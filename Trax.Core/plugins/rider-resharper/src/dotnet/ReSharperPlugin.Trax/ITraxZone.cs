@@ -7,5 +7,5 @@ namespace ReSharperPlugin.Trax.Core
 {
     [ZoneDefinition]
     // [ZoneDefinitionConfigurableFeature("Title", "Description", IsInProductSection: false)]
-    public interface ITrax.CoreZone : IZone { }
+    public interface ITraxZone : IZone { }
 }

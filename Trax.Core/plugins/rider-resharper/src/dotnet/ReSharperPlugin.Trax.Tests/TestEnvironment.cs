@@ -12,18 +12,18 @@ using NUnit.Framework;
 namespace ReSharperPlugin.Trax.Core.Tests
 {
     [ZoneDefinition]
-    public class Trax.CoreTestEnvironmentZone
+    public class TraxTestEnvironmentZone
         : ITestsEnvZone,
             IRequire<PsiFeatureTestZone>,
-            IRequire<ITrax.CoreZone> { }
+            IRequire<ITraxZone> { }
 
     [ZoneMarker]
     public class ZoneMarker
         : IRequire<ICodeEditingZone>,
             IRequire<ILanguageCSharpZone>,
-            IRequire<Trax.CoreTestEnvironmentZone> { }
+            IRequire<TraxTestEnvironmentZone> { }
 
     [SetUpFixture]
-    public class Trax.CoreTestsAssembly
-        : ExtensionTestEnvironmentAssembly<Trax.CoreTestEnvironmentZone> { }
+    public class TraxTestsAssembly
+        : ExtensionTestEnvironmentAssembly<TraxTestEnvironmentZone> { }
 }

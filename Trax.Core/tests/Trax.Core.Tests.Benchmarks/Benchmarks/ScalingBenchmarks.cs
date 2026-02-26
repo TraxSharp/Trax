@@ -23,11 +23,11 @@ public class ScalingBenchmarks
     public void Setup()
     {
         var services = new ServiceCollection();
-        services.AddTrax.CoreEffects();
-        services.AddScopedTrax.CoreRoute<IEffectAddOneX1Workflow, EffectAddOneX1Workflow>();
-        services.AddScopedTrax.CoreRoute<IEffectAddOneX3Workflow, EffectAddOneX3Workflow>();
-        services.AddScopedTrax.CoreRoute<IEffectAddOneX5Workflow, EffectAddOneX5Workflow>();
-        services.AddScopedTrax.CoreRoute<IEffectAddOneX10Workflow, EffectAddOneX10Workflow>();
+        services.AddTraxEffects();
+        services.AddScopedTraxRoute<IEffectAddOneX1Workflow, EffectAddOneX1Workflow>();
+        services.AddScopedTraxRoute<IEffectAddOneX3Workflow, EffectAddOneX3Workflow>();
+        services.AddScopedTraxRoute<IEffectAddOneX5Workflow, EffectAddOneX5Workflow>();
+        services.AddScopedTraxRoute<IEffectAddOneX10Workflow, EffectAddOneX10Workflow>();
         _provider = services.BuildServiceProvider();
     }
 
