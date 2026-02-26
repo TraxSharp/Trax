@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Trax.Scheduler/Trax.Scheduler.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.Scheduler.Tests.ArrayLogger/Trax.Scheduler.Tests.ArrayLogger.csproj" />
+    <Project Path="tests/Trax.Scheduler.Tests.Integration/Trax.Scheduler.Tests.Integration.csproj" />
+  </Folder>
+</Solution>
