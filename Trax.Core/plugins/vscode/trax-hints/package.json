@@ -1,0 +1,41 @@
+{
+  "name": "trax-hints",
+  "displayName": "Trax.Core Chain Hints",
+  "description": "Inlay hints showing TIn/TOut types for Trax.Core workflow chain steps",
+  "version": "0.2.0",
+  "publisher": "Trax.Core",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/theauxm/Trax.Core"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "csharp",
+    "dotnet",
+    "workflow",
+    "inlay hints",
+    "trax"
+  ],
+  "activationEvents": [
+    "onLanguage:csharp"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.3.0"
+  }
+}

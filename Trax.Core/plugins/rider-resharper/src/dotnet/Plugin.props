@@ -1,0 +1,20 @@
+﻿<Project>
+
+  <PropertyGroup>
+    <!-- See https://www.nuget.org/packages/JetBrains.ReSharper.SDK -->
+    <!-- Keep in sync with ProductVersion in gradle.properties -->
+    <SdkVersion>2025.3.0.1</SdkVersion>
+
+    <Title>Trax.Core Chain Hints</Title>
+    <Description>Inlay hints showing TIn/TOut types for Trax.Core workflow chain steps</Description>
+
+    <Authors>Trax.Core</Authors>
+    <Copyright>Copyright $([System.DateTime]::Now.Year) Maintainers of Trax.Core</Copyright>
+    <PackageTags>resharper rider plugin chainsharp inlay-hints workflow</PackageTags>
+
+    <PackageProjectUrl>https://github.com/theauxm/Trax.Core</PackageProjectUrl>
+    <PackageLicenseUrl></PackageLicenseUrl>
+    <PackageIconUrl></PackageIconUrl>
+  </PropertyGroup>
+
+</Project>
