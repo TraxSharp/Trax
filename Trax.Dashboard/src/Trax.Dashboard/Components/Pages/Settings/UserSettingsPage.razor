@@ -1,0 +1,111 @@
+@page "/chainsharp/settings/user"
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">User Settings</RadzenText>
+
+<RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="true" class="rz-mb-4">
+    These settings are stored in your browser and only affect your session.
+</RadzenAlert>
+
+<RadzenStack Gap="1.5rem" class="cs-settings-page">
+
+    <RadzenFieldset Text="Data Refresh" class="@(IsDataRefreshDirty ? "cs-fieldset-dirty" : "")">
+        <RadzenStack Gap="0.25rem">
+            <RadzenLabel Text="Polling Interval (seconds)" Component="PollingInterval" />
+            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                How often dashboard pages re-query for fresh data.
+            </RadzenText>
+            <RadzenNumeric @bind-Value="_pollingIntervalSeconds"
+                           TValue="int"
+                           Min="1"
+                           Max="300"
+                           Style="max-width: 400px;"
+                           Name="PollingInterval" />
+        </RadzenStack>
+    </RadzenFieldset>
+
+    <RadzenFieldset Text="Administration Workflows" class="@(IsAdminWorkflowsDirty ? "cs-fieldset-dirty" : "")">
+        <RadzenStack Gap="0.25rem">
+            <RadzenLabel Text="Hide Administration Workflows" Component="HideAdminWorkflows" />
+            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                Exclude scheduler internals (ManifestManager, TaskServerExecutor, MetadataCleanup) from dashboard statistics and charts.
+            </RadzenText>
+            <RadzenSwitch @bind-Value="_hideAdminWorkflows" Name="HideAdminWorkflows" />
+        </RadzenStack>
+    </RadzenFieldset>
+
+    <RadzenFieldset Text="Dashboard Components" class="@(IsComponentsDirty ? "cs-fieldset-dirty" : "")">
+        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);" class="rz-mb-3">
+            Toggle which sections are visible on the dashboard home page.
+        </RadzenText>
+        <RadzenStack Gap="1.5rem">
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Server Health" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Process CPU, memory, threads, uptime, and GC collection stats.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showServerHealth" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Summary Cards" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Executions Today, Success Rate, Currently Running, Dead Letters, Active Manifests, Registered Workflows.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showSummaryCards" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Executions Chart (24h)" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Hourly bar chart of completed vs failed executions over the last 24 hours.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showExecutionsChart" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Status Breakdown" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Donut chart showing today's workflow state distribution.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showStatusBreakdown" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Top Failing Workflows" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Bar chart of the most-failing workflows over the last 7 days.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showTopFailures" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Avg Execution Duration" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Bar chart of average workflow execution times over the last 7 days.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showAvgDuration" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Recent Failures" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Table of the most recent failed workflow executions.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showRecentFailures" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Active Scheduled Manifests" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Table of currently enabled scheduled manifests with their schedules.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showActiveManifests" />
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenFieldset>
+
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" JustifyContent="JustifyContent.End" class="cs-settings-actions">
+        <RadzenButton Text="Reset Default"
+                      Icon="restart_alt"
+                      ButtonStyle="ButtonStyle.Light"
+                      Click="ResetDefault" />
+        <RadzenButton Text="Save"
+                      Icon="save"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Click="Save" />
+    </RadzenStack>
+
+</RadzenStack>

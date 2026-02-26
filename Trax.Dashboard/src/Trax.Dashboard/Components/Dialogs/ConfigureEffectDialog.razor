@@ -1,0 +1,55 @@
+<RadzenStack Gap="1rem">
+    <RadzenText TextStyle="TextStyle.Subtitle1">
+        Configuration: <strong>@ConfigurationType.Name</strong>
+    </RadzenText>
+
+    <RadzenStack Gap="0.75rem">
+        @foreach (var prop in _configProperties)
+        {
+            var underlying = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+
+            @if (underlying == typeof(bool))
+            {
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem" Style="padding: 0.75rem 1rem; border: 1px solid var(--rz-input-border); border-radius: var(--rz-border-radius);">
+                    <RadzenLabel Text="@FormatLabel(prop.Name)" />
+                    <RadzenSwitch Value="@(GetFormValue<bool>(prop.Name))"
+                                  ValueChanged="@((bool v) => SetFormValue(prop.Name, v))" />
+                </RadzenStack>
+            }
+            else if (underlying.IsEnum)
+            {
+                <RadzenFormField Text="@FormatLabel(prop.Name)" Variant="Variant.Outlined" class="rz-w-100">
+                    <RadzenDropDown TValue="string"
+                                    Data="@Enum.GetNames(underlying)"
+                                    Value="@(GetFormValue<string>(prop.Name))"
+                                    ValueChanged="@((string v) => SetFormValue(prop.Name, v))" />
+                </RadzenFormField>
+            }
+            else
+            {
+                <RadzenFormField Text="@FormatLabel(prop.Name)" Variant="Variant.Outlined" class="rz-w-100">
+                    <RadzenTextBox Value="@(GetFormValue<string>(prop.Name))"
+                                   Change="@(v => SetFormValue(prop.Name, v))"
+                                   Placeholder="@GetPlaceholder(underlying)" />
+                </RadzenFormField>
+            }
+        }
+    </RadzenStack>
+
+    @if (_error is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat">
+            @_error
+        </RadzenAlert>
+    }
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton Text="Cancel"
+                      ButtonStyle="ButtonStyle.Light"
+                      Click="Cancel" />
+        <RadzenButton Text="Save"
+                      Icon="save"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Click="Save" />
+    </RadzenStack>
+</RadzenStack>

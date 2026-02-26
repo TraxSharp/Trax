@@ -1,0 +1,99 @@
+@page "/chainsharp/settings/effects"
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">Registered Effects</RadzenText>
+
+<RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="true" class="rz-mb-4">
+    Effect changes apply to the next workflow execution scope. Click the configure button on configurable effects to modify their runtime settings.
+</RadzenAlert>
+
+@if (!_effectsAvailable)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+        Effect Registry is not available. Ensure <code>.AddTrax.CoreEffects()</code> is configured in your service registration.
+    </RadzenAlert>
+}
+else if (_effects.Count == 0)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">
+        No effects are registered. Ensure effects are added via <code>.AddTrax.CoreEffects()</code> configuration.
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1.5rem" class="cs-settings-page">
+        <RadzenFieldset Text="Effects" class="@(IsEffectsDirty ? "cs-fieldset-dirty" : "")">
+            <RadzenStack Gap="1rem">
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" JustifyContent="JustifyContent.End">
+                    <RadzenButton Text="Enable All"
+                                  Icon="toggle_on"
+                                  ButtonStyle="ButtonStyle.Success"
+                                  Size="ButtonSize.Small"
+                                  Click="EnableAllEffects" />
+                    <RadzenButton Text="Disable All"
+                                  Icon="toggle_off"
+                                  ButtonStyle="ButtonStyle.Danger"
+                                  Size="ButtonSize.Small"
+                                  Click="DisableAllEffects" />
+                </RadzenStack>
+
+                <RadzenDataGrid Data="@_effects"
+                                TItem="EffectEntry"
+                                AllowSorting="true"
+                                AllowColumnResize="true"
+                                class="rz-datatable-striped">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="EffectEntry"
+                                              Property="Name"
+                                              Title="Effect Factory"
+                                              Width="250px" />
+                        <RadzenDataGridColumn TItem="EffectEntry"
+                                              Property="FullName"
+                                              Title="Full Type Name" />
+                        <RadzenDataGridColumn TItem="EffectEntry"
+                                              Title="Status"
+                                              Width="150px"
+                                              Sortable="false">
+                            <Template Context="entry">
+                                @if (entry.Toggleable)
+                                {
+                                    <RadzenSwitch @bind-Value="entry.Enabled" />
+                                }
+                                else
+                                {
+                                    <RadzenBadge BadgeStyle="BadgeStyle.Info" Text="Always On" />
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="EffectEntry"
+                                              Title="Configure"
+                                              Width="120px"
+                                              Sortable="false"
+                                              Filterable="false">
+                            <Template Context="entry">
+                                @if (entry.IsConfigurable)
+                                {
+                                    <RadzenButton Icon="settings"
+                                                  ButtonStyle="ButtonStyle.Light"
+                                                  Size="ButtonSize.Small"
+                                                  Click="@(() => OpenConfigureDialog(entry))" />
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </RadzenStack>
+        </RadzenFieldset>
+
+        @* ── Actions ── *@
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" JustifyContent="JustifyContent.End" class="cs-settings-actions">
+            <RadzenButton Text="Reset"
+                          Icon="restart_alt"
+                          ButtonStyle="ButtonStyle.Light"
+                          Click="ResetDefaults" />
+            <RadzenButton Text="Save"
+                          Icon="save"
+                          ButtonStyle="ButtonStyle.Primary"
+                          Click="Save" />
+        </RadzenStack>
+    </RadzenStack>
+}

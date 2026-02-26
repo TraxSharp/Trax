@@ -1,0 +1,80 @@
+@page "/chainsharp/workflows"
+@inject IWorkflowDiscoveryService WorkflowDiscovery
+@inject IDashboardSettingsService DashboardSettings
+@inject DialogService DialogService
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">Registered Workflows</RadzenText>
+
+<Trax.CoreDataGrid Data="@_workflows"
+                    TItem="WorkflowRegistration">
+    <Columns>
+        <RadzenDataGridColumn TItem="WorkflowRegistration"
+                              Property="ServiceTypeName"
+                              Title="Workflow"
+                              Width="250px" />
+        <RadzenDataGridColumn TItem="WorkflowRegistration"
+                              Property="ImplementationTypeName"
+                              Title="Implementation"
+                              Width="250px" />
+        <RadzenDataGridColumn TItem="WorkflowRegistration"
+                              Property="InputTypeName"
+                              Title="Input Type"
+                              Width="200px" />
+        <RadzenDataGridColumn TItem="WorkflowRegistration"
+                              Property="OutputTypeName"
+                              Title="Output Type"
+                              Width="200px" />
+        <RadzenDataGridColumn TItem="WorkflowRegistration"
+                              Property="Lifetime"
+                              Title="Lifetime"
+                              Width="120px" />
+        <RadzenDataGridColumn TItem="WorkflowRegistration"
+                              Title="Actions"
+                              Width="100px"
+                              Filterable="false"
+                              Sortable="false">
+            <Template Context="registration">
+                <RadzenButton Text="Queue"
+                              Icon="queue"
+                              ButtonStyle="ButtonStyle.Primary"
+                              Size="ButtonSize.Small"
+                              Click="@(() => OpenQueueDialog(registration))" />
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</Trax.CoreDataGrid>
+
+@code {
+    private IReadOnlyList<WorkflowRegistration> _workflows = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await DashboardSettings.InitializeAsync();
+
+        var all = WorkflowDiscovery.DiscoverWorkflows();
+
+        if (DashboardSettings.HideAdminWorkflows)
+        {
+            var adminNames = DashboardSettings.AdminWorkflowNames;
+            _workflows = all.Where(w => !adminNames.Contains(w.ImplementationTypeName)).ToList();
+        }
+        else
+        {
+            _workflows = all;
+        }
+    }
+
+    private async Task OpenQueueDialog(WorkflowRegistration registration)
+    {
+        await DialogService.OpenAsync<QueueWorkflowDialog>(
+            $"Queue {registration.ServiceTypeName}",
+            new Dictionary<string, object> { ["Registration"] = registration },
+            new DialogOptions
+            {
+                Width = "600px",
+                Resizable = true,
+                Draggable = true,
+            }
+        );
+    }
+}

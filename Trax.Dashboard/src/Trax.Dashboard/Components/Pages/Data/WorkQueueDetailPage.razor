@@ -1,0 +1,109 @@
+@page "/chainsharp/data/work-queue/{WorkQueueId:long}"
+@inherits PollingComponentBase
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
+    <RadzenButton Icon="arrow_back"
+                  Variant="Variant.Text"
+                  Click="@(() => Navigation.NavigateTo("chainsharp/data/work-queue"))" />
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
+        @if (_entry is not null)
+        {
+            @ShortName(_entry.WorkflowName)
+        }
+        else if (!IsLoading)
+        {
+            <text>Work Queue Entry Not Found</text>
+        }
+    </RadzenText>
+
+    @if (_entry is not null && _entry.Status == WorkQueueStatus.Queued)
+    {
+        <RadzenButton Text="Cancel"
+                      Icon="cancel"
+                      ButtonStyle="ButtonStyle.Danger"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Click="@CancelEntry"
+                      IsBusy="@_cancelling"
+                      Disabled="@_cancelling"
+                      Style="margin-left: auto;" />
+    }
+</RadzenStack>
+
+@if (IsLoading)
+{
+    <RadzenProgressBarCircular ShowValue="true" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Large" />
+    return;
+}
+
+@if (_entry is null)
+{
+    <RadzenText TextStyle="TextStyle.Body1">No work queue entry found with ID @WorkQueueId.</RadzenText>
+    return;
+}
+
+@if (_error is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" class="rz-mb-4">
+        @_error
+    </RadzenAlert>
+}
+
+@* ── Details ── *@
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Details</RadzenText>
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="ID" Value="@_entry.Id.ToString()" />
+                <FieldDisplay Label="External ID" Value="@_entry.ExternalId" />
+                <FieldDisplay Label="Workflow Name" Value="@ShortName(_entry.WorkflowName)" />
+                <FieldDisplay Label="Status">
+                    <RadzenBadge BadgeStyle="@GetStatusBadgeStyle(_entry.Status)"
+                                 Text="@_entry.Status.ToString()" />
+                </FieldDisplay>
+                <FieldDisplay Label="Priority" Value="@_entry.Priority.ToString()" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="Created At" Value="@_entry.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")" />
+                <FieldDisplay Label="Dispatched At" Value="@(_entry.DispatchedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")" />
+                <FieldDisplay Label="Input Type" Value="@(_entry.InputTypeName ?? "—")" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                @if (_entry.ManifestId.HasValue)
+                {
+                    <FieldDisplay Label="Manifest ID">
+                        <RadzenLink Path="@($"chainsharp/data/manifests/{_entry.ManifestId}")" Text="@_entry.ManifestId.ToString()" />
+                    </FieldDisplay>
+                }
+                else
+                {
+                    <FieldDisplay Label="Manifest ID" Value="—" />
+                }
+                @if (_entry.MetadataId.HasValue)
+                {
+                    <FieldDisplay Label="Metadata ID">
+                        <RadzenLink Path="@($"chainsharp/data/metadata/{_entry.MetadataId}")" Text="@_entry.MetadataId.ToString()" />
+                    </FieldDisplay>
+                }
+                else
+                {
+                    <FieldDisplay Label="Metadata ID" Value="—" />
+                }
+            </RadzenStack>
+        </RadzenColumn>
+    </RadzenRow>
+</RadzenCard>
+
+@* ── Input JSON ── *@
+@if (!string.IsNullOrWhiteSpace(_entry.Input))
+{
+    <RadzenCard class="rz-mb-4">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Input</RadzenText>
+        <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(_entry.Input)</pre>
+    </RadzenCard>
+}

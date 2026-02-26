@@ -1,0 +1,172 @@
+@page "/chainsharp/data/metadata"
+@using System.Linq.Dynamic.Core
+@using Trax.Scheduler.Services.CancellationRegistry
+@using Microsoft.Extensions.DependencyInjection
+@inherits PollingComponentBase
+@inject IDataContextProviderFactory DataContextFactory
+@inject NavigationManager Navigation
+@inject IServiceProvider ServiceProvider
+@inject NotificationService NotificationService
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Metadata</RadzenText>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    Execution records for each workflow run, tracking state, timing, input/output, and failure details.
+</RadzenText>
+
+<Trax.CoreDataGrid @ref="_grid"
+                    TItem="Metadata"
+                    ServerLoadData="@LoadPageAsync">
+    <Columns>
+        <RadzenDataGridColumn TItem="Metadata"
+                              Title=""
+                              Width="80px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true"
+                              TextAlign="TextAlign.Center">
+            <Template Context="m">
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0" AlignItems="AlignItems.Center">
+                    <RadzenButton Icon="visibility"
+                                  Variant="Variant.Text"
+                                  Size="ButtonSize.Small"
+                                  Click="@(() => Navigation.NavigateTo($"chainsharp/data/metadata/{m.Id}"))" />
+                    @if (m.WorkflowState == WorkflowState.InProgress)
+                    {
+                        <RadzenButton Icon="cancel"
+                                      Variant="Variant.Text"
+                                      Size="ButtonSize.Small"
+                                      ButtonStyle="ButtonStyle.Danger"
+                                      Click="@(() => CancelWorkflow(m.Id, m.Name))" />
+                    }
+                </RadzenStack>
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Metadata"
+                              Property="Id"
+                              Title="Id"
+                              Width="80px"
+                              SortOrder="SortOrder.Descending" />
+        <RadzenDataGridColumn TItem="Metadata"
+                              Property="Name"
+                              Title="Name"
+                              Width="200px">
+            <Template Context="m">@ShortName(m.Name)</Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Metadata"
+                              Property="WorkflowState"
+                              Title="State"
+                              Width="120px" />
+        <RadzenDataGridColumn TItem="Metadata"
+                              Property="CurrentlyRunningStep"
+                              Title="Current Step"
+                              Width="150px">
+            <Template Context="m">@(m.WorkflowState == WorkflowState.InProgress ? (m.CurrentlyRunningStep ?? "—") : "—")</Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Metadata"
+                              Property="ExternalId"
+                              Title="External Id"
+                              Width="200px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="Metadata"
+                              Property="StartTime"
+                              Title="Start Time"
+                              Width="180px"
+                              FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+        <RadzenDataGridColumn TItem="Metadata"
+                              Property="EndTime"
+                              Title="End Time"
+                              Width="180px"
+                              FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+        <RadzenDataGridColumn TItem="Metadata"
+                              Property="FailureStep"
+                              Title="Failure Step"
+                              Width="150px" />
+        <RadzenDataGridColumn TItem="Metadata"
+                              Property="FailureReason"
+                              Title="Failure Reason"
+                              Width="250px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="Metadata"
+                              Property="ParentId"
+                              Title="Parent Id"
+                              Width="140px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="Metadata"
+                              Property="ManifestId"
+                              Title="Manifest Id"
+                              Width="140px"
+                              Visible="false" />
+    </Columns>
+</Trax.CoreDataGrid>
+
+@code {
+    private Trax.CoreDataGrid<Metadata>? _grid;
+
+    private async Task CancelWorkflow(long metadataId, string workflowName)
+    {
+        try
+        {
+            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
+            await context
+                .Metadatas.Where(m => m.Id == metadataId)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.CancellationRequested, true),
+                    DisposalToken
+                );
+
+            ServiceProvider.GetService<ICancellationRegistry>()?.TryCancel(metadataId);
+
+            NotificationService.Notify(
+                NotificationSeverity.Success,
+                "Cancellation Requested",
+                $"Cancel signal sent for {ShortName(workflowName)}.",
+                duration: 4000
+            );
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(
+                NotificationSeverity.Error,
+                "Cancel Failed",
+                ex.Message,
+                duration: 6000
+            );
+        }
+    }
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        if (_grid is not null)
+            await _grid.ReloadAsync();
+    }
+
+    private async Task<ServerDataResult<Metadata>> LoadPageAsync(
+        LoadDataArgs args,
+        CancellationToken cancellationToken)
+    {
+        using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
+        IQueryable<Metadata> query = context.Metadatas.AsNoTracking();
+
+        if (DashboardSettings.HideAdminWorkflows)
+            query = query.ExcludeAdmin(DashboardSettings.AdminWorkflowNames);
+
+        if (!string.IsNullOrEmpty(args.Filter))
+            query = query.Where(args.Filter);
+
+        if (!string.IsNullOrEmpty(args.OrderBy))
+            query = query.OrderBy(args.OrderBy);
+        else
+            query = query.OrderByDescending(m => m.Id);
+
+        var count = await query.CountAsync(cancellationToken);
+
+        if (args.Skip.HasValue)
+            query = query.Skip(args.Skip.Value);
+        if (args.Top.HasValue)
+            query = query.Take(args.Top.Value);
+
+        var items = await query.ToListAsync(cancellationToken);
+        return new ServerDataResult<Metadata>(items, count);
+    }
+
+}

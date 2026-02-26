@@ -1,0 +1,44 @@
+@* Components/Layout/Sidebar/DashboardSidebar.razor *@
+@inject DashboardOptions Options
+
+<RadzenSidebar Expanded="@Expanded">
+    <RadzenPanelMenu>
+        <RadzenPanelMenuItem Text="Home"
+                            Path="@($"{Options.RoutePrefix.TrimStart('/')}")"
+                            Icon="home" />
+        <RadzenPanelMenuItem Text="Workflows"
+                            Path="@($"{Options.RoutePrefix.TrimStart('/')}/workflows")"
+                            Icon="account_tree" />
+        <RadzenPanelMenuItem Text="Data" Icon="storage" @bind-Expanded="_dataExpanded">
+            <RadzenPanelMenuItem Text="Manifest Groups"
+                                Path="@($"{Options.RoutePrefix.TrimStart('/')}/data/manifest-groups")"
+                                Icon="folder_open" />
+            <RadzenPanelMenuItem Text="Manifests"
+                                Path="@($"{Options.RoutePrefix.TrimStart('/')}/data/manifests")"
+                                Icon="description" />
+            <RadzenPanelMenuItem Text="Work Queue"
+                                Path="@($"{Options.RoutePrefix.TrimStart('/')}/data/work-queue")"
+                                Icon="queue" />
+            <RadzenPanelMenuItem Text="Dead Letters"
+                                Path="@($"{Options.RoutePrefix.TrimStart('/')}/data/dead-letters")"
+                                Icon="error_outline" />
+            <RadzenPanelMenuItem Text="Metadata"
+                                Path="@($"{Options.RoutePrefix.TrimStart('/')}/data/metadata")"
+                                Icon="timeline" />
+            <RadzenPanelMenuItem Text="Logs"
+                                Path="@($"{Options.RoutePrefix.TrimStart('/')}/data/logs")"
+                                Icon="list_alt" />
+        </RadzenPanelMenuItem>
+        <RadzenPanelMenuItem Text="Settings" Icon="settings" @bind-Expanded="_settingsExpanded">
+            <RadzenPanelMenuItem Text="User"
+                                Path="@($"{Options.RoutePrefix.TrimStart('/')}/settings/user")"
+                                Icon="person" />
+            <RadzenPanelMenuItem Text="Server"
+                                Path="@($"{Options.RoutePrefix.TrimStart('/')}/settings/server")"
+                                Icon="dns" />
+            <RadzenPanelMenuItem Text="Effects"
+                                Path="@($"{Options.RoutePrefix.TrimStart('/')}/settings/effects")"
+                                Icon="extension" />
+        </RadzenPanelMenuItem>
+    </RadzenPanelMenu>
+</RadzenSidebar>

@@ -1,0 +1,22 @@
+<RadzenStack Gap="0">
+    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color); margin: 0;">@Label</RadzenText>
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.Body1" Style="margin: 0;">@Value</RadzenText>
+    }
+</RadzenStack>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = "";
+
+    [Parameter]
+    public string Value { get; set; } = "";
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

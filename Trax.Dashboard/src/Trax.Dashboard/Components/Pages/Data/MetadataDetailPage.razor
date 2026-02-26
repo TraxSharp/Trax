@@ -1,0 +1,230 @@
+@page "/chainsharp/data/metadata/{MetadataId:long}"
+@inherits PollingComponentBase
+@using Microsoft.Extensions.Logging
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
+    <RadzenButton Icon="arrow_back"
+                  Variant="Variant.Text"
+                  Click="@(() => Navigation.NavigateTo("chainsharp/data/metadata"))" />
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
+        @if (_metadata is not null)
+        {
+            @ShortName(_metadata.Name)
+        }
+        else if (!IsLoading)
+        {
+            <text>Metadata Not Found</text>
+        }
+    </RadzenText>
+
+    @if (_metadata is not null)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Style="margin-left: auto;">
+            @if (_metadata.WorkflowState == WorkflowState.InProgress)
+            {
+                <RadzenButton Text="Cancel"
+                              Icon="cancel"
+                              ButtonStyle="ButtonStyle.Danger"
+                              Variant="Variant.Outlined"
+                              Size="ButtonSize.Small"
+                              Click="@CancelWorkflow"
+                              IsBusy="@_cancelling"
+                              Disabled="@_cancelling" />
+            }
+            @if (!string.IsNullOrWhiteSpace(_metadata.Input))
+            {
+                <RadzenButton Text="Re-queue"
+                              Icon="queue"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Variant="Variant.Outlined"
+                              Size="ButtonSize.Small"
+                              Click="@RequeueWorkflow"
+                              IsBusy="@_rerunning"
+                              Disabled="@_rerunning" />
+            }
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@if (IsLoading)
+{
+    <RadzenProgressBarCircular ShowValue="true" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Large" />
+    return;
+}
+
+@if (_metadata is null)
+{
+    <RadzenText TextStyle="TextStyle.Body1">No metadata found with ID @MetadataId.</RadzenText>
+    return;
+}
+
+@if (_rerunError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" class="rz-mb-4">
+        @_rerunError
+    </RadzenAlert>
+}
+
+@if (_cancelError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" class="rz-mb-4">
+        @_cancelError
+    </RadzenAlert>
+}
+
+@* ── Metadata Details ── *@
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Details</RadzenText>
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="ID" Value="@_metadata.Id.ToString()" />
+                <FieldDisplay Label="Name" Value="@ShortName(_metadata.Name)" />
+                <FieldDisplay Label="External ID" Value="@_metadata.ExternalId" />
+                <FieldDisplay Label="State" Value="@_metadata.WorkflowState.ToString()" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="Start Time" Value="@_metadata.StartTime.ToString("yyyy-MM-dd HH:mm:ss")" />
+                <FieldDisplay Label="End Time" Value="@(_metadata.EndTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")" />
+                <FieldDisplay Label="Duration" Value="@FormatDuration(_metadata)" />
+                <FieldDisplay Label="Scheduled Time" Value="@(_metadata.ScheduledTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                @if (_metadata.ManifestId.HasValue)
+                {
+                    <FieldDisplay Label="Manifest ID">
+                        <RadzenLink Path="@($"chainsharp/data/manifests/{_metadata.ManifestId}")" Text="@_metadata.ManifestId.ToString()" />
+                    </FieldDisplay>
+                }
+                else
+                {
+                    <FieldDisplay Label="Manifest ID" Value="—" />
+                }
+                @if (_metadata.ParentId.HasValue)
+                {
+                    <FieldDisplay Label="Parent ID">
+                        <RadzenLink Path="@($"chainsharp/data/metadata/{_metadata.ParentId}")" Text="@_metadata.ParentId.ToString()" />
+                    </FieldDisplay>
+                }
+                else
+                {
+                    <FieldDisplay Label="Parent ID" Value="—" />
+                }
+                <FieldDisplay Label="Executor" Value="@(_metadata.Executor ?? "—")" />
+            </RadzenStack>
+        </RadzenColumn>
+    </RadzenRow>
+</RadzenCard>
+
+@* ── Step Progress (only if in progress with a running step) ── *@
+@if (_metadata.WorkflowState == WorkflowState.InProgress && !string.IsNullOrWhiteSpace(_metadata.CurrentlyRunningStep))
+{
+    <RadzenCard class="rz-mb-4" Style="border-left: 4px solid var(--rz-info);">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2" Style="color: var(--rz-info);">Step Progress</RadzenText>
+        <RadzenStack Gap="0.75rem">
+            <FieldDisplay Label="Currently Running" Value="@_metadata.CurrentlyRunningStep" />
+            <FieldDisplay Label="Step Started" Value="@(_metadata.StepStartedAt?.ToString("HH:mm:ss") ?? "—")" />
+        </RadzenStack>
+    </RadzenCard>
+}
+
+@* ── Failure Details (only if failed) ── *@
+@if (_metadata.WorkflowState == WorkflowState.Failed)
+{
+    <RadzenCard class="rz-mb-4" Style="border-left: 4px solid var(--rz-danger);">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2" Style="color: var(--rz-danger);">Failure Details</RadzenText>
+        <RadzenRow Gap="1rem">
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenStack Gap="0.75rem">
+                    <FieldDisplay Label="Failure Step" Value="@(_metadata.FailureStep ?? "—")" />
+                    <FieldDisplay Label="Exception" Value="@(_metadata.FailureException ?? "—")" />
+                    <FieldDisplay Label="Reason" Value="@(_metadata.FailureReason ?? "—")" />
+                </RadzenStack>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="6">
+                @if (!string.IsNullOrWhiteSpace(_metadata.StackTrace))
+                {
+                    <RadzenStack Gap="0">
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color); margin: 0;">Stack Trace</RadzenText>
+                        <pre style="font-size: 0.75rem; max-height: 200px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_metadata.StackTrace</pre>
+                    </RadzenStack>
+                }
+            </RadzenColumn>
+        </RadzenRow>
+    </RadzenCard>
+}
+
+@* ── Input / Output ── *@
+@if (!string.IsNullOrWhiteSpace(_metadata.Input) || !string.IsNullOrWhiteSpace(_metadata.Output))
+{
+    <RadzenRow Gap="1rem" class="rz-mb-4">
+        @if (!string.IsNullOrWhiteSpace(_metadata.Input))
+        {
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenCard>
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Input</RadzenText>
+                    <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(_metadata.Input)</pre>
+                </RadzenCard>
+            </RadzenColumn>
+        }
+        @if (!string.IsNullOrWhiteSpace(_metadata.Output))
+        {
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenCard>
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Output</RadzenText>
+                    <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(_metadata.Output)</pre>
+                </RadzenCard>
+            </RadzenColumn>
+        }
+    </RadzenRow>
+}
+
+@* ── Logs ── *@
+<RadzenCard>
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Logs</RadzenText>
+    @if (_logs.Count > 0)
+    {
+        <Trax.CoreDataGrid Data="@_logs"
+                            TItem="Log">
+            <Columns>
+                <RadzenDataGridColumn TItem="Log"
+                                      Property="Id"
+                                      Title="Id"
+                                      Width="80px"
+                                      SortOrder="SortOrder.Descending" />
+                <RadzenDataGridColumn TItem="Log"
+                                      Property="Level"
+                                      Title="Level"
+                                      Width="120px">
+                    <Template Context="l">
+                        <RadzenBadge BadgeStyle="@GetLogLevelBadgeStyle(l.Level)"
+                                     Text="@l.Level.ToString()" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="Log"
+                                      Property="Category"
+                                      Title="Category"
+                                      Width="200px">
+                    <Template Context="l">@ShortName(l.Category)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="Log"
+                                      Property="Message"
+                                      Title="Message" />
+                <RadzenDataGridColumn TItem="Log"
+                                      Property="Exception"
+                                      Title="Exception"
+                                      Width="250px" />
+            </Columns>
+        </Trax.CoreDataGrid>
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color); text-align: center; padding: 2rem;">
+            No logs found for this execution.
+        </RadzenText>
+    }
+</RadzenCard>

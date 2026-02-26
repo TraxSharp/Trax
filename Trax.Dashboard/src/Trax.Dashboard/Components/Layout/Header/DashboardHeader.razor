@@ -1,0 +1,40 @@
+@* Components/Layout/Header/DashboardHeader.razor *@
+@implements IAsyncDisposable
+
+<RadzenHeader>
+    <RadzenStack Orientation="Orientation.Horizontal"
+                 AlignItems="AlignItems.Center"
+                 JustifyContent="JustifyContent.SpaceBetween"
+                 Style="height: 100%; padding: 0 1rem;">
+        <RadzenStack Orientation="Orientation.Horizontal"
+                     AlignItems="AlignItems.Center" Gap="0.75rem">
+            <RadzenSidebarToggle Click="@OnToggleSidebar" />
+            <RadzenText Text="@Title" Style="font-weight: 600; font-size: 1.15rem; margin: 0;" />
+            @if (!string.IsNullOrEmpty(EnvironmentName))
+            {
+                <span class="cs-env-badge" style="background-color: @EnvironmentBadgeColor;">Environment: @EnvironmentName</span>
+            }
+        </RadzenStack>
+        <RadzenStack Orientation="Orientation.Horizontal"
+                     AlignItems="AlignItems.Center" Gap="0.75rem">
+            <div style="display: flex; align-items: center; gap: 0.4rem; opacity: 0.7;"
+                 title="Time until next data refresh">
+                <RadzenIcon Icon="sync" Style="font-size: 0.85rem;" />
+                <span style="font-size: 0.75rem; min-width: 1.6rem; text-align: right;">@(_secondsRemaining)s</span>
+                <div style="width: 60px; height: 3px; background: var(--rz-base-300); border-radius: 2px; overflow: hidden;">
+                    <div style="height: 100%; width: @(_progressPercent.ToString("F0"))%; background: var(--rz-primary); transition: width 0.5s linear;"></div>
+                </div>
+            </div>
+            <div class="cs-utc-clock" title="Current UTC time — all timestamps in the dashboard are UTC">
+                <RadzenIcon Icon="schedule" Style="font-size: 0.85rem;" />
+                <span>@_utcTime UTC</span>
+            </div>
+            <RadzenButton Icon="@(IsDarkMode ? "light_mode" : "dark_mode")"
+                          ButtonStyle="ButtonStyle.Light"
+                          Variant="Variant.Text"
+                          Click="@OnToggleTheme"
+                          title="@(IsDarkMode ? "Switch to light mode"
+                                              : "Switch to dark mode")" />
+        </RadzenStack>
+    </RadzenStack>
+</RadzenHeader>

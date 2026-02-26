@@ -1,0 +1,99 @@
+@page "/chainsharp/data/manifests"
+@inherits PollingComponentBase
+@inject IDataContextProviderFactory DataContextFactory
+@inject NavigationManager Navigation
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Manifests</RadzenText>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    Scheduled workflow definitions with their scheduling configuration, retry policies, and execution history.
+</RadzenText>
+
+<Trax.CoreDataGrid Data="@_items"
+                    TItem="Manifest"
+                    IsLoading="@IsLoading">
+    <Columns>
+        <RadzenDataGridColumn TItem="Manifest"
+                              Title=""
+                              Width="50px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true"
+                              TextAlign="TextAlign.Center">
+            <Template Context="m">
+                <RadzenButton Icon="visibility"
+                              Variant="Variant.Text"
+                              Size="ButtonSize.Small"
+                              Click="@(() => Navigation.NavigateTo($"chainsharp/data/manifests/{m.Id}"))" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Manifest"
+                              Property="Id"
+                              Title="Id"
+                              Width="80px"
+                              SortOrder="SortOrder.Descending" />
+        <RadzenDataGridColumn TItem="Manifest"
+                              Property="Name"
+                              Title="Name"
+                              Width="250px">
+            <Template Context="m">@ShortName(m.Name)</Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="Manifest"
+                              Property="ExternalId"
+                              Title="External Id"
+                              Width="200px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="Manifest"
+                              Property="ManifestGroup.Name"
+                              Title="Group"
+                              Width="180px" />
+        <RadzenDataGridColumn TItem="Manifest"
+                              Property="IsEnabled"
+                              Title="Enabled"
+                              Width="100px" />
+        <RadzenDataGridColumn TItem="Manifest"
+                              Property="ScheduleType"
+                              Title="Schedule Type"
+                              Width="150px" />
+        <RadzenDataGridColumn TItem="Manifest"
+                              Property="CronExpression"
+                              Title="Cron Expression"
+                              Width="170px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="Manifest"
+                              Property="IntervalSeconds"
+                              Title="Interval (s)"
+                              Width="130px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="Manifest"
+                              Property="MaxRetries"
+                              Title="Max Retries"
+                              Width="140px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="Manifest"
+                              Property="TimeoutSeconds"
+                              Title="Timeout (s)"
+                              Width="130px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="Manifest"
+                              Property="LastSuccessfulRun"
+                              Title="Last Successful Run"
+                              Width="200px"
+                              FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+    </Columns>
+</Trax.CoreDataGrid>
+
+@code {
+    private List<Manifest> _items = [];
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
+        IQueryable<Manifest> query = context.Manifests.Include(m => m.ManifestGroup).AsNoTracking();
+
+        if (DashboardSettings.HideAdminWorkflows)
+            query = query.ExcludeAdmin(DashboardSettings.AdminWorkflowNames);
+
+        _items = await query.ToListAsync(cancellationToken);
+    }
+
+}

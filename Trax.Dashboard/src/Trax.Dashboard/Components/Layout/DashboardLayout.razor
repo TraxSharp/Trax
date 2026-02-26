@@ -1,0 +1,22 @@
+@* Components/Layout/DashboardLayout.razor *@
+@inherits LayoutComponentBase
+
+<RadzenTheme Theme="@ThemeStateService.Theme" />
+
+<div class="cs-dashboard">
+    <RadzenLayout>
+        <DashboardHeader OnToggleSidebar="@ToggleSidebar"
+                         OnToggleTheme="@ToggleTheme"
+                         IsDarkMode="@ThemeStateService.IsDarkMode"
+                         Title="@($"{Options.Title} Dashboard")"
+                         EnvironmentName="@Options.EnvironmentName" />
+        <DashboardSidebar Expanded="@SidebarExpanded" />
+        <RadzenBody>
+            <div class="rz-p-4">
+                @Body
+            </div>
+        </RadzenBody>
+        <DashboardFooter />
+    </RadzenLayout>
+    <RadzenComponents />
+</div>

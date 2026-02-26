@@ -1,0 +1,243 @@
+@page "/chainsharp/settings/server"
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">Server Settings</RadzenText>
+
+<RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="true" class="rz-mb-4">
+    These settings affect all users. Scheduler changes take effect on the next polling cycle.
+</RadzenAlert>
+
+<RadzenStack Gap="1.5rem" class="cs-settings-page">
+
+    @* ══════════════════════════════════════════════════════════ *@
+    @* ── Scheduler ── *@
+    @* ══════════════════════════════════════════════════════════ *@
+
+    @if (!_schedulerAvailable)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+            Scheduler is not configured. Add <code>.AddScheduler()</code> to your service registration to enable scheduler settings.
+        </RadzenAlert>
+    }
+    else
+    {
+        @* ── Administrative Workflows ── *@
+        <RadzenFieldset Text="Administrative Workflows" class="@(IsAdminWorkflowsDirty ? "cs-fieldset-dirty" : "")">
+            <RadzenStack Gap="1.5rem">
+                <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false" Variant="Variant.Flat">
+                    Disabling these workflows takes effect on the next polling cycle. While disabled, the ManifestManager will not queue new work and the JobDispatcher will not dispatch queued entries.
+                </RadzenAlert>
+
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Manifest Manager" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        Scans scheduled manifests for due work and creates work queue entries. Disable to stop new work from being queued.
+                    </RadzenText>
+                    <RadzenSwitch @bind-Value="_schedulerConfig!.ManifestManagerEnabled" />
+                </RadzenStack>
+
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Job Dispatcher" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        Picks queued work and dispatches it to the background task server. Disable to stop jobs from being dispatched while allowing the queue to accumulate.
+                    </RadzenText>
+                    <RadzenSwitch @bind-Value="_schedulerConfig!.JobDispatcherEnabled" />
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenFieldset>
+
+        @* ── Polling & Queue ── *@
+        <RadzenFieldset Text="Polling & Queue" class="@(IsPollingQueueDirty ? "cs-fieldset-dirty" : "")">
+            <RadzenStack Gap="1.5rem">
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Polling Interval" Component="PollingInterval" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        How often the ManifestManager polls for pending jobs. Requires an application restart to take effect.
+                    </RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="max-width: 400px;">
+                        <RadzenNumeric @bind-Value="_pollingInterval.Value" TValue="double" Min="1" Style="width: 60%" Name="PollingInterval" />
+                        <RadzenDropDown @bind-Value="_pollingInterval.Unit" Data="TimeUnits" Style="width: 40%" />
+                    </RadzenStack>
+                </RadzenStack>
+
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Max Active Jobs" Component="MaxActiveJobs" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        Maximum number of active jobs (Pending + InProgress) allowed. Leave empty for unlimited.
+                    </RadzenText>
+                    <RadzenNumeric @bind-Value="_schedulerConfig!.MaxActiveJobs" TValue="int?" Min="1" Style="max-width: 400px;" Name="MaxActiveJobs" />
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenFieldset>
+
+        @* ── Retry Settings ── *@
+        <RadzenFieldset Text="Retry Settings" class="@(IsRetryDirty ? "cs-fieldset-dirty" : "")">
+            <RadzenStack Gap="1.5rem">
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Default Max Retries" Component="DefaultMaxRetries" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        Number of retry attempts before a job is dead-lettered. Can be overridden per-manifest.
+                    </RadzenText>
+                    <RadzenNumeric @bind-Value="_schedulerConfig!.DefaultMaxRetries" TValue="int" Min="0" Style="max-width: 400px;" Name="DefaultMaxRetries" />
+                </RadzenStack>
+
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Default Retry Delay" Component="DefaultRetryDelay" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        Base delay between retry attempts. Combined with the backoff multiplier for exponential backoff.
+                    </RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="max-width: 400px;">
+                        <RadzenNumeric @bind-Value="_defaultRetryDelay.Value" TValue="double" Min="0" Style="width: 60%" Name="DefaultRetryDelay" />
+                        <RadzenDropDown @bind-Value="_defaultRetryDelay.Unit" Data="TimeUnits" Style="width: 40%" />
+                    </RadzenStack>
+                </RadzenStack>
+
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Backoff Multiplier" Component="RetryBackoffMultiplier" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        Multiplier applied to retry delay on each subsequent attempt. Set to 1.0 for constant delay.
+                    </RadzenText>
+                    <RadzenNumeric @bind-Value="_schedulerConfig!.RetryBackoffMultiplier" TValue="double" Min="1" Step="0.1" Format="0.0" Style="max-width: 400px;" Name="RetryBackoffMultiplier" />
+                </RadzenStack>
+
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Max Retry Delay" Component="MaxRetryDelay" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        Upper bound on retry delay to prevent unbounded backoff growth.
+                    </RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="max-width: 400px;">
+                        <RadzenNumeric @bind-Value="_maxRetryDelay.Value" TValue="double" Min="0" Style="width: 60%" Name="MaxRetryDelay" />
+                        <RadzenDropDown @bind-Value="_maxRetryDelay.Unit" Data="TimeUnits" Style="width: 40%" />
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenFieldset>
+
+        @* ── Job Settings ── *@
+        <RadzenFieldset Text="Job Settings" class="@(IsJobSettingsDirty ? "cs-fieldset-dirty" : "")">
+            <RadzenStack Gap="1.5rem">
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Default Job Timeout" Component="DefaultJobTimeout" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        Duration after which a running job is considered stuck and may be failed or retried.
+                    </RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="max-width: 400px;">
+                        <RadzenNumeric @bind-Value="_defaultJobTimeout.Value" TValue="double" Min="1" Style="width: 60%" Name="DefaultJobTimeout" />
+                        <RadzenDropDown @bind-Value="_defaultJobTimeout.Unit" Data="TimeUnits" Style="width: 40%" />
+                    </RadzenStack>
+                </RadzenStack>
+
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Recover Stuck Jobs on Startup" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        Re-evaluate and requeue jobs that were still in-progress when the application last shut down.
+                    </RadzenText>
+                    <RadzenSwitch @bind-Value="_schedulerConfig!.RecoverStuckJobsOnStartup" />
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenFieldset>
+
+        @* ── Dead Letter Settings ── *@
+        <RadzenFieldset Text="Dead Letter Settings" class="@(IsDeadLetterDirty ? "cs-fieldset-dirty" : "")">
+            <RadzenStack Gap="1.5rem">
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Retention Period" Component="DeadLetterRetention" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        How long resolved dead letter records are kept before being eligible for purge.
+                    </RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="max-width: 400px;">
+                        <RadzenNumeric @bind-Value="_deadLetterRetentionPeriod.Value" TValue="double" Min="0" Style="width: 60%" Name="DeadLetterRetention" />
+                        <RadzenDropDown @bind-Value="_deadLetterRetentionPeriod.Unit" Data="TimeUnits" Style="width: 40%" />
+                    </RadzenStack>
+                </RadzenStack>
+
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Auto Purge Dead Letters" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        Automatically delete dead letter records that exceed the retention period.
+                    </RadzenText>
+                    <RadzenSwitch @bind-Value="_schedulerConfig!.AutoPurgeDeadLetters" />
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenFieldset>
+
+        @* ── Metadata Cleanup (conditional) ── *@
+        @if (_schedulerConfig!.MetadataCleanup is not null)
+        {
+            <RadzenFieldset Text="Metadata Cleanup" class="@(IsMetadataCleanupDirty ? "cs-fieldset-dirty" : "")">
+                <RadzenStack Gap="1.5rem">
+                    <RadzenStack Gap="0.25rem">
+                        <RadzenLabel Text="Cleanup Interval" Component="CleanupInterval" />
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                            How often the background service runs to delete old metadata entries.
+                        </RadzenText>
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="max-width: 400px;">
+                            <RadzenNumeric @bind-Value="_cleanupInterval.Value" TValue="double" Min="1" Style="width: 60%" Name="CleanupInterval" />
+                            <RadzenDropDown @bind-Value="_cleanupInterval.Unit" Data="TimeUnits" Style="width: 40%" />
+                        </RadzenStack>
+                    </RadzenStack>
+
+                    <RadzenStack Gap="0.25rem">
+                        <RadzenLabel Text="Retention Period" Component="CleanupRetention" />
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                            Only terminal metadata (Completed/Failed) older than this is deleted. Pending or InProgress metadata is never cleaned up.
+                        </RadzenText>
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="max-width: 400px;">
+                            <RadzenNumeric @bind-Value="_cleanupRetentionPeriod.Value" TValue="double" Min="1" Style="width: 60%" Name="CleanupRetention" />
+                            <RadzenDropDown @bind-Value="_cleanupRetentionPeriod.Unit" Data="TimeUnits" Style="width: 40%" />
+                        </RadzenStack>
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenFieldset>
+        }
+    }
+
+    @* ══════════════════════════════════════════════════════════ *@
+    @* ── Logging ── *@
+    @* ══════════════════════════════════════════════════════════ *@
+
+    @if (_loggingAvailable)
+    {
+        <RadzenFieldset Text="Logging" class="@(IsLoggingDirty ? "cs-fieldset-dirty" : "")">
+            <RadzenStack Gap="1rem">
+                <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false" Variant="Variant.Flat">
+                    Log level changes take effect immediately for all loggers. These are runtime overrides and will reset on application restart.
+                </RadzenAlert>
+
+                <RadzenDataGrid Data="@_logLevels"
+                                TItem="LogLevelEntry"
+                                AllowColumnResize="true"
+                                class="rz-datatable-striped">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="LogLevelEntry"
+                                              Property="Category"
+                                              Title="Category"
+                                              Width="250px" />
+                        <RadzenDataGridColumn TItem="LogLevelEntry"
+                                              Title="Level"
+                                              Width="200px"
+                                              Sortable="false">
+                            <Template Context="entry">
+                                <RadzenDropDown @bind-Value="entry.Level"
+                                                Data="LogLevelValues"
+                                                Style="width: 100%;" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </RadzenStack>
+        </RadzenFieldset>
+    }
+
+    @* ── Actions ── *@
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" JustifyContent="JustifyContent.End" class="cs-settings-actions">
+        <RadzenButton Text="Reset Default"
+                      Icon="restart_alt"
+                      ButtonStyle="ButtonStyle.Light"
+                      Click="ResetDefaults" />
+        <RadzenButton Text="Save"
+                      Icon="save"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Click="Save" />
+    </RadzenStack>
+
+</RadzenStack>

@@ -1,0 +1,83 @@
+<RadzenStack Gap="1rem">
+    <RadzenText TextStyle="TextStyle.Subtitle1">
+        Input Type: <strong>@Registration.InputTypeName</strong>
+    </RadzenText>
+
+    <RadzenTabs @bind-SelectedIndex="_selectedTab">
+        <Tabs>
+            <RadzenTabsItem Text="Form">
+                <RadzenStack Gap="0.75rem" class="rz-mt-2">
+                    @foreach (var prop in _inputProperties)
+                    {
+                        var underlying = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+
+                        @if (underlying == typeof(bool))
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem" Style="padding: 0.75rem 1rem; border: 1px solid var(--rz-input-border); border-radius: var(--rz-border-radius);">
+                                <RadzenLabel Text="@FormatLabel(prop.Name)" />
+                                <RadzenSwitch Value="@(GetFormValue<bool>(prop.Name))"
+                                              ValueChanged="@((bool v) => SetFormValue(prop.Name, v))"
+                                              Disabled="@_running" />
+                            </RadzenStack>
+                        }
+                        else if (underlying.IsEnum)
+                        {
+                            <RadzenFormField Text="@FormatLabel(prop.Name)" Variant="Variant.Outlined" class="rz-w-100">
+                                <RadzenDropDown TValue="string"
+                                                Data="@Enum.GetNames(underlying)"
+                                                Value="@(GetFormValue<string>(prop.Name))"
+                                                ValueChanged="@((string v) => SetFormValue(prop.Name, v))"
+                                                Disabled="@_running" />
+                            </RadzenFormField>
+                        }
+                        else
+                        {
+                            <RadzenFormField Text="@FormatLabel(prop.Name)" Variant="Variant.Outlined" class="rz-w-100">
+                                <RadzenTextBox Value="@(GetFormValue<string>(prop.Name))"
+                                               Change="@(v => SetFormValue(prop.Name, v))"
+                                               Placeholder="@GetPlaceholder(underlying)"
+                                               ReadOnly="@_running" />
+                            </RadzenFormField>
+                        }
+                    }
+                </RadzenStack>
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="JSON">
+                <RadzenTextArea @bind-Value="_jsonInput"
+                                Placeholder="@($"Enter JSON for {Registration.InputTypeName}")"
+                                Rows="10"
+                                class="rz-w-100 rz-mt-2"
+                                ReadOnly="@_running" />
+            </RadzenTabsItem>
+        </Tabs>
+    </RadzenTabs>
+
+    <RadzenFormField Text="Priority" Variant="Variant.Outlined" class="rz-w-100">
+        <RadzenNumeric TValue="int"
+                       Min="@WorkQueue.MinPriority"
+                       Max="@WorkQueue.MaxPriority"
+                       @bind-Value="_priority"
+                       Disabled="@_running"
+                       Placeholder="0 (lowest) – 31 (highest)" />
+    </RadzenFormField>
+
+    @if (_error is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat">
+            @_error
+        </RadzenAlert>
+    }
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton Text="Cancel"
+                      ButtonStyle="ButtonStyle.Light"
+                      Click="@(() => DialogService.Close())"
+                      Disabled="@_running" />
+        <RadzenButton Text="Queue"
+                      Icon="queue"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Click="@QueueWorkflow"
+                      IsBusy="@_running"
+                      Disabled="@_running" />
+    </RadzenStack>
+</RadzenStack>

@@ -1,0 +1,50 @@
+@page "/chainsharp/data/logs"
+@inherits PollingComponentBase
+@inject IDataContextProviderFactory DataContextFactory
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Logs</RadzenText>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    Log entries captured during workflow execution, including messages, exceptions, and diagnostic information.
+</RadzenText>
+
+<Trax.CoreDataGrid Data="@_items"
+                    TItem="Log"
+                    IsLoading="@IsLoading">
+    <Columns>
+        <RadzenDataGridColumn TItem="Log"
+                              Property="Id"
+                              Title="Id"
+                              Width="80px"
+                              SortOrder="SortOrder.Descending" />
+        <RadzenDataGridColumn TItem="Log"
+                              Property="MetadataId"
+                              Title="Metadata Id"
+                              Width="140px" />
+        <RadzenDataGridColumn TItem="Log"
+                              Property="Level"
+                              Title="Level"
+                              Width="120px" />
+        <RadzenDataGridColumn TItem="Log"
+                              Property="Category"
+                              Title="Category"
+                              Width="200px" />
+        <RadzenDataGridColumn TItem="Log"
+                              Property="Message"
+                              Title="Message"
+                              Width="350px" />
+        <RadzenDataGridColumn TItem="Log"
+                              Property="Exception"
+                              Title="Exception"
+                              Width="250px" />
+    </Columns>
+</Trax.CoreDataGrid>
+
+@code {
+    private List<Log> _items = [];
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
+        _items = await context.Logs.AsNoTracking().ToListAsync(cancellationToken);
+    }
+}

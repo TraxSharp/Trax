@@ -1,0 +1,101 @@
+using Trax.Dashboard.Components;
+using Trax.Dashboard.Configuration;
+using Trax.Dashboard.Services.DashboardSettings;
+using Trax.Dashboard.Services.LocalStorage;
+using Trax.Dashboard.Services.ThemeState;
+using Trax.Dashboard.Services.WorkflowDiscovery;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Radzen;
+
+namespace Trax.Dashboard.Extensions;
+
+public static class DashboardServiceExtensions
+{
+    /// <summary>
+    /// Registers Trax.Core Dashboard services including Radzen components and workflow discovery.
+    /// Also ensures static web assets (CSS, JS) from NuGet packages are available in all environments.
+    /// This is the recommended overload for dashboard consumers.
+    /// </summary>
+    public static WebApplicationBuilder AddTrax.CoreDashboard(
+        this WebApplicationBuilder builder,
+        Action<DashboardOptions>? configure = null
+    )
+    {
+        // UseStaticWebAssets is only called automatically in Development.
+        // The dashboard requires it in all environments to serve Radzen CSS/JS and
+        // dashboard assets from NuGet packages via _content/ paths.
+        // This is idempotent and no-ops when the manifest is absent (e.g. published apps).
+        if (!builder.Environment.IsDevelopment())
+            builder.WebHost.UseStaticWebAssets();
+
+        // Add a MemoryConfigurationSource as the last (highest priority) source so that
+        // runtime configuration overrides (e.g. log level changes from the dashboard)
+        // survive IConfigurationRoot.Reload() — the memory provider's Load() is a no-op.
+        builder.Configuration.AddInMemoryCollection();
+
+        builder.Services.AddTrax.CoreDashboard(configure);
+        return builder;
+    }
+
+    /// <summary>
+    /// Registers Trax.Core Dashboard services including Radzen components and workflow discovery.
+    /// When using this overload, ensure static web assets are configured for non-Development environments
+    /// by calling <c>builder.WebHost.UseStaticWebAssets()</c> before <c>builder.Build()</c>.
+    /// Prefer the <see cref="AddTrax.CoreDashboard(WebApplicationBuilder, Action{DashboardOptions}?)"/> overload instead.
+    /// </summary>
+    public static IServiceCollection AddTrax.CoreDashboard(
+        this IServiceCollection services,
+        Action<DashboardOptions>? configure = null
+    )
+    {
+        var options = new DashboardOptions();
+        configure?.Invoke(options);
+
+        services.AddSingleton(options);
+
+        // Capture IServiceCollection so WorkflowDiscoveryService can scan descriptors at runtime
+        services.AddSingleton<IServiceCollection>(services);
+
+        services.AddScoped<IWorkflowDiscoveryService, WorkflowDiscoveryService>();
+        services.AddScoped<ILocalStorageService, LocalStorageService>();
+        services.AddScoped<IThemeStateService, ThemeStateService>();
+        services.AddScoped<IDashboardSettingsService, DashboardSettingsService>();
+
+        services.AddRadzenComponents();
+
+        services.AddRazorComponents().AddInteractiveServerComponents();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Maps the Trax.Core Dashboard Blazor components at the configured route prefix.
+    /// </summary>
+    public static WebApplication UseTrax.CoreDashboard(
+        this WebApplication app,
+        string routePrefix = "/chainsharp",
+        string? title = null
+    )
+    {
+        routePrefix = "/" + routePrefix.Trim('/');
+
+        var options = app.Services.GetRequiredService<DashboardOptions>();
+        options.RoutePrefix = routePrefix;
+
+        if (title is not null)
+            options.Title = title;
+        options.EnvironmentName = app.Environment.EnvironmentName;
+
+        app.UseStaticFiles();
+        app.UseAntiforgery();
+
+        app.MapStaticAssets();
+        app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+
+        return app;
+    }
+}

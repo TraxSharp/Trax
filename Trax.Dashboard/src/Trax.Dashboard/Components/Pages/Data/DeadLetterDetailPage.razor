@@ -1,0 +1,288 @@
+@page "/chainsharp/data/dead-letters/{DeadLetterId:long}"
+@inherits PollingComponentBase
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
+    <RadzenButton Icon="arrow_back"
+                  Variant="Variant.Text"
+                  Click="@(() => Navigation.NavigateTo("chainsharp/data/dead-letters"))" />
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
+        @if (_deadLetter?.Manifest is not null)
+        {
+            @ShortName(_deadLetter.Manifest.Name)
+        }
+        else if (_deadLetter is not null)
+        {
+            <text>Dead Letter #@_deadLetter.Id</text>
+        }
+        else if (!IsLoading)
+        {
+            <text>Dead Letter Not Found</text>
+        }
+    </RadzenText>
+
+    @if (_deadLetter?.Manifest is not null)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Style="margin-left: auto;">
+            <RadzenButton Text="Re-queue"
+                          Icon="replay"
+                          ButtonStyle="ButtonStyle.Primary"
+                          Variant="Variant.Outlined"
+                          Size="ButtonSize.Small"
+                          Click="@RequeueManifest"
+                          IsBusy="@_requeueing"
+                          Disabled="@(_requeueing || _acknowledging)" />
+            @if (_deadLetter.Status == DeadLetterStatus.AwaitingIntervention)
+            {
+                <RadzenButton Text="Acknowledge"
+                              Icon="check_circle"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Variant="Variant.Outlined"
+                              Size="ButtonSize.Small"
+                              Click="@(() => _showAcknowledgeInput = true)"
+                              Disabled="@(_requeueing || _acknowledging || _showAcknowledgeInput)" />
+            }
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@if (IsLoading)
+{
+    <RadzenProgressBarCircular ShowValue="true" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Large" />
+    return;
+}
+
+@if (_deadLetter is null)
+{
+    <RadzenText TextStyle="TextStyle.Body1">No dead letter found with ID @DeadLetterId.</RadzenText>
+    return;
+}
+
+@if (_actionError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" class="rz-mb-4">
+        @_actionError
+    </RadzenAlert>
+}
+
+@* ── Acknowledge Input ── *@
+@if (_showAcknowledgeInput)
+{
+    <RadzenCard class="rz-mb-4" Style="border-left: 4px solid var(--rz-secondary);">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Acknowledge Dead Letter</RadzenText>
+        <RadzenStack Gap="0.75rem">
+            <RadzenTextBox @bind-Value="_acknowledgeNote"
+                           Placeholder="Resolution note (e.g., root cause, why no retry needed)..."
+                           Style="width: 100%;" />
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                <RadzenButton Text="Confirm Acknowledge"
+                              Icon="check"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Size="ButtonSize.Small"
+                              Click="@AcknowledgeDeadLetter"
+                              IsBusy="@_acknowledging"
+                              Disabled="@_acknowledging" />
+                <RadzenButton Text="Cancel"
+                              Variant="Variant.Text"
+                              Size="ButtonSize.Small"
+                              Click="@(() => { _showAcknowledgeInput = false; _acknowledgeNote = ""; })"
+                              Disabled="@_acknowledging" />
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenCard>
+}
+
+@* ── Dead Letter Details ── *@
+<RadzenCard class="rz-mb-4" Style="@(_deadLetter.Status == DeadLetterStatus.AwaitingIntervention ? "border-left: 4px solid var(--rz-warning);" : "")">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Dead Letter Details</RadzenText>
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="ID" Value="@_deadLetter.Id.ToString()" />
+                <FieldDisplay Label="Status">
+                    <RadzenBadge BadgeStyle="@GetDeadLetterStatusBadgeStyle(_deadLetter.Status)"
+                                 Text="@_deadLetter.Status.ToString()" />
+                </FieldDisplay>
+                <FieldDisplay Label="Dead Lettered At" Value="@_deadLetter.DeadLetteredAt.ToString("yyyy-MM-dd HH:mm:ss")" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="Retry Count at Dead Letter" Value="@_deadLetter.RetryCountAtDeadLetter.ToString()" />
+                <FieldDisplay Label="Resolved At" Value="@(_deadLetter.ResolvedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")" />
+                <FieldDisplay Label="Resolution Note" Value="@(_deadLetter.ResolutionNote ?? "—")" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="Manifest ID">
+                    <RadzenLink Path="@($"chainsharp/data/manifests/{_deadLetter.ManifestId}")" Text="@_deadLetter.ManifestId.ToString()" />
+                </FieldDisplay>
+                @if (_deadLetter.RetryMetadataId.HasValue)
+                {
+                    <FieldDisplay Label="Retry Metadata ID">
+                        <RadzenLink Path="@($"chainsharp/data/metadata/{_deadLetter.RetryMetadataId}")" Text="@_deadLetter.RetryMetadataId.ToString()" />
+                    </FieldDisplay>
+                }
+            </RadzenStack>
+        </RadzenColumn>
+    </RadzenRow>
+    @if (!string.IsNullOrWhiteSpace(_deadLetter.Reason))
+    {
+        <RadzenStack Gap="0" class="rz-mt-3">
+            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color); margin: 0;">Reason</RadzenText>
+            <pre style="font-size: 0.75rem; max-height: 200px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_deadLetter.Reason</pre>
+        </RadzenStack>
+    }
+</RadzenCard>
+
+@* ── Manifest Details ── *@
+@if (_deadLetter.Manifest is not null)
+{
+    var manifest = _deadLetter.Manifest;
+    <RadzenCard class="rz-mb-4">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Manifest</RadzenText>
+        <RadzenRow Gap="1rem">
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                <RadzenStack Gap="0.75rem">
+                    <FieldDisplay Label="Name" Value="@ShortName(manifest.Name)" />
+                    <FieldDisplay Label="Enabled" Value="@(manifest.IsEnabled ? "Yes" : "No")" />
+                    <FieldDisplay Label="Schedule" Value="@FormatSchedule(manifest)" />
+                </RadzenStack>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                <RadzenStack Gap="0.75rem">
+                    <FieldDisplay Label="Max Retries" Value="@manifest.MaxRetries.ToString()" />
+                    <FieldDisplay Label="Timeout (s)" Value="@(manifest.TimeoutSeconds?.ToString() ?? "—")" />
+                    <FieldDisplay Label="Priority" Value="@manifest.Priority.ToString()" />
+                </RadzenStack>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                <RadzenStack Gap="0.75rem">
+                    <FieldDisplay Label="Last Successful Run" Value="@(manifest.LastSuccessfulRun?.ToString("yyyy-MM-dd HH:mm:ss") ?? "Never")" />
+                </RadzenStack>
+            </RadzenColumn>
+        </RadzenRow>
+        @if (!string.IsNullOrWhiteSpace(manifest.Properties))
+        {
+            <RadzenStack Gap="0" class="rz-mt-3">
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color); margin: 0;">Properties</RadzenText>
+                <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(manifest.Properties)</pre>
+            </RadzenStack>
+        }
+    </RadzenCard>
+}
+
+@* ── Most Recent Failure Details ── *@
+@if (_latestFailedRun is not null)
+{
+    <RadzenCard class="rz-mb-4" Style="border-left: 4px solid var(--rz-danger);">
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
+            <RadzenText TextStyle="TextStyle.H6" Style="margin: 0; color: var(--rz-danger);">Most Recent Failure</RadzenText>
+            <RadzenButton Icon="visibility"
+                          Variant="Variant.Text"
+                          Size="ButtonSize.Small"
+                          Click="@(() => Navigation.NavigateTo($"chainsharp/data/metadata/{_latestFailedRun.Id}"))"
+                          title="View full metadata detail" />
+        </RadzenStack>
+        <RadzenRow Gap="1rem">
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenStack Gap="0.75rem">
+                    <FieldDisplay Label="Metadata ID" Value="@_latestFailedRun.Id.ToString()" />
+                    <FieldDisplay Label="Failure Step" Value="@(_latestFailedRun.FailureStep ?? "—")" />
+                    <FieldDisplay Label="Exception" Value="@(_latestFailedRun.FailureException ?? "—")" />
+                    <FieldDisplay Label="Reason" Value="@(_latestFailedRun.FailureReason ?? "—")" />
+                    <FieldDisplay Label="Start Time" Value="@_latestFailedRun.StartTime.ToString("yyyy-MM-dd HH:mm:ss")" />
+                    <FieldDisplay Label="End Time" Value="@(_latestFailedRun.EndTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")" />
+                </RadzenStack>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="6">
+                @if (!string.IsNullOrWhiteSpace(_latestFailedRun.StackTrace))
+                {
+                    <RadzenStack Gap="0">
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color); margin: 0;">Stack Trace</RadzenText>
+                        <pre style="font-size: 0.75rem; max-height: 200px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_latestFailedRun.StackTrace</pre>
+                    </RadzenStack>
+                }
+                @if (!string.IsNullOrWhiteSpace(_latestFailedRun.Input))
+                {
+                    <RadzenStack Gap="0" class="rz-mt-3">
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color); margin: 0;">Input</RadzenText>
+                        <pre style="font-size: 0.75rem; max-height: 200px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(_latestFailedRun.Input)</pre>
+                    </RadzenStack>
+                }
+            </RadzenColumn>
+        </RadzenRow>
+    </RadzenCard>
+}
+
+@* ── Failed Execution History ── *@
+<RadzenCard>
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Failed Execution History</RadzenText>
+    @if (_failedRuns.Count > 0)
+    {
+        <Trax.CoreDataGrid Data="@_failedRuns"
+                            TItem="Metadata">
+            <Columns>
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Title=""
+                                      Width="50px"
+                                      Sortable="false"
+                                      Filterable="false"
+                                      Frozen="true"
+                                      TextAlign="TextAlign.Center">
+                    <Template Context="m">
+                        <RadzenButton Icon="visibility"
+                                      Variant="Variant.Text"
+                                      Size="ButtonSize.Small"
+                                      Click="@(() => Navigation.NavigateTo($"chainsharp/data/metadata/{m.Id}"))" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="Id"
+                                      Title="Id"
+                                      Width="80px"
+                                      SortOrder="SortOrder.Descending" />
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="WorkflowState"
+                                      Title="State"
+                                      Width="120px">
+                    <Template Context="m">
+                        <RadzenBadge BadgeStyle="@GetStateBadgeStyle(m.WorkflowState)"
+                                     Text="@m.WorkflowState.ToString()" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="StartTime"
+                                      Title="Start Time"
+                                      Width="180px"
+                                      FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="EndTime"
+                                      Title="End Time"
+                                      Width="180px"
+                                      FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Title="Duration"
+                                      Width="120px"
+                                      Sortable="false"
+                                      Filterable="false">
+                    <Template Context="m">@FormatDuration(m)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="FailureStep"
+                                      Title="Failure Step"
+                                      Width="150px" />
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="FailureReason"
+                                      Title="Failure Reason"
+                                      Width="250px" />
+            </Columns>
+        </Trax.CoreDataGrid>
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color); text-align: center; padding: 2rem;">
+            No failed executions found for this manifest.
+        </RadzenText>
+    }
+</RadzenCard>

@@ -1,0 +1,72 @@
+@using System.Globalization
+
+@if (Layout is null || Layout.Nodes.Count == 0)
+{
+    <RadzenText TextStyle="TextStyle.Body2"
+                Style="color: var(--rz-text-disabled-color); text-align: center; padding: 2rem;">
+        No dependency graph to display.
+    </RadzenText>
+    return;
+}
+
+<div class="cs-dag-container">
+    <svg xmlns="http://www.w3.org/2000/svg"
+         width="@Fmt(Layout.Width)"
+         height="@Fmt(Layout.Height)"
+         viewBox="@($"0 0 {Fmt(Layout.Width)} {Fmt(Layout.Height)}")"
+         class="cs-dag-svg">
+
+        <defs>
+            <marker id="@_markerId"
+                    markerWidth="10" markerHeight="7"
+                    refX="10" refY="3.5"
+                    orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" class="cs-dag-arrowhead" />
+            </marker>
+        </defs>
+
+        @foreach (var edge in Layout.Edges)
+        {
+            <path d="@edge.PathData"
+                  class="cs-dag-edge"
+                  marker-end="@($"url(#{_markerId})")" />
+        }
+
+        @foreach (var node in Layout.Nodes)
+        {
+            <g class="@NodeClass(node)" style="cursor: pointer;" @onclick="@(() => OnNodeClick.InvokeAsync(node.Id))">
+                <rect x="@Fmt(node.X)" y="@Fmt(node.Y)"
+                      width="@Fmt(node.Width)" height="@Fmt(node.Height)"
+                      rx="8" ry="8" />
+                <text x="@Fmt(node.X + node.Width / 2)"
+                      y="@Fmt(node.Y + node.Height / 2)"
+                      dominant-baseline="central"
+                      text-anchor="middle"
+                      textLength="@(node.Label.Length > 22 ? Fmt(node.Width - 20) : null)"
+                      lengthAdjust="@(node.Label.Length > 22 ? "spacingAndGlyphs" : null)">
+                    <title>@node.Label</title>
+                    @node.Label
+                </text>
+            </g>
+        }
+    </svg>
+</div>
+
+@code {
+    [Parameter]
+    public DagLayout? Layout { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnNodeClick { get; set; }
+
+    /// <summary>
+    /// Unique marker ID so multiple DagGraph instances on the same page don't collide.
+    /// </summary>
+    private readonly string _markerId = $"arrowhead-{Guid.NewGuid():N}";
+
+    private static string Fmt(double value) =>
+        value.ToString("F1", CultureInfo.InvariantCulture);
+
+    private static string NodeClass(PositionedNode node) =>
+        node.IsHighlighted ? "cs-dag-node cs-dag-node--highlighted" : "cs-dag-node";
+}

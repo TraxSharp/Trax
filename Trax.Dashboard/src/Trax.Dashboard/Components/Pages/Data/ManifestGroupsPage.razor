@@ -1,0 +1,137 @@
+@page "/chainsharp/data/manifest-groups"
+@inherits PollingComponentBase
+@inject IDataContextProviderFactory DataContextFactory
+@inject NavigationManager Navigation
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Manifest Groups</RadzenText>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    Logical groupings of related manifests with per-group dispatch controls.
+</RadzenText>
+
+@if (_dagLayout is not null && _dagLayout.Nodes.Count > 0)
+{
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Dependency Graph</RadzenText>
+    <DagGraph Layout="@_dagLayout" OnNodeClick="@OnDagNodeClick" />
+}
+
+<Trax.CoreDataGrid Data="@_items"
+                    TItem="GroupSummary"
+                    IsLoading="@IsLoading">
+    <Columns>
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Title=""
+                              Width="50px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true"
+                              TextAlign="TextAlign.Center">
+            <Template Context="g">
+                <RadzenButton Icon="visibility"
+                              Variant="Variant.Text"
+                              Size="ButtonSize.Small"
+                              Click="@(() => Navigation.NavigateTo($"chainsharp/data/manifest-groups/{g.Id}"))" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="Name"
+                              Title="Group"
+                              Width="250px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="Priority"
+                              Title="Priority"
+                              Width="100px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="MaxActiveJobs"
+                              Title="Max Active Jobs"
+                              Width="160px">
+            <Template Context="g">@(g.MaxActiveJobs?.ToString() ?? "—")</Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="IsEnabled"
+                              Title="Enabled"
+                              Width="100px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="ManifestCount"
+                              Title="Manifests"
+                              Width="120px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="TotalExecutions"
+                              Title="Total Executions"
+                              Width="170px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="CompletedCount"
+                              Title="Completed"
+                              Width="120px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="FailedCount"
+                              Title="Failed"
+                              Width="100px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="LastRun"
+                              Title="Last Run"
+                              Width="180px"
+                              FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+    </Columns>
+</Trax.CoreDataGrid>
+
+@code {
+    private List<GroupSummary> _items = [];
+    private DagLayout? _dagLayout;
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
+
+        _items = await context.ManifestGroups
+            .AsNoTracking()
+            .Include(g => g.Manifests)
+                .ThenInclude(m => m.Metadatas)
+            .Select(g => new GroupSummary
+            {
+                Id = g.Id,
+                Name = g.Name,
+                MaxActiveJobs = g.MaxActiveJobs,
+                Priority = g.Priority,
+                IsEnabled = g.IsEnabled,
+                ManifestCount = g.Manifests.Count,
+                TotalExecutions = g.Manifests.SelectMany(m => m.Metadatas).Count(),
+                CompletedCount = g.Manifests.SelectMany(m => m.Metadatas).Count(md => md.WorkflowState == WorkflowState.Completed),
+                FailedCount = g.Manifests.SelectMany(m => m.Metadatas).Count(md => md.WorkflowState == WorkflowState.Failed),
+                LastRun = g.Manifests.SelectMany(m => m.Metadatas).Max(md => (DateTime?)md.StartTime),
+            })
+            .ToListAsync(cancellationToken);
+
+        // Build group-level dependency graph
+        var crossGroupEdges = await context.Manifests
+            .AsNoTracking()
+            .Where(m => m.DependsOnManifestId != null)
+            .Join(
+                context.Manifests.AsNoTracking(),
+                dependent => dependent.DependsOnManifestId,
+                parent => (long?)parent.Id,
+                (dependent, parent) => new
+                {
+                    ParentGroupId = parent.ManifestGroupId,
+                    DependentGroupId = dependent.ManifestGroupId,
+                }
+            )
+            .Where(e => e.ParentGroupId != e.DependentGroupId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var dagNodes = _items
+            .Select(g => new DagNode { Id = g.Id, Label = g.Name })
+            .ToList();
+
+        var dagEdges = crossGroupEdges
+            .Select(e => new DagEdge { FromId = e.ParentGroupId, ToId = e.DependentGroupId })
+            .ToList();
+
+        _dagLayout = DagLayoutEngine.ComputeLayout(dagNodes, dagEdges);
+    }
+
+    private void OnDagNodeClick(long groupId)
+    {
+        Navigation.NavigateTo($"chainsharp/data/manifest-groups/{groupId}");
+    }
+}

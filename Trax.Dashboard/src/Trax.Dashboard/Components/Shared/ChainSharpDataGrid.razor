@@ -1,0 +1,180 @@
+@typeparam TItem
+@using System.Linq.Dynamic.Core
+@implements IAsyncDisposable
+
+<RadzenDataGrid @ref="_grid"
+                TItem="TItem"
+                Data="@_view"
+                Count="@_count"
+                IsLoading="@(IsLoading || _serverLoading)"
+                LoadData="@OnLoadData"
+                AllowFiltering="@AllowFiltering"
+                AllowSorting="@AllowSorting"
+                AllowPaging="@AllowPaging"
+                PageSize="@PageSize"
+                PagerHorizontalAlign="HorizontalAlign.Center"
+                AllowColumnResize="true"
+                AllowColumnPicking="true"
+                ColumnsPickerAllowDrag="false"
+                FilterMode="FilterMode.Advanced"
+                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                RowClick="@RowClick"
+                Style="@Style"
+                class="rz-datatable-striped">
+    <Columns>
+        @Columns
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    private RadzenDataGrid<TItem> _grid = default!;
+    private IEnumerable<TItem> _view = [];
+    private int _count;
+    private IEnumerable<TItem>? _previousData;
+    private CancellationTokenSource? _loadCts;
+    private bool _serverLoading;
+    private bool _serverLoadStarted;
+
+    // ── Client-side mode (existing) ──
+    [Parameter]
+    public IEnumerable<TItem>? Data { get; set; }
+
+    // ── Server-side mode ──
+    [Parameter]
+    public Func<LoadDataArgs, CancellationToken, Task<ServerDataResult<TItem>>>? ServerLoadData { get; set; }
+
+    [Parameter]
+    public RenderFragment? Columns { get; set; }
+
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    [Parameter]
+    public bool AllowFiltering { get; set; } = true;
+
+    [Parameter]
+    public bool AllowSorting { get; set; } = true;
+
+    [Parameter]
+    public bool AllowPaging { get; set; } = true;
+
+    [Parameter]
+    public int PageSize { get; set; } = 20;
+
+    [Parameter]
+    public EventCallback<DataGridRowMouseEventArgs<TItem>> RowClick { get; set; }
+
+    [Parameter]
+    public string? Style { get; set; }
+
+    private bool IsServerMode => ServerLoadData is not null;
+
+    public async Task ReloadAsync()
+    {
+        if (_grid is not null)
+            await _grid.Reload();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Safety net: if Radzen didn't fire LoadData on init, trigger it ourselves.
+        if (firstRender && IsServerMode && !_serverLoadStarted)
+        {
+            await _grid.Reload();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsServerMode)
+            return;
+
+        if (!ReferenceEquals(Data, _previousData))
+        {
+            _previousData = Data;
+
+            // Eagerly sync _view and _count so the grid always has data,
+            // even if RadzenDataGrid hasn't fired LoadData yet.
+            var items = (Data ?? []).ToList();
+            _view = items;
+            _count = items.Count;
+
+            if (_grid is not null)
+                await _grid.Reload();
+        }
+    }
+
+    // IMPORTANT: This stays as void so client-side mode behavior is identical
+    // to the original. Server-side async work is fire-and-forget with explicit
+    // StateHasChanged once complete.
+    private void OnLoadData(LoadDataArgs args)
+    {
+        if (IsServerMode)
+        {
+            _serverLoadStarted = true;
+            _ = InvokeServerLoadAsync(args);
+        }
+        else
+        {
+            var query = (Data ?? []).AsQueryable();
+
+            if (!string.IsNullOrEmpty(args.Filter))
+                query = query.Where(args.Filter);
+
+            if (!string.IsNullOrEmpty(args.OrderBy))
+                query = query.OrderBy(args.OrderBy);
+
+            _count = query.Count();
+
+            if (args.Skip.HasValue)
+                query = query.Skip(args.Skip.Value);
+
+            if (args.Top.HasValue)
+                query = query.Take(args.Top.Value);
+
+            _view = query.ToList();
+        }
+    }
+
+    private async Task InvokeServerLoadAsync(LoadDataArgs args)
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = new CancellationTokenSource();
+
+        try
+        {
+            _serverLoading = true;
+            await InvokeAsync(StateHasChanged);
+
+            var result = await ServerLoadData!(args, _loadCts.Token);
+
+            await InvokeAsync(() =>
+            {
+                _view = result.Items;
+                _count = result.TotalCount;
+                _serverLoading = false;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer request — ignore.
+        }
+        catch (Exception)
+        {
+            await InvokeAsync(() =>
+            {
+                _serverLoading = false;
+                StateHasChanged();
+            });
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

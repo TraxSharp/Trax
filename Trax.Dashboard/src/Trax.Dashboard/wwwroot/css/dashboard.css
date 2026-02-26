@@ -1,0 +1,183 @@
+/* Trax.Core Dashboard — custom variables bridging Radzen theme tokens.
+   --cs-* variables reference --rz-* tokens so they auto-cascade on theme change.
+   The .cs-dashboard wrapper scopes Radzen variable overrides to this dashboard. */
+
+:root {
+    /* ── Trax.Core custom tokens ── */
+    --cs-header-bg: #1B5E20;
+    --cs-header-text: #ffffff;
+    --cs-primary: #2E7D32;
+    --cs-primary-lighter: #388E3C;
+    --cs-grid-row-selected-bg: var(--rz-secondary-lighter, rgba(255, 255, 255, 0.1));
+    --cs-grid-row-hover-bg: var(--rz-base-background-color-hover, rgba(255, 255, 255, 0.18));
+
+    /* ── Override Radzen primary colour palette ──
+       !important is required because <RadzenTheme> injects a <style> block
+       that sets --rz-primary on :root AFTER our stylesheet loads, winning
+       the cascade by source order.  !important flips the priority. */
+    --rz-primary: #2E7D32 !important;
+    --rz-primary-light: #388E3C !important;
+    --rz-primary-lighter: #4CAF50 !important;
+    --rz-primary-dark: #1B5E20 !important;
+    --rz-primary-darker: #145A1E !important;
+    --rz-on-primary: #ffffff !important;
+    --rz-on-primary-lighter: #ffffff !important;
+}
+
+/* Panel menu active states — scoped to the dashboard wrapper. */
+.cs-dashboard {
+    --rz-panel-menu-item-active-background-color: var(--cs-primary);
+    --rz-panel-menu-item-active-color: var(--rz-text-contrast-color);
+    --rz-panel-menu-item-active-indicator: var(--cs-primary-lighter);
+    --rz-panel-menu-item-2nd-level-active-background-color: var(--cs-primary-lighter);
+    --rz-panel-menu-item-2nd-level-active-color: var(--rz-text-contrast-color);
+}
+
+/* Layout structure */
+.cs-dashboard .rz-layout {
+    min-height: 100vh;
+}
+
+.cs-dashboard .rz-sidebar {
+    width: 250px;
+}
+
+/* Header: forest green background, white text */
+.cs-dashboard .rz-header {
+    background-color: var(--cs-header-bg);
+}
+
+.cs-dashboard .rz-header,
+.cs-dashboard .rz-header * {
+    color: var(--cs-header-text);
+}
+
+/* UTC clock in header */
+.cs-dashboard .cs-utc-clock {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-family: monospace, var(--rz-body-font-family, sans-serif);
+    opacity: 0.85;
+    white-space: nowrap;
+}
+
+/* Environment badge in header */
+.cs-dashboard .cs-env-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    color: #ffffff;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+/* Ensure nested panel menu items are not greyed out */
+.cs-dashboard .rz-panel-menu .rz-navigation-item .rz-navigation-item .rz-navigation-item-link {
+    opacity: 1;
+    color: var(--rz-text-color);
+}
+
+.cs-dashboard .rz-panel-menu .rz-navigation-item .rz-navigation-item .rz-navigation-item-icon {
+    color: var(--rz-text-color);
+}
+
+/* Smooth border transition on fieldsets for unsaved-changes indicator */
+.cs-dashboard .rz-fieldset {
+    transition: border-color 0.3s ease;
+}
+
+/* Unsaved changes indicator — amber border on dirty fieldsets */
+.cs-fieldset-dirty {
+    border-color: var(--rz-warning, #FF9800) !important;
+}
+
+/* Settings page wrapper — ensures page fills the viewport so
+   the action bar is pushed to the bottom even on short pages */
+.cs-settings-page {
+    min-height: calc(100vh - 7rem);
+}
+
+/* Sticky action bar pinned to the bottom of the settings viewport */
+.cs-settings-actions {
+    position: sticky;
+    bottom: 0;
+    background-color: var(--rz-body-background-color, var(--rz-base-background-color, #121212));
+    padding: 1rem 0 2rem;
+    border-top: 1px solid var(--rz-base-200, rgba(255, 255, 255, 0.1));
+    z-index: 1;
+    margin-top: auto;
+}
+
+/* Prevent datagrid cells from clipping switches / toggles */
+.cs-dashboard .rz-data-grid td .rz-switch {
+    vertical-align: middle;
+    margin: 0.25rem 0;
+}
+
+/* Shrink the oversized focus ripple on switches inside grids */
+.cs-dashboard .rz-data-grid .rz-switch-circle::before {
+    transform: scale(0.6);
+}
+
+/* ── DAG Graph ── */
+
+.cs-dag-container {
+    overflow-x: auto;
+    border: 1px solid var(--rz-base-200, rgba(255, 255, 255, 0.1));
+    border-radius: var(--rz-border-radius, 4px);
+    background-color: var(--rz-base-background-color, #121212);
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.cs-dag-svg {
+    display: block;
+}
+
+.cs-dag-node rect {
+    fill: var(--rz-base-background-color, #1e1e1e);
+    stroke: var(--rz-primary, #2E7D32);
+    stroke-width: 2;
+    transition: fill 0.15s ease;
+}
+
+.cs-dag-node:hover rect {
+    fill: var(--rz-primary-lighter, #388E3C);
+}
+
+.cs-dag-node text {
+    fill: var(--rz-text-color, #ffffff);
+    font-size: 12px;
+    font-family: var(--rz-body-font-family, sans-serif);
+    pointer-events: none;
+}
+
+.cs-dag-node:hover text {
+    fill: var(--rz-on-primary-lighter, #ffffff);
+}
+
+.cs-dag-node--highlighted rect {
+    fill: var(--cs-primary, #2E7D32);
+    stroke: var(--cs-primary-lighter, #388E3C);
+    stroke-width: 3;
+}
+
+.cs-dag-node--highlighted text {
+    fill: #ffffff;
+    font-weight: 600;
+}
+
+.cs-dag-edge {
+    fill: none;
+    stroke: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.3));
+    stroke-width: 1.5;
+}
+
+.cs-dag-arrowhead {
+    fill: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.3));
+}

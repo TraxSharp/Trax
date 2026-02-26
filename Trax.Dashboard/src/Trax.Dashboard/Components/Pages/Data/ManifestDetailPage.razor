@@ -1,0 +1,221 @@
+@page "/chainsharp/data/manifests/{ManifestId:long}"
+@inherits PollingComponentBase
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
+    <RadzenButton Icon="arrow_back"
+                  Variant="Variant.Text"
+                  Click="@(() => Navigation.NavigateTo("chainsharp/data/manifests"))" />
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
+        @if (_manifest is not null)
+        {
+            @ShortName(_manifest.Name)
+        }
+        else if (!IsLoading)
+        {
+            <text>Manifest Not Found</text>
+        }
+    </RadzenText>
+
+    @if (_manifest is not null)
+    {
+        <RadzenButton Text="Run Now"
+                      Icon="play_arrow"
+                      ButtonStyle="ButtonStyle.Secondary"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Click="@TriggerManifest"
+                      IsBusy="@_triggering"
+                      Disabled="@_triggering"
+                      Style="margin-left: auto;" />
+    }
+</RadzenStack>
+
+@if (IsLoading)
+{
+    <RadzenProgressBarCircular ShowValue="true" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Large" />
+    return;
+}
+
+@if (_manifest is null)
+{
+    <RadzenText TextStyle="TextStyle.Body1">No manifest found with ID @ManifestId.</RadzenText>
+    return;
+}
+
+@if (_triggerError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" class="rz-mb-4">
+        @_triggerError
+    </RadzenAlert>
+}
+
+@* ── Manifest Details ── *@
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Details</RadzenText>
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="ID" Value="@_manifest.Id.ToString()" />
+                <FieldDisplay Label="Name" Value="@ShortName(_manifest.Name)" />
+                <FieldDisplay Label="External ID" Value="@_manifest.ExternalId" />
+                <FieldDisplay Label="Enabled" Value="@(_manifest.IsEnabled ? "Yes" : "No")" />
+                @if (_manifest.ManifestGroup is not null)
+                {
+                    <FieldDisplay Label="Group">
+                        <RadzenLink Path="@($"chainsharp/data/manifest-groups/{_manifest.ManifestGroupId}")" Text="@_manifest.ManifestGroup.Name" />
+                    </FieldDisplay>
+                }
+                else
+                {
+                    <FieldDisplay Label="Group" Value="—" />
+                }
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="Schedule Type" Value="@_manifest.ScheduleType.ToString()" />
+                <FieldDisplay Label="Cron Expression" Value="@(_manifest.CronExpression ?? "—")" />
+                <FieldDisplay Label="Interval (s)" Value="@(_manifest.IntervalSeconds?.ToString() ?? "—")" />
+                <FieldDisplay Label="Priority" Value="@_manifest.Priority.ToString()" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="Max Retries" Value="@_manifest.MaxRetries.ToString()" />
+                <FieldDisplay Label="Timeout (s)" Value="@(_manifest.TimeoutSeconds?.ToString() ?? "—")" />
+                <FieldDisplay Label="Last Successful Run" Value="@(_manifest.LastSuccessfulRun?.ToString("yyyy-MM-dd HH:mm:ss") ?? "Never")" />
+            </RadzenStack>
+        </RadzenColumn>
+    </RadzenRow>
+</RadzenCard>
+
+@* ── Summary Cards ── *@
+<RadzenRow Gap="1rem" class="rz-mb-4">
+    <RadzenColumn Size="6" SizeMD="3">
+        <RadzenCard>
+            <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
+                <RadzenIcon Icon="bar_chart" Style="font-size: 2rem; color: var(--rz-primary);" />
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Total Runs</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="6" SizeMD="3">
+        <RadzenCard>
+            <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
+                <RadzenIcon Icon="check_circle" Style="font-size: 2rem; color: var(--rz-success);" />
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.WorkflowState == WorkflowState.Completed)</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Completed</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="6" SizeMD="3">
+        <RadzenCard>
+            <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
+                <RadzenIcon Icon="error" Style="font-size: 2rem; color: var(--rz-danger);" />
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.WorkflowState == WorkflowState.Failed)</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Failed</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="6" SizeMD="3">
+        <RadzenCard>
+            <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
+                <RadzenIcon Icon="sync" Style="font-size: 2rem; color: var(--rz-info);" />
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.WorkflowState == WorkflowState.InProgress)</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">In Progress</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+@* ── Metadata Runs ── *@
+<RadzenCard>
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Execution History</RadzenText>
+    @if (_metadataItems.Count > 0)
+    {
+        <Trax.CoreDataGrid Data="@_metadataItems"
+                            TItem="Metadata">
+            <Columns>
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Title=""
+                                      Width="50px"
+                                      Sortable="false"
+                                      Filterable="false"
+                                      Frozen="true"
+                                      TextAlign="TextAlign.Center">
+                    <Template Context="m">
+                        <RadzenButton Icon="visibility"
+                                      Variant="Variant.Text"
+                                      Size="ButtonSize.Small"
+                                      Click="@(() => Navigation.NavigateTo($"chainsharp/data/metadata/{m.Id}"))" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="Id"
+                                      Title="Id"
+                                      Width="80px"
+                                      SortOrder="SortOrder.Descending" />
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="WorkflowState"
+                                      Title="State"
+                                      Width="120px">
+                    <Template Context="m">
+                        <RadzenBadge BadgeStyle="@GetStateBadgeStyle(m.WorkflowState)"
+                                     Text="@m.WorkflowState.ToString()" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="ExternalId"
+                                      Title="External Id"
+                                      Width="200px" />
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="StartTime"
+                                      Title="Start Time"
+                                      Width="180px"
+                                      FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="EndTime"
+                                      Title="End Time"
+                                      Width="180px"
+                                      FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Title="Duration"
+                                      Width="120px"
+                                      Sortable="false"
+                                      Filterable="false">
+                    <Template Context="m">@FormatDuration(m)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="FailureStep"
+                                      Title="Failure Step"
+                                      Width="150px" />
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="FailureReason"
+                                      Title="Failure Reason"
+                                      Width="250px" />
+                <RadzenDataGridColumn TItem="Metadata"
+                                      Property="ParentId"
+                                      Title="Parent Id"
+                                      Width="100px">
+                    <Template Context="m">
+                        @if (m.ParentId.HasValue)
+                        {
+                            <RadzenLink Path="@($"chainsharp/data/metadata/{m.ParentId}")" Text="@m.ParentId.ToString()" />
+                        }
+                        else
+                        {
+                            <text>—</text>
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </Trax.CoreDataGrid>
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color); text-align: center; padding: 2rem;">
+            No executions found for this manifest.
+        </RadzenText>
+    }
+</RadzenCard>

@@ -1,0 +1,22 @@
+@* Components/Layout/Footer/DashboardFooter.razor *@
+@using System.Reflection
+@inject Trax.Dashboard.Configuration.DashboardOptions Options
+
+<RadzenFooter>
+    <RadzenStack Orientation="Orientation.Horizontal"
+                 AlignItems="AlignItems.Center"
+                 JustifyContent="JustifyContent.Center"
+                 Style="height: 100%; padding: 0 1rem;">
+        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+            @Options.Title Dashboard — v@(Version)
+        </RadzenText>
+    </RadzenStack>
+</RadzenFooter>
+
+@code {
+    private static string Version { get; } =
+        typeof(DashboardOptions).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion?.Split('+')[0]
+        ?? "unknown";
+}
