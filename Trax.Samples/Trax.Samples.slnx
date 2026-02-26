@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/Trax.Samples.Scheduler/Trax.Samples.Scheduler.csproj" />
+    <Project Path="samples/Trax.Samples.Flowthru.Spaceflights/Trax.Samples.Flowthru.Spaceflights.csproj" />
+  </Folder>
+  <Folder Name="/templates/">
+    <Project Path="templates/Trax.Samples.Templates.csproj" />
+  </Folder>
+</Solution>

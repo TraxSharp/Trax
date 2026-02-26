@@ -1,0 +1,3 @@
+<Project>
+    <!-- Block root Directory.Build.props from applying to template content -->
+</Project>
