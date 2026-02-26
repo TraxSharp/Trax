@@ -1,0 +1,328 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using Trax.Effect.Configuration.Trax.CoreEffectConfiguration;
+using Trax.Effect.Enums;
+using Trax.Effect.Models.Manifest.DTOs;
+using Trax.Effect.Utils;
+using LanguageExt;
+
+namespace Trax.Effect.Models.Manifest;
+
+/// <summary>
+/// Represents a job definition that describes what workflow to run, how to schedule it,
+/// and what retry policies to apply.
+/// </summary>
+/// <remarks>
+/// A Manifest is the "job definition" in the scheduling system. It defines:
+/// - Which workflow to execute (via <see cref="Name"/>)
+/// - Default configuration/properties for the workflow
+/// - Scheduling rules (cron, interval, or manual-only)
+/// - Retry and timeout policies
+///
+/// Each execution of a Manifest creates a new <see cref="Metadata.Metadata"/> record.
+/// This allows for full audit trail of every execution attempt.
+/// </remarks>
+public class Manifest : IModel
+{
+    #region Columns
+
+    [Column("id")]
+    public long Id { get; }
+
+    [Column("external_id")]
+    public string ExternalId { get; set; }
+
+    [Column("name")]
+    public string Name { get; set; }
+
+    [Column("property_type")]
+    public string? PropertyTypeName { get; set; }
+
+    [Column("properties")]
+    public string? Properties { get; set; }
+
+    [NotMapped]
+    [JsonIgnore]
+    public Type PropertyType =>
+        PropertyTypeName == null ? typeof(Unit) : ResolveType(PropertyTypeName);
+
+    [NotMapped]
+    [JsonIgnore]
+    public Type NameType => Name == null ? typeof(Unit) : ResolveType(Name);
+
+    #region Scheduling Properties
+
+    /// <summary>
+    /// Gets or sets whether this manifest is enabled for scheduling.
+    /// </summary>
+    /// <remarks>
+    /// When false, the ManifestManager will skip this manifest during polling.
+    /// This allows pausing jobs without deleting them.
+    /// </remarks>
+    [Column("is_enabled")]
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the scheduling strategy for this manifest.
+    /// </summary>
+    [Column("schedule_type")]
+    public ScheduleType ScheduleType { get; set; } = ScheduleType.None;
+
+    /// <summary>
+    /// Gets or sets the cron expression for Cron-type schedules.
+    /// </summary>
+    /// <remarks>
+    /// Only used when <see cref="ScheduleType"/> is <see cref="ScheduleType.Cron"/>.
+    /// Uses standard cron format (e.g., "0 3 * * *" for daily at 3am).
+    /// </remarks>
+    [Column("cron_expression")]
+    public string? CronExpression { get; set; }
+
+    /// <summary>
+    /// Gets or sets the interval in seconds for Interval-type schedules.
+    /// </summary>
+    /// <remarks>
+    /// Only used when <see cref="ScheduleType"/> is <see cref="ScheduleType.Interval"/>.
+    /// </remarks>
+    [Column("interval_seconds")]
+    public int? IntervalSeconds { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum number of retry attempts before dead-lettering.
+    /// </summary>
+    /// <remarks>
+    /// Each retry creates a new Metadata record. After this many failed attempts,
+    /// the job is moved to the dead letter queue for manual intervention.
+    /// </remarks>
+    [Column("max_retries")]
+    public int MaxRetries { get; set; } = 3;
+
+    /// <summary>
+    /// Gets or sets the timeout in seconds for job execution.
+    /// </summary>
+    /// <remarks>
+    /// If a job is in "InProgress" state for longer than this duration,
+    /// it may be considered stuck and subject to recovery logic.
+    /// Null means use the global default from SchedulerConfiguration.
+    /// </remarks>
+    [Column("timeout_seconds")]
+    public int? TimeoutSeconds { get; set; }
+
+    /// <summary>
+    /// Gets or sets the timestamp of the last successful execution.
+    /// </summary>
+    /// <remarks>
+    /// Updated automatically when a job completes successfully.
+    /// Useful for scheduling decisions and "delta mode" workflows that
+    /// need to know when data was last synchronized.
+    /// </remarks>
+    [Column("last_successful_run")]
+    public DateTime? LastSuccessfulRun { get; set; }
+
+    /// <summary>
+    /// Gets or sets the ID of the ManifestGroup this manifest belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Every manifest must belong to a ManifestGroup. Groups provide per-group dispatch
+    /// controls (MaxActiveJobs, Priority, IsEnabled) and dashboard grouping.
+    /// </remarks>
+    [Column("manifest_group_id")]
+    public long ManifestGroupId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the ID of the parent manifest that this manifest depends on.
+    /// </summary>
+    /// <remarks>
+    /// When set, this manifest will only be queued for execution after the parent manifest
+    /// completes successfully. The <see cref="ScheduleType"/> should be set to
+    /// <see cref="Enums.ScheduleType.Dependent"/> when this property is used.
+    /// </remarks>
+    [Column("depends_on_manifest_id")]
+    public long? DependsOnManifestId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the default dispatch priority for work queue entries created from this manifest.
+    /// </summary>
+    /// <remarks>
+    /// Values range from 0 (lowest) to 31 (highest). Higher-priority entries are dispatched
+    /// before lower-priority ones. This value is denormalized onto WorkQueue entries at creation time.
+    /// </remarks>
+    [Column("priority")]
+    public int Priority { get; set; }
+
+    #endregion
+
+    #endregion
+
+    #region ForeignKeys
+
+    /// <summary>
+    /// Gets or sets the ManifestGroup this manifest belongs to.
+    /// </summary>
+    public ManifestGroup.ManifestGroup ManifestGroup { get; set; } = null!;
+
+    /// <summary>
+    /// Gets or sets the parent manifest that this manifest depends on.
+    /// </summary>
+    public Manifest? DependsOnManifest { get; set; }
+
+    /// <summary>
+    /// Gets the collection of metadata records (workflow executions) associated with this manifest.
+    /// </summary>
+    /// <remarks>
+    /// This navigation property allows for traversal from a job definition (Manifest)
+    /// to all its execution records (Metadata). It is populated by the ORM when loaded
+    /// from the database.
+    /// </remarks>
+    public ICollection<Metadata.Metadata> Metadatas { get; private set; } = [];
+
+    /// <summary>
+    /// Gets the collection of dead letter records for jobs that exceeded retry limits.
+    /// </summary>
+    /// <remarks>
+    /// This navigation property allows for traversal from a job definition (Manifest)
+    /// to all its dead-lettered executions. It is populated by the ORM when loaded
+    /// from the database.
+    /// </remarks>
+    public ICollection<DeadLetter.DeadLetter> DeadLetters { get; private set; } = [];
+
+    public ICollection<WorkQueue.WorkQueue> WorkQueues { get; private set; } = [];
+
+    #endregion
+
+    #region Functions
+
+    public static Manifest Create(CreateManifest manifest)
+    {
+        if (manifest.Name.FullName is null)
+            throw new Exception($"Could not get a full name from ({manifest.Name})");
+
+        var newManifest = new Manifest()
+        {
+            Name = manifest.Name.FullName,
+            ExternalId = Guid.NewGuid().ToString("N"),
+            // Scheduling properties
+            IsEnabled = manifest.IsEnabled,
+            ScheduleType = manifest.ScheduleType,
+            CronExpression = manifest.CronExpression,
+            IntervalSeconds = manifest.IntervalSeconds,
+            MaxRetries = manifest.MaxRetries,
+            TimeoutSeconds = manifest.TimeoutSeconds,
+            DependsOnManifestId = manifest.DependsOnManifestId,
+            Priority = manifest.Priority,
+        };
+
+        if (manifest.Properties != null)
+            newManifest.SetProperties(manifest.Properties);
+
+        return newManifest;
+    }
+
+    public Unit SetProperties(IManifestProperties properties)
+    {
+        var propertiesType = properties.GetType();
+
+        PropertyTypeName = propertiesType.FullName;
+
+        var json = JsonSerializer.Serialize(
+            properties,
+            propertiesType,
+            Trax.CoreJsonSerializationOptions.ManifestProperties
+        );
+
+        var node = JsonNode.Parse(json);
+        if (node is JsonObject obj)
+        {
+            var reordered = new JsonObject { ["$type"] = propertiesType.FullName };
+            foreach (var kvp in obj)
+                reordered[kvp.Key] = kvp.Value?.DeepClone();
+            Properties = reordered.ToJsonString(
+                Trax.CoreJsonSerializationOptions.ManifestProperties
+            );
+        }
+        else
+        {
+            Properties = json;
+        }
+
+        return Unit.Default;
+    }
+
+    public TProperty GetProperties<TProperty>()
+        where TProperty : IManifestProperties => (TProperty)GetProperties(typeof(TProperty));
+
+    public object GetProperties(Type propertyType)
+    {
+        if (propertyType != PropertyType)
+            throw new Exception($"Passed type ({propertyType}) is not saved type ({PropertyType})");
+
+        if (string.IsNullOrEmpty(Properties))
+            throw new Exception(
+                $"Cannot deserialize null property object with type ({PropertyType})"
+            );
+
+        return JsonSerializer.Deserialize(
+                Properties,
+                propertyType,
+                Trax.CoreJsonSerializationOptions.ManifestProperties
+            )
+            ?? throw new Exception(
+                $"Could not deserialize property object ({Properties}) with type ({PropertyType})"
+            );
+    }
+
+    /// <summary>
+    /// Deserializes the Properties JSON using the type resolved from <see cref="PropertyTypeName"/>.
+    /// </summary>
+    public object GetPropertiesUntyped()
+    {
+        if (string.IsNullOrEmpty(Properties))
+            throw new Exception(
+                $"Cannot deserialize null property object with type ({PropertyType})"
+            );
+
+        return JsonSerializer.Deserialize(
+                Properties,
+                PropertyType,
+                Trax.CoreJsonSerializationOptions.ManifestProperties
+            )
+            ?? throw new Exception(
+                $"Could not deserialize property object ({Properties}) with type ({PropertyType})"
+            );
+    }
+
+    public override string ToString() =>
+        JsonSerializer.Serialize(
+            this,
+            GetType(),
+            Trax.CoreEffectConfiguration.StaticSystemJsonSerializerOptions
+        );
+
+    #endregion
+
+    [JsonConstructor]
+    public Manifest() { }
+
+    /// <summary>
+    /// Resolves a type by its full name, searching all loaded assemblies.
+    /// </summary>
+    private static Type ResolveType(string typeName)
+    {
+        // First try the standard Type.GetType which works for types in the current assembly and mscorlib
+        var type = Type.GetType(typeName);
+        if (type != null)
+            return type;
+
+        // Search through all loaded assemblies
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            type = assembly.GetType(typeName);
+            if (type != null)
+                return type;
+        }
+
+        throw new TypeLoadException($"Unable to find type: {typeName}");
+    }
+}

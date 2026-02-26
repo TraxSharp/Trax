@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <Authors>Theauxm,mark-keaton</Authors>
+        <PackageDescription>Effect Data for Trax.Core Workflows</PackageDescription>
+        <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+        <AssemblyName>Trax.Effect.Data</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
+      <PackageReference Include="Npgsql" Version="10.0.1" />
+    </ItemGroup>
+
+</Project>

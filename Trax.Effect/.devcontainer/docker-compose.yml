@@ -1,0 +1,16 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspace:cached
+    command: sleep infinity
+  database:
+    image: postgres
+    environment:
+      POSTGRES_USER: trax
+      POSTGRES_PASSWORD: trax123
+      POSTGRES_DB: trax
+    ports:
+      - "5432:5432"

@@ -1,0 +1,1 @@
+drop index trax.workflow_external_id_uindex;

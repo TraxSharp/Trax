@@ -1,0 +1,15 @@
+services:
+  database:
+    container_name: trax_database
+    image: postgres
+    restart: always
+    shm_size: 512m
+    environment:
+      POSTGRES_USER: trax
+      POSTGRES_PASSWORD: trax123
+      POSTGRES_DB: trax
+    tty: true
+    ports:
+      - "5432:5432"
+    networks:
+      - default

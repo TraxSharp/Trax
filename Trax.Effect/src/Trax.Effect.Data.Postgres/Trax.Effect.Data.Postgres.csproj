@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <Authors>Theauxm,mark-keaton</Authors>
+        <PackageDescription>Postgres Provider for Trax.Effect.Data Library</PackageDescription>
+        <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+        <AssemblyName>Trax.Effect.Data.Postgres</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="Migrations/*.sql" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+        <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="dbup-core" Version="5.0.87" />
+        <PackageReference Include="dbup-postgresql" Version="5.0.40" />
+    </ItemGroup>
+
+</Project>

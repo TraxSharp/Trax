@@ -1,0 +1,24 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Trax.Effect/Trax.Effect.csproj" />
+  </Folder>
+  <Folder Name="/src/data/">
+    <Project Path="src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <Project Path="src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
+    <Project Path="src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+  </Folder>
+  <Folder Name="/src/providers/">
+    <Project Path="src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <Project Path="src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <Project Path="src/Trax.Effect.StepProvider.Logging/Trax.Effect.StepProvider.Logging.csproj" />
+    <Project Path="src/Trax.Effect.StepProvider.Progress/Trax.Effect.StepProvider.Progress.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.Effect.Tests.ArrayLogger/Trax.Effect.Tests.ArrayLogger.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Integration/Trax.Effect.Tests.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Json.Integration/Trax.Effect.Tests.Json.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Data.InMemory.Integration/Trax.Effect.Tests.Data.InMemory.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Data.Postgres.Integration/Trax.Effect.Tests.Data.Postgres.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.MemoryLeak.Integration/Trax.Effect.Tests.MemoryLeak.Integration.csproj" />
+  </Folder>
+</Solution>
