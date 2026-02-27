@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/TraxSharp/Trax.Core/compare/v1.0.2...v1.0.3) (2026-02-27)
+
+
+### Bug Fixes
+
+* For NuGet ([c6126a9](https://github.com/TraxSharp/Trax.Core/commit/c6126a963647836ffbef23708fe58015c546f473))
+
 ## [1.0.2](https://github.com/TraxSharp/Trax.Core/compare/v1.0.1...v1.0.2) (2026-02-26)
 
 
