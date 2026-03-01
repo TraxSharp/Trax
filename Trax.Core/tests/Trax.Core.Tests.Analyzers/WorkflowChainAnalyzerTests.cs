@@ -1,8 +1,8 @@
-using Trax.Core.Analyzers;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Testing;
 using Microsoft.CodeAnalysis.Testing;
 using NUnit.Framework;
+using Trax.Core.Analyzers;
 
 namespace Trax.Core.Tests.Analyzers;
 

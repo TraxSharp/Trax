@@ -1,5 +1,5 @@
-using Trax.Core.Exceptions;
 using FluentAssertions;
+using Trax.Core.Exceptions;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Utils;
 
@@ -24,11 +24,11 @@ public class ConvertTupleTests : TestSetup
     public async Task TestInvalidConvertTwoTuple()
     {
         // Arrange
-        var listToConvert = new List<(Type, dynamic)>() { (typeof(int), 1), };
+        var listToConvert = new List<(Type, dynamic)>() { (typeof(int), 1) };
 
         // Act
-        Assert.Throws<ArgumentException>(
-            () => Trax.Core.Utils.TypeHelpers.ConvertTwoTuple(listToConvert)
+        Assert.Throws<ArgumentException>(() =>
+            Trax.Core.Utils.TypeHelpers.ConvertTwoTuple(listToConvert)
         );
     }
 
@@ -40,7 +40,7 @@ public class ConvertTupleTests : TestSetup
         {
             (typeof(int), 1),
             (typeof(bool), false),
-            (typeof(string), "test")
+            (typeof(string), "test"),
         };
 
         // Act
@@ -61,8 +61,8 @@ public class ConvertTupleTests : TestSetup
         var listToConvert = new List<(Type, dynamic)>() { (typeof(int), 1), (typeof(bool), false) };
 
         // Act
-        Assert.Throws<ArgumentException>(
-            () => Trax.Core.Utils.TypeHelpers.ConvertThreeTuple(listToConvert)
+        Assert.Throws<ArgumentException>(() =>
+            Trax.Core.Utils.TypeHelpers.ConvertThreeTuple(listToConvert)
         );
     }
 
@@ -75,7 +75,7 @@ public class ConvertTupleTests : TestSetup
             (typeof(int), 1),
             (typeof(bool), false),
             (typeof(string), "test"),
-            (typeof(double), 2.0)
+            (typeof(double), 2.0),
         };
 
         // Act
@@ -98,12 +98,12 @@ public class ConvertTupleTests : TestSetup
         {
             (typeof(int), 1),
             (typeof(bool), false),
-            (typeof(string), "test")
+            (typeof(string), "test"),
         };
 
         // Act
-        Assert.Throws<ArgumentException>(
-            () => Trax.Core.Utils.TypeHelpers.ConvertFourTuple(listToConvert)
+        Assert.Throws<ArgumentException>(() =>
+            Trax.Core.Utils.TypeHelpers.ConvertFourTuple(listToConvert)
         );
     }
 
@@ -117,7 +117,7 @@ public class ConvertTupleTests : TestSetup
             (typeof(bool), false),
             (typeof(string), "test"),
             (typeof(double), 2.0),
-            (typeof(float), 3.0f)
+            (typeof(float), 3.0f),
         };
 
         // Act
@@ -142,12 +142,12 @@ public class ConvertTupleTests : TestSetup
             (typeof(int), 1),
             (typeof(bool), false),
             (typeof(string), "test"),
-            (typeof(double), 2.0)
+            (typeof(double), 2.0),
         };
 
         // Act
-        Assert.Throws<ArgumentException>(
-            () => Trax.Core.Utils.TypeHelpers.ConvertFiveTuple(listToConvert)
+        Assert.Throws<ArgumentException>(() =>
+            Trax.Core.Utils.TypeHelpers.ConvertFiveTuple(listToConvert)
         );
     }
 
@@ -162,7 +162,7 @@ public class ConvertTupleTests : TestSetup
             (typeof(string), "test"),
             (typeof(double), 2.0),
             (typeof(float), 3.0f),
-            (typeof(decimal), 4.0m)
+            (typeof(decimal), 4.0m),
         };
 
         // Act
@@ -189,12 +189,12 @@ public class ConvertTupleTests : TestSetup
             (typeof(bool), false),
             (typeof(string), "test"),
             (typeof(double), 2.0),
-            (typeof(float), 3.0f)
+            (typeof(float), 3.0f),
         };
 
         // Act
-        Assert.Throws<ArgumentException>(
-            () => Trax.Core.Utils.TypeHelpers.ConvertSixTuple(listToConvert)
+        Assert.Throws<ArgumentException>(() =>
+            Trax.Core.Utils.TypeHelpers.ConvertSixTuple(listToConvert)
         );
     }
 
@@ -210,7 +210,7 @@ public class ConvertTupleTests : TestSetup
             (typeof(double), 2.0),
             (typeof(float), 3.0f),
             (typeof(decimal), 4.0m),
-            (typeof(char), 'a')
+            (typeof(char), 'a'),
         };
 
         // Act
@@ -239,12 +239,12 @@ public class ConvertTupleTests : TestSetup
             (typeof(string), "test"),
             (typeof(double), 2.0),
             (typeof(float), 3.0f),
-            (typeof(decimal), 4.0m)
+            (typeof(decimal), 4.0m),
         };
 
         // Act
-        Assert.Throws<ArgumentException>(
-            () => Trax.Core.Utils.TypeHelpers.ConvertSevenTuple(listToConvert)
+        Assert.Throws<ArgumentException>(() =>
+            Trax.Core.Utils.TypeHelpers.ConvertSevenTuple(listToConvert)
         );
     }
 }

@@ -1,3 +1,7 @@
+using FluentAssertions;
+using LanguageExt;
+using Microsoft.Extensions.DependencyInjection;
+using NUnit.Framework;
 using Trax.Core.Exceptions;
 using Trax.Core.Step;
 using Trax.Core.Tests.Examples.Brewery;
@@ -6,10 +10,6 @@ using Trax.Core.Tests.Examples.Brewery.Steps.Brew;
 using Trax.Core.Tests.Examples.Brewery.Steps.Ferment;
 using Trax.Core.Tests.Examples.Brewery.Steps.Prepare;
 using Trax.Core.Train;
-using FluentAssertions;
-using LanguageExt;
-using Microsoft.Extensions.DependencyInjection;
-using NUnit.Framework;
 
 namespace Trax.Core.Tests.Tests;
 
@@ -356,13 +356,13 @@ public class WorkflowTests : TestSetup
         var outerProperty = new OuterProperty()
         {
             OuterString = "hello world",
-            InnerProperty = new InnerProperty() { Number = 7 }
+            InnerProperty = new InnerProperty() { Number = 7 },
         };
 
         var outerField = new OuterField()
         {
             OuterString = "hello mars",
-            InnerProperty = new InnerField() { Number = 8 }
+            InnerProperty = new InnerField() { Number = 8 },
         };
 
         // Act
@@ -387,7 +387,7 @@ public class WorkflowTests : TestSetup
             Apples = 1,
             BrownSugar = 1,
             Cinnamon = 1,
-            Yeast = 1
+            Yeast = 1,
         };
 
         var result = await workflow.Run(ingredients);
@@ -403,7 +403,7 @@ public class WorkflowTests : TestSetup
             Apples = 1,
             BrownSugar = 1,
             Cinnamon = 1,
-            Yeast = 1
+            Yeast = 1,
         };
 
         var result = await workflow.Run(ingredients);
@@ -419,7 +419,7 @@ public class WorkflowTests : TestSetup
             Apples = 1,
             BrownSugar = 1,
             Cinnamon = 1,
-            Yeast = 1
+            Yeast = 1,
         };
 
         var result = await workflow.Run(ingredients);
@@ -435,7 +435,7 @@ public class WorkflowTests : TestSetup
             Apples = 1,
             BrownSugar = 1,
             Cinnamon = 1,
-            Yeast = 1
+            Yeast = 1,
         };
 
         var result = await workflow.Run(ingredients);
@@ -451,7 +451,7 @@ public class WorkflowTests : TestSetup
             Apples = 1,
             BrownSugar = 1,
             Cinnamon = 1,
-            Yeast = 1
+            Yeast = 1,
         };
 
         var result = await workflow.Run(ingredients);
@@ -467,7 +467,7 @@ public class WorkflowTests : TestSetup
             Apples = 1,
             BrownSugar = 1,
             Cinnamon = 1,
-            Yeast = 1
+            Yeast = 1,
         };
 
         var result = await workflow.Run(ingredients);
@@ -486,7 +486,7 @@ public class WorkflowTests : TestSetup
             Apples = 1,
             BrownSugar = 1,
             Cinnamon = 1,
-            Yeast = 1
+            Yeast = 1,
         };
 
         var result = await workflow.Run(ingredients);
@@ -504,7 +504,7 @@ public class WorkflowTests : TestSetup
             Apples = 1,
             BrownSugar = 1,
             Cinnamon = 1,
-            Yeast = 1
+            Yeast = 1,
         };
 
         var result = await workflow.Run(ingredients);
@@ -523,7 +523,7 @@ public class WorkflowTests : TestSetup
             Apples = 1,
             BrownSugar = 1,
             Cinnamon = 1,
-            Yeast = 1
+            Yeast = 1,
         };
 
         var result = await workflow.Run(ingredients);

@@ -1,9 +1,9 @@
+using FluentAssertions;
+using LanguageExt;
 using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Core.Step;
 using Trax.Core.Train;
-using FluentAssertions;
-using LanguageExt;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Extensions;
 

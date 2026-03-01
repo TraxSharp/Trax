@@ -1,11 +1,11 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using LanguageExt;
+using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Monad;
 using Trax.Core.Utils;
-using LanguageExt;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Core.Extensions;
 
@@ -195,10 +195,9 @@ public static class MonadExtensions
         return typeTuples.Count switch
         {
             0 => throw new WorkflowException($"Cannot have Tuple of length 0."),
-            1
-                => throw new WorkflowException(
-                    "Tuple of a single length should be passed as the value itself."
-                ),
+            1 => throw new WorkflowException(
+                "Tuple of a single length should be passed as the value itself."
+            ),
             2 => TypeHelpers.ConvertTwoTuple(typeTuples),
             3 => TypeHelpers.ConvertThreeTuple(typeTuples),
             4 => TypeHelpers.ConvertFourTuple(typeTuples),

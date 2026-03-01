@@ -1,5 +1,5 @@
-using Trax.Core.Step;
 using LanguageExt;
+using Trax.Core.Step;
 using static LanguageExt.Prelude;
 
 namespace Trax.Core.Tests.Integration.Examples.Brewery.Steps.Prepare;

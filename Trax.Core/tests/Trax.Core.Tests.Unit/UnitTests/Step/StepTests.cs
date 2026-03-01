@@ -1,8 +1,8 @@
-using Trax.Core.Step;
-using Trax.Core.Tests.Unit.Utils;
 using FluentAssertions;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
+using Trax.Core.Step;
+using Trax.Core.Tests.Unit.Utils;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Step;
 

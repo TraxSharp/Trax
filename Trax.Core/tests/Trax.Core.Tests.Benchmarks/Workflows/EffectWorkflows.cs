@@ -1,7 +1,7 @@
-using Trax.Effect.Services.ServiceTrain;
+using LanguageExt;
 using Trax.Core.Tests.Benchmarks.Models;
 using Trax.Core.Tests.Benchmarks.Steps;
-using LanguageExt;
+using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Core.Tests.Benchmarks.Workflows;
 

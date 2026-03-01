@@ -1,5 +1,4 @@
 <Project>
-
   <PropertyGroup>
     <LangVersion>Latest</LangVersion>
     <NoWarn>MSB3277</NoWarn>
@@ -24,7 +23,11 @@
 
   <ItemGroup>
     <Reference Include="System.Xaml" />
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.0" PrivateAssets="All" />
+    <PackageReference
+      Include="Microsoft.NETFramework.ReferenceAssemblies"
+      Version="1.0.0"
+      PrivateAssets="All"
+    />
   </ItemGroup>
 
   <ItemGroup>
@@ -36,5 +39,4 @@
       <Generator>JetResourceGenerator</Generator>
     </EmbeddedResource>
   </ItemDefinitionGroup>
-
 </Project>

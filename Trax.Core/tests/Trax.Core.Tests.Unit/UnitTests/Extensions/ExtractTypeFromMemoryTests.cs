@@ -1,7 +1,7 @@
-using Trax.Core.Extensions;
-using Trax.Core.Train;
 using FluentAssertions;
 using LanguageExt;
+using Trax.Core.Extensions;
+using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Extensions;
 

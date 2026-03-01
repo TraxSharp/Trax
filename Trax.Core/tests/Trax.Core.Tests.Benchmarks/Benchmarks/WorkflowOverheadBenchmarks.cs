@@ -1,10 +1,10 @@
 using BenchmarkDotNet.Attributes;
-using Trax.Effect.Data.InMemory.Extensions;
-using Trax.Effect.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Tests.Benchmarks.Models;
 using Trax.Core.Tests.Benchmarks.Serial;
 using Trax.Core.Tests.Benchmarks.Workflows;
-using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Extensions;
 
 namespace Trax.Core.Tests.Benchmarks.Benchmarks;
 
@@ -28,14 +28,8 @@ public class WorkflowOverheadBenchmarks
         var noEffectsServices = new ServiceCollection();
         noEffectsServices.AddTraxEffects();
         noEffectsServices.AddScopedTraxRoute<IEffectAddOneWorkflow, EffectAddOneWorkflow>();
-        noEffectsServices.AddScopedTraxRoute<
-            IEffectAddThreeWorkflow,
-            EffectAddThreeWorkflow
-        >();
-        noEffectsServices.AddScopedTraxRoute<
-            IEffectTransformWorkflow,
-            EffectTransformWorkflow
-        >();
+        noEffectsServices.AddScopedTraxRoute<IEffectAddThreeWorkflow, EffectAddThreeWorkflow>();
+        noEffectsServices.AddScopedTraxRoute<IEffectTransformWorkflow, EffectTransformWorkflow>();
         noEffectsServices.AddScopedTraxRoute<
             IEffectSimulatedIoWorkflow,
             EffectSimulatedIoWorkflow
@@ -46,14 +40,8 @@ public class WorkflowOverheadBenchmarks
         var inMemoryServices = new ServiceCollection();
         inMemoryServices.AddTraxEffects(options => options.AddInMemoryEffect());
         inMemoryServices.AddScopedTraxRoute<IEffectAddOneWorkflow, EffectAddOneWorkflow>();
-        inMemoryServices.AddScopedTraxRoute<
-            IEffectAddThreeWorkflow,
-            EffectAddThreeWorkflow
-        >();
-        inMemoryServices.AddScopedTraxRoute<
-            IEffectTransformWorkflow,
-            EffectTransformWorkflow
-        >();
+        inMemoryServices.AddScopedTraxRoute<IEffectAddThreeWorkflow, EffectAddThreeWorkflow>();
+        inMemoryServices.AddScopedTraxRoute<IEffectTransformWorkflow, EffectTransformWorkflow>();
         inMemoryServices.AddScopedTraxRoute<
             IEffectSimulatedIoWorkflow,
             EffectSimulatedIoWorkflow

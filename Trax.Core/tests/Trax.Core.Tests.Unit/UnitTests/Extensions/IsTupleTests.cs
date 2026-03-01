@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
-using Trax.Core.Extensions;
 using FluentAssertions;
+using Trax.Core.Extensions;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Extensions;
 

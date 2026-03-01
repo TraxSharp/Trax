@@ -1,7 +1,7 @@
-using Trax.Core.Exceptions;
-using Trax.Core.Train;
 using FluentAssertions;
 using LanguageExt;
+using Trax.Core.Exceptions;
+using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Workflow;
 
@@ -27,8 +27,8 @@ public class WorkflowTests
         var workflow = new NotImplementedWorkflow();
 
         // Act
-        Assert.ThrowsAsync<NotImplementedException>(
-            async () => await workflow.Run(LanguageExt.Unit.Default)
+        Assert.ThrowsAsync<NotImplementedException>(async () =>
+            await workflow.Run(LanguageExt.Unit.Default)
         );
     }
 

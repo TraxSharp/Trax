@@ -1,6 +1,6 @@
 using System.Reflection;
-using Trax.Core.Exceptions;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Exceptions;
 
 namespace Trax.Core.Extensions;
 
@@ -13,18 +13,15 @@ public static class LoggerExtensions
     /// <summary>
     /// Cached generic CreateLogger method to avoid repeated reflection lookups.
     /// </summary>
-    private static readonly Lazy<MethodInfo> GenericCreateLoggerMethod =
-        new(
-            () =>
-                typeof(LoggerFactoryExtensions)
-                    .GetMethods(BindingFlags.Static | BindingFlags.Public)
-                    .First(
-                        m =>
-                            m.Name == nameof(LoggerFactoryExtensions.CreateLogger)
-                            && m.GetParameters().Length == 1
-                            && m.IsGenericMethod
-                    )
-        );
+    private static readonly Lazy<MethodInfo> GenericCreateLoggerMethod = new(() =>
+        typeof(LoggerFactoryExtensions)
+            .GetMethods(BindingFlags.Static | BindingFlags.Public)
+            .First(m =>
+                m.Name == nameof(LoggerFactoryExtensions.CreateLogger)
+                && m.GetParameters().Length == 1
+                && m.IsGenericMethod
+            )
+    );
 
     /// <summary>
     /// Creates a generic logger for the specified type.

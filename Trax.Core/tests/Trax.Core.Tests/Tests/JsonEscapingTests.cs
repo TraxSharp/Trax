@@ -1,10 +1,10 @@
 using System.Text.Json;
-using Trax.Core.Exceptions;
-using Trax.Core.Step;
-using Trax.Core.Train;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
 using NUnit.Framework;
+using Trax.Core.Exceptions;
+using Trax.Core.Step;
+using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Tests;
 
