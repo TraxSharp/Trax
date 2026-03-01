@@ -1,10 +1,10 @@
-title: Trax.Core
-description: A .NET library for Railway Oriented Programming with Effects
+title: Trax
+description: A .NET framework for Railway Oriented Programming with Effects, Scheduling, and more
 remote_theme: just-the-docs/just-the-docs@v0.10.0
 
 # GitHub Pages settings
-baseurl: "/Trax.Core"
-url: "https://theauxm.github.io"
+baseurl: "/Trax.Docs"
+url: "https://traxsharp.github.io"
 
 # Build settings
 markdown: kramdown
@@ -22,12 +22,12 @@ search:
 # Aux links (top right)
 aux_links:
   "View on GitHub":
-    - "https://github.com/Theauxm/Trax.Core"
+    - "https://github.com/TraxSharp/Trax.Docs"
 
 aux_links_new_tab: true
 
 # Footer
-footer_content: "Trax.Core - A .NET library for Railway Oriented Programming with Effects"
+footer_content: "Trax - A .NET framework for Railway Oriented Programming with Effects, Scheduling, and more"
 
 # Back to top link
 back_to_top: true
