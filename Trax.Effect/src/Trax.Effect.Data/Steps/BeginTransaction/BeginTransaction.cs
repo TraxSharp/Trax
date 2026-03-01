@@ -1,6 +1,6 @@
-using Trax.Effect.Data.Services.DataContext;
-using Trax.Core.Step;
 using LanguageExt;
+using Trax.Core.Step;
+using Trax.Effect.Data.Services.DataContext;
 
 namespace Trax.Effect.Data.Steps.BeginTransaction;
 

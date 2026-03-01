@@ -1,6 +1,6 @@
 using System.Reflection;
-using Trax.Effect.Models;
 using Microsoft.EntityFrameworkCore;
+using Trax.Effect.Models;
 
 namespace Trax.Effect.Data.Extensions;
 
@@ -49,8 +49,8 @@ public static class ModelBuilderExtensions
     {
         var entityTypes = typeof(AssemblyMarker)
             .Assembly.GetTypes()
-            .Where(
-                t => typeof(IModel).IsAssignableFrom(t) && t is { IsAbstract: false, IsClass: true }
+            .Where(t =>
+                typeof(IModel).IsAssignableFrom(t) && t is { IsAbstract: false, IsClass: true }
             )
             .ToList();
 

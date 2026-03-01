@@ -1,5 +1,5 @@
-using Trax.Effect.Services.EffectProviderFactory;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Services.EffectProviderFactory;
 
 namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
 

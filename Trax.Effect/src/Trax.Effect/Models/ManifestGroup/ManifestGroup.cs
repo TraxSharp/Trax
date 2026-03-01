@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Trax.Effect.Configuration.Trax.CoreEffectConfiguration;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
 
 namespace Trax.Effect.Models.ManifestGroup;
 
@@ -64,7 +64,7 @@ public class ManifestGroup : IModel
         JsonSerializer.Serialize(
             this,
             GetType(),
-            Trax.CoreEffectConfiguration.StaticSystemJsonSerializerOptions
+            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
         );
 
     [JsonConstructor]

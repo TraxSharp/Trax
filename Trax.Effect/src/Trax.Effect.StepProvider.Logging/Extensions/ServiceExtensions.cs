@@ -1,15 +1,15 @@
-using Trax.Effect.Configuration.Trax.CoreEffectBuilder;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Extensions;
 using Trax.Effect.StepProvider.Logging.Services.StepLoggerFactory;
 using Trax.Effect.StepProvider.Logging.Services.StepLoggerProvider;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Effect.StepProvider.Logging.Extensions;
 
 public static class ServiceExtensions
 {
-    public static Trax.CoreEffectConfigurationBuilder AddStepLogger(
-        this Trax.CoreEffectConfigurationBuilder configurationBuilder,
+    public static TraxEffectConfigurationBuilder AddStepLogger(
+        this TraxEffectConfigurationBuilder configurationBuilder,
         bool serializeStepData = false
     )
     {

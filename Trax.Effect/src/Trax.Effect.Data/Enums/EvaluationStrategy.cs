@@ -48,5 +48,5 @@ public enum EvaluationStrategy
     /// Lazy evaluation is the default behavior in Entity Framework Core and is generally
     /// more efficient for most scenarios.
     /// </remarks>
-    Lazy
+    Lazy,
 }

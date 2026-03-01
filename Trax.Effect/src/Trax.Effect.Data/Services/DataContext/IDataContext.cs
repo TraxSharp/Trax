@@ -1,4 +1,5 @@
 using System.Data;
+using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Models.Metadata;
 using Trax.Effect.Data.Services.DataContextTransaction;
 using Trax.Effect.Models;
@@ -10,7 +11,6 @@ using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.EffectProvider;
-using Microsoft.EntityFrameworkCore;
 
 namespace Trax.Effect.Data.Services.DataContext;
 

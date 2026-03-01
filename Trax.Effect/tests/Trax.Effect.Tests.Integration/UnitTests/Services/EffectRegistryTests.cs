@@ -1,7 +1,7 @@
+using FluentAssertions;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.StepEffectProviderFactory;
-using FluentAssertions;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 
@@ -279,18 +279,17 @@ public class EffectRegistryTests
 
         var tasks = Enumerable
             .Range(0, 100)
-            .Select(
-                i =>
-                    Task.Run(() =>
-                    {
-                        if (i % 2 == 0)
-                            _registry.Enable(typeof(FakeFactory));
-                        else
-                            _registry.Disable(typeof(FakeFactory));
+            .Select(i =>
+                Task.Run(() =>
+                {
+                    if (i % 2 == 0)
+                        _registry.Enable(typeof(FakeFactory));
+                    else
+                        _registry.Disable(typeof(FakeFactory));
 
-                        _ = _registry.IsEnabled(typeof(FakeFactory));
-                        _ = _registry.GetAll();
-                    })
+                    _ = _registry.IsEnabled(typeof(FakeFactory));
+                    _ = _registry.GetAll();
+                })
             )
             .ToArray();
 
@@ -304,15 +303,14 @@ public class EffectRegistryTests
     {
         var tasks = Enumerable
             .Range(0, 100)
-            .Select(
-                i =>
-                    Task.Run(() =>
-                    {
-                        // Use a unique type per iteration via a dictionary lookup
-                        _registry.Register(typeof(FakeFactory), enabled: i % 2 == 0);
-                        _ = _registry.IsEnabled(typeof(FakeFactory));
-                        _ = _registry.GetAll();
-                    })
+            .Select(i =>
+                Task.Run(() =>
+                {
+                    // Use a unique type per iteration via a dictionary lookup
+                    _registry.Register(typeof(FakeFactory), enabled: i % 2 == 0);
+                    _ = _registry.IsEnabled(typeof(FakeFactory));
+                    _ = _registry.GetAll();
+                })
             )
             .ToArray();
 

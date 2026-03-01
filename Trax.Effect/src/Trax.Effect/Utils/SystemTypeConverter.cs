@@ -21,7 +21,7 @@ namespace Trax.Effect.Utils;
 /// 2. Types need to be persisted for later use or analysis
 /// 3. Type information is used for dynamic method invocation and object creation
 ///
-/// The converter is registered in the Trax.CoreJsonSerializationOptions.Default
+/// The converter is registered in the TraxJsonSerializationOptions.Default
 /// options, making it available throughout the system.
 /// </remarks>
 public class SystemTypeConverter : JsonConverter<Type>

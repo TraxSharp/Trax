@@ -1,9 +1,9 @@
 using System.Text.Json.Nodes;
+using FluentAssertions;
+using LanguageExt;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
-using FluentAssertions;
-using LanguageExt;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Models;
 
@@ -70,7 +70,7 @@ public class ManifestSchedulingTests
             {
                 Name = typeof(Unit),
                 ScheduleType = ScheduleType.Cron,
-                CronExpression = "0 3 * * *" // Daily at 3am
+                CronExpression = "0 3 * * *", // Daily at 3am
             }
         );
 
@@ -89,7 +89,7 @@ public class ManifestSchedulingTests
             {
                 Name = typeof(Unit),
                 ScheduleType = ScheduleType.Interval,
-                IntervalSeconds = 300 // Every 5 minutes
+                IntervalSeconds = 300, // Every 5 minutes
             }
         );
 
@@ -151,7 +151,7 @@ public class ManifestSchedulingTests
             new CreateManifest
             {
                 Name = typeof(Unit),
-                TimeoutSeconds = 3600 // 1 hour
+                TimeoutSeconds = 3600, // 1 hour
             }
         );
 
@@ -171,7 +171,7 @@ public class ManifestSchedulingTests
                 ScheduleType = ScheduleType.Cron,
                 CronExpression = "0 */6 * * *", // Every 6 hours
                 MaxRetries = 5,
-                TimeoutSeconds = 7200
+                TimeoutSeconds = 7200,
             }
         );
 
@@ -219,7 +219,7 @@ public class ManifestSchedulingTests
         {
             Name = "TypeDiscriminatorTest",
             Value = 42,
-            Enabled = true
+            Enabled = true,
         };
 
         // Act
@@ -243,7 +243,7 @@ public class ManifestSchedulingTests
         {
             Name = "Order",
             Value = 1,
-            Enabled = true
+            Enabled = true,
         };
 
         // Act
@@ -264,7 +264,7 @@ public class ManifestSchedulingTests
         {
             Name = "EnumTest",
             Category = TestCategory.Beta,
-            Values = [1, 2, 3]
+            Values = [1, 2, 3],
         };
 
         var manifest = Manifest.Create(
@@ -288,7 +288,7 @@ public class ManifestSchedulingTests
         {
             Name = "UntypedTest",
             Category = TestCategory.Gamma,
-            Values = [10, 20]
+            Values = [10, 20],
         };
 
         var manifest = Manifest.Create(
@@ -314,7 +314,7 @@ public class ManifestSchedulingTests
         {
             Name = "ListTest",
             Category = TestCategory.Alpha,
-            Values = [100, 200, 300, 400, 500]
+            Values = [100, 200, 300, 400, 500],
         };
 
         var manifest = Manifest.Create(
@@ -337,7 +337,7 @@ public class ManifestSchedulingTests
         {
             Name = "EnumStringTest",
             Category = TestCategory.Beta,
-            Values = []
+            Values = [],
         };
 
         // Act
@@ -363,7 +363,7 @@ public class ManifestSchedulingTests
     {
         Alpha,
         Beta,
-        Gamma
+        Gamma,
     }
 
     private class TestManifestPropertiesWithEnum : IManifestProperties
@@ -383,7 +383,7 @@ public class ManifestSchedulingTests
         Customers,
         Orders,
         Inventory,
-        Invoices
+        Invoices,
     }
 
     /// <summary>

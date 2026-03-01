@@ -1,16 +1,16 @@
-using Trax.Effect.Configuration.Trax.CoreEffectConfiguration;
-using Trax.Effect.Services.EffectStep;
-using Trax.Effect.Services.ServiceTrain;
-using Trax.Core.Exceptions;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Trax.Core.Exceptions;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.ServiceTrain;
 using JsonConverter = System.Text.Json.Serialization.JsonConverter;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace Trax.Effect.StepProvider.Logging.Services.StepLoggerProvider;
 
 public class StepLoggerProvider(
-    ITrax.CoreEffectConfiguration configuration,
+    ITraxEffectConfiguration configuration,
     ILogger<StepLoggerProvider> logger
 ) : IStepLoggerProvider
 {

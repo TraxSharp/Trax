@@ -1,11 +1,11 @@
+using LanguageExt;
+using LanguageExt.UnsafeValueAccess;
+using Microsoft.Extensions.Logging;
+using Trax.Core.Exceptions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Core.Exceptions;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Effect.Extensions;
 
@@ -93,11 +93,10 @@ internal static class ServiceTrainExtensions
 
         var failureReason = result.IsRight ? null : result.Swap().ValueUnsafe();
 
-        var resultState = result.IsRight
-            ? WorkflowState.Completed
-            : failureReason is OperationCanceledException
-                ? WorkflowState.Cancelled
-                : WorkflowState.Failed;
+        var resultState =
+            result.IsRight ? WorkflowState.Completed
+            : failureReason is OperationCanceledException ? WorkflowState.Cancelled
+            : WorkflowState.Failed;
         serviceTrain.Logger?.LogTrace(
             "Setting ({TrainName}) to ({ResultState}).",
             serviceTrain.TrainName,

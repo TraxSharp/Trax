@@ -1,4 +1,6 @@
 using System.Reflection;
+using FluentAssertions;
+using LanguageExt;
 using Trax.Effect.Models;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -8,8 +10,6 @@ using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.Services.EffectStep;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.StepProvider.Progress.Services.StepProgressProvider;
-using FluentAssertions;
-using LanguageExt;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 
@@ -324,7 +324,7 @@ public class StepProgressProviderTests
             {
                 Name = "TestWorkflow",
                 ExternalId = Guid.NewGuid().ToString("N"),
-                Input = null
+                Input = null,
             }
         );
 
@@ -351,7 +351,7 @@ public class StepProgressProviderTests
                 ExternalId = Guid.NewGuid().ToString("N"),
                 InputType = typeof(string),
                 OutputType = typeof(string),
-                State = EitherStatus.IsRight
+                State = EitherStatus.IsRight,
             },
             parentMetadata
         );

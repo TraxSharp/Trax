@@ -1,19 +1,19 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
-using Trax.Mediator.Extensions;
-using Trax.Mediator.Services.WorkflowBus;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Trax.Mediator.Extensions;
+using Trax.Mediator.Services.WorkflowBus;
 
 namespace Trax.Effect.Tests.Data.Postgres.Integration;
 
@@ -43,22 +43,21 @@ public abstract class TestSetup
             .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
             .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
             .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
-            .AddTrax.CoreEffects(
-                options =>
-                    options
-                        .AddServiceTrainBus(
-                            assemblies:
-                            [
-                                typeof(AssemblyMarker).Assembly,
-                                typeof(Trax.Effect.Tests.Integration.AssemblyMarker).Assembly
-                            ]
-                        )
-                        .SetEffectLogLevel(LogLevel.Information)
-                        .SaveWorkflowParameters()
-                        .AddPostgresEffect(connectionString)
-                        .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
-                        .AddJsonEffect()
-                        .AddStepLogger(serializeStepData: true)
+            .AddTraxEffects(options =>
+                options
+                    .AddServiceTrainBus(
+                        assemblies:
+                        [
+                            typeof(AssemblyMarker).Assembly,
+                            typeof(Trax.Effect.Tests.Integration.AssemblyMarker).Assembly,
+                        ]
+                    )
+                    .SetEffectLogLevel(LogLevel.Information)
+                    .SaveWorkflowParameters()
+                    .AddPostgresEffect(connectionString)
+                    .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
+                    .AddJsonEffect()
+                    .AddStepLogger(serializeStepData: true)
             )
             .BuildServiceProvider();
     }

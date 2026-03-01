@@ -1,7 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Services.StepEffectProvider;
 using Trax.Effect.Services.StepEffectProviderFactory;
 using Trax.Effect.StepProvider.Logging.Services.StepLoggerProvider;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Effect.StepProvider.Logging.Services.StepLoggerFactory;
 

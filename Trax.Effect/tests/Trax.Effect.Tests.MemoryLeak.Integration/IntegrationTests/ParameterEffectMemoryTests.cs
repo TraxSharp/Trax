@@ -1,10 +1,10 @@
 using System.Text.Json;
+using FluentAssertions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Provider.Parameter.Configuration;
 using Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;
 using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows.TestModels;
 using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
-using FluentAssertions;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;
 
@@ -24,7 +24,7 @@ public class ParameterEffectMemoryTests
         _jsonOptions = new JsonSerializerOptions
         {
             WriteIndented = false,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         };
     }
 
@@ -62,7 +62,7 @@ public class ParameterEffectMemoryTests
                                 Message = $"Parameter test output {i}_{j}",
                                 ProcessedData = new string('P', 1000), // 1KB string
                                 Success = true,
-                                ProcessedAt = DateTime.UtcNow
+                                ProcessedAt = DateTime.UtcNow,
                             }
                         );
 
@@ -136,7 +136,7 @@ public class ParameterEffectMemoryTests
                             Message = $"Accumulation test output {i}",
                             ProcessedData = new string('A', 3000), // 3KB string
                             Success = true,
-                            ProcessedAt = DateTime.UtcNow
+                            ProcessedAt = DateTime.UtcNow,
                         }
                     );
 
@@ -224,7 +224,7 @@ public class ParameterEffectMemoryTests
                             Message = $"JsonDocument test output {i}",
                             ProcessedData = new string('J', 5000), // 5KB string
                             Success = true,
-                            ProcessedAt = DateTime.UtcNow
+                            ProcessedAt = DateTime.UtcNow,
                         }
                     );
 
@@ -286,7 +286,7 @@ public class ParameterEffectMemoryTests
                                     Message = $"Concurrent output {taskId}_{i}",
                                     ProcessedData = new string('C', 2000), // 2KB string
                                     Success = true,
-                                    ProcessedAt = DateTime.UtcNow
+                                    ProcessedAt = DateTime.UtcNow,
                                 }
                             );
 
@@ -360,7 +360,7 @@ public class ParameterEffectMemoryTests
                                 Message = $"Repeated output iteration {iteration}",
                                 ProcessedData = new string(iterationChar, 2500), // 2.5KB string
                                 Success = true,
-                                ProcessedAt = DateTime.UtcNow
+                                ProcessedAt = DateTime.UtcNow,
                             }
                         );
                     }
@@ -446,7 +446,7 @@ public class ParameterEffectMemoryTests
                             Message = $"Large parameter output {i}",
                             ProcessedData = new string('L', 30_000), // 30KB string
                             Success = true,
-                            ProcessedAt = DateTime.UtcNow
+                            ProcessedAt = DateTime.UtcNow,
                         }
                     );
 

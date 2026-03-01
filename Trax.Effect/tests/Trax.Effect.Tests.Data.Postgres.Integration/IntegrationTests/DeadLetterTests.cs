@@ -1,3 +1,6 @@
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -7,9 +10,6 @@ using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
-using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using ManifestGroup = Trax.Effect.Models.ManifestGroup.ManifestGroup;
 
 namespace Trax.Effect.Tests.Data.Postgres.Integration.IntegrationTests;
@@ -74,8 +74,8 @@ public class DeadLetterTests : TestSetup
         context.Reset();
 
         // Act
-        var foundDeadLetter = await context.DeadLetters.FirstOrDefaultAsync(
-            x => x.ManifestId == manifest.Id
+        var foundDeadLetter = await context.DeadLetters.FirstOrDefaultAsync(x =>
+            x.ManifestId == manifest.Id
         );
 
         // Assert
@@ -178,8 +178,8 @@ public class DeadLetterTests : TestSetup
         context.Reset();
 
         // Act - Acknowledge the dead letter
-        var foundDeadLetter = await context.DeadLetters.FirstOrDefaultAsync(
-            x => x.Id == deadLetterId
+        var foundDeadLetter = await context.DeadLetters.FirstOrDefaultAsync(x =>
+            x.Id == deadLetterId
         );
         foundDeadLetter.Should().NotBeNull();
 
@@ -188,8 +188,8 @@ public class DeadLetterTests : TestSetup
         context.Reset();
 
         // Assert
-        var acknowledgedDeadLetter = await context.DeadLetters.FirstOrDefaultAsync(
-            x => x.Id == deadLetterId
+        var acknowledgedDeadLetter = await context.DeadLetters.FirstOrDefaultAsync(x =>
+            x.Id == deadLetterId
         );
 
         acknowledgedDeadLetter.Should().NotBeNull();
@@ -243,7 +243,7 @@ public class DeadLetterTests : TestSetup
             {
                 Name = nameof(TestDeadLetterMarkRetriedPersists) + "_Retry",
                 ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new { Test = "value", Retry = true }
+                Input = new { Test = "value", Retry = true },
             }
         );
 
@@ -253,8 +253,8 @@ public class DeadLetterTests : TestSetup
         context.Reset();
 
         // Act - Mark as retried
-        var foundDeadLetter = await context.DeadLetters.FirstOrDefaultAsync(
-            x => x.Id == deadLetterId
+        var foundDeadLetter = await context.DeadLetters.FirstOrDefaultAsync(x =>
+            x.Id == deadLetterId
         );
         foundDeadLetter.Should().NotBeNull();
 

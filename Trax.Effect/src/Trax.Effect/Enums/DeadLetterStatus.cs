@@ -50,5 +50,5 @@ public enum DeadLetterStatus
     /// The <c>ResolutionNote</c> field should be populated to explain why
     /// the dead letter was acknowledged without retry.
     /// </remarks>
-    Acknowledged = 2
+    Acknowledged = 2,
 }

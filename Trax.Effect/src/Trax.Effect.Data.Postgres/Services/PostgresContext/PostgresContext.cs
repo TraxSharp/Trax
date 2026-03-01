@@ -1,6 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
-using Microsoft.EntityFrameworkCore;
 
 namespace Trax.Effect.Data.Postgres.Services.PostgresContext;
 
@@ -29,8 +29,8 @@ namespace Trax.Effect.Data.Postgres.Services.PostgresContext;
 ///
 /// Example usage:
 /// ```csharp
-/// services.AddTrax.CoreEffects(options =>
-///     options.AddPostgresEffect("Host=localhost;Database=chainsharp;Username=postgres;Password=password")
+/// services.AddTraxEffects(options =>
+///     options.AddPostgresEffect("Host=localhost;Database=trax;Username=postgres;Password=password")
 /// );
 /// ```
 /// </remarks>

@@ -21,7 +21,7 @@ namespace Trax.Effect.Utils;
 /// 2. These tuples often need to be serialized for persistence or transmission
 /// 3. The serialized form needs to be human-readable and compact
 ///
-/// The converter is registered in the Trax.CoreJsonSerializationOptions.Default
+/// The converter is registered in the TraxJsonSerializationOptions.Default
 /// options, making it available throughout the system.
 /// </remarks>
 public class ValueTupleConverter : JsonConverterFactory

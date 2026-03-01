@@ -159,7 +159,7 @@ public static class MemoryTestModelFactory
             Id = id ?? Guid.NewGuid().ToString("N")[..8],
             DataSizeBytes = dataSizeBytes,
             ProcessingDelayMs = processingDelayMs,
-            Description = description
+            Description = description,
         };
     }
 
@@ -183,7 +183,7 @@ public static class MemoryTestModelFactory
             Id = id ?? Guid.NewGuid().ToString("N")[..8],
             DataSizeBytes = dataSizeBytes,
             ProcessingDelayMs = processingDelayMs,
-            Description = description
+            Description = description,
         };
     }
 
@@ -218,13 +218,12 @@ public static class MemoryTestModelFactory
     {
         var childInputs = Enumerable
             .Range(0, childCount)
-            .Select(
-                i =>
-                    CreateInput(
-                        id: $"child_{i}",
-                        dataSizeBytes: childDataSizeBytes,
-                        description: $"Child workflow {i}"
-                    )
+            .Select(i =>
+                CreateInput(
+                    id: $"child_{i}",
+                    dataSizeBytes: childDataSizeBytes,
+                    description: $"Child workflow {i}"
+                )
             )
             .ToList();
 
@@ -232,7 +231,7 @@ public static class MemoryTestModelFactory
         {
             Id = id ?? Guid.NewGuid().ToString("N")[..8],
             ChildInputs = childInputs,
-            Description = $"Nested test with {childCount} children"
+            Description = $"Nested test with {childCount} children",
         };
     }
 
@@ -246,13 +245,12 @@ public static class MemoryTestModelFactory
     {
         return Enumerable
             .Range(0, count)
-            .Select(
-                i =>
-                    CreateInput(
-                        id: $"batch_{i:D4}",
-                        dataSizeBytes: dataSizeBytes,
-                        description: $"Batch item {i}"
-                    )
+            .Select(i =>
+                CreateInput(
+                    id: $"batch_{i:D4}",
+                    dataSizeBytes: dataSizeBytes,
+                    description: $"Batch item {i}"
+                )
             )
             .ToList();
     }

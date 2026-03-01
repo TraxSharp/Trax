@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
-using Trax.Effect.Models.Log.DTOs;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Models.Log.DTOs;
 
 namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
 
@@ -34,7 +34,7 @@ public class DataContextLogger(
                 Message = formatter(state, exception),
                 CategoryName = categoryName,
                 EventId = eventId.Id,
-                Exception = exception
+                Exception = exception,
             }
         );
 

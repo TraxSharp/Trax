@@ -1,6 +1,6 @@
+using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows.TestModels;
-using LanguageExt;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows;
 
@@ -36,7 +36,7 @@ public class MemoryTestWorkflow
                 ProcessedData = largeData,
                 Success = true,
                 Message =
-                    $"Successfully processed workflow {input.Id} with {input.DataSizeBytes} bytes of data"
+                    $"Successfully processed workflow {input.Id} with {input.DataSizeBytes} bytes of data",
             };
         }
         catch (Exception ex)
@@ -93,7 +93,7 @@ public class NestedTestWorkflow
                     ProcessedAt = DateTime.UtcNow,
                     ProcessedData = new string('Y', childInput.DataSizeBytes),
                     Success = true,
-                    Message = $"Child workflow {childInput.Id} processed"
+                    Message = $"Child workflow {childInput.Id} processed",
                 };
 
                 results.Add(childResult);
@@ -105,7 +105,7 @@ public class NestedTestWorkflow
                 ProcessedAt = DateTime.UtcNow,
                 ChildResults = results,
                 Success = true,
-                Message = $"Processed {results.Count} child workflows"
+                Message = $"Processed {results.Count} child workflows",
             };
         }
         catch (Exception ex)

@@ -1,9 +1,9 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Trax.Effect.Configuration.Trax.CoreEffectConfiguration;
-using Trax.Effect.Models.StepMetadata.DTOs;
 using LanguageExt;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Effect.Models.StepMetadata.DTOs;
 
 namespace Trax.Effect.Models.StepMetadata;
 
@@ -68,17 +68,14 @@ public class StepMetadata : IModel
             InputType = stepMetadata.InputType,
             OutputType = stepMetadata.OutputType,
             State = stepMetadata.State,
-            HasRan = false
+            HasRan = false,
         };
 
         return newStepMetadata;
     }
 
     public override string ToString() =>
-        JsonSerializer.Serialize(
-            this,
-            Trax.CoreEffectConfiguration.StaticSystemJsonSerializerOptions
-        );
+        JsonSerializer.Serialize(this, TraxEffectConfiguration.StaticSystemJsonSerializerOptions);
 
     #endregion
 

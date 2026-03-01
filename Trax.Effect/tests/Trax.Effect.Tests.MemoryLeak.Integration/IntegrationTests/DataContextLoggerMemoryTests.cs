@@ -1,9 +1,9 @@
 using System.Threading.Channels;
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
 using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
-using FluentAssertions;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;
 

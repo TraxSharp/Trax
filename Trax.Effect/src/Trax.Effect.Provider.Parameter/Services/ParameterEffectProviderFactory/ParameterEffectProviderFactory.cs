@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Trax.Effect.Configuration.Trax.CoreEffectConfiguration;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Provider.Parameter.Configuration;
 using Trax.Effect.Services.EffectProvider;
 
@@ -24,7 +24,7 @@ namespace Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory
 /// <param name="configuration">The Trax.Core effect configuration containing JSON serialization options</param>
 /// <param name="effectConfiguration">Runtime configuration controlling which parameters are serialized</param>
 public class ParameterEffectProviderFactory(
-    ITrax.CoreEffectConfiguration configuration,
+    ITraxEffectConfiguration configuration,
     ParameterEffectConfiguration effectConfiguration
 ) : IParameterEffectProviderFactory
 {

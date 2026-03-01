@@ -1,4 +1,10 @@
-using Trax.Effect.Configuration.Trax.CoreEffectBuilder;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
+using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Enums;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Postgres.Services.PostgresContextFactory;
@@ -9,12 +15,6 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using Npgsql;
 
 namespace Trax.Effect.Data.Postgres.Extensions;
 
@@ -56,13 +56,13 @@ public static class ServiceExtensions
     ///
     /// Example usage:
     /// ```csharp
-    /// services.AddTrax.CoreEffects(options =>
-    ///     options.AddPostgresEffect("Host=localhost;Database=chainsharp;Username=postgres;Password=password")
+    /// services.AddTraxEffects(options =>
+    ///     options.AddPostgresEffect("Host=localhost;Database=trax;Username=postgres;Password=password")
     /// );
     /// ```
     /// </remarks>
-    public static Trax.CoreEffectConfigurationBuilder AddPostgresEffect(
-        this Trax.CoreEffectConfigurationBuilder configurationBuilder,
+    public static TraxEffectConfigurationBuilder AddPostgresEffect(
+        this TraxEffectConfigurationBuilder configurationBuilder,
         string connectionString
     )
     {
@@ -95,8 +95,8 @@ public static class ServiceExtensions
         );
 
         // Register PostgresContext directly for injection (created from the factory)
-        configurationBuilder.ServiceCollection.AddScoped<IDataContext, PostgresContext>(
-            sp => sp.GetRequiredService<IDbContextFactory<PostgresContext>>().CreateDbContext()
+        configurationBuilder.ServiceCollection.AddScoped<IDataContext, PostgresContext>(sp =>
+            sp.GetRequiredService<IDbContextFactory<PostgresContext>>().CreateDbContext()
         );
 
         // Enable data context logging

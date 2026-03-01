@@ -113,8 +113,8 @@ public class SystemTypeConverterTests
         var json = "{\"TypeProperty\":\"NonExistentType, NonExistentAssembly\"}";
 
         // Act & Assert
-        var ex = Assert.Throws<JsonException>(
-            () => JsonSerializer.Deserialize<TestClass>(json, _options)
+        var ex = Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<TestClass>(json, _options)
         );
 
         // Verify the exception message contains useful information
@@ -147,7 +147,7 @@ public class SystemTypeConverterTests
             Name = "Test Object",
             IntType = typeof(int),
             StringType = typeof(string),
-            CustomType = typeof(TestClass)
+            CustomType = typeof(TestClass),
         };
 
         // Act

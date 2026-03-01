@@ -208,7 +208,9 @@ public record MemoryMonitorResult(
             Memory Allocated: {MemoryAllocated:N0} bytes
             Memory Retained: {MemoryRetained:N0} bytes
             Memory Freed: {MemoryFreed:N0} bytes
-            GC Collections: Gen0={After.Gen0Collections - Before.Gen0Collections}, Gen1={After.Gen1Collections - Before.Gen1Collections}, Gen2={After.Gen2Collections - Before.Gen2Collections}
+            GC Collections: Gen0={After.Gen0Collections
+                - Before.Gen0Collections}, Gen1={After.Gen1Collections
+                - Before.Gen1Collections}, Gen2={After.Gen2Collections - Before.Gen2Collections}
             """;
     }
 }

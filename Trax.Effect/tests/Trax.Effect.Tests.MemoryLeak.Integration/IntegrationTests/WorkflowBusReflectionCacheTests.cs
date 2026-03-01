@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using Trax.Mediator.Services.WorkflowBus;
-using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows.TestModels;
-using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows.TestModels;
+using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
+using Trax.Mediator.Services.WorkflowBus;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;
 

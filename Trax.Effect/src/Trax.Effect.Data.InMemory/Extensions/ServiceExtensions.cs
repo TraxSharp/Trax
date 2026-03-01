@@ -1,4 +1,4 @@
-using Trax.Effect.Configuration.Trax.CoreEffectBuilder;
+using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
@@ -43,15 +43,15 @@ public static class ServiceExtensions
     ///
     /// Example usage:
     /// ```csharp
-    /// services.AddTrax.CoreEffects(options => options.AddInMemoryEffect());
+    /// services.AddTraxEffects(options => options.AddInMemoryEffect());
     /// ```
     ///
     /// Note that data stored in the in-memory database is lost when the application stops,
     /// so this implementation is not suitable for production scenarios where data persistence
     /// is required.
     /// </remarks>
-    public static Trax.CoreEffectConfigurationBuilder AddInMemoryEffect(
-        this Trax.CoreEffectConfigurationBuilder configurationBuilder
+    public static TraxEffectConfigurationBuilder AddInMemoryEffect(
+        this TraxEffectConfigurationBuilder configurationBuilder
     ) =>
         configurationBuilder.AddEffect<IDataContextProviderFactory, InMemoryContextProviderFactory>(
             toggleable: false

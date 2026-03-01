@@ -76,10 +76,7 @@ public class DatabaseMigrator
                 await connection.OpenAsync();
                 await connection.ReloadTypesAsync();
 
-                var command = new NpgsqlCommand(
-                    "create schema if not exists trax;",
-                    connection
-                );
+                var command = new NpgsqlCommand("create schema if not exists trax;", connection);
                 await command.ExecuteNonQueryAsync();
             }
 

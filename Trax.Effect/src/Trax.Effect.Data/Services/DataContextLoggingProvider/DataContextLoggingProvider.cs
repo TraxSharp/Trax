@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
-using Trax.Effect.Data.Services.IDataContextFactory;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Services.IDataContextFactory;
 
 namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
 

@@ -1,10 +1,10 @@
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.EffectStep;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Services.StepEffectProvider;
 using Trax.Effect.Services.StepEffectProviderFactory;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Effect.Services.StepEffectRunner;
 
@@ -36,8 +36,8 @@ public class StepEffectRunner : IStepEffectRunner
         CancellationToken cancellationToken
     )
     {
-        await ActiveStepEffectProviders.RunAllAsync(
-            provider => provider.BeforeStepExecution(effectStep, serviceTrain, cancellationToken)
+        await ActiveStepEffectProviders.RunAllAsync(provider =>
+            provider.BeforeStepExecution(effectStep, serviceTrain, cancellationToken)
         );
     }
 
@@ -47,8 +47,8 @@ public class StepEffectRunner : IStepEffectRunner
         CancellationToken cancellationToken
     )
     {
-        await ActiveStepEffectProviders.RunAllAsync(
-            provider => provider.AfterStepExecution(effectStep, serviceTrain, cancellationToken)
+        await ActiveStepEffectProviders.RunAllAsync(provider =>
+            provider.AfterStepExecution(effectStep, serviceTrain, cancellationToken)
         );
     }
 

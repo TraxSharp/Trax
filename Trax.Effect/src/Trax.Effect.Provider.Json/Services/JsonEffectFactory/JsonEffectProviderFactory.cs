@@ -1,7 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Provider.Json.Services.JsonEffect;
 using Trax.Effect.Services.EffectProvider;
 using Trax.Effect.Services.EffectProviderFactory;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Effect.Provider.Json.Services.JsonEffectFactory;
 

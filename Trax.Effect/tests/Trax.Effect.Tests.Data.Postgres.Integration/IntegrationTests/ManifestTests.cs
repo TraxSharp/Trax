@@ -1,3 +1,7 @@
+using FluentAssertions;
+using LanguageExt;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -5,10 +9,6 @@ using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
-using FluentAssertions;
-using LanguageExt;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using MG = Trax.Effect.Models.ManifestGroup;
 
 namespace Trax.Effect.Tests.Data.Postgres.Integration.IntegrationTests;
@@ -30,7 +30,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -64,7 +64,7 @@ public class ManifestTests : TestSetup
         {
             Name = "TestConfig",
             Value = 42,
-            Enabled = true
+            Enabled = true,
         };
 
         var group = new MG.ManifestGroup
@@ -73,7 +73,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -117,7 +117,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -130,8 +130,8 @@ public class ManifestTests : TestSetup
         context.Reset();
 
         // Act - Query by ExternalId
-        var foundManifest = await context.Manifests.FirstOrDefaultAsync(
-            x => x.ExternalId == manifest.ExternalId
+        var foundManifest = await context.Manifests.FirstOrDefaultAsync(x =>
+            x.ExternalId == manifest.ExternalId
         );
 
         // Assert
@@ -153,7 +153,7 @@ public class ManifestTests : TestSetup
         {
             Name = "InitialConfig",
             Value = 1,
-            Enabled = false
+            Enabled = false,
         };
 
         var group = new MG.ManifestGroup
@@ -162,7 +162,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -185,7 +185,7 @@ public class ManifestTests : TestSetup
         {
             Name = "UpdatedConfig",
             Value = 100,
-            Enabled = true
+            Enabled = true,
         };
 
         foundManifest!.SetProperties(updatedConfig);
@@ -215,7 +215,7 @@ public class ManifestTests : TestSetup
         {
             Name = "TypeTest",
             Value = 5,
-            Enabled = true
+            Enabled = true,
         };
 
         var group = new MG.ManifestGroup
@@ -224,7 +224,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -261,7 +261,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -275,8 +275,8 @@ public class ManifestTests : TestSetup
                 {
                     Name = "TestJob",
                     Value = 1,
-                    Enabled = true
-                }
+                    Enabled = true,
+                },
             }
         );
         manifest.ManifestGroupId = group.Id;
@@ -291,7 +291,7 @@ public class ManifestTests : TestSetup
                 Name = nameof(TestMetadataCanLinkToManifest),
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { TestInput = "value" },
-                ManifestId = manifest.Id
+                ManifestId = manifest.Id,
             }
         );
 
@@ -326,7 +326,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -340,8 +340,8 @@ public class ManifestTests : TestSetup
                 {
                     Name = "MultiRunJob",
                     Value = 42,
-                    Enabled = true
-                }
+                    Enabled = true,
+                },
             }
         );
         manifest.ManifestGroupId = group.Id;
@@ -356,7 +356,7 @@ public class ManifestTests : TestSetup
                 Name = nameof(TestManifestCanHaveMultipleMetadataRecords) + "_Run1",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { Run = 1 },
-                ManifestId = manifest.Id
+                ManifestId = manifest.Id,
             }
         );
 
@@ -366,7 +366,7 @@ public class ManifestTests : TestSetup
                 Name = nameof(TestManifestCanHaveMultipleMetadataRecords) + "_Run2",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { Run = 2 },
-                ManifestId = manifest.Id
+                ManifestId = manifest.Id,
             }
         );
 
@@ -402,7 +402,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -419,8 +419,8 @@ public class ManifestTests : TestSetup
         context.Reset();
 
         // Act
-        var foundManifest = await context.Manifests.FirstOrDefaultAsync(
-            x => x.ExternalId == customExternalId
+        var foundManifest = await context.Manifests.FirstOrDefaultAsync(x =>
+            x.ExternalId == customExternalId
         );
 
         // Assert
@@ -443,7 +443,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -461,8 +461,8 @@ public class ManifestTests : TestSetup
         context.Reset();
 
         // Act
-        var foundManifest = await context.Manifests.FirstOrDefaultAsync(
-            x => x.ExternalId == longExternalId
+        var foundManifest = await context.Manifests.FirstOrDefaultAsync(x =>
+            x.ExternalId == longExternalId
         );
 
         // Assert
@@ -485,7 +485,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -502,8 +502,8 @@ public class ManifestTests : TestSetup
         context.Reset();
 
         // Act
-        var foundManifest = await context.Manifests.FirstOrDefaultAsync(
-            x => x.ExternalId == shortExternalId
+        var foundManifest = await context.Manifests.FirstOrDefaultAsync(x =>
+            x.ExternalId == shortExternalId
         );
 
         // Assert
@@ -528,7 +528,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -541,7 +541,7 @@ public class ManifestTests : TestSetup
                 ScheduleType = ScheduleType.Cron,
                 CronExpression = "0 3 * * *",
                 MaxRetries = 5,
-                TimeoutSeconds = 3600
+                TimeoutSeconds = 3600,
             }
         );
         manifest.ManifestGroupId = group.Id;
@@ -577,7 +577,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -587,7 +587,7 @@ public class ManifestTests : TestSetup
             {
                 Name = typeof(Unit),
                 ScheduleType = ScheduleType.Interval,
-                IntervalSeconds = 300 // Every 5 minutes
+                IntervalSeconds = 300, // Every 5 minutes
             }
         );
         manifest.ManifestGroupId = group.Id;
@@ -620,7 +620,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -631,7 +631,7 @@ public class ManifestTests : TestSetup
                 Name = typeof(Unit),
                 IsEnabled = false,
                 ScheduleType = ScheduleType.Cron,
-                CronExpression = "0 0 * * *"
+                CronExpression = "0 0 * * *",
             }
         );
         manifest.ManifestGroupId = group.Id;
@@ -663,7 +663,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -708,7 +708,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -719,7 +719,7 @@ public class ManifestTests : TestSetup
                 Name = typeof(Unit),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.Cron,
-                CronExpression = "0 * * * *"
+                CronExpression = "0 * * * *",
             }
         );
         enabledManifest.ManifestGroupId = group.Id;
@@ -730,7 +730,7 @@ public class ManifestTests : TestSetup
                 Name = typeof(Unit),
                 IsEnabled = false,
                 ScheduleType = ScheduleType.Cron,
-                CronExpression = "0 * * * *"
+                CronExpression = "0 * * * *",
             }
         );
         disabledManifest.ManifestGroupId = group.Id;
@@ -765,7 +765,7 @@ public class ManifestTests : TestSetup
             {
                 Name = nameof(TestMetadataCanHaveScheduledTime),
                 ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new { Test = "value" }
+                Input = new { Test = "value" },
             }
         );
         metadata.ScheduledTime = scheduledTime;
@@ -794,7 +794,7 @@ public class ManifestTests : TestSetup
         {
             Name = "TypeDiscriminatorTest",
             Value = 42,
-            Enabled = true
+            Enabled = true,
         };
 
         var manifest = Manifest.Create(
@@ -822,7 +822,7 @@ public class ManifestTests : TestSetup
         {
             Name = "EnumTest",
             Category = TestCategory.Beta,
-            Values = [1, 2, 3]
+            Values = [1, 2, 3],
         };
 
         var group = new MG.ManifestGroup
@@ -831,7 +831,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -869,7 +869,7 @@ public class ManifestTests : TestSetup
         {
             Name = "UntypedTest",
             Category = TestCategory.Gamma,
-            Values = [10, 20]
+            Values = [10, 20],
         };
 
         var group = new MG.ManifestGroup
@@ -878,7 +878,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -917,7 +917,7 @@ public class ManifestTests : TestSetup
         {
             Name = "ListTest",
             Category = TestCategory.Alpha,
-            Values = [100, 200, 300, 400, 500]
+            Values = [100, 200, 300, 400, 500],
         };
 
         var group = new MG.ManifestGroup
@@ -926,7 +926,7 @@ public class ManifestTests : TestSetup
             Priority = 0,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
         await context.Track(group);
         await context.SaveChanges(CancellationToken.None);
@@ -965,7 +965,7 @@ public class ManifestTests : TestSetup
     {
         Alpha,
         Beta,
-        Gamma
+        Gamma,
     }
 
     public class TestManifestPropertiesWithEnum : IManifestProperties

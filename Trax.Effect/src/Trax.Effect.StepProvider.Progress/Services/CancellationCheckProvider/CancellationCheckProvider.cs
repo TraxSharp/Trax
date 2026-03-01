@@ -1,7 +1,7 @@
+using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectStep;
 using Trax.Effect.Services.ServiceTrain;
-using Microsoft.EntityFrameworkCore;
 
 namespace Trax.Effect.StepProvider.Progress.Services.CancellationCheckProvider;
 

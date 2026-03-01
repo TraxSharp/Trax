@@ -2,12 +2,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Trax.Effect.Configuration.Trax.CoreEffectConfiguration;
+using LanguageExt;
+using Trax.Core.Exceptions;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata.DTOs;
-using Trax.Core.Exceptions;
-using LanguageExt;
 
 namespace Trax.Effect.Models.Metadata;
 
@@ -332,7 +332,7 @@ public class Metadata : IModel, IDisposable
             Executor = Assembly.GetEntryAssembly()?.GetAssemblyProject(),
             StartTime = DateTime.UtcNow,
             ParentId = metadata.ParentId,
-            ManifestId = metadata.ManifestId
+            ManifestId = metadata.ManifestId,
         };
 
         newWorkflow.SetInputObject(metadata.Input);
@@ -408,7 +408,7 @@ public class Metadata : IModel, IDisposable
         JsonSerializer.Serialize(
             this,
             GetType(),
-            Trax.CoreEffectConfiguration.StaticSystemJsonSerializerOptions
+            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
         );
 
     /// <summary>

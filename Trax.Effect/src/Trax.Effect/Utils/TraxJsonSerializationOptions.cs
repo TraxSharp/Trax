@@ -10,7 +10,7 @@ namespace Trax.Effect.Utils;
 /// Provides standardized JSON serialization options for the Trax.Effect system.
 /// </summary>
 /// <remarks>
-/// The Trax.CoreJsonSerializationOptions class defines a set of default serialization
+/// The TraxJsonSerializationOptions class defines a set of default serialization
 /// options that are used throughout the Trax.Effect system. These options ensure
 /// consistent serialization behavior across different components.
 ///
@@ -26,7 +26,7 @@ namespace Trax.Effect.Utils;
 /// These options can be used by any component that needs to serialize or deserialize
 /// JSON data in the Trax.Effect system, ensuring consistent behavior.
 /// </remarks>
-public static class Trax.CoreJsonSerializationOptions
+public static class TraxJsonSerializationOptions
 {
     /// <summary>
     /// Gets or sets the default JSON serializer options for the Trax.Effect system.
@@ -63,7 +63,7 @@ public static class Trax.CoreJsonSerializationOptions
                 new JsonStringEnumConverter(),
                 new ValueTupleConverter(),
                 new SystemTypeConverter(),
-            }
+            },
         };
 
     /// <summary>
@@ -86,13 +86,13 @@ public static class Trax.CoreJsonSerializationOptions
                 new JsonStringEnumConverter(),
                 new ValueTupleConverter(),
                 new SystemTypeConverter(),
-            }
+            },
         };
 
     public static JsonSerializerSettings NewtonsoftDefault { get; set; } =
         new()
         {
             ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-            Converters = [new Newtonsoft.Json.Converters.StringEnumConverter()]
+            Converters = [new Newtonsoft.Json.Converters.StringEnumConverter()],
         };
 }

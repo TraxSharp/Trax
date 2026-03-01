@@ -1,9 +1,9 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Trax.Effect.Configuration.Trax.CoreEffectConfiguration;
-using Trax.Effect.Models.Log.DTOs;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Effect.Models.Log.DTOs;
 
 namespace Trax.Effect.Models.Log;
 
@@ -63,7 +63,7 @@ public class Log : ILog
             Category = Truncate(createLog.CategoryName, 500)!,
             EventId = createLog.EventId,
             Exception = Truncate(createLog.Exception?.Message, 2000),
-            StackTrace = Truncate(createLog.Exception?.StackTrace, 4000)
+            StackTrace = Truncate(createLog.Exception?.StackTrace, 4000),
         };
 
         return newLog;
@@ -73,10 +73,7 @@ public class Log : ILog
         value?.Length > maxLength ? value[..maxLength] : value;
 
     public override string ToString() =>
-        JsonSerializer.Serialize(
-            this,
-            Trax.CoreEffectConfiguration.StaticSystemJsonSerializerOptions
-        );
+        JsonSerializer.Serialize(this, TraxEffectConfiguration.StaticSystemJsonSerializerOptions);
 
     #endregion
 

@@ -1,17 +1,17 @@
-using Trax.Effect.Data.Services.DataContext;
-using Trax.Effect.Data.Services.IDataContextFactory;
-using Trax.Effect.Enums;
-using Trax.Effect.Models.Metadata.DTOs;
-using Trax.Mediator.Services.WorkflowBus;
-using Trax.Effect.Services.EffectStep;
-using Trax.Effect.Services.ServiceTrain;
-using Trax.Core.Step;
-using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using FluentAssertions;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Step;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
+using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
+using Trax.Mediator.Services.WorkflowBus;
 using Metadata = Trax.Effect.Models.Metadata.Metadata;
 
 namespace Trax.Effect.Tests.Data.Postgres.Integration.IntegrationTests;
@@ -32,7 +32,7 @@ public class PostgresContextTests : TestSetup
             {
                 Name = "TestMetadata",
                 Input = Unit.Default,
-                ExternalId = Guid.NewGuid().ToString("N")
+                ExternalId = Guid.NewGuid().ToString("N"),
             }
         );
 
@@ -111,11 +111,11 @@ public class PostgresContextTests : TestSetup
 
         using var dataContext = (IDataContext)dataContextProvider.Create();
 
-        var parentWorkflowResult = await dataContext.Metadatas.FirstOrDefaultAsync(
-            x => x.Id == workflow.Metadata.Id
+        var parentWorkflowResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
+            x.Id == workflow.Metadata.Id
         );
-        var childWorkflowResult = await dataContext.Metadatas.FirstOrDefaultAsync(
-            x => x.Id == innerWorkflow.Metadata.Id
+        var childWorkflowResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
+            x.Id == innerWorkflow.Metadata.Id
         );
         parentWorkflowResult.Should().NotBeNull();
         parentWorkflowResult!.Id.Should().Be(workflow.Metadata.Id);

@@ -1,17 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageDescription>Parameter Effect Provider for Trax.Core Effects</PackageDescription>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <AssemblyName>Trax.Effect.Provider.Parameter</AssemblyName>
+  </PropertyGroup>
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <Authors>Theauxm,mark-keaton</Authors>
-        <PackageDescription>Parameter Effect Provider for Trax.Core Effects</PackageDescription>
-        <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
-        <AssemblyName>Trax.Effect.Provider.Parameter</AssemblyName>
-    </PropertyGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
+  </ItemGroup>
 </Project>

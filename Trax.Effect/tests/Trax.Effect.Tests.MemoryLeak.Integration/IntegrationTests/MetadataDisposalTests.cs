@@ -1,11 +1,11 @@
+using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
-using Trax.Mediator.Services.WorkflowBus;
 using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows;
 using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows.TestModels;
 using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
-using FluentAssertions;
-using Microsoft.Extensions.DependencyInjection;
+using Trax.Mediator.Services.WorkflowBus;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;
 
@@ -52,7 +52,7 @@ public class MetadataDisposalTests
             {
                 Name = "TestWorkflow",
                 Input = new { LargeData = new string('X', 10000) },
-                ExternalId = Guid.NewGuid().ToString("N")
+                ExternalId = Guid.NewGuid().ToString("N"),
             }
         );
 
@@ -79,7 +79,7 @@ public class MetadataDisposalTests
                 {
                     Name = "TestWorkflow",
                     Input = new { LargeData = new string('X', 50000) }, // 50KB of data
-                    ExternalId = Guid.NewGuid().ToString("N")
+                    ExternalId = Guid.NewGuid().ToString("N"),
                 }
             );
 

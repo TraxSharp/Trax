@@ -1,8 +1,8 @@
-using Trax.Core.Step;
-using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
-using Trax.Core.Train;
 using FluentAssertions;
 using LanguageExt;
+using Trax.Core.Step;
+using Trax.Core.Train;
+using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
 using Monad = Trax.Core.Monad;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;

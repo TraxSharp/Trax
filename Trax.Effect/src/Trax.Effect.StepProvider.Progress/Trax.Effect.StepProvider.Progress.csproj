@@ -1,18 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageDescription>Step Progress and Cancellation Check Providers for Trax.Core Effects</PackageDescription>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <AssemblyName>Trax.Effect.StepProvider.Progress</AssemblyName>
+  </PropertyGroup>
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <Authors>Theauxm,mark-keaton</Authors>
-        <PackageDescription>Step Progress and Cancellation Check Providers for Trax.Core Effects</PackageDescription>
-        <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
-        <AssemblyName>Trax.Effect.StepProvider.Progress</AssemblyName>
-    </PropertyGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
-      <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
+  </ItemGroup>
 </Project>

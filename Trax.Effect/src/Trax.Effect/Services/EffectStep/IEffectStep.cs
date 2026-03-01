@@ -1,6 +1,6 @@
-using Trax.Effect.Services.ServiceTrain;
-using Trax.Core.Step;
 using LanguageExt;
+using Trax.Core.Step;
+using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Services.EffectStep;
 

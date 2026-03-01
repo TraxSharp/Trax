@@ -1,17 +1,17 @@
-using Trax.Effect.Configuration.Trax.CoreEffectBuilder;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Extensions;
 using Trax.Effect.StepProvider.Progress.Services.CancellationCheckFactory;
 using Trax.Effect.StepProvider.Progress.Services.CancellationCheckProvider;
 using Trax.Effect.StepProvider.Progress.Services.StepProgressFactory;
 using Trax.Effect.StepProvider.Progress.Services.StepProgressProvider;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Effect.StepProvider.Progress.Extensions;
 
 public static class ServiceExtensions
 {
-    public static Trax.CoreEffectConfigurationBuilder AddStepProgress(
-        this Trax.CoreEffectConfigurationBuilder configurationBuilder
+    public static TraxEffectConfigurationBuilder AddStepProgress(
+        this TraxEffectConfigurationBuilder configurationBuilder
     )
     {
         configurationBuilder.ServiceCollection.AddTransient<

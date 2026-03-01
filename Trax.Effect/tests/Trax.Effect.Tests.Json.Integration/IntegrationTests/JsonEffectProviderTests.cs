@@ -1,17 +1,17 @@
+using FluentAssertions;
+using LanguageExt;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
-using FluentAssertions;
-using LanguageExt;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Effect.Tests.Json.Integration.IntegrationTests;
 
 public class JsonEffectProviderTests : TestSetup
 {
     public override ServiceProvider ConfigureServices(IServiceCollection services) =>
-        services.AddTransientTrax.CoreRoute<ITestWorkflow, TestWorkflow>().BuildServiceProvider();
+        services.AddTransientTraxRoute<ITestWorkflow, TestWorkflow>().BuildServiceProvider();
 
     [Theory]
     public async Task TestJsonEffect()
@@ -38,13 +38,11 @@ public class JsonEffectProviderTests : TestSetup
         // 1. Two workflow loggers (ILogger<ServiceTrain<Unit, Unit>>) - may have empty logs
         // 2. One JsonEffectProvider logger (ILogger<JsonEffectProvider>) - should have JSON logs
         var jsonProviderLoggers = arrayProvider
-            .Loggers.Where(
-                logger =>
-                    logger.Logs.Any(
-                        log =>
-                            log.Category
-                            == "Trax.Effect.Provider.Json.Services.JsonEffect.JsonEffectProvider"
-                    )
+            .Loggers.Where(logger =>
+                logger.Logs.Any(log =>
+                    log.Category
+                    == "Trax.Effect.Provider.Json.Services.JsonEffect.JsonEffectProvider"
+                )
             )
             .ToList();
 

@@ -1,10 +1,10 @@
 using System.Reflection;
-using Trax.Effect.Data.Postgres.Utils;
-using Trax.Effect.Enums;
-using Trax.Effect.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Trax.Effect.Data.Postgres.Utils;
+using Trax.Effect.Enums;
+using Trax.Effect.Models;
 
 namespace Trax.Effect.Data.Postgres.Extensions;
 

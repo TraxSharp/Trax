@@ -1,11 +1,11 @@
 using System.Text.Json;
-using Trax.Effect.Configuration.Trax.CoreEffectBuilder;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Parameter.Configuration;
 using Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Utils;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Effect.Provider.Parameter.Extensions;
 
@@ -39,13 +39,13 @@ public static class ServiceExtensions
     /// 1. Sets the JSON serializer options to use for parameter serialization
     /// 2. Registers the ParameterEffectProviderFactory as an IEffectProviderFactory
     ///
-    /// If no JSON serializer options are provided, the default options from Trax.CoreJsonSerializationOptions
+    /// If no JSON serializer options are provided, the default options from TraxJsonSerializationOptions
     /// are used. These default options are configured to handle common serialization scenarios
     /// in the Trax.Effect system.
     ///
     /// Example usage:
     /// ```csharp
-    /// services.AddTrax.CoreEffects(options =>
+    /// services.AddTraxEffects(options =>
     ///     options.SaveWorkflowParameters()
     /// );
     /// ```
@@ -58,14 +58,14 @@ public static class ServiceExtensions
     ///     WriteIndented = true
     /// };
     ///
-    /// services.AddTrax.CoreEffects(options =>
+    /// services.AddTraxEffects(options =>
     ///     options.SaveWorkflowParameters(jsonOptions)
     /// );
     /// ```
     ///
     /// Or with parameter configuration to control which parameters are saved:
     /// ```csharp
-    /// services.AddTrax.CoreEffects(options =>
+    /// services.AddTraxEffects(options =>
     ///     options.SaveWorkflowParameters(configure: cfg =>
     ///     {
     ///         cfg.SaveInputs = true;
@@ -74,13 +74,13 @@ public static class ServiceExtensions
     /// );
     /// ```
     /// </remarks>
-    public static Trax.CoreEffectConfigurationBuilder SaveWorkflowParameters(
-        this Trax.CoreEffectConfigurationBuilder builder,
+    public static TraxEffectConfigurationBuilder SaveWorkflowParameters(
+        this TraxEffectConfigurationBuilder builder,
         JsonSerializerOptions? jsonSerializerOptions = null,
         Action<ParameterEffectConfiguration>? configure = null
     )
     {
-        jsonSerializerOptions ??= Trax.CoreJsonSerializationOptions.Default;
+        jsonSerializerOptions ??= TraxJsonSerializationOptions.Default;
 
         var effectConfiguration = new ParameterEffectConfiguration();
         configure?.Invoke(effectConfiguration);

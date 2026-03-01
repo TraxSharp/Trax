@@ -1,9 +1,9 @@
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models;
 using Trax.Effect.Services.EffectProvider;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Effect.Services.EffectRunner;
 
@@ -83,8 +83,8 @@ public class EffectRunner : IEffectRunner
     /// </remarks>
     public async Task SaveChanges(CancellationToken cancellationToken)
     {
-        await ActiveEffectProviders.RunAllAsync(
-            provider => provider.SaveChanges(cancellationToken)
+        await ActiveEffectProviders.RunAllAsync(provider =>
+            provider.SaveChanges(cancellationToken)
         );
     }
 

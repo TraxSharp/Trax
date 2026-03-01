@@ -1,7 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Effect.Tests.Data.InMemory.Integration;
 
@@ -18,11 +18,10 @@ public abstract class TestSetup
     {
         ServiceCollection = new ServiceCollection();
 
-        ServiceCollection.AddTrax.CoreEffects(
-            options =>
-                options
-                    .SetEffectLogLevel(logLevel: Microsoft.Extensions.Logging.LogLevel.Debug)
-                    .AddInMemoryEffect()
+        ServiceCollection.AddTraxEffects(options =>
+            options
+                .SetEffectLogLevel(logLevel: Microsoft.Extensions.Logging.LogLevel.Debug)
+                .AddInMemoryEffect()
         );
 
         ServiceProvider = ConfigureServices(ServiceCollection);

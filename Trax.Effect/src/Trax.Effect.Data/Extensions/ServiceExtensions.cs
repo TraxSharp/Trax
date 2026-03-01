@@ -1,7 +1,7 @@
-using Trax.Effect.Configuration.Trax.CoreEffectBuilder;
-using Trax.Effect.Data.Services.DataContextLoggingProvider;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Configuration.TraxEffectBuilder;
+using Trax.Effect.Data.Services.DataContextLoggingProvider;
 
 namespace Trax.Effect.Data.Extensions;
 
@@ -48,7 +48,7 @@ public static class ServiceExtensions
     ///
     /// Example usage:
     /// ```csharp
-    /// services.AddTrax.CoreEffects(options =>
+    /// services.AddTraxEffects(options =>
     ///     options
     ///         .AddPostgresEffect(connectionString)
     ///         .AddEffectDataContextLogging(
@@ -58,8 +58,8 @@ public static class ServiceExtensions
     /// );
     /// ```
     /// </remarks>
-    public static Trax.CoreEffectConfigurationBuilder AddEffectDataContextLogging(
-        this Trax.CoreEffectConfigurationBuilder configurationBuilder,
+    public static TraxEffectConfigurationBuilder AddEffectDataContextLogging(
+        this TraxEffectConfigurationBuilder configurationBuilder,
         LogLevel? minimumLogLevel = null,
         List<string>? blacklist = null
     )
@@ -67,14 +67,14 @@ public static class ServiceExtensions
         // Verify that data context logging is enabled
         if (configurationBuilder.DataContextLoggingEffectEnabled == false)
             throw new Exception(
-                "Data Context Logging effect is not enabled in Trax.Core. Ensure a Data Effect has been added to Trax.CoreEffects (before calling AddEffectDataContextLogging). e.g. .AddTrax.CoreEffects(x => x.AddPostgresEffect(connectionString).AddDataContextEffectLogging())"
+                "Data Context Logging effect is not enabled in Trax.Core. Ensure a Data Effect has been added to TraxEffects (before calling AddEffectDataContextLogging). e.g. .AddTraxEffects(x => x.AddPostgresEffect(connectionString).AddDataContextEffectLogging())"
             );
 
         // Create and register the logging configuration
         var credentials = new DataContextLoggingProviderConfiguration
         {
             MinimumLogLevel = minimumLogLevel ?? LogLevel.Information,
-            Blacklist = blacklist ?? []
+            Blacklist = blacklist ?? [],
         };
 
         configurationBuilder

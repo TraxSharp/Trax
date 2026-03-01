@@ -1,3 +1,7 @@
+using FluentAssertions;
+using LanguageExt;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -6,10 +10,6 @@ using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
-using FluentAssertions;
-using LanguageExt;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Effect.Tests.Json.Integration.IntegrationTests;
 
@@ -28,17 +28,16 @@ public class JsonEffectToggleTests
 
         services
             .AddSingleton<IArrayLoggingProvider>(arrayProvider)
-            .AddLogging(
-                x => x.AddConsole().AddProvider(arrayProvider).SetMinimumLevel(LogLevel.Debug)
+            .AddLogging(x =>
+                x.AddConsole().AddProvider(arrayProvider).SetMinimumLevel(LogLevel.Debug)
             )
-            .AddTrax.CoreEffects(
-                options =>
-                    options
-                        .SetEffectLogLevel(LogLevel.Information)
-                        .AddJsonEffect()
-                        .AddStepLogger(serializeStepData: true)
+            .AddTraxEffects(options =>
+                options
+                    .SetEffectLogLevel(LogLevel.Information)
+                    .AddJsonEffect()
+                    .AddStepLogger(serializeStepData: true)
             )
-            .AddTransientTrax.CoreRoute<IToggleTestWorkflow, ToggleTestWorkflow>();
+            .AddTransientTraxRoute<IToggleTestWorkflow, ToggleTestWorkflow>();
 
         _serviceProvider = services.BuildServiceProvider();
     }

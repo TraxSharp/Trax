@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
-namespace Trax.Effect.Configuration.Trax.CoreEffectConfiguration;
+namespace Trax.Effect.Configuration.TraxEffectConfiguration;
 
 /// <summary>
 /// There is unfortunate use cases for both Newtonsoft.Json and System.Text.Json.
@@ -13,7 +13,7 @@ namespace Trax.Effect.Configuration.Trax.CoreEffectConfiguration;
 /// The only current use case of Newtonsoft is Serializing arbitrary output objects in steps
 /// due to its' ability to handle IDisposable objects and Circular Dependencies much better.
 /// </summary>
-public interface ITrax.CoreEffectConfiguration
+public interface ITraxEffectConfiguration
 {
     /// <summary>
     /// System.Text.Json Serialization Options

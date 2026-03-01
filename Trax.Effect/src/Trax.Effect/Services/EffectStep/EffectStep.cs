@@ -1,11 +1,11 @@
-using Trax.Effect.Models.StepMetadata;
-using Trax.Effect.Models.StepMetadata.DTOs;
-using Trax.Effect.Services.ServiceTrain;
+using LanguageExt;
+using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Step;
 using Trax.Core.Train;
-using LanguageExt;
-using Microsoft.Extensions.Logging;
+using Trax.Effect.Models.StepMetadata;
+using Trax.Effect.Models.StepMetadata.DTOs;
+using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Services.EffectStep;
 

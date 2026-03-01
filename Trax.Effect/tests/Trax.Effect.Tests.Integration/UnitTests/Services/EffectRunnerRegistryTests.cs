@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Trax.Effect.Models;
 using Trax.Effect.Services.EffectProvider;
 using Trax.Effect.Services.EffectProviderFactory;
@@ -8,7 +9,6 @@ using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Services.StepEffectProvider;
 using Trax.Effect.Services.StepEffectProviderFactory;
 using Trax.Effect.Services.StepEffectRunner;
-using FluentAssertions;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 

@@ -1,9 +1,9 @@
+using FluentAssertions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
-using FluentAssertions;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Models;
 

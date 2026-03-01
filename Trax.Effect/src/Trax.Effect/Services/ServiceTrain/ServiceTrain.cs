@@ -1,17 +1,17 @@
 using System.Text.Json.Serialization;
+using LanguageExt;
+using LanguageExt.UnsafeValueAccess;
+using Microsoft.Extensions.Logging;
+using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
+using Trax.Core.Monad;
+using Trax.Core.Train;
 using Trax.Effect.Attributes;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.Services.StepEffectRunner;
-using Trax.Core.Exceptions;
-using Trax.Core.Extensions;
-using Trax.Core.Monad;
-using Trax.Core.Train;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Effect.Services.ServiceTrain;
 

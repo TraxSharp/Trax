@@ -1,5 +1,5 @@
-using Trax.Effect.Data.Services.DataContext;
 using Microsoft.EntityFrameworkCore;
+using Trax.Effect.Data.Services.DataContext;
 
 namespace Trax.Effect.Data.InMemory.Services.InMemoryContext;
 
@@ -25,7 +25,7 @@ namespace Trax.Effect.Data.InMemory.Services.InMemoryContext;
 ///
 /// Example usage:
 /// ```csharp
-/// services.AddTrax.CoreEffects(options => options.AddInMemoryEffect());
+/// services.AddTraxEffects(options => options.AddInMemoryEffect());
 /// ```
 ///
 /// Note that data stored in the in-memory database is lost when the application stops,

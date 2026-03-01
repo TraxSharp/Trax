@@ -1,10 +1,10 @@
-using Trax.Effect.Data.Services.DataContext;
-using Trax.Effect.Data.Services.DataContextLoggingProvider;
-using Trax.Effect.Data.Services.IDataContextFactory;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.DataContextLoggingProvider;
+using Trax.Effect.Data.Services.IDataContextFactory;
 
 namespace Trax.Effect.Tests.Data.Postgres.Integration.IntegrationTests;
 
@@ -207,11 +207,10 @@ public class DataContextLoggingProviderTests : TestSetup
 
             using var context = (IDataContext)factory.Create();
             var logs = await context
-                .Logs.Where(
-                    l =>
-                        l.Category == "Test.Blacklisted"
-                        || l.Category == "Test.Wildcard.SubCategory"
-                        || l.Category == "Test.Allowed"
+                .Logs.Where(l =>
+                    l.Category == "Test.Blacklisted"
+                    || l.Category == "Test.Wildcard.SubCategory"
+                    || l.Category == "Test.Allowed"
                 )
                 .ToListAsync();
 

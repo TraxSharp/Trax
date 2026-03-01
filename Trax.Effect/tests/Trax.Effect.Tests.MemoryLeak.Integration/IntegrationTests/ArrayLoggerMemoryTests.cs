@@ -1,7 +1,7 @@
-using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
-using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
+using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;
 
