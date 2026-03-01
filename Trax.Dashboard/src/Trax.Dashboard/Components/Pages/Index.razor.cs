@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Microsoft.AspNetCore.Components;
+using Microsoft.EntityFrameworkCore;
 using Trax.Dashboard.Components.Shared;
 using Trax.Dashboard.Models;
 using Trax.Dashboard.Services.WorkflowDiscovery;
@@ -7,8 +9,6 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
-using Microsoft.AspNetCore.Components;
-using Microsoft.EntityFrameworkCore;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages;
@@ -120,25 +120,19 @@ public partial class Index
             recentQuery = recentQuery.ExcludeAdmin(adminNames);
 
         var hourlyStats = await recentQuery
-            .GroupBy(
-                m =>
-                    new
-                    {
-                        m.StartTime.Date,
-                        m.StartTime.Hour,
-                        m.WorkflowState,
-                    }
-            )
-            .Select(
-                g =>
-                    new
-                    {
-                        g.Key.Date,
-                        g.Key.Hour,
-                        g.Key.WorkflowState,
-                        Count = g.Count(),
-                    }
-            )
+            .GroupBy(m => new
+            {
+                m.StartTime.Date,
+                m.StartTime.Hour,
+                m.WorkflowState,
+            })
+            .Select(g => new
+            {
+                g.Key.Date,
+                g.Key.Hour,
+                g.Key.WorkflowState,
+                Count = g.Count(),
+            })
             .ToListAsync(cancellationToken);
 
         _executionsOverTime = Enumerable
@@ -152,27 +146,24 @@ public partial class Index
                 {
                     Hour = hourStart.ToString("HH"),
                     Completed = hourlyStats
-                        .Where(
-                            x =>
-                                x.Date == targetDate
-                                && x.Hour == targetHour
-                                && x.WorkflowState == WorkflowState.Completed
+                        .Where(x =>
+                            x.Date == targetDate
+                            && x.Hour == targetHour
+                            && x.WorkflowState == WorkflowState.Completed
                         )
                         .Sum(x => x.Count),
                     Failed = hourlyStats
-                        .Where(
-                            x =>
-                                x.Date == targetDate
-                                && x.Hour == targetHour
-                                && x.WorkflowState == WorkflowState.Failed
+                        .Where(x =>
+                            x.Date == targetDate
+                            && x.Hour == targetHour
+                            && x.WorkflowState == WorkflowState.Failed
                         )
                         .Sum(x => x.Count),
                     Cancelled = hourlyStats
-                        .Where(
-                            x =>
-                                x.Date == targetDate
-                                && x.Hour == targetHour
-                                && x.WorkflowState == WorkflowState.Cancelled
+                        .Where(x =>
+                            x.Date == targetDate
+                            && x.Hour == targetHour
+                            && x.WorkflowState == WorkflowState.Cancelled
                         )
                         .Sum(x => x.Count),
                 };
@@ -184,7 +175,7 @@ public partial class Index
         [
             new() { State = "Completed", Count = CountForState(WorkflowState.Completed) },
             new() { State = "Failed", Count = CountForState(WorkflowState.Failed) },
-            new() { State = "In Progress", Count = CountForState(WorkflowState.InProgress), },
+            new() { State = "In Progress", Count = CountForState(WorkflowState.InProgress) },
             new() { State = "Pending", Count = CountForState(WorkflowState.Pending) },
             new() { State = "Cancelled", Count = CountForState(WorkflowState.Cancelled) },
         ];
@@ -212,12 +203,11 @@ public partial class Index
         // Average duration by workflow (completed in last 7 days) — aggregated in SQL
         var durationsQuery = context
             .Metadatas.AsNoTracking()
-            .Where(
-                m =>
-                    m.WorkflowState == WorkflowState.Completed
-                    && m.EndTime != null
-                    && m.StartTime >= last7d
-                    && m.ParentId == null
+            .Where(m =>
+                m.WorkflowState == WorkflowState.Completed
+                && m.EndTime != null
+                && m.StartTime >= last7d
+                && m.ParentId == null
             );
 
         if (hideAdmin)
@@ -225,27 +215,21 @@ public partial class Index
 
         var avgDurationData = await durationsQuery
             .GroupBy(m => m.Name)
-            .Select(
-                g =>
-                    new
-                    {
-                        Name = g.Key,
-                        AvgSeconds = g.Average(m => (m.EndTime!.Value - m.StartTime).TotalSeconds),
-                    }
-            )
+            .Select(g => new
+            {
+                Name = g.Key,
+                AvgSeconds = g.Average(m => (m.EndTime!.Value - m.StartTime).TotalSeconds),
+            })
             .OrderByDescending(x => x.AvgSeconds)
             .Take(10)
             .ToListAsync(cancellationToken);
 
         _avgDurations = avgDurationData
-            .Select(
-                x =>
-                    new WorkflowDuration
-                    {
-                        Name = ShortName(x.Name),
-                        AvgMs = Math.Round(x.AvgSeconds * 1000, 0),
-                    }
-            )
+            .Select(x => new WorkflowDuration
+            {
+                Name = ShortName(x.Name),
+                AvgMs = Math.Round(x.AvgSeconds * 1000, 0),
+            })
             .ToList();
 
         // Recent failures

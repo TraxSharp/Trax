@@ -1,10 +1,10 @@
-@page "/chainsharp/data/work-queue/{WorkQueueId:long}"
+@page "/trax/data/work-queue/{WorkQueueId:long}"
 @inherits PollingComponentBase
 
 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
     <RadzenButton Icon="arrow_back"
                   Variant="Variant.Text"
-                  Click="@(() => Navigation.NavigateTo("chainsharp/data/work-queue"))" />
+                  Click="@(() => Navigation.NavigateTo("trax/data/work-queue"))" />
     <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
         @if (_entry is not null)
         {
@@ -77,7 +77,7 @@
                 @if (_entry.ManifestId.HasValue)
                 {
                     <FieldDisplay Label="Manifest ID">
-                        <RadzenLink Path="@($"chainsharp/data/manifests/{_entry.ManifestId}")" Text="@_entry.ManifestId.ToString()" />
+                        <RadzenLink Path="@($"trax/data/manifests/{_entry.ManifestId}")" Text="@_entry.ManifestId.ToString()" />
                     </FieldDisplay>
                 }
                 else
@@ -87,7 +87,7 @@
                 @if (_entry.MetadataId.HasValue)
                 {
                     <FieldDisplay Label="Metadata ID">
-                        <RadzenLink Path="@($"chainsharp/data/metadata/{_entry.MetadataId}")" Text="@_entry.MetadataId.ToString()" />
+                        <RadzenLink Path="@($"trax/data/metadata/{_entry.MetadataId}")" Text="@_entry.MetadataId.ToString()" />
                     </FieldDisplay>
                 }
                 else

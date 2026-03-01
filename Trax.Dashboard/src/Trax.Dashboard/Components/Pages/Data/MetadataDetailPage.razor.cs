@@ -1,4 +1,8 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Components;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Radzen;
 using Trax.Dashboard.Services.WorkflowDiscovery;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -6,12 +10,8 @@ using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Effect.Utils;
-using Microsoft.AspNetCore.Components;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Radzen;
+using Trax.Scheduler.Services.CancellationRegistry;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
@@ -113,10 +113,9 @@ public partial class MetadataDetailPage
         {
             var registration = WorkflowDiscovery
                 .DiscoverWorkflows()
-                .FirstOrDefault(
-                    r =>
-                        r.ServiceType.FullName == _metadata.Name
-                        || r.ImplementationType.FullName == _metadata.Name
+                .FirstOrDefault(r =>
+                    r.ServiceType.FullName == _metadata.Name
+                    || r.ImplementationType.FullName == _metadata.Name
                 );
 
             if (registration is null)
@@ -130,7 +129,7 @@ public partial class MetadataDetailPage
             var deserializedInput = JsonSerializer.Deserialize(
                 _metadata.Input,
                 registration.InputType,
-                Trax.CoreJsonSerializationOptions.ManifestProperties
+                TraxJsonSerializationOptions.ManifestProperties
             );
 
             if (deserializedInput is null)
@@ -142,7 +141,7 @@ public partial class MetadataDetailPage
             var serializedInput = JsonSerializer.Serialize(
                 deserializedInput,
                 registration.InputType,
-                Trax.CoreJsonSerializationOptions.ManifestProperties
+                TraxJsonSerializationOptions.ManifestProperties
             );
 
             var entry = WorkQueue.Create(
@@ -165,7 +164,7 @@ public partial class MetadataDetailPage
                 duration: 4000
             );
 
-            Navigation.NavigateTo($"chainsharp/data/work-queue/{entry.Id}");
+            Navigation.NavigateTo($"trax/data/work-queue/{entry.Id}");
         }
         catch (JsonException je)
         {

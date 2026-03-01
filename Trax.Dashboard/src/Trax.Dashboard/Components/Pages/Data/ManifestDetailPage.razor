@@ -1,10 +1,10 @@
-@page "/chainsharp/data/manifests/{ManifestId:long}"
+@page "/trax/data/manifests/{ManifestId:long}"
 @inherits PollingComponentBase
 
 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
     <RadzenButton Icon="arrow_back"
                   Variant="Variant.Text"
-                  Click="@(() => Navigation.NavigateTo("chainsharp/data/manifests"))" />
+                  Click="@(() => Navigation.NavigateTo("trax/data/manifests"))" />
     <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
         @if (_manifest is not null)
         {
@@ -62,7 +62,7 @@
                 @if (_manifest.ManifestGroup is not null)
                 {
                     <FieldDisplay Label="Group">
-                        <RadzenLink Path="@($"chainsharp/data/manifest-groups/{_manifest.ManifestGroupId}")" Text="@_manifest.ManifestGroup.Name" />
+                        <RadzenLink Path="@($"trax/data/manifest-groups/{_manifest.ManifestGroupId}")" Text="@_manifest.ManifestGroup.Name" />
                     </FieldDisplay>
                 }
                 else
@@ -134,7 +134,7 @@
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Execution History</RadzenText>
     @if (_metadataItems.Count > 0)
     {
-        <Trax.CoreDataGrid Data="@_metadataItems"
+        <TraxDataGrid Data="@_metadataItems"
                             TItem="Metadata">
             <Columns>
                 <RadzenDataGridColumn TItem="Metadata"
@@ -148,7 +148,7 @@
                         <RadzenButton Icon="visibility"
                                       Variant="Variant.Text"
                                       Size="ButtonSize.Small"
-                                      Click="@(() => Navigation.NavigateTo($"chainsharp/data/metadata/{m.Id}"))" />
+                                      Click="@(() => Navigation.NavigateTo($"trax/data/metadata/{m.Id}"))" />
                     </Template>
                 </RadzenDataGridColumn>
                 <RadzenDataGridColumn TItem="Metadata"
@@ -201,7 +201,7 @@
                     <Template Context="m">
                         @if (m.ParentId.HasValue)
                         {
-                            <RadzenLink Path="@($"chainsharp/data/metadata/{m.ParentId}")" Text="@m.ParentId.ToString()" />
+                            <RadzenLink Path="@($"trax/data/metadata/{m.ParentId}")" Text="@m.ParentId.ToString()" />
                         }
                         else
                         {
@@ -210,7 +210,7 @@
                     </Template>
                 </RadzenDataGridColumn>
             </Columns>
-        </Trax.CoreDataGrid>
+        </TraxDataGrid>
     }
     else
     {

@@ -1,7 +1,7 @@
-using Trax.Dashboard.Services.DashboardSettings;
-using Trax.Dashboard.Services.LocalStorage;
 using Microsoft.AspNetCore.Components;
 using Radzen;
+using Trax.Dashboard.Services.DashboardSettings;
+using Trax.Dashboard.Services.LocalStorage;
 
 namespace Trax.Dashboard.Components.Pages.Settings;
 

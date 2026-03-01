@@ -1,5 +1,0 @@
-<Project>
-  <PropertyGroup>
-    <RequiresAspNetWebAssets Condition="'$(RequiresAspNetWebAssets)' == ''">true</RequiresAspNetWebAssets>
-  </PropertyGroup>
-</Project>

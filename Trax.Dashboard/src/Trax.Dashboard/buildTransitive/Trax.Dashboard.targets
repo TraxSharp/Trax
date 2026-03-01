@@ -3,6 +3,8 @@
        (blazor.web.js) to be resolved at build time. Without this, _framework/blazor.web.js returns 404.
        This is in a .targets file (not .props) because the Razor SDK overwrites the .props file during pack. -->
   <PropertyGroup>
-    <RequiresAspNetWebAssets Condition="'$(RequiresAspNetWebAssets)' == ''">true</RequiresAspNetWebAssets>
+    <RequiresAspNetWebAssets Condition="'$(RequiresAspNetWebAssets)' == ''"
+      >true</RequiresAspNetWebAssets
+    >
   </PropertyGroup>
 </Project>

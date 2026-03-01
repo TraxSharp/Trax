@@ -1,6 +1,6 @@
-using Trax.Dashboard.Services.DashboardSettings;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Routing;
+using Trax.Dashboard.Services.DashboardSettings;
 
 namespace Trax.Dashboard.Components.Shared;
 

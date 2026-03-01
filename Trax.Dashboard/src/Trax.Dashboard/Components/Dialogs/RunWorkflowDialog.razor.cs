@@ -2,14 +2,14 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
-using Trax.Effect.Configuration.Trax.CoreEffectConfiguration;
+using Microsoft.AspNetCore.Components;
+using Radzen;
 using Trax.Dashboard.Services.WorkflowDiscovery;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Scheduler.Services.BackgroundTaskServer;
-using Microsoft.AspNetCore.Components;
-using Radzen;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
@@ -76,7 +76,7 @@ public partial class RunWorkflowDialog
                     : JsonSerializer.Deserialize(
                         _jsonInput,
                         Registration.InputType,
-                        Trax.CoreEffectConfiguration.StaticSystemJsonSerializerOptions
+                        TraxEffectConfiguration.StaticSystemJsonSerializerOptions
                     );
 
             if (input is null)
@@ -104,7 +104,7 @@ public partial class RunWorkflowDialog
             await BackgroundTaskServer.EnqueueAsync(metadata.Id, input);
 
             DialogService.Close();
-            Navigation.NavigateTo($"chainsharp/data/metadata/{metadata.Id}");
+            Navigation.NavigateTo($"trax/data/metadata/{metadata.Id}");
         }
         catch (JsonException je)
         {
@@ -205,13 +205,13 @@ public partial class RunWorkflowDialog
         type switch
         {
             _ when type == typeof(string) => "Enter text",
-            _ when type == typeof(int) || type == typeof(long) || type == typeof(short)
-                => "Enter number",
-            _ when type == typeof(double) || type == typeof(float) || type == typeof(decimal)
-                => "Enter decimal",
+            _ when type == typeof(int) || type == typeof(long) || type == typeof(short) =>
+                "Enter number",
+            _ when type == typeof(double) || type == typeof(float) || type == typeof(decimal) =>
+                "Enter decimal",
             _ when type == typeof(Guid) => "Enter GUID",
-            _ when type == typeof(DateTime) || type == typeof(DateTimeOffset)
-                => "yyyy-MM-dd HH:mm:ss",
+            _ when type == typeof(DateTime) || type == typeof(DateTimeOffset) =>
+                "yyyy-MM-dd HH:mm:ss",
             _ => $"Enter {type.Name}",
         };
 }

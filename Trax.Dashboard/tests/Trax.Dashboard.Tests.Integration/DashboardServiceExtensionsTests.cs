@@ -1,8 +1,8 @@
+using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Dashboard.Configuration;
 using Trax.Dashboard.Extensions;
 using Trax.Dashboard.Services.WorkflowDiscovery;
-using FluentAssertions;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Dashboard.Tests.Integration;
 
@@ -10,30 +10,30 @@ namespace Trax.Dashboard.Tests.Integration;
 public class DashboardServiceExtensionsTests
 {
     [Test]
-    public void AddTrax.CoreDashboard_RegistersDashboardOptions()
+    public void AddTraxDashboard_RegistersDashboardOptions()
     {
         // Arrange
         var services = new ServiceCollection();
 
         // Act
-        services.AddTrax.CoreDashboard();
+        services.AddTraxDashboard();
         using var provider = services.BuildServiceProvider();
 
         // Assert
         var options = provider.GetService<DashboardOptions>();
         options.Should().NotBeNull();
-        options!.RoutePrefix.Should().Be("/chainsharp");
+        options!.RoutePrefix.Should().Be("/trax");
         options.Title.Should().Be("Trax.Core");
     }
 
     [Test]
-    public void AddTrax.CoreDashboard_WithConfigure_AppliesOptions()
+    public void AddTraxDashboard_WithConfigure_AppliesOptions()
     {
         // Arrange
         var services = new ServiceCollection();
 
         // Act
-        services.AddTrax.CoreDashboard(o =>
+        services.AddTraxDashboard(o =>
         {
             o.Title = "Custom Title";
             o.RoutePrefix = "/custom";
@@ -47,13 +47,13 @@ public class DashboardServiceExtensionsTests
     }
 
     [Test]
-    public void AddTrax.CoreDashboard_RegistersIServiceCollection()
+    public void AddTraxDashboard_RegistersIServiceCollection()
     {
         // Arrange
         var services = new ServiceCollection();
 
         // Act
-        services.AddTrax.CoreDashboard();
+        services.AddTraxDashboard();
         using var provider = services.BuildServiceProvider();
 
         // Assert — WorkflowDiscoveryService depends on IServiceCollection being resolvable
@@ -63,13 +63,13 @@ public class DashboardServiceExtensionsTests
     }
 
     [Test]
-    public void AddTrax.CoreDashboard_RegistersWorkflowDiscoveryService()
+    public void AddTraxDashboard_RegistersWorkflowDiscoveryService()
     {
         // Arrange
         var services = new ServiceCollection();
 
         // Act
-        services.AddTrax.CoreDashboard();
+        services.AddTraxDashboard();
         using var provider = services.BuildServiceProvider();
 
         // Assert

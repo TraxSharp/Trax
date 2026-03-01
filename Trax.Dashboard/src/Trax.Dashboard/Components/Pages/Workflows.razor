@@ -1,11 +1,11 @@
-@page "/chainsharp/workflows"
+@page "/trax/workflows"
 @inject IWorkflowDiscoveryService WorkflowDiscovery
 @inject IDashboardSettingsService DashboardSettings
 @inject DialogService DialogService
 
 <RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">Registered Workflows</RadzenText>
 
-<Trax.CoreDataGrid Data="@_workflows"
+<TraxDataGrid Data="@_workflows"
                     TItem="WorkflowRegistration">
     <Columns>
         <RadzenDataGridColumn TItem="WorkflowRegistration"
@@ -42,7 +42,7 @@
             </Template>
         </RadzenDataGridColumn>
     </Columns>
-</Trax.CoreDataGrid>
+</TraxDataGrid>
 
 @code {
     private IReadOnlyList<WorkflowRegistration> _workflows = [];

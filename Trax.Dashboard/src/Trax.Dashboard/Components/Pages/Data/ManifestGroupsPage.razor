@@ -1,4 +1,4 @@
-@page "/chainsharp/data/manifest-groups"
+@page "/trax/data/manifest-groups"
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
@@ -14,7 +14,7 @@
     <DagGraph Layout="@_dagLayout" OnNodeClick="@OnDagNodeClick" />
 }
 
-<Trax.CoreDataGrid Data="@_items"
+<TraxDataGrid Data="@_items"
                     TItem="GroupSummary"
                     IsLoading="@IsLoading">
     <Columns>
@@ -29,7 +29,7 @@
                 <RadzenButton Icon="visibility"
                               Variant="Variant.Text"
                               Size="ButtonSize.Small"
-                              Click="@(() => Navigation.NavigateTo($"chainsharp/data/manifest-groups/{g.Id}"))" />
+                              Click="@(() => Navigation.NavigateTo($"trax/data/manifest-groups/{g.Id}"))" />
             </Template>
         </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="GroupSummary"
@@ -72,7 +72,7 @@
                               Width="180px"
                               FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
     </Columns>
-</Trax.CoreDataGrid>
+</TraxDataGrid>
 
 @code {
     private List<GroupSummary> _items = [];
@@ -132,6 +132,6 @@
 
     private void OnDagNodeClick(long groupId)
     {
-        Navigation.NavigateTo($"chainsharp/data/manifest-groups/{groupId}");
+        Navigation.NavigateTo($"trax/data/manifest-groups/{groupId}");
     }
 }

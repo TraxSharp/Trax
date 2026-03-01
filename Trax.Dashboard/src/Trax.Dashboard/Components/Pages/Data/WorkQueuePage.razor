@@ -1,4 +1,4 @@
-@page "/chainsharp/data/work-queue"
+@page "/trax/data/work-queue"
 @using System.Linq.Dynamic.Core
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
@@ -9,7 +9,7 @@
     Pending and dispatched workflow execution requests. Items are queued when a manifest is due and dispatched to the task server for execution.
 </RadzenText>
 
-<Trax.CoreDataGrid @ref="_grid"
+<TraxDataGrid @ref="_grid"
                     TItem="WorkQueue"
                     ServerLoadData="@LoadPageAsync">
     <Columns>
@@ -24,7 +24,7 @@
                 <RadzenButton Icon="visibility"
                               Variant="Variant.Text"
                               Size="ButtonSize.Small"
-                              Click="@(() => Navigation.NavigateTo($"chainsharp/data/work-queue/{q.Id}"))" />
+                              Click="@(() => Navigation.NavigateTo($"trax/data/work-queue/{q.Id}"))" />
             </Template>
         </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="WorkQueue"
@@ -70,10 +70,10 @@
                               Width="180px"
                               FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
     </Columns>
-</Trax.CoreDataGrid>
+</TraxDataGrid>
 
 @code {
-    private Trax.CoreDataGrid<WorkQueue>? _grid;
+    private TraxDataGrid<WorkQueue>? _grid;
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {

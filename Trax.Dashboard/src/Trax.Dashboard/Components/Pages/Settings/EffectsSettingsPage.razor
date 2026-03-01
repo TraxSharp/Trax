@@ -1,4 +1,4 @@
-@page "/chainsharp/settings/effects"
+@page "/trax/settings/effects"
 
 <RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">Registered Effects</RadzenText>
 
@@ -9,13 +9,13 @@
 @if (!_effectsAvailable)
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
-        Effect Registry is not available. Ensure <code>.AddTrax.CoreEffects()</code> is configured in your service registration.
+        Effect Registry is not available. Ensure <code>.AddTraxEffects()</code> is configured in your service registration.
     </RadzenAlert>
 }
 else if (_effects.Count == 0)
 {
     <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">
-        No effects are registered. Ensure effects are added via <code>.AddTrax.CoreEffects()</code> configuration.
+        No effects are registered. Ensure effects are added via <code>.AddTraxEffects()</code> configuration.
     </RadzenAlert>
 }
 else

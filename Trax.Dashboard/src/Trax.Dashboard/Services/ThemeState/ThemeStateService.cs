@@ -1,5 +1,5 @@
-using Trax.Dashboard.Services.LocalStorage;
 using Radzen;
+using Trax.Dashboard.Services.LocalStorage;
 
 namespace Trax.Dashboard.Services.ThemeState;
 

@@ -1,4 +1,8 @@
 using System.Linq.Dynamic.Core;
+using Microsoft.AspNetCore.Components;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Radzen;
 using Trax.Dashboard.Components.Shared;
 using Trax.Dashboard.Models;
 using Trax.Dashboard.Utilities;
@@ -9,10 +13,6 @@ using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.ManifestScheduler;
-using Microsoft.AspNetCore.Components;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Radzen;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
@@ -52,8 +52,8 @@ public partial class ManifestGroupDetailPage
     private int _inProgressCount;
 
     // ── Grid references for server-side reload ──
-    private Trax.CoreDataGrid<Manifest>? _manifestsGrid;
-    private Trax.CoreDataGrid<Metadata>? _executionsGrid;
+    private TraxDataGrid<Manifest>? _manifestsGrid;
+    private TraxDataGrid<Metadata>? _executionsGrid;
 
     // ── Settings dirty tracking ──
     private int? _savedMaxActiveJobs;
@@ -235,11 +235,10 @@ public partial class ManifestGroupDetailPage
         // Downstream: groups containing manifests that depend on our manifests
         var downstreamGroupIds = await context
             .Manifests.AsNoTracking()
-            .Where(
-                m =>
-                    m.DependsOnManifestId != null
-                    && currentManifestIdsQuery.Contains(m.DependsOnManifestId.Value)
-                    && m.ManifestGroupId != ManifestGroupId
+            .Where(m =>
+                m.DependsOnManifestId != null
+                && currentManifestIdsQuery.Contains(m.DependsOnManifestId.Value)
+                && m.ManifestGroupId != ManifestGroupId
             )
             .Select(m => m.ManifestGroupId)
             .Distinct()
@@ -262,23 +261,19 @@ public partial class ManifestGroupDetailPage
             .ToListAsync(cancellationToken);
 
         var dagNodes = neighborGroups
-            .Select(
-                g =>
-                    new DagNode
-                    {
-                        Id = g.Id,
-                        Label = g.Name,
-                        IsHighlighted = g.Id == ManifestGroupId,
-                    }
-            )
+            .Select(g => new DagNode
+            {
+                Id = g.Id,
+                Label = g.Name,
+                IsHighlighted = g.Id == ManifestGroupId,
+            })
             .ToList();
 
         // Edges between all relevant groups
         var crossGroupEdges = await context
             .Manifests.AsNoTracking()
-            .Where(
-                m =>
-                    m.DependsOnManifestId != null && allRelevantGroupIds.Contains(m.ManifestGroupId)
+            .Where(m =>
+                m.DependsOnManifestId != null && allRelevantGroupIds.Contains(m.ManifestGroupId)
             )
             .Join(
                 context.Manifests.AsNoTracking(),
@@ -291,10 +286,9 @@ public partial class ManifestGroupDetailPage
                         DependentGroupId = dependent.ManifestGroupId,
                     }
             )
-            .Where(
-                e =>
-                    e.ParentGroupId != e.DependentGroupId
-                    && allRelevantGroupIds.Contains(e.ParentGroupId)
+            .Where(e =>
+                e.ParentGroupId != e.DependentGroupId
+                && allRelevantGroupIds.Contains(e.ParentGroupId)
             )
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -421,11 +415,10 @@ public partial class ManifestGroupDetailPage
             // Get IDs of in-progress metadata for this group
             var inProgressIds = await context
                 .Metadatas.AsNoTracking()
-                .Where(
-                    m =>
-                        m.ManifestId.HasValue
-                        && manifestIdsSubquery.Contains(m.ManifestId.Value)
-                        && m.WorkflowState == WorkflowState.InProgress
+                .Where(m =>
+                    m.ManifestId.HasValue
+                    && manifestIdsSubquery.Contains(m.ManifestId.Value)
+                    && m.WorkflowState == WorkflowState.InProgress
                 )
                 .Select(m => m.Id)
                 .ToListAsync(DisposalToken);
@@ -476,6 +469,6 @@ public partial class ManifestGroupDetailPage
 
     private void OnDagNodeClick(long groupId)
     {
-        Navigation.NavigateTo($"chainsharp/data/manifest-groups/{groupId}");
+        Navigation.NavigateTo($"trax/data/manifest-groups/{groupId}");
     }
 }

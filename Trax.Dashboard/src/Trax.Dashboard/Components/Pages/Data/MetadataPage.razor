@@ -1,4 +1,4 @@
-@page "/chainsharp/data/metadata"
+@page "/trax/data/metadata"
 @using System.Linq.Dynamic.Core
 @using Trax.Scheduler.Services.CancellationRegistry
 @using Microsoft.Extensions.DependencyInjection
@@ -13,7 +13,7 @@
     Execution records for each workflow run, tracking state, timing, input/output, and failure details.
 </RadzenText>
 
-<Trax.CoreDataGrid @ref="_grid"
+<TraxDataGrid @ref="_grid"
                     TItem="Metadata"
                     ServerLoadData="@LoadPageAsync">
     <Columns>
@@ -29,7 +29,7 @@
                     <RadzenButton Icon="visibility"
                                   Variant="Variant.Text"
                                   Size="ButtonSize.Small"
-                                  Click="@(() => Navigation.NavigateTo($"chainsharp/data/metadata/{m.Id}"))" />
+                                  Click="@(() => Navigation.NavigateTo($"trax/data/metadata/{m.Id}"))" />
                     @if (m.WorkflowState == WorkflowState.InProgress)
                     {
                         <RadzenButton Icon="cancel"
@@ -97,10 +97,10 @@
                               Width="140px"
                               Visible="false" />
     </Columns>
-</Trax.CoreDataGrid>
+</TraxDataGrid>
 
 @code {
-    private Trax.CoreDataGrid<Metadata>? _grid;
+    private TraxDataGrid<Metadata>? _grid;
 
     private async Task CancelWorkflow(long metadataId, string workflowName)
     {

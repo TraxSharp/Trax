@@ -1,10 +1,10 @@
-using Trax.Effect.Configuration.Trax.CoreEffectBuilder;
+using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Dashboard.Tests.Integration.Fakes;
+using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Scheduling;
-using Trax.Dashboard.Tests.Integration.Fakes;
-using FluentAssertions;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Dashboard.Tests.Integration;
 
@@ -12,13 +12,13 @@ namespace Trax.Dashboard.Tests.Integration;
 public class InferredSchedulingApiTests
 {
     private IServiceCollection _services = null!;
-    private Trax.CoreEffectConfigurationBuilder _parentBuilder = null!;
+    private TraxEffectConfigurationBuilder _parentBuilder = null!;
 
     [SetUp]
     public void SetUp()
     {
         _services = new ServiceCollection();
-        _parentBuilder = new Trax.CoreEffectConfigurationBuilder(_services);
+        _parentBuilder = new TraxEffectConfigurationBuilder(_services);
     }
 
     #region Single-type-param: Schedule, Include, ThenInclude
@@ -27,13 +27,12 @@ public class InferredSchedulingApiTests
     public void Schedule_SingleTypeParam_Succeeds()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler.Schedule<IFakeSchedulerWorkflowA>(
-                        "job-a",
-                        new FakeManifestInputA(),
-                        Every.Minutes(5)
-                    )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.Schedule<IFakeSchedulerWorkflowA>(
+                    "job-a",
+                    new FakeManifestInputA(),
+                    Every.Minutes(5)
+                )
             );
 
         act.Should().NotThrow();
@@ -43,15 +42,14 @@ public class InferredSchedulingApiTests
     public void Schedule_ThenInclude_SingleTypeParam_Succeeds()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler
-                        .Schedule<IFakeSchedulerWorkflowA>(
-                            "job-a",
-                            new FakeManifestInputA(),
-                            Every.Minutes(5)
-                        )
-                        .ThenInclude<IFakeSchedulerWorkflowB>("job-b", new FakeManifestInputB())
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler
+                    .Schedule<IFakeSchedulerWorkflowA>(
+                        "job-a",
+                        new FakeManifestInputA(),
+                        Every.Minutes(5)
+                    )
+                    .ThenInclude<IFakeSchedulerWorkflowB>("job-b", new FakeManifestInputB())
             );
 
         act.Should().NotThrow();
@@ -61,16 +59,15 @@ public class InferredSchedulingApiTests
     public void Schedule_Include_FanOut_SingleTypeParam_Succeeds()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler
-                        .Schedule<IFakeSchedulerWorkflowA>(
-                            "job-a",
-                            new FakeManifestInputA(),
-                            Every.Minutes(5)
-                        )
-                        .Include<IFakeSchedulerWorkflowB>("job-b", new FakeManifestInputB())
-                        .Include<IFakeSchedulerWorkflowC>("job-c", new FakeManifestInputC())
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler
+                    .Schedule<IFakeSchedulerWorkflowA>(
+                        "job-a",
+                        new FakeManifestInputA(),
+                        Every.Minutes(5)
+                    )
+                    .Include<IFakeSchedulerWorkflowB>("job-b", new FakeManifestInputB())
+                    .Include<IFakeSchedulerWorkflowC>("job-c", new FakeManifestInputC())
             );
 
         act.Should().NotThrow();
@@ -80,15 +77,14 @@ public class InferredSchedulingApiTests
     public void Schedule_WithOptions_SingleTypeParam_Succeeds()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler.Schedule<IFakeSchedulerWorkflowA>(
-                        "job-a",
-                        new FakeManifestInputA(),
-                        Every.Minutes(5),
-                        options =>
-                            options.Priority(10).Group("my-group", group => group.MaxActiveJobs(5))
-                    )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.Schedule<IFakeSchedulerWorkflowA>(
+                    "job-a",
+                    new FakeManifestInputA(),
+                    Every.Minutes(5),
+                    options =>
+                        options.Priority(10).Group("my-group", group => group.MaxActiveJobs(5))
+                )
             );
 
         act.Should().NotThrow();
@@ -102,13 +98,12 @@ public class InferredSchedulingApiTests
     public void Schedule_WrongInputType_ThrowsInvalidOperationException()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler.Schedule<IFakeSchedulerWorkflowA>(
-                        "job-a",
-                        new FakeManifestInputB(), // Wrong: WorkflowA expects FakeManifestInputA
-                        Every.Minutes(5)
-                    )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.Schedule<IFakeSchedulerWorkflowA>(
+                    "job-a",
+                    new FakeManifestInputB(), // Wrong: WorkflowA expects FakeManifestInputA
+                    Every.Minutes(5)
+                )
             );
 
         act.Should()
@@ -120,18 +115,17 @@ public class InferredSchedulingApiTests
     public void Include_WrongInputType_ThrowsInvalidOperationException()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler
-                        .Schedule<IFakeSchedulerWorkflowA>(
-                            "job-a",
-                            new FakeManifestInputA(),
-                            Every.Minutes(5)
-                        )
-                        .Include<IFakeSchedulerWorkflowB>(
-                            "job-b",
-                            new FakeManifestInputA() // Wrong: WorkflowB expects FakeManifestInputB
-                        )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler
+                    .Schedule<IFakeSchedulerWorkflowA>(
+                        "job-a",
+                        new FakeManifestInputA(),
+                        Every.Minutes(5)
+                    )
+                    .Include<IFakeSchedulerWorkflowB>(
+                        "job-b",
+                        new FakeManifestInputA() // Wrong: WorkflowB expects FakeManifestInputB
+                    )
             );
 
         act.Should()
@@ -143,18 +137,17 @@ public class InferredSchedulingApiTests
     public void ThenInclude_WrongInputType_ThrowsInvalidOperationException()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler
-                        .Schedule<IFakeSchedulerWorkflowA>(
-                            "job-a",
-                            new FakeManifestInputA(),
-                            Every.Minutes(5)
-                        )
-                        .ThenInclude<IFakeSchedulerWorkflowB>(
-                            "job-b",
-                            new FakeManifestInputC() // Wrong: WorkflowB expects FakeManifestInputB
-                        )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler
+                    .Schedule<IFakeSchedulerWorkflowA>(
+                        "job-a",
+                        new FakeManifestInputA(),
+                        Every.Minutes(5)
+                    )
+                    .ThenInclude<IFakeSchedulerWorkflowB>(
+                        "job-b",
+                        new FakeManifestInputC() // Wrong: WorkflowB expects FakeManifestInputB
+                    )
             );
 
         act.Should()
@@ -170,12 +163,8 @@ public class InferredSchedulingApiTests
     public void ThenInclude_WithoutSchedule_ThrowsInvalidOperationException()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler.ThenInclude<IFakeSchedulerWorkflowA>(
-                        "job-a",
-                        new FakeManifestInputA()
-                    )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.ThenInclude<IFakeSchedulerWorkflowA>("job-a", new FakeManifestInputA())
             );
 
         act.Should()
@@ -187,9 +176,8 @@ public class InferredSchedulingApiTests
     public void Include_WithoutSchedule_ThrowsInvalidOperationException()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler.Include<IFakeSchedulerWorkflowA>("job-a", new FakeManifestInputA())
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.Include<IFakeSchedulerWorkflowA>("job-a", new FakeManifestInputA())
             );
 
         act.Should()
@@ -205,15 +193,14 @@ public class InferredSchedulingApiTests
     public void ScheduleMany_Named_Succeeds()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler.ScheduleMany<IFakeSchedulerWorkflowA>(
-                        "batch-a",
-                        Enumerable
-                            .Range(0, 5)
-                            .Select(i => new ManifestItem($"{i}", new FakeManifestInputA())),
-                        Every.Minutes(5)
-                    )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.ScheduleMany<IFakeSchedulerWorkflowA>(
+                    "batch-a",
+                    Enumerable
+                        .Range(0, 5)
+                        .Select(i => new ManifestItem($"{i}", new FakeManifestInputA())),
+                    Every.Minutes(5)
+                )
             );
 
         act.Should().NotThrow();
@@ -223,16 +210,13 @@ public class InferredSchedulingApiTests
     public void ScheduleMany_Unnamed_Succeeds()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler.ScheduleMany<IFakeSchedulerWorkflowA>(
-                        Enumerable
-                            .Range(0, 3)
-                            .Select(
-                                i => new ManifestItem($"batch-item-{i}", new FakeManifestInputA())
-                            ),
-                        Every.Minutes(5)
-                    )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.ScheduleMany<IFakeSchedulerWorkflowA>(
+                    Enumerable
+                        .Range(0, 3)
+                        .Select(i => new ManifestItem($"batch-item-{i}", new FakeManifestInputA())),
+                    Every.Minutes(5)
+                )
             );
 
         act.Should().NotThrow();
@@ -242,21 +226,17 @@ public class InferredSchedulingApiTests
     public void ScheduleMany_WrongInputType_ThrowsInvalidOperationException()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler.ScheduleMany<IFakeSchedulerWorkflowA>(
-                        "batch-a",
-                        Enumerable
-                            .Range(0, 3)
-                            .Select(
-                                i =>
-                                    new ManifestItem(
-                                        $"{i}",
-                                        new FakeManifestInputB() // Wrong type
-                                    )
-                            ),
-                        Every.Minutes(5)
-                    )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.ScheduleMany<IFakeSchedulerWorkflowA>(
+                    "batch-a",
+                    Enumerable
+                        .Range(0, 3)
+                        .Select(i => new ManifestItem(
+                            $"{i}",
+                            new FakeManifestInputB() // Wrong type
+                        )),
+                    Every.Minutes(5)
+                )
             );
 
         act.Should()
@@ -272,22 +252,21 @@ public class InferredSchedulingApiTests
     public void IncludeMany_RootBased_Succeeds()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler
-                        .Schedule<IFakeSchedulerWorkflowA>(
-                            "root-job",
-                            new FakeManifestInputA(),
-                            Every.Minutes(5)
-                        )
-                        .IncludeMany<IFakeSchedulerWorkflowB>(
-                            Enumerable
-                                .Range(0, 5)
-                                .Select(
-                                    i =>
-                                        new ManifestItem($"dependent-{i}", new FakeManifestInputB())
-                                )
-                        )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler
+                    .Schedule<IFakeSchedulerWorkflowA>(
+                        "root-job",
+                        new FakeManifestInputA(),
+                        Every.Minutes(5)
+                    )
+                    .IncludeMany<IFakeSchedulerWorkflowB>(
+                        Enumerable
+                            .Range(0, 5)
+                            .Select(i => new ManifestItem(
+                                $"dependent-{i}",
+                                new FakeManifestInputB()
+                            ))
+                    )
             );
 
         act.Should().NotThrow();
@@ -297,29 +276,25 @@ public class InferredSchedulingApiTests
     public void IncludeMany_Named_WithDependsOn_Succeeds()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler
-                        .ScheduleMany<IFakeSchedulerWorkflowA>(
-                            "extract",
-                            Enumerable
-                                .Range(0, 3)
-                                .Select(i => new ManifestItem($"{i}", new FakeManifestInputA())),
-                            Every.Minutes(5)
-                        )
-                        .IncludeMany<IFakeSchedulerWorkflowB>(
-                            "transform",
-                            Enumerable
-                                .Range(0, 3)
-                                .Select(
-                                    i =>
-                                        new ManifestItem(
-                                            $"{i}",
-                                            new FakeManifestInputB(),
-                                            DependsOn: $"extract-{i}"
-                                        )
-                                )
-                        )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler
+                    .ScheduleMany<IFakeSchedulerWorkflowA>(
+                        "extract",
+                        Enumerable
+                            .Range(0, 3)
+                            .Select(i => new ManifestItem($"{i}", new FakeManifestInputA())),
+                        Every.Minutes(5)
+                    )
+                    .IncludeMany<IFakeSchedulerWorkflowB>(
+                        "transform",
+                        Enumerable
+                            .Range(0, 3)
+                            .Select(i => new ManifestItem(
+                                $"{i}",
+                                new FakeManifestInputB(),
+                                DependsOn: $"extract-{i}"
+                            ))
+                    )
             );
 
         act.Should().NotThrow();
@@ -329,13 +304,12 @@ public class InferredSchedulingApiTests
     public void IncludeMany_WithoutSchedule_ThrowsInvalidOperationException()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler.IncludeMany<IFakeSchedulerWorkflowA>(
-                        Enumerable
-                            .Range(0, 3)
-                            .Select(i => new ManifestItem($"item-{i}", new FakeManifestInputA()))
-                    )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.IncludeMany<IFakeSchedulerWorkflowA>(
+                    Enumerable
+                        .Range(0, 3)
+                        .Select(i => new ManifestItem($"item-{i}", new FakeManifestInputA()))
+                )
             );
 
         act.Should()
@@ -351,42 +325,35 @@ public class InferredSchedulingApiTests
     public void ThenIncludeMany_WithDependsOn_Succeeds()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler
-                        .ScheduleMany<IFakeSchedulerWorkflowA>(
-                            "extract",
-                            Enumerable
-                                .Range(0, 3)
-                                .Select(i => new ManifestItem($"{i}", new FakeManifestInputA())),
-                            Every.Minutes(5)
-                        )
-                        .IncludeMany<IFakeSchedulerWorkflowB>(
-                            "transform",
-                            Enumerable
-                                .Range(0, 3)
-                                .Select(
-                                    i =>
-                                        new ManifestItem(
-                                            $"{i}",
-                                            new FakeManifestInputB(),
-                                            DependsOn: $"extract-{i}"
-                                        )
-                                )
-                        )
-                        .ThenIncludeMany<IFakeSchedulerWorkflowC>(
-                            "load",
-                            Enumerable
-                                .Range(0, 3)
-                                .Select(
-                                    i =>
-                                        new ManifestItem(
-                                            $"{i}",
-                                            new FakeManifestInputC(),
-                                            DependsOn: $"transform-{i}"
-                                        )
-                                )
-                        )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler
+                    .ScheduleMany<IFakeSchedulerWorkflowA>(
+                        "extract",
+                        Enumerable
+                            .Range(0, 3)
+                            .Select(i => new ManifestItem($"{i}", new FakeManifestInputA())),
+                        Every.Minutes(5)
+                    )
+                    .IncludeMany<IFakeSchedulerWorkflowB>(
+                        "transform",
+                        Enumerable
+                            .Range(0, 3)
+                            .Select(i => new ManifestItem(
+                                $"{i}",
+                                new FakeManifestInputB(),
+                                DependsOn: $"extract-{i}"
+                            ))
+                    )
+                    .ThenIncludeMany<IFakeSchedulerWorkflowC>(
+                        "load",
+                        Enumerable
+                            .Range(0, 3)
+                            .Select(i => new ManifestItem(
+                                $"{i}",
+                                new FakeManifestInputC(),
+                                DependsOn: $"transform-{i}"
+                            ))
+                    )
             );
 
         act.Should().NotThrow();
@@ -396,28 +363,24 @@ public class InferredSchedulingApiTests
     public void ThenIncludeMany_MissingDependsOn_ThrowsInvalidOperationException()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler
-                        .ScheduleMany<IFakeSchedulerWorkflowA>(
-                            "extract",
-                            Enumerable
-                                .Range(0, 3)
-                                .Select(i => new ManifestItem($"{i}", new FakeManifestInputA())),
-                            Every.Minutes(5)
-                        )
-                        .ThenIncludeMany<IFakeSchedulerWorkflowB>(
-                            Enumerable
-                                .Range(0, 3)
-                                .Select(
-                                    i =>
-                                        new ManifestItem(
-                                            $"item-{i}",
-                                            new FakeManifestInputB()
-                                        // No DependsOn — should fail
-                                        )
-                                )
-                        )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler
+                    .ScheduleMany<IFakeSchedulerWorkflowA>(
+                        "extract",
+                        Enumerable
+                            .Range(0, 3)
+                            .Select(i => new ManifestItem($"{i}", new FakeManifestInputA())),
+                        Every.Minutes(5)
+                    )
+                    .ThenIncludeMany<IFakeSchedulerWorkflowB>(
+                        Enumerable
+                            .Range(0, 3)
+                            .Select(i => new ManifestItem(
+                                $"item-{i}",
+                                new FakeManifestInputB()
+                            // No DependsOn — should fail
+                            ))
+                    )
             );
 
         act.Should()
@@ -433,30 +396,26 @@ public class InferredSchedulingApiTests
     public void IncludeMany_WithDormantOption_Succeeds()
     {
         var act = () =>
-            _parentBuilder.AddScheduler(
-                scheduler =>
-                    scheduler
-                        .ScheduleMany<IFakeSchedulerWorkflowA>(
-                            "extract",
-                            Enumerable
-                                .Range(0, 3)
-                                .Select(i => new ManifestItem($"{i}", new FakeManifestInputA())),
-                            Every.Minutes(5)
-                        )
-                        .IncludeMany<IFakeSchedulerWorkflowB>(
-                            "dq-check",
-                            Enumerable
-                                .Range(0, 3)
-                                .Select(
-                                    i =>
-                                        new ManifestItem(
-                                            $"{i}",
-                                            new FakeManifestInputB(),
-                                            DependsOn: $"extract-{i}"
-                                        )
-                                ),
-                            options: o => o.Dormant()
-                        )
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler
+                    .ScheduleMany<IFakeSchedulerWorkflowA>(
+                        "extract",
+                        Enumerable
+                            .Range(0, 3)
+                            .Select(i => new ManifestItem($"{i}", new FakeManifestInputA())),
+                        Every.Minutes(5)
+                    )
+                    .IncludeMany<IFakeSchedulerWorkflowB>(
+                        "dq-check",
+                        Enumerable
+                            .Range(0, 3)
+                            .Select(i => new ManifestItem(
+                                $"{i}",
+                                new FakeManifestInputB(),
+                                DependsOn: $"extract-{i}"
+                            )),
+                        options: o => o.Dormant()
+                    )
             );
 
         act.Should().NotThrow();
@@ -485,14 +444,11 @@ public class InferredSchedulingApiTests
                         "group-b",
                         Enumerable
                             .Range(0, 2)
-                            .Select(
-                                i =>
-                                    new ManifestItem(
-                                        $"{i}",
-                                        new FakeManifestInputB(),
-                                        DependsOn: $"group-a-{i}"
-                                    )
-                            )
+                            .Select(i => new ManifestItem(
+                                $"{i}",
+                                new FakeManifestInputB(),
+                                DependsOn: $"group-a-{i}"
+                            ))
                     );
 
                 // Close the cycle: group-b → group-a

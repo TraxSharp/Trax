@@ -1,15 +1,15 @@
-using Trax.Dashboard.Components;
-using Trax.Dashboard.Configuration;
-using Trax.Dashboard.Services.DashboardSettings;
-using Trax.Dashboard.Services.LocalStorage;
-using Trax.Dashboard.Services.ThemeState;
-using Trax.Dashboard.Services.WorkflowDiscovery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Radzen;
+using Trax.Dashboard.Components;
+using Trax.Dashboard.Configuration;
+using Trax.Dashboard.Services.DashboardSettings;
+using Trax.Dashboard.Services.LocalStorage;
+using Trax.Dashboard.Services.ThemeState;
+using Trax.Dashboard.Services.WorkflowDiscovery;
 
 namespace Trax.Dashboard.Extensions;
 
@@ -20,7 +20,7 @@ public static class DashboardServiceExtensions
     /// Also ensures static web assets (CSS, JS) from NuGet packages are available in all environments.
     /// This is the recommended overload for dashboard consumers.
     /// </summary>
-    public static WebApplicationBuilder AddTrax.CoreDashboard(
+    public static WebApplicationBuilder AddTraxDashboard(
         this WebApplicationBuilder builder,
         Action<DashboardOptions>? configure = null
     )
@@ -37,7 +37,7 @@ public static class DashboardServiceExtensions
         // survive IConfigurationRoot.Reload() — the memory provider's Load() is a no-op.
         builder.Configuration.AddInMemoryCollection();
 
-        builder.Services.AddTrax.CoreDashboard(configure);
+        builder.Services.AddTraxDashboard(configure);
         return builder;
     }
 
@@ -45,9 +45,9 @@ public static class DashboardServiceExtensions
     /// Registers Trax.Core Dashboard services including Radzen components and workflow discovery.
     /// When using this overload, ensure static web assets are configured for non-Development environments
     /// by calling <c>builder.WebHost.UseStaticWebAssets()</c> before <c>builder.Build()</c>.
-    /// Prefer the <see cref="AddTrax.CoreDashboard(WebApplicationBuilder, Action{DashboardOptions}?)"/> overload instead.
+    /// Prefer the <see cref="AddTraxDashboard(WebApplicationBuilder, Action{DashboardOptions}?)"/> overload instead.
     /// </summary>
-    public static IServiceCollection AddTrax.CoreDashboard(
+    public static IServiceCollection AddTraxDashboard(
         this IServiceCollection services,
         Action<DashboardOptions>? configure = null
     )
@@ -75,9 +75,9 @@ public static class DashboardServiceExtensions
     /// <summary>
     /// Maps the Trax.Core Dashboard Blazor components at the configured route prefix.
     /// </summary>
-    public static WebApplication UseTrax.CoreDashboard(
+    public static WebApplication UseTraxDashboard(
         this WebApplication app,
-        string routePrefix = "/chainsharp",
+        string routePrefix = "/trax",
         string? title = null
     )
     {

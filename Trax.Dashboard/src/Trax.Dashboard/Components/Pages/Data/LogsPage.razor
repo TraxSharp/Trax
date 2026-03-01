@@ -1,4 +1,4 @@
-@page "/chainsharp/data/logs"
+@page "/trax/data/logs"
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 
@@ -7,7 +7,7 @@
     Log entries captured during workflow execution, including messages, exceptions, and diagnostic information.
 </RadzenText>
 
-<Trax.CoreDataGrid Data="@_items"
+<TraxDataGrid Data="@_items"
                     TItem="Log"
                     IsLoading="@IsLoading">
     <Columns>
@@ -37,7 +37,7 @@
                               Title="Exception"
                               Width="250px" />
     </Columns>
-</Trax.CoreDataGrid>
+</TraxDataGrid>
 
 @code {
     private List<Log> _items = [];

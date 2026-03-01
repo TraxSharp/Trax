@@ -1,9 +1,9 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Radzen;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
-using Microsoft.Extensions.Logging;
-using Radzen;
 
 namespace Trax.Dashboard.Utilities;
 
@@ -36,14 +36,13 @@ public static class DashboardFormatters
         manifest.ScheduleType switch
         {
             ScheduleType.Cron => manifest.CronExpression ?? "—",
-            ScheduleType.Interval
-                => manifest.IntervalSeconds switch
-                {
-                    null => "—",
-                    < 60 => $"Every {manifest.IntervalSeconds}s",
-                    < 3600 => $"Every {manifest.IntervalSeconds / 60}m",
-                    _ => $"Every {manifest.IntervalSeconds / 3600}h",
-                },
+            ScheduleType.Interval => manifest.IntervalSeconds switch
+            {
+                null => "—",
+                < 60 => $"Every {manifest.IntervalSeconds}s",
+                < 3600 => $"Every {manifest.IntervalSeconds / 60}m",
+                _ => $"Every {manifest.IntervalSeconds / 3600}h",
+            },
             _ => manifest.ScheduleType.ToString(),
         };
 

@@ -1,7 +1,7 @@
-using Trax.Dashboard.Utilities;
-using Trax.Effect.Enums;
 using FluentAssertions;
 using Radzen;
+using Trax.Dashboard.Utilities;
+using Trax.Effect.Enums;
 
 namespace Trax.Dashboard.Tests.Integration;
 
@@ -199,7 +199,7 @@ public class DashboardFormattersTests
             [WorkflowState.Failed] = BadgeStyle.Danger,
             [WorkflowState.InProgress] = BadgeStyle.Info,
             [WorkflowState.Pending] = BadgeStyle.Warning,
-            [WorkflowState.Cancelled] = BadgeStyle.Warning
+            [WorkflowState.Cancelled] = BadgeStyle.Warning,
         };
 
         foreach (var (state, expectedStyle) in expectedMappings)

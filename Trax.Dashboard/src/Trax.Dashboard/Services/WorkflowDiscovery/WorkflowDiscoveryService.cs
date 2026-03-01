@@ -1,5 +1,5 @@
-using Trax.Effect.Services.ServiceTrain;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Dashboard.Services.WorkflowDiscovery;
 
@@ -32,7 +32,7 @@ public class WorkflowDiscoveryService : IWorkflowDiscoveryService
                 continue;
 
             // Skip concrete type registrations from the dual-registration pattern
-            // (AddScopedTrax.CoreRoute registers both TImplementation and TService)
+            // (AddScopedTraxRoute registers both TImplementation and TService)
             if (descriptor.ImplementationFactory != null && !serviceType.IsInterface)
                 continue;
 
@@ -98,8 +98,8 @@ public class WorkflowDiscoveryService : IWorkflowDiscoveryService
             return type;
 
         return type.GetInterfaces()
-            .FirstOrDefault(
-                i => i.IsGenericType && i.GetGenericTypeDefinition() == serviceTrainType
+            .FirstOrDefault(i =>
+                i.IsGenericType && i.GetGenericTypeDefinition() == serviceTrainType
             );
     }
 

@@ -150,10 +150,10 @@ public partial class ConfigureEffectDialog
         type switch
         {
             _ when type == typeof(string) => "Enter text",
-            _ when type == typeof(int) || type == typeof(long) || type == typeof(short)
-                => "Enter number",
-            _ when type == typeof(double) || type == typeof(float) || type == typeof(decimal)
-                => "Enter decimal",
+            _ when type == typeof(int) || type == typeof(long) || type == typeof(short) =>
+                "Enter number",
+            _ when type == typeof(double) || type == typeof(float) || type == typeof(decimal) =>
+                "Enter decimal",
             _ when type == typeof(Guid) => "Enter GUID",
             _ => $"Enter {type.Name}",
         };

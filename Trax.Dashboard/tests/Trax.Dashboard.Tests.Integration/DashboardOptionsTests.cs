@@ -1,5 +1,5 @@
-using Trax.Dashboard.Configuration;
 using FluentAssertions;
+using Trax.Dashboard.Configuration;
 
 namespace Trax.Dashboard.Tests.Integration;
 
@@ -13,7 +13,7 @@ public class DashboardOptionsTests
         var options = new DashboardOptions();
 
         // Assert
-        options.RoutePrefix.Should().Be("/chainsharp");
+        options.RoutePrefix.Should().Be("/trax");
         options.Title.Should().Be("Trax.Core");
     }
 }

@@ -1,4 +1,4 @@
-@page "/chainsharp/data/dead-letters"
+@page "/trax/data/dead-letters"
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
@@ -8,7 +8,7 @@
     Workflow executions that exceeded their maximum retry count and require manual intervention. Resolve by retrying or acknowledging.
 </RadzenText>
 
-<Trax.CoreDataGrid Data="@_items"
+<TraxDataGrid Data="@_items"
                     TItem="DeadLetter"
                     IsLoading="@IsLoading">
     <Columns>
@@ -23,7 +23,7 @@
                 <RadzenButton Icon="visibility"
                               Variant="Variant.Text"
                               Size="ButtonSize.Small"
-                              Click="@(() => Navigation.NavigateTo($"chainsharp/data/dead-letters/{d.Id}"))" />
+                              Click="@(() => Navigation.NavigateTo($"trax/data/dead-letters/{d.Id}"))" />
             </Template>
         </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="DeadLetter"
@@ -67,7 +67,7 @@
                               Title="Resolution Note"
                               Width="250px" />
     </Columns>
-</Trax.CoreDataGrid>
+</TraxDataGrid>
 
 @code {
     private List<DeadLetter> _items = [];

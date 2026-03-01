@@ -1,10 +1,10 @@
-@page "/chainsharp/data/dead-letters/{DeadLetterId:long}"
+@page "/trax/data/dead-letters/{DeadLetterId:long}"
 @inherits PollingComponentBase
 
 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
     <RadzenButton Icon="arrow_back"
                   Variant="Variant.Text"
-                  Click="@(() => Navigation.NavigateTo("chainsharp/data/dead-letters"))" />
+                  Click="@(() => Navigation.NavigateTo("trax/data/dead-letters"))" />
     <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
         @if (_deadLetter?.Manifest is not null)
         {
@@ -115,12 +115,12 @@
         <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
             <RadzenStack Gap="0.75rem">
                 <FieldDisplay Label="Manifest ID">
-                    <RadzenLink Path="@($"chainsharp/data/manifests/{_deadLetter.ManifestId}")" Text="@_deadLetter.ManifestId.ToString()" />
+                    <RadzenLink Path="@($"trax/data/manifests/{_deadLetter.ManifestId}")" Text="@_deadLetter.ManifestId.ToString()" />
                 </FieldDisplay>
                 @if (_deadLetter.RetryMetadataId.HasValue)
                 {
                     <FieldDisplay Label="Retry Metadata ID">
-                        <RadzenLink Path="@($"chainsharp/data/metadata/{_deadLetter.RetryMetadataId}")" Text="@_deadLetter.RetryMetadataId.ToString()" />
+                        <RadzenLink Path="@($"trax/data/metadata/{_deadLetter.RetryMetadataId}")" Text="@_deadLetter.RetryMetadataId.ToString()" />
                     </FieldDisplay>
                 }
             </RadzenStack>
@@ -181,7 +181,7 @@
             <RadzenButton Icon="visibility"
                           Variant="Variant.Text"
                           Size="ButtonSize.Small"
-                          Click="@(() => Navigation.NavigateTo($"chainsharp/data/metadata/{_latestFailedRun.Id}"))"
+                          Click="@(() => Navigation.NavigateTo($"trax/data/metadata/{_latestFailedRun.Id}"))"
                           title="View full metadata detail" />
         </RadzenStack>
         <RadzenRow Gap="1rem">
@@ -220,7 +220,7 @@
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Failed Execution History</RadzenText>
     @if (_failedRuns.Count > 0)
     {
-        <Trax.CoreDataGrid Data="@_failedRuns"
+        <TraxDataGrid Data="@_failedRuns"
                             TItem="Metadata">
             <Columns>
                 <RadzenDataGridColumn TItem="Metadata"
@@ -234,7 +234,7 @@
                         <RadzenButton Icon="visibility"
                                       Variant="Variant.Text"
                                       Size="ButtonSize.Small"
-                                      Click="@(() => Navigation.NavigateTo($"chainsharp/data/metadata/{m.Id}"))" />
+                                      Click="@(() => Navigation.NavigateTo($"trax/data/metadata/{m.Id}"))" />
                     </Template>
                 </RadzenDataGridColumn>
                 <RadzenDataGridColumn TItem="Metadata"
@@ -277,7 +277,7 @@
                                       Title="Failure Reason"
                                       Width="250px" />
             </Columns>
-        </Trax.CoreDataGrid>
+        </TraxDataGrid>
     }
     else
     {

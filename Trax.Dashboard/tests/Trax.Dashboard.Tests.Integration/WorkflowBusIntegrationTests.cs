@@ -1,10 +1,10 @@
-using Trax.Dashboard.Extensions;
-using Trax.Dashboard.Services.WorkflowDiscovery;
-using Trax.Effect.Extensions;
-using Trax.Mediator.Extensions;
-using Trax.Dashboard.Tests.Integration.Fakes;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Dashboard.Extensions;
+using Trax.Dashboard.Services.WorkflowDiscovery;
+using Trax.Dashboard.Tests.Integration.Fakes;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
 
 namespace Trax.Dashboard.Tests.Integration;
 
@@ -17,11 +17,11 @@ public class WorkflowBusIntegrationTests
         // Arrange — register workflows via assembly scanning (as in a real app)
         var services = new ServiceCollection();
 
-        services.AddTrax.CoreEffects(
-            o => o.AddServiceTrainBus(assemblies: [typeof(FakeWorkflowA).Assembly])
+        services.AddTraxEffects(o =>
+            o.AddServiceTrainBus(assemblies: [typeof(FakeWorkflowA).Assembly])
         );
 
-        services.AddTrax.CoreDashboard();
+        services.AddTraxDashboard();
 
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();

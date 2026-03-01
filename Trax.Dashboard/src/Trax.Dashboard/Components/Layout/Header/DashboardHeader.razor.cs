@@ -1,5 +1,5 @@
-using Trax.Dashboard.Services.DashboardSettings;
 using Microsoft.AspNetCore.Components;
+using Trax.Dashboard.Services.DashboardSettings;
 
 namespace Trax.Dashboard.Components.Layout.Header;
 
@@ -24,11 +24,9 @@ public partial class DashboardHeader : IAsyncDisposable
     public string EnvironmentName { get; set; } = "";
 
     private string EnvironmentBadgeColor =>
-        EnvironmentName.Equals("Development", StringComparison.OrdinalIgnoreCase)
-            ? "#1976D2"
-            : EnvironmentName.Equals("Production", StringComparison.OrdinalIgnoreCase)
-                ? "#D32F2F"
-                : "#757575";
+        EnvironmentName.Equals("Development", StringComparison.OrdinalIgnoreCase) ? "#1976D2"
+        : EnvironmentName.Equals("Production", StringComparison.OrdinalIgnoreCase) ? "#D32F2F"
+        : "#757575";
 
     private PeriodicTimer? _uiTimer;
     private CancellationTokenSource? _cts;

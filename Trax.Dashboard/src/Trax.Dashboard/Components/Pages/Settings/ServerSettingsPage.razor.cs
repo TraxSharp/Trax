@@ -1,8 +1,8 @@
-using Trax.Scheduler.Configuration;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
+using Trax.Scheduler.Configuration;
 
 namespace Trax.Dashboard.Components.Pages.Settings;
 
@@ -109,8 +109,8 @@ public partial class ServerSettingsPage
 
     private bool IsLoggingDirty =>
         _loggingAvailable
-        && _logLevels.Any(
-            e => e.Level != _savedLogLevels.GetValueOrDefault(e.Category, "Information")
+        && _logLevels.Any(e =>
+            e.Level != _savedLogLevels.GetValueOrDefault(e.Category, "Information")
         );
 
     protected override void OnInitialized()
@@ -241,14 +241,11 @@ public partial class ServerSettingsPage
         _logLevels = _configRoot!
             .GetSection("Logging:LogLevel")
             .GetChildren()
-            .Select(
-                section =>
-                    new LogLevelEntry
-                    {
-                        Category = section.Key,
-                        Level = section.Value ?? "Information",
-                    }
-            )
+            .Select(section => new LogLevelEntry
+            {
+                Category = section.Key,
+                Level = section.Value ?? "Information",
+            })
             .OrderBy(e => e.Category == "Default" ? "" : e.Category)
             .ToList();
     }

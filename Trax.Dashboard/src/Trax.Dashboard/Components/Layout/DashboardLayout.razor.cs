@@ -1,7 +1,7 @@
+using Microsoft.AspNetCore.Components;
 using Trax.Dashboard.Configuration;
 using Trax.Dashboard.Services.LocalStorage;
 using Trax.Dashboard.Services.ThemeState;
-using Microsoft.AspNetCore.Components;
 
 namespace Trax.Dashboard.Components.Layout;
 

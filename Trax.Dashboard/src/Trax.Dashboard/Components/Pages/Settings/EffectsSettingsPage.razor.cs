@@ -1,9 +1,9 @@
-using Trax.Dashboard.Components.Dialogs;
-using Trax.Effect.Services.EffectProviderFactory;
-using Trax.Effect.Services.EffectRegistry;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
+using Trax.Dashboard.Components.Dialogs;
+using Trax.Effect.Services.EffectProviderFactory;
+using Trax.Effect.Services.EffectRegistry;
 
 namespace Trax.Dashboard.Components.Pages.Settings;
 
@@ -27,8 +27,8 @@ public partial class EffectsSettingsPage
     // ── Dirty tracking ──
     private bool IsEffectsDirty =>
         _effectsAvailable
-        && _effects.Any(
-            e => e.Toggleable && e.Enabled != _savedEffectStates.GetValueOrDefault(e.FactoryType)
+        && _effects.Any(e =>
+            e.Toggleable && e.Enabled != _savedEffectStates.GetValueOrDefault(e.FactoryType)
         );
 
     protected override void OnInitialized()

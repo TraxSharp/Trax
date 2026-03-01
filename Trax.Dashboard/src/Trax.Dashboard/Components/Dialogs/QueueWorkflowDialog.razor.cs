@@ -2,14 +2,14 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
-using Trax.Effect.Configuration.Trax.CoreEffectConfiguration;
+using Microsoft.AspNetCore.Components;
+using Radzen;
 using Trax.Dashboard.Services.WorkflowDiscovery;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Utils;
-using Microsoft.AspNetCore.Components;
-using Radzen;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
@@ -74,7 +74,7 @@ public partial class QueueWorkflowDialog
                     : JsonSerializer.Deserialize(
                         _jsonInput,
                         Registration.InputType,
-                        Trax.CoreEffectConfiguration.StaticSystemJsonSerializerOptions
+                        TraxEffectConfiguration.StaticSystemJsonSerializerOptions
                     );
 
             if (input is null)
@@ -87,7 +87,7 @@ public partial class QueueWorkflowDialog
             var serializedInput = JsonSerializer.Serialize(
                 input,
                 Registration.InputType,
-                Trax.CoreJsonSerializationOptions.ManifestProperties
+                TraxJsonSerializationOptions.ManifestProperties
             );
 
             var entry = WorkQueue.Create(
@@ -107,7 +107,7 @@ public partial class QueueWorkflowDialog
             await dataContext.SaveChanges(CancellationToken.None);
 
             DialogService.Close();
-            Navigation.NavigateTo($"chainsharp/data/work-queue/{entry.Id}");
+            Navigation.NavigateTo($"trax/data/work-queue/{entry.Id}");
         }
         catch (JsonException je)
         {
@@ -208,13 +208,13 @@ public partial class QueueWorkflowDialog
         type switch
         {
             _ when type == typeof(string) => "Enter text",
-            _ when type == typeof(int) || type == typeof(long) || type == typeof(short)
-                => "Enter number",
-            _ when type == typeof(double) || type == typeof(float) || type == typeof(decimal)
-                => "Enter decimal",
+            _ when type == typeof(int) || type == typeof(long) || type == typeof(short) =>
+                "Enter number",
+            _ when type == typeof(double) || type == typeof(float) || type == typeof(decimal) =>
+                "Enter decimal",
             _ when type == typeof(Guid) => "Enter GUID",
-            _ when type == typeof(DateTime) || type == typeof(DateTimeOffset)
-                => "yyyy-MM-dd HH:mm:ss",
+            _ when type == typeof(DateTime) || type == typeof(DateTimeOffset) =>
+                "yyyy-MM-dd HH:mm:ss",
             _ => $"Enter {type.Name}",
         };
 }

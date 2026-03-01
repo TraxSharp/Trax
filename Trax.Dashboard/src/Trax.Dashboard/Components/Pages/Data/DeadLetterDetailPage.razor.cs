@@ -1,4 +1,7 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Components;
+using Microsoft.EntityFrameworkCore;
+using Radzen;
 using Trax.Dashboard.Services.WorkflowDiscovery;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -7,9 +10,6 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Utils;
-using Microsoft.AspNetCore.Components;
-using Microsoft.EntityFrameworkCore;
-using Radzen;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
@@ -56,10 +56,9 @@ public partial class DeadLetterDetailPage
         {
             _failedRuns = await context
                 .Metadatas.AsNoTracking()
-                .Where(
-                    m =>
-                        m.ManifestId == _deadLetter.ManifestId
-                        && m.WorkflowState == WorkflowState.Failed
+                .Where(m =>
+                    m.ManifestId == _deadLetter.ManifestId
+                    && m.WorkflowState == WorkflowState.Failed
                 )
                 .OrderByDescending(m => m.StartTime)
                 .ToListAsync(cancellationToken);
@@ -82,10 +81,9 @@ public partial class DeadLetterDetailPage
 
             var registration = WorkflowDiscovery
                 .DiscoverWorkflows()
-                .FirstOrDefault(
-                    r =>
-                        r.ServiceType.FullName == manifest.Name
-                        || r.ImplementationType.FullName == manifest.Name
+                .FirstOrDefault(r =>
+                    r.ServiceType.FullName == manifest.Name
+                    || r.ImplementationType.FullName == manifest.Name
                 );
 
             if (registration is null)
@@ -103,7 +101,7 @@ public partial class DeadLetterDetailPage
                 var deserializedInput = JsonSerializer.Deserialize(
                     manifest.Properties,
                     registration.InputType,
-                    Trax.CoreJsonSerializationOptions.ManifestProperties
+                    TraxJsonSerializationOptions.ManifestProperties
                 );
 
                 if (deserializedInput is not null)
@@ -111,7 +109,7 @@ public partial class DeadLetterDetailPage
                     serializedInput = JsonSerializer.Serialize(
                         deserializedInput,
                         registration.InputType,
-                        Trax.CoreJsonSerializationOptions.ManifestProperties
+                        TraxJsonSerializationOptions.ManifestProperties
                     );
                     inputTypeName = registration.InputType.FullName;
                 }
@@ -137,8 +135,8 @@ public partial class DeadLetterDetailPage
             // re-queuing from them creates a fresh WorkQueue entry without mutating history.
             if (_deadLetter.Status == DeadLetterStatus.AwaitingIntervention)
             {
-                var trackedDeadLetter = await dataContext.DeadLetters.FirstAsync(
-                    d => d.Id == DeadLetterId
+                var trackedDeadLetter = await dataContext.DeadLetters.FirstAsync(d =>
+                    d.Id == DeadLetterId
                 );
 
                 trackedDeadLetter.Status = DeadLetterStatus.Retried;
@@ -156,7 +154,7 @@ public partial class DeadLetterDetailPage
                 duration: 4000
             );
 
-            Navigation.NavigateTo($"chainsharp/data/work-queue/{entry.Id}");
+            Navigation.NavigateTo($"trax/data/work-queue/{entry.Id}");
         }
         catch (JsonException je)
         {
@@ -184,8 +182,8 @@ public partial class DeadLetterDetailPage
         {
             using var dataContext = await DataContextFactory.CreateDbContextAsync(DisposalToken);
 
-            var trackedDeadLetter = await dataContext.DeadLetters.FirstAsync(
-                d => d.Id == DeadLetterId
+            var trackedDeadLetter = await dataContext.DeadLetters.FirstAsync(d =>
+                d.Id == DeadLetterId
             );
 
             trackedDeadLetter.Acknowledge(_acknowledgeNote);

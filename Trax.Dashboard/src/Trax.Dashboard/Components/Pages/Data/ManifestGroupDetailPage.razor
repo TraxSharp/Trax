@@ -1,10 +1,10 @@
-@page "/chainsharp/data/manifest-groups/{ManifestGroupId:long}"
+@page "/trax/data/manifest-groups/{ManifestGroupId:long}"
 @inherits PollingComponentBase
 
 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
     <RadzenButton Icon="arrow_back"
                   Variant="Variant.Text"
-                  Click="@(() => Navigation.NavigateTo("chainsharp/data/manifest-groups"))" />
+                  Click="@(() => Navigation.NavigateTo("trax/data/manifest-groups"))" />
     <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
         @if (_group is not null)
         {
@@ -155,7 +155,7 @@
 @* ── Manifests in Group ── *@
 <RadzenCard class="rz-mb-4">
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Manifests</RadzenText>
-    <Trax.CoreDataGrid @ref="_manifestsGrid"
+    <TraxDataGrid @ref="_manifestsGrid"
                         TItem="Manifest"
                         ServerLoadData="@LoadManifestPageAsync">
         <Columns>
@@ -170,7 +170,7 @@
                     <RadzenButton Icon="visibility"
                                   Variant="Variant.Text"
                                   Size="ButtonSize.Small"
-                                  Click="@(() => Navigation.NavigateTo($"chainsharp/data/manifests/{m.Id}"))" />
+                                  Click="@(() => Navigation.NavigateTo($"trax/data/manifests/{m.Id}"))" />
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn TItem="Manifest"
@@ -202,13 +202,13 @@
                                   Width="200px"
                                   FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
         </Columns>
-    </Trax.CoreDataGrid>
+    </TraxDataGrid>
 </RadzenCard>
 
 @* ── Recent Executions ── *@
 <RadzenCard>
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Executions</RadzenText>
-    <Trax.CoreDataGrid @ref="_executionsGrid"
+    <TraxDataGrid @ref="_executionsGrid"
                         TItem="Metadata"
                         ServerLoadData="@LoadExecutionPageAsync">
         <Columns>
@@ -223,7 +223,7 @@
                     <RadzenButton Icon="visibility"
                                   Variant="Variant.Text"
                                   Size="ButtonSize.Small"
-                                  Click="@(() => Navigation.NavigateTo($"chainsharp/data/metadata/{m.Id}"))" />
+                                  Click="@(() => Navigation.NavigateTo($"trax/data/metadata/{m.Id}"))" />
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn TItem="Metadata"
@@ -272,5 +272,5 @@
                                   Title="Failure Reason"
                                   Width="250px" />
         </Columns>
-    </Trax.CoreDataGrid>
+    </TraxDataGrid>
 </RadzenCard>
