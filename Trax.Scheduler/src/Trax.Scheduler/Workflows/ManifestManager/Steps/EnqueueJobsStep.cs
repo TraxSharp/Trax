@@ -1,10 +1,10 @@
+using LanguageExt;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata.DTOs;
-using Trax.Scheduler.Services.BackgroundTaskServer;
 using Trax.Effect.Services.EffectStep;
-using LanguageExt;
-using Microsoft.Extensions.Logging;
+using Trax.Scheduler.Services.BackgroundTaskServer;
 
 namespace Trax.Scheduler.Workflows.ManifestManager.Steps;
 
@@ -39,13 +39,13 @@ internal class EnqueueJobsStep(
             try
             {
                 // Create a new Metadata record for this execution
-                var metadata = Models.Metadata.Metadata.Create(
+                var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
                     new CreateMetadata
                     {
                         Name = manifest.Name,
                         ExternalId = Guid.NewGuid().ToString("N"),
                         Input = null, // The input comes from manifest.Properties during execution
-                        ManifestId = manifest.Id
+                        ManifestId = manifest.Id,
                     }
                 );
 

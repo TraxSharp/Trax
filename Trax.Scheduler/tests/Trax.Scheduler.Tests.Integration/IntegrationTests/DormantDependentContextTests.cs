@@ -1,3 +1,6 @@
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -8,9 +11,6 @@ using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -112,11 +112,10 @@ public class DormantDependentContextTests : TestSetup
         // Assert
         DataContext.Reset();
         var entries = await DataContext
-            .WorkQueues.Where(
-                q =>
-                    q.ManifestId == dormant1.Id
-                    || q.ManifestId == dormant2.Id
-                    || q.ManifestId == dormant3.Id
+            .WorkQueues.Where(q =>
+                q.ManifestId == dormant1.Id
+                || q.ManifestId == dormant2.Id
+                || q.ManifestId == dormant3.Id
             )
             .ToListAsync();
 

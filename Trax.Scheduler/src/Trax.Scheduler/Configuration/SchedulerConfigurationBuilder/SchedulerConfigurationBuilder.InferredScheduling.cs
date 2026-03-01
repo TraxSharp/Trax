@@ -1,7 +1,7 @@
-using Trax.Effect.Models.Manifest;
-using Trax.Scheduler.Services.ManifestScheduler;
-using Trax.Effect.Services.ServiceTrain;
 using LanguageExt;
+using Trax.Effect.Models.Manifest;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Scheduler.Services.ManifestScheduler;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 
 namespace Trax.Scheduler.Configuration;
@@ -445,11 +445,10 @@ public partial class SchedulerConfigurationBuilder
     {
         var effectInterface = workflowType
             .GetInterfaces()
-            .FirstOrDefault(
-                i =>
-                    i.IsGenericType
-                    && i.GetGenericTypeDefinition() == typeof(IServiceTrain<,>)
-                    && i.GetGenericArguments()[1] == typeof(Unit)
+            .FirstOrDefault(i =>
+                i.IsGenericType
+                && i.GetGenericTypeDefinition() == typeof(IServiceTrain<,>)
+                && i.GetGenericArguments()[1] == typeof(Unit)
             );
 
         if (effectInterface is null)

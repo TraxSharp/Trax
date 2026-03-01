@@ -17,7 +17,7 @@ namespace Trax.Scheduler.Services.BackgroundTaskServer;
 ///
 /// Example usage:
 /// ```csharp
-/// services.AddTrax.CoreEffects(options => options
+/// services.AddTraxEffects(options => options
 ///     .AddScheduler(scheduler => scheduler.UseInMemoryTaskServer())
 /// );
 /// ```

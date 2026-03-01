@@ -1,15 +1,15 @@
+using FluentAssertions;
+using LanguageExt;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Scheduler.Workflows.JobDispatcher;
 using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using FluentAssertions;
-using LanguageExt;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using Trax.Scheduler.Workflows.JobDispatcher;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -39,8 +39,8 @@ public class DispatchConcurrencyTests : TestSetup
             .CreateScope();
         var assertContext = assertScope.ServiceProvider.GetRequiredService<IDataContext>();
 
-        var metadataCount = await assertContext.Metadatas.CountAsync(
-            m => m.ManifestId == manifest.Id
+        var metadataCount = await assertContext.Metadatas.CountAsync(m =>
+            m.ManifestId == manifest.Id
         );
         metadataCount.Should().Be(1, "FOR UPDATE SKIP LOCKED should prevent duplicate dispatch");
 
@@ -75,8 +75,8 @@ public class DispatchConcurrencyTests : TestSetup
 
         foreach (var (manifest, entry) in entries)
         {
-            var metadataCount = await assertContext.Metadatas.CountAsync(
-                m => m.ManifestId == manifest.Id
+            var metadataCount = await assertContext.Metadatas.CountAsync(m =>
+                m.ManifestId == manifest.Id
             );
             metadataCount
                 .Should()
@@ -110,8 +110,8 @@ public class DispatchConcurrencyTests : TestSetup
             .CreateScope();
         var assertContext = assertScope.ServiceProvider.GetRequiredService<IDataContext>();
 
-        var metadataCount = await assertContext.Metadatas.CountAsync(
-            m => m.ManifestId == manifest.Id
+        var metadataCount = await assertContext.Metadatas.CountAsync(m =>
+            m.ManifestId == manifest.Id
         );
         metadataCount.Should().Be(1);
     }

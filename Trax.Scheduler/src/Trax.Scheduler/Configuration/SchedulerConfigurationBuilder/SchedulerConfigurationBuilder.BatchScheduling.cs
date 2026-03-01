@@ -1,6 +1,6 @@
+using LanguageExt;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
-using LanguageExt;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 
 namespace Trax.Scheduler.Configuration;
@@ -26,7 +26,7 @@ public partial class SchedulerConfigurationBuilder
     /// </remarks>
     /// <example>
     /// <code>
-    /// builder.Services.AddTrax.CoreEffects(options => options
+    /// builder.Services.AddTraxEffects(options => options
     ///     .AddScheduler(scheduler => scheduler
     ///         .UseHangfire(/* ... */)
     ///         .ScheduleMany&lt;ISyncTableWorkflow, SyncTableInput, string&gt;(

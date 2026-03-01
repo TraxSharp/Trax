@@ -1,13 +1,13 @@
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Trax.Core.Exceptions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
-using Trax.Core.Exceptions;
 using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
+using Trax.Scheduler.Workflows.TaskServerExecutor;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -103,7 +103,7 @@ public class TaskServerExecutorTests : TestSetup
                 Name = typeof(SchedulerTestWorkflow).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
-                ManifestId = null
+                ManifestId = null,
             }
         );
 
@@ -134,8 +134,8 @@ public class TaskServerExecutorTests : TestSetup
 
         // Assert - Verify execution happened (LastSuccessfulRun updated)
         DataContext.Reset();
-        var updatedManifest = await DataContext.Manifests.FirstOrDefaultAsync(
-            x => x.Id == manifest.Id
+        var updatedManifest = await DataContext.Manifests.FirstOrDefaultAsync(x =>
+            x.Id == manifest.Id
         );
 
         updatedManifest.Should().NotBeNull();
@@ -160,8 +160,8 @@ public class TaskServerExecutorTests : TestSetup
 
         // Assert
         DataContext.Reset();
-        var updatedManifest = await DataContext.Manifests.FirstOrDefaultAsync(
-            x => x.Id == manifest.Id
+        var updatedManifest = await DataContext.Manifests.FirstOrDefaultAsync(x =>
+            x.Id == manifest.Id
         );
 
         updatedManifest.Should().NotBeNull();
@@ -184,8 +184,8 @@ public class TaskServerExecutorTests : TestSetup
 
         // Assert
         DataContext.Reset();
-        var updatedManifest = await DataContext.Manifests.FirstOrDefaultAsync(
-            x => x.Id == manifest.Id
+        var updatedManifest = await DataContext.Manifests.FirstOrDefaultAsync(x =>
+            x.Id == manifest.Id
         );
 
         updatedManifest.Should().NotBeNull();
@@ -210,7 +210,7 @@ public class TaskServerExecutorTests : TestSetup
                 IsEnabled = true,
                 ScheduleType = ScheduleType.None,
                 MaxRetries = 3,
-                Properties = new SchedulerTestInput { Value = inputValue }
+                Properties = new SchedulerTestInput { Value = inputValue },
             }
         );
         manifest.ManifestGroupId = group.Id;
@@ -230,7 +230,7 @@ public class TaskServerExecutorTests : TestSetup
                 Name = typeof(SchedulerTestWorkflow).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
-                ManifestId = manifest.Id
+                ManifestId = manifest.Id,
             }
         );
 

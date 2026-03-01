@@ -1,6 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Scheduler.Services.BackgroundTaskServer;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Scheduler.Configuration;
 

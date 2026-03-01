@@ -1,9 +1,9 @@
+using LanguageExt;
+using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.EffectStep;
-using LanguageExt;
-using Microsoft.EntityFrameworkCore;
 
 namespace Trax.Scheduler.Workflows.JobDispatcher.Steps;
 
@@ -17,7 +17,7 @@ internal class LoadQueuedJobsStep(IDataContext dataContext) : EffectStep<Unit, L
     public override async Task<List<WorkQueue>> Run(Unit input) =>
         await dataContext
             .WorkQueues.Include(q => q.Manifest)
-            .ThenInclude(m => m.ManifestGroup)
+                .ThenInclude(m => m.ManifestGroup)
             .Where(q => q.Status == WorkQueueStatus.Queued)
             .Where(q => q.ManifestId == null || q.Manifest.ManifestGroup.IsEnabled)
             .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup.Priority : 0)

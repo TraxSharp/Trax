@@ -1,7 +1,7 @@
-using Trax.Effect.Models.Manifest;
-using Trax.Scheduler.Configuration;
-using Trax.Effect.Services.ServiceTrain;
 using LanguageExt;
+using Trax.Effect.Models.Manifest;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Scheduler.Configuration;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 
 namespace Trax.Scheduler.Services.ManifestScheduler;

@@ -1,5 +1,5 @@
-using Trax.Scheduler.Services.CancellationRegistry;
 using FluentAssertions;
+using Trax.Scheduler.Services.CancellationRegistry;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
 
@@ -219,16 +219,15 @@ public class CancellationRegistryTests
         // Arrange & Act
         var tasks = Enumerable
             .Range(0, 200)
-            .Select(
-                i =>
-                    Task.Run(() =>
-                    {
-                        var cts = new CancellationTokenSource();
-                        _registry.Register(i, cts);
-                        _registry.TryCancel(i);
-                        _registry.Unregister(i);
-                        cts.Dispose();
-                    })
+            .Select(i =>
+                Task.Run(() =>
+                {
+                    var cts = new CancellationTokenSource();
+                    _registry.Register(i, cts);
+                    _registry.TryCancel(i);
+                    _registry.Unregister(i);
+                    cts.Dispose();
+                })
             )
             .ToArray();
 

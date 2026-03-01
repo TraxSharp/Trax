@@ -1,8 +1,8 @@
-using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Workflows.MetadataCleanup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Workflows.MetadataCleanup;
 
 namespace Trax.Scheduler.Services.MetadataCleanupPollingService;
 

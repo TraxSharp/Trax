@@ -1,6 +1,6 @@
-using Trax.Scheduler.Workflows.JobDispatcher.Steps;
-using Trax.Effect.Services.ServiceTrain;
 using LanguageExt;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Scheduler.Workflows.JobDispatcher.Steps;
 
 namespace Trax.Scheduler.Workflows.JobDispatcher;
 

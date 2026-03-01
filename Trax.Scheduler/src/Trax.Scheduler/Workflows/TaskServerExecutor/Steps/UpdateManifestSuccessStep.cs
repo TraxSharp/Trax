@@ -1,8 +1,8 @@
+using LanguageExt;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectStep;
-using LanguageExt;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Scheduler.Workflows.TaskServerExecutor.Steps;
 

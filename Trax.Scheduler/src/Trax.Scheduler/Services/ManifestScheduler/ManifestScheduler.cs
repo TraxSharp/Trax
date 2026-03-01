@@ -1,16 +1,16 @@
+using LanguageExt;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.WorkflowRegistry;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
-using Trax.Effect.Services.ServiceTrain;
-using LanguageExt;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 
 namespace Trax.Scheduler.Services.ManifestScheduler;
@@ -355,12 +355,11 @@ public class ManifestScheduler(
 
         var manifests = await context
             .Manifests.AsNoTracking()
-            .Where(
-                m =>
-                    m.ManifestGroupId == groupId
-                    && m.IsEnabled
-                    && m.ScheduleType != ScheduleType.Dependent
-                    && m.ScheduleType != ScheduleType.DormantDependent
+            .Where(m =>
+                m.ManifestGroupId == groupId
+                && m.IsEnabled
+                && m.ScheduleType != ScheduleType.Dependent
+                && m.ScheduleType != ScheduleType.DormantDependent
             )
             .ToListAsync(ct);
 
@@ -713,8 +712,8 @@ public class ManifestScheduler(
     )
     {
         var staleManifestIds = await context
-            .Manifests.Where(
-                m => m.ExternalId.StartsWith(prunePrefix) && !keepExternalIds.Contains(m.ExternalId)
+            .Manifests.Where(m =>
+                m.ExternalId.StartsWith(prunePrefix) && !keepExternalIds.Contains(m.ExternalId)
             )
             .Select(m => m.Id)
             .ToListAsync(ct);
@@ -724,8 +723,8 @@ public class ManifestScheduler(
 
         // Delete in FK-dependency order: work_queue → dead_letters → metadata → manifests
         await context
-            .WorkQueues.Where(
-                w => w.ManifestId.HasValue && staleManifestIds.Contains(w.ManifestId.Value)
+            .WorkQueues.Where(w =>
+                w.ManifestId.HasValue && staleManifestIds.Contains(w.ManifestId.Value)
             )
             .ExecuteDeleteAsync(ct);
 
@@ -734,8 +733,8 @@ public class ManifestScheduler(
             .ExecuteDeleteAsync(ct);
 
         await context
-            .Metadatas.Where(
-                m => m.ManifestId.HasValue && staleManifestIds.Contains(m.ManifestId.Value)
+            .Metadatas.Where(m =>
+                m.ManifestId.HasValue && staleManifestIds.Contains(m.ManifestId.Value)
             )
             .ExecuteDeleteAsync(ct);
 

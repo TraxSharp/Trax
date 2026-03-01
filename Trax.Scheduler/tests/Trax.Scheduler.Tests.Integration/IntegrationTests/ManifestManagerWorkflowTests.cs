@@ -1,3 +1,7 @@
+using FluentAssertions;
+using LanguageExt;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
@@ -8,12 +12,8 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Scheduler.Workflows.ManifestManager;
 using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using FluentAssertions;
-using LanguageExt;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using Trax.Scheduler.Workflows.ManifestManager;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -401,8 +401,8 @@ public class ManifestManagerWorkflowTests : TestSetup
 
         // Assert
         DataContext.Reset();
-        var workQueueEntry = await DataContext.WorkQueues.FirstOrDefaultAsync(
-            q => q.ManifestId == manifest.Id
+        var workQueueEntry = await DataContext.WorkQueues.FirstOrDefaultAsync(q =>
+            q.ManifestId == manifest.Id
         );
 
         workQueueEntry.Should().NotBeNull();
@@ -423,8 +423,8 @@ public class ManifestManagerWorkflowTests : TestSetup
 
         // Assert - WorkQueue entry should have correct workflow name and Queued status
         DataContext.Reset();
-        var workQueueEntry = await DataContext.WorkQueues.FirstOrDefaultAsync(
-            q => q.ManifestId == manifest.Id
+        var workQueueEntry = await DataContext.WorkQueues.FirstOrDefaultAsync(q =>
+            q.ManifestId == manifest.Id
         );
 
         workQueueEntry.Should().NotBeNull();
@@ -1013,7 +1013,7 @@ public class ManifestManagerWorkflowTests : TestSetup
                 IntervalSeconds = intervalSeconds,
                 CronExpression = cronExpression,
                 MaxRetries = maxRetries,
-                Properties = new SchedulerTestInput { Value = inputValue }
+                Properties = new SchedulerTestInput { Value = inputValue },
             }
         );
 
@@ -1050,7 +1050,7 @@ public class ManifestManagerWorkflowTests : TestSetup
                 IntervalSeconds = intervalSeconds,
                 CronExpression = cronExpression,
                 MaxRetries = 3,
-                Properties = new SchedulerTestInput { Value = "EdgeCase" }
+                Properties = new SchedulerTestInput { Value = "EdgeCase" },
             }
         );
 
@@ -1071,7 +1071,7 @@ public class ManifestManagerWorkflowTests : TestSetup
                 Name = typeof(SchedulerTestWorkflow).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
-                ManifestId = manifest.Id
+                ManifestId = manifest.Id,
             }
         );
 
@@ -1097,7 +1097,7 @@ public class ManifestManagerWorkflowTests : TestSetup
             {
                 Manifest = reloadedManifest,
                 Reason = "Test dead letter",
-                RetryCount = 3
+                RetryCount = 3,
             }
         );
 

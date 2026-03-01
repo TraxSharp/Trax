@@ -1,8 +1,8 @@
 namespace Trax.Scheduler.Workflows.ManifestManager.Utilities;
 
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
-using Microsoft.Extensions.Logging;
 
 /// <summary>
 /// Helper utilities for scheduling logic in DetermineJobsToQueueStep.
@@ -24,7 +24,7 @@ internal static class SchedulingHelpers
             ScheduleType.Interval => ShouldRunByInterval(manifest, now, logger),
             ScheduleType.OnDemand => false, // OnDemand manifests are never auto-scheduled, only via BulkEnqueueAsync
             ScheduleType.Dependent => false, // Dependent manifests are evaluated separately in DetermineJobsToQueueStep
-            _ => false
+            _ => false,
         };
     }
 

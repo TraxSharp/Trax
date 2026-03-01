@@ -1,17 +1,17 @@
 using System.Reflection;
-using Trax.Effect.Data.Services.IDataContextFactory;
-using Trax.Effect.Enums;
-using Trax.Effect.Models.Metadata;
-using Trax.Effect.Models.Metadata.DTOs;
-using Trax.Scheduler.Services.CancellationRegistry;
-using Trax.Effect.Services.EffectStep;
-using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.StepProvider.Progress.Services.CancellationCheckProvider;
-using Trax.Scheduler.Tests.Integration.Examples.Workflows;
 using FluentAssertions;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.StepProvider.Progress.Services.CancellationCheckProvider;
+using Trax.Scheduler.Services.CancellationRegistry;
+using Trax.Scheduler.Tests.Integration.Examples.Workflows;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -333,11 +333,10 @@ public class CancellationIntegrationTests : TestSetup
         // Act — query for terminal states (mirrors DeleteExpiredMetadataStep logic)
         var terminalCount = await DataContext
             .Metadatas.AsNoTracking()
-            .CountAsync(
-                m =>
-                    m.WorkflowState == WorkflowState.Completed
-                    || m.WorkflowState == WorkflowState.Failed
-                    || m.WorkflowState == WorkflowState.Cancelled
+            .CountAsync(m =>
+                m.WorkflowState == WorkflowState.Completed
+                || m.WorkflowState == WorkflowState.Failed
+                || m.WorkflowState == WorkflowState.Cancelled
             );
 
         // Assert
@@ -355,7 +354,7 @@ public class CancellationIntegrationTests : TestSetup
             {
                 Name = typeof(SchedulerTestWorkflow).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
-                Input = new SchedulerTestInput { Value = "test" }
+                Input = new SchedulerTestInput { Value = "test" },
             }
         );
 

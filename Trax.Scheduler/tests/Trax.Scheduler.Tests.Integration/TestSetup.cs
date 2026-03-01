@@ -1,21 +1,21 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.ManifestGroup;
-using Trax.Mediator.Extensions;
-using Trax.Mediator.Services.WorkflowBus;
-using Trax.Scheduler.Extensions;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Trax.Mediator.Extensions;
+using Trax.Mediator.Services.WorkflowBus;
+using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Workflows.TaskServerExecutor;
 
 namespace Trax.Scheduler.Tests.Integration;
 
@@ -49,25 +49,24 @@ public abstract class TestSetup
             .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
             .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
             .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
-            .AddTrax.CoreEffects(
-                options =>
-                    options
-                        .AddServiceTrainBus(
-                            assemblies:
-                            [
-                                typeof(AssemblyMarker).Assembly,
-                                typeof(TaskServerExecutorWorkflow).Assembly,
-                            ]
-                        )
-                        .SetEffectLogLevel(LogLevel.Information)
-                        .SaveWorkflowParameters()
-                        .AddPostgresEffect(connectionString)
-                        .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
-                        .AddJsonEffect()
-                        .AddStepLogger(serializeStepData: true)
-                        .AddScheduler(
-                            scheduler => scheduler.UseInMemoryTaskServer().AddMetadataCleanup()
-                        )
+            .AddTraxEffects(options =>
+                options
+                    .AddServiceTrainBus(
+                        assemblies:
+                        [
+                            typeof(AssemblyMarker).Assembly,
+                            typeof(TaskServerExecutorWorkflow).Assembly,
+                        ]
+                    )
+                    .SetEffectLogLevel(LogLevel.Information)
+                    .SaveWorkflowParameters()
+                    .AddPostgresEffect(connectionString)
+                    .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
+                    .AddJsonEffect()
+                    .AddStepLogger(serializeStepData: true)
+                    .AddScheduler(scheduler =>
+                        scheduler.UseInMemoryTaskServer().AddMetadataCleanup()
+                    )
             )
             // Register IDataContext as scoped, created from the factory
             .AddScoped<IDataContext>(sp =>

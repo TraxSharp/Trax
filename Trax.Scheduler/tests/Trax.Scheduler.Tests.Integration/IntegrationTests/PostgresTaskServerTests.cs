@@ -1,14 +1,14 @@
 using System.Text.Json;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Models.BackgroundJob.DTOs;
-using Trax.Scheduler.Services.BackgroundTaskServer;
 using Trax.Effect.Utils;
+using Trax.Scheduler.Services.BackgroundTaskServer;
 using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -42,8 +42,8 @@ public class PostgresTaskServerTests : TestSetup
         jobId.Should().NotBeNullOrEmpty();
 
         DataContext.Reset();
-        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(
-            j => j.Id == int.Parse(jobId)
+        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
+            j.Id == int.Parse(jobId)
         );
 
         job.Should().NotBeNull();
@@ -87,11 +87,8 @@ public class PostgresTaskServerTests : TestSetup
 
         DataContext.Reset();
         var jobs = await DataContext
-            .BackgroundJobs.Where(
-                j =>
-                    new[] { long.Parse(jobId1), long.Parse(jobId2), long.Parse(jobId3) }.Contains(
-                        j.Id
-                    )
+            .BackgroundJobs.Where(j =>
+                new[] { long.Parse(jobId1), long.Parse(jobId2), long.Parse(jobId3) }.Contains(j.Id)
             )
             .ToListAsync();
 
@@ -115,8 +112,8 @@ public class PostgresTaskServerTests : TestSetup
 
         // Assert
         DataContext.Reset();
-        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(
-            j => j.Id == int.Parse(jobId)
+        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
+            j.Id == int.Parse(jobId)
         );
 
         job.Should().NotBeNull();
@@ -138,8 +135,8 @@ public class PostgresTaskServerTests : TestSetup
 
         // Assert
         DataContext.Reset();
-        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(
-            j => j.Id == int.Parse(jobId)
+        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
+            j.Id == int.Parse(jobId)
         );
 
         job.Should().NotBeNull();
@@ -158,8 +155,8 @@ public class PostgresTaskServerTests : TestSetup
 
         // Assert
         DataContext.Reset();
-        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(
-            j => j.Id == int.Parse(jobId)
+        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
+            j.Id == int.Parse(jobId)
         );
 
         job.Should().NotBeNull();
@@ -167,7 +164,7 @@ public class PostgresTaskServerTests : TestSetup
 
         var deserialized = JsonSerializer.Deserialize<SchedulerTestInput>(
             job.Input!,
-            Trax.CoreJsonSerializationOptions.ManifestProperties
+            TraxJsonSerializationOptions.ManifestProperties
         );
 
         deserialized.Should().NotBeNull();
@@ -186,8 +183,8 @@ public class PostgresTaskServerTests : TestSetup
 
         // Assert
         DataContext.Reset();
-        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(
-            j => j.Id == int.Parse(jobId)
+        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
+            j.Id == int.Parse(jobId)
         );
 
         job.Should().NotBeNull();
@@ -195,7 +192,7 @@ public class PostgresTaskServerTests : TestSetup
 
         var deserialized = JsonSerializer.Deserialize<SchedulerTestInput>(
             job.Input!,
-            Trax.CoreJsonSerializationOptions.ManifestProperties
+            TraxJsonSerializationOptions.ManifestProperties
         );
 
         deserialized.Should().NotBeNull();
@@ -217,8 +214,8 @@ public class PostgresTaskServerTests : TestSetup
 
         // Assert - Newly enqueued jobs should be available for dequeue (FetchedAt == null)
         DataContext.Reset();
-        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(
-            j => j.Id == int.Parse(jobId)
+        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
+            j.Id == int.Parse(jobId)
         );
 
         job.Should().NotBeNull();
@@ -237,8 +234,8 @@ public class PostgresTaskServerTests : TestSetup
 
         // Assert
         DataContext.Reset();
-        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(
-            j => j.Id == int.Parse(jobId)
+        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
+            j.Id == int.Parse(jobId)
         );
 
         job.Should().NotBeNull();

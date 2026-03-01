@@ -1,9 +1,9 @@
-using Trax.Effect.Data.Services.DataContext;
-using Trax.Effect.Enums;
-using Trax.Scheduler.Workflows.ManifestManager;
-using Trax.Effect.Services.EffectStep;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Enums;
+using Trax.Effect.Services.EffectStep;
+using Trax.Scheduler.Workflows.ManifestManager;
 
 namespace Trax.Scheduler.Workflows.ManifestManager.Steps;
 
@@ -25,26 +25,20 @@ internal class LoadManifestsStep(IDataContext dataContext)
     public override async Task<List<ManifestDispatchView>> Run(Unit input) =>
         await dataContext
             .Manifests.Where(m => m.IsEnabled)
-            .Select(
-                m =>
-                    new ManifestDispatchView
-                    {
-                        Manifest = m,
-                        ManifestGroup = m.ManifestGroup,
-                        FailedCount = m.Metadatas.Count(
-                            md => md.WorkflowState == WorkflowState.Failed
-                        ),
-                        HasAwaitingDeadLetter = m.DeadLetters.Any(
-                            dl => dl.Status == DeadLetterStatus.AwaitingIntervention
-                        ),
-                        HasQueuedWork = m.WorkQueues.Any(q => q.Status == WorkQueueStatus.Queued),
-                        HasActiveExecution = m.Metadatas.Any(
-                            md =>
-                                md.WorkflowState == WorkflowState.Pending
-                                || md.WorkflowState == WorkflowState.InProgress
-                        ),
-                    }
-            )
+            .Select(m => new ManifestDispatchView
+            {
+                Manifest = m,
+                ManifestGroup = m.ManifestGroup,
+                FailedCount = m.Metadatas.Count(md => md.WorkflowState == WorkflowState.Failed),
+                HasAwaitingDeadLetter = m.DeadLetters.Any(dl =>
+                    dl.Status == DeadLetterStatus.AwaitingIntervention
+                ),
+                HasQueuedWork = m.WorkQueues.Any(q => q.Status == WorkQueueStatus.Queued),
+                HasActiveExecution = m.Metadatas.Any(md =>
+                    md.WorkflowState == WorkflowState.Pending
+                    || md.WorkflowState == WorkflowState.InProgress
+                ),
+            })
             .AsNoTracking()
             .ToListAsync(CancellationToken);
 }

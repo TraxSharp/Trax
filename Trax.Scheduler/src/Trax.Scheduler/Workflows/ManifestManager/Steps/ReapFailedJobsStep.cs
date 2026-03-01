@@ -1,9 +1,9 @@
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
-using Trax.Scheduler.Workflows.ManifestManager;
 using Trax.Effect.Services.EffectStep;
-using Microsoft.Extensions.Logging;
+using Trax.Scheduler.Workflows.ManifestManager;
 
 namespace Trax.Scheduler.Workflows.ManifestManager.Steps;
 
@@ -61,7 +61,7 @@ internal class ReapFailedJobsStep(IDataContext dataContext, ILogger<ReapFailedJo
                         Manifest = view.Manifest,
                         Reason =
                             $"Max retries exceeded: ({view.FailedCount}) failures >= ({view.Manifest.MaxRetries}) max retries",
-                        RetryCount = view.FailedCount
+                        RetryCount = view.FailedCount,
                     }
                 );
 

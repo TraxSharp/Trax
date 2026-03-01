@@ -1,3 +1,7 @@
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -13,10 +17,6 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.ManifestScheduler;
 using Trax.Scheduler.Services.SchedulerStartupService;
 using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 

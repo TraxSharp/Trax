@@ -1,4 +1,5 @@
-using Trax.Effect.Configuration.Trax.CoreEffectBuilder;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Extensions;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.DormantDependentContext;
@@ -9,7 +10,6 @@ using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.SchedulerStartupService;
 using Trax.Scheduler.Utilities;
 using Trax.Scheduler.Workflows.JobDispatcher;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Scheduler.Configuration;
 
@@ -19,7 +19,7 @@ namespace Trax.Scheduler.Configuration;
 /// <remarks>
 /// This builder allows configuring the scheduler as part of the Trax.Core effects setup:
 /// <code>
-/// services.AddTrax.CoreEffects(options => options
+/// services.AddTraxEffects(options => options
 ///     .AddServiceTrainBus(assemblies)
 ///     .AddPostgresEffect(connectionString)
 ///     .AddScheduler(scheduler => scheduler
@@ -32,7 +32,7 @@ namespace Trax.Scheduler.Configuration;
 /// </remarks>
 public partial class SchedulerConfigurationBuilder
 {
-    private readonly Trax.CoreEffectConfigurationBuilder _parentBuilder;
+    private readonly TraxEffectConfigurationBuilder _parentBuilder;
     private readonly SchedulerConfiguration _configuration = new();
     private Action<IServiceCollection>? _taskServerRegistration;
     private string? _rootScheduledExternalId;
@@ -46,7 +46,7 @@ public partial class SchedulerConfigurationBuilder
     /// Creates a new scheduler configuration builder.
     /// </summary>
     /// <param name="parentBuilder">The parent Trax.Core effect configuration builder</param>
-    public SchedulerConfigurationBuilder(Trax.CoreEffectConfigurationBuilder parentBuilder)
+    public SchedulerConfigurationBuilder(TraxEffectConfigurationBuilder parentBuilder)
     {
         _parentBuilder = parentBuilder;
     }
@@ -60,7 +60,7 @@ public partial class SchedulerConfigurationBuilder
     /// Builds the scheduler configuration and registers all services.
     /// </summary>
     /// <returns>The parent builder for continued chaining</returns>
-    internal Trax.CoreEffectConfigurationBuilder Build()
+    internal TraxEffectConfigurationBuilder Build()
     {
         ValidateNoCyclicGroupDependencies();
 
@@ -84,12 +84,12 @@ public partial class SchedulerConfigurationBuilder
         // (for ExecuteScheduledWorkflowStep.Initialize) and interface (for user steps)
         // resolve to the same scoped instance
         _parentBuilder.ServiceCollection.AddScoped<DormantDependentContext>();
-        _parentBuilder.ServiceCollection.AddScoped<IDormantDependentContext>(
-            sp => sp.GetRequiredService<DormantDependentContext>()
+        _parentBuilder.ServiceCollection.AddScoped<IDormantDependentContext>(sp =>
+            sp.GetRequiredService<DormantDependentContext>()
         );
 
-        // Register JobDispatcher workflow (must use AddScopedTrax.CoreRoute for property injection)
-        _parentBuilder.ServiceCollection.AddScopedTrax.CoreRoute<
+        // Register JobDispatcher workflow (must use AddScopedTraxRoute for property injection)
+        _parentBuilder.ServiceCollection.AddScopedTraxRoute<
             IJobDispatcherWorkflow,
             JobDispatcherWorkflow
         >();

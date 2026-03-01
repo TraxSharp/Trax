@@ -1,10 +1,10 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
-using Trax.Scheduler.Configuration;
 using Trax.Effect.Services.EffectStep;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
+using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Workflows.JobDispatcher.Steps;
 
@@ -31,13 +31,12 @@ internal class LoadDispatchCapacityStep(
         // Rows without a manifest group under null. This gives both the global active
         // count (sum of all groups) and per-group active counts in one round-trip.
         var activeCounts = await dataContext
-            .Metadatas.Where(
-                m =>
-                    !excluded.Contains(m.Name)
-                    && (
-                        m.WorkflowState == WorkflowState.Pending
-                        || m.WorkflowState == WorkflowState.InProgress
-                    )
+            .Metadatas.Where(m =>
+                !excluded.Contains(m.Name)
+                && (
+                    m.WorkflowState == WorkflowState.Pending
+                    || m.WorkflowState == WorkflowState.InProgress
+                )
             )
             .GroupJoin(
                 dataContext.Manifests,

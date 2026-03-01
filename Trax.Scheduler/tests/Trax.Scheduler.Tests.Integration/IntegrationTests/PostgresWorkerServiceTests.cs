@@ -1,4 +1,8 @@
 using System.Text.Json;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -9,16 +13,12 @@ using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.BackgroundTaskServer;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.PostgresWorkerService;
-using Trax.Effect.Utils;
 using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -105,7 +105,7 @@ public class PostgresWorkerServiceTests : TestSetup
         var inputJson = JsonSerializer.Serialize(
             input,
             input.GetType(),
-            Trax.CoreJsonSerializationOptions.ManifestProperties
+            TraxJsonSerializationOptions.ManifestProperties
         );
 
         var job = BackgroundJob.Create(
@@ -147,8 +147,8 @@ public class PostgresWorkerServiceTests : TestSetup
 
         // Assert - Metadata should be updated by the workflow execution
         DataContext.Reset();
-        var updatedMetadata = await DataContext.Metadatas.FirstOrDefaultAsync(
-            m => m.Id == metadata.Id
+        var updatedMetadata = await DataContext.Metadatas.FirstOrDefaultAsync(m =>
+            m.Id == metadata.Id
         );
 
         updatedMetadata.Should().NotBeNull();
@@ -453,7 +453,7 @@ public class PostgresWorkerServiceTests : TestSetup
         var inputJson = JsonSerializer.Serialize(
             input,
             input.GetType(),
-            Trax.CoreJsonSerializationOptions.ManifestProperties
+            TraxJsonSerializationOptions.ManifestProperties
         );
 
         var job = BackgroundJob.Create(
@@ -554,7 +554,7 @@ public class PostgresWorkerServiceTests : TestSetup
                 MaxRetries = 0,
                 Properties = new FailingSchedulerTestInput
                 {
-                    FailureMessage = "Expected test failure"
+                    FailureMessage = "Expected test failure",
                 },
             }
         );

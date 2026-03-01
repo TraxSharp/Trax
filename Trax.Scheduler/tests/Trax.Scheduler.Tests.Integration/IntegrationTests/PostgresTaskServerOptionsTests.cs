@@ -1,5 +1,5 @@
-using Trax.Scheduler.Configuration;
 using FluentAssertions;
+using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 

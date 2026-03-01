@@ -1,7 +1,7 @@
-using Trax.Effect.Models.WorkQueue;
-using Trax.Scheduler.Configuration;
-using Trax.Effect.Services.EffectStep;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Models.WorkQueue;
+using Trax.Effect.Services.EffectStep;
+using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Workflows.JobDispatcher.Steps;
 

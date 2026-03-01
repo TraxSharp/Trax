@@ -86,10 +86,10 @@ public record Schedule
             1 => "* * * * *",
             <= 30 when 60 % totalMinutes == 0 => $"*/{totalMinutes} * * * *",
             60 => "0 * * * *",
-            > 60 when totalMinutes % 60 == 0 && 24 % (totalMinutes / 60) == 0
-                => $"0 */{totalMinutes / 60} * * *",
+            > 60 when totalMinutes % 60 == 0 && 24 % (totalMinutes / 60) == 0 =>
+                $"0 */{totalMinutes / 60} * * *",
             // For intervals that don't map cleanly to cron, use the closest divisor of 60
-            _ => $"*/{ClosestDivisorOf60(totalMinutes)} * * * *"
+            _ => $"*/{ClosestDivisorOf60(totalMinutes)} * * * *",
         };
     }
 

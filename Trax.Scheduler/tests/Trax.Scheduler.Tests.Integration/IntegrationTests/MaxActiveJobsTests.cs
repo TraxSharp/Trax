@@ -1,3 +1,9 @@
+using FluentAssertions;
+using LanguageExt;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -11,21 +17,15 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Mediator.Extensions;
-using Trax.Scheduler.Extensions;
-using Trax.Scheduler.Workflows.JobDispatcher;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using FluentAssertions;
-using LanguageExt;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Trax.Scheduler.Workflows.JobDispatcher;
+using Trax.Scheduler.Workflows.TaskServerExecutor;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -67,26 +67,24 @@ public class MaxActiveJobsTests
             .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
             .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
             .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
-            .AddTrax.CoreEffects(
-                options =>
-                    options
-                        .AddServiceTrainBus(
-                            assemblies:
-                            [
-                                typeof(AssemblyMarker).Assembly,
-                                typeof(TaskServerExecutorWorkflow).Assembly,
-                            ]
-                        )
-                        .SetEffectLogLevel(LogLevel.Information)
-                        .SaveWorkflowParameters()
-                        .AddPostgresEffect(connectionString)
-                        .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
-                        .AddJsonEffect()
-                        .AddStepLogger(serializeStepData: true)
-                        .AddScheduler(
-                            scheduler =>
-                                scheduler.UseInMemoryTaskServer().MaxActiveJobs(MaxActiveJobsLimit)
-                        )
+            .AddTraxEffects(options =>
+                options
+                    .AddServiceTrainBus(
+                        assemblies:
+                        [
+                            typeof(AssemblyMarker).Assembly,
+                            typeof(TaskServerExecutorWorkflow).Assembly,
+                        ]
+                    )
+                    .SetEffectLogLevel(LogLevel.Information)
+                    .SaveWorkflowParameters()
+                    .AddPostgresEffect(connectionString)
+                    .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
+                    .AddJsonEffect()
+                    .AddStepLogger(serializeStepData: true)
+                    .AddScheduler(scheduler =>
+                        scheduler.UseInMemoryTaskServer().MaxActiveJobs(MaxActiveJobsLimit)
+                    )
             )
             .AddScoped<IDataContext>(sp =>
             {
@@ -486,8 +484,8 @@ public class MaxActiveJobsTests
         // Assert - The high-priority entry should be dispatched (not the low-priority one)
         _dataContext.Reset();
 
-        var updatedHighPriority = await _dataContext.WorkQueues.FirstAsync(
-            q => q.Id == highPriorityEntry.Id
+        var updatedHighPriority = await _dataContext.WorkQueues.FirstAsync(q =>
+            q.Id == highPriorityEntry.Id
         );
         updatedHighPriority
             .Status.Should()
@@ -496,8 +494,8 @@ public class MaxActiveJobsTests
                 "higher-priority entries should be dispatched before lower-priority ones"
             );
 
-        var updatedLowPriority = await _dataContext.WorkQueues.FirstAsync(
-            q => q.Id == lowPriorityEntry.Id
+        var updatedLowPriority = await _dataContext.WorkQueues.FirstAsync(q =>
+            q.Id == lowPriorityEntry.Id
         );
         updatedLowPriority
             .Status.Should()
@@ -732,25 +730,24 @@ public class MaxActiveJobsTests
             .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
             .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
             .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
-            .AddTrax.CoreEffects(
-                options =>
-                    options
-                        .AddServiceTrainBus(
-                            assemblies:
-                            [
-                                typeof(AssemblyMarker).Assembly,
-                                typeof(TaskServerExecutorWorkflow).Assembly,
-                            ]
-                        )
-                        .SetEffectLogLevel(LogLevel.Information)
-                        .SaveWorkflowParameters()
-                        .AddPostgresEffect(connectionString)
-                        .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
-                        .AddJsonEffect()
-                        .AddStepLogger(serializeStepData: true)
-                        .AddScheduler(
-                            scheduler => scheduler.UseInMemoryTaskServer().MaxActiveJobs(null)
-                        )
+            .AddTraxEffects(options =>
+                options
+                    .AddServiceTrainBus(
+                        assemblies:
+                        [
+                            typeof(AssemblyMarker).Assembly,
+                            typeof(TaskServerExecutorWorkflow).Assembly,
+                        ]
+                    )
+                    .SetEffectLogLevel(LogLevel.Information)
+                    .SaveWorkflowParameters()
+                    .AddPostgresEffect(connectionString)
+                    .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
+                    .AddJsonEffect()
+                    .AddStepLogger(serializeStepData: true)
+                    .AddScheduler(scheduler =>
+                        scheduler.UseInMemoryTaskServer().MaxActiveJobs(null)
+                    )
             )
             .AddScoped<IDataContext>(sp =>
             {
@@ -778,7 +775,7 @@ public class MaxActiveJobsTests
                     IsEnabled = true,
                     ScheduleType = ScheduleType.None,
                     MaxRetries = 3,
-                    Properties = new SchedulerTestInput { Value = $"Active_{i}" }
+                    Properties = new SchedulerTestInput { Value = $"Active_{i}" },
                 }
             );
             activeManifest.ManifestGroupId = activeGroup.Id;
@@ -791,7 +788,7 @@ public class MaxActiveJobsTests
                     Name = typeof(SchedulerTestWorkflow).FullName!,
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = new SchedulerTestInput { Value = $"Active_{i}" },
-                    ManifestId = activeManifest.Id
+                    ManifestId = activeManifest.Id,
                 }
             );
             metadata.WorkflowState = WorkflowState.Pending;
@@ -816,7 +813,7 @@ public class MaxActiveJobsTests
                     IsEnabled = true,
                     ScheduleType = ScheduleType.None,
                     MaxRetries = 3,
-                    Properties = new SchedulerTestInput { Value = $"Queued_{i}" }
+                    Properties = new SchedulerTestInput { Value = $"Queued_{i}" },
                 }
             );
             manifest.ManifestGroupId = queuedGroup.Id;
@@ -829,7 +826,7 @@ public class MaxActiveJobsTests
                     WorkflowName = typeof(SchedulerTestWorkflow).FullName!,
                     Input = manifest.Properties,
                     InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
-                    ManifestId = manifest.Id
+                    ManifestId = manifest.Id,
                 }
             );
             await dataContext.Track(entry);
@@ -878,7 +875,7 @@ public class MaxActiveJobsTests
                 IsEnabled = true,
                 ScheduleType = ScheduleType.None,
                 MaxRetries = 3,
-                Properties = new SchedulerTestInput { Value = inputValue }
+                Properties = new SchedulerTestInput { Value = inputValue },
             }
         );
 
@@ -899,7 +896,7 @@ public class MaxActiveJobsTests
                 Name = typeof(SchedulerTestWorkflow).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
-                ManifestId = manifest.Id
+                ManifestId = manifest.Id,
             }
         );
 

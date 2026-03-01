@@ -1,25 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Trax.Scheduler</AssemblyName>
+  </PropertyGroup>
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <AssemblyName>Trax.Scheduler</AssemblyName>
-    </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Trax.Effect" Version="*" />
+    <PackageReference Include="Trax.Mediator" Version="*" />
+    <PackageReference Include="Trax.Effect.Data" Version="*" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="Trax.Effect" Version="*" />
-      <PackageReference Include="Trax.Mediator" Version="*" />
-      <PackageReference Include="Trax.Effect.Data" Version="*" />
-    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <InternalsVisibleTo Include="Trax.Scheduler.Hangfire" />
-      <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Scheduler.Hangfire" />
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
+  </ItemGroup>
 </Project>

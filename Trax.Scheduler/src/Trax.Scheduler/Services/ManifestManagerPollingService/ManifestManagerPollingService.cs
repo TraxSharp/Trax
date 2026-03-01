@@ -1,11 +1,11 @@
-using Trax.Effect.Data.Services.DataContext;
-using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Workflows.ManifestManager;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Workflows.ManifestManager;
 
 namespace Trax.Scheduler.Services.ManifestManagerPollingService;
 
@@ -64,7 +64,7 @@ internal class ManifestManagerPollingService(
 
                 var acquired = await dbContext
                     .Database.SqlQuery<bool>(
-                        $"""SELECT pg_try_advisory_xact_lock(hashtext('chainsharp_manifest_manager')) AS "Value" """
+                        $"""SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager')) AS "Value" """
                     )
                     .FirstAsync(cancellationToken);
 

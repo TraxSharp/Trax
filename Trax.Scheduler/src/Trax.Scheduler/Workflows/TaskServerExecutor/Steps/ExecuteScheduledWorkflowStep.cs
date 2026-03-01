@@ -1,9 +1,9 @@
-using Trax.Effect.Models.Metadata;
-using Trax.Mediator.Services.WorkflowBus;
-using Trax.Scheduler.Services.DormantDependentContext;
-using Trax.Effect.Services.EffectStep;
 using LanguageExt;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Services.EffectStep;
+using Trax.Mediator.Services.WorkflowBus;
+using Trax.Scheduler.Services.DormantDependentContext;
 
 namespace Trax.Scheduler.Workflows.TaskServerExecutor.Steps;
 

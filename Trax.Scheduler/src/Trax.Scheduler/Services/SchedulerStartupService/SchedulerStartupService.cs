@@ -1,11 +1,11 @@
-using Trax.Effect.Data.Services.DataContext;
-using Trax.Effect.Enums;
-using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Services.ManifestScheduler;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Enums;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.ManifestScheduler;
 
 namespace Trax.Scheduler.Services.SchedulerStartupService;
 
@@ -41,8 +41,8 @@ internal class SchedulerStartupService(
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         var stuckJobs = await dataContext
-            .Metadatas.Where(
-                m => m.WorkflowState == WorkflowState.InProgress && m.StartTime < serverStartTime
+            .Metadatas.Where(m =>
+                m.WorkflowState == WorkflowState.InProgress && m.StartTime < serverStartTime
             )
             .ToListAsync(cancellationToken);
 
@@ -156,10 +156,9 @@ internal class SchedulerStartupService(
         // Clear self-referencing FK (DependsOnManifestId) for any manifest pointing to an orphan.
         // This handles both orphan→orphan and kept→orphan references.
         await dataContext
-            .Manifests.Where(
-                m =>
-                    m.DependsOnManifestId.HasValue
-                    && orphanedManifestIds.Contains(m.DependsOnManifestId.Value)
+            .Manifests.Where(m =>
+                m.DependsOnManifestId.HasValue
+                && orphanedManifestIds.Contains(m.DependsOnManifestId.Value)
             )
             .ExecuteUpdateAsync(
                 s => s.SetProperty(m => m.DependsOnManifestId, (long?)null),
@@ -168,8 +167,8 @@ internal class SchedulerStartupService(
 
         // Delete in FK-dependency order: WorkQueues → DeadLetters → Metadata → Manifests
         await dataContext
-            .WorkQueues.Where(
-                w => w.ManifestId.HasValue && orphanedManifestIds.Contains(w.ManifestId.Value)
+            .WorkQueues.Where(w =>
+                w.ManifestId.HasValue && orphanedManifestIds.Contains(w.ManifestId.Value)
             )
             .ExecuteDeleteAsync(cancellationToken);
 
@@ -178,8 +177,8 @@ internal class SchedulerStartupService(
             .ExecuteDeleteAsync(cancellationToken);
 
         await dataContext
-            .Metadatas.Where(
-                m => m.ManifestId.HasValue && orphanedManifestIds.Contains(m.ManifestId.Value)
+            .Metadatas.Where(m =>
+                m.ManifestId.HasValue && orphanedManifestIds.Contains(m.ManifestId.Value)
             )
             .ExecuteDeleteAsync(cancellationToken);
 

@@ -1,11 +1,11 @@
+using LanguageExt;
+using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.ManifestGroup;
-using Trax.Scheduler.Configuration;
 using Trax.Effect.Services.ServiceTrain;
-using LanguageExt;
-using Microsoft.EntityFrameworkCore;
+using Trax.Scheduler.Configuration;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 
 namespace Trax.Scheduler.Extensions;

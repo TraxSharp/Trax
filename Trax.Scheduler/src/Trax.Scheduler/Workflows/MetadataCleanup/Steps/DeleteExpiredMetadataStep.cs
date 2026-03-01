@@ -1,10 +1,10 @@
-using Trax.Effect.Data.Services.DataContext;
-using Trax.Effect.Enums;
-using Trax.Scheduler.Configuration;
-using Trax.Effect.Services.EffectStep;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Enums;
+using Trax.Effect.Services.EffectStep;
+using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Workflows.MetadataCleanup.Steps;
 
@@ -40,18 +40,17 @@ internal class DeleteExpiredMetadataStep(
         var metadataIdsToDelete = dataContext
             .Metadatas.Where(m => whitelist.Contains(m.Name))
             .Where(m => m.StartTime < cutoffTime)
-            .Where(
-                m =>
-                    m.WorkflowState == WorkflowState.Completed
-                    || m.WorkflowState == WorkflowState.Failed
-                    || m.WorkflowState == WorkflowState.Cancelled
+            .Where(m =>
+                m.WorkflowState == WorkflowState.Completed
+                || m.WorkflowState == WorkflowState.Failed
+                || m.WorkflowState == WorkflowState.Cancelled
             )
             .Select(m => m.Id);
 
         // Delete associated work queue entries first to avoid FK constraint violations
         var workQueuesDeleted = await dataContext
-            .WorkQueues.Where(
-                wq => wq.MetadataId.HasValue && metadataIdsToDelete.Contains(wq.MetadataId.Value)
+            .WorkQueues.Where(wq =>
+                wq.MetadataId.HasValue && metadataIdsToDelete.Contains(wq.MetadataId.Value)
             )
             .ExecuteDeleteAsync(CancellationToken);
 
@@ -64,11 +63,10 @@ internal class DeleteExpiredMetadataStep(
         var metadataDeleted = await dataContext
             .Metadatas.Where(m => whitelist.Contains(m.Name))
             .Where(m => m.StartTime < cutoffTime)
-            .Where(
-                m =>
-                    m.WorkflowState == WorkflowState.Completed
-                    || m.WorkflowState == WorkflowState.Failed
-                    || m.WorkflowState == WorkflowState.Cancelled
+            .Where(m =>
+                m.WorkflowState == WorkflowState.Completed
+                || m.WorkflowState == WorkflowState.Failed
+                || m.WorkflowState == WorkflowState.Cancelled
             )
             .ExecuteDeleteAsync(CancellationToken);
 

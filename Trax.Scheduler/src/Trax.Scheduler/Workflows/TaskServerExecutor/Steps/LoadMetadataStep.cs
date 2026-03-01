@@ -1,9 +1,9 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectStep;
-using Trax.Core.Exceptions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Scheduler.Workflows.TaskServerExecutor.Steps;
 

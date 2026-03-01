@@ -1,15 +1,15 @@
 using System.Text.Json;
+using LanguageExt;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Scheduler.Configuration;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Utils;
-using LanguageExt;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
+using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Services.DormantDependentContext;
 
@@ -179,10 +179,10 @@ internal class DormantDependentContext(
         var inputJson = JsonSerializer.Serialize(
             input,
             input.GetType(),
-            Trax.CoreJsonSerializationOptions.ManifestProperties
+            TraxJsonSerializationOptions.ManifestProperties
         );
 
-        var entry = Models.WorkQueue.WorkQueue.Create(
+        var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
             new CreateWorkQueue
             {
                 WorkflowName = manifest.Name,

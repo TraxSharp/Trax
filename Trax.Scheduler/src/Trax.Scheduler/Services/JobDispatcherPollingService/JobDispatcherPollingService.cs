@@ -1,9 +1,9 @@
-using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Workflows.JobDispatcher;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Workflows.JobDispatcher;
 
 namespace Trax.Scheduler.Services.JobDispatcherPollingService;
 

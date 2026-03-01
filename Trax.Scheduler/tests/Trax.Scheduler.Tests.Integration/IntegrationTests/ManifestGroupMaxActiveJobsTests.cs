@@ -1,4 +1,10 @@
 using System.Text.Json;
+using FluentAssertions;
+using LanguageExt;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -12,22 +18,16 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Mediator.Extensions;
-using Trax.Scheduler.Extensions;
-using Trax.Scheduler.Workflows.JobDispatcher;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Logging.Extensions;
-using Trax.Effect.Utils;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
+using Trax.Effect.Utils;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using FluentAssertions;
-using LanguageExt;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Trax.Scheduler.Workflows.JobDispatcher;
+using Trax.Scheduler.Workflows.TaskServerExecutor;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -63,26 +63,24 @@ public class ManifestGroupMaxActiveJobsTests
             .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
             .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
             .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
-            .AddTrax.CoreEffects(
-                options =>
-                    options
-                        .AddServiceTrainBus(
-                            assemblies:
-                            [
-                                typeof(AssemblyMarker).Assembly,
-                                typeof(TaskServerExecutorWorkflow).Assembly,
-                            ]
-                        )
-                        .SetEffectLogLevel(LogLevel.Information)
-                        .SaveWorkflowParameters()
-                        .AddPostgresEffect(connectionString)
-                        .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
-                        .AddJsonEffect()
-                        .AddStepLogger(serializeStepData: true)
-                        .AddScheduler(
-                            scheduler =>
-                                scheduler.UseInMemoryTaskServer().MaxActiveJobs(GlobalMaxActiveJobs)
-                        )
+            .AddTraxEffects(options =>
+                options
+                    .AddServiceTrainBus(
+                        assemblies:
+                        [
+                            typeof(AssemblyMarker).Assembly,
+                            typeof(TaskServerExecutorWorkflow).Assembly,
+                        ]
+                    )
+                    .SetEffectLogLevel(LogLevel.Information)
+                    .SaveWorkflowParameters()
+                    .AddPostgresEffect(connectionString)
+                    .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
+                    .AddJsonEffect()
+                    .AddStepLogger(serializeStepData: true)
+                    .AddScheduler(scheduler =>
+                        scheduler.UseInMemoryTaskServer().MaxActiveJobs(GlobalMaxActiveJobs)
+                    )
             )
             .AddScoped<IDataContext>(sp =>
             {
@@ -421,8 +419,8 @@ public class ManifestGroupMaxActiveJobsTests
         // Assert - Disabled group's entry stays queued, enabled group's entry dispatches
         _dataContext.Reset();
 
-        var updatedDisabled = await _dataContext.WorkQueues.FirstAsync(
-            q => q.Id == disabledEntry.Id
+        var updatedDisabled = await _dataContext.WorkQueues.FirstAsync(q =>
+            q.Id == disabledEntry.Id
         );
         updatedDisabled.Status.Should().Be(WorkQueueStatus.Queued);
 
@@ -588,7 +586,7 @@ public class ManifestGroupMaxActiveJobsTests
     {
         var serializedInput = JsonSerializer.Serialize(
             new SchedulerTestInput { Value = inputValue },
-            Trax.CoreJsonSerializationOptions.ManifestProperties
+            TraxJsonSerializationOptions.ManifestProperties
         );
 
         var entry = WorkQueue.Create(

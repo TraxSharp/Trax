@@ -2,8 +2,8 @@ using System.Text.Json;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Models.BackgroundJob.DTOs;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
 using Trax.Effect.Utils;
+using Trax.Scheduler.Workflows.TaskServerExecutor;
 
 namespace Trax.Scheduler.Services.BackgroundTaskServer;
 
@@ -46,7 +46,7 @@ public class PostgresTaskServer(IDataContext dataContext) : IBackgroundTaskServe
         var inputJson = JsonSerializer.Serialize(
             input,
             input.GetType(),
-            Trax.CoreJsonSerializationOptions.ManifestProperties
+            TraxJsonSerializationOptions.ManifestProperties
         );
 
         var job = BackgroundJob.Create(

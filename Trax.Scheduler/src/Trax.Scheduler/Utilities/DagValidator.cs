@@ -77,7 +77,7 @@ public static class DagValidator
 
         if (sorted.Count == nodeSet.Count)
         {
-            return new TopologicalSortResult<TKey> { IsAcyclic = true, Sorted = sorted, };
+            return new TopologicalSortResult<TKey> { IsAcyclic = true, Sorted = sorted };
         }
 
         // Nodes with remaining in-degree > 0 are part of or downstream of a cycle

@@ -1,3 +1,7 @@
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Log.DTOs;
@@ -8,10 +12,6 @@ using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Workflows.ManifestManager;
 using Trax.Scheduler.Workflows.MetadataCleanup;
-using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -352,12 +352,11 @@ public class MetadataCleanupWorkflowTests : TestSetup
         // Link the work queue entry to the metadata and mark as dispatched
         await DataContext
             .WorkQueues.Where(wq => wq.Id == entryId)
-            .ExecuteUpdateAsync(
-                setters =>
-                    setters
-                        .SetProperty(wq => wq.MetadataId, metadata.Id)
-                        .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
-                        .SetProperty(wq => wq.DispatchedAt, DateTime.UtcNow)
+            .ExecuteUpdateAsync(setters =>
+                setters
+                    .SetProperty(wq => wq.MetadataId, metadata.Id)
+                    .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
+                    .SetProperty(wq => wq.DispatchedAt, DateTime.UtcNow)
             );
 
         DataContext.Reset();
@@ -405,12 +404,11 @@ public class MetadataCleanupWorkflowTests : TestSetup
 
         await DataContext
             .WorkQueues.Where(wq => wq.Id == entryId)
-            .ExecuteUpdateAsync(
-                setters =>
-                    setters
-                        .SetProperty(wq => wq.MetadataId, metadata.Id)
-                        .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
-                        .SetProperty(wq => wq.DispatchedAt, DateTime.UtcNow)
+            .ExecuteUpdateAsync(setters =>
+                setters
+                    .SetProperty(wq => wq.MetadataId, metadata.Id)
+                    .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
+                    .SetProperty(wq => wq.DispatchedAt, DateTime.UtcNow)
             );
 
         DataContext.Reset();

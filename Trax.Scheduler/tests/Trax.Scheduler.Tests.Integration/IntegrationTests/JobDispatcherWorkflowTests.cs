@@ -1,17 +1,17 @@
 using System.Text.Json;
+using FluentAssertions;
+using LanguageExt;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Scheduler.Workflows.JobDispatcher;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using FluentAssertions;
-using LanguageExt;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using Trax.Scheduler.Workflows.JobDispatcher;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -108,13 +108,13 @@ public class JobDispatcherWorkflowTests : TestSetup
         var updatedQueued = await DataContext.WorkQueues.FirstAsync(q => q.Id == queuedEntry.Id);
         updatedQueued.Status.Should().Be(WorkQueueStatus.Dispatched);
 
-        var updatedDispatched = await DataContext.WorkQueues.FirstAsync(
-            q => q.Id == dispatchedEntry.Id
+        var updatedDispatched = await DataContext.WorkQueues.FirstAsync(q =>
+            q.Id == dispatchedEntry.Id
         );
         updatedDispatched.Status.Should().Be(WorkQueueStatus.Dispatched);
 
-        var updatedCancelled = await DataContext.WorkQueues.FirstAsync(
-            q => q.Id == cancelledEntry.Id
+        var updatedCancelled = await DataContext.WorkQueues.FirstAsync(q =>
+            q.Id == cancelledEntry.Id
         );
         updatedCancelled.Status.Should().Be(WorkQueueStatus.Cancelled);
     }
@@ -229,8 +229,8 @@ public class JobDispatcherWorkflowTests : TestSetup
 
         // Assert - InMemoryTaskServer executes immediately, which updates LastSuccessfulRun
         DataContext.Reset();
-        var updatedManifest = await DataContext.Manifests.FirstOrDefaultAsync(
-            m => m.Id == manifest.Id
+        var updatedManifest = await DataContext.Manifests.FirstOrDefaultAsync(m =>
+            m.Id == manifest.Id
         );
 
         updatedManifest.Should().NotBeNull();
@@ -341,8 +341,8 @@ public class JobDispatcherWorkflowTests : TestSetup
         // Assert - Both should be dispatched
         DataContext.Reset();
 
-        var updatedManifest = await DataContext.WorkQueues.FirstAsync(
-            q => q.Id == manifestEntry.Id
+        var updatedManifest = await DataContext.WorkQueues.FirstAsync(q =>
+            q.Id == manifestEntry.Id
         );
         updatedManifest.Status.Should().Be(WorkQueueStatus.Dispatched);
 
@@ -369,8 +369,8 @@ public class JobDispatcherWorkflowTests : TestSetup
         // Assert - Manual entry dispatches, disabled group entry stays queued
         DataContext.Reset();
 
-        var updatedDisabled = await DataContext.WorkQueues.FirstAsync(
-            q => q.Id == disabledEntry.Id
+        var updatedDisabled = await DataContext.WorkQueues.FirstAsync(q =>
+            q.Id == disabledEntry.Id
         );
         updatedDisabled.Status.Should().Be(WorkQueueStatus.Queued);
 
@@ -472,7 +472,7 @@ public class JobDispatcherWorkflowTests : TestSetup
     {
         var serializedInput = JsonSerializer.Serialize(
             new SchedulerTestInput { Value = inputValue },
-            Trax.CoreJsonSerializationOptions.ManifestProperties
+            TraxJsonSerializationOptions.ManifestProperties
         );
 
         var entry = WorkQueue.Create(

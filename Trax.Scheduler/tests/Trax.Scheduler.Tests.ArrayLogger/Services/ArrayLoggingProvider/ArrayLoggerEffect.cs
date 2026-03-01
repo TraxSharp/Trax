@@ -1,6 +1,6 @@
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Log.DTOs;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 

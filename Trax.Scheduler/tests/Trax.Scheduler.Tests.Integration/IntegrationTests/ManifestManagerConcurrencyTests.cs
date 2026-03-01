@@ -1,14 +1,14 @@
+using FluentAssertions;
+using LanguageExt;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.WorkQueue;
-using Trax.Scheduler.Workflows.ManifestManager;
 using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using FluentAssertions;
-using LanguageExt;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using Trax.Scheduler.Workflows.ManifestManager;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -62,8 +62,8 @@ public class ManifestManagerConcurrencyTests : TestSetup
 
         // Assert - Exactly one WorkQueue entry should exist
         DataContext.Reset();
-        var workQueueCount = await DataContext.WorkQueues.CountAsync(
-            q => q.ManifestId == manifest.Id
+        var workQueueCount = await DataContext.WorkQueues.CountAsync(q =>
+            q.ManifestId == manifest.Id
         );
         workQueueCount
             .Should()
@@ -116,8 +116,8 @@ public class ManifestManagerConcurrencyTests : TestSetup
         DataContext.Reset();
         foreach (var manifest in manifests)
         {
-            var workQueueCount = await DataContext.WorkQueues.CountAsync(
-                q => q.ManifestId == manifest.Id
+            var workQueueCount = await DataContext.WorkQueues.CountAsync(q =>
+                q.ManifestId == manifest.Id
             );
             workQueueCount
                 .Should()
@@ -183,7 +183,7 @@ public class ManifestManagerConcurrencyTests : TestSetup
 
             var acquired = await dbContext
                 .Database.SqlQuery<bool>(
-                    $"""SELECT pg_try_advisory_xact_lock(hashtext('chainsharp_manifest_manager')) AS "Value" """
+                    $"""SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager')) AS "Value" """
                 )
                 .FirstAsync();
 

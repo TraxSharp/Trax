@@ -1,9 +1,9 @@
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
+using Trax.Effect.Services.EffectStep;
 using Trax.Scheduler.Workflows.ManifestManager;
 using Trax.Scheduler.Workflows.ManifestManager.Utilities;
-using Trax.Effect.Services.EffectStep;
-using Microsoft.Extensions.Logging;
 
 namespace Trax.Scheduler.Workflows.ManifestManager.Steps;
 
@@ -40,12 +40,11 @@ internal class DetermineJobsToQueueStep(ILogger<DetermineJobsToQueueStep> logger
         // Filter to only time-based scheduled manifests (not manual-only or dependent)
         // Also skip manifests whose group is disabled
         var scheduledViews = views
-            .Where(
-                v =>
-                    v.Manifest.ScheduleType != ScheduleType.None
-                    && v.Manifest.ScheduleType != ScheduleType.Dependent
-                    && v.Manifest.ScheduleType != ScheduleType.DormantDependent
-                    && v.ManifestGroup.IsEnabled
+            .Where(v =>
+                v.Manifest.ScheduleType != ScheduleType.None
+                && v.Manifest.ScheduleType != ScheduleType.Dependent
+                && v.Manifest.ScheduleType != ScheduleType.DormantDependent
+                && v.ManifestGroup.IsEnabled
             )
             .ToList();
 
@@ -73,11 +72,10 @@ internal class DetermineJobsToQueueStep(ILogger<DetermineJobsToQueueStep> logger
 
         // Evaluate dependent manifests (triggered by parent success, not by schedule)
         var dependentViews = views
-            .Where(
-                v =>
-                    v.Manifest.ScheduleType == ScheduleType.Dependent
-                    && v.Manifest.DependsOnManifestId != null
-                    && v.ManifestGroup.IsEnabled
+            .Where(v =>
+                v.Manifest.ScheduleType == ScheduleType.Dependent
+                && v.Manifest.DependsOnManifestId != null
+                && v.ManifestGroup.IsEnabled
             )
             .ToList();
 
@@ -94,8 +92,8 @@ internal class DetermineJobsToQueueStep(ILogger<DetermineJobsToQueueStep> logger
                     continue;
 
                 // Find parent manifest in the loaded set (only enabled manifests are loaded)
-                var parent = views.FirstOrDefault(
-                    v => v.Manifest.Id == dependent.Manifest.DependsOnManifestId
+                var parent = views.FirstOrDefault(v =>
+                    v.Manifest.Id == dependent.Manifest.DependsOnManifestId
                 );
                 if (parent is null)
                 {

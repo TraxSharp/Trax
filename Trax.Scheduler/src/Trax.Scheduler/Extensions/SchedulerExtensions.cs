@@ -1,4 +1,4 @@
-using Trax.Effect.Configuration.Trax.CoreEffectBuilder;
+using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Extensions;
@@ -18,7 +18,7 @@ public static class SchedulerExtensions
     /// Configure the scheduler within the Trax.Core effects setup:
     ///
     /// <code>
-    /// services.AddTrax.CoreEffects(options => options
+    /// services.AddTraxEffects(options => options
     ///     .AddEffectWorkflowBus(assemblies)
     ///     .AddPostgresEffect(connectionString)
     ///     .AddScheduler(scheduler => scheduler
@@ -33,8 +33,8 @@ public static class SchedulerExtensions
     /// );
     /// </code>
     /// </remarks>
-    public static Trax.CoreEffectConfigurationBuilder AddScheduler(
-        this Trax.CoreEffectConfigurationBuilder builder,
+    public static TraxEffectConfigurationBuilder AddScheduler(
+        this TraxEffectConfigurationBuilder builder,
         Action<SchedulerConfigurationBuilder> configure
     )
     {
