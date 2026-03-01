@@ -1,9 +1,9 @@
+using LanguageExt;
 using Trax.Core.Tests.Integration.Examples.Brewery.Steps.Bottle;
 using Trax.Core.Tests.Integration.Examples.Brewery.Steps.Brew;
 using Trax.Core.Tests.Integration.Examples.Brewery.Steps.Ferment;
 using Trax.Core.Tests.Integration.Examples.Brewery.Steps.Prepare;
 using Trax.Core.Train;
-using LanguageExt;
 
 namespace Trax.Core.Tests.Integration.Examples.Brewery;
 

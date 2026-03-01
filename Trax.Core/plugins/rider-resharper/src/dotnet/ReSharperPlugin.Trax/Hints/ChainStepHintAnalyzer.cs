@@ -18,7 +18,7 @@ namespace ReSharperPlugin.Trax.Core.Hints
         {
             "Chain",
             "ShortCircuit",
-            "IChain"
+            "IChain",
         };
 
         protected override void Run(

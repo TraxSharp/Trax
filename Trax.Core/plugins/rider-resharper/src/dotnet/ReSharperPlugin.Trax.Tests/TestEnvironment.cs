@@ -24,6 +24,5 @@ namespace ReSharperPlugin.Trax.Core.Tests
             IRequire<TraxTestEnvironmentZone> { }
 
     [SetUpFixture]
-    public class TraxTestsAssembly
-        : ExtensionTestEnvironmentAssembly<TraxTestEnvironmentZone> { }
+    public class TraxTestsAssembly : ExtensionTestEnvironmentAssembly<TraxTestEnvironmentZone> { }
 }

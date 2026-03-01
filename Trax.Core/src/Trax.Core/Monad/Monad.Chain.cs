@@ -1,9 +1,9 @@
+using LanguageExt;
+using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
 using Trax.Core.Step;
 using Trax.Core.Utils;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
 
 namespace Trax.Core.Monad;
 

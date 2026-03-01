@@ -1,5 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <IsPackable>True</IsPackable>
@@ -8,14 +7,27 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="JetBrains.ReSharper.SDK" Version="$(SdkVersion)" PrivateAssets="all" />
+    <PackageReference
+      Include="JetBrains.ReSharper.SDK"
+      Version="$(SdkVersion)"
+      PrivateAssets="all"
+    />
     <PackageReference Include="Wave" Version="$(WaveVersion)" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="../../../dependencies.json" PackagePath="" Pack="true" Visible="false" />
-    <Content Include="bin/$(AssemblyName)/$(Configuration)/$(AssemblyName).dll" PackagePath="dotFiles" Pack="true" Visible="false" />
-    <Content Include="bin/$(AssemblyName)/$(Configuration)/$(AssemblyName).pdb" PackagePath="dotFiles" Pack="true" Visible="false" />
+    <Content
+      Include="bin/$(AssemblyName)/$(Configuration)/$(AssemblyName).dll"
+      PackagePath="dotFiles"
+      Pack="true"
+      Visible="false"
+    />
+    <Content
+      Include="bin/$(AssemblyName)/$(Configuration)/$(AssemblyName).pdb"
+      PackagePath="dotFiles"
+      Pack="true"
+      Visible="false"
+    />
   </ItemGroup>
-
 </Project>

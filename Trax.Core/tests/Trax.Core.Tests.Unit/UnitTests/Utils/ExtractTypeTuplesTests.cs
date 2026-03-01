@@ -1,5 +1,5 @@
-using Trax.Core.Exceptions;
 using FluentAssertions;
+using Trax.Core.Exceptions;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Utils;
 
@@ -38,8 +38,8 @@ public class ExtractTypeTuplesTests : TestSetup
         var inputType = typeof(ValueTuple<int, string, bool>);
 
         // Act
-        Assert.Throws<WorkflowException>(
-            () => Trax.Core.Utils.TypeHelpers.ExtractTypeTuples(memory, inputType)
+        Assert.Throws<WorkflowException>(() =>
+            Trax.Core.Utils.TypeHelpers.ExtractTypeTuples(memory, inputType)
         );
     }
 }

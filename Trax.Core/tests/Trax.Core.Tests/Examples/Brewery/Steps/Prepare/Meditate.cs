@@ -1,7 +1,7 @@
-using Trax.Core.Exceptions;
-using Trax.Core.Step;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
+using Trax.Core.Exceptions;
+using Trax.Core.Step;
 using static LanguageExt.Prelude;
 
 namespace Trax.Core.Tests.Examples.Brewery.Steps.Prepare;

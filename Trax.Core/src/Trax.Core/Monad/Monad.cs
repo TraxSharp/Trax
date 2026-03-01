@@ -1,5 +1,5 @@
-using Trax.Core.Train;
 using LanguageExt;
+using Trax.Core.Train;
 
 namespace Trax.Core.Monad;
 

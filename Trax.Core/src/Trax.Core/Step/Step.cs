@@ -1,9 +1,9 @@
 using System.Reflection;
 using System.Text.Json;
-using Trax.Core.Exceptions;
-using Trax.Core.Train;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
+using Trax.Core.Exceptions;
+using Trax.Core.Train;
 
 namespace Trax.Core.Step;
 
@@ -95,7 +95,7 @@ public abstract class Step<TIn, TOut> : IStep<TIn, TOut>
                 WorkflowExternalId = train.ExternalId,
                 Step = GetType().Name,
                 Type = e.GetType().Name,
-                Message = e.Message
+                Message = e.Message,
             };
 
             ExceptionData = exceptionData;

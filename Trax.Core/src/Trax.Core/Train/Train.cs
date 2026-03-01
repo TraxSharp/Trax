@@ -1,9 +1,9 @@
 using System.Text.Json.Serialization;
+using LanguageExt;
+using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Core.Route;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
 
 namespace Trax.Core.Train;
 

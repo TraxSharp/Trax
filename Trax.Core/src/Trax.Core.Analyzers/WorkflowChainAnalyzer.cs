@@ -1,11 +1,11 @@
 using System.Collections.Immutable;
 using System.Linq;
-using Trax.Core.Analyzers.Analysis;
-using Trax.Core.Analyzers.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Trax.Core.Analyzers.Analysis;
+using Trax.Core.Analyzers.Diagnostics;
 
 namespace Trax.Core.Analyzers;
 
@@ -344,7 +344,7 @@ public sealed class WorkflowChainAnalyzer : DiagnosticAnalyzer
         {
             MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.Text,
             IdentifierNameSyntax identifier => identifier.Identifier.Text,
-            _ => null
+            _ => null,
         };
     }
 

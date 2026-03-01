@@ -1,12 +1,14 @@
 <Project>
-    <PropertyGroup>
-        <Version>1.0.3</Version>
-    </PropertyGroup>
+  <PropertyGroup>
+    <Version>1.0.3</Version>
+  </PropertyGroup>
 
-    <!-- Propagate the Trax.Core analyzer to all projects in the solution -->
-    <ItemGroup Condition="'$(MSBuildProjectName)' != 'Trax.Core.Analyzers'">
-        <ProjectReference Include="$(MSBuildThisFileDirectory)src/Trax.Core.Analyzers/Trax.Core.Analyzers.csproj"
-                          ReferenceOutputAssembly="false"
-                          OutputItemType="Analyzer" />
-    </ItemGroup>
+  <!-- Propagate the Trax.Core analyzer to all projects in the solution -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Trax.Core.Analyzers'">
+    <ProjectReference
+      Include="$(MSBuildThisFileDirectory)src/Trax.Core.Analyzers/Trax.Core.Analyzers.csproj"
+      ReferenceOutputAssembly="false"
+      OutputItemType="Analyzer"
+    />
+  </ItemGroup>
 </Project>

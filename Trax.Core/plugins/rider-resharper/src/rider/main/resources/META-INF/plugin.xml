@@ -7,11 +7,10 @@
   <depends>com.intellij.modules.rider</depends>
 
   <description>
-<![CDATA[
+    <![CDATA[
 <p>Inlay hints for Trax.Core workflow chains, showing TIn and TOut
 types for each .Chain&lt;StepType&gt;(), .ShortCircuit&lt;StepType&gt;(),
 and .IChain&lt;StepType&gt;() call.</p>
 ]]>
   </description>
-
 </idea-plugin>

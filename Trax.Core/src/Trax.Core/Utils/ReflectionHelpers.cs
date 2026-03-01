@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using LanguageExt;
 using Trax.Core.Monad;
 using Trax.Core.Step;
-using LanguageExt;
 
 namespace Trax.Core.Utils;
 
@@ -47,8 +47,8 @@ internal static class ReflectionHelpers
         // Find the IStep<,> interface
         var interfaceType = stepType
             .GetInterfaces()
-            .FirstOrDefault(
-                i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IStep<,>)
+            .FirstOrDefault(i =>
+                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IStep<,>)
             );
 
         if (interfaceType is null)

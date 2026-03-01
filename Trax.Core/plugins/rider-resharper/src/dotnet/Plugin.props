@@ -1,5 +1,4 @@
 ﻿<Project>
-
   <PropertyGroup>
     <!-- See https://www.nuget.org/packages/JetBrains.ReSharper.SDK -->
     <!-- Keep in sync with ProductVersion in gradle.properties -->
@@ -16,5 +15,4 @@
     <PackageLicenseUrl></PackageLicenseUrl>
     <PackageIconUrl></PackageIconUrl>
   </PropertyGroup>
-
 </Project>
