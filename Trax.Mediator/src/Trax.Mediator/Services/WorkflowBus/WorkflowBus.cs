@@ -1,15 +1,15 @@
 using System.Collections.Concurrent;
 using System.Reflection;
-using Trax.Effect.Enums;
-using Trax.Effect.Extensions;
-using Trax.Effect.Models.Metadata;
-using Trax.Mediator.Services.WorkflowRegistry;
-using Trax.Effect.Services.ServiceTrain;
-using Trax.Core.Exceptions;
-using Trax.Core.Route;
 using LanguageExt;
 using LanguageExt.ClassInstances;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Exceptions;
+using Trax.Core.Route;
+using Trax.Effect.Enums;
+using Trax.Effect.Extensions;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Mediator.Services.WorkflowRegistry;
 
 namespace Trax.Mediator.Services.WorkflowBus;
 
@@ -179,8 +179,8 @@ public class WorkflowBus(IServiceProvider serviceProvider, IWorkflowRegistry reg
                         .Where(x => x.Name == "Run")
                         // Run(input, metadata) has 2 parameters
                         .Where(x => x.GetParameters().Length == 2)
-                        .FirstOrDefault(
-                            x => x.GetParameters()[1].ParameterType == typeof(Metadata)
+                        .FirstOrDefault(x =>
+                            x.GetParameters()[1].ParameterType == typeof(Metadata)
                         );
 
                     if (method == null)
@@ -270,10 +270,9 @@ public class WorkflowBus(IServiceProvider serviceProvider, IWorkflowRegistry reg
                     var method = type.GetMethods()
                         .Where(x => x.Name == "Run")
                         .Where(x => x.GetParameters().Length == 3)
-                        .FirstOrDefault(
-                            x =>
-                                x.GetParameters()[1].ParameterType == typeof(Metadata)
-                                && x.GetParameters()[2].ParameterType == typeof(CancellationToken)
+                        .FirstOrDefault(x =>
+                            x.GetParameters()[1].ParameterType == typeof(Metadata)
+                            && x.GetParameters()[2].ParameterType == typeof(CancellationToken)
                         );
 
                     if (method == null)
@@ -307,10 +306,9 @@ public class WorkflowBus(IServiceProvider serviceProvider, IWorkflowRegistry reg
                 var method = type.GetMethods()
                     .Where(x => x.Name == "Run")
                     .Where(x => x.GetParameters().Length == 2)
-                    .FirstOrDefault(
-                        x =>
-                            x.GetParameters()[1].ParameterType == typeof(CancellationToken)
-                            && x.Module.Name.Contains("Effect")
+                    .FirstOrDefault(x =>
+                        x.GetParameters()[1].ParameterType == typeof(CancellationToken)
+                        && x.Module.Name.Contains("Effect")
                     );
 
                 if (method == null)

@@ -1,6 +1,6 @@
+using Trax.Core.Route;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Core.Route;
 
 namespace Trax.Mediator.Services.WorkflowBus;
 

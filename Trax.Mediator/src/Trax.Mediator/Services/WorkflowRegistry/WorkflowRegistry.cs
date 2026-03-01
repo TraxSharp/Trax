@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using Trax.Effect.Services.ServiceTrain;
 using Trax.Core.Exceptions;
+using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Mediator.Services.WorkflowRegistry;
 
@@ -71,18 +71,17 @@ public class WorkflowRegistry : IWorkflowRegistry
                 .GetTypes()
                 .Where(x => x.IsClass)
                 .Where(x => x.IsAbstract == false)
-                .Where(
-                    x =>
-                        x.GetInterfaces()
-                            .Where(y => y.IsGenericType)
-                            .Select(y => y.GetGenericTypeDefinition())
-                            .Contains(workflowType)
+                .Where(x =>
+                    x.GetInterfaces()
+                        .Where(y => y.IsGenericType)
+                        .Select(y => y.GetGenericTypeDefinition())
+                        .Contains(workflowType)
                 )
-                .Select(
-                    x =>
-                        // Prefer to inject via interface, but if it doesn't exist then inject by underlying type
-                        x.GetInterfaces()
-                            .FirstOrDefault(y => !y.IsGenericType && y != typeof(IDisposable)) ?? x
+                .Select(x =>
+                    // Prefer to inject via interface, but if it doesn't exist then inject by underlying type
+                    x.GetInterfaces()
+                        .FirstOrDefault(y => !y.IsGenericType && y != typeof(IDisposable))
+                    ?? x
                 );
 
             allWorkflowTypes.UnionWith(workflowTypes);
@@ -97,8 +96,8 @@ public class WorkflowRegistry : IWorkflowRegistry
             var inputType =
                 wf.GetInterfaces()
                     .Where(interfaceType => interfaceType.IsGenericType)
-                    .FirstOrDefault(
-                        interfaceType => interfaceType.GetGenericTypeDefinition() == workflowType
+                    .FirstOrDefault(interfaceType =>
+                        interfaceType.GetGenericTypeDefinition() == workflowType
                     )
                     ?.GetGenericArguments()
                     .FirstOrDefault()
