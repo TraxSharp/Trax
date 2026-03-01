@@ -1,5 +1,5 @@
-$PluginId = "ReSharperPlugin.ChainSharp"
-$SolutionPath = "$PSScriptRoot\ReSharperPlugin.ChainSharp.sln"
+$PluginId = "ReSharperPlugin.Trax"
+$SolutionPath = "$PSScriptRoot\ReSharperPlugin.Trax.sln"
 $SourceBasePath = "$PSScriptRoot\src\dotnet"
 
 $VsWhereOutput = [xml] (& "$PSScriptRoot\tools\vswhere.exe" -format xml -products *)

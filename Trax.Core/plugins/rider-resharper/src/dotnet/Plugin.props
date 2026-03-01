@@ -10,7 +10,7 @@
 
     <Authors>Trax.Core</Authors>
     <Copyright>Copyright $([System.DateTime]::Now.Year) Maintainers of Trax.Core</Copyright>
-    <PackageTags>resharper rider plugin chainsharp inlay-hints workflow</PackageTags>
+    <PackageTags>resharper rider plugin trax inlay-hints workflow</PackageTags>
 
     <PackageProjectUrl>https://github.com/theauxm/Trax.Core</PackageProjectUrl>
     <PackageLicenseUrl></PackageLicenseUrl>
