@@ -1,5 +1,5 @@
-using Trax.Effect.Services.ServiceTrain;
 using LanguageExt;
+using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Samples.Scheduler.Workflows.HelloWorld;
 

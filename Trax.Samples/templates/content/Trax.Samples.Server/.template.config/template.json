@@ -4,7 +4,7 @@
   "classifications": ["Web", "Trax.Core", "Hangfire", "Scheduler"],
   "identity": "Trax.Samples.Server.CSharp",
   "name": "Trax.Core Server with Hangfire",
-  "shortName": "chainsharp-server",
+  "shortName": "trax-server",
   "sourceName": "Trax.Samples.Server",
   "preferNameDirectory": true,
   "tags": {

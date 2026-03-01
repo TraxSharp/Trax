@@ -1,6 +1,6 @@
+using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.Scheduler.Workflows.TransformLoad.Steps;
-using LanguageExt;
 
 namespace Trax.Samples.Scheduler.Workflows.TransformLoad;
 

@@ -1,6 +1,6 @@
+using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.Flowthru.Spaceflights.Workflows.Reporting.Steps;
-using LanguageExt;
 
 namespace Trax.Samples.Flowthru.Spaceflights.Workflows.Reporting;
 

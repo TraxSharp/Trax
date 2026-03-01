@@ -1,8 +1,8 @@
-using Trax.Core.Step;
 using Flowthru.Services;
 using Flowthru.Services.Models;
 using LanguageExt;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Step;
 
 namespace Trax.Samples.Flowthru.Spaceflights.Workflows.DataScience.Steps;
 

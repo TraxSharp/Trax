@@ -1,5 +1,5 @@
-using Trax.Core.Step;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Step;
 
 namespace Trax.Samples.Scheduler.Workflows.DataQualityCheck.Steps;
 

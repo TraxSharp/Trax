@@ -1,6 +1,6 @@
+using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.Server.Workflows.HelloWorld.Steps;
-using LanguageExt;
 
 namespace Trax.Samples.Server.Workflows.HelloWorld;
 

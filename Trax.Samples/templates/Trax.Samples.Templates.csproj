@@ -1,25 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Trax.Samples.Templates</PackageId>
+    <PackageType>Template</PackageType>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageDescription>Project templates for Trax.Core - Railway Oriented Programming workflow engine for .NET</PackageDescription>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Samples</RepositoryUrl>
+    <PackageTags>dotnet-new;templates;trax;workflows;railway-oriented-programming;hangfire</PackageTags>
 
-    <PropertyGroup>
-        <PackageId>Trax.Samples.Templates</PackageId>
-        <PackageType>Template</PackageType>
-        <Authors>Theauxm,mark-keaton</Authors>
-        <PackageDescription>Project templates for Trax.Core - Railway Oriented Programming workflow engine for .NET</PackageDescription>
-        <PackageLicenseExpression>MIT</PackageLicenseExpression>
-        <RepositoryUrl>https://github.com/TraxSharp/Trax.Samples</RepositoryUrl>
-        <PackageTags>dotnet-new;templates;chainsharp;workflows;railway-oriented-programming;hangfire</PackageTags>
+    <TargetFramework>net10.0</TargetFramework>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
 
-        <TargetFramework>net10.0</TargetFramework>
-        <IncludeContentInPack>true</IncludeContentInPack>
-        <IncludeBuildOutput>false</IncludeBuildOutput>
-        <ContentTargetFolders>content</ContentTargetFolders>
-        <NoDefaultExcludes>true</NoDefaultExcludes>
-        <NoWarn>$(NoWarn);NU5128</NoWarn>
-    </PropertyGroup>
-
-    <ItemGroup>
-        <Content Include="content/**" Exclude="**/bin/**;**/obj/**" />
-        <Compile Remove="**/*" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <Content Include="content/**" Exclude="**/bin/**;**/obj/**" />
+    <Compile Remove="**/*" />
+  </ItemGroup>
 </Project>

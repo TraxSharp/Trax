@@ -7,42 +7,42 @@
 //   data-processing → data-science → reporting
 //
 // Pipeline logic, data catalog, and example datasets are from the
-// KedroSpaceflights.Pure example in the Flowthru project by @Spelkington:
+// KedroSpaceflights example in the Flowthru project by @Spelkington:
 //   https://github.com/chaoticgoodcomputing/flowthru
 //
 // Original dataset: Kedro Spaceflights tutorial (Apache 2.0)
 //   https://github.com/kedro-org/kedro-starters
 // ─────────────────────────────────────────────────────────────────────────────
 
+using KedroSpaceflights.Data;
+using KedroSpaceflights.Pipelines.DataProcessing;
+using KedroSpaceflights.Pipelines.DataScience;
+using KedroSpaceflights.Pipelines.Reporting;
 using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
-using Trax.Mediator.Extensions;
-using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Extensions;
-using Trax.Scheduler.Services.Scheduling;
-using Trax.Scheduler.Workflows.ManifestManager;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Progress.Extensions;
+using Trax.Mediator.Extensions;
 using Trax.Samples.Flowthru.Spaceflights;
 using Trax.Samples.Flowthru.Spaceflights.Workflows.DataProcessing;
 using Trax.Samples.Flowthru.Spaceflights.Workflows.DataScience;
 using Trax.Samples.Flowthru.Spaceflights.Workflows.Reporting;
-using KedroSpaceflights.Pure.Data;
-using KedroSpaceflights.Pure.Pipelines.DataProcessing;
-using KedroSpaceflights.Pure.Pipelines.DataScience;
-using KedroSpaceflights.Pure.Pipelines.Reporting;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Services.Scheduling;
+using Trax.Scheduler.Workflows.ManifestManager;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString =
-    builder.Configuration.GetConnectionString("Trax.CoreDatabase")
-    ?? throw new InvalidOperationException("Connection string 'Trax.CoreDatabase' not found.");
+    builder.Configuration.GetConnectionString("TraxDatabase")
+    ?? throw new InvalidOperationException("Connection string 'TraxDatabase' not found.");
 
 builder.Services.AddLogging(logging => logging.AddConsole());
-builder.AddTrax.CoreDashboard();
+builder.AddTraxDashboard();
 
 // ── Register Flowthru services ──────────────────────────────────────────────
 // Pipeline logic by @Spelkington — https://github.com/chaoticgoodcomputing/flowthru
@@ -73,52 +73,51 @@ builder.Services.AddFlowthru(flowthru =>
 });
 
 // ── Register Trax.Core Effect + Scheduler ──────────────────────────────────
-builder.Services.AddTrax.CoreEffects(
-    options =>
-        options
-            .AddServiceTrainBus(
-                assemblies: [typeof(Program).Assembly, typeof(ManifestManagerWorkflow).Assembly]
-            )
-            .AddPostgresEffect(connectionString)
-            .AddEffectDataContextLogging()
-            .AddJsonEffect()
-            .SaveWorkflowParameters()
-            .AddStepProgress()
-            .AddScheduler(scheduler =>
-            {
-                scheduler
-                    .AddMetadataCleanup(cleanup =>
-                    {
-                        cleanup.AddWorkflowType<IDataProcessingPipelineWorkflow>();
-                        cleanup.AddWorkflowType<IDataSciencePipelineWorkflow>();
-                        cleanup.AddWorkflowType<IReportingPipelineWorkflow>();
-                    })
-                    .JobDispatcherPollingInterval(TimeSpan.FromSeconds(2))
-                    .UsePostgresTaskServer();
+builder.Services.AddTraxEffects(options =>
+    options
+        .AddServiceTrainBus(
+            assemblies: [typeof(Program).Assembly, typeof(ManifestManagerWorkflow).Assembly]
+        )
+        .AddPostgresEffect(connectionString)
+        .AddEffectDataContextLogging()
+        .AddJsonEffect()
+        .SaveWorkflowParameters()
+        .AddStepProgress()
+        .AddScheduler(scheduler =>
+        {
+            scheduler
+                .AddMetadataCleanup(cleanup =>
+                {
+                    cleanup.AddWorkflowType<IDataProcessingPipelineWorkflow>();
+                    cleanup.AddWorkflowType<IDataSciencePipelineWorkflow>();
+                    cleanup.AddWorkflowType<IReportingPipelineWorkflow>();
+                })
+                .JobDispatcherPollingInterval(TimeSpan.FromSeconds(2))
+                .UsePostgresTaskServer();
 
-                // ── Spaceflights Pipeline Topology ──────────────────────────────
-                //    data-processing (root, every 5 min)
-                //      └── data-science   (ThenInclude — depends on data-processing)
-                //          └── reporting   (ThenInclude — depends on data-science)
-                scheduler
-                    .Schedule<IDataProcessingPipelineWorkflow>(
-                        ManifestNames.DataProcessing,
-                        new DataProcessingPipelineInput(),
-                        Every.Minutes(5)
-                    )
-                    .ThenInclude<IDataSciencePipelineWorkflow>(
-                        ManifestNames.DataScience,
-                        new DataSciencePipelineInput()
-                    )
-                    .ThenInclude<IReportingPipelineWorkflow>(
-                        ManifestNames.Reporting,
-                        new ReportingPipelineInput()
-                    );
-            })
+            // ── Spaceflights Pipeline Topology ──────────────────────────────
+            //    data-processing (root, every 5 min)
+            //      └── data-science   (ThenInclude — depends on data-processing)
+            //          └── reporting   (ThenInclude — depends on data-science)
+            scheduler
+                .Schedule<IDataProcessingPipelineWorkflow>(
+                    ManifestNames.DataProcessing,
+                    new DataProcessingPipelineInput(),
+                    Every.Minutes(5)
+                )
+                .ThenInclude<IDataSciencePipelineWorkflow>(
+                    ManifestNames.DataScience,
+                    new DataSciencePipelineInput()
+                )
+                .ThenInclude<IReportingPipelineWorkflow>(
+                    ManifestNames.Reporting,
+                    new ReportingPipelineInput()
+                );
+        })
 );
 
 var app = builder.Build();
 
-app.UseTrax.CoreDashboard();
+app.UseTraxDashboard();
 
 app.Run();

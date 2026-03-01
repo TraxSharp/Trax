@@ -1,22 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
+  </PropertyGroup>
 
-    <PropertyGroup>
-        <OutputType>Exe</OutputType>
-        <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
-    </PropertyGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Trax.Effect" Version="*" />
-        <PackageReference Include="Trax.Effect.Data.Postgres" Version="*" />
-        <PackageReference Include="Trax.Mediator" Version="*" />
-        <PackageReference Include="Trax.Scheduler" Version="*" />
-        <PackageReference Include="Trax.Scheduler.Hangfire" Version="*" />
-        <PackageReference Include="Trax.Effect.Provider.Json" Version="*" />
-        <PackageReference Include="Trax.Effect.Provider.Parameter" Version="*" />
-        <PackageReference Include="Trax.Dashboard" Version="*" />
-    </ItemGroup>
-
+  <ItemGroup>
+    <PackageReference Include="Trax.Effect" Version="*" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="*" />
+    <PackageReference Include="Trax.Mediator" Version="*" />
+    <PackageReference Include="Trax.Scheduler" Version="*" />
+    <PackageReference Include="Trax.Scheduler.Hangfire" Version="*" />
+    <PackageReference Include="Trax.Effect.Provider.Json" Version="*" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="*" />
+    <PackageReference Include="Trax.Dashboard" Version="*" />
+  </ItemGroup>
 </Project>

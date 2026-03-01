@@ -1,8 +1,8 @@
-using Trax.Scheduler.Services.DormantDependentContext;
-using Trax.Samples.Scheduler.Workflows.DataQualityCheck;
-using Trax.Core.Step;
 using LanguageExt;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Step;
+using Trax.Samples.Scheduler.Workflows.DataQualityCheck;
+using Trax.Scheduler.Services.DormantDependentContext;
 using static Trax.Samples.Scheduler.ManifestNames;
 
 namespace Trax.Samples.Scheduler.Workflows.ExtractImport.Steps;

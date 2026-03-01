@@ -1,0 +1,24 @@
+NOTICE
+
+The dataset files in this directory (companies.csv, reviews.csv, shuttles.xlsx)
+are derived from the Kedro Spaceflights tutorial dataset, which is part of the
+kedro-starters project.
+
+Source: https://github.com/kedro-org/kedro-starters
+Copyright: Kedro team (https://github.com/kedro-org)
+License: Apache License 2.0
+
+These files are included here for demonstration and testing purposes as part of
+the Flowthru project's example implementations.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
