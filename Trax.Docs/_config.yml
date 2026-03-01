@@ -1,0 +1,39 @@
+title: Trax.Core
+description: A .NET library for Railway Oriented Programming with Effects
+remote_theme: just-the-docs/just-the-docs@v0.10.0
+
+# GitHub Pages settings
+baseurl: "/Trax.Core"
+url: "https://theauxm.github.io"
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+
+# Just the Docs settings
+color_scheme: dark
+
+# Enable search
+search_enabled: true
+search:
+  heading_level: 2
+  previews: 3
+
+# Aux links (top right)
+aux_links:
+  "View on GitHub":
+    - "https://github.com/Theauxm/Trax.Core"
+
+aux_links_new_tab: true
+
+# Footer
+footer_content: "Trax.Core - A .NET library for Railway Oriented Programming with Effects"
+
+# Back to top link
+back_to_top: true
+back_to_top_text: "Back to top"
+
+# Plugins
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag

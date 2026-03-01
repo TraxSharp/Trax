@@ -1,0 +1,239 @@
+---
+layout: default
+title: Task Server
+parent: Scheduling
+nav_order: 2
+---
+
+# Task Server
+
+The task server is the execution backend for the scheduler. When the JobDispatcher creates a Metadata record and calls `IBackgroundTaskServer.EnqueueAsync()`, the task server is responsible for picking up that job and running the workflow.
+
+## Built-in PostgreSQL Task Server
+
+The recommended task server uses Trax.Core's own `trax.background_job` table for job queuing. No external dependencies — it shares the same PostgreSQL database already used by Trax.Core's data layer.
+
+The JobDispatcher commits the Metadata creation and WorkQueue status update in a `FOR UPDATE SKIP LOCKED` transaction before calling `EnqueueAsync`. The BackgroundJob insertion then happens as a separate operation. This ordering ensures the Metadata record is visible to the task server when it begins execution — necessary because the `InMemoryTaskServer` executes synchronously within the `EnqueueAsync` call.
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     JobDispatcherWorkflow                        │
+│  Creates Metadata → Calls EnqueueAsync(metadataId)               │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     PostgresTaskServer                           │
+│  INSERT INTO trax.background_job (metadata_id, ...)       │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   background_job table                           │
+│  ┌────┬─────────────┬───────┬────────────┬────────────┐         │
+│  │ id │ metadata_id │ input │ created_at │ fetched_at │         │
+│  ├────┼─────────────┼───────┼────────────┼────────────┤         │
+│  │ 1  │     42      │ null  │ 10:00:00   │   null     │ ← available
+│  │ 2  │     43      │ {...} │ 10:00:01   │ 10:00:05   │ ← claimed
+│  └────┴─────────────┴───────┴────────────┴────────────┘         │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   PostgresWorkerService                          │
+│  N concurrent workers polling the table                          │
+│                                                                  │
+│  Worker 0 ──► SELECT ... FOR UPDATE SKIP LOCKED ──► Execute     │
+│  Worker 1 ──► SELECT ... FOR UPDATE SKIP LOCKED ──► Execute     │
+│  Worker 2 ──► SELECT ... FOR UPDATE SKIP LOCKED ──► Execute     │
+│              (each worker gets a different job — no duplicates)  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Setup
+
+```csharp
+builder.Services.AddTrax.CoreEffects(options => options
+    .AddServiceTrainBus(
+        typeof(Program).Assembly,
+        typeof(TaskServerExecutorWorkflow).Assembly
+    )
+    .AddPostgresEffect(connectionString)
+    .AddScheduler(scheduler => scheduler
+        .UsePostgresTaskServer()                   // ← built-in, no extra packages
+        .Schedule<IMyWorkflow, MyInput>(
+            "my-job", new MyInput(), Every.Minutes(5))
+    )
+);
+```
+
+No connection string parameter needed — `UsePostgresTaskServer()` uses the same `IDataContext` already registered by `AddPostgresEffect()`.
+
+### Configuration
+
+```csharp
+.UsePostgresTaskServer(options =>
+{
+    options.WorkerCount = 4;                                   // default: Environment.ProcessorCount
+    options.PollingInterval = TimeSpan.FromSeconds(2);         // default: 1 second
+    options.VisibilityTimeout = TimeSpan.FromMinutes(30);      // default: 30 minutes
+    options.ShutdownTimeout = TimeSpan.FromSeconds(30);        // default: 30 seconds
+})
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `WorkerCount` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs |
+| `PollingInterval` | 1 second | How often idle workers poll for new jobs |
+| `VisibilityTimeout` | 30 minutes | How long a claimed job stays invisible before crash recovery reclaims it |
+| `ShutdownTimeout` | 30 seconds | Grace period for in-flight jobs during application shutdown. When the host signals shutdown, in-flight workflows receive the cancellation token after this delay — giving them time to finish cleanly. See [Cancellation Tokens]({{ site.baseurl }}{% link usage-guide/cancellation-tokens.md %}#background-services-and-shutdown). |
+
+### Worker Lifecycle
+
+Each worker runs a three-phase loop:
+
+**Phase 1 — Claim** (atomic, within a transaction)
+
+```sql
+SELECT * FROM trax.background_job
+WHERE fetched_at IS NULL
+   OR fetched_at < NOW() - make_interval(secs => :visibility_timeout)
+ORDER BY created_at ASC
+LIMIT 1
+FOR UPDATE SKIP LOCKED
+```
+
+The `FOR UPDATE SKIP LOCKED` clause ensures:
+- Each job is claimed by exactly one worker (no duplicates)
+- Workers don't block each other (SKIP LOCKED, not WAIT)
+- Oldest jobs are processed first (ORDER BY created_at ASC)
+
+On claim, the worker sets `fetched_at = NOW()` and commits the transaction.
+
+**Phase 2 — Execute** (in a fresh DI scope)
+
+The worker resolves `ITaskServerExecutorWorkflow` from a new DI scope and calls `Run(new ExecuteManifestRequest(metadataId, input))`. This is the same workflow that Hangfire invoked — it loads the Metadata, validates the job state, executes the target workflow, and updates the Manifest's `LastSuccessfulRun` on success.
+
+**Phase 3 — Cleanup** (always runs, success or failure)
+
+The worker deletes the `background_job` row. This matches the previous Hangfire behavior where jobs were auto-deleted on completion. Trax.Core's Metadata and DeadLetter tables handle the audit trail — the background_job table is purely a transient queue.
+
+### Crash Recovery
+
+If a worker crashes after claiming a job (Phase 1) but before deleting it (Phase 3), the `fetched_at` timestamp becomes stale. The dequeue query's `WHERE fetched_at < NOW() - :visibility_timeout` condition makes the job eligible for re-claim by another worker after the visibility timeout expires.
+
+```
+Worker A claims job #1 → fetched_at = 10:00:00
+Worker A crashes at 10:01:00
+                               ...
+At 10:30:00 (30m later):
+Worker B's dequeue query finds job #1 eligible (fetched_at < NOW() - 30m)
+Worker B claims and executes job #1
+```
+
+This is the same pattern Hangfire uses with its `InvisibilityTimeout` — a well-established approach for reliable background job processing.
+
+### Comparison with Hangfire
+
+| Feature | Hangfire | PostgresTaskServer |
+|---------|----------|-------------------|
+| **Dependencies** | 3 NuGet packages (Hangfire.Core, Hangfire.AspNetCore, Hangfire.PostgreSql) | None (uses existing EF Core) |
+| **Database tables** | 10+ tables in `hangfire` schema | 1 table in `trax` schema |
+| **Retries** | Disabled (Trax.Core manages retries) | N/A (Trax.Core manages retries) |
+| **Recurring jobs** | Not used | N/A (ManifestManager handles scheduling) |
+| **Concurrency** | Thread-based workers | Task-based workers |
+| **Job storage** | Separate connection/schema | Same `IDataContext` as all Trax.Core data |
+| **Dashboard** | Hangfire Dashboard (separate UI) | Trax.Core Dashboard |
+| **Migration** | Hangfire manages its own schema | DbUp migration alongside other Trax.Core tables |
+| **Crash recovery** | InvisibilityTimeout | VisibilityTimeout (same pattern) |
+
+## Hangfire Task Server (Deprecated)
+
+> **Deprecated**: Use `UsePostgresTaskServer()` instead. The `Trax.Scheduler.Hangfire` package will be removed in a future version.
+
+The Hangfire task server wraps Hangfire's `IBackgroundJobClient.Enqueue()` to dispatch jobs. It brings 3 NuGet packages and creates its own database tables, but Trax.Core only uses a tiny fraction of Hangfire's capabilities:
+
+- One API call (`Enqueue`)
+- Retries disabled
+- Auto-delete on completion
+- No recurring jobs, continuations, or batches
+
+If you're using Hangfire and need to migrate, see [Migrating from Hangfire](#migrating-from-hangfire).
+
+## InMemory Task Server
+
+For testing and local development:
+
+```csharp
+.AddScheduler(scheduler => scheduler.UseInMemoryTaskServer())
+```
+
+Executes jobs immediately and synchronously — no background workers, no database tables. The `EnqueueAsync` call blocks until the workflow completes.
+
+## Custom Task Server
+
+Implement `IBackgroundTaskServer` and register it via `UseTaskServer()`:
+
+```csharp
+public class MyTaskServer : IBackgroundTaskServer
+{
+    public Task<string> EnqueueAsync(int metadataId) { /* ... */ }
+    public Task<string> EnqueueAsync(int metadataId, object input) { /* ... */ }
+}
+
+// Registration
+.AddScheduler(scheduler => scheduler
+    .UseTaskServer(services =>
+    {
+        services.AddScoped<IBackgroundTaskServer, MyTaskServer>();
+    })
+)
+```
+
+## Migrating from Hangfire
+
+### 1. Update Configuration
+
+```diff
+  builder.Services.AddTrax.CoreEffects(options => options
+      .AddPostgresEffect(connectionString)
+      .AddScheduler(scheduler => scheduler
+-         .UseHangfire(connectionString)
++         .UsePostgresTaskServer()
+          .Schedule<IMyWorkflow, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+      )
+  );
+
+- // Remove Hangfire dashboard
+- app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [] });
+```
+
+### 2. Update Package References
+
+```diff
+  <ItemGroup>
+      <PackageReference Include="Trax.Scheduler" />
+-     <PackageReference Include="Trax.Scheduler.Hangfire" />
+  </ItemGroup>
+```
+
+### 3. Remove Hangfire Usings
+
+```diff
+- using Hangfire;
+- using Trax.Scheduler.Hangfire.Extensions;
+```
+
+### 4. Run the Application
+
+The `trax.background_job` table is created automatically by the migration system on startup. No manual SQL required.
+
+### 5. Clean Up Hangfire Tables (Optional)
+
+After confirming the migration works, you can drop the Hangfire schema:
+
+```sql
+DROP SCHEMA IF EXISTS hangfire CASCADE;
+```

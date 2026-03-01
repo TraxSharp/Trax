@@ -1,0 +1,208 @@
+---
+layout: default
+title: Scheduling Options
+parent: Scheduling
+nav_order: 2
+---
+
+# Scheduling Options
+
+## Bulk Scheduling
+
+### Startup Configuration: ScheduleMany
+
+For static bulk jobs, use the builder-time `ScheduleMany` during DI configuration. No async startup code or service resolution needed. The **name-based overload** derives `groupId`, `prunePrefix`, and the external ID prefix from a single `name` parameter. The **explicit overload** gives full control over each independently.
+
+*API Reference: [ScheduleMany]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %}) — all overloads, parameter tables, and examples including pruning.*
+
+The builder captures the manifests and seeds them when the `BackgroundService` starts—same upsert semantics as `Schedule`.
+
+### Grouping Manifests
+
+Every manifest belongs to a **ManifestGroup**. A ManifestGroup is a first-class entity that ties related manifests together and exposes per-group dispatch controls (see [Per-Group Dispatch Controls](#per-group-dispatch-controls) below).
+
+The group is set via the `ScheduleOptions` fluent builder using `.Group(...)`. When you don't specify a group, it defaults to the manifest's `externalId`—so every manifest always has a group, even if it's a group of one. ManifestGroups are upserted by name during scheduling: if a group with that name already exists it's reused, otherwise a new one is created automatically. Orphaned groups (groups with no remaining manifests) are cleaned up on startup.
+
+```csharp
+services.AddTrax.CoreEffects(options => options
+    .AddScheduler(scheduler => scheduler
+        .UsePostgresTaskServer()
+        // Single manifest — explicit group shared with other related jobs
+        .Schedule<IExtractWorkflow>(
+            "extract-users",
+            new ExtractInput { Table = "users" },
+            Every.Minutes(5),
+            options => options.Group("user-pipeline"))
+        // Dependent manifest in the same group
+        .Include<ILoadWorkflow>(
+            "load-users",
+            new LoadInput { Table = "users" },
+            options => options.Group("user-pipeline"))
+        // Bulk scheduling — name-based overload sets groupId automatically
+        .ScheduleMany<ISyncTableWorkflow>(
+            "table-sync",
+            tables.Select(tableName => new ManifestItem(
+                tableName,
+                new SyncTableInput { TableName = tableName }
+            )),
+            Every.Minutes(5))
+    )
+);
+```
+
+*API Reference: [Schedule]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}), [ScheduleMany]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %})*
+
+The dashboard's **Manifest Groups** page shows each group's settings and aggregate execution stats, which is useful when a logical operation is split across many manifests (e.g., syncing 1000 table slices).
+
+### Runtime: ScheduleManyAsync
+
+Use `ScheduleManyAsync` when the set of jobs is determined at runtime (loaded from a database, config file, or external API). It creates multiple manifests in a single transaction—if any fails, the entire batch rolls back. Both startup and runtime variants accept the same `ScheduleOptions` builder and use upsert semantics.
+
+*API Reference: [ScheduleManyAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %})*
+
+### Configuration Per Item
+
+The optional `configureEach` parameter receives each source item, so you can vary per-item settings. Use the `ScheduleOptions` builder for settings shared across the batch:
+
+```csharp
+var tableConfigs = new[]
+{
+    (Name: "users", Interval: TimeSpan.FromMinutes(1), Retries: 5),
+    (Name: "orders", Interval: TimeSpan.FromMinutes(1), Retries: 5),
+    (Name: "products", Interval: TimeSpan.FromMinutes(15), Retries: 3),
+    (Name: "logs", Interval: TimeSpan.FromHours(1), Retries: 1),
+};
+
+foreach (var config in tableConfigs)
+{
+    await scheduler.ScheduleAsync<ISyncTableWorkflow, SyncTableInput>(
+        $"sync-{config.Name}",
+        new SyncTableInput { TableName = config.Name },
+        Schedule.FromInterval(config.Interval),
+        options => options.MaxRetries(config.Retries));
+}
+```
+
+*API Reference: [ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}), [ScheduleOptions]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
+
+### Multi-Dimensional Bulk Jobs
+
+For jobs split across multiple dimensions (e.g., table x slice index):
+
+```csharp
+var tables = new[]
+{
+    (Name: "customer", SliceCount: 100),
+    (Name: "partner", SliceCount: 10),
+    (Name: "user", SliceCount: 1000)
+};
+
+// Flatten with LINQ, schedule all in one transaction
+var allJobs = tables.SelectMany(t =>
+    Enumerable.Range(0, t.SliceCount).Select(slice => (t.Name, slice)));
+
+await scheduler.ScheduleManyAsync<ISyncTableWorkflow, SyncTableInput, (string Table, int Slice)>(
+    allJobs,
+    item => (
+        ExternalId: $"sync-{item.Table}-{item.Slice}",
+        Input: new SyncTableInput { TableName = item.Table, SliceIndex = item.Slice }
+    ),
+    Every.Minutes(5));
+```
+
+*API Reference: [ScheduleManyAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %})*
+
+### Pruning Stale Manifests
+
+When the source collection shrinks between deployments—tables removed, slices reduced—old manifests stick around in the database. The name-based overload handles this automatically (`prunePrefix: "{name}-"`). With the explicit overload, specify `prunePrefix` manually. After upserting the batch, any existing manifests whose `ExternalId` starts with the prefix but weren't in the current batch are deleted—keeping the manifest table in sync with your source data.
+
+*API Reference: [ScheduleMany — prunePrefix]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %})*
+
+## Per-Group Dispatch Controls
+
+Each ManifestGroup has three configurable properties that govern how its manifests are dispatched:
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `MaxActiveJobs` | `int?` | `null` (unlimited) | Maximum concurrent active jobs (Pending + InProgress) within this group |
+| `Priority` | `int` (0–31) | `0` | Dispatch ordering between groups—higher values are dispatched first |
+| `IsEnabled` | `bool` | `true` | When `false`, all manifests in the group are skipped during queuing and dispatch |
+
+These settings can be configured both from code via the `.Group(...)` builder on `ScheduleOptions`, and from the dashboard's **Manifest Group detail page**. Code-level configuration is applied during scheduling (upsert semantics), while the dashboard allows operators to adjust settings at runtime without redeployment.
+
+```csharp
+scheduler.Schedule<IMyWorkflow>(
+    "my-job",
+    new MyInput { ... },
+    Every.Minutes(5),
+    options => options
+        .Priority(10)
+        .Group("my-group", group => group
+            .MaxActiveJobs(5)
+            .Priority(20)
+            .Enabled(true)));
+```
+
+**MaxActiveJobs** limits concurrent active jobs within a single group. When a group hits its cap, the [JobDispatcher](admin-workflows/job-dispatcher.md) skips it and moves on to the next group—so other groups can still dispatch normally. This prevents a single high-throughput group from monopolizing all capacity. The global `MaxActiveJobs` (configured in code) still applies as an overall ceiling across all groups.
+
+**Priority** determines the order in which groups are considered during dispatch. The JobDispatcher processes groups from highest priority (31) to lowest (0). If a high-priority group continually re-queues work, it is dispatched first—but because `MaxActiveJobs` caps how many jobs it can have active at once, lower-priority groups still get their fair share of capacity. This solves the starvation problem: priority controls *ordering*, while `MaxActiveJobs` controls *capacity*.
+
+**IsEnabled** acts as a kill switch for an entire group. Disabling a group prevents its manifests from being queued or dispatched until re-enabled. This is useful during maintenance windows or when a downstream system is unavailable.
+
+## Management Operations
+
+`IManifestScheduler` includes methods for runtime job control: `DisableAsync`, `EnableAsync`, `TriggerAsync`, and `ScheduleDependentAsync`. Disabled jobs remain in the database but are skipped by the ManifestManager until re-enabled.
+
+*API Reference: [DisableAsync / EnableAsync / TriggerAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}), [ScheduleDependentAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %})*
+
+## Manifest Options
+
+Configure per-job settings via the `ScheduleOptions` fluent builder:
+
+```csharp
+await scheduler.ScheduleAsync<IMyWorkflow, MyInput>(
+    "my-job",
+    new MyInput { ... },
+    Every.Hours(1),
+    options => options
+        .Enabled(true)                              // Default: true
+        .MaxRetries(5)                              // Default: 3
+        .Timeout(TimeSpan.FromMinutes(30))          // Null uses global default
+        .Priority(10));                             // Default: 0
+```
+
+For dependent manifests that should only fire when explicitly activated by the parent workflow at runtime, add `.Dormant()`:
+
+```csharp
+scheduler
+    .Schedule<IParentWorkflow>("parent", new ParentInput(), Every.Minutes(5))
+    .Include<IChildWorkflow>(
+        "child", new ChildInput(),
+        options: o => o.Dormant());
+```
+
+See [Dormant Dependents](dependent-workflows.md#dormant-dependents) for full details on registration and runtime activation.
+
+*API Reference: [ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}), [ScheduleOptions]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
+
+## Schedule Types
+
+| Type | Use Case | API |
+|------|----------|-----|
+| `Interval` | Simple recurring | `Every.Minutes(5)` or `Schedule.FromInterval(TimeSpan)` |
+| `Cron` | Traditional scheduling | `Cron.Daily()` or `Schedule.FromCron("0 3 * * *")` |
+| `Dependent` | Runs after another manifest succeeds | `.ThenInclude()` / `.ThenIncludeMany()` / `.Include()` / `.IncludeMany()` or `ScheduleDependentAsync` |
+| `DormantDependent` | Declared dependent, activated at runtime by parent | `.Include()` / `.IncludeMany()` with `.Dormant()` option, activated via `IDormantDependentContext` |
+| `None` | Manual trigger only | Use `scheduler.TriggerAsync(externalId)` |
+
+See [Dependent Workflows](dependent-workflows.md) for details on chaining workflows.
+
+## Configuration Options
+
+Key options to know:
+
+- **`ManifestManagerPollingInterval`** / **`JobDispatcherPollingInterval`** (default: 5 seconds each) — how often the ManifestManager and JobDispatcher poll independently. Use `PollingInterval` to set both to the same value
+- **`MaxActiveJobs`** (default: 100) — global concurrent job cap; set to `null` for unlimited. Per-group limits can be set from code via `.Group(group => group.MaxActiveJobs(...))` or from the dashboard (see [Per-Group Dispatch Controls](#per-group-dispatch-controls))
+- **`DefaultMaxRetries`** (default: 3) — retry attempts before dead-lettering
+
+*API Reference: [AddScheduler]({{ site.baseurl }}{% link api-reference/scheduler-api/add-scheduler.md %}) — full options table with all defaults including retry backoff, timeouts, and stuck job recovery.*

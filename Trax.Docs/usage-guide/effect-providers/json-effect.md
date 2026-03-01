@@ -1,0 +1,45 @@
+---
+layout: default
+title: JSON Effect
+parent: Effect Providers
+grand_parent: Usage Guide
+nav_order: 2
+---
+
+# JSON Effect
+
+The JSON effect tracks model changes by comparing JSON snapshots. When a workflow calls `SaveChanges`, this provider serializes every tracked model to JSON and compares it to the snapshot taken when the model was first tracked. If something changed, it logs the current state.
+
+This is a development debugging tool. It doesn't persist anything—it writes to your configured `ILogger`.
+
+## Registration
+
+```bash
+dotnet add package Trax.Effect.Provider.Json
+```
+
+```csharp
+services.AddTrax.CoreEffects(options =>
+    options.AddJsonEffect()
+);
+```
+
+*API Reference: [AddJsonEffect]({{ site.baseurl }}{% link api-reference/configuration/add-json-effect.md %})*
+
+No configuration required. The provider uses the JSON serialization options from `ITrax.CoreEffectConfiguration` and logs at the level configured there.
+
+## How It Works
+
+1. When the `EffectRunner` calls `Track(model)`, the JSON effect serializes the model to a JSON string and stores that snapshot alongside a reference to the model.
+2. When `SaveChanges` runs at the end of the workflow, the provider re-serializes every tracked model and compares the new JSON to the stored snapshot.
+3. If the JSON differs—a field was updated, a state changed—the provider logs the new serialized state.
+
+This gives you a log of what changed during workflow execution without needing a database. When you see a workflow misbehaving, the JSON effect shows you the model states at the point they were saved.
+
+## When to Use It
+
+- **Development** — See workflow state changes in your console output without setting up Postgres.
+- **Debugging** — When a workflow produces unexpected results, the JSON logs show exactly what each model looked like at `SaveChanges` time.
+- **Lightweight setups** — Pair it with `AddInMemoryEffect()` for a no-infrastructure development environment.
+
+In production, you'll typically replace this with (or supplement it by) the [Data Persistence](data-persistence.md) provider.
