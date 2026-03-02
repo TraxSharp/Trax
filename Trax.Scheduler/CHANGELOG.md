@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/TraxSharp/Trax.Scheduler/compare/v1.0.0...v1.1.0) (2026-03-02)
+
+
+### Features
+
+* rename Workflow to Train ([#4](https://github.com/TraxSharp/Trax.Scheduler/issues/4)) ([04c7b31](https://github.com/TraxSharp/Trax.Scheduler/commit/04c7b31d3d39e7d7add7dc6a0e989b6dc56235fa))
+
 # 1.0.0 (2026-03-02)
 
 
