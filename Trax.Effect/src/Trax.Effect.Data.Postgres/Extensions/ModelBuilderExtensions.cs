@@ -47,6 +47,7 @@ public static class ModelBuilderExtensions
         modelBuilder.HasPostgresEnum<ScheduleType>(schema: "trax");
         modelBuilder.HasPostgresEnum<DeadLetterStatus>(schema: "trax");
         modelBuilder.HasPostgresEnum<WorkQueueStatus>(schema: "trax");
+        modelBuilder.HasPostgresEnum<MisfirePolicy>(schema: "trax");
 
         return modelBuilder;
     }
@@ -75,6 +76,7 @@ public static class ModelBuilderExtensions
         npgsqlDataSourceBuilder.MapEnum<ScheduleType>("trax.schedule_type");
         npgsqlDataSourceBuilder.MapEnum<DeadLetterStatus>("trax.dead_letter_status");
         npgsqlDataSourceBuilder.MapEnum<WorkQueueStatus>("trax.work_queue_status");
+        npgsqlDataSourceBuilder.MapEnum<MisfirePolicy>("trax.misfire_policy");
 
         return npgsqlDataSourceBuilder.Build();
     }

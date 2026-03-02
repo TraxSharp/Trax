@@ -60,5 +60,15 @@ public class CreateManifest
     /// </summary>
     public int Priority { get; set; }
 
+    /// <summary>
+    /// Misfire policy for missed/overdue runs. Defaults to FireOnceNow.
+    /// </summary>
+    public MisfirePolicy MisfirePolicy { get; set; } = MisfirePolicy.FireOnceNow;
+
+    /// <summary>
+    /// Misfire threshold in seconds. Null uses the global default.
+    /// </summary>
+    public int? MisfireThresholdSeconds { get; set; }
+
     #endregion
 }

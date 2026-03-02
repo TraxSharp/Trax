@@ -87,6 +87,7 @@ public static class ServiceExtensions
                             o.MapEnum<ScheduleType>("schedule_type", "trax");
                             o.MapEnum<DeadLetterStatus>("dead_letter_status", "trax");
                             o.MapEnum<WorkQueueStatus>("work_queue_status", "trax");
+                            o.MapEnum<MisfirePolicy>("misfire_policy", "trax");
                         }
                     )
                     .UseLoggerFactory(new NullLoggerFactory())

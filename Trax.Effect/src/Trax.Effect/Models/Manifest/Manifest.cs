@@ -152,6 +152,27 @@ public class Manifest : IModel
     [Column("priority")]
     public int Priority { get; set; }
 
+    /// <summary>
+    /// Gets or sets the misfire policy for this manifest.
+    /// </summary>
+    /// <remarks>
+    /// Determines behavior when a scheduled run is missed (e.g., scheduler was down).
+    /// Only applies to Cron and Interval schedule types.
+    /// </remarks>
+    [Column("misfire_policy")]
+    public MisfirePolicy MisfirePolicy { get; set; } = MisfirePolicy.FireOnceNow;
+
+    /// <summary>
+    /// Gets or sets the misfire threshold in seconds for this manifest.
+    /// </summary>
+    /// <remarks>
+    /// Defines the grace period for misfire detection. If a manifest is overdue by less than
+    /// this threshold, it fires normally regardless of <see cref="MisfirePolicy"/>.
+    /// Null means use the global default from SchedulerConfiguration.DefaultMisfireThreshold.
+    /// </remarks>
+    [Column("misfire_threshold_seconds")]
+    public int? MisfireThresholdSeconds { get; set; }
+
     #endregion
 
     #endregion
@@ -212,6 +233,8 @@ public class Manifest : IModel
             TimeoutSeconds = manifest.TimeoutSeconds,
             DependsOnManifestId = manifest.DependsOnManifestId,
             Priority = manifest.Priority,
+            MisfirePolicy = manifest.MisfirePolicy,
+            MisfireThresholdSeconds = manifest.MisfireThresholdSeconds,
         };
 
         if (manifest.Properties != null)
