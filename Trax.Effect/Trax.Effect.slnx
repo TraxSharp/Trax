@@ -18,7 +18,6 @@
     <Project Path="tests/Trax.Effect.Tests.Integration/Trax.Effect.Tests.Integration.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Json.Integration/Trax.Effect.Tests.Json.Integration.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Data.InMemory.Integration/Trax.Effect.Tests.Data.InMemory.Integration.csproj" />
-    <Project Path="tests/Trax.Effect.Tests.Data.Postgres.Integration/Trax.Effect.Tests.Data.Postgres.Integration.csproj" />
-    <Project Path="tests/Trax.Effect.Tests.MemoryLeak.Integration/Trax.Effect.Tests.MemoryLeak.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Benchmarks/Trax.Effect.Tests.Benchmarks.csproj" />
   </Folder>
 </Solution>
