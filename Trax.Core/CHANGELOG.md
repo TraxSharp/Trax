@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/TraxSharp/Trax.Core/compare/v1.1.0...v1.1.1) (2026-03-02)
+
+
+### Bug Fixes
+
+* Move benchmarks to Trax.Effect to fix circular test dependency ([#3](https://github.com/TraxSharp/Trax.Core/issues/3)) ([a1ada51](https://github.com/TraxSharp/Trax.Core/commit/a1ada51b671b0801e6d099912604597eb68f5939))
+
 # [1.1.0](https://github.com/TraxSharp/Trax.Core/compare/v1.0.3...v1.1.0) (2026-03-02)
 
 
