@@ -2,4 +2,9 @@
   <Folder Name="/src/">
     <Project Path="src/Trax.Mediator/Trax.Mediator.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.Mediator.Tests.ArrayLogger/Trax.Mediator.Tests.ArrayLogger.csproj" />
+    <Project Path="tests/Trax.Mediator.Tests.Postgres.Integration/Trax.Mediator.Tests.Postgres.Integration.csproj" />
+    <Project Path="tests/Trax.Mediator.Tests.MemoryLeak.Integration/Trax.Mediator.Tests.MemoryLeak.Integration.csproj" />
+  </Folder>
 </Solution>

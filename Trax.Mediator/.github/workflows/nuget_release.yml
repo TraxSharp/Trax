@@ -16,6 +16,20 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: trax
+          POSTGRES_PASSWORD: trax123
+          POSTGRES_DB: trax_data_tests
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U trax"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     permissions:
       contents: write
       packages: write
