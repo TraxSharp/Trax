@@ -31,7 +31,30 @@ public partial class Monad<TInput, TReturn>
 
         // Execute the step directly without thread pool scheduling
         var task = step.RailwayStep(previousStep, Train);
-        outVar = task.IsCompletedSuccessfully ? task.Result : task.GetAwaiter().GetResult();
+
+        if (task.IsCompletedSuccessfully)
+        {
+            outVar = task.Result;
+        }
+        else
+        {
+            // Suppress the SynchronizationContext so that continuations from the step's
+            // async work are posted to the thread pool instead of trying to marshal back
+            // to the captured context. Without this, .GetAwaiter().GetResult() deadlocks
+            // in environments with a single-threaded SynchronizationContext (Blazor Server,
+            // WPF, legacy ASP.NET) because the blocked thread is the same one the
+            // continuation needs to resume on.
+            var savedContext = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(null);
+            try
+            {
+                outVar = task.GetAwaiter().GetResult();
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(savedContext);
+            }
+        }
 
         // Handle the result
         if (outVar.IsLeft)
