@@ -1,4 +1,4 @@
--- Add priority column to manifest (default priority for workflows scheduled via this manifest)
+-- Add priority column to manifest (default priority for trains scheduled via this manifest)
 ALTER TABLE trax.manifest
     ADD COLUMN priority smallint NOT NULL DEFAULT 0;
 

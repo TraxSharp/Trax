@@ -3,19 +3,19 @@ using Trax.Effect.Models;
 namespace Trax.Effect.Services.EffectProvider;
 
 /// <summary>
-/// Defines the contract for a component that tracks and persists workflow metadata.
+/// Defines the contract for a component that tracks and persists train metadata.
 /// </summary>
 /// <remarks>
 /// The IEffectProvider interface is a key abstraction in the Trax.Effect system.
-/// It represents a mechanism for tracking and persisting workflow metadata, such as
+/// It represents a mechanism for tracking and persisting train metadata, such as
 /// execution details, inputs, outputs, and error information.
 ///
 /// Different implementations of this interface can store metadata in different ways,
 /// such as in a database, in memory, or in a file. This allows for flexibility in
-/// how workflow execution is tracked and monitored.
+/// how train execution is tracked and monitored.
 ///
 /// The provider pattern used here allows for:
-/// 1. Separation of concerns between workflow execution and metadata tracking
+/// 1. Separation of concerns between train execution and metadata tracking
 /// 2. Multiple tracking mechanisms to be used simultaneously
 /// 3. Easy extension with new tracking mechanisms
 /// </remarks>
@@ -44,7 +44,7 @@ public interface IEffectProvider : IDisposable
     /// persist it immediately. The actual persistence typically occurs when
     /// SaveChanges is called.
     ///
-    /// Models typically represent workflow metadata, such as execution details,
+    /// Models typically represent train metadata, such as execution details,
     /// inputs, outputs, and error information.
     /// </remarks>
     Task Track(IModel model);

@@ -12,7 +12,7 @@ create type trax.log_level as ENUM (
 );
 
 -- Create the log table to store detailed logging information
--- This table stores log entries generated during workflow execution
+-- This table stores log entries generated during train execution
 create table trax.log
 (
     -- Primary key with auto-incrementing ID
@@ -20,8 +20,8 @@ create table trax.log
         constraint log_pkey
             primary key,
     
-    -- Reference to the workflow metadata this log entry belongs to
-    -- This allows filtering logs by workflow execution
+    -- Reference to the train metadata this log entry belongs to
+    -- This allows filtering logs by train execution
     metadata_id integer,
     
     -- Event ID for grouping related log entries

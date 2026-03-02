@@ -1,8 +1,8 @@
 -- Create the schedule_type enum for manifest scheduling strategies
 create type trax.schedule_type as enum ('none', 'cron', 'interval', 'on_demand');
 
--- Create the manifest table to store workflow manifest information
--- This table stores configuration, scheduling, and retry policies for workflows
+-- Create the manifest table to store train manifest information
+-- This table stores configuration, scheduling, and retry policies for trains
 create table if not exists trax.manifest
 (
     -- Primary key with auto-incrementing ID

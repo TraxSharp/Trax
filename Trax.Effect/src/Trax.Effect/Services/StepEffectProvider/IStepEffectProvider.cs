@@ -5,15 +5,15 @@ namespace Trax.Effect.Services.StepEffectProvider;
 
 public interface IStepEffectProvider : IDisposable
 {
-    Task BeforeStepExecution<TIn, TOut, TWorkflowIn, TWorkflowOut>(
+    Task BeforeStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectStep<TIn, TOut> effectStep,
-        ServiceTrain<TWorkflowIn, TWorkflowOut> serviceTrain,
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
         CancellationToken cancellationToken
     );
 
-    Task AfterStepExecution<TIn, TOut, TWorkflowIn, TWorkflowOut>(
+    Task AfterStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectStep<TIn, TOut> effectStep,
-        ServiceTrain<TWorkflowIn, TWorkflowOut> serviceTrain,
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
         CancellationToken cancellationToken
     );
 }

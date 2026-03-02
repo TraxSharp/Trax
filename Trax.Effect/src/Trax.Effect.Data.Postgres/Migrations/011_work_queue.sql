@@ -3,7 +3,7 @@ CREATE TYPE trax.work_queue_status AS ENUM ('queued', 'dispatched', 'cancelled')
 CREATE TABLE trax.work_queue (
     id              serial PRIMARY KEY,
     external_id     varchar NOT NULL,
-    workflow_name   varchar NOT NULL,
+    train_name   varchar NOT NULL,
     input           jsonb,
     input_type_name varchar,
     status          trax.work_queue_status NOT NULL DEFAULT 'queued',

@@ -8,12 +8,12 @@ namespace Trax.Effect.Models.Manifest.DTOs;
 public class CreateManifest
 {
     /// <summary>
-    /// The workflow type to execute. Must implement IEffectWorkflow.
+    /// The train type to execute. Must implement IEffectTrain.
     /// </summary>
     public required Type Name { get; set; }
 
     /// <summary>
-    /// Optional properties/configuration for the workflow.
+    /// Optional properties/configuration for the train.
     /// </summary>
     public IManifestProperties? Properties { get; set; }
 

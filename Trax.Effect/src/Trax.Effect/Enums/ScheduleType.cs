@@ -59,8 +59,8 @@ public enum ScheduleType
     /// The manifest runs after a parent manifest completes successfully.
     /// </summary>
     /// <remarks>
-    /// Use this for workflows that should be triggered by the successful completion of
-    /// another workflow. The <see cref="Manifest.Manifest.DependsOnManifestId"/> property
+    /// Use this for trains that should be triggered by the successful completion of
+    /// another train. The <see cref="Manifest.Manifest.DependsOnManifestId"/> property
     /// must be set to the parent manifest's ID. The dependent manifest is queued when the
     /// parent's <see cref="Manifest.Manifest.LastSuccessfulRun"/> is newer than the
     /// dependent's own <see cref="Manifest.Manifest.LastSuccessfulRun"/>.
@@ -69,11 +69,11 @@ public enum ScheduleType
 
     /// <summary>
     /// The manifest is declared as a dependent but only fires when explicitly activated
-    /// at runtime by the parent workflow via <c>IDormantDependentContext</c>.
+    /// at runtime by the parent train via <c>IDormantDependentContext</c>.
     /// </summary>
     /// <remarks>
     /// Unlike <see cref="Dependent"/>, dormant dependents are never automatically queued
-    /// when the parent succeeds. The parent workflow must explicitly call
+    /// when the parent succeeds. The parent train must explicitly call
     /// <c>IDormantDependentContext.ActivateAsync</c> with runtime-determined input.
     /// The <see cref="Manifest.Manifest.DependsOnManifestId"/> property must be set
     /// to the parent manifest's ID. Use this when the parent needs to decide at runtime

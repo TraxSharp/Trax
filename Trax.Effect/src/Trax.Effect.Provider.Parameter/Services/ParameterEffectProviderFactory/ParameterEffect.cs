@@ -10,11 +10,11 @@ using Trax.Effect.Services.EffectProvider;
 namespace Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;
 
 /// <summary>
-/// Implements an effect provider that serializes workflow input and output parameters to JSON format.
+/// Implements an effect provider that serializes train input and output parameters to JSON format.
 /// </summary>
 /// <remarks>
 /// The ParameterEffect class provides an implementation of the IEffectProvider interface
-/// that serializes workflow input and output parameters to JSON format.
+/// that serializes train input and output parameters to JSON format.
 ///
 /// This provider tracks metadata objects and serializes their input and output parameters
 /// to JSON format when changes are saved. The serialized parameters are stored in the
@@ -22,7 +22,7 @@ namespace Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory
 /// or other storage medium.
 ///
 /// This implementation is useful for capturing and storing the input and output parameters
-/// of workflow executions, which can be used for auditing, debugging, and analytics purposes.
+/// of train executions, which can be used for auditing, debugging, and analytics purposes.
 /// </remarks>
 /// <param name="options">The JSON serializer options to use for parameter serialization</param>
 /// <param name="configuration">Runtime configuration controlling which parameters are serialized</param>
@@ -45,7 +45,7 @@ public class ParameterEffect(
     /// in the metadata object's Input and Output properties, which can then be persisted
     /// to a database or other storage medium.
     ///
-    /// This allows for capturing and storing the input and output parameters of workflow
+    /// This allows for capturing and storing the input and output parameters of train
     /// executions, which can be used for auditing, debugging, and analytics purposes.
     /// </remarks>
     public async Task SaveChanges(CancellationToken cancellationToken)

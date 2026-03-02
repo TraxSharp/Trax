@@ -1,21 +1,19 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows.TestModels;
+using Trax.Effect.Tests.MemoryLeak.Integration.TestTrains.TestModels;
 
-namespace Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows;
-
-/// <summary>
-/// Interface for the memory test workflow.
-/// </summary>
-public interface IMemoryTestWorkflow : IServiceTrain<MemoryTestInput, MemoryTestOutput>;
+namespace Trax.Effect.Tests.MemoryLeak.Integration.TestTrains;
 
 /// <summary>
-/// A test workflow designed to generate memory allocation patterns for leak testing.
-/// This workflow creates large JsonDocument objects to amplify any memory leaks.
+/// Interface for the memory test train.
 /// </summary>
-public class MemoryTestWorkflow
-    : ServiceTrain<MemoryTestInput, MemoryTestOutput>,
-        IMemoryTestWorkflow
+public interface IMemoryTestTrain : IServiceTrain<MemoryTestInput, MemoryTestOutput>;
+
+/// <summary>
+/// A test train designed to generate memory allocation patterns for leak testing.
+/// This train creates large JsonDocument objects to amplify any memory leaks.
+/// </summary>
+public class MemoryTestTrain : ServiceTrain<MemoryTestInput, MemoryTestOutput>, IMemoryTestTrain
 {
     protected override async Task<Either<Exception, MemoryTestOutput>> RunInternal(
         MemoryTestInput input
@@ -36,7 +34,7 @@ public class MemoryTestWorkflow
                 ProcessedData = largeData,
                 Success = true,
                 Message =
-                    $"Successfully processed workflow {input.Id} with {input.DataSizeBytes} bytes of data",
+                    $"Successfully processed train {input.Id} with {input.DataSizeBytes} bytes of data",
             };
         }
         catch (Exception ex)
@@ -47,13 +45,11 @@ public class MemoryTestWorkflow
 }
 
 /// <summary>
-/// A workflow that intentionally throws exceptions to test error handling memory behavior.
+/// A train that intentionally throws exceptions to test error handling memory behavior.
 /// </summary>
-public interface IFailingTestWorkflow : IServiceTrain<FailingTestInput, MemoryTestOutput>;
+public interface IFailingTestTrain : IServiceTrain<FailingTestInput, MemoryTestOutput>;
 
-public class FailingTestWorkflow
-    : ServiceTrain<FailingTestInput, MemoryTestOutput>,
-        IFailingTestWorkflow
+public class FailingTestTrain : ServiceTrain<FailingTestInput, MemoryTestOutput>, IFailingTestTrain
 {
     protected override async Task<Either<Exception, MemoryTestOutput>> RunInternal(
         FailingTestInput input
@@ -62,18 +58,16 @@ public class FailingTestWorkflow
         await Task.Delay(input.ProcessingDelayMs);
 
         // Always throw an exception to test error handling paths
-        return new InvalidOperationException($"Intentional failure in workflow {input.Id}");
+        return new InvalidOperationException($"Intentional failure in train {input.Id}");
     }
 }
 
 /// <summary>
-/// A workflow that creates nested child workflows to test hierarchical memory patterns.
+/// A train that creates nested child trains to test hierarchical memory patterns.
 /// </summary>
-public interface INestedTestWorkflow : IServiceTrain<NestedTestInput, NestedTestOutput>;
+public interface INestedTestTrain : IServiceTrain<NestedTestInput, NestedTestOutput>;
 
-public class NestedTestWorkflow
-    : ServiceTrain<NestedTestInput, NestedTestOutput>,
-        INestedTestWorkflow
+public class NestedTestTrain : ServiceTrain<NestedTestInput, NestedTestOutput>, INestedTestTrain
 {
     protected override async Task<Either<Exception, NestedTestOutput>> RunInternal(
         NestedTestInput input
@@ -86,14 +80,14 @@ public class NestedTestWorkflow
             // Process each child input sequentially
             foreach (var childInput in input.ChildInputs)
             {
-                // Create child workflow data
+                // Create child train data
                 var childResult = new MemoryTestOutput
                 {
                     Id = childInput.Id,
                     ProcessedAt = DateTime.UtcNow,
                     ProcessedData = new string('Y', childInput.DataSizeBytes),
                     Success = true,
-                    Message = $"Child workflow {childInput.Id} processed",
+                    Message = $"Child train {childInput.Id} processed",
                 };
 
                 results.Add(childResult);
@@ -105,7 +99,7 @@ public class NestedTestWorkflow
                 ProcessedAt = DateTime.UtcNow,
                 ChildResults = results,
                 Success = true,
-                Message = $"Processed {results.Count} child workflows",
+                Message = $"Processed {results.Count} child trains",
             };
         }
         catch (Exception ex)

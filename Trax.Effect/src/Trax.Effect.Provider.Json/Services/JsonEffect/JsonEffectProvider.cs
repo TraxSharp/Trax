@@ -20,7 +20,7 @@ namespace Trax.Effect.Provider.Json.Services.JsonEffect;
 /// configuration to serialize models to JSON format.
 ///
 /// This implementation is useful for debugging, auditing, and logging purposes, as it
-/// provides a way to track and record all changes made to models during workflow execution.
+/// provides a way to track and record all changes made to models during train execution.
 /// </remarks>
 /// <param name="logger">The logger used to log model changes</param>
 /// <param name="configuration">The Trax.Core effect configuration containing JSON serialization options</param>
@@ -61,7 +61,7 @@ public class JsonEffectProvider(
     /// 5. If the state has changed, updates the previous state and adds the model to the changed models list
     /// 6. Logs the serialized state of each changed model
     ///
-    /// This allows for tracking and logging all changes made to models during workflow execution,
+    /// This allows for tracking and logging all changes made to models during train execution,
     /// which can be useful for debugging, auditing, and logging purposes.
     /// </remarks>
     public async Task SaveChanges(CancellationToken cancellationToken)

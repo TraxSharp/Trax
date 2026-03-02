@@ -13,7 +13,7 @@ using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Mediator.Extensions;
-using Trax.Mediator.Services.WorkflowBus;
+using Trax.Mediator.Services.TrainBus;
 
 namespace Trax.Effect.Tests.Data.Postgres.Integration;
 
@@ -24,7 +24,7 @@ public abstract class TestSetup
 
     public IServiceScope Scope { get; private set; }
 
-    public IWorkflowBus WorkflowBus { get; private set; }
+    public ITrainBus TrainBus { get; private set; }
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
@@ -53,7 +53,7 @@ public abstract class TestSetup
                         ]
                     )
                     .SetEffectLogLevel(LogLevel.Information)
-                    .SaveWorkflowParameters()
+                    .SaveTrainParameters()
                     .AddPostgresEffect(connectionString)
                     .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
                     .AddJsonEffect()
@@ -72,7 +72,7 @@ public abstract class TestSetup
     public virtual async Task TestSetUp()
     {
         Scope = ServiceProvider.CreateScope();
-        WorkflowBus = Scope.ServiceProvider.GetRequiredService<IWorkflowBus>();
+        TrainBus = Scope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         using var cleanupContext = (IDataContext)factory.Create();

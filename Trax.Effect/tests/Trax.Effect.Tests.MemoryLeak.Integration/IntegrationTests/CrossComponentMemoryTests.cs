@@ -11,7 +11,7 @@ using Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.EffectRunner;
-using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows.TestModels;
+using Trax.Effect.Tests.MemoryLeak.Integration.TestTrains.TestModels;
 using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;
@@ -19,7 +19,7 @@ namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;
 /// <summary>
 /// Tests for validating memory management across multiple components working together.
 /// These tests focus on cross-component memory interactions that could cause leaks
-/// when multiple effect providers, workflows, and services interact.
+/// when multiple effect providers, trains, and services interact.
 /// </summary>
 [TestFixture]
 public class CrossComponentMemoryTests

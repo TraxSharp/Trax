@@ -30,7 +30,7 @@ public static class ServiceExtensions
     /// <remarks>
     /// This method registers the InMemoryContextProviderFactory as an IDataContextProviderFactory
     /// with the dependency injection container, enabling the Trax.Effect system to use
-    /// in-memory databases for workflow metadata persistence.
+    /// in-memory databases for train metadata persistence.
     ///
     /// The in-memory database implementation is particularly useful for:
     /// 1. Unit and integration testing

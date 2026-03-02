@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Provider.Json.Services.JsonEffect;
-using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows.TestModels;
+using Trax.Effect.Tests.MemoryLeak.Integration.TestTrains.TestModels;
 using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;

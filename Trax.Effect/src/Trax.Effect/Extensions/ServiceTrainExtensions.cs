@@ -44,9 +44,9 @@ internal static class ServiceTrainExtensions
     {
         serviceTrain.EffectRunner.AssertLoaded();
 
-        if (metadata.WorkflowState != WorkflowState.Pending)
-            throw new WorkflowException(
-                $"Cannot start a train with state ({metadata.WorkflowState}), must be Pending."
+        if (metadata.TrainState != TrainState.Pending)
+            throw new TrainException(
+                $"Cannot start a train with state ({metadata.TrainState}), must be Pending."
             );
 
         await serviceTrain.EffectRunner.Track(metadata);
@@ -64,16 +64,16 @@ internal static class ServiceTrainExtensions
         serviceTrain.EffectRunner.AssertLoaded();
         serviceTrain.Metadata.AssertLoaded();
 
-        if (metadata.WorkflowState != WorkflowState.Pending)
-            throw new WorkflowException(
-                $"Cannot start a train with state ({metadata.WorkflowState}), must be Pending."
+        if (metadata.TrainState != TrainState.Pending)
+            throw new TrainException(
+                $"Cannot start a train with state ({metadata.TrainState}), must be Pending."
             );
 
         serviceTrain.Logger?.LogTrace(
             "Setting ({TrainName}) to In Progress.",
             serviceTrain.TrainName
         );
-        serviceTrain.Metadata.WorkflowState = WorkflowState.InProgress;
+        serviceTrain.Metadata.TrainState = TrainState.InProgress;
 
         await serviceTrain.EffectRunner.Update(serviceTrain.Metadata);
 
@@ -94,15 +94,15 @@ internal static class ServiceTrainExtensions
         var failureReason = result.IsRight ? null : result.Swap().ValueUnsafe();
 
         var resultState =
-            result.IsRight ? WorkflowState.Completed
-            : failureReason is OperationCanceledException ? WorkflowState.Cancelled
-            : WorkflowState.Failed;
+            result.IsRight ? TrainState.Completed
+            : failureReason is OperationCanceledException ? TrainState.Cancelled
+            : TrainState.Failed;
         serviceTrain.Logger?.LogTrace(
             "Setting ({TrainName}) to ({ResultState}).",
             serviceTrain.TrainName,
             resultState.ToString()
         );
-        serviceTrain.Metadata.WorkflowState = resultState;
+        serviceTrain.Metadata.TrainState = resultState;
         serviceTrain.Metadata.EndTime = DateTime.UtcNow;
         serviceTrain.Metadata.CurrentlyRunningStep = null;
         serviceTrain.Metadata.StepStartedAt = null;

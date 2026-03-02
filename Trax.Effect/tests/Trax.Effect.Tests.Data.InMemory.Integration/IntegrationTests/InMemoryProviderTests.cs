@@ -15,7 +15,7 @@ namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;
 public class InMemoryProviderTests : TestSetup
 {
     public override ServiceProvider ConfigureServices(IServiceCollection services) =>
-        services.AddScopedTraxRoute<ITestWorkflow, TestWorkflow>().BuildServiceProvider();
+        services.AddScopedTraxRoute<ITestTrain, TestTrain>().BuildServiceProvider();
 
     [Test]
     [Ignore("Serialization Failing for Input/Output Objects.")]
@@ -52,28 +52,28 @@ public class InMemoryProviderTests : TestSetup
 
     [Test]
     [Ignore("Serialization Failing for Input/Output Objects.")]
-    public async Task TestInMemoryProviderCanRunWorkflow()
+    public async Task TestInMemoryProviderCanRunTrain()
     {
         // Arrange
 
-        var workflow = Scope.ServiceProvider.GetRequiredService<ITestWorkflow>();
+        var train = Scope.ServiceProvider.GetRequiredService<ITestTrain>();
 
         // Act
-        await workflow.Run(Unit.Default);
+        await train.Run(Unit.Default);
 
         // Assert
-        workflow.Metadata.Name.Should().Be("TestWorkflow");
-        workflow.Metadata.FailureException.Should().BeNullOrEmpty();
-        workflow.Metadata.FailureReason.Should().BeNullOrEmpty();
-        workflow.Metadata.FailureStep.Should().BeNullOrEmpty();
-        workflow.Metadata.WorkflowState.Should().Be(WorkflowState.Completed);
+        train.Metadata.Name.Should().Be("TestTrain");
+        train.Metadata.FailureException.Should().BeNullOrEmpty();
+        train.Metadata.FailureReason.Should().BeNullOrEmpty();
+        train.Metadata.FailureStep.Should().BeNullOrEmpty();
+        train.Metadata.TrainState.Should().Be(TrainState.Completed);
     }
 
-    private class TestWorkflow : ServiceTrain<Unit, Unit>, ITestWorkflow
+    private class TestTrain : ServiceTrain<Unit, Unit>, ITestTrain
     {
         protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
             Activate(input).Resolve();
     }
 
-    private interface ITestWorkflow : IServiceTrain<Unit, Unit> { }
+    private interface ITestTrain : IServiceTrain<Unit, Unit> { }
 }

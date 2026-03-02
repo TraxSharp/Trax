@@ -1,18 +1,18 @@
 using System.Diagnostics;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows.TestModels;
+using Trax.Effect.Tests.MemoryLeak.Integration.TestTrains.TestModels;
 using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
-using Trax.Mediator.Services.WorkflowBus;
+using Trax.Mediator.Services.TrainBus;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;
 
 /// <summary>
-/// Tests for validating WorkflowBus reflection method caching performance and memory efficiency.
+/// Tests for validating TrainBus reflection method caching performance and memory efficiency.
 /// This addresses the reflection performance issue that was causing memory pressure.
 /// </summary>
 [TestFixture]
-public class WorkflowBusReflectionCacheTests
+public class TrainBusReflectionCacheTests
 {
     private IServiceProvider _serviceProvider = null!;
 
@@ -20,7 +20,7 @@ public class WorkflowBusReflectionCacheTests
     public void Setup()
     {
         // Clear the static cache before each test to prevent memory leaks
-        WorkflowBus.ClearMethodCache();
+        TrainBus.ClearMethodCache();
         _serviceProvider = TestSetup.CreateMemoryOnlyTestServiceProvider();
     }
 
@@ -33,7 +33,7 @@ public class WorkflowBusReflectionCacheTests
         }
 
         // Clear the static cache after each test to prevent memory leaks
-        WorkflowBus.ClearMethodCache();
+        TrainBus.ClearMethodCache();
 
         // Force garbage collection to ensure cleanup
         GC.Collect();
@@ -42,14 +42,14 @@ public class WorkflowBusReflectionCacheTests
     }
 
     [Test]
-    public async Task WorkflowBus_ShouldCacheReflectionLookups()
+    public async Task TrainBus_ShouldCacheReflectionLookups()
     {
         // Arrange
-        var workflowBus = _serviceProvider.GetRequiredService<IWorkflowBus>();
+        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
         var input = MemoryTestModelFactory.CreateInput();
 
         // Warm up the cache with first execution
-        await workflowBus.RunAsync<MemoryTestOutput>(input);
+        await trainBus.RunAsync<MemoryTestOutput>(input);
 
         // Act - Measure subsequent executions that should use cached methods
         var stopwatch = Stopwatch.StartNew();
@@ -57,7 +57,7 @@ public class WorkflowBusReflectionCacheTests
         for (int i = 0; i < 100; i++)
         {
             var testInput = MemoryTestModelFactory.CreateInput($"cache_test_{i}");
-            var result = await workflowBus.RunAsync<MemoryTestOutput>(testInput);
+            var result = await trainBus.RunAsync<MemoryTestOutput>(testInput);
             result.Should().NotBeNull();
         }
 
@@ -76,24 +76,24 @@ public class WorkflowBusReflectionCacheTests
     }
 
     [Test]
-    public async Task WorkflowBus_ShouldNotLeakMemory_WithRepeatedExecutions()
+    public async Task TrainBus_ShouldNotLeakMemory_WithRepeatedExecutions()
     {
         // Arrange
-        var workflowBus = _serviceProvider.GetRequiredService<IWorkflowBus>();
+        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
 
         // Act & Assert
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
             {
-                // Execute many workflows to test reflection caching memory behavior
+                // Execute many trains to test reflection caching memory behavior
                 for (int i = 0; i < 200; i++)
                 {
                     var testInput = MemoryTestModelFactory.CreateInput($"reflection_test_{i}");
-                    var output = await workflowBus.RunAsync<MemoryTestOutput>(testInput);
+                    var output = await trainBus.RunAsync<MemoryTestOutput>(testInput);
                     output.Should().NotBeNull();
                 }
             },
-            "WorkflowBus_RepeatedExecutions_MemoryTest"
+            "TrainBus_RepeatedExecutions_MemoryTest"
         );
 
         Console.WriteLine(result.GetSummary());
@@ -108,10 +108,10 @@ public class WorkflowBusReflectionCacheTests
     }
 
     [Test]
-    public async Task WorkflowBus_ShouldHandleConcurrentExecutions_WithoutMemoryLeaks()
+    public async Task TrainBus_ShouldHandleConcurrentExecutions_WithoutMemoryLeaks()
     {
         // Arrange
-        var workflowBus = _serviceProvider.GetRequiredService<IWorkflowBus>();
+        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
         const int concurrentTasks = 20;
         const int executionsPerTask = 10;
 
@@ -128,14 +128,14 @@ public class WorkflowBusReflectionCacheTests
                             var testInput = MemoryTestModelFactory.CreateInput(
                                 $"concurrent_{taskId}_{i}"
                             );
-                            var output = await workflowBus.RunAsync<MemoryTestOutput>(testInput);
+                            var output = await trainBus.RunAsync<MemoryTestOutput>(testInput);
                             output.Should().NotBeNull();
                         }
                     });
 
                 await Task.WhenAll(tasks);
             },
-            "WorkflowBus_ConcurrentExecutions_MemoryTest"
+            "TrainBus_ConcurrentExecutions_MemoryTest"
         );
 
         Console.WriteLine(result.GetSummary());
@@ -150,18 +150,18 @@ public class WorkflowBusReflectionCacheTests
     }
 
     [Test]
-    public async Task WorkflowBus_PerformanceComparison_CachedVsUncached()
+    public async Task TrainBus_PerformanceComparison_CachedVsUncached()
     {
         // This test simulates the performance difference between cached and uncached lookups
         // Since we can't easily disable caching, we compare cold starts vs warm executions
 
         // Arrange
-        var workflowBus = _serviceProvider.GetRequiredService<IWorkflowBus>();
+        var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
 
         // Act - Cold start (first execution - cache miss)
         var coldStartStopwatch = Stopwatch.StartNew();
         var coldInput = MemoryTestModelFactory.CreateInput("cold_start");
-        await workflowBus.RunAsync<MemoryTestOutput>(coldInput);
+        await trainBus.RunAsync<MemoryTestOutput>(coldInput);
         coldStartStopwatch.Stop();
 
         // Warm executions (cache hits)
@@ -169,7 +169,7 @@ public class WorkflowBusReflectionCacheTests
         for (int i = 0; i < 10; i++)
         {
             var warmInput = MemoryTestModelFactory.CreateInput($"warm_{i}");
-            await workflowBus.RunAsync<MemoryTestOutput>(warmInput);
+            await trainBus.RunAsync<MemoryTestOutput>(warmInput);
         }
 
         warmStopwatch.Stop();
@@ -191,7 +191,7 @@ public class WorkflowBusReflectionCacheTests
     }
 
     [Test]
-    public async Task WorkflowBus_ShouldMaintainCacheEfficiency_AcrossServiceScopes()
+    public async Task TrainBus_ShouldMaintainCacheEfficiency_AcrossServiceScopes()
     {
         // Test that the static cache works across different service provider scopes
 
@@ -201,14 +201,14 @@ public class WorkflowBusReflectionCacheTests
         {
             using var scopedProvider = (IDisposable)TestSetup.CreateMemoryOnlyTestServiceProvider();
             var serviceProvider = (IServiceProvider)scopedProvider;
-            var workflowBus = serviceProvider.GetRequiredService<IWorkflowBus>();
+            var trainBus = serviceProvider.GetRequiredService<ITrainBus>();
 
             var stopwatch = Stopwatch.StartNew();
 
             for (int i = 0; i < 20; i++)
             {
                 var testInput = MemoryTestModelFactory.CreateInput($"scope_{scope}_item_{i}");
-                var result = await workflowBus.RunAsync<MemoryTestOutput>(testInput);
+                var result = await trainBus.RunAsync<MemoryTestOutput>(testInput);
                 result.Should().NotBeNull();
             }
 

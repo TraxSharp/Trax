@@ -67,7 +67,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// </summary>
     internal string TrainName =>
         GetType().FullName
-        ?? throw new WorkflowException($"Could not find FullName for ({GetType().Name})");
+        ?? throw new TrainException($"Could not find FullName for ({GetType().Name})");
 
     /// <summary>
     /// Overrides the base Train Run method to add database tracking and logging capabilities.

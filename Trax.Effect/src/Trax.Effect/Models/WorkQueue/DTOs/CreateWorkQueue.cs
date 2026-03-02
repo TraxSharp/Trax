@@ -6,12 +6,12 @@ namespace Trax.Effect.Models.WorkQueue.DTOs;
 public class CreateWorkQueue
 {
     /// <summary>
-    /// The fully qualified workflow type name to execute.
+    /// The fully qualified train type name to execute.
     /// </summary>
-    public required string WorkflowName { get; set; }
+    public required string TrainName { get; set; }
 
     /// <summary>
-    /// Serialized workflow input (JSON). Same format as Manifest.Properties.
+    /// Serialized train input (JSON). Same format as Manifest.Properties.
     /// </summary>
     public string? Input { get; set; }
 

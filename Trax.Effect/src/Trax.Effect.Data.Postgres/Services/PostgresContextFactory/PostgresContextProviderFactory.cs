@@ -67,7 +67,7 @@ public class PostgresContextProviderFactory(
     /// It increments the Count property to track the number of contexts created.
     ///
     /// This method is called by the EffectRunner when it needs to create a new effect provider
-    /// for tracking workflow metadata.
+    /// for tracking train metadata.
     ///
     /// The context is created with the configuration provided to the DbContextFactory,
     /// which typically includes the connection string and other PostgreSQL-specific options.

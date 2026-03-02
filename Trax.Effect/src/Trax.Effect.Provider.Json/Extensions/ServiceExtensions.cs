@@ -15,7 +15,7 @@ namespace Trax.Effect.Provider.Json.Extensions;
 /// of Trax.Effect.Json services with the dependency injection system.
 ///
 /// These extensions enable JSON serialization support for the Trax.Effect system,
-/// allowing workflow models to be serialized to and from JSON format.
+/// allowing train models to be serialized to and from JSON format.
 ///
 /// By using these extensions, applications can easily configure and use the
 /// Trax.Effect.Json system with minimal boilerplate code.

@@ -27,7 +27,7 @@ public abstract class EffectStep<TIn, TOut> : Step<TIn, TOut>, IEffectStep<TIn, 
     )
     {
         if (train is not ServiceTrain<TTrainIn, TTrainOut> serviceTrain)
-            throw new WorkflowException(
+            throw new TrainException(
                 $"Cannot run an EffectStep ({GetType().Name}) against a non-ServiceTrain ({train.GetType().Name})"
             );
 
@@ -40,7 +40,7 @@ public abstract class EffectStep<TIn, TOut> : Step<TIn, TOut>, IEffectStep<TIn, 
     )
     {
         if (serviceTrain.Metadata is null)
-            throw new WorkflowException(
+            throw new TrainException(
                 "ServiceTrain Metadata cannot be null. Something has gone horribly wrong."
             );
 

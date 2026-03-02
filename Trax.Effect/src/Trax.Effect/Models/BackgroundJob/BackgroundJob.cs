@@ -31,7 +31,7 @@ public class BackgroundJob : IModel
     public long MetadataId { get; set; }
 
     /// <summary>
-    /// Serialized workflow input (JSON), for ad-hoc executions where input is provided directly.
+    /// Serialized train input (JSON), for ad-hoc executions where input is provided directly.
     /// </summary>
     [Column("input")]
     public string? Input { get; set; }

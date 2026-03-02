@@ -1,6 +1,6 @@
 # Trax.Effect
 
-Effect system for Trax workflows — side-effect management, data persistence, and service integration.
+Effect system for Trax trains — side-effect management, data persistence, and service integration.
 
 ## Installation
 

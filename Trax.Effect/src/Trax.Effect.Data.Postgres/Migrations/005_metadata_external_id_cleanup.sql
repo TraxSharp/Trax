@@ -1,1 +1,1 @@
-drop index trax.workflow_external_id_uindex;
+drop index trax.train_external_id_uindex;

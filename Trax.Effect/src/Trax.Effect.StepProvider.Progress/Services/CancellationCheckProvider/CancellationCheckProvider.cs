@@ -8,9 +8,9 @@ namespace Trax.Effect.StepProvider.Progress.Services.CancellationCheckProvider;
 public class CancellationCheckProvider(IDataContextProviderFactory dataContextFactory)
     : ICancellationCheckProvider
 {
-    public async Task BeforeStepExecution<TIn, TOut, TWorkflowIn, TWorkflowOut>(
+    public async Task BeforeStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectStep<TIn, TOut> effectStep,
-        ServiceTrain<TWorkflowIn, TWorkflowOut> serviceTrain,
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
         CancellationToken cancellationToken
     )
     {
@@ -25,12 +25,12 @@ public class CancellationCheckProvider(IDataContextProviderFactory dataContextFa
             .FirstOrDefaultAsync(cancellationToken);
 
         if (cancelRequested)
-            throw new OperationCanceledException("Workflow cancellation requested via dashboard.");
+            throw new OperationCanceledException("Train cancellation requested via dashboard.");
     }
 
-    public Task AfterStepExecution<TIn, TOut, TWorkflowIn, TWorkflowOut>(
+    public Task AfterStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectStep<TIn, TOut> effectStep,
-        ServiceTrain<TWorkflowIn, TWorkflowOut> serviceTrain,
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
         CancellationToken cancellationToken
     ) => Task.CompletedTask;
 

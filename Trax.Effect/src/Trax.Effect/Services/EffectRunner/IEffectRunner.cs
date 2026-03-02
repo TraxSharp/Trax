@@ -4,11 +4,11 @@ namespace Trax.Effect.Services.EffectRunner;
 
 /// <summary>
 /// Defines the contract for a component that coordinates tracking and persistence
-/// of workflow metadata across multiple effect providers.
+/// of train metadata across multiple effect providers.
 /// </summary>
 /// <remarks>
 /// The IEffectRunner interface is a key abstraction in the Trax.Effect system.
-/// It serves as a facade over multiple effect providers, allowing workflows to interact
+/// It serves as a facade over multiple effect providers, allowing trains to interact
 /// with a single component rather than managing multiple providers directly.
 ///
 /// Implementations of this interface are responsible for:
@@ -40,7 +40,7 @@ public interface IEffectRunner : IDisposable
     /// for tracking. The actual persistence of the model will occur when
     /// SaveChanges is called.
     ///
-    /// Models typically represent workflow metadata, such as execution details,
+    /// Models typically represent train metadata, such as execution details,
     /// inputs, outputs, and error information.
     /// </remarks>
     Task Track(IModel model);

@@ -42,7 +42,7 @@ public static class ServiceExtensions
     /// <param name="connectionString">The connection string to the PostgreSQL database</param>
     /// <returns>The configuration builder for method chaining</returns>
     /// <remarks>
-    /// This method configures the Trax.Effect system to use PostgreSQL for workflow metadata persistence.
+    /// This method configures the Trax.Effect system to use PostgreSQL for train metadata persistence.
     /// It performs the following steps:
     ///
     /// 1. Migrates the database schema to the latest version using the DatabaseMigrator
@@ -82,7 +82,7 @@ public static class ServiceExtensions
                         dataSource,
                         o =>
                         {
-                            o.MapEnum<WorkflowState>("workflow_state", "trax");
+                            o.MapEnum<TrainState>("train_state", "trax");
                             o.MapEnum<LogLevel>("log_level", "trax");
                             o.MapEnum<ScheduleType>("schedule_type", "trax");
                             o.MapEnum<DeadLetterStatus>("dead_letter_status", "trax");

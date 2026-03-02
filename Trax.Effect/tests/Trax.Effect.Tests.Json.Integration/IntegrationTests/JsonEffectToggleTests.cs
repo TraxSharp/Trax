@@ -37,7 +37,7 @@ public class JsonEffectToggleTests
                     .AddJsonEffect()
                     .AddStepLogger(serializeStepData: true)
             )
-            .AddTransientTraxRoute<IToggleTestWorkflow, ToggleTestWorkflow>();
+            .AddTransientTraxRoute<IToggleTestTrain, ToggleTestTrain>();
 
         _serviceProvider = services.BuildServiceProvider();
     }
@@ -58,11 +58,11 @@ public class JsonEffectToggleTests
 
         // Act
         using var scope = _serviceProvider.CreateScope();
-        var workflow = scope.ServiceProvider.GetRequiredService<IToggleTestWorkflow>();
-        await workflow.Run(Unit.Default);
+        var train = scope.ServiceProvider.GetRequiredService<IToggleTestTrain>();
+        await train.Run(Unit.Default);
 
         // Assert
-        workflow.Metadata!.WorkflowState.Should().Be(WorkflowState.Completed);
+        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
 
         var jsonLogCountAfter = GetJsonEffectLogCount(arrayProvider);
         (jsonLogCountAfter - jsonLogCountBefore)
@@ -83,11 +83,11 @@ public class JsonEffectToggleTests
 
         // Act
         using var scope = _serviceProvider.CreateScope();
-        var workflow = scope.ServiceProvider.GetRequiredService<IToggleTestWorkflow>();
-        await workflow.Run(Unit.Default);
+        var train = scope.ServiceProvider.GetRequiredService<IToggleTestTrain>();
+        await train.Run(Unit.Default);
 
-        // Assert - workflow still completes successfully
-        workflow.Metadata!.WorkflowState.Should().Be(WorkflowState.Completed);
+        // Assert - train still completes successfully
+        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
 
         // But no new JSON logs should have been written
         var jsonLogCountAfter = GetJsonEffectLogCount(arrayProvider);
@@ -109,11 +109,11 @@ public class JsonEffectToggleTests
 
         // Act
         using var scope = _serviceProvider.CreateScope();
-        var workflow = scope.ServiceProvider.GetRequiredService<IToggleTestWorkflow>();
-        await workflow.Run(Unit.Default);
+        var train = scope.ServiceProvider.GetRequiredService<IToggleTestTrain>();
+        await train.Run(Unit.Default);
 
         // Assert
-        workflow.Metadata!.WorkflowState.Should().Be(WorkflowState.Completed);
+        train.Metadata!.TrainState.Should().Be(TrainState.Completed);
 
         var jsonLogCountAfter = GetJsonEffectLogCount(arrayProvider);
         (jsonLogCountAfter - jsonLogCountBefore)
@@ -127,11 +127,11 @@ public class JsonEffectToggleTests
             .SelectMany(logger => logger.Logs.Where(log => log.Category == JsonEffectCategory))
             .Count();
 
-    private class ToggleTestWorkflow : ServiceTrain<Unit, Unit>, IToggleTestWorkflow
+    private class ToggleTestTrain : ServiceTrain<Unit, Unit>, IToggleTestTrain
     {
         protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
             Activate(input).Resolve();
     }
 
-    private interface IToggleTestWorkflow : IServiceTrain<Unit, Unit> { }
+    private interface IToggleTestTrain : IServiceTrain<Unit, Unit> { }
 }

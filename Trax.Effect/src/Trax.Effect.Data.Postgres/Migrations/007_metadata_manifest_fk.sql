@@ -1,6 +1,6 @@
 -- Add manifest_id foreign key column to metadata table
--- This establishes the relationship between workflow executions (metadata) and job definitions (manifest)
--- A single manifest (job definition) can have many metadata records (workflow executions)
+-- This establishes the relationship between train executions (metadata) and job definitions (manifest)
+-- A single manifest (job definition) can have many metadata records (train executions)
 
 -- Add the manifest_id column to the metadata table
 alter table trax.metadata

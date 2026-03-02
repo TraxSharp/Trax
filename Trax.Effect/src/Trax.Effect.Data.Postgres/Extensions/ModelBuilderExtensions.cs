@@ -32,7 +32,7 @@ public static class ModelBuilderExtensions
     /// <returns>The configured model builder for method chaining</returns>
     /// <remarks>
     /// This method configures the model builder to map .NET enums to PostgreSQL enum types.
-    /// It specifically maps the WorkflowState and LogLevel enums, which are used throughout
+    /// It specifically maps the TrainState and LogLevel enums, which are used throughout
     /// the Trax.Effect system.
     ///
     /// PostgreSQL enum types provide type safety at the database level and can improve
@@ -42,7 +42,7 @@ public static class ModelBuilderExtensions
     /// </remarks>
     public static ModelBuilder AddPostgresEnums(this ModelBuilder modelBuilder)
     {
-        modelBuilder.HasPostgresEnum<WorkflowState>(schema: "trax");
+        modelBuilder.HasPostgresEnum<TrainState>(schema: "trax");
         modelBuilder.HasPostgresEnum<LogLevel>(schema: "trax");
         modelBuilder.HasPostgresEnum<ScheduleType>(schema: "trax");
         modelBuilder.HasPostgresEnum<DeadLetterStatus>(schema: "trax");
@@ -60,7 +60,7 @@ public static class ModelBuilderExtensions
     /// This method creates a new NpgsqlDataSource with the specified connection string
     /// and configures it with the necessary enum mappings for the Trax.Effect system.
     ///
-    /// The data source is configured to map the WorkflowState and LogLevel enums,
+    /// The data source is configured to map the TrainState and LogLevel enums,
     /// ensuring that they are properly handled when reading from and writing to the database.
     ///
     /// This method is typically called when setting up the DbContextFactory in the
@@ -70,7 +70,7 @@ public static class ModelBuilderExtensions
     {
         var npgsqlDataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
 
-        npgsqlDataSourceBuilder.MapEnum<WorkflowState>("trax.workflow_state");
+        npgsqlDataSourceBuilder.MapEnum<TrainState>("trax.train_state");
         npgsqlDataSourceBuilder.MapEnum<LogLevel>("trax.log_level");
         npgsqlDataSourceBuilder.MapEnum<ScheduleType>("trax.schedule_type");
         npgsqlDataSourceBuilder.MapEnum<DeadLetterStatus>("trax.dead_letter_status");

@@ -14,8 +14,8 @@ public class StepMetadata : IModel
     [Column("id")]
     public long Id { get; private set; }
 
-    [Column("workflow_name")]
-    public string WorkflowName { get; private set; }
+    [Column("train_name")]
+    public string TrainName { get; private set; }
 
     [Column("name")]
     public string Name { get; private set; }
@@ -23,8 +23,8 @@ public class StepMetadata : IModel
     [Column("external_id")]
     public string ExternalId { get; private set; }
 
-    [Column("workflow_external_id")]
-    public string WorkflowExternalId { get; private set; }
+    [Column("train_external_id")]
+    public string TrainExternalId { get; private set; }
 
     [Column("start_time_utc")]
     public DateTime? StartTimeUtc { get; set; }
@@ -61,8 +61,8 @@ public class StepMetadata : IModel
         {
             Name = stepMetadata.Name,
             ExternalId = stepMetadata.ExternalId,
-            WorkflowExternalId = metadata.ExternalId,
-            WorkflowName = metadata.Name,
+            TrainExternalId = metadata.ExternalId,
+            TrainName = metadata.Name,
             StartTimeUtc = stepMetadata.StartTimeUtc,
             EndTimeUtc = stepMetadata.EndTimeUtc,
             InputType = stepMetadata.InputType,

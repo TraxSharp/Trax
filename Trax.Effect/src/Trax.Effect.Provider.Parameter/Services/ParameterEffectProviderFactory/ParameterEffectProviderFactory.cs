@@ -50,7 +50,7 @@ public class ParameterEffectProviderFactory(
     /// <returns>A new instance of IEffectProvider</returns>
     /// <remarks>
     /// This method creates a new instance of ParameterEffect, which is an implementation of
-    /// IEffectProvider that serializes workflow input and output parameters to JSON format.
+    /// IEffectProvider that serializes train input and output parameters to JSON format.
     ///
     /// The method performs the following steps:
     /// 1. Creates a new instance of ParameterEffect with the JSON serialization options from the configuration

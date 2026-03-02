@@ -22,7 +22,7 @@ public class TraxEffectConfigurationBuilder(
 
     public LogLevel LogLevel { get; set; } = LogLevel.Debug;
 
-    public JsonSerializerOptions WorkflowParameterJsonSerializerOptions { get; set; } =
+    public JsonSerializerOptions TrainParameterJsonSerializerOptions { get; set; } =
         TraxJsonSerializationOptions.Default;
 
     public JsonSerializerSettings NewtonsoftJsonSerializerSettings { get; set; } =
@@ -32,14 +32,14 @@ public class TraxEffectConfigurationBuilder(
     {
         var configuration = new TraxEffectConfiguration.TraxEffectConfiguration
         {
-            SystemJsonSerializerOptions = WorkflowParameterJsonSerializerOptions,
+            SystemJsonSerializerOptions = TrainParameterJsonSerializerOptions,
             NewtonsoftJsonSerializerSettings = NewtonsoftJsonSerializerSettings,
             SerializeStepData = SerializeStepData,
             LogLevel = LogLevel,
         };
 
         TraxEffectConfiguration.TraxEffectConfiguration.StaticSystemJsonSerializerOptions =
-            WorkflowParameterJsonSerializerOptions;
+            TrainParameterJsonSerializerOptions;
 
         return configuration;
     }

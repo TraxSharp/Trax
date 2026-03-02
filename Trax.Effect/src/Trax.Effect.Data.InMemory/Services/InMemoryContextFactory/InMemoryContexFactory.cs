@@ -47,7 +47,7 @@ public class InMemoryContextProviderFactory : IDataContextProviderFactory
     /// for testing and development scenarios where database setup should be simple.
     ///
     /// This method is called by the EffectRunner when it needs to create
-    /// a new effect provider for tracking workflow metadata.
+    /// a new effect provider for tracking train metadata.
     /// </remarks>
     public IDataContext Create() =>
         new InMemoryContext.InMemoryContext(
@@ -85,7 +85,7 @@ public class InMemoryContextProviderFactory : IDataContextProviderFactory
     /// or IEffectProviderFactory.
     ///
     /// This method is called by the EffectRunner when it needs to create a new effect provider
-    /// for tracking workflow metadata.
+    /// for tracking train metadata.
     /// </remarks>
     IEffectProvider IEffectProviderFactory.Create() => Create();
 }

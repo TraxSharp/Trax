@@ -1,13 +1,13 @@
-namespace Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows.TestModels;
+namespace Trax.Effect.Tests.MemoryLeak.Integration.TestTrains.TestModels;
 
 /// <summary>
-/// Base input model for memory test workflows.
+/// Base input model for memory test trains.
 /// Includes configurable data size to amplify memory allocation patterns.
 /// </summary>
 public abstract record BaseMemoryTestInput
 {
     /// <summary>
-    /// Unique identifier for the workflow execution.
+    /// Unique identifier for the train execution.
     /// </summary>
     public required string Id { get; init; }
 
@@ -34,28 +34,28 @@ public abstract record BaseMemoryTestInput
 }
 
 /// <summary>
-/// Input model for the standard memory test workflow.
+/// Input model for the standard memory test train.
 /// </summary>
 public record MemoryTestInput : BaseMemoryTestInput;
 
 /// <summary>
-/// Input model for the failing test workflow.
+/// Input model for the failing test train.
 /// </summary>
 public record FailingTestInput : BaseMemoryTestInput;
 
 /// <summary>
-/// Output model for memory test workflows.
+/// Output model for memory test trains.
 /// Contains large data objects to test JsonDocument serialization and disposal.
 /// </summary>
 public record MemoryTestOutput
 {
     /// <summary>
-    /// Unique identifier for the workflow execution.
+    /// Unique identifier for the train execution.
     /// </summary>
     public required string Id { get; init; }
 
     /// <summary>
-    /// Timestamp when the workflow was processed.
+    /// Timestamp when the train was processed.
     /// </summary>
     public DateTime ProcessedAt { get; init; }
 
@@ -66,12 +66,12 @@ public record MemoryTestOutput
     public required string ProcessedData { get; init; }
 
     /// <summary>
-    /// Indicates if the workflow completed successfully.
+    /// Indicates if the train completed successfully.
     /// </summary>
     public bool Success { get; init; }
 
     /// <summary>
-    /// Result message from the workflow.
+    /// Result message from the train.
     /// </summary>
     public required string Message { get; init; }
 
@@ -82,18 +82,18 @@ public record MemoryTestOutput
 }
 
 /// <summary>
-/// Input model for nested workflow tests.
-/// Used to test hierarchical workflow memory patterns.
+/// Input model for nested train tests.
+/// Used to test hierarchical train memory patterns.
 /// </summary>
 public record NestedTestInput
 {
     /// <summary>
-    /// Unique identifier for the parent workflow.
+    /// Unique identifier for the parent train.
     /// </summary>
     public required string Id { get; init; }
 
     /// <summary>
-    /// Collection of child workflow inputs.
+    /// Collection of child train inputs.
     /// </summary>
     public required List<MemoryTestInput> ChildInputs { get; init; }
 
@@ -104,32 +104,32 @@ public record NestedTestInput
 }
 
 /// <summary>
-/// Output model for nested workflow tests.
+/// Output model for nested train tests.
 /// </summary>
 public record NestedTestOutput
 {
     /// <summary>
-    /// Unique identifier for the parent workflow.
+    /// Unique identifier for the parent train.
     /// </summary>
     public required string Id { get; init; }
 
     /// <summary>
-    /// Timestamp when the workflow was processed.
+    /// Timestamp when the train was processed.
     /// </summary>
     public DateTime ProcessedAt { get; init; }
 
     /// <summary>
-    /// Results from all child workflows.
+    /// Results from all child trains.
     /// </summary>
     public required List<MemoryTestOutput> ChildResults { get; init; }
 
     /// <summary>
-    /// Indicates if the workflow completed successfully.
+    /// Indicates if the train completed successfully.
     /// </summary>
     public bool Success { get; init; }
 
     /// <summary>
-    /// Result message from the workflow.
+    /// Result message from the train.
     /// </summary>
     public required string Message { get; init; }
 }
@@ -204,10 +204,10 @@ public static class MemoryTestModelFactory
     }
 
     /// <summary>
-    /// Creates a nested test input with multiple child workflows.
+    /// Creates a nested test input with multiple child trains.
     /// </summary>
     /// <param name="id">Unique identifier</param>
-    /// <param name="childCount">Number of child workflows</param>
+    /// <param name="childCount">Number of child trains</param>
     /// <param name="childDataSizeBytes">Size of data for each child</param>
     /// <returns>Configured NestedTestInput</returns>
     public static NestedTestInput CreateNestedInput(
@@ -222,7 +222,7 @@ public static class MemoryTestModelFactory
                 CreateInput(
                     id: $"child_{i}",
                     dataSizeBytes: childDataSizeBytes,
-                    description: $"Child workflow {i}"
+                    description: $"Child train {i}"
                 )
             )
             .ToList();

@@ -45,7 +45,7 @@ public class PostgresContext(DbContextOptions<PostgresContext> options)
     /// This method overrides the base OnModelCreating method to add PostgreSQL-specific configurations:
     ///
     /// 1. Sets the default schema to "trax" to isolate Trax.Core tables
-    /// 2. Adds PostgreSQL enum mappings for workflow states and log levels
+    /// 2. Adds PostgreSQL enum mappings for train states and log levels
     /// 3. Applies UTC date/time conversion to ensure consistent timestamp handling
     ///
     /// These configurations ensure that the PostgreSQL database is properly set up to work with

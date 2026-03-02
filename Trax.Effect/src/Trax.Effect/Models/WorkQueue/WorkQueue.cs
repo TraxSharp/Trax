@@ -8,7 +8,7 @@ using Trax.Effect.Models.WorkQueue.DTOs;
 namespace Trax.Effect.Models.WorkQueue;
 
 /// <summary>
-/// Represents a queued workflow execution — the intermediary between scheduling and dispatch.
+/// Represents a queued train execution — the intermediary between scheduling and dispatch.
 /// </summary>
 /// <remarks>
 /// A WorkQueue entry decouples "intent to run" from "actual execution". All sources
@@ -30,13 +30,13 @@ public class WorkQueue : IModel
     public string ExternalId { get; set; }
 
     /// <summary>
-    /// The fully qualified workflow type name to execute.
+    /// The fully qualified train type name to execute.
     /// </summary>
-    [Column("workflow_name")]
-    public string WorkflowName { get; set; }
+    [Column("train_name")]
+    public string TrainName { get; set; }
 
     /// <summary>
-    /// Serialized workflow input (JSON). Same format as Manifest.Properties.
+    /// Serialized train input (JSON). Same format as Manifest.Properties.
     /// </summary>
     [Column("input")]
     public string? Input { get; set; }
@@ -109,7 +109,7 @@ public class WorkQueue : IModel
         return new WorkQueue
         {
             ExternalId = Guid.NewGuid().ToString("N"),
-            WorkflowName = dto.WorkflowName,
+            TrainName = dto.TrainName,
             Input = dto.Input,
             InputTypeName = dto.InputTypeName,
             ManifestId = dto.ManifestId,

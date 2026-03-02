@@ -16,12 +16,12 @@ namespace Trax.Effect.Data.Services.DataContext;
 
 /// <summary>
 /// Defines the contract for a database context that integrates with the Trax.Effect system.
-/// This interface extends IEffectProvider to enable database persistence of workflow metadata.
+/// This interface extends IEffectProvider to enable database persistence of train metadata.
 /// </summary>
 /// <remarks>
 /// The IDataContext interface is a central abstraction in the Trax.Effect.Data system.
 /// It serves as a bridge between the Trax.Effect tracking system and database persistence,
-/// allowing workflow metadata to be stored in various database systems.
+/// allowing train metadata to be stored in various database systems.
 ///
 /// This interface:
 /// 1. Extends IEffectProvider to integrate with the EffectRunner
@@ -37,37 +37,37 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     #region Tables
 
     /// <summary>
-    /// Gets the DbSet for workflow metadata records.
+    /// Gets the DbSet for train metadata records.
     /// </summary>
     /// <remarks>
     /// This property provides access to the Metadata table, which stores information about
-    /// workflow executions, including inputs, outputs, state, and timing information.
+    /// train executions, including inputs, outputs, state, and timing information.
     ///
-    /// The Metadatas DbSet is the primary storage mechanism for workflow tracking data
-    /// and is used by the EffectRunner to persist workflow execution details.
+    /// The Metadatas DbSet is the primary storage mechanism for train tracking data
+    /// and is used by the EffectRunner to persist train execution details.
     /// </remarks>
     DbSet<Metadata> Metadatas { get; }
 
     /// <summary>
-    /// Gets the DbSet for workflow log entries.
+    /// Gets the DbSet for train log entries.
     /// </summary>
     /// <remarks>
     /// This property provides access to the Log table, which stores detailed log entries
-    /// generated during workflow execution.
+    /// generated during train execution.
     ///
-    /// The Logs DbSet allows for fine-grained tracking of workflow execution steps
+    /// The Logs DbSet allows for fine-grained tracking of train execution steps
     /// and is particularly useful for debugging and auditing.
     /// </remarks>
     DbSet<Log> Logs { get; }
 
     /// <summary>
-    /// Gets the DbSet for workflow manifest records.
+    /// Gets the DbSet for train manifest records.
     /// </summary>
     /// <remarks>
     /// This property provides access to the Manifest table, which stores configuration
-    /// and property information for workflows.
+    /// and property information for trains.
     ///
-    /// The Manifests DbSet allows for storing workflow configurations and properties
+    /// The Manifests DbSet allows for storing train configurations and properties
     /// that can be serialized/deserialized as JSONB.
     /// </remarks>
     DbSet<Manifest> Manifests { get; }

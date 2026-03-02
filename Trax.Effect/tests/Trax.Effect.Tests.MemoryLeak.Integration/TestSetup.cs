@@ -5,7 +5,7 @@ using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
-using Trax.Mediator.Services.WorkflowBus;
+using Trax.Mediator.Services.TrainBus;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration;
 
@@ -41,9 +41,9 @@ public static class TestSetup
             options.AddJsonEffect();
 
             // Add parameter effect provider
-            options.SaveWorkflowParameters();
+            options.SaveTrainParameters();
 
-            // Add workflow bus and mediator for testing workflow execution
+            // Add train bus and mediator for testing train execution
             options.AddServiceTrainBus(assemblies: [typeof(AssemblyMarker).Assembly]);
         });
 
@@ -115,7 +115,7 @@ public static class TestSetup
         {
             options.AddInMemoryEffect();
             options.AddJsonEffect();
-            options.SaveWorkflowParameters();
+            options.SaveTrainParameters();
         });
 
         return services;
@@ -127,7 +127,7 @@ public static class TestSetup
     /// </summary>
     /// <remarks>
     /// This method:
-    /// 1. Clears the static WorkflowBus method cache
+    /// 1. Clears the static TrainBus method cache
     /// 2. Forces garbage collection to ensure cleanup
     /// 3. Provides a centralized cleanup point for all memory leak tests
     /// </remarks>
@@ -136,7 +136,7 @@ public static class TestSetup
         try
         {
             // Clear the static cache that can cause memory leaks
-            WorkflowBus.ClearMethodCache();
+            TrainBus.ClearMethodCache();
 
             // Force garbage collection to ensure cleanup
             GC.Collect();

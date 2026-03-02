@@ -28,7 +28,7 @@ public class WorkQueueTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = "Trax.Core.Tests.TestWorkflow",
+                TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
             }
@@ -43,7 +43,7 @@ public class WorkQueueTests : TestSetup
 
         // Assert
         found.Should().NotBeNull();
-        found!.WorkflowName.Should().Be("Trax.Core.Tests.TestWorkflow");
+        found!.TrainName.Should().Be("Trax.Core.Tests.TestTrain");
         found.Input.Should().Be("""{"value": "test"}""");
         found.InputTypeName.Should().Be("Trax.Core.Tests.TestInput");
         found.Status.Should().Be(WorkQueueStatus.Queued);
@@ -67,7 +67,7 @@ public class WorkQueueTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = "Trax.Core.Tests.TestWorkflow",
+                TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"priority-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
                 Priority = 15,
@@ -98,7 +98,7 @@ public class WorkQueueTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = "Trax.Core.Tests.TestWorkflow",
+                TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"clamp-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
                 Priority = 50,
@@ -129,7 +129,7 @@ public class WorkQueueTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = "Trax.Core.Tests.TestWorkflow",
+                TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"negative-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
                 Priority = -5,
@@ -184,7 +184,7 @@ public class WorkQueueTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = typeof(WorkQueueTests).FullName!,
+                TrainName = typeof(WorkQueueTests).FullName!,
                 Input = """{"value":"test"}""",
                 InputTypeName = typeof(WorkQueueTests).FullName,
                 ManifestId = manifest.Id,
@@ -219,7 +219,7 @@ public class WorkQueueTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = "Trax.Core.Tests.AdHocWorkflow",
+                TrainName = "Trax.Core.Tests.AdHocTrain",
                 Input = """{"key":"value"}""",
                 InputTypeName = "Trax.Core.Tests.AdHocInput",
             }
@@ -250,7 +250,7 @@ public class WorkQueueTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = "Trax.Core.Tests.TestWorkflow",
+                TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"dispatch-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
             }
@@ -262,7 +262,7 @@ public class WorkQueueTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = "Trax.Core.Tests.TestWorkflow",
+                Name = "Trax.Core.Tests.TestTrain",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new { value = "dispatch-test" },
             }
@@ -303,7 +303,7 @@ public class WorkQueueTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = "Trax.Core.Tests.TestWorkflow",
+                TrainName = "Trax.Core.Tests.TestTrain",
                 Input = """{"value":"cancel-test"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
             }
@@ -339,7 +339,7 @@ public class WorkQueueTests : TestSetup
         var queuedEntry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = "Trax.Core.Tests.QueuedWorkflow",
+                TrainName = "Trax.Core.Tests.QueuedTrain",
                 Input = """{"status":"queued"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
             }
@@ -348,7 +348,7 @@ public class WorkQueueTests : TestSetup
         var cancelledEntry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = "Trax.Core.Tests.CancelledWorkflow",
+                TrainName = "Trax.Core.Tests.CancelledTrain",
                 Input = """{"status":"cancelled"}""",
                 InputTypeName = "Trax.Core.Tests.TestInput",
             }
@@ -392,7 +392,7 @@ public class WorkQueueTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = "Trax.Core.Tests.JsonTestWorkflow",
+                TrainName = "Trax.Core.Tests.JsonTestTrain",
                 Input = complexJson,
                 InputTypeName = "Trax.Core.Tests.ComplexInput",
             }

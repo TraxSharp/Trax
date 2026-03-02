@@ -284,7 +284,7 @@ public class ManifestTests : TestSetup
         await context.Track(manifest);
         await context.SaveChanges(CancellationToken.None);
 
-        // Create metadata (workflow execution) linked to the manifest
+        // Create metadata (train execution) linked to the manifest
         var metadata = Metadata.Create(
             new CreateMetadata
             {
@@ -349,7 +349,7 @@ public class ManifestTests : TestSetup
         await context.Track(manifest);
         await context.SaveChanges(CancellationToken.None);
 
-        // Create multiple metadata records (workflow executions) linked to the same manifest
+        // Create multiple metadata records (train executions) linked to the same manifest
         var metadata1 = Metadata.Create(
             new CreateMetadata
             {

@@ -224,15 +224,15 @@ public class EffectRunnerRegistryTests
 
     private class StubStepEffectProvider : IStepEffectProvider
     {
-        public Task BeforeStepExecution<TIn, TOut, TWorkflowIn, TWorkflowOut>(
+        public Task BeforeStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
             EffectStep<TIn, TOut> effectStep,
-            ServiceTrain<TWorkflowIn, TWorkflowOut> serviceTrain,
+            ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
             CancellationToken cancellationToken
         ) => Task.CompletedTask;
 
-        public Task AfterStepExecution<TIn, TOut, TWorkflowIn, TWorkflowOut>(
+        public Task AfterStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
             EffectStep<TIn, TOut> effectStep,
-            ServiceTrain<TWorkflowIn, TWorkflowOut> serviceTrain,
+            ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
             CancellationToken cancellationToken
         ) => Task.CompletedTask;
 

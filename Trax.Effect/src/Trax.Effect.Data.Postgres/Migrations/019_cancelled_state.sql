@@ -1,1 +1,1 @@
-ALTER TYPE trax.workflow_state ADD VALUE IF NOT EXISTS 'cancelled';
+ALTER TYPE trax.train_state ADD VALUE IF NOT EXISTS 'cancelled';

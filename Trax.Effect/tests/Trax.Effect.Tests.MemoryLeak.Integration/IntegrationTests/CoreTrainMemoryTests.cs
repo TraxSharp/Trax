@@ -8,95 +8,95 @@ using Monad = Trax.Core.Monad;
 namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;
 
 /// <summary>
-/// Tests for validating core Trax.Core Workflow memory management.
+/// Tests for validating core Trax.Core Train memory management.
 /// These tests focus on the Memory dictionary lifecycle and potential memory leaks
-/// in the core workflow execution engine.
+/// in the core train execution engine.
 /// </summary>
 [TestFixture]
-public class CoreWorkflowMemoryTests
+public class CoreTrainMemoryTests
 {
     [Test]
-    public async Task Workflow_ShouldNotRetainMemoryDictionary_AfterCompletion()
+    public async Task Train_ShouldNotRetainMemoryDictionary_AfterCompletion()
     {
         // This test validates that the Memory dictionary doesn't cause memory leaks
-        var workflowFactory = () => new LargeDataWorkflow();
+        var trainFactory = () => new LargeDataTrain();
 
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
             {
-                // Create multiple workflow instances with large data
+                // Create multiple train instances with large data
                 for (int i = 0; i < 50; i++)
                 {
-                    var workflow = workflowFactory();
+                    var train = trainFactory();
                     var largeInput = new LargeDataModel($"test_{i}", new byte[100_000]); // 100KB each
 
-                    var output = await workflow.Run(largeInput);
+                    var output = await train.Run(largeInput);
                     output.Should().NotBeNull();
 
-                    // Workflow goes out of scope here, but Memory dictionary might retain objects
+                    // Train goes out of scope here, but Memory dictionary might retain objects
                 }
             },
-            "CoreWorkflow_MemoryDictionary_Retention"
+            "CoreTrain_MemoryDictionary_Retention"
         );
 
         Console.WriteLine(result.GetSummary());
 
-        // Memory should be freed after GC since workflows are out of scope
+        // Memory should be freed after GC since trains are out of scope
         result
             .MemoryRetained.Should()
             .BeLessThan(
                 result.MemoryAllocated / 2,
-                "Most memory should be freed when workflows go out of scope"
+                "Most memory should be freed when trains go out of scope"
             );
 
-        // Should not retain more than 10MB after processing 50x100KB workflows
+        // Should not retain more than 10MB after processing 50x100KB trains
         result
             .MemoryRetained.Should()
             .BeLessThan(
                 10 * 1024 * 1024,
-                "Should not retain significant memory from completed workflows"
+                "Should not retain significant memory from completed trains"
             );
     }
 
     [Test]
-    public async Task Workflow_MemoryDictionary_ShouldGrowWithStepCount()
+    public async Task Train_MemoryDictionary_ShouldGrowWithStepCount()
     {
         // Test how Memory dictionary grows with increasing number of steps
-        var smallWorkflowResult = await MemoryProfiler.MonitorMemoryUsageAsync(
+        var smallTrainResult = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
             {
-                var workflow = new SmallChainWorkflow();
+                var train = new SmallChainTrain();
                 var input = new SimpleInput("small_test");
-                await workflow.Run(input);
+                await train.Run(input);
             },
-            "SmallWorkflow_MemoryUsage"
+            "SmallTrain_MemoryUsage"
         );
 
-        var largeWorkflowResult = await MemoryProfiler.MonitorMemoryUsageAsync(
+        var largeTrainResult = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
             {
-                var workflow = new LargeChainWorkflow(); // Many more steps
+                var train = new LargeChainTrain(); // Many more steps
                 var input = new SimpleInput("large_test");
-                await workflow.Run(input);
+                await train.Run(input);
             },
-            "LargeWorkflow_MemoryUsage"
+            "LargeTrain_MemoryUsage"
         );
 
-        Console.WriteLine(smallWorkflowResult.GetSummary());
-        Console.WriteLine(largeWorkflowResult.GetSummary());
+        Console.WriteLine(smallTrainResult.GetSummary());
+        Console.WriteLine(largeTrainResult.GetSummary());
 
-        // Large workflow may allocate similar or more memory due to more objects in Memory dictionary
-        // Note: Very efficient workflows might have similar allocation patterns
-        largeWorkflowResult
+        // Large train may allocate similar or more memory due to more objects in Memory dictionary
+        // Note: Very efficient trains might have similar allocation patterns
+        largeTrainResult
             .MemoryAllocated.Should()
             .BeGreaterThanOrEqualTo(
-                smallWorkflowResult.MemoryAllocated / 3,
-                "Workflows should have reasonable memory allocation patterns"
+                smallTrainResult.MemoryAllocated / 3,
+                "Trains should have reasonable memory allocation patterns"
             );
     }
 
     [Test]
-    public async Task Workflow_TupleStorage_ShouldNotMultiplyReferences()
+    public async Task Train_TupleStorage_ShouldNotMultiplyReferences()
     {
         // Test tuple storage behavior in Memory dictionary
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
@@ -104,13 +104,13 @@ public class CoreWorkflowMemoryTests
             {
                 for (int i = 0; i < 20; i++)
                 {
-                    var workflow = new TupleWorkflow();
+                    var train = new TupleTrain();
                     var input = new SimpleInput($"tuple_test_{i}");
-                    var output = await workflow.Run(input);
+                    var output = await train.Run(input);
                     output.Should().NotBeNull();
                 }
             },
-            "TupleWorkflow_MemoryUsage"
+            "TupleTrain_MemoryUsage"
         );
 
         Console.WriteLine(result.GetSummary());
@@ -125,46 +125,44 @@ public class CoreWorkflowMemoryTests
     }
 
     [Test]
-    public async Task Workflow_WithLargeObjects_ShouldReleaseMemory()
+    public async Task Train_WithLargeObjects_ShouldReleaseMemory()
     {
-        // Test workflow behavior with very large objects
-        var largeObjectWorkflows = new List<WeakReference>();
+        // Test train behavior with very large objects
+        var largeObjectTrains = new List<WeakReference>();
 
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
             {
                 for (int i = 0; i < 10; i++)
                 {
-                    var workflow = new VeryLargeDataWorkflow();
-                    largeObjectWorkflows.Add(new WeakReference(workflow));
+                    var train = new VeryLargeDataTrain();
+                    largeObjectTrains.Add(new WeakReference(train));
 
                     var largeInput = new VeryLargeDataModel($"large_{i}", new byte[1_000_000]); // 1MB each
-                    var output = await workflow.Run(largeInput);
+                    var output = await train.Run(largeInput);
                     output.Should().NotBeNull();
                 }
             },
-            "VeryLargeDataWorkflow_MemoryUsage"
+            "VeryLargeDataTrain_MemoryUsage"
         );
 
         Console.WriteLine(result.GetSummary());
 
-        // Force GC and check if workflows can be collected
+        // Force GC and check if trains can be collected
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
         await Task.Delay(100); // Give GC time to work
 
-        var aliveWorkflows = largeObjectWorkflows.Count(wr => wr.IsAlive);
-        Console.WriteLine(
-            $"Workflows still alive after GC: {aliveWorkflows}/{largeObjectWorkflows.Count}"
-        );
+        var aliveTrains = largeObjectTrains.Count(wr => wr.IsAlive);
+        Console.WriteLine($"Trains still alive after GC: {aliveTrains}/{largeObjectTrains.Count}");
 
-        aliveWorkflows
+        aliveTrains
             .Should()
             .BeLessThan(
-                largeObjectWorkflows.Count,
-                "Some workflows should be collected by GC after going out of scope"
+                largeObjectTrains.Count,
+                "Some trains should be collected by GC after going out of scope"
             );
 
         // Memory retention should be minimal compared to allocation
@@ -172,39 +170,39 @@ public class CoreWorkflowMemoryTests
             .MemoryRetained.Should()
             .BeLessThan(
                 result.MemoryAllocated / 3,
-                "Most memory should be freed for large object workflows"
+                "Most memory should be freed for large object trains"
             );
     }
 
     [Test]
-    public async Task MultipleWorkflows_Concurrent_ShouldNotLeakMemory()
+    public async Task MultipleTrains_Concurrent_ShouldNotLeakMemory()
     {
-        // Test concurrent workflow execution for memory leaks
-        const int concurrentWorkflows = 20;
-        const int executionsPerWorkflow = 5;
+        // Test concurrent train execution for memory leaks
+        const int concurrentTrains = 20;
+        const int executionsPerTrain = 5;
 
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
             {
                 var tasks = Enumerable
-                    .Range(0, concurrentWorkflows)
-                    .Select(async workflowId =>
+                    .Range(0, concurrentTrains)
+                    .Select(async trainId =>
                     {
-                        for (int i = 0; i < executionsPerWorkflow; i++)
+                        for (int i = 0; i < executionsPerTrain; i++)
                         {
-                            var workflow = new LargeDataWorkflow();
+                            var train = new LargeDataTrain();
                             var input = new LargeDataModel(
-                                $"concurrent_{workflowId}_{i}",
+                                $"concurrent_{trainId}_{i}",
                                 new byte[50_000]
                             ); // 50KB each
-                            var output = await workflow.Run(input);
+                            var output = await train.Run(input);
                             output.Should().NotBeNull();
                         }
                     });
 
                 await Task.WhenAll(tasks);
             },
-            "ConcurrentWorkflows_MemoryUsage"
+            "ConcurrentTrains_MemoryUsage"
         );
 
         Console.WriteLine(result.GetSummary());
@@ -214,40 +212,40 @@ public class CoreWorkflowMemoryTests
             .MemoryRetained.Should()
             .BeLessThan(
                 15 * 1024 * 1024,
-                "Concurrent workflow execution should not cause significant memory leaks"
+                "Concurrent train execution should not cause significant memory leaks"
             );
     }
 
     [Test]
-    public void Workflow_MemoryDictionary_ShouldAllowManualClearing()
+    public void Train_MemoryDictionary_ShouldAllowManualClearing()
     {
         // Test if we can manually clear the Memory dictionary (future enhancement)
-        var workflow = new TestableWorkflow();
+        var train = new TestableTrain();
         var input = new SimpleInput("clear_test");
 
-        // Run workflow to populate Memory
-        var result = workflow.Run(input).Result;
+        // Run train to populate Memory
+        var result = train.Run(input).Result;
         result.Should().NotBeNull();
 
         // Memory dictionary should contain objects
-        workflow
+        train
             .GetMemoryCount()
             .Should()
-            .BeGreaterThan(0, "Memory dictionary should contain objects after workflow execution");
+            .BeGreaterThan(0, "Memory dictionary should contain objects after train execution");
 
         // Manual clear (this would be a future enhancement)
-        workflow.ClearMemory();
+        train.ClearMemory();
 
-        workflow
+        train
             .GetMemoryCount()
             .Should()
             .Be(0, "Memory dictionary should be empty after manual clear");
     }
 
     [Test]
-    public async Task RepeatedWorkflowExecution_ShouldShowConsistentMemoryUsage()
+    public async Task RepeatedTrainExecution_ShouldShowConsistentMemoryUsage()
     {
-        // Test repeated execution of the same workflow for memory consistency
+        // Test repeated execution of the same train for memory consistency
         var batchResults = new List<MemoryMonitorResult>();
 
         for (int batch = 0; batch < 3; batch++)
@@ -257,9 +255,9 @@ public class CoreWorkflowMemoryTests
                 {
                     for (int i = 0; i < 15; i++)
                     {
-                        var workflow = new LargeDataWorkflow();
+                        var train = new LargeDataTrain();
                         var input = new LargeDataModel($"batch_{batch}_item_{i}", new byte[75_000]); // 75KB each
-                        var output = await workflow.Run(input);
+                        var output = await train.Run(input);
                         output.Should().NotBeNull();
                     }
                 },
@@ -289,7 +287,7 @@ public class CoreWorkflowMemoryTests
     }
 }
 
-// Test workflow classes
+// Test train classes
 public class SimpleInput(string name)
 {
     public string Name { get; } = name;
@@ -361,8 +359,8 @@ public class TupleStep : Step<SimpleInput, (string Result, int Count, DateTime T
     }
 }
 
-// Test workflows
-public class SmallChainWorkflow : Train<SimpleInput, SimpleOutput>
+// Test trains
+public class SmallChainTrain : Train<SimpleInput, SimpleOutput>
 {
     protected override Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input)
     {
@@ -371,7 +369,7 @@ public class SmallChainWorkflow : Train<SimpleInput, SimpleOutput>
     }
 }
 
-public class LargeChainWorkflow : Train<SimpleInput, SimpleOutput>
+public class LargeChainTrain : Train<SimpleInput, SimpleOutput>
 {
     protected override Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input)
     {
@@ -388,7 +386,7 @@ public class LargeChainWorkflow : Train<SimpleInput, SimpleOutput>
     }
 }
 
-public class LargeDataWorkflow : Train<LargeDataModel, SimpleOutput>
+public class LargeDataTrain : Train<LargeDataModel, SimpleOutput>
 {
     protected override Task<Either<Exception, SimpleOutput>> RunInternal(LargeDataModel input)
     {
@@ -397,7 +395,7 @@ public class LargeDataWorkflow : Train<LargeDataModel, SimpleOutput>
     }
 }
 
-public class VeryLargeDataWorkflow : Train<VeryLargeDataModel, SimpleOutput>
+public class VeryLargeDataTrain : Train<VeryLargeDataModel, SimpleOutput>
 {
     protected override Task<Either<Exception, SimpleOutput>> RunInternal(VeryLargeDataModel input)
     {
@@ -407,7 +405,7 @@ public class VeryLargeDataWorkflow : Train<VeryLargeDataModel, SimpleOutput>
     }
 }
 
-public class TupleWorkflow : Train<SimpleInput, (string Result, int Count, DateTime Timestamp)>
+public class TupleTrain : Train<SimpleInput, (string Result, int Count, DateTime Timestamp)>
 {
     protected override Task<
         Either<Exception, (string Result, int Count, DateTime Timestamp)>
@@ -418,8 +416,8 @@ public class TupleWorkflow : Train<SimpleInput, (string Result, int Count, DateT
     }
 }
 
-// Testable workflow that exposes Memory dictionary for testing
-public class TestableWorkflow : Train<SimpleInput, SimpleOutput>
+// Testable train that exposes Memory dictionary for testing
+public class TestableTrain : Train<SimpleInput, SimpleOutput>
 {
     private Monad.Monad<SimpleInput, SimpleOutput>? _monad;
 

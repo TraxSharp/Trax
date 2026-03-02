@@ -11,7 +11,7 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.EffectStep;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
-using Trax.Mediator.Services.WorkflowBus;
+using Trax.Mediator.Services.TrainBus;
 using Metadata = Trax.Effect.Models.Metadata.Metadata;
 
 namespace Trax.Effect.Tests.Data.Postgres.Integration.IntegrationTests;
@@ -51,40 +51,40 @@ public class PostgresContextTests : TestSetup
     }
 
     [Theory]
-    public async Task TestPostgresProviderCanRunWorkflow()
+    public async Task TestPostgresProviderCanRunTrain()
     {
         // Arrange
         // Act
-        var workflow = await WorkflowBus.RunAsync<TestWorkflow>(new TestWorkflowInput());
+        var train = await TrainBus.RunAsync<TestTrain>(new TestTrainInput());
 
         // Assert
-        workflow.Metadata.Name.Should().Be(typeof(TestWorkflow).FullName);
-        workflow.Metadata.FailureException.Should().BeNullOrEmpty();
-        workflow.Metadata.FailureReason.Should().BeNullOrEmpty();
-        workflow.Metadata.FailureStep.Should().BeNullOrEmpty();
-        workflow.Metadata.WorkflowState.Should().Be(WorkflowState.Completed);
+        train.Metadata.Name.Should().Be(typeof(TestTrain).FullName);
+        train.Metadata.FailureException.Should().BeNullOrEmpty();
+        train.Metadata.FailureReason.Should().BeNullOrEmpty();
+        train.Metadata.FailureStep.Should().BeNullOrEmpty();
+        train.Metadata.TrainState.Should().Be(TrainState.Completed);
     }
 
     [Theory]
-    public async Task TestPostgresProviderCanRunWorkflowTwo()
+    public async Task TestPostgresProviderCanRunTrainTwo()
     {
         // Arrange
         // Act
-        var workflow = await WorkflowBus.RunAsync<TestWorkflow>(new TestWorkflowInput());
-        var workflowTwo = await WorkflowBus.RunAsync<TestWorkflowWithoutInterface>(
-            new TestWorkflowWithoutInterfaceInput()
+        var train = await TrainBus.RunAsync<TestTrain>(new TestTrainInput());
+        var trainTwo = await TrainBus.RunAsync<TestTrainWithoutInterface>(
+            new TestTrainWithoutInterfaceInput()
         );
 
         // Assert
-        workflow.Metadata.Name.Should().Be(typeof(TestWorkflow).FullName);
-        workflow.Metadata.FailureException.Should().BeNullOrEmpty();
-        workflow.Metadata.FailureReason.Should().BeNullOrEmpty();
-        workflow.Metadata.FailureStep.Should().BeNullOrEmpty();
-        workflow.Metadata.WorkflowState.Should().Be(WorkflowState.Completed);
+        train.Metadata.Name.Should().Be(typeof(TestTrain).FullName);
+        train.Metadata.FailureException.Should().BeNullOrEmpty();
+        train.Metadata.FailureReason.Should().BeNullOrEmpty();
+        train.Metadata.FailureStep.Should().BeNullOrEmpty();
+        train.Metadata.TrainState.Should().Be(TrainState.Completed);
     }
 
     [Theory]
-    public async Task TestPostgresProviderCanRunWorkflowWithinWorkflow()
+    public async Task TestPostgresProviderCanRunTrainWithinTrain()
     {
         // Arrange
         var dataContextProvider =
@@ -92,42 +92,41 @@ public class PostgresContextTests : TestSetup
         var arrayLoggerProvider = Scope.ServiceProvider.GetRequiredService<IArrayLoggingProvider>();
 
         // Act
-        var (innerWorkflow, workflow) = await WorkflowBus.RunAsync<(
-            ITestWorkflow,
-            ITestWorkflowWithinWorkflow
-        )>(new TestWorkflowWithinWorkflowInput());
+        var (innerTrain, train) = await TrainBus.RunAsync<(ITestTrain, ITestTrainWithinTrain)>(
+            new TestTrainWithinTrainInput()
+        );
 
         // Assert
-        workflow.Metadata.Name.Should().Be(typeof(TestWorkflowWithinWorkflow).FullName);
-        workflow.Metadata.FailureException.Should().BeNullOrEmpty();
-        workflow.Metadata.FailureReason.Should().BeNullOrEmpty();
-        workflow.Metadata.FailureStep.Should().BeNullOrEmpty();
-        workflow.Metadata.WorkflowState.Should().Be(WorkflowState.Completed);
-        innerWorkflow.Metadata.Name.Should().Be(typeof(TestWorkflow).FullName);
-        innerWorkflow.Metadata.FailureException.Should().BeNullOrEmpty();
-        innerWorkflow.Metadata.FailureReason.Should().BeNullOrEmpty();
-        innerWorkflow.Metadata.FailureStep.Should().BeNullOrEmpty();
-        innerWorkflow.Metadata.WorkflowState.Should().Be(WorkflowState.Completed);
+        train.Metadata.Name.Should().Be(typeof(TestTrainWithinTrain).FullName);
+        train.Metadata.FailureException.Should().BeNullOrEmpty();
+        train.Metadata.FailureReason.Should().BeNullOrEmpty();
+        train.Metadata.FailureStep.Should().BeNullOrEmpty();
+        train.Metadata.TrainState.Should().Be(TrainState.Completed);
+        innerTrain.Metadata.Name.Should().Be(typeof(TestTrain).FullName);
+        innerTrain.Metadata.FailureException.Should().BeNullOrEmpty();
+        innerTrain.Metadata.FailureReason.Should().BeNullOrEmpty();
+        innerTrain.Metadata.FailureStep.Should().BeNullOrEmpty();
+        innerTrain.Metadata.TrainState.Should().Be(TrainState.Completed);
 
         using var dataContext = (IDataContext)dataContextProvider.Create();
 
-        var parentWorkflowResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
-            x.Id == workflow.Metadata.Id
+        var parentTrainResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
+            x.Id == train.Metadata.Id
         );
-        var childWorkflowResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
-            x.Id == innerWorkflow.Metadata.Id
+        var childTrainResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
+            x.Id == innerTrain.Metadata.Id
         );
-        parentWorkflowResult.Should().NotBeNull();
-        parentWorkflowResult!.Id.Should().Be(workflow.Metadata.Id);
-        parentWorkflowResult!.WorkflowState.Should().Be(WorkflowState.Completed);
-        parentWorkflowResult.Input.Should().NotBeNull();
-        parentWorkflowResult.Output.Should().NotBeNull();
+        parentTrainResult.Should().NotBeNull();
+        parentTrainResult!.Id.Should().Be(train.Metadata.Id);
+        parentTrainResult!.TrainState.Should().Be(TrainState.Completed);
+        parentTrainResult.Input.Should().NotBeNull();
+        parentTrainResult.Output.Should().NotBeNull();
 
-        childWorkflowResult.Should().NotBeNull();
-        childWorkflowResult!.Id.Should().Be(innerWorkflow.Metadata.Id);
-        childWorkflowResult.WorkflowState.Should().Be(WorkflowState.Completed);
-        childWorkflowResult.Input.Should().NotBeNull();
-        childWorkflowResult.Output.Should().NotBeNull();
+        childTrainResult.Should().NotBeNull();
+        childTrainResult!.Id.Should().Be(innerTrain.Metadata.Id);
+        childTrainResult.TrainState.Should().Be(TrainState.Completed);
+        childTrainResult.Input.Should().NotBeNull();
+        childTrainResult.Output.Should().NotBeNull();
 
         var logLevel = arrayLoggerProvider
             .Loggers.SelectMany(x => x.Logs)
@@ -136,63 +135,55 @@ public class PostgresContextTests : TestSetup
         logLevel.Should().Be(1);
     }
 
-    internal class TestWorkflow : ServiceTrain<TestWorkflowInput, TestWorkflow>, ITestWorkflow
+    internal class TestTrain : ServiceTrain<TestTrainInput, TestTrain>, ITestTrain
     {
-        protected override async Task<Either<Exception, TestWorkflow>> RunInternal(
-            TestWorkflowInput input
+        protected override async Task<Either<Exception, TestTrain>> RunInternal(
+            TestTrainInput input
         ) => Activate(input, this).Resolve();
     }
 
-    internal class TestWorkflowWithoutInterface
-        : ServiceTrain<TestWorkflowWithoutInterfaceInput, TestWorkflowWithoutInterface>
+    internal class TestTrainWithoutInterface
+        : ServiceTrain<TestTrainWithoutInterfaceInput, TestTrainWithoutInterface>
     {
-        protected override async Task<Either<Exception, TestWorkflowWithoutInterface>> RunInternal(
-            TestWorkflowWithoutInterfaceInput input
+        protected override async Task<Either<Exception, TestTrainWithoutInterface>> RunInternal(
+            TestTrainWithoutInterfaceInput input
         ) => Activate(input, this).Resolve();
     }
 
-    internal record TestWorkflowWithoutInterfaceInput;
+    internal record TestTrainWithoutInterfaceInput;
 
-    internal record TestWorkflowInput;
+    internal record TestTrainInput;
 
-    internal class TestWorkflowWithinWorkflow()
-        : ServiceTrain<
-            TestWorkflowWithinWorkflowInput,
-            (ITestWorkflow, ITestWorkflowWithinWorkflow)
-        >,
-            ITestWorkflowWithinWorkflow
+    internal class TestTrainWithinTrain()
+        : ServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)>,
+            ITestTrainWithinTrain
     {
         protected override async Task<
-            Either<Exception, (ITestWorkflow, ITestWorkflowWithinWorkflow)>
-        > RunInternal(TestWorkflowWithinWorkflowInput input) =>
+            Either<Exception, (ITestTrain, ITestTrainWithinTrain)>
+        > RunInternal(TestTrainWithinTrainInput input) =>
             Activate(input)
-                .AddServices<ITestWorkflowWithinWorkflow>(this)
-                .Chain<StepToRunTestWorkflow>()
+                .AddServices<ITestTrainWithinTrain>(this)
+                .Chain<StepToRunTestTrain>()
                 .Resolve();
     }
 
-    internal record TestWorkflowWithinWorkflowInput;
+    internal record TestTrainWithinTrainInput;
 
-    internal class StepToRunTestWorkflow(
-        IWorkflowBus workflowBus,
-        ILogger<StepToRunTestWorkflow> logger
-    ) : EffectStep<Unit, ITestWorkflow>
+    internal class StepToRunTestTrain(ITrainBus trainBus, ILogger<StepToRunTestTrain> logger)
+        : EffectStep<Unit, ITestTrain>
     {
-        public override async Task<ITestWorkflow> Run(Unit input)
+        public override async Task<ITestTrain> Run(Unit input)
         {
-            var testWorkflow = await workflowBus.RunAsync<TestWorkflow>(new TestWorkflowInput());
+            var testTrain = await trainBus.RunAsync<TestTrain>(new TestTrainInput());
 
-            logger.LogCritical("Ran {WorkflowName}", "TestWorkflow");
+            logger.LogCritical("Ran {TrainName}", "TestTrain");
 
-            return testWorkflow;
+            return testTrain;
         }
     }
 
-    internal interface ITestWorkflow : IServiceTrain<TestWorkflowInput, TestWorkflow> { }
+    internal interface ITestTrain : IServiceTrain<TestTrainInput, TestTrain> { }
 
-    internal interface ITestWorkflowWithinWorkflow
-        : IServiceTrain<
-            TestWorkflowWithinWorkflowInput,
-            (ITestWorkflow, ITestWorkflowWithinWorkflow)
-        > { }
+    internal interface ITestTrainWithinTrain
+        : IServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)> { }
 }

@@ -11,7 +11,7 @@ public class CreateBackgroundJob
     public required long MetadataId { get; set; }
 
     /// <summary>
-    /// Serialized workflow input (JSON), for ad-hoc executions.
+    /// Serialized train input (JSON), for ad-hoc executions.
     /// </summary>
     public string? Input { get; set; }
 

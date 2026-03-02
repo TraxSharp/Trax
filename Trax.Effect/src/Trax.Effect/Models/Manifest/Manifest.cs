@@ -11,13 +11,13 @@ using Trax.Effect.Utils;
 namespace Trax.Effect.Models.Manifest;
 
 /// <summary>
-/// Represents a job definition that describes what workflow to run, how to schedule it,
+/// Represents a job definition that describes what train to run, how to schedule it,
 /// and what retry policies to apply.
 /// </summary>
 /// <remarks>
 /// A Manifest is the "job definition" in the scheduling system. It defines:
-/// - Which workflow to execute (via <see cref="Name"/>)
-/// - Default configuration/properties for the workflow
+/// - Which train to execute (via <see cref="Name"/>)
+/// - Default configuration/properties for the train
 /// - Scheduling rules (cron, interval, or manual-only)
 /// - Retry and timeout policies
 ///
@@ -115,7 +115,7 @@ public class Manifest : IModel
     /// </summary>
     /// <remarks>
     /// Updated automatically when a job completes successfully.
-    /// Useful for scheduling decisions and "delta mode" workflows that
+    /// Useful for scheduling decisions and "delta mode" trains that
     /// need to know when data was last synchronized.
     /// </remarks>
     [Column("last_successful_run")]
@@ -169,7 +169,7 @@ public class Manifest : IModel
     public Manifest? DependsOnManifest { get; set; }
 
     /// <summary>
-    /// Gets the collection of metadata records (workflow executions) associated with this manifest.
+    /// Gets the collection of metadata records (train executions) associated with this manifest.
     /// </summary>
     /// <remarks>
     /// This navigation property allows for traversal from a job definition (Manifest)

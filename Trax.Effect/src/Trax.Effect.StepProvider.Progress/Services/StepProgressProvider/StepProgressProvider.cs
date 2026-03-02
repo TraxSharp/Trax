@@ -5,9 +5,9 @@ namespace Trax.Effect.StepProvider.Progress.Services.StepProgressProvider;
 
 public class StepProgressProvider : IStepProgressProvider
 {
-    public async Task BeforeStepExecution<TIn, TOut, TWorkflowIn, TWorkflowOut>(
+    public async Task BeforeStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectStep<TIn, TOut> effectStep,
-        ServiceTrain<TWorkflowIn, TWorkflowOut> serviceTrain,
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
         CancellationToken cancellationToken
     )
     {
@@ -21,9 +21,9 @@ public class StepProgressProvider : IStepProgressProvider
         await serviceTrain.EffectRunner.SaveChanges(cancellationToken);
     }
 
-    public async Task AfterStepExecution<TIn, TOut, TWorkflowIn, TWorkflowOut>(
+    public async Task AfterStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectStep<TIn, TOut> effectStep,
-        ServiceTrain<TWorkflowIn, TWorkflowOut> serviceTrain,
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
         CancellationToken cancellationToken
     )
     {

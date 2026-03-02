@@ -11,31 +11,31 @@ namespace Trax.Effect.Tests.Json.Integration.IntegrationTests;
 public class JsonEffectProviderTests : TestSetup
 {
     public override ServiceProvider ConfigureServices(IServiceCollection services) =>
-        services.AddTransientTraxRoute<ITestWorkflow, TestWorkflow>().BuildServiceProvider();
+        services.AddTransientTraxRoute<ITestTrain, TestTrain>().BuildServiceProvider();
 
     [Theory]
     public async Task TestJsonEffect()
     {
         // Arrange
-        var workflow = Scope.ServiceProvider.GetRequiredService<ITestWorkflow>();
-        var workflowTwo = Scope.ServiceProvider.GetRequiredService<ITestWorkflow>();
+        var train = Scope.ServiceProvider.GetRequiredService<ITestTrain>();
+        var trainTwo = Scope.ServiceProvider.GetRequiredService<ITestTrain>();
         var arrayProvider = Scope.ServiceProvider.GetRequiredService<IArrayLoggingProvider>();
 
         // Act
-        await workflow.Run(Unit.Default);
-        await workflowTwo.Run(Unit.Default);
+        await train.Run(Unit.Default);
+        await trainTwo.Run(Unit.Default);
 
         // Assert
-        workflow.Metadata.Name.Should().Be(typeof(TestWorkflow).FullName);
-        workflow.Metadata.FailureException.Should().BeNullOrEmpty();
-        workflow.Metadata.FailureReason.Should().BeNullOrEmpty();
-        workflow.Metadata.FailureStep.Should().BeNullOrEmpty();
-        workflow.Metadata.WorkflowState.Should().Be(WorkflowState.Completed);
+        train.Metadata.Name.Should().Be(typeof(TestTrain).FullName);
+        train.Metadata.FailureException.Should().BeNullOrEmpty();
+        train.Metadata.FailureReason.Should().BeNullOrEmpty();
+        train.Metadata.FailureStep.Should().BeNullOrEmpty();
+        train.Metadata.TrainState.Should().Be(TrainState.Completed);
         arrayProvider.Loggers.Should().NotBeNullOrEmpty();
         arrayProvider.Loggers.Should().HaveCount(5);
 
         // Verify that we have the expected logger types:
-        // 1. Two workflow loggers (ILogger<ServiceTrain<Unit, Unit>>) - may have empty logs
+        // 1. Two train loggers (ILogger<ServiceTrain<Unit, Unit>>) - may have empty logs
         // 2. One JsonEffectProvider logger (ILogger<JsonEffectProvider>) - should have JSON logs
         var jsonProviderLoggers = arrayProvider
             .Loggers.Where(logger =>
@@ -59,11 +59,11 @@ public class JsonEffectProviderTests : TestSetup
             .NotBeEmpty("JsonEffectProvider logger should contain JSON metadata logs");
     }
 
-    private class TestWorkflow : ServiceTrain<Unit, Unit>, ITestWorkflow
+    private class TestTrain : ServiceTrain<Unit, Unit>, ITestTrain
     {
         protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
             Activate(input).Resolve();
     }
 
-    private interface ITestWorkflow : IServiceTrain<Unit, Unit> { }
+    private interface ITestTrain : IServiceTrain<Unit, Unit> { }
 }

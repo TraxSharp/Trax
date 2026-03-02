@@ -15,7 +15,7 @@ namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 
 /// <summary>
 /// Unit tests for <see cref="StepProgressProvider"/>, the step effect provider
-/// that writes currently-running step name and timestamp to workflow metadata.
+/// that writes currently-running step name and timestamp to train metadata.
 /// </summary>
 [TestFixture]
 public class StepProgressProviderTests
@@ -43,39 +43,39 @@ public class StepProgressProviderTests
     public async Task BeforeStepExecution_SetsCurrentlyRunningStep()
     {
         // Arrange
-        var (workflow, step) = CreateTestWorkflowAndStep("ProcessDataStep");
+        var (train, step) = CreateTestTrainAndStep("ProcessDataStep");
 
         // Act
-        await _provider.BeforeStepExecution(step, workflow, CancellationToken.None);
+        await _provider.BeforeStepExecution(step, train, CancellationToken.None);
 
         // Assert
-        workflow.Metadata!.CurrentlyRunningStep.Should().Be("ProcessDataStep");
+        train.Metadata!.CurrentlyRunningStep.Should().Be("ProcessDataStep");
     }
 
     [Test]
     public async Task BeforeStepExecution_SetsStepStartedAt()
     {
         // Arrange
-        var (workflow, step) = CreateTestWorkflowAndStep("ProcessDataStep");
+        var (train, step) = CreateTestTrainAndStep("ProcessDataStep");
         var before = DateTime.UtcNow;
 
         // Act
-        await _provider.BeforeStepExecution(step, workflow, CancellationToken.None);
+        await _provider.BeforeStepExecution(step, train, CancellationToken.None);
 
         // Assert
-        workflow.Metadata!.StepStartedAt.Should().NotBeNull();
-        workflow.Metadata!.StepStartedAt.Should().BeOnOrAfter(before);
-        workflow.Metadata!.StepStartedAt.Should().BeOnOrBefore(DateTime.UtcNow);
+        train.Metadata!.StepStartedAt.Should().NotBeNull();
+        train.Metadata!.StepStartedAt.Should().BeOnOrAfter(before);
+        train.Metadata!.StepStartedAt.Should().BeOnOrBefore(DateTime.UtcNow);
     }
 
     [Test]
     public async Task BeforeStepExecution_CallsEffectRunnerUpdate()
     {
         // Arrange
-        var (workflow, step) = CreateTestWorkflowAndStep("ProcessDataStep");
+        var (train, step) = CreateTestTrainAndStep("ProcessDataStep");
 
         // Act
-        await _provider.BeforeStepExecution(step, workflow, CancellationToken.None);
+        await _provider.BeforeStepExecution(step, train, CancellationToken.None);
 
         // Assert
         _fakeEffectRunner.UpdateCallCount.Should().Be(1);
@@ -85,10 +85,10 @@ public class StepProgressProviderTests
     public async Task BeforeStepExecution_CallsEffectRunnerSaveChanges()
     {
         // Arrange
-        var (workflow, step) = CreateTestWorkflowAndStep("ProcessDataStep");
+        var (train, step) = CreateTestTrainAndStep("ProcessDataStep");
 
         // Act
-        await _provider.BeforeStepExecution(step, workflow, CancellationToken.None);
+        await _provider.BeforeStepExecution(step, train, CancellationToken.None);
 
         // Assert
         _fakeEffectRunner.SaveChangesCallCount.Should().Be(1);
@@ -97,13 +97,13 @@ public class StepProgressProviderTests
     [Test]
     public async Task BeforeStepExecution_NullMetadata_ReturnsWithoutError()
     {
-        // Arrange — workflow with null metadata (no reflection call)
-        var workflow = new TestWorkflow();
-        workflow.EffectRunner = _fakeEffectRunner;
+        // Arrange — train with null metadata (no reflection call)
+        var train = new TestTrain();
+        train.EffectRunner = _fakeEffectRunner;
         var step = CreateTestStep("SomeStep");
 
         // Act & Assert
-        var act = () => _provider.BeforeStepExecution(step, workflow, CancellationToken.None);
+        var act = () => _provider.BeforeStepExecution(step, train, CancellationToken.None);
         await act.Should().NotThrowAsync();
 
         _fakeEffectRunner.UpdateCallCount.Should().Be(0);
@@ -112,14 +112,14 @@ public class StepProgressProviderTests
     [Test]
     public async Task BeforeStepExecution_NullEffectRunner_ReturnsWithoutError()
     {
-        // Arrange — workflow with metadata but no EffectRunner
-        var workflow = new TestWorkflow();
-        SetInternalProperty(workflow, "Metadata", CreateMetadata());
+        // Arrange — train with metadata but no EffectRunner
+        var train = new TestTrain();
+        SetInternalProperty(train, "Metadata", CreateMetadata());
         // EffectRunner left as null
         var step = CreateTestStep("SomeStep");
 
         // Act & Assert
-        var act = () => _provider.BeforeStepExecution(step, workflow, CancellationToken.None);
+        var act = () => _provider.BeforeStepExecution(step, train, CancellationToken.None);
         await act.Should().NotThrowAsync();
     }
 
@@ -127,11 +127,11 @@ public class StepProgressProviderTests
     public async Task BeforeStepExecution_PassesCancellationTokenToSaveChanges()
     {
         // Arrange
-        var (workflow, step) = CreateTestWorkflowAndStep("ProcessDataStep");
+        var (train, step) = CreateTestTrainAndStep("ProcessDataStep");
         using var cts = new CancellationTokenSource();
 
         // Act
-        await _provider.BeforeStepExecution(step, workflow, cts.Token);
+        await _provider.BeforeStepExecution(step, train, cts.Token);
 
         // Assert
         _fakeEffectRunner.SaveChangesCallCount.Should().Be(1);
@@ -146,40 +146,40 @@ public class StepProgressProviderTests
     public async Task AfterStepExecution_ClearsCurrentlyRunningStep()
     {
         // Arrange
-        var (workflow, step) = CreateTestWorkflowAndStep("ProcessDataStep");
-        workflow.Metadata!.CurrentlyRunningStep = "ProcessDataStep";
-        workflow.Metadata!.StepStartedAt = DateTime.UtcNow;
+        var (train, step) = CreateTestTrainAndStep("ProcessDataStep");
+        train.Metadata!.CurrentlyRunningStep = "ProcessDataStep";
+        train.Metadata!.StepStartedAt = DateTime.UtcNow;
 
         // Act
-        await _provider.AfterStepExecution(step, workflow, CancellationToken.None);
+        await _provider.AfterStepExecution(step, train, CancellationToken.None);
 
         // Assert
-        workflow.Metadata!.CurrentlyRunningStep.Should().BeNull();
+        train.Metadata!.CurrentlyRunningStep.Should().BeNull();
     }
 
     [Test]
     public async Task AfterStepExecution_ClearsStepStartedAt()
     {
         // Arrange
-        var (workflow, step) = CreateTestWorkflowAndStep("ProcessDataStep");
-        workflow.Metadata!.CurrentlyRunningStep = "ProcessDataStep";
-        workflow.Metadata!.StepStartedAt = DateTime.UtcNow;
+        var (train, step) = CreateTestTrainAndStep("ProcessDataStep");
+        train.Metadata!.CurrentlyRunningStep = "ProcessDataStep";
+        train.Metadata!.StepStartedAt = DateTime.UtcNow;
 
         // Act
-        await _provider.AfterStepExecution(step, workflow, CancellationToken.None);
+        await _provider.AfterStepExecution(step, train, CancellationToken.None);
 
         // Assert
-        workflow.Metadata!.StepStartedAt.Should().BeNull();
+        train.Metadata!.StepStartedAt.Should().BeNull();
     }
 
     [Test]
     public async Task AfterStepExecution_CallsEffectRunnerUpdateAndSaveChanges()
     {
         // Arrange
-        var (workflow, step) = CreateTestWorkflowAndStep("ProcessDataStep");
+        var (train, step) = CreateTestTrainAndStep("ProcessDataStep");
 
         // Act
-        await _provider.AfterStepExecution(step, workflow, CancellationToken.None);
+        await _provider.AfterStepExecution(step, train, CancellationToken.None);
 
         // Assert
         _fakeEffectRunner.UpdateCallCount.Should().Be(1);
@@ -189,13 +189,13 @@ public class StepProgressProviderTests
     [Test]
     public async Task AfterStepExecution_NullMetadata_ReturnsWithoutError()
     {
-        // Arrange — workflow with null metadata (no reflection call)
-        var workflow = new TestWorkflow();
-        workflow.EffectRunner = _fakeEffectRunner;
+        // Arrange — train with null metadata (no reflection call)
+        var train = new TestTrain();
+        train.EffectRunner = _fakeEffectRunner;
         var step = CreateTestStep("SomeStep");
 
         // Act & Assert
-        var act = () => _provider.AfterStepExecution(step, workflow, CancellationToken.None);
+        var act = () => _provider.AfterStepExecution(step, train, CancellationToken.None);
         await act.Should().NotThrowAsync();
 
         _fakeEffectRunner.UpdateCallCount.Should().Be(0);
@@ -209,44 +209,44 @@ public class StepProgressProviderTests
     public async Task FullLifecycle_BeforeAndAfter_SetsAndClearsStepProgress()
     {
         // Arrange
-        var (workflow, step) = CreateTestWorkflowAndStep("FetchDataStep");
+        var (train, step) = CreateTestTrainAndStep("FetchDataStep");
 
         // Act — Before
-        await _provider.BeforeStepExecution(step, workflow, CancellationToken.None);
+        await _provider.BeforeStepExecution(step, train, CancellationToken.None);
 
         // Assert — progress is set
-        workflow.Metadata!.CurrentlyRunningStep.Should().Be("FetchDataStep");
-        workflow.Metadata!.StepStartedAt.Should().NotBeNull();
+        train.Metadata!.CurrentlyRunningStep.Should().Be("FetchDataStep");
+        train.Metadata!.StepStartedAt.Should().NotBeNull();
 
         // Act — After
-        await _provider.AfterStepExecution(step, workflow, CancellationToken.None);
+        await _provider.AfterStepExecution(step, train, CancellationToken.None);
 
         // Assert — progress is cleared
-        workflow.Metadata!.CurrentlyRunningStep.Should().BeNull();
-        workflow.Metadata!.StepStartedAt.Should().BeNull();
+        train.Metadata!.CurrentlyRunningStep.Should().BeNull();
+        train.Metadata!.StepStartedAt.Should().BeNull();
     }
 
     [Test]
     public async Task FullLifecycle_MultipleSteps_TracksEachStepSeparately()
     {
         // Arrange
-        var (workflow, _) = CreateTestWorkflowAndStep("Unused");
+        var (train, _) = CreateTestTrainAndStep("Unused");
         var step1 = CreateTestStep("Step1");
         var step2 = CreateTestStep("Step2");
 
         // Step 1 lifecycle
-        await _provider.BeforeStepExecution(step1, workflow, CancellationToken.None);
-        workflow.Metadata!.CurrentlyRunningStep.Should().Be("Step1");
+        await _provider.BeforeStepExecution(step1, train, CancellationToken.None);
+        train.Metadata!.CurrentlyRunningStep.Should().Be("Step1");
 
-        await _provider.AfterStepExecution(step1, workflow, CancellationToken.None);
-        workflow.Metadata!.CurrentlyRunningStep.Should().BeNull();
+        await _provider.AfterStepExecution(step1, train, CancellationToken.None);
+        train.Metadata!.CurrentlyRunningStep.Should().BeNull();
 
         // Step 2 lifecycle
-        await _provider.BeforeStepExecution(step2, workflow, CancellationToken.None);
-        workflow.Metadata!.CurrentlyRunningStep.Should().Be("Step2");
+        await _provider.BeforeStepExecution(step2, train, CancellationToken.None);
+        train.Metadata!.CurrentlyRunningStep.Should().Be("Step2");
 
-        await _provider.AfterStepExecution(step2, workflow, CancellationToken.None);
-        workflow.Metadata!.CurrentlyRunningStep.Should().BeNull();
+        await _provider.AfterStepExecution(step2, train, CancellationToken.None);
+        train.Metadata!.CurrentlyRunningStep.Should().BeNull();
 
         // Verify 4 updates (before+after for each step) and 4 saves
         _fakeEffectRunner.UpdateCallCount.Should().Be(4);
@@ -279,36 +279,33 @@ public class StepProgressProviderTests
 
     #region Test Helpers
 
-    private (TestWorkflow workflow, TestStep step) CreateTestWorkflowAndStep(string stepName)
+    private (TestTrain train, TestStep step) CreateTestTrainAndStep(string stepName)
     {
-        var workflow = CreateTestWorkflow();
+        var train = CreateTestTrain();
         var step = CreateTestStep(stepName);
-        return (workflow, step);
+        return (train, step);
     }
 
-    private TestWorkflow CreateTestWorkflow(
-        Metadata? metadata = null,
-        IEffectRunner? effectRunner = null
-    )
+    private TestTrain CreateTestTrain(Metadata? metadata = null, IEffectRunner? effectRunner = null)
     {
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // EffectRunner has a public setter
-        workflow.EffectRunner = effectRunner ?? _fakeEffectRunner;
+        train.EffectRunner = effectRunner ?? _fakeEffectRunner;
 
         // Metadata has an internal setter — use reflection
         var metadataToSet = metadata ?? CreateMetadata();
-        SetInternalProperty(workflow, "Metadata", metadataToSet);
+        SetInternalProperty(train, "Metadata", metadataToSet);
 
-        return workflow;
+        return train;
     }
 
-    private TestWorkflow CreateTestWorkflow(bool withNullMetadata)
+    private TestTrain CreateTestTrain(bool withNullMetadata)
     {
-        var workflow = new TestWorkflow();
-        workflow.EffectRunner = _fakeEffectRunner;
+        var train = new TestTrain();
+        train.EffectRunner = _fakeEffectRunner;
         // Leave Metadata as null (default)
-        return workflow;
+        return train;
     }
 
     private TestStep CreateTestStep(string name)
@@ -322,7 +319,7 @@ public class StepProgressProviderTests
         Metadata.Create(
             new CreateMetadata
             {
-                Name = "TestWorkflow",
+                Name = "TestTrain",
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
             }
@@ -364,9 +361,9 @@ public class StepProgressProviderTests
     }
 
     /// <summary>
-    /// Concrete test double for EffectWorkflow. Only used for property access in tests.
+    /// Concrete test double for EffectTrain. Only used for property access in tests.
     /// </summary>
-    private class TestWorkflow : ServiceTrain<string, string>
+    private class TestTrain : ServiceTrain<string, string>
     {
         protected override Task<Either<Exception, string>> RunInternal(string input) =>
             Task.FromResult<Either<Exception, string>>(input);

@@ -2,10 +2,10 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
-using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows;
-using Trax.Effect.Tests.MemoryLeak.Integration.TestWorkflows.TestModels;
+using Trax.Effect.Tests.MemoryLeak.Integration.TestTrains;
+using Trax.Effect.Tests.MemoryLeak.Integration.TestTrains.TestModels;
 using Trax.Effect.Tests.MemoryLeak.Integration.Utils;
-using Trax.Mediator.Services.WorkflowBus;
+using Trax.Mediator.Services.TrainBus;
 
 namespace Trax.Effect.Tests.MemoryLeak.Integration.IntegrationTests;
 
@@ -22,7 +22,7 @@ public class MetadataDisposalTests
     public void Setup()
     {
         // Clear the static cache before each test to prevent memory leaks
-        WorkflowBus.ClearMethodCache();
+        TrainBus.ClearMethodCache();
         _serviceProvider = TestSetup.CreateMemoryOnlyTestServiceProvider();
     }
 
@@ -35,7 +35,7 @@ public class MetadataDisposalTests
         }
 
         // Clear the static cache after each test to prevent memory leaks
-        WorkflowBus.ClearMethodCache();
+        TrainBus.ClearMethodCache();
 
         // Force garbage collection to ensure cleanup
         GC.Collect();
@@ -50,13 +50,13 @@ public class MetadataDisposalTests
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = "TestWorkflow",
+                Name = "TestTrain",
                 Input = new { LargeData = new string('X', 10000) },
                 ExternalId = Guid.NewGuid().ToString("N"),
             }
         );
 
-        // Simulate setting Output JsonDocument (this would normally happen during workflow execution)
+        // Simulate setting Output JsonDocument (this would normally happen during train execution)
         var outputData = new { Result = new string('Y', 10000) };
         metadata.SetOutputObject(outputData);
 
@@ -77,7 +77,7 @@ public class MetadataDisposalTests
             Metadata.Create(
                 new CreateMetadata
                 {
-                    Name = "TestWorkflow",
+                    Name = "TestTrain",
                     Input = new { LargeData = new string('X', 50000) }, // 50KB of data
                     ExternalId = Guid.NewGuid().ToString("N"),
                 }
@@ -94,9 +94,9 @@ public class MetadataDisposalTests
     }
 
     [Test]
-    public async Task SuccessfulEffectWorkflows_ShouldNotLeakMemory()
+    public async Task SuccessfulEffectTrains_ShouldNotLeakMemory()
     {
-        // This test validates that EffectWorkflow.Dispose() properly clears the Memory dictionary
+        // This test validates that EffectTrain.Dispose() properly clears the Memory dictionary
         // on the success path, preventing large step inputs/outputs from being retained.
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
@@ -107,8 +107,8 @@ public class MetadataDisposalTests
 
                     try
                     {
-                        var workflow =
-                            serviceProviderScope.ServiceProvider.GetRequiredService<IMemoryTestWorkflow>();
+                        var train =
+                            serviceProviderScope.ServiceProvider.GetRequiredService<IMemoryTestTrain>();
 
                         var testInput = MemoryTestModelFactory.CreateInput(
                             $"success_test_{i}",
@@ -116,44 +116,44 @@ public class MetadataDisposalTests
                             processingDelayMs: 0
                         ); // 100KB each
 
-                        await workflow.Run(testInput);
+                        await train.Run(testInput);
                     }
                     finally
                     {
-                        // Scope disposal triggers EffectWorkflow.Dispose() which should clear Memory
+                        // Scope disposal triggers EffectTrain.Dispose() which should clear Memory
                         serviceProviderScope.Dispose();
                     }
                 }
             },
-            "SuccessfulEffectWorkflows_ShouldNotLeakMemory"
+            "SuccessfulEffectTrains_ShouldNotLeakMemory"
         );
 
         Console.WriteLine(result.GetSummary());
 
-        // Successful workflows should clean up Memory dictionary contents on disposal
+        // Successful trains should clean up Memory dictionary contents on disposal
         result
             .MemoryRetained.Should()
             .BeLessThan(
                 2 * 1024 * 1024,
-                "Should not retain more than 2MB total for 20 successful workflows with 100KB data each"
+                "Should not retain more than 2MB total for 20 successful trains with 100KB data each"
             );
 
-        // Ensure per-workflow retention is minimal
-        var memoryPerWorkflow = result.MemoryRetained / 20;
-        memoryPerWorkflow
+        // Ensure per-train retention is minimal
+        var memoryPerTrain = result.MemoryRetained / 20;
+        memoryPerTrain
             .Should()
             .BeLessThan(
                 100 * 1024,
-                "Each successful workflow should retain less than 100KB on average after disposal"
+                "Each successful train should retain less than 100KB on average after disposal"
             );
     }
 
     [Test]
-    public async Task EffectWorkflow_ShouldBeCollected_AfterScopeDisposal()
+    public async Task EffectTrain_ShouldBeCollected_AfterScopeDisposal()
     {
-        // This test validates that EffectWorkflow instances are GC-collectible after scope disposal.
+        // This test validates that EffectTrain instances are GC-collectible after scope disposal.
         // Memory.Clear() in Dispose() is critical here — without it, large objects in the Memory
-        // dictionary could prevent the workflow and its references from being collected.
+        // dictionary could prevent the train and its references from being collected.
         var weakReferences = new List<WeakReference>();
 
         for (int i = 0; i < 30; i++)
@@ -162,10 +162,10 @@ public class MetadataDisposalTests
 
             try
             {
-                var workflow =
-                    serviceProviderScope.ServiceProvider.GetRequiredService<IMemoryTestWorkflow>();
+                var train =
+                    serviceProviderScope.ServiceProvider.GetRequiredService<IMemoryTestTrain>();
 
-                weakReferences.Add(new WeakReference(workflow));
+                weakReferences.Add(new WeakReference(train));
 
                 var testInput = MemoryTestModelFactory.CreateInput(
                     $"gc_test_{i}",
@@ -173,7 +173,7 @@ public class MetadataDisposalTests
                     processingDelayMs: 0
                 ); // 50KB each
 
-                await workflow.Run(testInput);
+                await train.Run(testInput);
             }
             finally
             {
@@ -190,19 +190,19 @@ public class MetadataDisposalTests
 
         var aliveCount = weakReferences.Count(wr => wr.IsAlive);
         Console.WriteLine(
-            $"EffectWorkflows still alive after scope disposal + GC: {aliveCount}/{weakReferences.Count}"
+            $"EffectTrains still alive after scope disposal + GC: {aliveCount}/{weakReferences.Count}"
         );
 
         aliveCount
             .Should()
             .BeLessThan(
                 weakReferences.Count,
-                "Some EffectWorkflow instances should be collected by GC after scope disposal"
+                "Some EffectTrain instances should be collected by GC after scope disposal"
             );
     }
 
     [Test]
-    public async Task FailingWorkflows_ShouldNotLeakMemory()
+    public async Task FailingTrains_ShouldNotLeakMemory()
     {
         // Arrange
 
@@ -216,15 +216,15 @@ public class MetadataDisposalTests
 
                     try
                     {
-                        var failingWorkflow =
-                            serviceProviderScope.ServiceProvider.GetRequiredService<IFailingTestWorkflow>();
+                        var failingTrain =
+                            serviceProviderScope.ServiceProvider.GetRequiredService<IFailingTestTrain>();
 
                         var testInput = MemoryTestModelFactory.CreateFailingInput(
                             $"failing_test_{i}",
                             dataSizeBytes: 100000
                         ); // 100KB each
 
-                        await failingWorkflow.Run(testInput);
+                        await failingTrain.Run(testInput);
                     }
                     catch (Exception)
                     {
@@ -232,33 +232,30 @@ public class MetadataDisposalTests
                     }
                     finally
                     {
-                        // Always dispose the scope, even when workflow fails
+                        // Always dispose the scope, even when train fails
                         serviceProviderScope.Dispose();
                     }
                 }
             },
-            "FailingWorkflows_ShouldNotLeakMemory"
+            "FailingTrains_ShouldNotLeakMemory"
         );
 
         Console.WriteLine(result.GetSummary());
 
-        // Even with failing workflows, memory should be cleaned up properly
-        // Note: Failing workflows retain more memory due to exception handling and error metadata
+        // Even with failing trains, memory should be cleaned up properly
+        // Note: Failing trains retain more memory due to exception handling and error metadata
         // The key is that we don't have unbounded growth - memory should be reasonable
         result
             .MemoryRetained.Should()
             .BeLessThan(
                 1 * 1024 * 1024,
-                "Should not retain more than 1MB total for 15 failing workflows"
+                "Should not retain more than 1MB total for 15 failing trains"
             );
 
-        // Ensure memory retention is proportional to the number of workflows (not growing exponentially)
-        var memoryPerWorkflow = result.MemoryRetained / 15;
-        memoryPerWorkflow
+        // Ensure memory retention is proportional to the number of trains (not growing exponentially)
+        var memoryPerTrain = result.MemoryRetained / 15;
+        memoryPerTrain
             .Should()
-            .BeLessThan(
-                100 * 1024,
-                "Each failing workflow should retain less than 100KB on average"
-            );
+            .BeLessThan(100 * 1024, "Each failing train should retain less than 100KB on average");
     }
 }

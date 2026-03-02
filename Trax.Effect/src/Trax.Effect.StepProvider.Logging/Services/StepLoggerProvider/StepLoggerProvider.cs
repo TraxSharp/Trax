@@ -14,28 +14,28 @@ public class StepLoggerProvider(
     ILogger<StepLoggerProvider> logger
 ) : IStepLoggerProvider
 {
-    public async Task BeforeStepExecution<TIn, TOut, TWorkflowIn, TWorkflowOut>(
+    public async Task BeforeStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectStep<TIn, TOut> effectStep,
-        ServiceTrain<TWorkflowIn, TWorkflowOut> serviceTrain,
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
         CancellationToken cancellationToken
     )
     {
         if (effectStep.Metadata is null)
-            throw new WorkflowException(
+            throw new TrainException(
                 "Effect Step's Metadata should be null. Something has gone horribly wrong."
             );
 
         logger.Log(configuration.LogLevel, "{@StepMetadata}", effectStep.Metadata);
     }
 
-    public async Task AfterStepExecution<TIn, TOut, TWorkflowIn, TWorkflowOut>(
+    public async Task AfterStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectStep<TIn, TOut> effectStep,
-        ServiceTrain<TWorkflowIn, TWorkflowOut> serviceTrain,
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
         CancellationToken cancellationToken
     )
     {
         if (effectStep.Metadata is null)
-            throw new WorkflowException(
+            throw new TrainException(
                 "Effect Step's Metadata should be null. Something has gone horribly wrong."
             );
 

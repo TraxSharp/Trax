@@ -43,37 +43,37 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     #region Tables
 
     /// <summary>
-    /// Gets or sets the DbSet for workflow metadata records.
+    /// Gets or sets the DbSet for train metadata records.
     /// </summary>
     /// <remarks>
     /// This property provides access to the Metadata table, which stores information about
-    /// workflow executions, including inputs, outputs, state, and timing information.
+    /// train executions, including inputs, outputs, state, and timing information.
     ///
-    /// The Metadatas DbSet is the primary storage mechanism for workflow tracking data
-    /// and is used by the EffectRunner to persist workflow execution details.
+    /// The Metadatas DbSet is the primary storage mechanism for train tracking data
+    /// and is used by the EffectRunner to persist train execution details.
     /// </remarks>
     public DbSet<Metadata> Metadatas { get; set; }
 
     /// <summary>
-    /// Gets or sets the DbSet for workflow log entries.
+    /// Gets or sets the DbSet for train log entries.
     /// </summary>
     /// <remarks>
     /// This property provides access to the Log table, which stores detailed log entries
-    /// generated during workflow execution.
+    /// generated during train execution.
     ///
-    /// The Logs DbSet allows for fine-grained tracking of workflow execution steps
+    /// The Logs DbSet allows for fine-grained tracking of train execution steps
     /// and is particularly useful for debugging and auditing.
     /// </remarks>
     public DbSet<Log> Logs { get; set; }
 
     /// <summary>
-    /// Gets or sets the DbSet for workflow manifest records.
+    /// Gets or sets the DbSet for train manifest records.
     /// </summary>
     /// <remarks>
     /// This property provides access to the Manifest table, which stores configuration
-    /// and property information for workflows.
+    /// and property information for trains.
     ///
-    /// The Manifests DbSet allows for storing workflow configurations and properties
+    /// The Manifests DbSet allows for storing train configurations and properties
     /// that can be serialized/deserialized as JSONB.
     /// </remarks>
     public DbSet<Manifest> Manifests { get; set; }
@@ -233,7 +233,7 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     /// indicating that it should be inserted into the database when SaveChanges is called.
     ///
     /// This implementation is called by the EffectRunner when Track is called on the runner,
-    /// allowing workflow metadata to be automatically persisted to the database.
+    /// allowing train metadata to be automatically persisted to the database.
     /// </remarks>
     public async Task Track(IModel model)
     {

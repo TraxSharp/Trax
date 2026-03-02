@@ -8,7 +8,7 @@ using Trax.Effect.Services.EffectRegistry;
 namespace Trax.Effect.Services.EffectRunner;
 
 /// <summary>
-/// Coordinates multiple effect providers to track and persist workflow metadata.
+/// Coordinates multiple effect providers to track and persist train metadata.
 /// This class acts as a facade over all registered effect providers, delegating
 /// operations to each provider and managing their lifecycle.
 /// </summary>
@@ -30,7 +30,7 @@ public class EffectRunner : IEffectRunner
     /// </summary>
     /// <remarks>
     /// Each provider in this collection represents a different storage or processing mechanism
-    /// for workflow metadata (e.g., database, logging, etc.).
+    /// for train metadata (e.g., database, logging, etc.).
     /// </remarks>
     private List<IEffectProvider> ActiveEffectProviders { get; init; }
 

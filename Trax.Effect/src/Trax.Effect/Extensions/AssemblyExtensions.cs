@@ -8,7 +8,7 @@ namespace Trax.Effect.Extensions;
 /// </summary>
 /// <remarks>
 /// Assembly extensions are particularly useful in the Trax.Effect system
-/// for identifying the source of workflows and tracking their execution across
+/// for identifying the source of trains and tracking their execution across
 /// different assemblies in a modular application.
 /// </remarks>
 public static class AssemblyExtensions
@@ -25,7 +25,7 @@ public static class AssemblyExtensions
     /// The assembly full name typically follows the format "ProjectName, Version=x.x.x.x, Culture=neutral, PublicKeyToken=null".
     /// This method extracts just the "ProjectName" portion.
     ///
-    /// In the Trax.Effect system, this is used to identify the source of workflows
+    /// In the Trax.Effect system, this is used to identify the source of trains
     /// in the metadata tracking system, allowing for filtering and analysis by project.
     /// </remarks>
     public static string GetAssemblyProject(this Assembly assembly)
