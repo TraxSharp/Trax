@@ -7,15 +7,15 @@ nav_order: 2
 
 # Railway Oriented Programming
 
-Railway Oriented Programming comes from functional programming. The idea: your code has two tracks, success and failure. Each operation either continues down the success track or switches to the failure track.
+Railway Oriented Programming comes from functional programming — and it's the reason for the train metaphor. The idea: your code runs on two tracks. The train stays on the main track as long as every stop succeeds. If any stop fails, the train derails onto the failure track and skips every remaining stop.
 
 ```
-Success Track:  Input → [Step 1] → [Step 2] → [Step 3] → Output
+Main Track:     Input → [Stop 1] → [Stop 2] → [Stop 3] → Output
                             ↓
-Failure Track:          Exception → [Skip] → [Skip] → Exception
+Derailed:              Exception → [Skip]  → [Skip]  → Exception
 ```
 
-Trax.Core uses `Either<Exception, T>` from LanguageExt to represent this. A value is either `Left` (an exception) or `Right` (the success value):
+Trax.Core uses `Either<Exception, T>` from LanguageExt to represent this. A value is either `Left` (a derailment) or `Right` (the successful delivery):
 
 ```csharp
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
@@ -29,11 +29,11 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 }
 ```
 
-If `ValidateUserStep` throws, the train immediately returns `Left(exception)`. `CreateUserStep` and `SendEmailStep` never execute. You don't write any error-checking code—the chain handles it.
+If `ValidateUserStep` throws, the train derails immediately and returns `Left(exception)`. `CreateUserStep` and `SendEmailStep` are never reached. You don't write any error-checking code — the railway handles it.
 
 ## The Effect Pattern
 
-The Effect Pattern separates *describing* what should happen from *doing* it. If you've used Entity Framework, you already know this pattern:
+The Effect Pattern separates *describing* what should happen from *doing* it. Think of it as loading cargo onto the train versus actually delivering it. If you've used Entity Framework, you already know this pattern:
 
 ```csharp
 // Track changes (doesn't hit database yet)
@@ -44,17 +44,17 @@ context.Orders.Update(order);
 await context.SaveChanges();
 ```
 
-Trax.Core's `ServiceTrain` does the same thing. Steps can track models, log entries, and other effects. Nothing actually persists until the train completes successfully and calls `SaveChanges`. If any step fails, nothing is saved.
+Trax.Core's `ServiceTrain` does the same thing. Stops can track models, log entries, and other effects along the journey. Nothing actually persists until the train arrives at its destination and calls `SaveChanges`. If any stop derails the train, nothing is saved.
 
-This gives you atomic trains—either everything succeeds and all effects are applied, or something fails and nothing is applied.
+This gives you atomic journeys — either the train arrives and all station services are applied, or it derails and nothing is applied.
 
 ## Train vs ServiceTrain
 
 Trax.Core has two base classes for trains:
 
-**`Train<TIn, TOut>`** — The core class. Handles chaining, [Memory](memory.md), and error propagation. No metadata, no effects, no automatic dependency injection from an `IServiceProvider`. Use this when:
+**`Train<TIn, TOut>`** — The bare locomotive. Handles routing through stops, [cargo](memory.md) management, and derailment propagation. No journey logging, no station services, no automatic dependency injection from an `IServiceProvider`. Use this when:
 - You want a lightweight train without persistence
-- You're composing steps inside a larger system that handles its own concerns
+- You're composing stops inside a larger system that handles its own concerns
 - Testing or prototyping
 
 ```csharp
@@ -68,13 +68,13 @@ public class SimpleUserCreation : Train<CreateUserRequest, User>
 }
 ```
 
-**`ServiceTrain<TIn, TOut>`** — Extends `Train` with:
-- Automatic metadata tracking (start time, end time, success/failure, inputs/outputs)
-- Effect providers (database persistence, JSON logging, parameter serialization)
-- Integration with `ITrainBus` for train discovery
-- `IServiceProvider` access for step instantiation
+**`ServiceTrain<TIn, TOut>`** — The full commercial service. Extends `Train` with:
+- Automatic journey logging (departure time, arrival time, success/derailment, cargo in/out)
+- Station services (database persistence, JSON logging, parameter serialization)
+- Integration with `ITrainBus` for dispatch station discovery
+- `IServiceProvider` access for stop instantiation
 
-Use this when you want observability, persistence, or the mediator pattern:
+Use this when you want observability, persistence, or the dispatch station pattern:
 
 ```csharp
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>
@@ -87,4 +87,4 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>
 }
 ```
 
-Most applications should use `ServiceTrain`. The base `Train` exists for cases where you need the chaining pattern without the infrastructure.
+Most applications should use `ServiceTrain`. The bare `Train` locomotive exists for cases where you need the routing pattern without the infrastructure.

@@ -6,7 +6,7 @@ nav_order: 8
 
 # Dashboard
 
-Trax.Dashboard adds a web UI to your application for inspecting registered trains. It mounts as a Blazor Server app at a route you choose—similar to how Hangfire's dashboard works at `/hangfire`.
+Trax.Dashboard is the operations control room — a web UI for inspecting registered trains, browsing execution history, managing scheduled manifests, and monitoring the network. It mounts as a Blazor Server app at a route you choose, similar to how Hangfire's dashboard works at `/hangfire`.
 
 The dashboard only requires `Trax.Effect`. As you add more Effect packages (Data, Scheduler, etc.), the dashboard gains access to more information. Start with train discovery, and add more as your setup grows.
 

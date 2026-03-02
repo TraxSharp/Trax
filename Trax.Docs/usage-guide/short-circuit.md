@@ -7,7 +7,7 @@ nav_order: 5
 
 # ShortCircuit
 
-`.ShortCircuit<TStep>()` lets a step end the train early with a valid result. If the step returns a value of the train's return type, that becomes the final result and remaining steps are skipped. If the step throws, the train continues normally.
+`.ShortCircuit<TStep>()` lets a step take the express route — ending the train early with a valid result. If the step returns a value of the train's return type, that becomes the final result and remaining steps are skipped. If the step throws, the train continues normally.
 
 ```csharp
 public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderResult>

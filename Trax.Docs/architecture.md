@@ -7,7 +7,7 @@ has_children: true
 
 # Architecture
 
-How Trax.Core's components fit together.
+How Trax.Core's packages fit together.
 
 ## System Architecture Overview
 
@@ -35,8 +35,8 @@ How Trax.Core's components fit together.
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      Core Trax.Core                                │
-│           [Train Engine] ────────► [Steps]                       │
+│                      Trax.Core                                     │
+│             [Train Engine] ────────► [Steps]                       │
 └─────────────────────────────────┬───────────────────────────────────┘
                                   │
                                   ▼
@@ -54,22 +54,22 @@ How Trax.Core's components fit together.
 ## Package Hierarchy
 
 ```
-Trax.Core (Core)
+Trax.Core (Core — the locomotive)
     │
     ├─── Trax.Core.Analyzers (Compile-Time Chain Validation)
     │
-    └─── Trax.Effect (Enhanced Trains)
+    └─── Trax.Effect (ServiceTrain — the full commercial service)
               │
-              ├─── Trax.Dashboard (Web UI)
+              ├─── Trax.Dashboard (Web UI — the control room)
               │
-              ├─── Trax.Mediator (TrainBus)
+              ├─── Trax.Mediator (TrainBus — the dispatch station)
               │
               ├─── Trax.Effect.Data (Abstract Persistence)
               │         │
               │         ├─── Trax.Effect.Data.Postgres
               │         └─── Trax.Effect.Data.InMemory
               │
-              ├─── Trax.Scheduler (Job Orchestration)
+              ├─── Trax.Scheduler (Manifest-Based Scheduling — the timetable)
               │         │
               │         └─── Trax.Scheduler.Hangfire
               │

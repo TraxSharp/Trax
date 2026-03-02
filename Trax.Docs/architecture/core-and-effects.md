@@ -9,12 +9,12 @@ nav_order: 1
 
 ## Trax.Core (Core Engine)
 
-The foundation layer providing Railway Oriented Programming patterns.
+The foundation layer providing Railway Oriented Programming patterns. In the train metaphor, this is the locomotive — the engine that moves data through a chain of steps.
 
 ### Key Classes
 
 ```csharp
-// Base train class
+// Base train class — chains steps and propagates errors
 public abstract class Train<TIn, TOut>
 {
     public Task<TOut> Run(TIn input);
@@ -37,7 +37,7 @@ This layer handles chaining, error propagation, and the core train lifecycle.
 
 ## Trax.Effect (Enhanced Trains)
 
-Extends core trains with dependency injection, metadata tracking, and effect management.
+Extends core trains with dependency injection, metadata tracking, and effect management. Where `Train` is the bare locomotive, `ServiceTrain` is the full commercial service — it logs every journey and coordinates station services (effect providers) along the way.
 
 ### ServiceTrain<TIn, TOut>
 
@@ -188,4 +188,4 @@ The full lifecycle of a `ServiceTrain` execution, corresponding to the `Run` met
            [Return Result]
 ```
 
-Steps execute inside the "Execute Train Chain" box. Each mutation to the train's `Metadata` is followed by an `Update` call that notifies all registered effect providers—allowing them to react immediately (e.g., `ParameterEffect` re-serializes input/output parameters). The final `SaveChanges` call persists all accumulated side effects. Both success and failure paths call `SaveChanges`, so metadata is always persisted regardless of outcome.
+Steps execute inside the "Execute Train Chain" box. Each mutation to the train's `Metadata` is followed by an `Update` call that notifies all registered effect providers — allowing them to react immediately (e.g., `ParameterEffect` re-serializes input/output parameters). The final `SaveChanges` call persists all accumulated side effects. Both success and failure paths call `SaveChanges`, so metadata is always persisted regardless of outcome.

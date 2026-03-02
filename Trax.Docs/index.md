@@ -9,7 +9,7 @@ nav_order: 1
 [![Build Status](https://github.com/Theauxm/Trax.Core/trains/Release%20NuGet%20Package/badge.svg?branch=main)](https://github.com/Theauxm/Trax.Core/actions)
 [![Test Status](https://github.com/Theauxm/Trax.Core/trains/Trax.Core:%20Run%20CI%2FCD%20Test%20Suite/badge.svg?branch=main)](https://github.com/Theauxm/Trax.Core/actions)
 
-Trax.Core is a .NET library for building trains as a chain of discrete steps.
+Trax.Core is a .NET library for building trains — sequences of typed stops that carry data along a route with automatic derailment handling.
 
 ## The Problem
 
@@ -52,21 +52,21 @@ public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderReceipt>
 }
 ```
 
-If `CheckInventoryStep` throws, `ChargePaymentStep` never runs. The exception propagates automatically. Each step is a separate class with its own dependencies, easy to test in isolation.
+The train departs with its cargo (`Activate`), visits each stop (`.Chain<T>`), and arrives at its destination (`Resolve`). If `CheckInventoryStep` throws, the train derails — `ChargePaymentStep` and `CreateShipmentStep` are never reached. Each stop is a separate class with its own dependencies, testable in isolation.
 
 ```
-Success Track:  Input → [Step 1] → [Step 2] → [Step 3] → Output
+Main Track:     Input → [Stop 1] → [Stop 2] → [Stop 3] → Output
                             ↓
-Failure Track:          Exception → [Skip] → [Skip] → Exception
+Derailed:              Exception → [Skip]  → [Skip]  → Exception
 ```
 
-Remove a step or reorder the chain incorrectly, and the built-in [Analyzer](analyzer.md) tells you at compile time—before you ever run the code.
+Remove a stop or reorder the route incorrectly, and the built-in [Analyzer](analyzer.md) tells you at compile time — before the train ever leaves the station.
 
 For more on how this works, see [Core Concepts](concepts.md).
 
 ## IDE Extensions
 
-Inlay hint extensions for VSCode and Rider/ReSharper. They show `TIn → TOut` types inline for each `.Chain<TStep>()` call.
+Inlay hint extensions for VSCode and Rider/ReSharper. They show `TIn → TOut` cargo types inline for each `.Chain<TStep>()` stop.
 
 - **VSCode** — Install from the [VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=Trax.Core.trax-hints)
 - **Rider / ReSharper** — Search for **Trax.Core Chain Hints** in JetBrains Marketplace
@@ -81,18 +81,18 @@ Trax.Core 5.x requires `net10.0`. See [Getting Started](getting-started.md) for 
 
 | Package | Description | Version |
 |---------|-------------|---------|
-| [Trax.Core](https://www.nuget.org/packages/Trax.Core/) | Core library for Railway Oriented Programming | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Core) |
-| [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/) | Effects for Trax.Core Trains | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect) |
-| [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/) | Web dashboard for inspecting Trax.Core trains | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Dashboard) |
-| [Trax.Effect.Data](https://www.nuget.org/packages/Trax.Effect.Data/) | Data persistence abstractions for Trax.Core Effects | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Data) |
-| [Trax.Effect.Data.InMemory](https://www.nuget.org/packages/Trax.Effect.Data.InMemory/) | In-memory data persistence for Trax.Core Effects | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Data.InMemory) |
-| [Trax.Effect.Data.Postgres](https://www.nuget.org/packages/Trax.Effect.Data.Postgres/) | PostgreSQL data persistence for Trax.Core Effects | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Data.Postgres) |
-| [Trax.Effect.Provider.Json](https://www.nuget.org/packages/Trax.Effect.Provider.Json/) | JSON serialization for Trax.Core Effects | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Provider.Json) |
-| [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/) | Mediator pattern implementation for Trax.Core Effects | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Mediator) |
-| [Trax.Effect.Provider.Parameter](https://www.nuget.org/packages/Trax.Effect.Provider.Parameter/) | Parameter serialization for Trax.Core Effects | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Provider.Parameter) |
-| [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/) | Manifest-based job scheduling for Trax.Core | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Scheduler) |
-| [Trax.Scheduler.Hangfire](https://www.nuget.org/packages/Trax.Scheduler.Hangfire/) | Hangfire integration for Trax.Core Scheduler | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Scheduler.Hangfire) |
-| [Trax.Samples.Templates](https://www.nuget.org/packages/Trax.Samples.Templates/) | `dotnet new` project template for Trax.Core servers | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Samples.Templates) |
+| [Trax.Core](https://www.nuget.org/packages/Trax.Core/) | The locomotive — trains, stops, and railway programming | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Core) |
+| [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/) | Full commercial service — journey logging and station services | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect) |
+| [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/) | Operations control room for the train network | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Dashboard) |
+| [Trax.Effect.Data](https://www.nuget.org/packages/Trax.Effect.Data/) | Data persistence abstractions for station services | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Data) |
+| [Trax.Effect.Data.InMemory](https://www.nuget.org/packages/Trax.Effect.Data.InMemory/) | In-memory depot for testing | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Data.InMemory) |
+| [Trax.Effect.Data.Postgres](https://www.nuget.org/packages/Trax.Effect.Data.Postgres/) | PostgreSQL depot for production | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Data.Postgres) |
+| [Trax.Effect.Provider.Json](https://www.nuget.org/packages/Trax.Effect.Provider.Json/) | JSON logging station service | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Provider.Json) |
+| [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/) | Dispatch station — route cargo to the right train | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Mediator) |
+| [Trax.Effect.Provider.Parameter](https://www.nuget.org/packages/Trax.Effect.Provider.Parameter/) | Cargo serialization station service | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Provider.Parameter) |
+| [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/) | Timetable management — manifests, retries, dead letters | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Scheduler) |
+| [Trax.Scheduler.Hangfire](https://www.nuget.org/packages/Trax.Scheduler.Hangfire/) | Hangfire integration for the timetable | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Scheduler.Hangfire) |
+| [Trax.Samples.Templates](https://www.nuget.org/packages/Trax.Samples.Templates/) | `dotnet new` project template for Trax servers | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Samples.Templates) |
 
 ## License
 

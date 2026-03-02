@@ -7,7 +7,7 @@ nav_order: 1
 
 # Steps
 
-Steps are the building blocks of trains. Each step does one thing:
+Steps are the stops along a train's route — each one does one thing:
 
 ```csharp
 public class ValidateEmailStep(IUserRepository UserRepository) : Step<CreateUserRequest, Unit>
@@ -38,7 +38,7 @@ public class CreateUserStep(IUserRepository UserRepository) : Step<CreateUserReq
 }
 ```
 
-Steps use constructor injection for dependencies. When a step throws, the train stops and returns the exception.
+Steps use constructor injection for dependencies. When a step throws, the train derails and returns the exception.
 
 ## CancellationToken in Steps
 

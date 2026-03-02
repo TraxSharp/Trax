@@ -7,7 +7,7 @@ nav_order: 4
 
 # Metadata
 
-Every train execution creates a metadata record:
+Every train journey produces a log — the metadata record. It captures everything about the trip: when it departed, where it went, what it was carrying, and whether it arrived or derailed.
 
 ```csharp
 public class Metadata : IModel, IDisposable
@@ -17,8 +17,8 @@ public class Metadata : IModel, IDisposable
     public string ExternalId { get; set; }          // GUID for external references
     public string? Executor { get; }                // Assembly that ran the train
     public TrainState TrainState { get; set; } // Pending/InProgress/Completed/Failed
-    public DateTime StartTime { get; set; }         // When train started
-    public DateTime? EndTime { get; set; }          // When train finished
+    public DateTime StartTime { get; set; }         // When the train started
+    public DateTime? EndTime { get; set; }          // When the train finished
     public string? Input { get; set; }              // Serialized input (jsonb)
     public string? Output { get; set; }             // Serialized output (jsonb)
     public string? FailureStep { get; }             // Which step failed
@@ -30,11 +30,11 @@ public class Metadata : IModel, IDisposable
 }
 ```
 
-The `TrainState` tracks progress: `Pending` → `InProgress` → `Completed` (or `Failed`). If a train fails, the metadata captures the exception, stack trace, and which step failed.
+The `TrainState` tracks the journey: `Pending` (boarding) → `InProgress` (in transit) → `Completed` (arrived) or `Failed` (derailed). If a train derails, the journey log captures the exception, stack trace, and which stop it happened at.
 
 ## Nested Trains
 
-Trains can run other trains by injecting `ITrainBus`. Pass the current `Metadata` to the child train to establish a parent-child relationship—this creates a tree of metadata records you can query to trace execution across trains.
+A stop can dispatch another train mid-journey by injecting `ITrainBus`. Pass the current `Metadata` to the child train to link the journeys — this creates a tree of journey logs you can query to trace execution across an entire network of trains.
 
 See [Nested Trains](../usage-guide/mediator.md#nested-trains) for implementation details.
 

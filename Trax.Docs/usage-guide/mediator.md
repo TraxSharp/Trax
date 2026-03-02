@@ -7,7 +7,7 @@ nav_order: 8
 
 # Mediator & TrainBus
 
-The `Trax.Mediator` package provides the `TrainBus`—a way to dispatch trains by their input type instead of injecting each one directly.
+The `Trax.Mediator` package provides the `TrainBus` — the dispatch station that routes trains by their input type instead of requiring you to inject each one directly.
 
 ## The Mediator Pattern
 
@@ -41,7 +41,7 @@ public class UsersController(ITrainBus trainBus) : ControllerBase
 
 *API Reference: [TrainBus.RunAsync]({{ site.baseurl }}{% link api-reference/mediator-api/train-bus.md %})*
 
-The `TrainBus` looks at the input type (`CreateUserRequest`), finds the train registered for that type, and runs it. The controller doesn't need to know which train class handles the request—it just sends the input and gets back a result.
+The `TrainBus` looks at the input type (`CreateUserRequest`), finds the train registered for that type, and dispatches it. The controller doesn't need to know which train class handles the request — it just drops off the cargo and gets back a delivery.
 
 ## Setup
 

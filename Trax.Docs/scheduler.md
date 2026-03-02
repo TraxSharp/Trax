@@ -7,7 +7,7 @@ has_children: true
 
 # Scheduling
 
-Trax.Scheduler adds background job orchestration to trains. Define a manifest (what to run, when, and how many retries), and the scheduler handles execution, retries, and dead-lettering.
+Trax.Scheduler adds timetable management to trains. Define a manifest — like a shipping manifest listing what train to dispatch, when, and how many retries — and the scheduler handles execution, retries, and dead-lettering.
 
 This isn't a traditional cron scheduler. It supports cron expressions, but its design goal is controlled bulk job orchestration—database replication with thousands of table slices, for example—where you need visibility into every execution attempt.
 
@@ -19,7 +19,7 @@ A hosted service with a timer works fine for simple recurring tasks. The Schedul
 
 ### Manifest = Job Definition
 
-A `Manifest` describes a type of job: which train it triggers, scheduling rules, retry policies, and default configuration. The `IManifestScheduler` handles the boilerplate—no need to worry about assembly-qualified names or JSON serialization:
+A `Manifest` is the scheduling equivalent of a shipping manifest — it describes what train to run, when to dispatch it, how to handle failures, and what cargo (input) to load. The `IManifestScheduler` handles the boilerplate—no need to worry about assembly-qualified names or JSON serialization:
 
 ```csharp
 await scheduler.ScheduleAsync<ISyncCustomersTrain, SyncCustomersInput>(
@@ -54,7 +54,7 @@ Manifest: "sync-customers-us-east"
 
 ### Dead Letter = Failed Beyond Retry
 
-When a job fails more times than `MaxRetries`, it moves to the dead letter queue. Dead letters require manual intervention—the scheduler won't automatically retry them.
+Like a lost shipment in a postal system, when a job fails more times than `MaxRetries`, it moves to the dead letter queue. Dead letters require manual intervention — the scheduler won't automatically retry them.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -70,7 +70,7 @@ Operators can retry (which creates a new execution) or acknowledge (mark as hand
 
 ### Dependent Manifests
 
-A manifest can depend on another manifest. Instead of running on a timer, it fires when its parent's `LastSuccessfulRun` advances past the dependent's own. This is how you build ETL chains, post-processing steps, or any train that should only run after another succeeds. See [Dependent Trains](scheduler/dependent-trains.md).
+A manifest can depend on another manifest — one train's arrival triggers another's departure. Instead of running on a timer, it fires when its parent's `LastSuccessfulRun` advances past the dependent's own. This is how you build ETL chains, post-processing steps, or any train that should only run after another succeeds. See [Dependent Trains](scheduler/dependent-trains.md).
 
 ```csharp
 scheduler

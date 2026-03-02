@@ -13,25 +13,25 @@ Trax.Core borrows concepts from functional programming and applies them to train
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                       Train                          │
-│         Orchestrates steps, manages effects             │
+│                       Train                             │
+│       Carries cargo through a route of stops            │
 └─────────────────────────────────────────────────────────┘
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────┐
-│                        Steps                            │
+│                   Stops (Steps)                         │
 │  [Validate] ────► [Create] ────► [Notify]              │
 └─────────────────────────────────────────────────────────┘
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────┐
-│                       Effects                           │
+│                  Station Services (Effects)              │
 │     Database    │    JSON Log    │    Parameters        │
 └─────────────────────────────────────────────────────────┘
 ```
 
-A **train** is a sequence of steps that accomplish a business operation. `CreateUserTrain` chains together validation, database insertion, and email notification.
+A **train** travels a route of stops to accomplish a business operation. `CreateUserTrain` carries a request through validation, database insertion, and email notification. The data it carries between stops is its **cargo** ([Memory](concepts/memory.md)).
 
-A **step** does one thing. `ValidateEmailStep` checks if an email is valid. `CreateUserInDatabaseStep` inserts a record. Steps are easy to test in isolation because they have a single responsibility.
+A **step** is a stop on the route. Each stop does one thing: `ValidateEmailStep` inspects the cargo, `CreateUserInDatabaseStep` produces a new record. Steps are easy to test in isolation because each one has a single responsibility.
 
-**Effects** are side effects that happen as a result of steps running—database writes, log entries, serialized parameters. Effect providers track these during train execution and save them atomically at the end.
+**Effects** are station services — operations that happen as the train passes through each stop. Database persistence, log entries, serialized parameters. Effect providers handle these behind the scenes and save them atomically when the journey completes.

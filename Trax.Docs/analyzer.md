@@ -6,7 +6,7 @@ nav_order: 7
 
 # Analyzer
 
-Trax.Core includes a Roslyn analyzer that validates your train chains at compile time. When you chain steps via `.Chain<TStep>()`, the analyzer simulates the runtime Memory dictionary to verify that each step's input type is available before that step executes.
+Trax.Core includes a Roslyn analyzer that validates your train's route at compile time — like a route planner that checks every stop has the cargo it needs before the train ever departs. When you chain steps via `.Chain<TStep>()`, the analyzer simulates the runtime Memory dictionary to verify that each step's input type is available before that step executes.
 
 ## The Problem
 

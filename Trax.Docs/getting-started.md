@@ -16,13 +16,13 @@ Trax.Core 5.x targets `net10.0` exclusively. Make sure your project's target fra
 
 If you're upgrading from 4.x, see [Migration (4.x → 5.x)](migration.md).
 
-For a complete starter project with scheduling, persistence, and dashboards already configured, see the [Project Template](templates.md).
+For a complete starter project with timetables, persistence, and the control room already configured, see the [Project Template](templates.md).
 
 ## Installation
 
 ### Install NuGet Packages
 
-For a typical setup with database persistence and train discovery:
+For a typical setup with database persistence and the dispatch station:
 
 ```xml
 <PackageReference Include="Trax.Core" Version="5.*" />
@@ -62,7 +62,7 @@ app.Run();
 ### 1. Define Input and Output Models
 
 ```csharp
-// Input model - unique per train
+// Cargo type - unique per train
 public record CreateUserRequest
 {
     public required string Email { get; init; }
@@ -71,7 +71,7 @@ public record CreateUserRequest
     public string? PhoneNumber { get; init; }
 }
 
-// Output model
+// Delivery type
 public record User
 {
     public int Id { get; init; }
@@ -99,7 +99,7 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 
 *API Reference: [Activate]({{ site.baseurl }}{% link api-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
 
-### 3. Implement the Steps
+### 3. Implement the Stops
 
 ```csharp
 public class ValidateEmailStep(IUserRepository UserRepository) : Step<CreateUserRequest, Unit>
@@ -178,9 +178,9 @@ public class UsersController(ITrainBus trainBus) : ControllerBase
 
 ## Next Steps
 
-- [Core Concepts](concepts.md) - Understand the ideas behind Trax.Core
+- [Core Concepts](concepts.md) - Understand trains, stops, cargo, and the railway
 - [Usage Guide](usage-guide.md) - Patterns and examples for building trains
-- [Mediator](usage-guide/mediator.md) - Dispatch trains with the TrainBus
-- [Scheduling](scheduler.md) - Background job orchestration with retries and dead-lettering
+- [Mediator](usage-guide/mediator.md) - The dispatch station — route cargo to the right train
+- [Scheduling](scheduler.md) - Timetables, manifests, retries, and dead letters
 - [Architecture](architecture.md) - How the system is built internally
-- [Dashboard](dashboard.md) - Add a web UI for inspecting trains (optional)
+- [Dashboard](dashboard.md) - The operations control room (optional)

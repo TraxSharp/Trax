@@ -7,7 +7,7 @@ nav_order: 3
 
 # Chain
 
-`.Chain<TStep>()` is the primary way to add a step to a train. It resolves the step from the DI container, pulls its input from [Memory](../concepts/memory.md), runs it, and stores the output back in Memory.
+`.Chain<TStep>()` is the primary way to add a stop to a train's route. It resolves the step from the DI container, pulls its input from [Memory](../concepts/memory.md), runs it, and stores the output back in Memory.
 
 ```csharp
 Activate(input)
@@ -23,7 +23,7 @@ For all 12 overloads, type parameter constraints, and step-wiring behavior, see 
 
 ## Railway Behavior
 
-If a previous step threw an exception, `.Chain<TStep>()` is skipped entirely. The exception propagates through the chain until it reaches `.Resolve()`, which returns it as `Left(exception)`.
+If a previous step derailed the train, `.Chain<TStep>()` is skipped entirely. The exception propagates through the chain until it reaches `.Resolve()`, which returns it as `Left(exception)`.
 
 ```csharp
 Activate(input)

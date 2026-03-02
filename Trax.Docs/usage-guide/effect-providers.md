@@ -8,7 +8,7 @@ has_children: true
 
 # Configuring Effect Providers
 
-Effect providers handle the side effects that happen when a train runs—database writes, logging, serialization. Each provider is independent: add or remove any of them without changing your train code. For the conceptual background, see [Effects](../concepts/functional-programming.md#effects).
+Effect providers are the station services that handle side effects as a train runs — database writes, logging, serialization. Each provider is independent: add or remove any of them without changing your train code. For the conceptual background, see [Effects](../concepts/functional-programming.md#effects).
 
 ## Database Persistence (Postgres or InMemory)
 

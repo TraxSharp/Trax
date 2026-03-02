@@ -7,11 +7,11 @@ nav_order: 3
 
 # Memory
 
-Memory is how steps communicate in a Trax.Core train. It's a type-keyed dictionary that the train maintains as it executes—each step pulls its input from Memory and pushes its output back in.
+Memory is how steps communicate in a train. Think of it as the cargo the train carries between stops — a type-keyed dictionary that accumulates as the train executes. Each step pulls its input from Memory and pushes its output back in.
 
 ## How It Works
 
-When you call `Activate(input)`, the train seeds Memory with two entries: your input type and `Unit`. As each step runs, its output gets stored in Memory under that output's type:
+When you call `Activate(input)`, Memory is seeded with two entries: your input type and `Unit`. As each step runs, its output is stored in Memory under that output's type:
 
 ```csharp
 Activate(request)                  // Memory: { CreateUserRequest, Unit }
@@ -21,11 +21,11 @@ Activate(request)                  // Memory: { CreateUserRequest, Unit }
     .Resolve();                    // Resolves User from Memory
 ```
 
-Each step declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the step, and stores `TOut` back. If `TIn` isn't in Memory, the train fails at runtime—though the [Analyzer](../analyzer.md) catches this at compile time.
+Each step declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the step, and stores `TOut` back. If `TIn` isn't in Memory, the train fails at runtime — though the [Analyzer](../analyzer.md) catches this at compile time.
 
 ## Storage by Type
 
-Memory stores one value per type. If two steps both return `string`, the second one overwrites the first. This is by design—use distinct types to avoid collisions:
+Memory stores one value per type. If two steps both return `string`, the second one overwrites the first. This is by design — use distinct types to avoid collisions:
 
 ```csharp
 // These would collide in Memory (both produce string)
@@ -37,11 +37,11 @@ Memory stores one value per type. If two steps both return `string`, the second 
 .Chain<GetLastNameStep>()    // Returns LastName
 ```
 
-This is why Trax.Core encourages specific types (records, value objects) over primitives. A step signature like `Step<User, EmailAddress>` tells you more than `Step<User, string>`.
+This is why Trax.Core encourages specific types (records, value objects) over primitives. A step signature like `Step<User, EmailAddress>` tells you exactly what goes in and what comes out — `Step<User, string>` doesn't.
 
 ## References, Not Copies
 
-Memory stores references. When you modify an object in a step, every subsequent step sees the modification:
+Memory stores references, not copies. When you modify an object in a step, every subsequent step sees the modification:
 
 ```csharp
 public class EnrichUserStep : Step<User, Unit>
@@ -87,7 +87,7 @@ public class LoadEntitiesStep : Step<LoadRequest, (User, Order, Payment)>
 // After this step, Memory contains: { LoadRequest, Unit, User, Order, Payment }
 ```
 
-When a step takes a tuple as input, Memory reconstructs it from individual elements:
+When a step takes a tuple as input, Memory reconstructs it from the individual elements:
 
 ```csharp
 public class ProcessCheckoutStep : Step<(User, Order, Payment), Receipt>
@@ -100,7 +100,7 @@ public class ProcessCheckoutStep : Step<(User, Order, Payment), Receipt>
 // Memory finds User, Order, and Payment individually, constructs the tuple, and passes it in
 ```
 
-This lets you load multiple entities in one step and consume them individually—or as a group—in later steps:
+This lets you load multiple entities in one step and consume them individually — or as a group — in later steps:
 
 ```csharp
 public class CheckoutTrain : ServiceTrain<CheckoutRequest, Receipt>
