@@ -67,3 +67,7 @@ return Activate(input)
 - Steps are created and injected with DI services from Memory via `InitializeStep`. Constructor parameters are resolved from Memory by type.
 - `TIn`/`TOut` are discovered via reflection from the step's `IStep<,>` interface at runtime.
 - See [Memory]({{ site.baseurl }}{% link concepts/memory.md %}) for how type-based lookup works, including tuple handling.
+
+## SynchronizationContext Safety
+
+Chain suppresses the current `SynchronizationContext` when awaiting an incomplete step task via `.GetAwaiter().GetResult()`. This prevents deadlocks in environments with a single-threaded `SynchronizationContext` such as Blazor Server, WPF, WinForms, and legacy ASP.NET. The original context is restored after the step completes (or throws).
