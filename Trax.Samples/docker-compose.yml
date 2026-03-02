@@ -8,8 +8,11 @@ services:
       POSTGRES_USER: trax
       POSTGRES_PASSWORD: trax123
       POSTGRES_DB: trax
+      POSTGRES_MULTIPLE_DATABASES: trax_scheduler_tests,trax_data_tests
     tty: true
     ports:
       - "5432:5432"
     networks:
       - default
+    volumes:
+      - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh

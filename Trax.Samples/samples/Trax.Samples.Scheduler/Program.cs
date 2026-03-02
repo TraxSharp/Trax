@@ -1,6 +1,7 @@
 using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
@@ -225,6 +226,33 @@ builder.Services.AddTraxEffects(options =>
                         )),
                     options: o => o.Dormant()
                 );
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // 7. MISFIRE POLICIES
+            //    OnMisfire(policy)       — what to do when a scheduled run is missed
+            //    MisfireThreshold(span)  — grace period before the policy kicks in
+            //
+            //    Two policies compared side-by-side:
+            //    - FireOnceNow: fires immediately on recovery (default behavior)
+            //    - DoNothing:   skips if overdue beyond threshold, waits for next
+            //
+            //    Try it: stop the app for >60 seconds, restart.
+            //    "misfire-fire-once" will fire immediately on recovery.
+            //    "misfire-do-nothing" will skip and wait for the next 30-second tick.
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            scheduler.Schedule<IHelloWorldTrain>(
+                ManifestNames.MisfireFireOnce,
+                new HelloWorldInput { Name = "Misfire: FireOnceNow" },
+                Every.Seconds(30),
+                o => o.OnMisfire(MisfirePolicy.FireOnceNow)
+            );
+
+            scheduler.Schedule<IHelloWorldTrain>(
+                ManifestNames.MisfireDoNothing,
+                new HelloWorldInput { Name = "Misfire: DoNothing" },
+                Every.Seconds(30),
+                o => o.OnMisfire(MisfirePolicy.DoNothing).MisfireThreshold(TimeSpan.FromSeconds(10))
+            );
         })
 );
 

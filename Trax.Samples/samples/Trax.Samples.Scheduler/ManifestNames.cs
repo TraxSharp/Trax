@@ -27,6 +27,10 @@ public static class ManifestNames
     public const string ExtractTransaction = "extract-transaction";
     public const string DqTransaction = "dq-transaction";
 
+    // ── Misfire Policy Showcase ────────────────────────────────────────
+    public const string MisfireFireOnce = "misfire-fire-once";
+    public const string MisfireDoNothing = "misfire-do-nothing";
+
     // ── Table Names ──────────────────────────────────────────────────────
     public const string CustomerTable = "Customer";
     public const string TransactionTable = "Transaction";
