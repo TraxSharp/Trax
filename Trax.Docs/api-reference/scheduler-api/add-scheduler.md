@@ -45,6 +45,8 @@ services.AddTrax.CoreEffects(options => options
         .RetryBackoffMultiplier(2.0)
         .MaxRetryDelay(TimeSpan.FromHours(1))
         .DefaultJobTimeout(TimeSpan.FromMinutes(20))
+        .DefaultMisfirePolicy(MisfirePolicy.FireOnceNow)
+        .DefaultMisfireThreshold(TimeSpan.FromSeconds(60))
         .RecoverStuckJobsOnStartup()
         .DependentPriorityBoost(16)
         .AddMetadataCleanup()
@@ -85,6 +87,8 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `RetryBackoffMultiplier(double)` | multiplier | 2.0 | Exponential backoff multiplier. Set to 1.0 for constant delay |
 | `MaxRetryDelay(TimeSpan)` | maxDelay | 1 hour | Caps retry delay to prevent unbounded growth |
 | `DefaultJobTimeout(TimeSpan)` | timeout | 1 hour | Timeout after which a running job is considered stuck |
+| `DefaultMisfirePolicy(MisfirePolicy)` | policy | `FireOnceNow` | Default [misfire policy]({{ site.baseurl }}{% link scheduler/scheduling-options.md %}#misfire-policies) for manifests that don't specify one |
+| `DefaultMisfireThreshold(TimeSpan)` | threshold | 60 seconds | Grace period before misfire policies take effect. If a manifest is overdue by less than this, it fires normally |
 | `RecoverStuckJobsOnStartup(bool)` | recover | `true` | Whether to auto-recover stuck jobs on startup |
 | `PruneOrphanedManifests(bool)` | prune | `true` | Whether to [delete manifests]({{ site.baseurl }}{% link scheduler/orphan-manifest-cleanup.md %}) from the database that are no longer defined in the startup configuration. Disable if you create manifests dynamically at runtime via `IManifestScheduler` |
 | `DependentPriorityBoost(int)` | boost | 16 | Priority boost added to dependent train work queue entries at dispatch time. Range: 0-31. Ensures dependent trains are dispatched before non-dependent ones by default |

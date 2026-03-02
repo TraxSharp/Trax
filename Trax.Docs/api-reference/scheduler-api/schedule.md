@@ -88,6 +88,8 @@ The `ScheduleOptions` fluent builder consolidates all optional scheduling parame
 | `.Enabled(bool)` | Whether the manifest is enabled. Default: `true`. |
 | `.MaxRetries(int)` | Max retry attempts before dead-lettering. Default: `3`. |
 | `.Timeout(TimeSpan)` | Job execution timeout. `null` uses global default. |
+| `.OnMisfire(MisfirePolicy)` | Misfire policy for missed runs. `FireOnceNow` (default) fires immediately; `DoNothing` skips and waits for the next natural occurrence. Only applies to Cron and Interval types. |
+| `.MisfireThreshold(TimeSpan)` | Grace period before the misfire policy takes effect. Overrides the global `DefaultMisfireThreshold`. |
 
 ### Group-level methods
 

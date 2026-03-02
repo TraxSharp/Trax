@@ -197,6 +197,65 @@ See [Dormant Dependents](dependent-trains.md#dormant-dependents) for full detail
 
 See [Dependent Trains](dependent-trains.md) for details on chaining trains.
 
+## Misfire Policies
+
+A **misfire** occurs when a scheduled job was supposed to fire but couldn't — the scheduler was down, or the job was blocked by an active execution or dead letter. When the scheduler recovers, the misfire policy determines what happens.
+
+### Policies
+
+| Policy | Behavior |
+|--------|----------|
+| `FireOnceNow` | Fire once immediately if overdue. This is the default and preserves backward compatibility. |
+| `DoNothing` | If overdue beyond the misfire threshold, skip and wait for the next natural occurrence. |
+
+### Misfire Threshold
+
+The misfire threshold is a grace period. If a job is overdue by less than the threshold, it fires normally regardless of policy. Only when the overdue period exceeds the threshold does the policy take effect.
+
+- **Global default**: `DefaultMisfireThreshold` (default: 60 seconds) — set via `AddScheduler`
+- **Per-manifest override**: `MisfireThreshold(TimeSpan)` on `ScheduleOptions` — overrides the global default for a single manifest
+
+### How DoNothing Works
+
+For interval-based schedules, the scheduler finds the most recent interval boundary relative to `LastSuccessfulRun` and checks if the current time is within the misfire threshold of that boundary. If yes, fire. If no, wait for the next boundary.
+
+**Example**: A job runs every 5 minutes with a 60-second threshold. The scheduler goes down at 10:00 and comes back at 13:02:
+
+- Most recent 5-minute boundary from `LastSuccessfulRun` (10:00): **13:00**
+- Time since boundary: 2 minutes (120 seconds) > 60-second threshold → **skip**
+- Next boundary: **13:05** — the job fires then (if within threshold)
+
+If the scheduler comes back at 13:00:30 instead:
+
+- Most recent boundary: **13:00**
+- Time since boundary: 30 seconds ≤ 60-second threshold → **fire**
+
+For cron-based schedules, the scheduler estimates the cron frequency using a heuristic and applies the same boundary math. Precision will improve when the cron parser is upgraded to support full expression evaluation.
+
+### Configuration
+
+```csharp
+// Global defaults
+.AddScheduler(scheduler => scheduler
+    .DefaultMisfirePolicy(MisfirePolicy.FireOnceNow)
+    .DefaultMisfireThreshold(TimeSpan.FromSeconds(60))
+    // ...
+)
+
+// Per-manifest override
+.Schedule<ISyncTrain>(
+    "sync-daily",
+    new SyncInput(),
+    Cron.Daily(3, 0),
+    options => options
+        .OnMisfire(MisfirePolicy.DoNothing)
+        .MisfireThreshold(TimeSpan.FromMinutes(10)))
+```
+
+Misfire policies only apply to `Cron` and `Interval` schedule types. Dependent manifests fire based on parent completion, not time — misfire policies are ignored for them.
+
+*API Reference: [AddScheduler]({{ site.baseurl }}{% link api-reference/scheduler-api/add-scheduler.md %}), [ScheduleOptions]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
+
 ## Configuration Options
 
 Key options to know:
@@ -204,5 +263,7 @@ Key options to know:
 - **`ManifestManagerPollingInterval`** / **`JobDispatcherPollingInterval`** (default: 5 seconds each) — how often the ManifestManager and JobDispatcher poll independently. Use `PollingInterval` to set both to the same value
 - **`MaxActiveJobs`** (default: 100) — global concurrent job cap; set to `null` for unlimited. Per-group limits can be set from code via `.Group(group => group.MaxActiveJobs(...))` or from the dashboard (see [Per-Group Dispatch Controls](#per-group-dispatch-controls))
 - **`DefaultMaxRetries`** (default: 3) — retry attempts before dead-lettering
+- **`DefaultMisfirePolicy`** (default: `FireOnceNow`) — how missed runs are handled
+- **`DefaultMisfireThreshold`** (default: 60 seconds) — grace period for misfire detection
 
 *API Reference: [AddScheduler]({{ site.baseurl }}{% link api-reference/scheduler-api/add-scheduler.md %}) — full options table with all defaults including retry backoff, timeouts, and stuck job recovery.*

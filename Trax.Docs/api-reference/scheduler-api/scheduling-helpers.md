@@ -124,6 +124,17 @@ Converts the schedule to a 5-field cron expression. For cron-type schedules, ret
 | `OnDemand` | Batch operations triggered programmatically |
 | `Dependent` | Runs after a parent manifest completes successfully |
 
+### MisfirePolicy Enum
+
+Determines behavior when a scheduled run is missed.
+
+| Value | Description |
+|-------|-------------|
+| `FireOnceNow` | Fire once immediately if overdue. Default behavior. |
+| `DoNothing` | If overdue beyond the misfire threshold, skip and wait for the next natural occurrence. |
+
+See [Misfire Policies]({{ site.baseurl }}{% link scheduler/scheduling-options.md %}#misfire-policies) for detailed behavior and examples.
+
 ---
 
 ## ManifestOptions
@@ -140,6 +151,8 @@ public class ManifestOptions
 | `MaxRetries` | `int` | `3` | Maximum retry attempts before the job is dead-lettered. Each retry creates a new Metadata record. |
 | `Timeout` | `TimeSpan?` | `null` | Per-job timeout override. `null` falls back to the global `DefaultJobTimeout`. If a job exceeds this duration, it may be considered stuck. |
 | `Priority` | `int` | `0` | Manifest-level priority stored on the manifest record. Note: dispatch ordering is primarily determined by **ManifestGroup.Priority** (set from the dashboard). This manifest-level priority is used as the work queue entry's priority when the manifest is queued. For dependent manifests, `DependentPriorityBoost` (default 16) is added on top at dispatch time. Can also be set via the `priority` parameter on scheduling methods. |
+| `MisfirePolicy` | `MisfirePolicy?` | `null` | Per-manifest misfire policy override. `null` uses the global `DefaultMisfirePolicy`. Only applies to Cron and Interval schedule types. See [Misfire Policies]({{ site.baseurl }}{% link scheduler/scheduling-options.md %}#misfire-policies). |
+| `MisfireThreshold` | `TimeSpan?` | `null` | Per-manifest misfire threshold override. `null` uses the global `DefaultMisfireThreshold` (60 seconds). |
 
 ### Example
 
