@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/TraxSharp/Trax.Mediator/compare/v1.0.1...v1.1.0) (2026-03-02)
+
+
+### Features
+
+* rename Workflow to Train ([#3](https://github.com/TraxSharp/Trax.Mediator/issues/3)) ([0685026](https://github.com/TraxSharp/Trax.Mediator/commit/0685026eb3d2432afb5fb72ec817ff511adb9115))
+
 ## [1.0.1](https://github.com/TraxSharp/Trax.Mediator/compare/v1.0.0...v1.0.1) (2026-03-01)
 
 
