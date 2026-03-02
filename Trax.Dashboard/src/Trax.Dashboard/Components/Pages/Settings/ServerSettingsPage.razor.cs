@@ -16,6 +16,7 @@ public partial class ServerSettingsPage
 
     // ── Scheduler state ──
     private SchedulerConfiguration? _schedulerConfig;
+    private PostgresTaskServerOptions? _taskServerOptions;
     private bool _schedulerAvailable;
 
     private TimeSpanField _pollingInterval = new();
@@ -33,6 +34,7 @@ public partial class ServerSettingsPage
     private bool _savedJobDispatcherEnabled;
     private TimeSpan _savedPollingInterval;
     private int? _savedMaxActiveJobs;
+    private int _savedWorkerCount;
     private int _savedDefaultMaxRetries;
     private TimeSpan _savedDefaultRetryDelay;
     private double _savedRetryBackoffMultiplier;
@@ -74,6 +76,10 @@ public partial class ServerSettingsPage
         && (
             _pollingInterval.ToTimeSpan() != _savedPollingInterval
             || _schedulerConfig!.MaxActiveJobs != _savedMaxActiveJobs
+            || (
+                _taskServerOptions is not null
+                && _taskServerOptions.WorkerCount != _savedWorkerCount
+            )
         );
 
     private bool IsRetryDirty =>
@@ -117,6 +123,7 @@ public partial class ServerSettingsPage
     {
         // Scheduler
         _schedulerConfig = ServiceProvider.GetService<SchedulerConfiguration>();
+        _taskServerOptions = ServiceProvider.GetService<PostgresTaskServerOptions>();
         _schedulerAvailable = _schedulerConfig is not null;
 
         if (_schedulerAvailable)
@@ -202,6 +209,9 @@ public partial class ServerSettingsPage
         _schedulerConfig.DeadLetterRetentionPeriod = TimeSpan.FromDays(30);
         _schedulerConfig.AutoPurgeDeadLetters = true;
 
+        if (_taskServerOptions is not null)
+            _taskServerOptions.WorkerCount = Environment.ProcessorCount;
+
         if (_schedulerConfig.MetadataCleanup is not null)
         {
             _schedulerConfig.MetadataCleanup.CleanupInterval = TimeSpan.FromMinutes(1);
@@ -226,6 +236,9 @@ public partial class ServerSettingsPage
         _savedRecoverStuckJobsOnStartup = _schedulerConfig.RecoverStuckJobsOnStartup;
         _savedDeadLetterRetentionPeriod = _schedulerConfig.DeadLetterRetentionPeriod;
         _savedAutoPurgeDeadLetters = _schedulerConfig.AutoPurgeDeadLetters;
+
+        if (_taskServerOptions is not null)
+            _savedWorkerCount = _taskServerOptions.WorkerCount;
 
         if (_schedulerConfig.MetadataCleanup is not null)
         {

@@ -10,7 +10,7 @@ public class DashboardOptions
     /// <summary>
     /// Title displayed in the dashboard header.
     /// </summary>
-    public string Title { get; set; } = "Trax.Core";
+    public string Title { get; set; } = "Trax";
 
     /// <summary>
     /// The hosting environment name (e.g., "Development", "Production").

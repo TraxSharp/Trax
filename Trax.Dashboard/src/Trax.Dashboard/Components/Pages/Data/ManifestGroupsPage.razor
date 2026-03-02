@@ -2,8 +2,30 @@
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
+@inject NotificationService NotificationService
 
-<RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Manifest Groups</RadzenText>
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">Manifest Groups</RadzenText>
+    @if (_items.Count > 0)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Style="margin-left: auto;">
+            <RadzenButton Text="Enable All"
+                          Icon="play_arrow"
+                          ButtonStyle="ButtonStyle.Success"
+                          Variant="Variant.Outlined"
+                          Size="ButtonSize.Small"
+                          Click="@(() => SetAllGroupsEnabled(true))"
+                          Disabled="@(_toggling || _items.All(g => g.IsEnabled))" />
+            <RadzenButton Text="Disable All"
+                          Icon="pause"
+                          ButtonStyle="ButtonStyle.Danger"
+                          Variant="Variant.Outlined"
+                          Size="ButtonSize.Small"
+                          Click="@(() => SetAllGroupsEnabled(false))"
+                          Disabled="@(_toggling || _items.All(g => !g.IsEnabled))" />
+        </RadzenStack>
+    }
+</RadzenStack>
 <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
     Logical groupings of related manifests with per-group dispatch controls.
 </RadzenText>
@@ -77,6 +99,7 @@
 @code {
     private List<GroupSummary> _items = [];
     private DagLayout? _dagLayout;
+    private bool _toggling;
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -128,6 +151,55 @@
             .ToList();
 
         _dagLayout = DagLayoutEngine.ComputeLayout(dagNodes, dagEdges);
+    }
+
+    private async Task SetAllGroupsEnabled(bool enabled)
+    {
+        _toggling = true;
+
+        try
+        {
+            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
+
+            await context.ManifestGroups
+                .Where(g => g.IsEnabled != enabled)
+                .ExecuteUpdateAsync(
+                    s => s
+                        .SetProperty(g => g.IsEnabled, enabled)
+                        .SetProperty(g => g.UpdatedAt, DateTime.UtcNow),
+                    DisposalToken
+                );
+
+            NotificationService.Notify(
+                new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = enabled ? "All Groups Enabled" : "All Groups Disabled",
+                    Detail = enabled
+                        ? "All manifest groups have been enabled."
+                        : "All manifest groups have been disabled. No new jobs will be queued.",
+                    Duration = 4000,
+                }
+            );
+
+            await RefreshNowAsync();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(
+                new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Update Failed",
+                    Detail = ex.Message,
+                    Duration = 6000,
+                }
+            );
+        }
+        finally
+        {
+            _toggling = false;
+        }
     }
 
     private void OnDagNodeClick(long groupId)

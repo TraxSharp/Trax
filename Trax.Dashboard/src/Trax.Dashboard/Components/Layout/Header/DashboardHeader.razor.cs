@@ -18,7 +18,7 @@ public partial class DashboardHeader : IAsyncDisposable
     public bool IsDarkMode { get; set; }
 
     [Parameter]
-    public string Title { get; set; } = "Trax.Core Dashboard";
+    public string Title { get; set; } = "Trax Dashboard";
 
     [Parameter]
     public string EnvironmentName { get; set; } = "";

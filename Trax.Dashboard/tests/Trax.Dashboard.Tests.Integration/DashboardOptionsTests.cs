@@ -14,6 +14,6 @@ public class DashboardOptionsTests
 
         // Assert
         options.RoutePrefix.Should().Be("/trax");
-        options.Title.Should().Be("Trax.Core");
+        options.Title.Should().Be("Trax");
     }
 }

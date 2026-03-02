@@ -66,6 +66,17 @@
                     </RadzenText>
                     <RadzenNumeric @bind-Value="_schedulerConfig!.MaxActiveJobs" TValue="int?" Min="1" Style="max-width: 400px;" Name="MaxActiveJobs" />
                 </RadzenStack>
+
+                @if (_taskServerOptions is not null)
+                {
+                    <RadzenStack Gap="0.25rem">
+                        <RadzenLabel Text="Worker Count" Component="WorkerCount" />
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                            Number of concurrent worker tasks polling for and executing background jobs. Defaults to the number of processor cores (@Environment.ProcessorCount). Requires an application restart to take effect.
+                        </RadzenText>
+                        <RadzenNumeric @bind-Value="_taskServerOptions.WorkerCount" TValue="int" Min="1" Style="max-width: 400px;" Name="WorkerCount" />
+                    </RadzenStack>
+                }
             </RadzenStack>
         </RadzenFieldset>
 

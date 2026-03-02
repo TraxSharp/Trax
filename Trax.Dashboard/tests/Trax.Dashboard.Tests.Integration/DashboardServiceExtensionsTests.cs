@@ -23,7 +23,7 @@ public class DashboardServiceExtensionsTests
         var options = provider.GetService<DashboardOptions>();
         options.Should().NotBeNull();
         options!.RoutePrefix.Should().Be("/trax");
-        options.Title.Should().Be("Trax.Core");
+        options.Title.Should().Be("Trax");
     }
 
     [Test]
