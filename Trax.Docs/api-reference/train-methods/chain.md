@@ -1,14 +1,14 @@
 ---
 layout: default
 title: Chain
-parent: Workflow Methods
+parent: Train Methods
 grand_parent: API Reference
 nav_order: 2
 ---
 
 # Chain
 
-Executes a step, wiring its input from Memory and storing its output back into Memory. This is the primary method for composing steps into a workflow pipeline. If any step fails (returns `Left`), subsequent steps are short-circuited.
+Executes a step, wiring its input from Memory and storing its output back into Memory. This is the primary method for composing steps into a train pipeline. If any step fails (returns `Left`), subsequent steps are short-circuited.
 
 ## Chain\<TStep\>()
 
@@ -22,7 +22,7 @@ public Train<TInput, TReturn> Chain<TStep>() where TStep : class
 |---------------|------------|-------------|
 | `TStep` | `class` | The step type. Must implement `IStep<TIn, TOut>` for some `TIn`/`TOut`. |
 
-This is the overload used in most workflows:
+This is the overload used in most trains:
 
 ```csharp
 return Activate(input)
@@ -56,7 +56,7 @@ return Activate(input)
 
 ## Behavior
 
-1. If the workflow already has an exception, the step is **skipped** (short-circuited).
+1. If the train already has an exception, the step is **skipped** (short-circuited).
 2. The step's input is extracted from Memory by type.
 3. The step is executed via `RailwayStep`.
 4. On **success** (Right): the output is stored in Memory by its type. Tuple outputs are decomposed into individual Memory entries.

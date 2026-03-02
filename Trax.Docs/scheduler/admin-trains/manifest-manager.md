@@ -1,12 +1,12 @@
 ---
 layout: default
 title: ManifestManager
-parent: Administrative Workflows
+parent: Administrative Trains
 grand_parent: Scheduling
 nav_order: 1
 ---
 
-# ManifestManagerWorkflow
+# ManifestManagerTrain
 
 The ManifestManager is the first half of each polling cycle. It figures out which manifests are due for execution and writes them to the work queue. It doesn't dispatch anything—that's the [JobDispatcher's](job-dispatcher.md) job.
 
@@ -38,9 +38,9 @@ The decision step. It runs two passes over the loaded manifests:
 
 **Pass 1: Time-based manifests** (Cron and Interval). For each, it checks whether the manifest is due using `SchedulingHelpers.ShouldRunNow()`, which dispatches to either cron parsing or interval arithmetic based on the schedule type.
 
-**Pass 2: Dependent manifests**. For each manifest with `ScheduleType.Dependent`, it finds the parent in the loaded set and checks whether `parent.LastSuccessfulRun > dependent.LastSuccessfulRun`. See [Dependent Workflows](../dependent-workflows.md).
+**Pass 2: Dependent manifests**. For each manifest with `ScheduleType.Dependent`, it finds the parent in the loaded set and checks whether `parent.LastSuccessfulRun > dependent.LastSuccessfulRun`. See [Dependent Trains](../dependent-trains.md).
 
-Manifests with `ScheduleType.DormantDependent` are excluded from **both** passes. They are never auto-queued by the ManifestManager—dormant dependents must be explicitly activated at runtime by the parent workflow via [`IDormantDependentContext`](../dependent-workflows.md#dormant-dependents).
+Manifests with `ScheduleType.DormantDependent` are excluded from **both** passes. They are never auto-queued by the ManifestManager—dormant dependents must be explicitly activated at runtime by the parent train via [`IDormantDependentContext`](../dependent-trains.md#dormant-dependents).
 
 Both passes apply the same per-manifest guards before evaluating the schedule:
 - Skip if the manifest's ManifestGroup has `IsEnabled = false`
@@ -54,7 +54,7 @@ Both passes apply the same per-manifest guards before evaluating the schedule:
 ### CreateWorkQueueEntriesStep
 
 For each manifest identified as due, creates a `WorkQueue` entry with:
-- `WorkflowName` from the manifest's `Name`
+- `TrainName` from the manifest's `Name`
 - `Input` / `InputTypeName` from the manifest's `Properties` / `PropertyTypeName`
 - `ManifestId` linking back to the source manifest
 - `Priority` set from `ManifestGroup.Priority` (the group's priority, not an individual manifest priority)
@@ -70,7 +70,7 @@ The ManifestManager uses a layered approach to prevent duplicate work queue entr
 
 ### Outer Layer: Advisory Lock (Single-Leader Election)
 
-The `ManifestManagerPollingService` acquires a PostgreSQL transaction-scoped advisory lock before invoking the workflow:
+The `ManifestManagerPollingService` acquires a PostgreSQL transaction-scoped advisory lock before invoking the train:
 
 ```sql
 SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager'))
@@ -78,7 +78,7 @@ SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager'))
 
 This is a **non-blocking try-lock** — if another server already holds it, the current server skips the cycle entirely and waits for the next polling tick. No server ever blocks waiting for the lock.
 
-The lock is `xact`-scoped (transaction-scoped), meaning it auto-releases when the wrapping transaction commits or rolls back. The entire ManifestManagerWorkflow runs within this transaction, so all database changes (dead letters, WorkQueue entries) are committed atomically. If the workflow fails partway through, everything rolls back — no partial state.
+The lock is `xact`-scoped (transaction-scoped), meaning it auto-releases when the wrapping transaction commits or rolls back. The entire ManifestManagerTrain runs within this transaction, so all database changes (dead letters, WorkQueue entries) are committed atomically. If the train fails partway through, everything rolls back — no partial state.
 
 This is the primary concurrency control. It ensures that in a multi-server deployment, only one server evaluates manifests at a time, eliminating the TOCTOU race between `LoadManifestsStep` (which reads `HasQueuedWork = false`) and `CreateWorkQueueEntriesStep` (which inserts the entry).
 
@@ -109,12 +109,12 @@ If the advisory lock is somehow bypassed (e.g., a bug, a code path that doesn't 
 
 ### Non-Postgres Providers
 
-The advisory lock is only acquired when the `IDataContext` is backed by Entity Framework Core (`DbContext`). When using the InMemory provider for tests, the lock is skipped and the workflow runs directly — safe because InMemory implies a single-process setup.
+The advisory lock is only acquired when the `IDataContext` is backed by Entity Framework Core (`DbContext`). When using the InMemory provider for tests, the lock is skipped and the train runs directly — safe because InMemory implies a single-process setup.
 
 See [Multi-Server Concurrency](../concurrency.md) for the full cross-service concurrency model.
 
 ## What Changed
 
-Previously, this workflow had an `EnqueueJobsStep` as its final step. That step would directly create Metadata records and enqueue to the background task server (Hangfire). `MaxActiveJobs` was enforced there, meaning the ManifestManager was both the scheduler and the dispatcher.
+Previously, this train had an `EnqueueJobsStep` as its final step. That step would directly create Metadata records and enqueue to the background task server (Hangfire). `MaxActiveJobs` was enforced there, meaning the ManifestManager was both the scheduler and the dispatcher.
 
 Now those responsibilities are split. The ManifestManager writes intent to the work queue. The [JobDispatcher](job-dispatcher.md) reads from it and handles the actual dispatch. This means `TriggerAsync`, dashboard re-runs, and scheduled manifests all converge on the same dispatch path.

@@ -23,11 +23,11 @@ Configuration class for the Trax.Core Dashboard. Passed via the `configure` call
 ```csharp
 builder.AddTrax.CoreDashboard(options =>
 {
-    options.Title = "My Application - Workflows";
+    options.Title = "My Application - Trains";
 });
 
-app.UseTrax.CoreDashboard(routePrefix: "/workflows");
-// RoutePrefix is set to "/workflows" by UseTrax.CoreDashboard
+app.UseTrax.CoreDashboard(routePrefix: "/trains");
+// RoutePrefix is set to "/trains" by UseTrax.CoreDashboard
 // EnvironmentName is set automatically from the hosting environment
 ```
 

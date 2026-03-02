@@ -7,7 +7,7 @@ nav_order: 3
 
 # Chain
 
-`.Chain<TStep>()` is the primary way to add a step to a workflow. It resolves the step from the DI container, pulls its input from [Memory](../concepts/memory.md), runs it, and stores the output back in Memory.
+`.Chain<TStep>()` is the primary way to add a step to a train. It resolves the step from the DI container, pulls its input from [Memory](../concepts/memory.md), runs it, and stores the output back in Memory.
 
 ```csharp
 Activate(input)
@@ -17,9 +17,9 @@ Activate(input)
     .Resolve();
 ```
 
-*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/workflow-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/workflow-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/workflow-methods/resolve.md %})*
+*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
 
-For all 12 overloads, type parameter constraints, and step-wiring behavior, see [API Reference: Chain]({{ site.baseurl }}{% link api-reference/workflow-methods/chain.md %}). The [Analyzer](../analyzer.md) catches missing types at compile time, so you'll see these errors in your IDE before you ever run the code.
+For all 12 overloads, type parameter constraints, and step-wiring behavior, see [API Reference: Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}). The [Analyzer](../analyzer.md) catches missing types at compile time, so you'll see these errors in your IDE before you ever run the code.
 
 ## Railway Behavior
 
@@ -33,7 +33,7 @@ Activate(input)
     .Resolve();                    // Returns Left(ValidationException)
 ```
 
-*API Reference: [Chain]({{ site.baseurl }}{% link api-reference/workflow-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/workflow-methods/resolve.md %})*
+*API Reference: [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
 
 This is the core of Railway Oriented Programming—see [Railway Programming](../concepts/railway-programming.md) for the full explanation.
 

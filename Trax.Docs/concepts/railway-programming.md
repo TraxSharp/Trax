@@ -18,7 +18,7 @@ Failure Track:          Exception → [Skip] → [Skip] → Exception
 Trax.Core uses `Either<Exception, T>` from LanguageExt to represent this. A value is either `Left` (an exception) or `Right` (the success value):
 
 ```csharp
-public class CreateUserWorkflow : ServiceTrain<CreateUserRequest, User>, ICreateUserWorkflow
+public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
     protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
         => Activate(input)
@@ -29,7 +29,7 @@ public class CreateUserWorkflow : ServiceTrain<CreateUserRequest, User>, ICreate
 }
 ```
 
-If `ValidateUserStep` throws, the workflow immediately returns `Left(exception)`. `CreateUserStep` and `SendEmailStep` never execute. You don't write any error-checking code—the chain handles it.
+If `ValidateUserStep` throws, the train immediately returns `Left(exception)`. `CreateUserStep` and `SendEmailStep` never execute. You don't write any error-checking code—the chain handles it.
 
 ## The Effect Pattern
 
@@ -44,16 +44,16 @@ context.Orders.Update(order);
 await context.SaveChanges();
 ```
 
-Trax.Core's `ServiceTrain` does the same thing. Steps can track models, log entries, and other effects. Nothing actually persists until the workflow completes successfully and calls `SaveChanges`. If any step fails, nothing is saved.
+Trax.Core's `ServiceTrain` does the same thing. Steps can track models, log entries, and other effects. Nothing actually persists until the train completes successfully and calls `SaveChanges`. If any step fails, nothing is saved.
 
-This gives you atomic workflows—either everything succeeds and all effects are applied, or something fails and nothing is applied.
+This gives you atomic trains—either everything succeeds and all effects are applied, or something fails and nothing is applied.
 
 ## Train vs ServiceTrain
 
-Trax.Core has two base classes for workflows:
+Trax.Core has two base classes for trains:
 
 **`Train<TIn, TOut>`** — The core class. Handles chaining, [Memory](memory.md), and error propagation. No metadata, no effects, no automatic dependency injection from an `IServiceProvider`. Use this when:
-- You want a lightweight workflow without persistence
+- You want a lightweight train without persistence
 - You're composing steps inside a larger system that handles its own concerns
 - Testing or prototyping
 
@@ -71,13 +71,13 @@ public class SimpleUserCreation : Train<CreateUserRequest, User>
 **`ServiceTrain<TIn, TOut>`** — Extends `Train` with:
 - Automatic metadata tracking (start time, end time, success/failure, inputs/outputs)
 - Effect providers (database persistence, JSON logging, parameter serialization)
-- Integration with `IWorkflowBus` for workflow discovery
+- Integration with `ITrainBus` for train discovery
 - `IServiceProvider` access for step instantiation
 
 Use this when you want observability, persistence, or the mediator pattern:
 
 ```csharp
-public class CreateUserWorkflow : ServiceTrain<CreateUserRequest, User>
+public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>
 {
     protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
         => Activate(input)

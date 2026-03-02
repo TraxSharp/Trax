@@ -7,23 +7,23 @@ nav_order: 12
 
 # Troubleshooting
 
-## "No workflow found for input type X"
+## "No train found for input type X"
 
-The `WorkflowBus` couldn't find a workflow that accepts your input type.
+The `TrainBus` couldn't find a train that accepts your input type.
 
 **Causes:**
-- The assembly containing your workflow wasn't registered with `AddServiceTrainBus`
-- Your workflow doesn't implement `IServiceTrain<TIn, TOut>`
-- Your workflow class is `abstract`
+- The assembly containing your train wasn't registered with `AddServiceTrainBus`
+- Your train doesn't implement `IServiceTrain<TIn, TOut>`
+- Your train class is `abstract`
 
 **Fix:**
 ```csharp
 services.AddTrax.CoreEffects(o =>
-    o.AddServiceTrainBus(typeof(YourWorkflow).Assembly)  // Ensure correct assembly
+    o.AddServiceTrainBus(typeof(YourTrain).Assembly)  // Ensure correct assembly
 );
 ```
 
-*API Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-workflow-bus.md %})*
+*API Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-train-bus.md %})*
 
 ## "Unable to resolve service for type 'IStep'"
 
@@ -56,32 +56,32 @@ Activate(input)                    // Memory: CreateUserRequest
 
 The [Analyzer](../analyzer.md) catches most of these issues at compile time—if you see CHAIN001, the message tells you exactly which type is missing and what's available.
 
-## Workflow completes but metadata shows "Failed"
+## Train completes but metadata shows "Failed"
 
 Check `FailureException` and `FailureReason` in the metadata record for details. Common causes:
 - An effect provider failed during `SaveChanges` (database connection, serialization error)
-- A step threw after the main workflow logic completed
+- A step threw after the main train logic completed
 
 ## Steps execute out of order or skip unexpectedly
 
-If you're using `ShortCircuit`, remember that throwing an exception means "continue" not "stop." See [ShortCircuit](short-circuit.md) for details or [API Reference: ShortCircuit]({{ site.baseurl }}{% link api-reference/workflow-methods/short-circuit.md %}) for all overloads.
+If you're using `ShortCircuit`, remember that throwing an exception means "continue" not "stop." See [ShortCircuit](short-circuit.md) for details or [API Reference: ShortCircuit]({{ site.baseurl }}{% link api-reference/train-methods/short-circuit.md %}) for all overloads.
 
 ## Scheduled jobs don't execute (no errors)
 
-The most common cause: `TaskServerExecutorWorkflow.Assembly` isn't registered with the `WorkflowBus`. The ManifestManager enqueues jobs to Hangfire, but Hangfire can't resolve the executor workflow.
+The most common cause: `TaskServerExecutorTrain.Assembly` isn't registered with the `TrainBus`. The ManifestManager enqueues jobs to Hangfire, but Hangfire can't resolve the executor train.
 
 **Fix:**
 ```csharp
 .AddServiceTrainBus(
     typeof(Program).Assembly,
-    typeof(TaskServerExecutorWorkflow).Assembly  // Don't forget this
+    typeof(TaskServerExecutorTrain).Assembly  // Don't forget this
 )
 ```
 
 Other causes:
 - The manifest's `IsEnabled` is `false`—check via `IManifestScheduler` or the database
 - `ManifestManagerPollingInterval` or `JobDispatcherPollingInterval` is set too high and the job hasn't been picked up yet
-- The workflow's input type doesn't implement `IManifestProperties`
+- The train's input type doesn't implement `IManifestProperties`
 
 ## "Ambiguous reference" between Cron types
 

@@ -78,11 +78,11 @@ public class DataContext<TDbContext> : DbContext, IDataContext
 ├────────────┤  ├────────────────┤  ├─────────────────────────────┤
 │ Id     │int│  │ Id       │ int │  │ Id (PK)         │ int       │
 │Manifest│int│  │ External │ str │  │ ParentId (FK)   │ int? →Self│
-│  Id    │   │  │ Workflow │ str │  │ ManifestId (FK) │ int?      │
+│  Id    │   │  │ Train │ str │  │ ManifestId (FK) │ int?      │
 │DeadLet │ dt│  │   Name   │     │  │ ExternalId      │ string    │
 │ teredAt│   │  │ Input    │json?│  │ Name            │ string    │
 │ Status │enm│  │ InputTyp │str? │  │ Executor        │ string?   │
-│ Reason │str│  │   eName  │     │  │ WorkflowState   │ enum      │
+│ Reason │str│  │   eName  │     │  │ TrainState   │ enum      │
 │RetryC. │int│  │ Status   │enum │  │ FailureStep     │ string?   │
 │Resolved│dt?│  │ CreatedAt│ dt  │  │ FailureException│ string?   │
 │Resoluti│   │  │Dispatched│ dt? │  │ FailureReason   │ string?   │
@@ -112,7 +112,7 @@ public class DataContext<TDbContext> : DbContext, IDataContext
 
 The **WorkQueue** table sits between scheduling and dispatch. When a manifest is due (or `TriggerAsync` is called), a `Queued` entry is created. The JobDispatcher reads these, creates a Metadata record, enqueues to the background task server, and flips the status to `Dispatched`. Both the Manifest and Metadata FKs use `ON DELETE RESTRICT`. The **ManifestGroup** table provides per-group dispatch controls. Every manifest belongs to exactly one group. Groups are auto-created during scheduling and orphaned groups (with no manifests) are cleaned up on startup.
 
-The **BackgroundJob** table is a transient queue for the built-in PostgreSQL task server. When `JobDispatcherWorkflow` enqueues a job via `IBackgroundTaskServer.EnqueueAsync()`, a row is inserted. Worker threads claim jobs atomically using `FOR UPDATE SKIP LOCKED`, execute the workflow, and delete the row on completion. The `fetched_at` column enables crash recovery — if a worker dies mid-execution, the stale timestamp makes the job eligible for re-claim after the visibility timeout. See [Task Server]({{ site.baseurl }}{% link scheduler/task-server.md %}) for architecture details.
+The **BackgroundJob** table is a transient queue for the built-in PostgreSQL task server. When `JobDispatcherTrain` enqueues a job via `IBackgroundTaskServer.EnqueueAsync()`, a row is inserted. Worker threads claim jobs atomically using `FOR UPDATE SKIP LOCKED`, execute the train, and delete the row on completion. The `fetched_at` column enables crash recovery — if a worker dies mid-execution, the stale timestamp makes the job eligible for re-claim after the visibility timeout. See [Task Server]({{ site.baseurl }}{% link scheduler/task-server.md %}) for architecture details.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -133,15 +133,15 @@ States (via FetchedAt):
 - (deleted)  → Completed (row removed)
 ```
 
-Additionally, **StepMetadata** tracks individual step executions within a workflow (not persisted to the database, used in-memory during workflow execution):
+Additionally, **StepMetadata** tracks individual step executions within a train (not persisted to the database, used in-memory during train execution):
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                        STEP_METADATA                              │
 ├──────────────────────────────────────────────────────────────────┤
 │ Id (PK)              │ int                                       │
-│ WorkflowName         │ string                                    │
-│ WorkflowExternalId   │ string                                    │
+│ TrainName         │ string                                    │
+│ TrainExternalId   │ string                                    │
 │ Name                 │ string                                    │
 │ ExternalId           │ string                                    │
 │ InputType            │ Type                                      │

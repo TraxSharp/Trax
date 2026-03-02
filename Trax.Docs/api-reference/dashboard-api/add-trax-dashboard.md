@@ -8,7 +8,7 @@ nav_order: 1
 
 # AddTrax.CoreDashboard
 
-Registers Trax.Core Dashboard services including Blazor/Radzen components, workflow discovery, theme state, and local storage.
+Registers Trax.Core Dashboard services including Blazor/Radzen components, train discovery, theme state, and local storage.
 
 ## Signatures
 
@@ -62,7 +62,7 @@ app.UseTrax.CoreDashboard(routePrefix: "/admin/trax");
 
 ## What It Registers
 
-- `IWorkflowDiscoveryService` (scoped) — scans DI container for registered workflows
+- `ITrainDiscoveryService` (scoped) — scans DI container for registered trains
 - `ILocalStorageService` (scoped) — browser local storage access for theme preferences
 - `IThemeStateService` (scoped) — dark/light theme state management
 - `IDashboardSettingsService` (scoped) — dashboard configuration access

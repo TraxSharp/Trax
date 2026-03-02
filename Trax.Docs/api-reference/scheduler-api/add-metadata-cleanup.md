@@ -8,7 +8,7 @@ nav_order: 8
 
 # AddMetadataCleanup
 
-Enables automatic purging of old metadata records for high-frequency system workflows. By default, cleans up `ManifestManagerWorkflow` and `MetadataCleanupWorkflow` metadata. Additional workflow types can be added via the configure callback.
+Enables automatic purging of old metadata records for high-frequency system trains. By default, cleans up `ManifestManagerTrain` and `MetadataCleanupTrain` metadata. Additional train types can be added via the configure callback.
 
 ## Signature
 
@@ -39,8 +39,8 @@ public SchedulerConfigurationBuilder AddMetadataCleanup(
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `AddWorkflowType<TWorkflow>()` | `void AddWorkflowType<TWorkflow>() where TWorkflow : class` | Adds a workflow type to the cleanup whitelist by generic type |
-| `AddWorkflowType(string)` | `void AddWorkflowType(string workflowTypeName)` | Adds a workflow type to the cleanup whitelist by fully-qualified type name |
+| `AddTrainType<TTrain>()` | `void AddTrainType<TTrain>() where TTrain : class` | Adds a train type to the cleanup whitelist by generic type |
+| `AddTrainType(string)` | `void AddTrainType(string trainTypeName)` | Adds a train type to the cleanup whitelist by fully-qualified type name |
 
 ## Examples
 
@@ -62,8 +62,8 @@ public SchedulerConfigurationBuilder AddMetadataCleanup(
     {
         cleanup.RetentionPeriod = TimeSpan.FromHours(2);
         cleanup.CleanupInterval = TimeSpan.FromMinutes(5);
-        cleanup.AddWorkflowType<MyHighFrequencyWorkflow>();
-        cleanup.AddWorkflowType("MyNamespace.AnotherWorkflow");
+        cleanup.AddTrainType<MyHighFrequencyTrain>();
+        cleanup.AddTrainType("MyNamespace.AnotherTrain");
     })
 )
 ```
@@ -72,5 +72,5 @@ public SchedulerConfigurationBuilder AddMetadataCleanup(
 
 - Only metadata in a **terminal state** (`Completed` or `Failed`) older than `RetentionPeriod` is deleted. `Pending` and `InProgress` metadata is never cleaned up.
 - The cleanup service runs as an `IHostedService` on the configured `CleanupInterval`.
-- `ManifestManagerWorkflow` and `MetadataCleanupWorkflow` are always included in the cleanup whitelist by default — you don't need to add them manually.
-- Workflow type names are matched against the `name` column in the metadata table (which stores `GetType().FullName`).
+- `ManifestManagerTrain` and `MetadataCleanupTrain` are always included in the cleanup whitelist by default — you don't need to add them manually.
+- Train type names are matched against the `name` column in the metadata table (which stores `GetType().FullName`).

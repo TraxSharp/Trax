@@ -145,7 +145,7 @@ public class ManifestOptions
 
 ```csharp
 // Priority can be set via the configure callback...
-await scheduler.ScheduleAsync<IMyWorkflow, MyInput>(
+await scheduler.ScheduleAsync<IMyTrain, MyInput>(
     "my-job",
     new MyInput(),
     Every.Minutes(5),
@@ -158,7 +158,7 @@ await scheduler.ScheduleAsync<IMyWorkflow, MyInput>(
     });
 
 // ...or directly via the priority parameter (simpler for most cases)
-await scheduler.ScheduleAsync<IMyWorkflow, MyInput>(
+await scheduler.ScheduleAsync<IMyTrain, MyInput>(
     "my-job",
     new MyInput(),
     Every.Minutes(5),

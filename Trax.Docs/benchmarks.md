@@ -6,7 +6,7 @@ nav_order: 14
 
 # Benchmarks
 
-Trax.Core adds overhead to every workflow invocation. This page presents honest numbers so you can make informed decisions about where it's appropriate to use.
+Trax.Core adds overhead to every train invocation. This page presents honest numbers so you can make informed decisions about where it's appropriate to use.
 
 All benchmarks use [BenchmarkDotNet](https://benchmarkdotnet.org/) and are located in `tests/Trax.Core.Tests.Benchmarks/`.
 
@@ -27,9 +27,9 @@ Three execution modes are compared for identical workloads:
 |------|-------------|
 | **Serial** | Plain function calls — no framework, no abstractions |
 | **BaseTrain** | `Train<TIn, TOut>` — the core Chain/Resolve pipeline with `Either` error handling |
-| **ServiceTrain (no effects)** | `ServiceTrain<TIn, TOut>` — full DI-resolved workflow with effect runner lifecycle, but no effect providers registered |
+| **ServiceTrain (no effects)** | `ServiceTrain<TIn, TOut>` — full DI-resolved train with effect runner lifecycle, but no effect providers registered |
 
-## Workflow Overhead
+## Train Overhead
 
 How much does Trax.Core cost for different kinds of work?
 
@@ -62,7 +62,7 @@ In absolute terms:
 
 Once the steps do real work, the overhead shrinks dramatically. With simulated I/O (`Task.Yield`), the BaseTrain is only **3.6×** the serial cost instead of 6,900×.
 
-For a workflow step that makes a database call (~1–10 ms) or an HTTP request (~50–500 ms), the 1.5–7 μs framework overhead is **less than 0.01%** of total execution time.
+For a train step that makes a database call (~1–10 ms) or an HTTP request (~50–500 ms), the 1.5–7 μs framework overhead is **less than 0.01%** of total execution time.
 
 ## Scaling with Step Count
 
@@ -75,7 +75,7 @@ How does overhead grow as you chain more steps?
 | 5 | 5.1 ns | 2,468 ns | 8,079 ns | ~210 ns | ~223 ns |
 | 10 | 10.7 ns | 3,440 ns | 9,016 ns | ~201 ns | ~203 ns |
 
-Each additional step adds roughly **200 ns** of overhead in both workflow modes. This covers step instantiation, type mapping, and `Either` propagation through the chain.
+Each additional step adds roughly **200 ns** of overhead in both train modes. This covers step instantiation, type mapping, and `Either` propagation through the chain.
 
 ### Memory Scaling
 
@@ -99,12 +99,12 @@ Each additional step allocates roughly **~424 B** (BaseTrain) or **~464 B** (Ser
 
 ## Guidance
 
-**Trax.Core is not designed for hot-path, sub-microsecond operations.** It's designed for business workflow orchestration where each step does meaningful work — database queries, API calls, file I/O, domain logic.
+**Trax.Core is not designed for hot-path, sub-microsecond operations.** It's designed for business train orchestration where each step does meaningful work — database queries, API calls, file I/O, domain logic.
 
 Use Trax.Core when:
 - Steps perform I/O or non-trivial computation (the ~7 μs overhead is noise)
 - You value error propagation, observability, and composability over raw throughput
-- You're building workflows that run at request-level granularity (tens to hundreds per second), not tight inner loops
+- You're building trains that run at request-level granularity (tens to hundreds per second), not tight inner loops
 
 Don't use Trax.Core for:
 - Per-element processing in large collections (use LINQ or loops)
@@ -120,7 +120,7 @@ cd tests/Trax.Core.Tests.Benchmarks/
 dotnet run -c Release -- --filter '*'
 
 # Run a specific suite
-dotnet run -c Release -- --filter '*WorkflowOverhead*'
+dotnet run -c Release -- --filter '*TrainOverhead*'
 dotnet run -c Release -- --filter '*Scaling*'
 
 # List available benchmarks
@@ -128,4 +128,4 @@ dotnet run -c Release -- --list flat
 ```
 
 {: .note }
-Results will vary by hardware. The relative ratios between serial, base, and effect workflows are more meaningful than the absolute numbers.
+Results will vary by hardware. The relative ratios between serial, base, and effect trains are more meaningful than the absolute numbers.

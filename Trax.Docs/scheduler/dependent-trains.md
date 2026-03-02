@@ -1,21 +1,21 @@
 ---
 layout: default
-title: Dependent Workflows
+title: Dependent Trains
 parent: Scheduling
 nav_order: 5
 ---
 
-# Dependent Workflows
+# Dependent Trains
 
 ## The Problem
 
-Some jobs only make sense after another job finishes. An ETL pipeline extracts data first, then transforms and loads it. A notification workflow runs after a report completes. You could schedule both on the same interval and hope the timing works out, but that's fragile—if the parent runs slow or retries, the dependent kicks off against stale data.
+Some jobs only make sense after another job finishes. An ETL pipeline extracts data first, then transforms and loads it. A notification train runs after a report completes. You could schedule both on the same interval and hope the timing works out, but that's fragile—if the parent runs slow or retries, the dependent kicks off against stale data.
 
-Dependent workflows solve this. A manifest with `ScheduleType.Dependent` doesn't run on a timer. It runs when its parent's `LastSuccessfulRun` moves forward.
+Dependent trains solve this. A manifest with `ScheduleType.Dependent` doesn't run on a timer. It runs when its parent's `LastSuccessfulRun` moves forward.
 
 ## How It Works
 
-Each polling cycle, the `ManifestManagerWorkflow` evaluates dependent manifests separately from time-based ones. The logic is simple:
+Each polling cycle, the `ManifestManagerTrain` evaluates dependent manifests separately from time-based ones. The logic is simple:
 
 1. Find the parent manifest (via `DependsOnManifestId`)
 2. If `parent.LastSuccessfulRun > dependent.LastSuccessfulRun`, queue the dependent
@@ -27,18 +27,18 @@ The same guards that apply to scheduled manifests apply here too: if the depende
 
 ## Startup Configuration: ThenInclude
 
-Chain a dependent workflow after a `Schedule` call:
+Chain a dependent train after a `Schedule` call:
 
 ```csharp
 services.AddTrax.CoreEffects(options => options
     .AddScheduler(scheduler => scheduler
         .UsePostgresTaskServer()
-        .Schedule<IExtractWorkflow>(
+        .Schedule<IExtractTrain>(
             "extract-data",
             new ExtractInput { Source = "api" },
             Every.Hours(1),
             options => options.Group("etl"))
-        .ThenInclude<ITransformWorkflow>(
+        .ThenInclude<ITransformTrain>(
             "transform-data",
             new TransformInput { Format = "parquet" },
             options => options.Group("etl"))
@@ -50,7 +50,7 @@ services.AddTrax.CoreEffects(options => options
 
 `ThenInclude` captures the previous call's external ID as the parent. No schedule parameter—dependent manifests don't have one.
 
-Chaining works: `.Schedule(...).ThenInclude(...).ThenInclude(...)` creates A &rarr; B &rarr; C. Each `ThenInclude` depends on the one before it. If `extract` fails, neither downstream workflow fires.
+Chaining works: `.Schedule(...).ThenInclude(...).ThenInclude(...)` creates A &rarr; B &rarr; C. Each `ThenInclude` depends on the one before it. If `extract` fails, neither downstream train fires.
 
 ## Fan-Out: Include
 
@@ -60,14 +60,14 @@ Sometimes one job needs to trigger multiple independent downstream jobs. An extr
 
 ```csharp
 scheduler
-    .Schedule<IExtractWorkflow>(
+    .Schedule<IExtractTrain>(
         "extract", new ExtractInput(), Every.Hours(1),
         options => options.Group("etl"))
     // Both depend on Extract, not on each other
-    .Include<ITransformWorkflow>(
+    .Include<ITransformTrain>(
         "transform", new TransformInput(),
         options => options.Group("etl"))
-    .Include<IValidateWorkflow>(
+    .Include<IValidateTrain>(
         "validate", new ValidateInput(),
         options => options.Group("etl"));
 ```
@@ -88,14 +88,14 @@ For batch jobs where each item in one batch depends on a corresponding item in a
 
 ```csharp
 scheduler
-    .ScheduleMany<IExtractWorkflow>(
+    .ScheduleMany<IExtractTrain>(
         "extract",
         Enumerable.Range(0, 100).Select(i => new ManifestItem(
             $"{i}",
             new ExtractInput { Partition = i }
         )),
         Every.Minutes(30))
-    .IncludeMany<ILoadWorkflow>(
+    .IncludeMany<ILoadTrain>(
         "load",
         Enumerable.Range(0, 100).Select(i => new ManifestItem(
             $"{i}",
@@ -120,12 +120,12 @@ When a single root manifest should trigger an entire batch of dependents, use `I
 
 ```csharp
 scheduler
-    .Schedule<IExtractWorkflow>(
+    .Schedule<IExtractTrain>(
         "extract-all",
         new ExtractInput { Mode = "full" },
         Every.Hours(1),
         options => options.Group("extract"))
-    .IncludeMany<ILoadWorkflow>(
+    .IncludeMany<ILoadTrain>(
         "load",
         Enumerable.Range(0, 10).Select(i => new ManifestItem(
             $"{i}",
@@ -160,7 +160,7 @@ The dashboard also visualizes the group dependency graph on the ManifestGroups p
 
 ## Dormant Dependents
 
-Standard dependents auto-fire whenever their parent succeeds. But sometimes the parent needs to decide at runtime *which* dependents fire and *with what input*. Dormant dependents solve this: they're declared in the fluent API like normal dependents (keeping the topology self-contained), but they never auto-fire. The parent workflow must explicitly activate them at runtime.
+Standard dependents auto-fire whenever their parent succeeds. But sometimes the parent needs to decide at runtime *which* dependents fire and *with what input*. Dormant dependents solve this: they're declared in the fluent API like normal dependents (keeping the topology self-contained), but they never auto-fire. The parent train must explicitly activate them at runtime.
 
 ### When to Use
 
@@ -174,7 +174,7 @@ Add `.Dormant()` to the options when declaring a dependent:
 
 ```csharp
 scheduler
-    .ScheduleMany<IDeltaImportWorkflow>(
+    .ScheduleMany<IDeltaImportTrain>(
         "delta",
         allTables.Select(table => new ManifestItem(
             $"{table}",
@@ -182,7 +182,7 @@ scheduler
         )),
         Every.Seconds(10),
         options: o => o.Group(group => group.MaxActiveJobs(4)))
-    .IncludeMany<ICacheBronzeWorkflow>(
+    .IncludeMany<ICacheBronzeTrain>(
         "delta-bronze",
         allJobs.Select(item => new ManifestItem(
             $"{item.Table}-{item.Batch}",
@@ -196,7 +196,7 @@ The `delta-bronze-*` manifests appear in the topology with `ScheduleType.Dormant
 
 ### Runtime Activation
 
-Inject `IDormantDependentContext` into any step within the parent workflow:
+Inject `IDormantDependentContext` into any step within the parent train:
 
 ```csharp
 public class QueueDeltaBronzeTasks(IDormantDependentContext dormants)
@@ -211,7 +211,7 @@ public class QueueDeltaBronzeTasks(IDormantDependentContext dormants)
                 ExternalId: $"delta-bronze-{input.Table}-{b.Key}",
                 Input: ExtractRequest.Create(input.Table, b.Key, b.Value)));
 
-        await dormants.ActivateManyAsync<ICacheBronzeWorkflow, ExtractRequest>(activations);
+        await dormants.ActivateManyAsync<ICacheBronzeTrain, ExtractRequest>(activations);
         return Unit.Default;
     }
 }
@@ -238,7 +238,7 @@ If a dormant dependent already has a queued `WorkQueue` entry or an active execu
 
 ### Database
 
-Dependent workflows add one column to the `manifest` table:
+Dependent trains add one column to the `manifest` table:
 
 ```sql
 ALTER TABLE trax.manifest
@@ -250,7 +250,7 @@ It's a self-referencing FK. If the parent manifest is deleted, the dependent's `
 
 The `schedule_type` enum has two dependency values: `dependent` and `dormant_dependent`. Both have no `CronExpression` or `IntervalSeconds`—those fields are `NULL`. The difference is behavioral: `dependent` manifests auto-fire when their parent succeeds, while `dormant_dependent` manifests must be explicitly activated via `IDormantDependentContext`.
 
-### Evaluation in ManifestManagerWorkflow
+### Evaluation in ManifestManagerTrain
 
 The `DetermineJobsToQueueStep` runs two passes:
 

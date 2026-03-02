@@ -6,22 +6,22 @@ nav_order: 7
 
 # Analyzer
 
-Trax.Core includes a Roslyn analyzer that validates your workflow chains at compile time. When you chain steps via `.Chain<TStep>()`, the analyzer simulates the runtime Memory dictionary to verify that each step's input type is available before that step executes.
+Trax.Core includes a Roslyn analyzer that validates your train chains at compile time. When you chain steps via `.Chain<TStep>()`, the analyzer simulates the runtime Memory dictionary to verify that each step's input type is available before that step executes.
 
 ## The Problem
 
-Consider this workflow:
+Consider this train:
 
 ```csharp
 Activate(input)                          // input: ExecuteManifestRequest
     .Chain<LoadMetadataStep>()           // TIn=ExecuteManifestRequest → TOut=Metadata
     .Chain<ValidateMetadataStateStep>()  // TIn=Metadata → TOut=Unit
-    .Chain<ExecuteScheduledWorkflowStep>()
+    .Chain<ExecuteScheduledTrainStep>()
     .Chain<UpdateManifestSuccessStep>()
     .Resolve();
 ```
 
-If someone removes `LoadMetadataStep`, `ValidateMetadataStateStep` expects `Metadata` in Memory but nothing produces it. Today this is a runtime error—the workflow fails when it tries to find `Metadata` in the dictionary. You won't discover this until the code actually runs.
+If someone removes `LoadMetadataStep`, `ValidateMetadataStateStep` expects `Metadata` in Memory but nothing produces it. Today this is a runtime error—the train fails when it tries to find `Metadata` in the dictionary. You won't discover this until the code actually runs.
 
 The analyzer makes it a compile-time error. You see the problem immediately in your IDE, before you even build.
 
@@ -52,7 +52,7 @@ Activate(input)       → Memory = { TInput, Unit }
 Fires when a step needs a type that no previous step has produced.
 
 ```csharp
-public class BrokenWorkflow : ServiceTrain<string, Unit>
+public class BrokenTrain : ServiceTrain<string, Unit>
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(string input) =>
         Activate(input)
@@ -68,12 +68,12 @@ error CHAIN001: Step 'LogGreetingStep' requires input type 'HelloWorldInput'
 which has not been produced by a previous step. Available: [string, Unit].
 ```
 
-### CHAIN002: Workflow return type not available (Error)
+### CHAIN002: Train return type not available (Error)
 
 Fires when `Resolve()` needs a type that hasn't been produced. The analyzer tracks all chain methods including `ShortCircuit`, so a missing return type is always an error.
 
 ```csharp
-public class MissingReturnWorkflow : ServiceTrain<OrderRequest, Receipt>
+public class MissingReturnTrain : ServiceTrain<OrderRequest, Receipt>
 {
     protected override async Task<Either<Exception, Receipt>> RunInternal(OrderRequest input) =>
         Activate(input)
@@ -94,7 +94,7 @@ The analyzer mirrors the runtime's Memory behavior:
 
 ## Known Limitations
 
-**Sibling interface inputs.** When the workflow's `TInput` is an interface (e.g., `Train<IFoo, Unit>`) and a step requires a different interface that the runtime concrete type also implements, the analyzer can't verify this. Suppress with `#pragma warning disable CHAIN001`.
+**Sibling interface inputs.** When the train's `TInput` is an interface (e.g., `Train<IFoo, Unit>`) and a step requires a different interface that the runtime concrete type also implements, the analyzer can't verify this. Suppress with `#pragma warning disable CHAIN001`.
 
 **Cross-method chains.** The analyzer only looks within a single method body. If you build a chain across helper methods, it won't follow the calls.
 

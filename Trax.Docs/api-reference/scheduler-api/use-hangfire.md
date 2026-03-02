@@ -39,7 +39,7 @@ services.AddTrax.CoreEffects(options => options
     .AddServiceTrainBus(assemblies: typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
         .UseHangfire(connectionString)
-        .Schedule<IMyWorkflow, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```

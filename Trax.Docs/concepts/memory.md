@@ -7,11 +7,11 @@ nav_order: 3
 
 # Memory
 
-Memory is how steps communicate in a Trax.Core workflow. It's a type-keyed dictionary that the workflow maintains as it executes—each step pulls its input from Memory and pushes its output back in.
+Memory is how steps communicate in a Trax.Core train. It's a type-keyed dictionary that the train maintains as it executes—each step pulls its input from Memory and pushes its output back in.
 
 ## How It Works
 
-When you call `Activate(input)`, the workflow seeds Memory with two entries: your input type and `Unit`. As each step runs, its output gets stored in Memory under that output's type:
+When you call `Activate(input)`, the train seeds Memory with two entries: your input type and `Unit`. As each step runs, its output gets stored in Memory under that output's type:
 
 ```csharp
 Activate(request)                  // Memory: { CreateUserRequest, Unit }
@@ -21,7 +21,7 @@ Activate(request)                  // Memory: { CreateUserRequest, Unit }
     .Resolve();                    // Resolves User from Memory
 ```
 
-Each step declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the step, and stores `TOut` back. If `TIn` isn't in Memory, the workflow fails at runtime—though the [Analyzer](../analyzer.md) catches this at compile time.
+Each step declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the step, and stores `TOut` back. If `TIn` isn't in Memory, the train fails at runtime—though the [Analyzer](../analyzer.md) catches this at compile time.
 
 ## Storage by Type
 
@@ -103,7 +103,7 @@ public class ProcessCheckoutStep : Step<(User, Order, Payment), Receipt>
 This lets you load multiple entities in one step and consume them individually—or as a group—in later steps:
 
 ```csharp
-public class CheckoutWorkflow : ServiceTrain<CheckoutRequest, Receipt>
+public class CheckoutTrain : ServiceTrain<CheckoutRequest, Receipt>
 {
     protected override async Task<Either<Exception, Receipt>> RunInternal(CheckoutRequest input)
         => Activate(input)

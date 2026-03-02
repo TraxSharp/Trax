@@ -22,7 +22,7 @@ For a complete starter project with scheduling, persistence, and dashboards alre
 
 ### Install NuGet Packages
 
-For a typical setup with database persistence and workflow discovery:
+For a typical setup with database persistence and train discovery:
 
 ```xml
 <PackageReference Include="Trax.Core" Version="5.*" />
@@ -55,14 +55,14 @@ var app = builder.Build();
 app.Run();
 ```
 
-*API Reference: [AddTrax.CoreEffects]({{ site.baseurl }}{% link api-reference/configuration.md %}), [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-workflow-bus.md %})*
+*API Reference: [AddTrax.CoreEffects]({{ site.baseurl }}{% link api-reference/configuration.md %}), [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-train-bus.md %})*
 
-## Creating Your First Workflow
+## Creating Your First Train
 
 ### 1. Define Input and Output Models
 
 ```csharp
-// Input model - unique per workflow
+// Input model - unique per train
 public record CreateUserRequest
 {
     public required string Email { get; init; }
@@ -81,12 +81,12 @@ public record User
 }
 ```
 
-### 2. Implement the Workflow
+### 2. Implement the Train
 
 ```csharp
-public interface ICreateUserWorkflow : IServiceTrain<CreateUserRequest, User> { }
+public interface ICreateUserTrain : IServiceTrain<CreateUserRequest, User> { }
 
-public class CreateUserWorkflow : ServiceTrain<CreateUserRequest, User>, ICreateUserWorkflow
+public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
     protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
         => Activate(input)
@@ -97,7 +97,7 @@ public class CreateUserWorkflow : ServiceTrain<CreateUserRequest, User>, ICreate
 }
 ```
 
-*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/workflow-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/workflow-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/workflow-methods/resolve.md %})*
+*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
 
 ### 3. Implement the Steps
 
@@ -147,19 +147,19 @@ public class SendWelcomeEmailStep(IEmailService EmailService) : Step<User, Unit>
 }
 ```
 
-### 4. Use the Workflow
+### 4. Use the Train
 
 ```csharp
 [ApiController]
 [Route("api/[controller]")]
-public class UsersController(IWorkflowBus workflowBus) : ControllerBase
+public class UsersController(ITrainBus trainBus) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<User>> CreateUser(CreateUserRequest request)
     {
         try
         {
-            var user = await workflowBus.RunAsync<User>(request);
+            var user = await trainBus.RunAsync<User>(request);
             return Created($"/api/users/{user.Id}", user);
         }
         catch (ValidationException ex)
@@ -174,13 +174,13 @@ public class UsersController(IWorkflowBus workflowBus) : ControllerBase
 }
 ```
 
-*API Reference: [WorkflowBus.RunAsync]({{ site.baseurl }}{% link api-reference/mediator-api/workflow-bus.md %})*
+*API Reference: [TrainBus.RunAsync]({{ site.baseurl }}{% link api-reference/mediator-api/train-bus.md %})*
 
 ## Next Steps
 
 - [Core Concepts](concepts.md) - Understand the ideas behind Trax.Core
-- [Usage Guide](usage-guide.md) - Patterns and examples for building workflows
-- [Mediator](usage-guide/mediator.md) - Dispatch workflows with the WorkflowBus
+- [Usage Guide](usage-guide.md) - Patterns and examples for building trains
+- [Mediator](usage-guide/mediator.md) - Dispatch trains with the TrainBus
 - [Scheduling](scheduler.md) - Background job orchestration with retries and dead-lettering
 - [Architecture](architecture.md) - How the system is built internally
-- [Dashboard](dashboard.md) - Add a web UI for inspecting workflows (optional)
+- [Dashboard](dashboard.md) - Add a web UI for inspecting trains (optional)

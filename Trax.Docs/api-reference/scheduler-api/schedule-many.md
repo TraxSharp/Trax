@@ -8,7 +8,7 @@ nav_order: 4
 
 # ScheduleMany / ScheduleManyAsync
 
-Batch-schedules multiple instances of a workflow from a collection. All manifests are created or updated in a **single transaction**. Supports automatic cleanup of stale manifests via `prunePrefix`.
+Batch-schedules multiple instances of a train from a collection. All manifests are created or updated in a **single transaction**. Supports automatic cleanup of stale manifests via `prunePrefix`.
 
 `ScheduleMany` is used at startup configuration time; `ScheduleManyAsync` is used at runtime via `IManifestScheduler`.
 
@@ -17,13 +17,13 @@ Batch-schedules multiple instances of a workflow from a collection. All manifest
 ### Startup: Name-Based with ManifestItem (Recommended)
 
 ```csharp
-public SchedulerConfigurationBuilder ScheduleMany<TWorkflow>(
+public SchedulerConfigurationBuilder ScheduleMany<TTrain>(
     string name,
     IEnumerable<ManifestItem> items,
     Schedule schedule,
     Action<ScheduleOptions>? options = null
 )
-    where TWorkflow : class
+    where TTrain : class
 ```
 
 The `name` parameter automatically derives:
@@ -31,17 +31,17 @@ The `name` parameter automatically derives:
 - **`prunePrefix`** = `"{name}-"`
 - **`externalId`** = `"{name}-{item.Id}"` for each item
 
-Each `ManifestItem` contains the item's ID and input. The input type is inferred from `TWorkflow`'s `IServiceTrain<TInput, Unit>` interface and validated at configuration time.
+Each `ManifestItem` contains the item's ID and input. The input type is inferred from `TTrain`'s `IServiceTrain<TInput, Unit>` interface and validated at configuration time.
 
 ### Startup: Unnamed with ManifestItem
 
 ```csharp
-public SchedulerConfigurationBuilder ScheduleMany<TWorkflow>(
+public SchedulerConfigurationBuilder ScheduleMany<TTrain>(
     IEnumerable<ManifestItem> items,
     Schedule schedule,
     Action<ScheduleOptions>? options = null
 )
-    where TWorkflow : class
+    where TTrain : class
 ```
 
 Each `ManifestItem.Id` is used as the full external ID (no name prefix applied).
@@ -59,7 +59,7 @@ public sealed record ManifestItem(
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `string` | The item's identifier. In name-based overloads, this becomes the suffix (full external ID = `"{name}-{Id}"`). In unnamed overloads, this is the full external ID. |
-| `Input` | `IManifestProperties` | The workflow input for this item. Must match the expected input type of `TWorkflow`. |
+| `Input` | `IManifestProperties` | The train input for this item. Must match the expected input type of `TTrain`. |
 | `DependsOn` | `string?` | The external ID of the parent manifest this item depends on. Used by `IncludeMany` and `ThenIncludeMany`. See [Dependent Scheduling]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %}). |
 
 ### Startup: Explicit Type Parameters (Legacy)
@@ -68,7 +68,7 @@ The three-type-parameter forms are still available for backward compatibility:
 
 ```csharp
 // Name-based
-public SchedulerConfigurationBuilder ScheduleMany<TWorkflow, TInput, TSource>(
+public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TSource>(
     string name,
     IEnumerable<TSource> sources,
     Func<TSource, (string Suffix, TInput Input)> map,
@@ -76,25 +76,25 @@ public SchedulerConfigurationBuilder ScheduleMany<TWorkflow, TInput, TSource>(
     Action<ScheduleOptions>? options = null,
     Action<TSource, ManifestOptions>? configureEach = null
 )
-    where TWorkflow : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, Unit>
     where TInput : IManifestProperties
 
 // Explicit
-public SchedulerConfigurationBuilder ScheduleMany<TWorkflow, TInput, TSource>(
+public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TSource>(
     IEnumerable<TSource> sources,
     Func<TSource, (string ExternalId, TInput Input)> map,
     Schedule schedule,
     Action<ScheduleOptions>? options = null,
     Action<TSource, ManifestOptions>? configureEach = null
 )
-    where TWorkflow : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, Unit>
     where TInput : IManifestProperties
 ```
 
 ### Runtime (IManifestScheduler)
 
 ```csharp
-Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TWorkflow, TInput, TSource>(
+Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TSource>(
     IEnumerable<TSource> sources,
     Func<TSource, (string ExternalId, TInput Input)> map,
     Schedule schedule,
@@ -102,7 +102,7 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TWorkflow, TInput, TSource>(
     Action<TSource, ManifestOptions>? configureEach = null,
     CancellationToken ct = default
 )
-    where TWorkflow : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, Unit>
     where TInput : IManifestProperties
 ```
 
@@ -112,14 +112,14 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TWorkflow, TInput, TSource>(
 
 | Type Parameter | Constraint | Description |
 |---------------|------------|-------------|
-| `TWorkflow` | `class` | The workflow interface type. Must implement `IServiceTrain<TInput, Unit>`. The input type is inferred at configuration time. |
+| `TTrain` | `class` | The train interface type. Must implement `IServiceTrain<TInput, Unit>`. The input type is inferred at configuration time. |
 
 ### Legacy / Runtime API
 
 | Type Parameter | Constraint | Description |
 |---------------|------------|-------------|
-| `TWorkflow` | `IServiceTrain<TInput, Unit>` | The workflow interface type. All items in the batch execute the same workflow. |
-| `TInput` | `IManifestProperties` | The input type for the workflow. Each item in the batch can have different input data. |
+| `TTrain` | `IServiceTrain<TInput, Unit>` | The train interface type. All items in the batch execute the same train. |
+| `TInput` | `IManifestProperties` | The input type for the train. Each item in the batch can have different input data. |
 | `TSource` | — | The type of elements in the source collection. Can be any type — it is transformed into `(ExternalId, Input)` pairs by the `map` function. |
 
 ## Parameters
@@ -160,7 +160,7 @@ var tables = new[] { "customers", "orders", "products" };
 services.AddTrax.CoreEffects(options => options
     .AddScheduler(scheduler => scheduler
         .UsePostgresTaskServer()
-        .ScheduleMany<ISyncTableWorkflow>(
+        .ScheduleMany<ISyncTableTrain>(
             "sync",
             tables.Select(table => new ManifestItem(
                 table,
@@ -173,14 +173,14 @@ services.AddTrax.CoreEffects(options => options
 // groupId: "sync", prunePrefix: "sync-"
 ```
 
-Each `ManifestItem` contains the item's ID (used as the suffix in name-based overloads) and the workflow input. No `map` function needed — the data is already structured.
+Each `ManifestItem` contains the item's ID (used as the suffix in name-based overloads) and the train input. No `map` function needed — the data is already structured.
 
 ### Unnamed Batch Scheduling
 
 ```csharp
 var tables = new[] { "customers", "orders", "products" };
 
-scheduler.ScheduleMany<ISyncTableWorkflow>(
+scheduler.ScheduleMany<ISyncTableTrain>(
     tables.Select(table => new ManifestItem(
         $"sync-{table}",
         new SyncTableInput { TableName = table }
@@ -198,7 +198,7 @@ The name-based overload includes pruning automatically (`prunePrefix: "{name}-"`
 // "sync-" but wasn't included in the current batch.
 var tables = new[] { "customers", "orders" };
 
-scheduler.ScheduleMany<ISyncTableWorkflow>(
+scheduler.ScheduleMany<ISyncTableTrain>(
     "sync",
     tables.Select(table => new ManifestItem(
         table,
@@ -210,7 +210,7 @@ scheduler.ScheduleMany<ISyncTableWorkflow>(
 ### With Group Configuration
 
 ```csharp
-scheduler.ScheduleMany<ISyncTableWorkflow>(
+scheduler.ScheduleMany<ISyncTableTrain>(
     "sync",
     tables.Select(table => new ManifestItem(
         table,
@@ -229,7 +229,7 @@ scheduler.ScheduleMany<ISyncTableWorkflow>(
 The three-type-parameter form is still available and supports per-item configuration via `configureEach`:
 
 ```csharp
-scheduler.ScheduleMany<ISyncTableWorkflow, SyncTableInput, string>(
+scheduler.ScheduleMany<ISyncTableTrain, SyncTableInput, string>(
     tables,
     table => ($"sync-{table}", new SyncTableInput { TableName = table }),
     Every.Minutes(5),
@@ -251,7 +251,7 @@ public class TenantSyncService(IManifestScheduler scheduler)
 {
     public async Task SyncTenants(IEnumerable<Tenant> tenants)
     {
-        var manifests = await scheduler.ScheduleManyAsync<ISyncTenantWorkflow, SyncTenantInput, Tenant>(
+        var manifests = await scheduler.ScheduleManyAsync<ISyncTenantTrain, SyncTenantInput, Tenant>(
             sources: tenants,
             map: tenant => (
                 ExternalId: $"tenant-sync-{tenant.Id}",

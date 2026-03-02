@@ -8,7 +8,7 @@ nav_order: 6
 
 # AddStepLogger
 
-Adds per-step execution logging as a step-level effect. Records individual step metadata (name, duration, input/output types) for each step in the workflow.
+Adds per-step execution logging as a step-level effect. Records individual step metadata (name, duration, input/output types) for each step in the train.
 
 ## Signature
 
@@ -40,7 +40,7 @@ services.AddTrax.CoreEffects(options => options
 
 ## Remarks
 
-- This is a **step-level effect** (runs per step, not per workflow).
+- This is a **step-level effect** (runs per step, not per train).
 - Step metadata includes: step name, start/end times, duration, input/output types.
 - When `serializeStepData` is `true`, the actual step input and output values are serialized to JSON.
 - Registered as a toggleable effect.

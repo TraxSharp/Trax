@@ -91,7 +91,7 @@ services.AddDbContext<MyContext>(options =>
 
 Both registrations are necessary—the `NpgsqlDataSourceBuilder` mapping handles the ADO.NET layer, and the `UseNpgsql` callback mapping handles the EF Core model layer. Omitting the latter causes `column "x" is of type my_enum but expression is of type integer` errors at runtime.
 
-Trax.Core handles this internally for its own enum types (`WorkflowState`, `LogLevel`, `ScheduleType`, `DeadLetterStatus`). This only affects you if you've added custom PostgreSQL enum types to your own `DbContext` that extends `DataContext<T>`.
+Trax.Core handles this internally for its own enum types (`TrainState`, `LogLevel`, `ScheduleType`, `DeadLetterStatus`). This only affects you if you've added custom PostgreSQL enum types to your own `DbContext` that extends `DataContext<T>`.
 
 ## Step-by-Step Upgrade
 

@@ -8,7 +8,7 @@ nav_order: 1
 
 # AddPostgresEffect
 
-Adds PostgreSQL database support for persisting workflow metadata, logs, manifests, and dead letters. Automatically migrates the database schema on startup.
+Adds PostgreSQL database support for persisting train metadata, logs, manifests, and dead letters. Automatically migrates the database schema on startup.
 
 ## Signature
 
@@ -41,7 +41,7 @@ services.AddTrax.CoreEffects(options => options
 ## What It Registers
 
 1. Migrates the database schema to the latest version via `DatabaseMigrator`
-2. Creates an `NpgsqlDataSource` with enum mappings (`WorkflowState`, `LogLevel`, `ScheduleType`, `DeadLetterStatus`, `WorkQueueStatus`)
+2. Creates an `NpgsqlDataSource` with enum mappings (`TrainState`, `LogLevel`, `ScheduleType`, `DeadLetterStatus`, `WorkQueueStatus`)
 3. Registers `IDbContextFactory<PostgresContext>` for creating database contexts
 4. Registers `IDataContext` (scoped) for direct database access
 5. Enables data context logging support (for [AddEffectDataContextLogging]({{ site.baseurl }}{% link api-reference/configuration/add-effect-data-context-logging.md %}))

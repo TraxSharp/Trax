@@ -9,10 +9,10 @@ nav_order: 10
 
 ## Error Handling Patterns
 
-### Workflow-Level Error Handling
+### Train-Level Error Handling
 
 ```csharp
-public class RobustWorkflow : ServiceTrain<ProcessOrderRequest, ProcessOrderResult>
+public class RobustTrain : ServiceTrain<ProcessOrderRequest, ProcessOrderResult>
 {
     protected override async Task<Either<Exception, ProcessOrderResult>> RunInternal(ProcessOrderRequest input)
     {
@@ -40,7 +40,7 @@ public class RobustWorkflow : ServiceTrain<ProcessOrderRequest, ProcessOrderResu
 }
 ```
 
-*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/workflow-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/workflow-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/workflow-methods/resolve.md %})*
+*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
 
 ### Step-Level Error Handling
 
@@ -75,7 +75,7 @@ public async Task<IActionResult> CreateOrder(
     CreateOrderRequest request,
     CancellationToken cancellationToken)
 {
-    var result = await workflowBus.RunAsync<OrderResult>(request, cancellationToken);
+    var result = await trainBus.RunAsync<OrderResult>(request, cancellationToken);
     return Ok(result);
 }
 ```

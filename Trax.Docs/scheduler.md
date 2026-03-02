@@ -7,7 +7,7 @@ has_children: true
 
 # Scheduling
 
-Trax.Scheduler adds background job orchestration to workflows. Define a manifest (what to run, when, and how many retries), and the scheduler handles execution, retries, and dead-lettering.
+Trax.Scheduler adds background job orchestration to trains. Define a manifest (what to run, when, and how many retries), and the scheduler handles execution, retries, and dead-lettering.
 
 This isn't a traditional cron scheduler. It supports cron expressions, but its design goal is controlled bulk job orchestration—database replication with thousands of table slices, for example—where you need visibility into every execution attempt.
 
@@ -19,17 +19,17 @@ A hosted service with a timer works fine for simple recurring tasks. The Schedul
 
 ### Manifest = Job Definition
 
-A `Manifest` describes a type of job: which workflow it triggers, scheduling rules, retry policies, and default configuration. The `IManifestScheduler` handles the boilerplate—no need to worry about assembly-qualified names or JSON serialization:
+A `Manifest` describes a type of job: which train it triggers, scheduling rules, retry policies, and default configuration. The `IManifestScheduler` handles the boilerplate—no need to worry about assembly-qualified names or JSON serialization:
 
 ```csharp
-await scheduler.ScheduleAsync<ISyncCustomersWorkflow, SyncCustomersInput>(
+await scheduler.ScheduleAsync<ISyncCustomersTrain, SyncCustomersInput>(
     "sync-customers-us-east",
     new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
     Every.Hours(6),
     opts => opts.MaxRetries = 3);
 
 // For bulk scheduling from a collection, use ScheduleMany:
-scheduler.ScheduleMany<ISyncTableWorkflow, SyncTableInput, string>(
+scheduler.ScheduleMany<ISyncTableTrain, SyncTableInput, string>(
     "sync",
     tables,
     table => (table, new SyncTableInput { TableName = table }),
@@ -70,13 +70,13 @@ Operators can retry (which creates a new execution) or acknowledge (mark as hand
 
 ### Dependent Manifests
 
-A manifest can depend on another manifest. Instead of running on a timer, it fires when its parent's `LastSuccessfulRun` advances past the dependent's own. This is how you build ETL chains, post-processing steps, or any workflow that should only run after another succeeds. See [Dependent Workflows](scheduler/dependent-workflows.md).
+A manifest can depend on another manifest. Instead of running on a timer, it fires when its parent's `LastSuccessfulRun` advances past the dependent's own. This is how you build ETL chains, post-processing steps, or any train that should only run after another succeeds. See [Dependent Trains](scheduler/dependent-trains.md).
 
 ```csharp
 scheduler
-    .Schedule<IExtractWorkflow, ExtractInput>(
+    .Schedule<IExtractTrain, ExtractInput>(
         "extract", new ExtractInput(), Every.Hours(1))
-    .Include<ILoadWorkflow, LoadInput>(
+    .Include<ILoadTrain, LoadInput>(
         "load", new LoadInput());
 ```
 
@@ -88,10 +88,10 @@ Every manifest belongs to a `ManifestGroup`. Groups provide per-group dispatch c
 
 ```csharp
 scheduler
-    .Schedule<ISyncWorkflow, SyncInput>(
+    .Schedule<ISyncTrain, SyncInput>(
         "sync-data", new SyncInput(), Every.Hours(1),
         groupId: "data-sync")
-    .Include<ILoadWorkflow, LoadInput>(
+    .Include<ILoadTrain, LoadInput>(
         "load-data", new LoadInput(),
         groupId: "data-sync");
 ```
@@ -113,7 +113,7 @@ When `groupId` is not specified, it defaults to the manifest's `externalId`. See
 └──────────────┬───────────────┘  └──────────────┬────────────────┘
                ▼                                  ▼
 ┌──────────────────────────────┐  ┌──────────────────────────────┐
-│   ManifestManagerWorkflow    │  │    JobDispatcherWorkflow      │
+│   ManifestManagerTrain    │  │    JobDispatcherTrain      │
 │                              │  │                               │
 │  LoadManifests               │  │  LoadQueuedJobs               │
 │  → ReapFailedJobs            │  │  → DispatchJobs               │
@@ -130,17 +130,17 @@ When `groupId` is not specified, it defaults to the manifest's `externalId`. See
                                   │ dispatched to
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  TaskServerExecutorWorkflow                       │
+│                  TaskServerExecutorTrain                       │
 │            (runs on PostgresWorkerService workers)                │
 │                                                                  │
-│  LoadMetadata → ValidateState → ExecuteWorkflow →                │
+│  LoadMetadata → ValidateState → ExecuteTrain →                │
 │                                      UpdateManifest              │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Your Workflow                                 │
-│              (Resolved via WorkflowBus)                           │
+│                     Your Train                                 │
+│              (Resolved via TrainBus)                           │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -148,19 +148,19 @@ The **SchedulerStartupService** is an `IHostedService` that runs once on startup
 
 The **ManifestManagerPollingService** and **JobDispatcherPollingService** are independent `BackgroundService` instances, each with their own configurable polling interval (default: 5 seconds). They communicate via the work queue — ManifestManager writes entries, JobDispatcher reads them. Running independently means JobDispatcher may not see ManifestManager's freshly-queued entries until its next tick, but no work is lost. Both services are safe to run across multiple server instances — see [Multi-Server Concurrency](scheduler/concurrency.md).
 
-The **ManifestManagerWorkflow** loads enabled manifests, dead-letters any that have exceeded their retry limit, determines which are due for execution (including [dependent manifests](scheduler/dependent-workflows.md) whose parent has a newer `LastSuccessfulRun`), and writes them to the work queue. It doesn't enqueue anything directly—it just records intent. In multi-server deployments, a PostgreSQL advisory lock ensures only one server runs the ManifestManager per cycle.
+The **ManifestManagerTrain** loads enabled manifests, dead-letters any that have exceeded their retry limit, determines which are due for execution (including [dependent manifests](scheduler/dependent-trains.md) whose parent has a newer `LastSuccessfulRun`), and writes them to the work queue. It doesn't enqueue anything directly—it just records intent. In multi-server deployments, a PostgreSQL advisory lock ensures only one server runs the ManifestManager per cycle.
 
-The **JobDispatcherWorkflow** reads from the work queue, enforces both global and per-group `MaxActiveJobs` limits, creates `Metadata` records, and enqueues to the background task server. This is the single gateway to execution. Everything goes through the work queue first—manifest schedules, `TriggerAsync` calls, dashboard re-runs—so capacity enforcement happens in one place. Each entry is dispatched within its own transaction using `FOR UPDATE SKIP LOCKED`, allowing multiple servers to dispatch concurrently without duplicate execution.
+The **JobDispatcherTrain** reads from the work queue, enforces both global and per-group `MaxActiveJobs` limits, creates `Metadata` records, and enqueues to the background task server. This is the single gateway to execution. Everything goes through the work queue first—manifest schedules, `TriggerAsync` calls, dashboard re-runs—so capacity enforcement happens in one place. Each entry is dispatched within its own transaction using `FOR UPDATE SKIP LOCKED`, allowing multiple servers to dispatch concurrently without duplicate execution.
 
-The **TaskServerExecutorWorkflow** runs on the task server's worker threads for each enqueued job. It loads the Metadata and Manifest, validates the job is still pending, executes the target workflow via `IWorkflowBus`, and updates `LastSuccessfulRun` on success. See [Task Server](scheduler/task-server.md) for details on the built-in PostgreSQL implementation.
+The **TaskServerExecutorTrain** runs on the task server's worker threads for each enqueued job. It loads the Metadata and Manifest, validates the job is still pending, executes the target train via `ITrainBus`, and updates `LastSuccessfulRun` on success. See [Task Server](scheduler/task-server.md) for details on the built-in PostgreSQL implementation.
 
-See [Administrative Workflows](scheduler/admin-workflows.md) for detailed documentation on each internal workflow.
+See [Administrative Trains](scheduler/admin-trains.md) for detailed documentation on each internal train.
 
 ## API Reference
 
 For complete method signatures, all parameters, and detailed usage examples for every scheduling function, see the [Scheduler API Reference]({{ site.baseurl }}{% link api-reference/scheduler-api.md %}):
 
-- [Schedule / ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}) — single recurring workflow
+- [Schedule / ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}) — single recurring train
 - [ScheduleMany / ScheduleManyAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %}) — batch scheduling with pruning
 - [Dependent Scheduling]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %}) — ThenInclude, ThenIncludeMany, Include, IncludeMany, ScheduleDependentAsync
 - [Manifest Management]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}) — DisableAsync, EnableAsync, TriggerAsync

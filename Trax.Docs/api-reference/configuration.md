@@ -17,7 +17,7 @@ services.AddTrax.CoreEffects(options => options
     .AddPostgresEffect(connectionString)
     .AddEffectDataContextLogging()
     .AddJsonEffect()
-    .SaveWorkflowParameters()
+    .SaveTrainParameters()
     .AddStepLogger()
     .AddStepProgress()
     .AddServiceTrainBus(assemblies: typeof(Program).Assembly)
@@ -46,7 +46,7 @@ These properties can be set directly on the `Trax.CoreEffectConfigurationBuilder
 | `ServiceCollection` | `IServiceCollection` | (from constructor) | Direct access to the DI container for manual registrations |
 | `SerializeStepData` | `bool` | `false` | Whether step input/output data should be serialized globally |
 | `LogLevel` | `LogLevel` | `LogLevel.Debug` | Minimum log level for effect logging |
-| `WorkflowParameterJsonSerializerOptions` | `JsonSerializerOptions` | `Trax.CoreJsonSerializationOptions.Default` | System.Text.Json options for parameter serialization |
+| `TrainParameterJsonSerializerOptions` | `JsonSerializerOptions` | `Trax.CoreJsonSerializationOptions.Default` | System.Text.Json options for parameter serialization |
 | `NewtonsoftJsonSerializerSettings` | `JsonSerializerSettings` | `Trax.CoreJsonSerializationOptions.NewtonsoftDefault` | Newtonsoft.Json settings for legacy serialization |
 
 ## Extension Methods
@@ -57,9 +57,9 @@ These properties can be set directly on the `Trax.CoreEffectConfigurationBuilder
 | [AddInMemoryEffect]({{ site.baseurl }}{% link api-reference/configuration/add-in-memory-effect.md %}) | Adds in-memory database support for testing/development |
 | [AddEffectDataContextLogging]({{ site.baseurl }}{% link api-reference/configuration/add-effect-data-context-logging.md %}) | Enables logging for database operations |
 | [AddJsonEffect]({{ site.baseurl }}{% link api-reference/configuration/add-json-effect.md %}) | Adds JSON change detection for tracking model mutations |
-| [SaveWorkflowParameters]({{ site.baseurl }}{% link api-reference/configuration/save-workflow-parameters.md %}) | Serializes workflow input/output to JSON for persistence (optionally configurable) |
+| [SaveTrainParameters]({{ site.baseurl }}{% link api-reference/configuration/save-train-parameters.md %}) | Serializes train input/output to JSON for persistence (optionally configurable) |
 | [AddStepLogger]({{ site.baseurl }}{% link api-reference/configuration/add-step-logger.md %}) | Adds per-step execution logging |
 | [AddStepProgress]({{ site.baseurl }}{% link api-reference/configuration/add-step-progress.md %}) | Adds step progress tracking and cross-server cancellation checking |
-| [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-workflow-bus.md %}) | Registers the WorkflowBus and discovers workflows via assembly scanning |
+| [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-train-bus.md %}) | Registers the TrainBus and discovers trains via assembly scanning |
 | [AddEffect / AddStepEffect]({{ site.baseurl }}{% link api-reference/configuration/add-effect.md %}) | Registers custom effect provider factories |
 | [SetEffectLogLevel]({{ site.baseurl }}{% link api-reference/configuration/set-effect-log-level.md %}) | Sets the minimum log level for effect logging |

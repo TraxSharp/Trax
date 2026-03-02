@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Extract
-parent: Workflow Methods
+parent: Train Methods
 grand_parent: API Reference
 nav_order: 5
 ---
@@ -43,7 +43,7 @@ public Train<TInput, TReturn> Extract<TIn, TOut>(TIn input)
 
 ## Returns
 
-`Train<TInput, TReturn>` — the workflow instance, for fluent chaining.
+`Train<TInput, TReturn>` — the train instance, for fluent chaining.
 
 ## Example
 

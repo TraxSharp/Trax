@@ -46,7 +46,7 @@ services.AddTrax.CoreEffects(options => options
     .AddScheduler(scheduler => scheduler
         .UsePostgresTaskServer()
         .PruneOrphanedManifests(false)  // Disable orphan cleanup
-        .Schedule<IMyWorkflow>(
+        .Schedule<IMyTrain>(
             "my-job",
             new MyInput(),
             Every.Minutes(5))
@@ -61,18 +61,18 @@ services.AddTrax.CoreEffects(options => options
 ```csharp
 // Before: two schedules defined
 scheduler
-    .Schedule<IHelloWorldWorkflow>(
+    .Schedule<IHelloWorldTrain>(
         "hello-world",
         new HelloWorldInput { Name = "Scheduler" },
         Every.Seconds(20))
-    .Schedule<IGoodbyeWorldWorkflow>(
+    .Schedule<IGoodbyeWorldTrain>(
         "goodbye-world",
         new GoodbyeWorldInput { Name = "Scheduler" },
         Every.Minutes(1));
 
 // After: "goodbye-world" removed from code
 scheduler
-    .Schedule<IHelloWorldWorkflow>(
+    .Schedule<IHelloWorldTrain>(
         "hello-world",
         new HelloWorldInput { Name = "Scheduler" },
         Every.Seconds(20));
@@ -87,7 +87,7 @@ scheduler
 ```csharp
 // Before: schedules defined
 scheduler
-    .Schedule<IMyWorkflow>("my-job", new MyInput(), Every.Minutes(5));
+    .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5));
 
 // After: all schedules removed
 services.AddTrax.CoreEffects(options => options

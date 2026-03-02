@@ -5,7 +5,7 @@ parent: Scheduling
 nav_order: 1
 ---
 
-# Setup & Creating Scheduled Workflows
+# Setup & Creating Scheduled Trains
 
 ## Quick Setup
 
@@ -23,7 +23,7 @@ Jobs can be scheduled directly in startup configuration. The scheduler creates o
 
 ```csharp
 using Trax.Scheduler.Services.Scheduling;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
+using Trax.Scheduler.Trains.TaskServerExecutor;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,7 +32,7 @@ var connectionString = builder.Configuration.GetConnectionString("Database");
 builder.Services.AddTrax.CoreEffects(options => options
     .AddServiceTrainBus(
         typeof(Program).Assembly,
-        typeof(TaskServerExecutorWorkflow).Assembly  // Required — see note below
+        typeof(TaskServerExecutorTrain).Assembly  // Required — see note below
     )
     .AddPostgresEffect(connectionString)
     .AddScheduler(scheduler => scheduler
@@ -42,12 +42,12 @@ builder.Services.AddTrax.CoreEffects(options => options
         .UsePostgresTaskServer()
 
         // Schedule jobs directly in configuration
-        .Schedule<IHelloWorldWorkflow, HelloWorldInput>(
+        .Schedule<IHelloWorldTrain, HelloWorldInput>(
             "hello-world",
             new HelloWorldInput { Name = "Trax.Core Scheduler" },
             Every.Minutes(1))
 
-        .Schedule<IDailyReportWorkflow, DailyReportInput>(
+        .Schedule<IDailyReportTrain, DailyReportInput>(
             "daily-report",
             new DailyReportInput { ReportType = "sales" },
             Cron.Daily(hour: 3),
@@ -65,7 +65,7 @@ app.Run();
 
 `UsePostgresTaskServer()` starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed — it reuses the `IDataContext` from `AddPostgresEffect()`. See [Task Server]({{ site.baseurl }}{% link scheduler/task-server.md %}) for architecture details.
 
-> **`TaskServerExecutorWorkflow.Assembly` is required.** The `WorkflowBus` discovers workflows by scanning assemblies. `TaskServerExecutorWorkflow` is the internal workflow that the task server invokes when a job fires—if its assembly isn't registered, scheduled jobs will silently fail to execute with no error message. Always include it alongside your own assemblies.
+> **`TaskServerExecutorTrain.Assembly` is required.** The `TrainBus` discovers trains by scanning assemblies. `TaskServerExecutorTrain` is the internal train that the task server invokes when a job fires—if its assembly isn't registered, scheduled jobs will silently fail to execute with no error message. Always include it alongside your own assemblies.
 
 ### Task Server Options
 
@@ -85,11 +85,11 @@ See [UsePostgresTaskServer]({{ site.baseurl }}{% link api-reference/scheduler-ap
 
 > **Migrating from Hangfire?** See the [migration guide]({{ site.baseurl }}{% link scheduler/task-server.md %}#migrating-from-hangfire).
 
-## Creating Scheduled Workflows
+## Creating Scheduled Trains
 
 ### 1. Define the Input
 
-Your workflow input must implement `IManifestProperties`. This marker interface signals the type is safe for serialization and storage:
+Your train input must implement `IManifestProperties`. This marker interface signals the type is safe for serialization and storage:
 
 ```csharp
 using Trax.Effect.Models.Manifest;
@@ -105,14 +105,14 @@ Types without `IManifestProperties` won't compile with the scheduling API—this
 
 `IManifestProperties` lives in the `Trax.Effect` package (namespace `Trax.Effect.Models.Manifest`), not in the Scheduler package. You won't need an extra package reference if you already have `Trax.Effect` installed.
 
-### 2. Create the Workflow
+### 2. Create the Train
 
 Standard `ServiceTrain` with an interface for DI resolution:
 
 ```csharp
-public interface ISyncCustomersWorkflow : IServiceTrain<SyncCustomersInput, Unit> { }
+public interface ISyncCustomersTrain : IServiceTrain<SyncCustomersInput, Unit> { }
 
-public class SyncCustomersWorkflow : ServiceTrain<SyncCustomersInput, Unit>, ISyncCustomersWorkflow
+public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, Unit>, ISyncCustomersTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(SyncCustomersInput input)
         => Activate(input)
@@ -130,7 +130,7 @@ public class SyncCustomersWorkflow : ServiceTrain<SyncCustomersInput, Unit>, ISy
 ```csharp
 .AddScheduler(scheduler => scheduler
     .UsePostgresTaskServer()
-    .Schedule<ISyncCustomersWorkflow, SyncCustomersInput>(
+    .Schedule<ISyncCustomersTrain, SyncCustomersInput>(
         "sync-customers-us-east",
         new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
         Cron.Hourly(minute: 30),
@@ -145,7 +145,7 @@ public class JobSetupService(IManifestScheduler scheduler)
 {
     public async Task SetupJobs()
     {
-        await scheduler.ScheduleAsync<ISyncCustomersWorkflow, SyncCustomersInput>(
+        await scheduler.ScheduleAsync<ISyncCustomersTrain, SyncCustomersInput>(
             "sync-customers-us-east",
             new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
             Every.Hours(6),
@@ -172,7 +172,7 @@ The scheduler spans multiple packages. This table lists every public type you're
 | Type | Namespace | Package |
 |------|-----------|---------|
 | `IManifestProperties` | `Trax.Effect.Models.Manifest` | `Trax.Effect` |
-| `TaskServerExecutorWorkflow` | `Trax.Scheduler.Workflows.TaskServerExecutor` | `Trax.Scheduler` |
+| `TaskServerExecutorTrain` | `Trax.Scheduler.Trains.TaskServerExecutor` | `Trax.Scheduler` |
 | `PostgresTaskServerOptions` | `Trax.Scheduler.Configuration` | `Trax.Scheduler` |
 | `Cron` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
 | `Every` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |

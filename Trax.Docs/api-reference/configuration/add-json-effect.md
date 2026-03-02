@@ -8,7 +8,7 @@ nav_order: 4
 
 # AddJsonEffect
 
-Adds JSON change detection for tracking model mutations during workflow execution. Serializes model state before and after each step to detect changes.
+Adds JSON change detection for tracking model mutations during train execution. Serializes model state before and after each step to detect changes.
 
 ## Signature
 

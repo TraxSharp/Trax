@@ -21,11 +21,11 @@ How Trax.Core's components fit together.
           ▼                       ▼                       ▼
 ┌──────────────────┐  ┌────────────────────┐  ┌──────────────────────┐
 │ Dashboard (Opt.) │  │     Mediator       │  │  Scheduler (Opt.)    │
-│ [Blazor Server]  │  │  [WorkflowBus]     │  │  [ManifestManager]   │
+│ [Blazor Server]  │  │  [TrainBus]     │  │  [ManifestManager]   │
 └────────┬─────────┘  └─────────┬──────────┘  └──────────┬───────────┘
          │                      │                        │
          │                      │◄───────────────────────┘
-         │                      │  (Scheduler uses WorkflowBus)
+         │                      │  (Scheduler uses TrainBus)
          └──────────┬───────────┘
                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -36,7 +36,7 @@ How Trax.Core's components fit together.
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      Core Trax.Core                                │
-│           [Workflow Engine] ────────► [Steps]                       │
+│           [Train Engine] ────────► [Steps]                       │
 └─────────────────────────────────┬───────────────────────────────────┘
                                   │
                                   ▼
@@ -58,11 +58,11 @@ Trax.Core (Core)
     │
     ├─── Trax.Core.Analyzers (Compile-Time Chain Validation)
     │
-    └─── Trax.Effect (Enhanced Workflows)
+    └─── Trax.Effect (Enhanced Trains)
               │
               ├─── Trax.Dashboard (Web UI)
               │
-              ├─── Trax.Mediator (WorkflowBus)
+              ├─── Trax.Mediator (TrainBus)
               │
               ├─── Trax.Effect.Data (Abstract Persistence)
               │         │

@@ -7,7 +7,7 @@ nav_order: 2
 
 # Task Server
 
-The task server is the execution backend for the scheduler. When the JobDispatcher creates a Metadata record and calls `IBackgroundTaskServer.EnqueueAsync()`, the task server is responsible for picking up that job and running the workflow.
+The task server is the execution backend for the scheduler. When the JobDispatcher creates a Metadata record and calls `IBackgroundTaskServer.EnqueueAsync()`, the task server is responsible for picking up that job and running the train.
 
 ## Built-in PostgreSQL Task Server
 
@@ -19,7 +19,7 @@ The JobDispatcher commits the Metadata creation and WorkQueue status update in a
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     JobDispatcherWorkflow                        │
+│                     JobDispatcherTrain                        │
 │  Creates Metadata → Calls EnqueueAsync(metadataId)               │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
@@ -58,12 +58,12 @@ The JobDispatcher commits the Metadata creation and WorkQueue status update in a
 builder.Services.AddTrax.CoreEffects(options => options
     .AddServiceTrainBus(
         typeof(Program).Assembly,
-        typeof(TaskServerExecutorWorkflow).Assembly
+        typeof(TaskServerExecutorTrain).Assembly
     )
     .AddPostgresEffect(connectionString)
     .AddScheduler(scheduler => scheduler
         .UsePostgresTaskServer()                   // ← built-in, no extra packages
-        .Schedule<IMyWorkflow, MyInput>(
+        .Schedule<IMyTrain, MyInput>(
             "my-job", new MyInput(), Every.Minutes(5))
     )
 );
@@ -88,7 +88,7 @@ No connection string parameter needed — `UsePostgresTaskServer()` uses the sam
 | `WorkerCount` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs |
 | `PollingInterval` | 1 second | How often idle workers poll for new jobs |
 | `VisibilityTimeout` | 30 minutes | How long a claimed job stays invisible before crash recovery reclaims it |
-| `ShutdownTimeout` | 30 seconds | Grace period for in-flight jobs during application shutdown. When the host signals shutdown, in-flight workflows receive the cancellation token after this delay — giving them time to finish cleanly. See [Cancellation Tokens]({{ site.baseurl }}{% link usage-guide/cancellation-tokens.md %}#background-services-and-shutdown). |
+| `ShutdownTimeout` | 30 seconds | Grace period for in-flight jobs during application shutdown. When the host signals shutdown, in-flight trains receive the cancellation token after this delay — giving them time to finish cleanly. See [Cancellation Tokens]({{ site.baseurl }}{% link usage-guide/cancellation-tokens.md %}#background-services-and-shutdown). |
 
 ### Worker Lifecycle
 
@@ -114,7 +114,7 @@ On claim, the worker sets `fetched_at = NOW()` and commits the transaction.
 
 **Phase 2 — Execute** (in a fresh DI scope)
 
-The worker resolves `ITaskServerExecutorWorkflow` from a new DI scope and calls `Run(new ExecuteManifestRequest(metadataId, input))`. This is the same workflow that Hangfire invoked — it loads the Metadata, validates the job state, executes the target workflow, and updates the Manifest's `LastSuccessfulRun` on success.
+The worker resolves `ITaskServerExecutorTrain` from a new DI scope and calls `Run(new ExecuteManifestRequest(metadataId, input))`. This is the same train that Hangfire invoked — it loads the Metadata, validates the job state, executes the target train, and updates the Manifest's `LastSuccessfulRun` on success.
 
 **Phase 3 — Cleanup** (always runs, success or failure)
 
@@ -170,7 +170,7 @@ For testing and local development:
 .AddScheduler(scheduler => scheduler.UseInMemoryTaskServer())
 ```
 
-Executes jobs immediately and synchronously — no background workers, no database tables. The `EnqueueAsync` call blocks until the workflow completes.
+Executes jobs immediately and synchronously — no background workers, no database tables. The `EnqueueAsync` call blocks until the train completes.
 
 ## Custom Task Server
 
@@ -202,7 +202,7 @@ public class MyTaskServer : IBackgroundTaskServer
       .AddScheduler(scheduler => scheduler
 -         .UseHangfire(connectionString)
 +         .UsePostgresTaskServer()
-          .Schedule<IMyWorkflow, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+          .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
       )
   );
 

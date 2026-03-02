@@ -17,9 +17,9 @@ Activate(input)
     .Resolve();
 ```
 
-*API Reference: [Chain]({{ site.baseurl }}{% link api-reference/workflow-methods/chain.md %}), [Extract]({{ site.baseurl }}{% link api-reference/workflow-methods/extract.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/workflow-methods/resolve.md %})*
+*API Reference: [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Extract]({{ site.baseurl }}{% link api-reference/train-methods/extract.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
 
-`Extract` uses reflection to find a property or field on `TSource` whose type matches `TTarget` and stores it in Memory. See [API Reference: Extract]({{ site.baseurl }}{% link api-reference/workflow-methods/extract.md %}) for the full search order and failure behavior.
+`Extract` uses reflection to find a property or field on `TSource` whose type matches `TTarget` and stores it in Memory. See [API Reference: Extract]({{ site.baseurl }}{% link api-reference/train-methods/extract.md %}) for the full search order and failure behavior.
 
 ## When to Use It
 

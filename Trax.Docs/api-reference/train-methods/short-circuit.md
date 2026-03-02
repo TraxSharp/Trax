@@ -1,16 +1,16 @@
 ---
 layout: default
 title: ShortCircuit
-parent: Workflow Methods
+parent: Train Methods
 grand_parent: API Reference
 nav_order: 4
 ---
 
 # ShortCircuit
 
-Executes a step that can **return early** from the workflow. If the step succeeds and returns a value of type `TReturn`, that value is captured as the short-circuit result — when [Resolve]({{ site.baseurl }}{% link api-reference/workflow-methods/resolve.md %}) is called, it returns this value instead of looking in Memory, bypassing all remaining steps.
+Executes a step that can **return early** from the train. If the step succeeds and returns a value of type `TReturn`, that value is captured as the short-circuit result — when [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %}) is called, it returns this value instead of looking in Memory, bypassing all remaining steps.
 
-If the step **fails** (returns Left), the failure is **ignored** — no exception is set, the workflow continues normally.
+If the step **fails** (returns Left), the failure is **ignored** — no exception is set, the train continues normally.
 
 ## ShortCircuit\<TStep\>()
 
@@ -56,10 +56,10 @@ protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderI
 3. If the step **succeeds** and returns a value of type `TReturn`:
    - The value is stored as `ShortCircuitValue`.
    - `Resolve()` will return this value, bypassing Memory lookup.
-4. If the step **fails** (returns Left): the failure is **ignored** — no exception is set, the workflow continues normally.
+4. If the step **fails** (returns Left): the failure is **ignored** — no exception is set, the train continues normally.
 
 ## Remarks
 
-- The key difference from `Chain`: failures do not stop the workflow. A failing short-circuit step is silently ignored.
-- If the step output type matches the workflow's `TReturn`, the value becomes the short-circuit result for `Resolve()`.
+- The key difference from `Chain`: failures do not stop the train. A failing short-circuit step is silently ignored.
+- If the step output type matches the train's `TReturn`, the value becomes the short-circuit result for `Resolve()`.
 - This is useful for cache checks, optional enrichment steps, and conditional early returns.

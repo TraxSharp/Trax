@@ -79,7 +79,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `ManifestManagerPollingInterval(TimeSpan)` | interval | 5 seconds | How often the ManifestManager evaluates manifests and writes to the work queue |
 | `JobDispatcherPollingInterval(TimeSpan)` | interval | 5 seconds | How often the JobDispatcher reads from the work queue and dispatches to the task server |
 | `MaxActiveJobs(int?)` | maxJobs | 100 | Max concurrent active jobs (Pending + InProgress) globally. `null` = unlimited. Per-group limits can also be set from the dashboard on each ManifestGroup |
-| `ExcludeFromMaxActiveJobs<TRoute>()` | — | — | Excludes a workflow type from the MaxActiveJobs count |
+| `ExcludeFromMaxActiveJobs<TRoute>()` | — | — | Excludes a train type from the MaxActiveJobs count |
 | `DefaultMaxRetries(int)` | maxRetries | 3 | Retry attempts before dead-lettering |
 | `DefaultRetryDelay(TimeSpan)` | delay | 5 minutes | Base delay between retries |
 | `RetryBackoffMultiplier(double)` | multiplier | 2.0 | Exponential backoff multiplier. Set to 1.0 for constant delay |
@@ -87,21 +87,21 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `DefaultJobTimeout(TimeSpan)` | timeout | 1 hour | Timeout after which a running job is considered stuck |
 | `RecoverStuckJobsOnStartup(bool)` | recover | `true` | Whether to auto-recover stuck jobs on startup |
 | `PruneOrphanedManifests(bool)` | prune | `true` | Whether to [delete manifests]({{ site.baseurl }}{% link scheduler/orphan-manifest-cleanup.md %}) from the database that are no longer defined in the startup configuration. Disable if you create manifests dynamically at runtime via `IManifestScheduler` |
-| `DependentPriorityBoost(int)` | boost | 16 | Priority boost added to dependent workflow work queue entries at dispatch time. Range: 0-31. Ensures dependent workflows are dispatched before non-dependent ones by default |
+| `DependentPriorityBoost(int)` | boost | 16 | Priority boost added to dependent train work queue entries at dispatch time. Range: 0-31. Ensures dependent trains are dispatched before non-dependent ones by default |
 
 ### Startup Schedules
 
 | Method | Description |
 |--------|-------------|
-| [Schedule]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}) | Schedules a single recurring workflow (seeded on startup) |
+| [Schedule]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}) | Schedules a single recurring train (seeded on startup) |
 | [ScheduleMany]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %}) | Batch-schedules manifests from a collection |
-| [Then / ThenMany]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %}) | Schedules dependent workflows |
+| [Then / ThenMany]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %}) | Schedules dependent trains |
 | [AddMetadataCleanup]({{ site.baseurl }}{% link api-reference/scheduler-api/add-metadata-cleanup.md %}) | Enables automatic metadata purging |
 
 ## Remarks
 
 - `AddScheduler` requires a data provider (`AddPostgresEffect` or `AddInMemoryEffect`) and `AddServiceTrainBus` to be configured first.
-- Internal scheduler workflows (`ManifestManager`, `JobDispatcher`, `TaskServerExecutor`, `MetadataCleanup`) are automatically excluded from `MaxActiveJobs`.
+- Internal scheduler trains (`ManifestManager`, `JobDispatcher`, `TaskServerExecutor`, `MetadataCleanup`) are automatically excluded from `MaxActiveJobs`.
 - Manifests declared via `Schedule`/`ScheduleMany` are not created immediately — they are seeded on application startup by the `SchedulerStartupService`.
 - Manifests declared via `Schedule`/`ThenInclude`/`Include` get a ManifestGroup based on their `groupId` parameter (defaults to externalId). Per-group dispatch controls (MaxActiveJobs, Priority, IsEnabled) are configured from the dashboard.
-- At build time, the scheduler validates that ManifestGroup dependencies form a DAG (no circular dependencies). If a cycle is detected, `AddScheduler` throws `InvalidOperationException` with the groups involved. See [Dependent Workflows — Cycle Detection]({{ site.baseurl }}{% link scheduler/dependent-workflows.md %}#cycle-detection).
+- At build time, the scheduler validates that ManifestGroup dependencies form a DAG (no circular dependencies). If a cycle is detected, `AddScheduler` throws `InvalidOperationException` with the groups involved. See [Dependent Trains — Cycle Detection]({{ site.baseurl }}{% link scheduler/dependent-trains.md %}#cycle-detection).

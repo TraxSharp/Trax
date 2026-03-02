@@ -47,7 +47,7 @@ services.AddTrax.CoreEffects(options => options
     .AddServiceTrainBus(assemblies: typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
         .UsePostgresTaskServer()
-        .Schedule<IMyWorkflow, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```
@@ -66,7 +66,7 @@ services.AddTrax.CoreEffects(options => options
             options.VisibilityTimeout = TimeSpan.FromMinutes(15);
             options.ShutdownTimeout = TimeSpan.FromMinutes(1);
         })
-        .Schedule<IMyWorkflow, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```

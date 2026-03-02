@@ -24,13 +24,13 @@ This page documents the concurrency model, the guarantees it provides, and the i
 
 ### The Problem
 
-The ManifestManager evaluates which manifests are "due" for execution and writes WorkQueue entries. If two servers run the ManifestManager simultaneously, they both load the same manifests, both evaluate them as due, and both insert duplicate WorkQueue entries — causing the same workflow to be dispatched twice.
+The ManifestManager evaluates which manifests are "due" for execution and writes WorkQueue entries. If two servers run the ManifestManager simultaneously, they both load the same manifests, both evaluate them as due, and both insert duplicate WorkQueue entries — causing the same train to be dispatched twice.
 
 The race window exists between `LoadManifestsStep` (which reads `HasQueuedWork = false`) and `CreateWorkQueueEntriesStep` (which inserts the entry). This is a classic time-of-check-time-of-use (TOCTOU) bug.
 
 ### The Solution
 
-The ManifestManagerPollingService acquires a PostgreSQL transaction-scoped advisory lock before running the workflow:
+The ManifestManagerPollingService acquires a PostgreSQL transaction-scoped advisory lock before running the train:
 
 ```sql
 SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager'))
@@ -62,15 +62,15 @@ The lock key is `hashtext('trax_manifest_manager')`, which produces a stable 32-
 
 ### Transaction Scope
 
-The advisory lock wraps the entire ManifestManager workflow in a single transaction. This has two implications:
+The advisory lock wraps the entire ManifestManager train in a single transaction. This has two implications:
 
-1. **Atomicity**: All `SaveChanges()` calls within the workflow steps (ReapFailedJobsStep, CreateWorkQueueEntriesStep) are buffered within the transaction. If the workflow fails partway through, everything rolls back — no partial state (e.g., dead letters created but WorkQueue entries missing).
+1. **Atomicity**: All `SaveChanges()` calls within the train steps (ReapFailedJobsStep, CreateWorkQueueEntriesStep) are buffered within the transaction. If the train fails partway through, everything rolls back — no partial state (e.g., dead letters created but WorkQueue entries missing).
 
 2. **Visibility delay**: WorkQueue entries created by CreateWorkQueueEntriesStep are not visible to the JobDispatcher until the ManifestManager transaction commits. This is typically a few milliseconds of additional latency. The JobDispatcher picks them up on its next polling tick — no work is lost.
 
 ### Non-Postgres Providers
 
-The advisory lock is only acquired when the `IDataContext` is backed by Entity Framework Core (i.e., it inherits from `DbContext`). When using the InMemory provider for tests, the lock is skipped entirely and the workflow runs directly. This is safe because InMemory implies a single-server, single-process setup.
+The advisory lock is only acquired when the `IDataContext` is backed by Entity Framework Core (i.e., it inherits from `DbContext`). When using the InMemory provider for tests, the lock is skipped entirely and the train runs directly. This is safe because InMemory implies a single-server, single-process setup.
 
 ### Defense-in-Depth: Unique Partial Index
 
@@ -90,7 +90,7 @@ Manual WorkQueue entries (from the dashboard or `TriggerAsync`) have `manifest_i
 
 ### The Problem
 
-The JobDispatcher loads `Queued` WorkQueue entries and dispatches them — creating Metadata records, updating entry status to `Dispatched`, and enqueuing to the background task server. If two servers load the same entries simultaneously, both would create Metadata records for the same entry and dispatch the workflow twice.
+The JobDispatcher loads `Queued` WorkQueue entries and dispatches them — creating Metadata records, updating entry status to `Dispatched`, and enqueuing to the background task server. If two servers load the same entries simultaneously, both would create Metadata records for the same entry and dispatch the train twice.
 
 ### The Solution
 
@@ -139,7 +139,7 @@ Each entry is dispatched within its own DI scope, following the same pattern as 
 
 1. **Clean change tracker**: each entry gets a fresh `IDataContext` with no stale tracked entities from previous iterations.
 2. **Transaction isolation**: if one entry fails, its transaction is rolled back without affecting others.
-3. **Commit-then-enqueue**: the claim transaction (Metadata creation + WorkQueue status update) is committed before calling `EnqueueAsync` on the background task server. This ensures the Metadata record is visible to the task server when it begins execution — necessary because the `InMemoryTaskServer` executes workflows synchronously within `EnqueueAsync`. If the enqueue fails after commit, the WorkQueue entry is already `Dispatched` with a valid Metadata record; the next dispatch cycle won't re-process it, but the Metadata's `Pending` state can be detected for recovery.
+3. **Commit-then-enqueue**: the claim transaction (Metadata creation + WorkQueue status update) is committed before calling `EnqueueAsync` on the background task server. This ensures the Metadata record is visible to the task server when it begins execution — necessary because the `InMemoryTaskServer` executes trains synchronously within `EnqueueAsync`. If the enqueue fails after commit, the WorkQueue entry is already `Dispatched` with a valid Metadata record; the next dispatch cycle won't re-process it, but the Metadata's `Pending` state can be detected for recovery.
 
 ### Capacity Limit Approximation
 

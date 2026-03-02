@@ -1,12 +1,12 @@
 ---
 layout: default
 title: JobDispatcher
-parent: Administrative Workflows
+parent: Administrative Trains
 grand_parent: Scheduling
 nav_order: 2
 ---
 
-# JobDispatcherWorkflow
+# JobDispatcherTrain
 
 The JobDispatcher is the single gateway between the work queue and the background task server. It reads `Queued` entries, enforces both global and per-group `MaxActiveJobs` limits, creates Metadata records, and enqueues to Hangfire (or whatever `IBackgroundTaskServer` implementation is configured).
 
@@ -46,13 +46,13 @@ For each successfully claimed entry, the dispatcher:
 
 1. **Deserializes the input**: uses `InputTypeName` to resolve the CLR type, then deserializes `Input` from JSON. Type resolution searches all loaded assemblies.
 
-2. **Creates a Metadata record**: a new `Metadata` row with `WorkflowState = Pending`, linked to the manifest (if present). Saved immediately so it gets a database-generated ID.
+2. **Creates a Metadata record**: a new `Metadata` row with `TrainState = Pending`, linked to the manifest (if present). Saved immediately so it gets a database-generated ID.
 
 3. **Updates the work queue entry**: sets `Status = Dispatched`, records the `MetadataId` and `DispatchedAt` timestamp.
 
 4. **Commits the transaction**: the Metadata creation and WorkQueue status update are committed as a single atomic unit. This makes the Metadata visible to the task server before enqueue.
 
-5. **Enqueues to the background task server**: calls `IBackgroundTaskServer.EnqueueAsync` with the metadata ID and deserialized input. This happens after commit because the `InMemoryTaskServer` executes the workflow synchronously and needs to read the committed Metadata.
+5. **Enqueues to the background task server**: calls `IBackgroundTaskServer.EnqueueAsync` with the metadata ID and deserialized input. This happens after commit because the `InMemoryTaskServer` executes the train synchronously and needs to read the committed Metadata.
 
 Each entry is processed in its own DI scope with a fresh `IDataContext`. If any individual entry fails (type resolution, serialization, database error), its transaction is rolled back, the error is logged, and the loop continues to the next entry. One bad entry doesn't affect the rest of the queue.
 
@@ -62,7 +62,7 @@ Capacity is enforced at two independent levels: global and per-group.
 
 ### Global MaxActiveJobs
 
-The global limit works the same as before. The count is based on `Metadata` rows in `Pending` or `InProgress` state, excluding administrative workflows (and any types registered via `ExcludeFromMaxActiveJobs<T>()`).
+The global limit works the same as before. The count is based on `Metadata` rows in `Pending` or `InProgress` state, excluding administrative trains (and any types registered via `ExcludeFromMaxActiveJobs<T>()`).
 
 The count happens once at the start of each dispatch cycle, not per-entry. If you have `MaxActiveJobs = 100` and 95 are active, the dispatcher will take up to 5 entries from the queue. The remaining entries stay `Queued` and get picked up on the next polling cycle.
 
@@ -71,7 +71,7 @@ Setting `MaxActiveJobs` to `null` disables the global check entirely—all queue
 ```csharp
 .AddScheduler(scheduler => scheduler
     .MaxActiveJobs(100)                              // limit to 100 concurrent jobs
-    .ExcludeFromMaxActiveJobs<IMyInternalWorkflow>() // don't count these
+    .ExcludeFromMaxActiveJobs<IMyInternalTrain>() // don't count these
 )
 ```
 
@@ -118,7 +118,7 @@ Because Group A has higher priority, its entries appear first in the sorted queu
 
 **Key takeaway:** Per-group limits exceeding the global limit is a valid and useful configuration. It means each group *could* use up to its limit if other groups are idle, but when all groups are busy, the global limit determines the overall throughput and priority determines who gets slots first.
 
-## Why a Separate Workflow
+## Why a Separate Train
 
 Before the JobDispatcher existed, the ManifestManager handled dispatch directly. `MaxActiveJobs` was checked in its `EnqueueJobsStep`. That worked fine when the ManifestManager was the only source of job execution.
 

@@ -8,7 +8,7 @@ nav_order: 8
 
 # AddEffect / AddStepEffect
 
-Registers custom effect provider factories. `AddEffect` registers workflow-level effects (run once per workflow execution); `AddStepEffect` registers step-level effects (run once per step).
+Registers custom effect provider factories. `AddEffect` registers train-level effects (run once per train execution); `AddStepEffect` registers step-level effects (run once per step).
 
 ## AddEffect Signatures
 
@@ -121,7 +121,7 @@ Configurable factories appear with a settings button on the dashboard's [Effects
 
 ## Remarks
 
-- **Workflow-level effects** (`AddEffect`): Implement `IEffectProviderFactory`. Called at workflow start and end. Used for cross-cutting concerns like data persistence, audit logging, etc.
+- **Train-level effects** (`AddEffect`): Implement `IEffectProviderFactory`. Called at train start and end. Used for cross-cutting concerns like data persistence, audit logging, etc.
 - **Step-level effects** (`AddStepEffect`): Implement `IStepEffectProviderFactory`. Called before and after each step. Used for step-level logging, metrics, etc.
 - The interface+implementation overloads register the factory under both the interface type and `IEffectProviderFactory`, enabling resolution by either type.
 - See [Effect Providers]({{ site.baseurl }}{% link usage-guide/effect-providers.md %}) for conceptual background on the effect system.

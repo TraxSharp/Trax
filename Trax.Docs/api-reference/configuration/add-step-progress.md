@@ -37,9 +37,9 @@ services.AddTrax.CoreEffects(options => options
 
 ## Remarks
 
-- This is a **step-level effect** (runs per step, not per workflow).
+- This is a **step-level effect** (runs per step, not per train).
 - Registers two providers: `CancellationCheckProvider` (runs first) and `StepProgressProvider`.
-- `CancellationCheckProvider` queries the database before each step to check `Metadata.CancellationRequested`. If `true`, it throws `OperationCanceledException`, which `FinishWorkflow` maps to `WorkflowState.Cancelled`.
+- `CancellationCheckProvider` queries the database before each step to check `Metadata.CancellationRequested`. If `true`, it throws `OperationCanceledException`, which `FinishTrain` maps to `TrainState.Cancelled`.
 - `StepProgressProvider` sets `Metadata.CurrentlyRunningStep` and `Metadata.StepStartedAt` before each step, and clears them after.
 - Both providers are registered as toggleable step effects visible on the dashboard Effects page.
 - Requires a database effect (`AddPostgresEffect` or `AddInMemoryEffect`) to be registered.

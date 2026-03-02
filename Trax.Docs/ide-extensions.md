@@ -10,7 +10,7 @@ Inlay hint extensions for **VSCode** and **Rider/ReSharper**. Both show `TIn →
 
 ## What They Show
 
-Given a workflow chain:
+Given a train chain:
 
 ```csharp
 protected override async Task<Either<Exception, OrderReceipt>> RunInternal(OrderRequest input)

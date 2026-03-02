@@ -7,7 +7,7 @@ nav_order: 12
 
 # Cancellation Tokens
 
-Trax.Core threads `CancellationToken` through the entire pipeline — from the initial `Run` call, through every step, down to EF Core queries and background service shutdown. This enables graceful cancellation of workflows in response to HTTP request aborts, application shutdown, or explicit user cancellation.
+Trax.Core threads `CancellationToken` through the entire pipeline — from the initial `Run` call, through every step, down to EF Core queries and background service shutdown. This enables graceful cancellation of trains in response to HTTP request aborts, application shutdown, or explicit user cancellation.
 
 ## How It Works
 
@@ -30,29 +30,29 @@ Run(input, cancellationToken)
 └──────────────────────────┘
 ```
 
-1. The caller passes a `CancellationToken` to `workflow.Run(input, cancellationToken)`
-2. The workflow stores it on its `CancellationToken` property
-3. Before each step executes, `RailwayStep` copies the token from the workflow to the step
+1. The caller passes a `CancellationToken` to `train.Run(input, cancellationToken)`
+2. The train stores it on its `CancellationToken` property
+3. Before each step executes, `RailwayStep` copies the token from the train to the step
 4. The step checks `CancellationToken.ThrowIfCancellationRequested()` before `Run()` is called
 5. Inside `Run()`, your code accesses `this.CancellationToken` for async operations
 
-## Passing a Token to a Workflow
+## Passing a Token to a Train
 
 Every `Run` and `RunEither` overload has a `CancellationToken` variant:
 
 ```csharp
 // Throws on failure
-await workflow.Run(input, cancellationToken);
-await workflow.Run(input, serviceProvider, cancellationToken);
+await train.Run(input, cancellationToken);
+await train.Run(input, serviceProvider, cancellationToken);
 
 // Returns Either<Exception, TReturn>
-await workflow.RunEither(input, cancellationToken);
-await workflow.RunEither(input, serviceProvider, cancellationToken);
+await train.RunEither(input, cancellationToken);
+await train.RunEither(input, serviceProvider, cancellationToken);
 ```
 
 If you call `Run(input)` without a token, `CancellationToken` defaults to `CancellationToken.None` — all existing code works unchanged.
 
-*API Reference: [Run / RunEither]({{ site.baseurl }}{% link api-reference/workflow-methods/run.md %})*
+*API Reference: [Run / RunEither]({{ site.baseurl }}{% link api-reference/train-methods/run.md %})*
 
 ## Using the Token Inside Steps
 
@@ -125,7 +125,7 @@ using var cts = new CancellationTokenSource();
 cts.Cancel();
 
 // Throws OperationCanceledException — no steps execute
-await workflow.Run(input, cts.Token);
+await train.Run(input, cts.Token);
 ```
 
 ### Cancellation Between Steps
@@ -156,35 +156,35 @@ public override async Task<string> Run(string input)
 
 Cancellation is treated differently from regular exceptions:
 
-- **Regular exceptions** are wrapped with `WorkflowExceptionData` (step name, workflow name, etc.) and returned as `Left` in the Railway pattern
+- **Regular exceptions** are wrapped with `TrainExceptionData` (step name, train name, etc.) and returned as `Left` in the Railway pattern
 - **`OperationCanceledException`** propagates cleanly without wrapping — it is not a step failure, it is an explicit abort signal
 
 This means cancellation always throws (even with `RunEither`), which matches the .NET convention that cancellation is exceptional flow, not a business error.
 
-### WorkflowState.Cancelled
+### TrainState.Cancelled
 
-When an `OperationCanceledException` reaches `FinishWorkflow`, the workflow state is set to `Cancelled` instead of `Failed`:
+When an `OperationCanceledException` reaches `FinishTrain`, the train state is set to `Cancelled` instead of `Failed`:
 
 ```
-OperationCanceledException → WorkflowState.Cancelled
-All other exceptions       → WorkflowState.Failed
-No exception               → WorkflowState.Completed
+OperationCanceledException → TrainState.Cancelled
+All other exceptions       → TrainState.Failed
+No exception               → TrainState.Completed
 ```
 
-Cancelled workflows are **not retried** and **do not create dead letters**. Cancellation is a deliberate operator action, not a transient failure. The dashboard shows cancelled workflows with a warning (orange) badge to distinguish them from failures.
+Cancelled trains are **not retried** and **do not create dead letters**. Cancellation is a deliberate operator action, not a transient failure. The dashboard shows cancelled trains with a warning (orange) badge to distinguish them from failures.
 
-## WorkflowBus Dispatch
+## TrainBus Dispatch
 
-When using `IWorkflowBus` for dynamic workflow dispatch, pass the token as the second argument:
+When using `ITrainBus` for dynamic train dispatch, pass the token as the second argument:
 
 ```csharp
-public class OrderService(IWorkflowBus workflowBus)
+public class OrderService(ITrainBus trainBus)
 {
     public async Task<OrderResult> ProcessOrder(
         OrderInput input,
         CancellationToken cancellationToken)
     {
-        return await workflowBus.RunAsync<OrderResult>(input, cancellationToken);
+        return await trainBus.RunAsync<OrderResult>(input, cancellationToken);
     }
 }
 ```
@@ -201,15 +201,15 @@ Task<TOut> RunAsync<TOut>(object input, CancellationToken ct, Metadata? metadata
 Task RunAsync(object input, CancellationToken ct, Metadata? metadata = null);
 ```
 
-*API Reference: [WorkflowBus]({{ site.baseurl }}{% link api-reference/mediator-api/workflow-bus.md %})*
+*API Reference: [TrainBus]({{ site.baseurl }}{% link api-reference/mediator-api/train-bus.md %})*
 
 ## Background Services and Shutdown
 
-All Trax.Core background services propagate their `stoppingToken` to workflow executions. This means when your application shuts down (e.g., `Ctrl+C`, SIGTERM, or `IHostApplicationLifetime.StopApplication()`), in-flight workflows receive a cancellation signal.
+All Trax.Core background services propagate their `stoppingToken` to train executions. This means when your application shuts down (e.g., `Ctrl+C`, SIGTERM, or `IHostApplicationLifetime.StopApplication()`), in-flight trains receive a cancellation signal.
 
 ### Polling Services
 
-The ManifestManager, JobDispatcher, and MetadataCleanup polling services all pass `stoppingToken` to `workflow.Run()`:
+The ManifestManager, JobDispatcher, and MetadataCleanup polling services all pass `stoppingToken` to `train.Run()`:
 
 ```csharp
 // Inside ManifestManagerPollingService (simplified)
@@ -224,13 +224,13 @@ protected override async Task ExecuteAsync(CancellationToken stoppingToken)
 
 private async Task RunManifestManager(CancellationToken cancellationToken)
 {
-    await workflow.Run(Unit.Default, cancellationToken);
+    await train.Run(Unit.Default, cancellationToken);
 }
 ```
 
 ### PostgresWorkerService Shutdown Grace Period
 
-The PostgresWorkerService implements a **shutdown grace period** using an unlinked CancellationTokenSource. When the host signals shutdown, in-flight workflows get `ShutdownTimeout` (default: 30 seconds) to finish before being cancelled:
+The PostgresWorkerService implements a **shutdown grace period** using an unlinked CancellationTokenSource. When the host signals shutdown, in-flight trains get `ShutdownTimeout` (default: 30 seconds) to finish before being cancelled:
 
 ```
 Host signals shutdown (stoppingToken fires)
@@ -239,14 +239,14 @@ Host signals shutdown (stoppingToken fires)
 ┌──────────────────────────────────────────┐
 │  shutdownCts.CancelAfter(ShutdownTimeout) │  ← 30 second grace period starts
 │                                            │
-│  In-flight workflow continues running...   │
+│  In-flight train continues running...   │
 │  ... has 30 seconds to complete ...        │
 │                                            │
-│  After 30s: shutdownCts fires             │  ← workflow receives cancellation
+│  After 30s: shutdownCts fires             │  ← train receives cancellation
 └──────────────────────────────────────────┘
 ```
 
-This ensures workflows performing critical operations (database transactions, external API calls) have time to complete cleanly rather than being aborted mid-operation.
+This ensures trains performing critical operations (database transactions, external API calls) have time to complete cleanly rather than being aborted mid-operation.
 
 Configure the grace period:
 
@@ -261,21 +261,21 @@ Configure the grace period:
 
 ## ServiceTrain Token Propagation
 
-`ServiceTrain` (the database-tracked workflow base class) propagates the token to all its internal operations:
+`ServiceTrain` (the database-tracked train base class) propagates the token to all its internal operations:
 
 - `SaveChangesAsync(CancellationToken)` — transaction commits use the token
 - `BeginTransaction(CancellationToken)` — transaction starts use the token
 - Step effect providers receive the token for their before/after hooks
 
-If a workflow is cancelled mid-execution, the `ServiceTrain` catch block still runs `FinishWorkflow` to record the cancellation in Metadata — so you get an audit trail even for cancelled workflows. `FinishWorkflow` also clears the step progress columns (`CurrentlyRunningStep` and `StepStartedAt`) as a safety net.
+If a train is cancelled mid-execution, the `ServiceTrain` catch block still runs `FinishTrain` to record the cancellation in Metadata — so you get an audit trail even for cancelled trains. `FinishTrain` also clears the step progress columns (`CurrentlyRunningStep` and `StepStartedAt`) as a safety net.
 
-## Cancelling Running Workflows
+## Cancelling Running Trains
 
 Trax.Core supports two complementary cancellation paths: **same-server** (instant) and **cross-server** (between-step).
 
 ### Same-Server: ICancellationRegistry
 
-When the scheduler is configured, `PostgresWorkerService` registers each in-flight workflow's `CancellationTokenSource` with `ICancellationRegistry`. Calling `TryCancel(metadataId)` fires the CTS immediately, interrupting the workflow mid-step:
+When the scheduler is configured, `PostgresWorkerService` registers each in-flight train's `CancellationTokenSource` with `ICancellationRegistry`. Calling `TryCancel(metadataId)` fires the CTS immediately, interrupting the train mid-step:
 
 ```
 Dashboard "Cancel" button
@@ -287,13 +287,13 @@ Dashboard "Cancel" button
 
 ### Cross-Server: CancellationCheckProvider
 
-For multi-server deployments where the cancelling server may not be the one executing the workflow, the `CancellationCheckProvider` step effect queries the `cancel_requested` column before each step:
+For multi-server deployments where the cancelling server may not be the one executing the train, the `CancellationCheckProvider` step effect queries the `cancel_requested` column before each step:
 
 ```
 CancellationCheckProvider.BeforeStepExecution()
     → SELECT cancel_requested FROM metadata WHERE id = @id
     → if true: throw OperationCanceledException
-    → workflow terminates at next step boundary
+    → train terminates at next step boundary
 ```
 
 Enable both paths with a single call:
@@ -325,7 +325,7 @@ public interface IBackgroundTaskServer
 }
 ```
 
-The built-in `PostgresTaskServer` and `InMemoryTaskServer` both implement the CT overloads — `PostgresTaskServer` passes the token to `SaveChangesAsync`, and `InMemoryTaskServer` passes it to `workflow.Run()`.
+The built-in `PostgresTaskServer` and `InMemoryTaskServer` both implement the CT overloads — `PostgresTaskServer` passes the token to `SaveChangesAsync`, and `InMemoryTaskServer` passes it to `train.Run()`.
 
 ## Testing with Cancellation Tokens
 
@@ -339,10 +339,10 @@ public async Task Step_Cancellation_StopsExecution()
     cts.Cancel();
 
     var step = new CountingStep();
-    var workflow = new TestWorkflow(step);
+    var train = new TestTrain(step);
 
     // Cancelled token prevents the step from executing
-    var act = () => workflow.Run("input", cts.Token);
+    var act = () => train.Run("input", cts.Token);
     await act.Should().ThrowAsync<Exception>();
 
     step.ExecutionCount.Should().Be(0);
@@ -357,9 +357,9 @@ public async Task Step_UsesToken_ForAsyncCalls()
 {
     using var cts = new CancellationTokenSource();
     var step = new TokenCapturingStep();
-    var workflow = new TestWorkflow(step);
+    var train = new TestTrain(step);
 
-    await workflow.Run("input", cts.Token);
+    await train.Run("input", cts.Token);
 
     step.CapturedToken.Should().Be(cts.Token);
 }
@@ -380,14 +380,14 @@ private class TokenCapturingStep : Step<string, string>
 
 ```csharp
 [Test]
-public async Task Workflow_CancelDuringStep_PropagatesCancellation()
+public async Task Train_CancelDuringStep_PropagatesCancellation()
 {
     using var cts = new CancellationTokenSource();
     cts.CancelAfter(TimeSpan.FromMilliseconds(50));
 
-    var workflow = new SlowWorkflow();
+    var train = new SlowTrain();
 
-    var act = () => workflow.Run("input", cts.Token);
+    var act = () => train.Run("input", cts.Token);
     await act.Should().ThrowAsync<Exception>();
 }
 ```
@@ -399,12 +399,12 @@ public async Task Workflow_CancelDuringStep_PropagatesCancellation()
 | Layer | How the token arrives | What it's used for |
 |-------|----------------------|-------------------|
 | **Train** | `Run(input, ct)` or `RunEither(input, ct)` | Stored on `Train.CancellationToken` property |
-| **Step** | Copied from workflow before `Run()` is called | Access via `this.CancellationToken` in `Run()` |
-| **WorkflowBus** | `RunAsync<TOut>(input, ct)` | Forwarded to `workflow.Run(input, ct)` |
+| **Step** | Copied from train before `Run()` is called | Access via `this.CancellationToken` in `Run()` |
+| **TrainBus** | `RunAsync<TOut>(input, ct)` | Forwarded to `train.Run(input, ct)` |
 | **ServiceTrain** | Inherited from `Train` | Passed to `SaveChangesAsync`, `BeginTransaction` |
-| **Background Services** | `stoppingToken` from `ExecuteAsync` | Passed to `workflow.Run(input, stoppingToken)` |
-| **PostgresWorkerService** | `shutdownCts.Token` (grace period) | Passed to `workflow.Run(input, shutdownCts.Token)` |
-| **Task Server** | `EnqueueAsync(id, ct)` | Passed to `SaveChangesAsync` / `workflow.Run()` |
+| **Background Services** | `stoppingToken` from `ExecuteAsync` | Passed to `train.Run(input, stoppingToken)` |
+| **PostgresWorkerService** | `shutdownCts.Token` (grace period) | Passed to `train.Run(input, shutdownCts.Token)` |
+| **Task Server** | `EnqueueAsync(id, ct)` | Passed to `SaveChangesAsync` / `train.Run()` |
 | **Dashboard** | Component disposal token | Passed to event handler async calls |
 | **CancellationCheckProvider** | DB `cancel_requested` flag | Throws `OperationCanceledException` before step |
 | **ICancellationRegistry** | `CancellationTokenSource` lookup | `TryCancel()` fires CTS for same-server instant cancel |

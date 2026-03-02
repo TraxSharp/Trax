@@ -28,18 +28,18 @@ services.AddTrax.CoreEffects(options => options
     .AddScheduler(scheduler => scheduler
         .UsePostgresTaskServer()
         // Single manifest — explicit group shared with other related jobs
-        .Schedule<IExtractWorkflow>(
+        .Schedule<IExtractTrain>(
             "extract-users",
             new ExtractInput { Table = "users" },
             Every.Minutes(5),
             options => options.Group("user-pipeline"))
         // Dependent manifest in the same group
-        .Include<ILoadWorkflow>(
+        .Include<ILoadTrain>(
             "load-users",
             new LoadInput { Table = "users" },
             options => options.Group("user-pipeline"))
         // Bulk scheduling — name-based overload sets groupId automatically
-        .ScheduleMany<ISyncTableWorkflow>(
+        .ScheduleMany<ISyncTableTrain>(
             "table-sync",
             tables.Select(tableName => new ManifestItem(
                 tableName,
@@ -75,7 +75,7 @@ var tableConfigs = new[]
 
 foreach (var config in tableConfigs)
 {
-    await scheduler.ScheduleAsync<ISyncTableWorkflow, SyncTableInput>(
+    await scheduler.ScheduleAsync<ISyncTableTrain, SyncTableInput>(
         $"sync-{config.Name}",
         new SyncTableInput { TableName = config.Name },
         Schedule.FromInterval(config.Interval),
@@ -101,7 +101,7 @@ var tables = new[]
 var allJobs = tables.SelectMany(t =>
     Enumerable.Range(0, t.SliceCount).Select(slice => (t.Name, slice)));
 
-await scheduler.ScheduleManyAsync<ISyncTableWorkflow, SyncTableInput, (string Table, int Slice)>(
+await scheduler.ScheduleManyAsync<ISyncTableTrain, SyncTableInput, (string Table, int Slice)>(
     allJobs,
     item => (
         ExternalId: $"sync-{item.Table}-{item.Slice}",
@@ -131,7 +131,7 @@ Each ManifestGroup has three configurable properties that govern how its manifes
 These settings can be configured both from code via the `.Group(...)` builder on `ScheduleOptions`, and from the dashboard's **Manifest Group detail page**. Code-level configuration is applied during scheduling (upsert semantics), while the dashboard allows operators to adjust settings at runtime without redeployment.
 
 ```csharp
-scheduler.Schedule<IMyWorkflow>(
+scheduler.Schedule<IMyTrain>(
     "my-job",
     new MyInput { ... },
     Every.Minutes(5),
@@ -143,7 +143,7 @@ scheduler.Schedule<IMyWorkflow>(
             .Enabled(true)));
 ```
 
-**MaxActiveJobs** limits concurrent active jobs within a single group. When a group hits its cap, the [JobDispatcher](admin-workflows/job-dispatcher.md) skips it and moves on to the next group—so other groups can still dispatch normally. This prevents a single high-throughput group from monopolizing all capacity. The global `MaxActiveJobs` (configured in code) still applies as an overall ceiling across all groups.
+**MaxActiveJobs** limits concurrent active jobs within a single group. When a group hits its cap, the [JobDispatcher](admin-trains/job-dispatcher.md) skips it and moves on to the next group—so other groups can still dispatch normally. This prevents a single high-throughput group from monopolizing all capacity. The global `MaxActiveJobs` (configured in code) still applies as an overall ceiling across all groups.
 
 **Priority** determines the order in which groups are considered during dispatch. The JobDispatcher processes groups from highest priority (31) to lowest (0). If a high-priority group continually re-queues work, it is dispatched first—but because `MaxActiveJobs` caps how many jobs it can have active at once, lower-priority groups still get their fair share of capacity. This solves the starvation problem: priority controls *ordering*, while `MaxActiveJobs` controls *capacity*.
 
@@ -160,7 +160,7 @@ scheduler.Schedule<IMyWorkflow>(
 Configure per-job settings via the `ScheduleOptions` fluent builder:
 
 ```csharp
-await scheduler.ScheduleAsync<IMyWorkflow, MyInput>(
+await scheduler.ScheduleAsync<IMyTrain, MyInput>(
     "my-job",
     new MyInput { ... },
     Every.Hours(1),
@@ -171,17 +171,17 @@ await scheduler.ScheduleAsync<IMyWorkflow, MyInput>(
         .Priority(10));                             // Default: 0
 ```
 
-For dependent manifests that should only fire when explicitly activated by the parent workflow at runtime, add `.Dormant()`:
+For dependent manifests that should only fire when explicitly activated by the parent train at runtime, add `.Dormant()`:
 
 ```csharp
 scheduler
-    .Schedule<IParentWorkflow>("parent", new ParentInput(), Every.Minutes(5))
-    .Include<IChildWorkflow>(
+    .Schedule<IParentTrain>("parent", new ParentInput(), Every.Minutes(5))
+    .Include<IChildTrain>(
         "child", new ChildInput(),
         options: o => o.Dormant());
 ```
 
-See [Dormant Dependents](dependent-workflows.md#dormant-dependents) for full details on registration and runtime activation.
+See [Dormant Dependents](dependent-trains.md#dormant-dependents) for full details on registration and runtime activation.
 
 *API Reference: [ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}), [ScheduleOptions]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
 
@@ -195,7 +195,7 @@ See [Dormant Dependents](dependent-workflows.md#dormant-dependents) for full det
 | `DormantDependent` | Declared dependent, activated at runtime by parent | `.Include()` / `.IncludeMany()` with `.Dormant()` option, activated via `IDormantDependentContext` |
 | `None` | Manual trigger only | Use `scheduler.TriggerAsync(externalId)` |
 
-See [Dependent Workflows](dependent-workflows.md) for details on chaining workflows.
+See [Dependent Trains](dependent-trains.md) for details on chaining trains.
 
 ## Configuration Options
 

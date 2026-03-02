@@ -7,7 +7,7 @@ nav_order: 1
 
 # Steps
 
-Steps are the building blocks of workflows. Each step does one thing:
+Steps are the building blocks of trains. Each step does one thing:
 
 ```csharp
 public class ValidateEmailStep(IUserRepository UserRepository) : Step<CreateUserRequest, Unit>
@@ -38,11 +38,11 @@ public class CreateUserStep(IUserRepository UserRepository) : Step<CreateUserReq
 }
 ```
 
-Steps use constructor injection for dependencies. When a step throws, the workflow stops and returns the exception.
+Steps use constructor injection for dependencies. When a step throws, the train stops and returns the exception.
 
 ## CancellationToken in Steps
 
-Every step has a `CancellationToken` property that is set automatically by the workflow before `Run()` is called. Use it to pass cancellation to async operations:
+Every step has a `CancellationToken` property that is set automatically by the train before `Run()` is called. Use it to pass cancellation to async operations:
 
 ```csharp
 public class FetchUserStep(IHttpClientFactory httpFactory) : Step<UserId, UserProfile>
@@ -57,7 +57,7 @@ public class FetchUserStep(IHttpClientFactory httpFactory) : Step<UserId, UserPr
 }
 ```
 
-The token comes from the caller: `workflow.Run(input, cancellationToken)`. If no token is provided, `CancellationToken` defaults to `CancellationToken.None`. Before each step executes, cancellation is checked — if the token is already cancelled, the step is skipped and `OperationCanceledException` propagates.
+The token comes from the caller: `train.Run(input, cancellationToken)`. If no token is provided, `CancellationToken` defaults to `CancellationToken.None`. Before each step executes, cancellation is checked — if the token is already cancelled, the step is skipped and `OperationCanceledException` propagates.
 
 *Full details: [Cancellation Tokens]({{ site.baseurl }}{% link usage-guide/cancellation-tokens.md %})*
 

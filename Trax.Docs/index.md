@@ -6,10 +6,10 @@ nav_order: 1
 
 # Trax.Core
 
-[![Build Status](https://github.com/Theauxm/Trax.Core/workflows/Release%20NuGet%20Package/badge.svg?branch=main)](https://github.com/Theauxm/Trax.Core/actions)
-[![Test Status](https://github.com/Theauxm/Trax.Core/workflows/Trax.Core:%20Run%20CI%2FCD%20Test%20Suite/badge.svg?branch=main)](https://github.com/Theauxm/Trax.Core/actions)
+[![Build Status](https://github.com/Theauxm/Trax.Core/trains/Release%20NuGet%20Package/badge.svg?branch=main)](https://github.com/Theauxm/Trax.Core/actions)
+[![Test Status](https://github.com/Theauxm/Trax.Core/trains/Trax.Core:%20Run%20CI%2FCD%20Test%20Suite/badge.svg?branch=main)](https://github.com/Theauxm/Trax.Core/actions)
 
-Trax.Core is a .NET library for building workflows as a chain of discrete steps.
+Trax.Core is a .NET library for building trains as a chain of discrete steps.
 
 ## The Problem
 
@@ -41,7 +41,7 @@ The actual business logic gets buried under null checks and error handling.
 The same flow, without the noise:
 
 ```csharp
-public class ProcessOrderWorkflow : ServiceTrain<OrderRequest, OrderReceipt>
+public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderReceipt>
 {
     protected override async Task<Either<Exception, OrderReceipt>> RunInternal(OrderRequest input)
         => Activate(input)
@@ -75,15 +75,15 @@ See [IDE Extensions](ide-extensions.md) for details.
 
 ## Quick Start
 
-Trax.Core 5.x requires `net10.0`. See [Getting Started](getting-started.md) for installation and your first workflow.
+Trax.Core 5.x requires `net10.0`. See [Getting Started](getting-started.md) for installation and your first train.
 
 ## Available NuGet Packages
 
 | Package | Description | Version |
 |---------|-------------|---------|
 | [Trax.Core](https://www.nuget.org/packages/Trax.Core/) | Core library for Railway Oriented Programming | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Core) |
-| [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/) | Effects for Trax.Core Workflows | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect) |
-| [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/) | Web dashboard for inspecting Trax.Core workflows | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Dashboard) |
+| [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/) | Effects for Trax.Core Trains | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect) |
+| [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/) | Web dashboard for inspecting Trax.Core trains | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Dashboard) |
 | [Trax.Effect.Data](https://www.nuget.org/packages/Trax.Effect.Data/) | Data persistence abstractions for Trax.Core Effects | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Data) |
 | [Trax.Effect.Data.InMemory](https://www.nuget.org/packages/Trax.Effect.Data.InMemory/) | In-memory data persistence for Trax.Core Effects | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Data.InMemory) |
 | [Trax.Effect.Data.Postgres](https://www.nuget.org/packages/Trax.Effect.Data.Postgres/) | PostgreSQL data persistence for Trax.Core Effects | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Data.Postgres) |

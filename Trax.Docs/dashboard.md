@@ -6,9 +6,9 @@ nav_order: 8
 
 # Dashboard
 
-Trax.Dashboard adds a web UI to your application for inspecting registered workflows. It mounts as a Blazor Server app at a route you choose—similar to how Hangfire's dashboard works at `/hangfire`.
+Trax.Dashboard adds a web UI to your application for inspecting registered trains. It mounts as a Blazor Server app at a route you choose—similar to how Hangfire's dashboard works at `/hangfire`.
 
-The dashboard only requires `Trax.Effect`. As you add more Effect packages (Data, Scheduler, etc.), the dashboard gains access to more information. Start with workflow discovery, and add more as your setup grows.
+The dashboard only requires `Trax.Effect`. As you add more Effect packages (Data, Scheduler, etc.), the dashboard gains access to more information. Start with train discovery, and add more as your setup grows.
 
 ## Quick Setup
 
@@ -43,23 +43,23 @@ app.Run();
 
 *API Reference: [AddTrax.CoreDashboard]({{ site.baseurl }}{% link api-reference/dashboard-api/add-trax-dashboard.md %}), [UseTrax.CoreDashboard]({{ site.baseurl }}{% link api-reference/dashboard-api/use-trax-dashboard.md %})*
 
-Navigate to `/trax/workflows` and you'll see every `IServiceTrain` registered in your application.
+Navigate to `/trax/trains` and you'll see every `IServiceTrain` registered in your application.
 
 ## What It Shows
 
-### Workflows Page
+### Trains Page
 
 The dashboard scans your DI container for all services implementing `IServiceTrain<TIn, TOut>` and displays them in a sortable, filterable grid:
 
 | Column | Description |
 |--------|-------------|
-| **Workflow** | The service interface name (e.g., `ICreateUserWorkflow`) |
-| **Implementation** | The concrete class (e.g., `CreateUserWorkflow`) |
+| **Train** | The service interface name (e.g., `ICreateUserTrain`) |
+| **Implementation** | The concrete class (e.g., `CreateUserTrain`) |
 | **Input Type** | The `TIn` generic argument |
 | **Output Type** | The `TOut` generic argument |
 | **Lifetime** | DI lifetime—Transient, Scoped, or Singleton |
 
-This is the same information the `WorkflowRegistry` uses internally, but surfaced in a UI instead of buried in reflection.
+This is the same information the `TrainRegistry` uses internally, but surfaced in a UI instead of buried in reflection.
 
 ### Data Pages
 
@@ -67,8 +67,8 @@ When `Trax.Effect.Data` is registered, the dashboard exposes pages for browsing 
 
 | Page | Description |
 |------|-------------|
-| **Metadata** | Workflow execution history—start/end times, success/failure, inputs/outputs. Includes a "Current Step" column for InProgress workflows and per-row cancel buttons. |
-| **Logs** | Application log entries captured during workflow execution |
+| **Metadata** | Train execution history—start/end times, success/failure, inputs/outputs. Includes a "Current Step" column for InProgress trains and per-row cancel buttons. |
+| **Logs** | Application log entries captured during train execution |
 | **Manifests** | Scheduled job definitions (requires Scheduler) |
 | **Manifest Groups** | Manifest group settings and aggregate execution stats (requires Scheduler). Includes a "Cancel All Running" button. |
 | **Dead Letters** | Failed jobs that exhausted their retry budget (requires Scheduler) |
@@ -91,27 +91,27 @@ Two action buttons appear when the dead letter is in `AwaitingIntervention` stat
 
 #### Metadata Detail Page
 
-Clicking a metadata row opens a detail page with workflow state, timing, input/output, and exception details.
+Clicking a metadata row opens a detail page with train state, timing, input/output, and exception details.
 
-When `AddStepProgress()` is registered and the workflow is `InProgress`, a **Step Progress** card appears showing:
+When `AddStepProgress()` is registered and the train is `InProgress`, a **Step Progress** card appears showing:
 - **Currently Running** — the name of the step currently executing
 - **Step Started** — when the step began (HH:mm:ss)
 
-A **Cancel** button appears for InProgress workflows. Clicking it sets `cancel_requested = true` in the database and attempts to cancel the workflow via `ICancellationRegistry` (instant for same-server). Cancelled workflows transition to `WorkflowState.Cancelled`.
+A **Cancel** button appears for InProgress trains. Clicking it sets `cancel_requested = true` in the database and attempts to cancel the train via `ICancellationRegistry` (instant for same-server). Cancelled trains transition to `TrainState.Cancelled`.
 
 #### Cancellation Metrics on Home Page
 
 The dashboard home page includes:
-- A **Cancelled** slice in the workflow state donut chart
+- A **Cancelled** slice in the train state donut chart
 - A **Cancelled** column series in the 24-hour execution chart
 
-Cancelled workflows are excluded from the success rate calculation — cancellation is an operator action, not a failure.
+Cancelled trains are excluded from the success rate calculation — cancellation is an operator action, not a failure.
 
 ### Effects Page
 
 The **Effects** page (`/trax/settings/effects`) shows all registered effect and step effect provider factories. From this page you can:
 
-- **Enable/disable** toggleable effects at runtime (changes apply to the next workflow execution scope)
+- **Enable/disable** toggleable effects at runtime (changes apply to the next train execution scope)
 - **Configure** effects that expose runtime settings — click the gear icon to open a dynamic form dialog
 
 Configurable effects (those whose factory implements `IConfigurableEffectProviderFactory<TConfiguration>`) show a settings button in the grid. Clicking it opens a form auto-generated from the configuration type's properties. For example, the [Parameter Effect](usage-guide/effect-providers/parameter-effect.md) exposes `SaveInputs` and `SaveOutputs` toggles.
@@ -133,7 +133,7 @@ Per-group `MaxActiveJobs` prevents starvation — when a high-priority group hit
 
 The dashboard reads from the same `IServiceCollection` that your application builds. When you call `AddTrax.CoreDashboard()`, it captures a reference to the service collection. At request time, it scans the registered `ServiceDescriptor` entries for anything that implements `IServiceTrain<,>`, extracts the generic type arguments, and deduplicates.
 
-If you register workflows with `AddServiceTrainBus` (which calls `AddScopedTrax.CoreRoute` under the hood), they show up automatically. Workflows registered manually via `AddScoped<IMyWorkflow, MyWorkflow>()` will also appear as long as their interface extends `IServiceTrain<TIn, TOut>`.
+If you register trains with `AddServiceTrainBus` (which calls `AddScopedTrax.CoreRoute` under the hood), they show up automatically. Trains registered manually via `AddScoped<IMyTrain, MyTrain>()` will also appear as long as their interface extends `IServiceTrain<TIn, TOut>`.
 
 ## Options
 
@@ -163,7 +163,7 @@ The **User Settings** page (`/trax/settings/user`) lets each user customize thei
 | Setting | Default | Description |
 |---------|---------|-------------|
 | **Polling Interval** | 5 seconds | How often dashboard pages re-query for fresh data. Range: 1–300 seconds. |
-| **Hide Administration Workflows** | `true` | Exclude scheduler internals (ManifestManager, TaskServerExecutor, MetadataCleanup) from statistics and charts. |
+| **Hide Administration Trains** | `true` | Exclude scheduler internals (ManifestManager, TaskServerExecutor, MetadataCleanup) from statistics and charts. |
 | **Dashboard Components** | All visible | Toggle visibility of individual home page sections (summary cards, charts, tables). |
 
 ## Integration with Existing Blazor Apps
@@ -186,13 +186,13 @@ app.UseTrax.CoreDashboard("/trax");  // After Build(), before Run()
 app.Run();
 ```
 
-### "No workflows listed"
+### "No trains listed"
 
-The dashboard discovers workflows by scanning `ServiceDescriptor` entries in your DI container. If the grid is empty:
+The dashboard discovers trains by scanning `ServiceDescriptor` entries in your DI container. If the grid is empty:
 
 **Causes:**
-- The assembly containing your workflows wasn't passed to `AddServiceTrainBus`
-- `AddTrax.CoreDashboard()` was called before the workflows were registered, so the captured `IServiceCollection` snapshot doesn't include them yet
+- The assembly containing your trains wasn't passed to `AddServiceTrainBus`
+- `AddTrax.CoreDashboard()` was called before the trains were registered, so the captured `IServiceCollection` snapshot doesn't include them yet
 
 **Fix:** Make sure `AddTrax.CoreDashboard()` is called after `AddTrax.CoreEffects`:
 
@@ -200,18 +200,18 @@ The dashboard discovers workflows by scanning `ServiceDescriptor` entries in you
 builder.Services.AddTrax.CoreEffects(o =>
     o.AddServiceTrainBus(typeof(Program).Assembly)
 );
-builder.Services.AddTrax.CoreDashboard();  // After workflows are registered
+builder.Services.AddTrax.CoreDashboard();  // After trains are registered
 ```
 
 ### Blazor static assets returning 404
 
 If styles are missing or `_content/` paths return 404, ensure `UseStaticFiles()` is in your middleware pipeline. `UseTrax.CoreDashboard()` calls it internally, but if something earlier in the pipeline is short-circuiting requests, the static file middleware might not run.
 
-### Duplicate workflow entries in the grid
+### Duplicate train entries in the grid
 
-`AddScopedTrax.CoreRoute<IMyWorkflow, MyWorkflow>()` registers two DI descriptors—one for the concrete type and one for the interface. The discovery service attempts to deduplicate these, but in some cases both registrations appear in the grid. The entries will have the same input/output types; one will show the interface name and the other the concrete class name.
+`AddScopedTrax.CoreRoute<IMyTrain, MyTrain>()` registers two DI descriptors—one for the concrete type and one for the interface. The discovery service attempts to deduplicate these, but in some cases both registrations appear in the grid. The entries will have the same input/output types; one will show the interface name and the other the concrete class name.
 
-This is cosmetic and doesn't affect workflow execution. If it bothers you, it's a known limitation of how the discovery service groups factory-based descriptors.
+This is cosmetic and doesn't affect train execution. If it bothers you, it's a known limitation of how the discovery service groups factory-based descriptors.
 
 ## Architecture
 
@@ -220,7 +220,7 @@ The dashboard sits alongside other Effect packages in the dependency tree:
 ```
 Trax.Effect
     ├── Trax.Dashboard (UI)
-    ├── Trax.Mediator (WorkflowBus)
+    ├── Trax.Mediator (TrainBus)
     ├── Trax.Effect.Data (Persistence)
     └── ...
 ```

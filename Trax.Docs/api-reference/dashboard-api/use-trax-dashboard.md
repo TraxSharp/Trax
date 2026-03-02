@@ -37,13 +37,13 @@ public static WebApplication UseTrax.CoreDashboard(
 var app = builder.Build();
 
 app.UseTrax.CoreDashboard(
-    routePrefix: "/admin/workflows",
+    routePrefix: "/admin/trains",
     title: "Order Processing Dashboard");
 
 app.Run();
 ```
 
-The dashboard will be accessible at `https://yourapp/admin/workflows`.
+The dashboard will be accessible at `https://yourapp/admin/trains`.
 
 ## What It Configures
 

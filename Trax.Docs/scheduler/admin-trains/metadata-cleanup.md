@@ -1,14 +1,14 @@
 ---
 layout: default
 title: MetadataCleanup
-parent: Administrative Workflows
+parent: Administrative Trains
 grand_parent: Scheduling
 nav_order: 4
 ---
 
-# MetadataCleanupWorkflow
+# MetadataCleanupTrain
 
-The MetadataCleanup workflow deletes old metadata rows for high-frequency internal workflows. Without it, workflows like ManifestManager (which runs every 5 seconds by default) would generate hundreds of thousands of metadata rows per day.
+The MetadataCleanup train deletes old metadata rows for high-frequency internal trains. Without it, trains like ManifestManager (which runs every 5 seconds by default) would generate hundreds of thousands of metadata rows per day.
 
 ## Chain
 
@@ -16,11 +16,11 @@ The MetadataCleanup workflow deletes old metadata rows for high-frequency intern
 DeleteExpiredMetadata
 ```
 
-One step. It's a simple workflow because the logic is straightforward—the complexity is in the deletion query, not in orchestration.
+One step. It's a simple train because the logic is straightforward—the complexity is in the deletion query, not in orchestration.
 
 ## How It Runs
 
-The `MetadataCleanupPollingService` is a separate `BackgroundService` from the manifest polling service. It runs on its own interval (`CleanupInterval`, default: 1 minute) and invokes the MetadataCleanupWorkflow each cycle. It also runs a cleanup immediately on startup.
+The `MetadataCleanupPollingService` is a separate `BackgroundService` from the manifest polling service. It runs on its own interval (`CleanupInterval`, default: 1 minute) and invokes the MetadataCleanupTrain each cycle. It also runs a cleanup immediately on startup.
 
 ## The Deletion Step
 
@@ -31,15 +31,15 @@ The `MetadataCleanupPollingService` is a separate `BackgroundService` from the m
 
 A metadata row is deleted when all three conditions are true:
 
-1. Its `Name` matches a workflow in the `WorkflowTypeWhitelist`
+1. Its `Name` matches a train in the `TrainTypeWhitelist`
 2. Its `StartTime` is older than `RetentionPeriod`
-3. Its `WorkflowState` is `Completed` or `Failed`
+3. Its `TrainState` is `Completed` or `Failed`
 
 `Pending` and `InProgress` metadata is never deleted, regardless of age. Only terminal states are eligible.
 
 ## Concurrency Model: Idempotent Bulk Deletes
 
-The MetadataCleanup workflow uses no application-level locking. Multiple servers can run cleanup concurrently without conflict because the operations are inherently idempotent.
+The MetadataCleanup train uses no application-level locking. Multiple servers can run cleanup concurrently without conflict because the operations are inherently idempotent.
 
 ### Implicit Database Locks
 
@@ -73,7 +73,7 @@ Enable cleanup with `.AddMetadataCleanup()`:
 
 *API Reference: [AddMetadataCleanup]({{ site.baseurl }}{% link api-reference/scheduler-api/add-metadata-cleanup.md %})*
 
-With no arguments, this cleans up `ManifestManagerWorkflow`, `JobDispatcherWorkflow`, and `MetadataCleanupWorkflow` metadata older than 1 hour, checking every minute.
+With no arguments, this cleans up `ManifestManagerTrain`, `JobDispatcherTrain`, and `MetadataCleanupTrain` metadata older than 1 hour, checking every minute.
 
 ### Custom Configuration
 
@@ -82,12 +82,12 @@ With no arguments, this cleans up `ManifestManagerWorkflow`, `JobDispatcherWorkf
 {
     cleanup.RetentionPeriod = TimeSpan.FromHours(2);
     cleanup.CleanupInterval = TimeSpan.FromMinutes(5);
-    cleanup.AddWorkflowType<IMyNoisyWorkflow>();
-    cleanup.AddWorkflowType("LegacyWorkflowName");
+    cleanup.AddTrainType<IMyNoisyTrain>();
+    cleanup.AddTrainType("LegacyTrainName");
 })
 ```
 
-`AddWorkflowType<T>()` uses `typeof(T).Name` to match the `Name` column in the metadata table. You can also pass a raw string for workflows that aren't easily referenced by type.
+`AddTrainType<T>()` uses `typeof(T).Name` to match the `Name` column in the metadata table. You can also pass a raw string for trains that aren't easily referenced by type.
 
 ### Options
 
@@ -95,4 +95,4 @@ With no arguments, this cleans up `ManifestManagerWorkflow`, `JobDispatcherWorkf
 |--------|---------|-------------|
 | `CleanupInterval` | 1 minute | How often the cleanup service runs |
 | `RetentionPeriod` | 1 hour | Age threshold for deletion eligibility |
-| `WorkflowTypeWhitelist` | ManifestManager, JobDispatcher, MetadataCleanup | Workflow names whose metadata can be deleted |
+| `TrainTypeWhitelist` | ManifestManager, JobDispatcher, MetadataCleanup | Train names whose metadata can be deleted |

@@ -8,7 +8,7 @@ nav_order: 2
 
 # Step Registration
 
-Extension methods for registering Trax.Core steps with `[Inject]` property injection support. These are **aliases** for the corresponding [Workflow Registration]({{ site.baseurl }}{% link api-reference/di-registration/workflow-registration.md %}) methods — the injection behavior is identical.
+Extension methods for registering Trax.Core steps with `[Inject]` property injection support. These are **aliases** for the corresponding [Train Registration]({{ site.baseurl }}{% link api-reference/di-registration/train-registration.md %}) methods — the injection behavior is identical.
 
 ## Signatures
 
@@ -53,5 +53,5 @@ services.AddTransientTrax.CoreStep<IProcessPaymentStep, ProcessPaymentStep>();
 
 ## Remarks
 
-- These methods delegate directly to the workflow registration equivalents. They exist for semantic clarity — `AddTrax.CoreStep` communicates intent better than `AddTrax.CoreRoute` when registering steps.
-- Steps typically don't need manual DI registration unless they use `[Inject]` properties. Most steps are created by the workflow's `Chain<TStep>()` method using Memory-based constructor injection.
+- These methods delegate directly to the train registration equivalents. They exist for semantic clarity — `AddTrax.CoreStep` communicates intent better than `AddTrax.CoreRoute` when registering steps.
+- Steps typically don't need manual DI registration unless they use `[Inject]` properties. Most steps are created by the train's `Chain<TStep>()` method using Memory-based constructor injection.

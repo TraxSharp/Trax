@@ -8,7 +8,7 @@ nav_order: 4
 
 # Step Logger
 
-The step logger fires before and after each step in a workflow, logging structured `StepMetadata` entries. This gives you per-step observability: which step is running, how long it took, what its Railway state was, and optionally what it returned.
+The step logger fires before and after each step in a train, logging structured `StepMetadata` entries. This gives you per-step observability: which step is running, how long it took, what its Railway state was, and optionally what it returned.
 
 ## Registration
 
@@ -32,15 +32,15 @@ When `true`, after each step completes, the logger serializes the step's output 
 
 ## How It Works
 
-The step logger is a **step effect provider**, not a regular effect provider. It hooks into the `EffectStep` lifecycle rather than the workflow-level `Track`/`SaveChanges` cycle.
+The step logger is a **step effect provider**, not a regular effect provider. It hooks into the `EffectStep` lifecycle rather than the train-level `Track`/`SaveChanges` cycle.
 
 Before each step runs, the logger creates a `StepMetadata` entry with:
 
 | Field | Description |
 |-------|-------------|
 | `Name` | Step class name |
-| `WorkflowName` | Parent workflow name |
-| `WorkflowExternalId` | Parent workflow's external GUID |
+| `TrainName` | Parent train name |
+| `TrainExternalId` | Parent train's external GUID |
 | `InputType` / `OutputType` | The step's generic type arguments |
 | `StartTimeUtc` | When the step began |
 
@@ -63,6 +63,6 @@ See [Steps: EffectStep vs Step](../steps.md#effectstep-vs-step) for the differen
 
 ## When to Use It
 
-- **Debugging slow workflows** — The timing data shows which step is the bottleneck.
-- **Tracing failures** — The Railway state tells you exactly where and why a workflow entered the failure track.
+- **Debugging slow trains** — The timing data shows which step is the bottleneck.
+- **Tracing failures** — The Railway state tells you exactly where and why a train entered the failure track.
 - **Development** — Pair with `serializeStepData: true` to see step-by-step data flow through the chain.

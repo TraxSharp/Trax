@@ -1,7 +1,7 @@
 ---
 layout: default
 title: AddServices
-parent: Workflow Methods
+parent: Train Methods
 grand_parent: API Reference
 nav_order: 6
 ---
@@ -36,12 +36,12 @@ All services are **required** (non-null). Passing `null` throws an `Exception`.
 
 ## Returns
 
-`Train<TInput, TReturn>` — the workflow instance, for fluent chaining.
+`Train<TInput, TReturn>` — the train instance, for fluent chaining.
 
 ## Example
 
 ```csharp
-public class ProcessOrderWorkflow(
+public class ProcessOrderTrain(
     IPaymentGateway paymentGateway,
     IInventoryService inventoryService,
     INotificationService notificationService
@@ -65,8 +65,8 @@ public class ProcessOrderWorkflow(
 1. For each service, finds the interface from the type parameter list that the service's concrete type implements.
 2. Stores the service in Memory under that interface type.
 3. If a service is `null`, throws an `Exception`.
-4. If a service's concrete type is not a class, sets the workflow exception.
-5. If a service doesn't implement any of the specified interfaces, sets the workflow exception.
+4. If a service's concrete type is not a class, sets the train exception.
+5. If a service doesn't implement any of the specified interfaces, sets the train exception.
 
 ### Moq Proxy Handling
 

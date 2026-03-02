@@ -1,14 +1,14 @@
 ---
 layout: default
 title: Activate
-parent: Workflow Methods
+parent: Train Methods
 grand_parent: API Reference
 nav_order: 1
 ---
 
 # Activate
 
-Stores the workflow input (and optional extra objects) into Memory. Typically the **first** method called in `RunInternal`. After activation, the input is available to subsequent steps via Memory's type-based lookup.
+Stores the train input (and optional extra objects) into Memory. Typically the **first** method called in `RunInternal`. After activation, the input is available to subsequent steps via Memory's type-based lookup.
 
 ## Signature
 
@@ -20,12 +20,12 @@ public Train<TInput, TReturn> Activate(TInput input, params object[] otherInputs
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `input` | `TInput` | Yes | The primary workflow input. Stored in Memory by its concrete type and all its interfaces. |
+| `input` | `TInput` | Yes | The primary train input. Stored in Memory by its concrete type and all its interfaces. |
 | `otherInputs` | `params object[]` | No | Additional objects to store in Memory. Each is stored by its concrete type and interfaces. |
 
 ## Returns
 
-`Train<TInput, TReturn>` — the workflow instance, for fluent chaining.
+`Train<TInput, TReturn>` — the train instance, for fluent chaining.
 
 ## Examples
 
@@ -61,7 +61,7 @@ The object is stored by its concrete type **and** all its interfaces. For exampl
 Each element of the tuple is extracted and stored individually. For example, `(string, int)` stores the `string` and `int` as separate Memory entries.
 
 ### Null Input
-If `input` is `null`, the workflow's exception is set to `"Input ({typeof(TInput)}) is null."` and subsequent steps are short-circuited.
+If `input` is `null`, the train's exception is set to `"Input ({typeof(TInput)}) is null."` and subsequent steps are short-circuited.
 
 ## Remarks
 

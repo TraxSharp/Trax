@@ -1,14 +1,14 @@
 ---
 layout: default
-title: Workflow Registration
+title: Train Registration
 parent: DI Registration
 grand_parent: API Reference
 nav_order: 1
 ---
 
-# Workflow Registration
+# Train Registration
 
-Extension methods for registering Trax.Core workflows with the .NET DI container. These methods wrap standard `AddScoped`/`AddTransient`/`AddSingleton` and add `[Inject]` property injection support.
+Extension methods for registering Trax.Core trains with the .NET DI container. These methods wrap standard `AddScoped`/`AddTransient`/`AddSingleton` and add `[Inject]` property injection support.
 
 ## Signatures
 
@@ -54,8 +54,8 @@ public static IServiceCollection AddSingletonTrax.CoreRoute(
 
 | Type Parameter | Constraint | Description |
 |---------------|------------|-------------|
-| `TService` | `class` | The service interface type (e.g., `IMyWorkflow`) |
-| `TImplementation` | `class, TService` | The implementation type (e.g., `MyWorkflow`) |
+| `TService` | `class` | The service interface type (e.g., `IMyTrain`) |
+| `TImplementation` | `class, TService` | The implementation type (e.g., `MyTrain`) |
 
 ## Returns
 
@@ -64,8 +64,8 @@ public static IServiceCollection AddSingletonTrax.CoreRoute(
 ## Example
 
 ```csharp
-services.AddTransientTrax.CoreRoute<ICreateOrderWorkflow, CreateOrderWorkflow>();
-services.AddScopedTrax.CoreRoute<IProcessPaymentWorkflow, ProcessPaymentWorkflow>();
+services.AddTransientTrax.CoreRoute<ICreateOrderTrain, CreateOrderTrain>();
+services.AddScopedTrax.CoreRoute<IProcessPaymentTrain, ProcessPaymentTrain>();
 ```
 
 ## What It Does
@@ -78,7 +78,7 @@ services.AddScopedTrax.CoreRoute<IProcessPaymentWorkflow, ProcessPaymentWorkflow
 
 ## When to Use
 
-Use these methods when your workflow class (or its base class) uses `[Inject]` properties. For example, `ServiceTrain<TIn, TOut>` has:
+Use these methods when your train class (or its base class) uses `[Inject]` properties. For example, `ServiceTrain<TIn, TOut>` has:
 
 ```csharp
 [Inject] public IEffectRunner? EffectRunner { get; set; }
@@ -90,6 +90,6 @@ Without `AddTrax.CoreRoute`, these properties would remain `null` after DI resol
 
 ## Remarks
 
-- If your workflows are discovered via [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-workflow-bus.md %}), you don't need to register them manually — the bus handles registration automatically.
-- These methods are primarily useful for workflows registered outside of assembly scanning, or when you need explicit control over the DI lifetime.
+- If your trains are discovered via [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-train-bus.md %}), you don't need to register them manually — the bus handles registration automatically.
+- These methods are primarily useful for trains registered outside of assembly scanning, or when you need explicit control over the DI lifetime.
 - The non-generic overloads accept `Type` parameters for dynamic/reflection-based registration scenarios.

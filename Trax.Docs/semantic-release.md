@@ -47,7 +47,7 @@ This triggers a major version bump (5.1.0 → 6.0.0).
 
 ## How It Works
 
-When you push a commit to `main`, GitHub Actions runs the release workflow:
+When you push a commit to `main`, GitHub Actions runs the release train:
 
 1. **Analyze commits** since the last tag (e.g., `v5.1.0`)
 2. **Determine the next version** based on commit types
@@ -58,14 +58,14 @@ When you push a commit to `main`, GitHub Actions runs the release workflow:
 5. **Commit and push** the changes back to `main` (marked `[skip ci]` so it doesn't re-trigger)
 6. **Build and publish** NuGet packages
 
-All of this happens in the `.github/workflows/nuget_release.yml` workflow. The configuration lives in `.releaserc.json`.
+All of this happens in the `.github/trains/nuget_release.yml` train. The configuration lives in `.releaserc.json`.
 
 ## Examples
 
 A feature and a bug fix in one push:
 
 ```
-feat(mediator): cache workflow discovery results
+feat(mediator): cache train discovery results
 fix(effect): prevent memory leak in effect tracking
 ```
 
@@ -97,10 +97,10 @@ After a release, you'll see:
 - **CHANGELOG.md** updated with release notes
 - **Directory.Build.props** updated with new version
 - **NuGet packages** available on https://www.nuget.org/packages?q=Trax.Core
-- **A commit on main** from the release workflow, bumping the version
+- **A commit on main** from the release train, bumping the version
 
 ## Troubleshooting
 
 No release after push: Check that commits follow `type(scope): description` format and are pushed to `main`.
 
-NuGet publish failed: Verify `NUGET_API_KEY` is configured in GitHub repository settings. Check workflow logs for details.
+NuGet publish failed: Verify `NUGET_API_KEY` is configured in GitHub repository settings. Check train logs for details.

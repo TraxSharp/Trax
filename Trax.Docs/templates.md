@@ -6,7 +6,7 @@ nav_order: 12
 
 # Project Template
 
-Trax.Core ships a `dotnet new` template that scaffolds a working server with Hangfire scheduling, PostgreSQL persistence, the Trax.Core Dashboard, and a starter workflow—ready to run out of the box.
+Trax.Core ships a `dotnet new` template that scaffolds a working server with Hangfire scheduling, PostgreSQL persistence, the Trax.Core Dashboard, and a starter train—ready to run out of the box.
 
 ## Installation
 
@@ -48,11 +48,11 @@ MyCompany.OrderService/
 ├── appsettings.json
 ├── Properties/
 │   └── launchSettings.json
-└── Workflows/
+└── Trains/
     └── HelloWorld/
         ├── HelloWorldInput.cs
-        ├── HelloWorldWorkflow.cs
-        ├── IHelloWorldWorkflow.cs
+        ├── HelloWorldTrain.cs
+        ├── IHelloWorldTrain.cs
         └── Steps/
             └── LogGreetingStep.cs
 ```
@@ -61,24 +61,24 @@ MyCompany.OrderService/
 
 A minimal `WebApplication` configured with:
 
-- **Trax.Core Effects** — workflow bus, PostgreSQL persistence, JSON and parameter providers
+- **Trax.Core Effects** — train bus, PostgreSQL persistence, JSON and parameter providers
 - **Scheduler** — Hangfire backend with a HelloWorld job running every 20 seconds
 - **Dashboard** — Trax.Core Dashboard at `/` and Hangfire Dashboard at `/hangfire`
 - **Metadata Cleanup** — automatic cleanup of old execution records
 
-### HelloWorld Workflow
+### HelloWorld Train
 
-A single workflow with one step that logs a greeting. Use it as a reference for building your own workflows, then delete it when you're ready.
+A single train with one step that logs a greeting. Use it as a reference for building your own trains, then delete it when you're ready.
 
 ```csharp
-public class HelloWorldWorkflow : ServiceTrain<HelloWorldInput, Unit>, IHelloWorldWorkflow
+public class HelloWorldTrain : ServiceTrain<HelloWorldInput, Unit>, IHelloWorldTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(HelloWorldInput input) =>
         Activate(input).Chain<LogGreetingStep>().Resolve();
 }
 ```
 
-*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/workflow-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/workflow-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/workflow-methods/resolve.md %})*
+*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
 
 ### Package References
 
@@ -109,7 +109,7 @@ dotnet run
 
 The HelloWorld job will start running every 20 seconds. Check the dashboards to see execution records.
 
-## Adding Your Own Workflows
+## Adding Your Own Trains
 
 1. Create an input record implementing `IManifestProperties`:
 
@@ -120,12 +120,12 @@ public record SyncCustomersInput : IManifestProperties
 }
 ```
 
-2. Define a workflow interface and implementation:
+2. Define a train interface and implementation:
 
 ```csharp
-public interface ISyncCustomersWorkflow : IServiceTrain<SyncCustomersInput, Unit>;
+public interface ISyncCustomersTrain : IServiceTrain<SyncCustomersInput, Unit>;
 
-public class SyncCustomersWorkflow : ServiceTrain<SyncCustomersInput, Unit>, ISyncCustomersWorkflow
+public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, Unit>, ISyncCustomersTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(SyncCustomersInput input) =>
         Activate(input)
@@ -141,11 +141,11 @@ public class SyncCustomersWorkflow : ServiceTrain<SyncCustomersInput, Unit>, ISy
 scheduler
     .AddMetadataCleanup(cleanup =>
     {
-        cleanup.AddWorkflowType<IHelloWorldWorkflow>();
-        cleanup.AddWorkflowType<ISyncCustomersWorkflow>();
+        cleanup.AddTrainType<IHelloWorldTrain>();
+        cleanup.AddTrainType<ISyncCustomersTrain>();
     })
     .UseHangfire(connectionString)
-    .Schedule<ISyncCustomersWorkflow, SyncCustomersInput>(
+    .Schedule<ISyncCustomersTrain, SyncCustomersInput>(
         "sync-customers",
         new SyncCustomersInput { Region = "us-east" },
         Every.Hours(1)
@@ -154,7 +154,7 @@ scheduler
 
 *API Reference: [AddMetadataCleanup]({{ site.baseurl }}{% link api-reference/scheduler-api/add-metadata-cleanup.md %}), [UseHangfire]({{ site.baseurl }}{% link api-reference/scheduler-api/use-hangfire.md %}), [Schedule]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %})*
 
-See [Scheduling](scheduler.md) for dependent workflows, bulk scheduling, and dead letter handling.
+See [Scheduling](scheduler.md) for dependent trains, bulk scheduling, and dead letter handling.
 
 ## Uninstalling
 

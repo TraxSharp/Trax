@@ -8,9 +8,9 @@ nav_order: 1
 
 # Data Persistence
 
-The data persistence effect stores a `Metadata` record for every workflow execution. Each record captures the workflow name, state, timing, inputs/outputs, and failure details. See [Metadata](../../concepts/metadata.md) for the full field breakdown.
+The data persistence effect stores a `Metadata` record for every train execution. Each record captures the train name, state, timing, inputs/outputs, and failure details. See [Metadata](../../concepts/metadata.md) for the full field breakdown.
 
-Two backends are available: PostgreSQL for production and InMemory for testing. Both implement the same `IDataContext` interface, so your workflow code doesn't change between them.
+Two backends are available: PostgreSQL for production and InMemory for testing. Both implement the same `IDataContext` interface, so your train code doesn't change between them.
 
 ## PostgreSQL
 
@@ -28,7 +28,7 @@ services.AddTrax.CoreEffects(options =>
 
 On first startup, the Postgres provider runs automatic migrations to create the `trax` schema and its tables (`metadata`, `logs`, `manifests`, `dead_letters`). Subsequent startups apply any pending migrations.
 
-The provider uses Entity Framework Core with Npgsql. Workflow states and dead letter statuses are mapped to PostgreSQL enum types. Input and output fields use `jsonb` columns. All timestamps are stored in UTC.
+The provider uses Entity Framework Core with Npgsql. Train states and dead letter statuses are mapped to PostgreSQL enum types. Input and output fields use `jsonb` columns. All timestamps are stored in UTC.
 
 ### What Gets Persisted
 
@@ -36,15 +36,15 @@ Every `ServiceTrain` execution creates a `Metadata` row:
 
 | Field | Description |
 |-------|-------------|
-| `Name` | Workflow class name |
-| `WorkflowState` | Pending → InProgress → Completed or Failed |
+| `Name` | Train class name |
+| `TrainState` | Pending → InProgress → Completed or Failed |
 | `StartTime` / `EndTime` | Execution duration |
 | `Input` / `Output` | Serialized JSON (requires [Parameter Effect](parameter-effect.md)) |
 | `FailureStep` | Which step threw |
 | `FailureException` | Exception type |
 | `FailureReason` | Error message |
 | `StackTrace` | Full stack trace on failure |
-| `ParentId` | Links to parent workflow for [nested workflows](../mediator.md#nested-workflows) |
+| `ParentId` | Links to parent train for [nested trains](../mediator.md#nested-trains) |
 | `ManifestId` | Links to scheduling manifest |
 
 Without the [Parameter Effect](parameter-effect.md), the `Input` and `Output` columns are null—metadata is still persisted, but without the serialized request/response data.
@@ -72,15 +72,15 @@ var services = new ServiceCollection();
 services.AddTrax.CoreEffects(options =>
     options
         .AddInMemoryEffect()
-        .AddServiceTrainBus(typeof(MyWorkflow).Assembly)
+        .AddServiceTrainBus(typeof(MyTrain).Assembly)
 );
 
 var provider = services.BuildServiceProvider();
 var context = provider.GetRequiredService<IDataContext>();
 
-// Run a workflow, then query metadata
+// Run a train, then query metadata
 var metadata = await context.Metadatas.FirstOrDefaultAsync();
-Assert.Equal(WorkflowState.Completed, metadata.WorkflowState);
+Assert.Equal(TrainState.Completed, metadata.TrainState);
 ```
 
 ## DataContext Logging

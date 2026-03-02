@@ -68,22 +68,22 @@ public async Task CreateUserStep_ReturnsNewUser()
 }
 ```
 
-## Unit Testing Workflows
+## Unit Testing Trains
 
 Register your fakes in the service collection:
 
 ```csharp
 [Test]
-public async Task CreateUserWorkflow_CreatesUser()
+public async Task CreateUserTrain_CreatesUser()
 {
     // Arrange
     var services = new ServiceCollection();
     services.AddSingleton<IUserRepository, FakeUserRepository>();
     services.AddSingleton<IEmailService, FakeEmailService>();
-    services.AddTrax.CoreEffects(o => o.AddServiceTrainBus(typeof(CreateUserWorkflow).Assembly));
+    services.AddTrax.CoreEffects(o => o.AddServiceTrainBus(typeof(CreateUserTrain).Assembly));
 
     var provider = services.BuildServiceProvider();
-    var bus = provider.GetRequiredService<IWorkflowBus>();
+    var bus = provider.GetRequiredService<ITrainBus>();
 
     // Act
     var result = await bus.RunAsync<User>(new CreateUserRequest
@@ -99,7 +99,7 @@ public async Task CreateUserWorkflow_CreatesUser()
 }
 ```
 
-*API Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-workflow-bus.md %}), [WorkflowBus.RunAsync]({{ site.baseurl }}{% link api-reference/mediator-api/workflow-bus.md %})*
+*API Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-train-bus.md %}), [TrainBus.RunAsync]({{ site.baseurl }}{% link api-reference/mediator-api/train-bus.md %})*
 
 ## Integration Testing with InMemory Provider
 
@@ -107,7 +107,7 @@ For integration tests, use the InMemory data provider to avoid database dependen
 
 ```csharp
 [Test]
-public async Task Workflow_PersistsMetadata()
+public async Task Train_PersistsMetadata()
 {
     // Arrange
     var services = new ServiceCollection();
@@ -115,11 +115,11 @@ public async Task Workflow_PersistsMetadata()
     services.AddTrax.CoreEffects(options =>
         options
             .AddInMemoryEffect()
-            .AddServiceTrainBus(typeof(CreateUserWorkflow).Assembly)
+            .AddServiceTrainBus(typeof(CreateUserTrain).Assembly)
     );
 
     var provider = services.BuildServiceProvider();
-    var bus = provider.GetRequiredService<IWorkflowBus>();
+    var bus = provider.GetRequiredService<ITrainBus>();
     var context = provider.GetRequiredService<IDataContext>();
 
     // Act
@@ -128,27 +128,27 @@ public async Task Workflow_PersistsMetadata()
     // Assert
     var metadata = await context.Metadatas.FirstOrDefaultAsync();
     Assert.NotNull(metadata);
-    Assert.Equal(WorkflowState.Completed, metadata.WorkflowState);
+    Assert.Equal(TrainState.Completed, metadata.TrainState);
 }
 ```
 
-*API Reference: [AddInMemoryEffect]({{ site.baseurl }}{% link api-reference/configuration/add-in-memory-effect.md %}), [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-workflow-bus.md %})*
+*API Reference: [AddInMemoryEffect]({{ site.baseurl }}{% link api-reference/configuration/add-in-memory-effect.md %}), [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-train-bus.md %})*
 
 ## Testing Cancellation
 
-Verify that your steps and workflows handle cancellation correctly by passing a pre-cancelled or timed token:
+Verify that your steps and trains handle cancellation correctly by passing a pre-cancelled or timed token:
 
 ```csharp
 [Test]
-public async Task Workflow_WithCancelledToken_DoesNotExecuteSteps()
+public async Task Train_WithCancelledToken_DoesNotExecuteSteps()
 {
     // Arrange
     using var cts = new CancellationTokenSource();
     cts.Cancel();
-    var workflow = new MyWorkflow();
+    var train = new MyTrain();
 
-    // Act & Assert — workflow should throw, step should not run
-    var act = () => workflow.Run(input, cts.Token);
+    // Act & Assert — train should throw, step should not run
+    var act = () => train.Run(input, cts.Token);
     await act.Should().ThrowAsync<Exception>();
 }
 
@@ -157,10 +157,10 @@ public async Task Step_UsesToken_ForAsyncOperations()
 {
     // Arrange
     using var cts = new CancellationTokenSource();
-    var workflow = new TestWorkflow(new MyStep());
+    var train = new TestTrain(new MyStep());
 
     // Act
-    await workflow.Run("input", cts.Token);
+    await train.Run("input", cts.Token);
 
     // Assert — verify the step received the token
     // (access via a test helper that captures this.CancellationToken)

@@ -7,10 +7,10 @@ nav_order: 5
 
 # ShortCircuit
 
-`.ShortCircuit<TStep>()` lets a step end the workflow early with a valid result. If the step returns a value of the workflow's return type, that becomes the final result and remaining steps are skipped. If the step throws, the workflow continues normally.
+`.ShortCircuit<TStep>()` lets a step end the train early with a valid result. If the step returns a value of the train's return type, that becomes the final result and remaining steps are skipped. If the step throws, the train continues normally.
 
 ```csharp
-public class ProcessOrderWorkflow : ServiceTrain<OrderRequest, OrderResult>
+public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderResult>
 {
     protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderRequest input)
         => Activate(input)
@@ -23,13 +23,13 @@ public class ProcessOrderWorkflow : ServiceTrain<OrderRequest, OrderResult>
 }
 ```
 
-*API Reference: [Chain]({{ site.baseurl }}{% link api-reference/workflow-methods/chain.md %}), [ShortCircuit]({{ site.baseurl }}{% link api-reference/workflow-methods/short-circuit.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/workflow-methods/resolve.md %})*
+*API Reference: [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [ShortCircuit]({{ site.baseurl }}{% link api-reference/train-methods/short-circuit.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
 
 ## The Step
 
-> **This behavior is intentionally inverted from Chain.** A `Chain` step that throws stops the workflow with an error. A `ShortCircuit` step that throws means "no short-circuit available, keep going." The exception is swallowed, not propagated.
+> **This behavior is intentionally inverted from Chain.** A `Chain` step that throws stops the train with an error. A `ShortCircuit` step that throws means "no short-circuit available, keep going." The exception is swallowed, not propagated.
 
-See [API Reference: ShortCircuit]({{ site.baseurl }}{% link api-reference/workflow-methods/short-circuit.md %}) for all overloads, the step signature, and a full example.
+See [API Reference: ShortCircuit]({{ site.baseurl }}{% link api-reference/train-methods/short-circuit.md %}) for all overloads, the step signature, and a full example.
 
 ## When to Use It
 

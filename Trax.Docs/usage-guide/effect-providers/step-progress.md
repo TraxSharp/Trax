@@ -8,7 +8,7 @@ nav_order: 5
 
 # Step Progress
 
-The step progress provider gives real-time visibility into which step a workflow is currently executing and enables between-step cancellation. It registers two step-effect providers under a single call: **CancellationCheckProvider** and **StepProgressProvider**.
+The step progress provider gives real-time visibility into which step a train is currently executing and enables between-step cancellation. It registers two step-effect providers under a single call: **CancellationCheckProvider** and **StepProgressProvider**.
 
 ## Registration
 
@@ -30,7 +30,7 @@ services.AddTrax.CoreEffects(options =>
 
 ### 1. CancellationCheckProvider
 
-Runs **before** each step executes. It queries the database for the workflow's `CancellationRequested` flag. If the flag is `true`, it throws an `OperationCanceledException` and the step never starts.
+Runs **before** each step executes. It queries the database for the train's `CancellationRequested` flag. If the flag is `true`, it throws an `OperationCanceledException` and the step never starts.
 
 The provider uses `IDataContextProviderFactory` to create a fresh `DbContext` for each check. This ensures it always reads the latest database state, even if the cancellation was requested by a different server or process.
 
@@ -38,7 +38,7 @@ After step execution, this provider is a no-op.
 
 ### 2. StepProgressProvider
 
-Runs **before** each step to set two columns on the workflow's `Metadata`:
+Runs **before** each step to set two columns on the train's `Metadata`:
 
 | Field | Value |
 |-------|-------|
@@ -47,7 +47,7 @@ Runs **before** each step to set two columns on the workflow's `Metadata`:
 
 After each step completes, it clears both columns back to `null`. The provider calls `EffectRunner.Update()` and `EffectRunner.SaveChanges(ct)` on both paths so the changes are persisted immediately.
 
-As a safety net, `FinishWorkflow` always clears both step progress columns regardless of outcome. This prevents stale values if a workflow crashes mid-step.
+As a safety net, `FinishTrain` always clears both step progress columns regardless of outcome. This prevents stale values if a train crashes mid-step.
 
 ## Execution Order
 
@@ -69,18 +69,18 @@ See [Steps: EffectStep vs Step](../steps.md#effectstep-vs-step) for the differen
 
 Trax.Core supports two cancellation paths that work together:
 
-**Same-server (instant):** When the cancelling code runs on the same server as the workflow, `ICancellationRegistry` provides direct access to the workflow's `CancellationTokenSource`. Cancellation is immediate and can interrupt a running step mid-execution.
+**Same-server (instant):** When the cancelling code runs on the same server as the train, `ICancellationRegistry` provides direct access to the train's `CancellationTokenSource`. Cancellation is immediate and can interrupt a running step mid-execution.
 
-**Cross-server (between-step):** When the cancellation request comes from a different server — for example, an operator clicking "Cancel" on the dashboard while the workflow runs on a background worker — the request is written to the database as a `CancellationRequested` flag. The `CancellationCheckProvider` picks it up before the next step starts.
+**Cross-server (between-step):** When the cancellation request comes from a different server — for example, an operator clicking "Cancel" on the dashboard while the train runs on a background worker — the request is written to the database as a `CancellationRequested` flag. The `CancellationCheckProvider` picks it up before the next step starts.
 
 The two paths are complementary. Same-server cancellation is faster but only works within a single process. The DB flag approach is slower (it only fires between steps) but works across any number of servers.
 
 ## Dashboard Integration
 
-When a workflow is `InProgress`, the dashboard detail page displays the current step name and how long it has been running, drawn from the `CurrentlyRunningStep` and `StepStartedAt` columns.
+When a train is `InProgress`, the dashboard detail page displays the current step name and how long it has been running, drawn from the `CurrentlyRunningStep` and `StepStartedAt` columns.
 
 ## When to Use It
 
-- **Production environments** — Where workflows may need to be cancelled from the dashboard by operators.
-- **Multi-server deployments** — Where the server requesting cancellation may not be the server executing the workflow.
-- **Step-level visibility** — When operators need to see which step a long-running workflow is currently on.
+- **Production environments** — Where trains may need to be cancelled from the dashboard by operators.
+- **Multi-server deployments** — Where the server requesting cancellation may not be the server executing the train.
+- **Step-level visibility** — When operators need to see which step a long-running train is currently on.
