@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/TraxSharp/Trax.Samples/compare/v1.0.1...v1.1.0) (2026-03-02)
+
+
+### Features
+
+* rename Workflow to Train ([#3](https://github.com/TraxSharp/Trax.Samples/issues/3)) ([757da45](https://github.com/TraxSharp/Trax.Samples/commit/757da459b753142592644e02e3748939d59a483b))
+
 ## [1.0.1](https://github.com/TraxSharp/Trax.Samples/compare/v1.0.0...v1.0.1) (2026-03-01)
 
 
