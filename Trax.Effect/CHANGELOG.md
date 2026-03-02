@@ -1,3 +1,15 @@
+# [1.1.0](https://github.com/TraxSharp/Trax.Effect/compare/v1.0.0...v1.1.0) (2026-03-02)
+
+
+### Bug Fixes
+
+* Move circular test deps to downstream repos ([#6](https://github.com/TraxSharp/Trax.Effect/issues/6)) ([b58a2c9](https://github.com/TraxSharp/Trax.Effect/commit/b58a2c94f552fa845d6b4c85736e3b9ee31024a1))
+
+
+### Features
+
+* rename Workflow to Train ([#5](https://github.com/TraxSharp/Trax.Effect/issues/5)) ([d499269](https://github.com/TraxSharp/Trax.Effect/commit/d499269606bdd34eccf8ac9eedd31bdd349239f3))
+
 # 1.0.0 (2026-03-02)
 
 
