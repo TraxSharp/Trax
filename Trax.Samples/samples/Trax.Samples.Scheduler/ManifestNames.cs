@@ -2,7 +2,7 @@ namespace Trax.Samples.Scheduler;
 
 /// <summary>
 /// Centralized manifest external IDs and table names for the scheduler sample topology.
-/// These names link the topology registration in Program.cs with runtime activation in workflow steps.
+/// These names link the topology registration in Program.cs with runtime activation in train steps.
 /// </summary>
 public static class ManifestNames
 {

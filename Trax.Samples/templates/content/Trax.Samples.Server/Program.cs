@@ -4,10 +4,10 @@ using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
-using Trax.Samples.Server.Workflows.HelloWorld;
+using Trax.Samples.Server.Trains.HelloWorld;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Scheduling;
-using Trax.Scheduler.Workflows.ManifestManager;
+using Trax.Scheduler.Trains.ManifestManager;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,21 +25,21 @@ builder.AddTraxDashboard();
 
 builder.Services.AddTraxEffects(options =>
     options
-        .AddEffectWorkflowBus(
-            assemblies: [typeof(Program).Assembly, typeof(ManifestManagerWorkflow).Assembly]
+        .AddServiceTrainBus(
+            assemblies: [typeof(Program).Assembly, typeof(ManifestManagerTrain).Assembly]
         )
         .AddPostgresEffect(connectionString)
         .AddJsonEffect()
-        .SaveWorkflowParameters()
+        .SaveTrainParameters()
         .AddScheduler(scheduler =>
         {
             scheduler
                 .AddMetadataCleanup(cleanup =>
                 {
-                    cleanup.AddWorkflowType<IHelloWorldWorkflow>();
+                    cleanup.AddTrainType<IHelloWorldTrain>();
                 })
                 .UseHangfire(connectionString)
-                .Schedule<IHelloWorldWorkflow>(
+                .Schedule<IHelloWorldTrain>(
                     "hello-world",
                     new HelloWorldInput { Name = "Trax.Core" },
                     Every.Seconds(20)

@@ -45,11 +45,11 @@ The sample seeds a "HelloWorld" manifest that runs every 60 seconds. The manifes
 
 | Component | Purpose |
 |-----------|---------|
-| `HelloWorldWorkflow` | Simple ServiceTrain that logs a greeting |
-| `HelloWorldInput` | Workflow input implementing `IManifestProperties` |
+| `HelloWorldTrain` | Simple ServiceTrain that logs a greeting |
+| `HelloWorldInput` | Train input implementing `IManifestProperties` |
 | `LogGreetingStep` | Step that performs the greeting logic |
-| `ManifestManagerWorkflow` | Built-in workflow that polls for scheduled jobs |
-| `TaskServerExecutorWorkflow` | Built-in workflow that executes individual jobs |
+| `ManifestManagerTrain` | Built-in train that polls for scheduled jobs |
+| `TaskServerExecutorTrain` | Built-in train that executes individual jobs |
 
 ### Hangfire Integration
 
@@ -76,9 +76,9 @@ Edit `appsettings.json` to customize:
 }
 ```
 
-## Creating Your Own Scheduled Workflows
+## Creating Your Own Scheduled Trains
 
-1. **Create a workflow input** implementing `IManifestProperties`:
+1. **Create a train input** implementing `IManifestProperties`:
    ```csharp
    public record MyJobInput : IManifestProperties
    {
@@ -86,9 +86,9 @@ Edit `appsettings.json` to customize:
    }
    ```
 
-2. **Create a workflow**:
+2. **Create a train**:
    ```csharp
-   public class MyJobWorkflow : ServiceTrain<MyJobInput, Unit>, IMyJobWorkflow
+   public class MyJobTrain : ServiceTrain<MyJobInput, Unit>, IMyJobTrain
    {
        protected override async Task<Either<Exception, Unit>> RunInternal(MyJobInput input) =>
            Activate(input)
@@ -96,25 +96,25 @@ Edit `appsettings.json` to customize:
                .Resolve();
    }
 
-   public interface IMyJobWorkflow : IServiceTrain<MyJobInput, Unit>;
+   public interface IMyJobTrain : IServiceTrain<MyJobInput, Unit>;
    ```
 
-3. **Schedule the workflow** (at startup via the scheduler builder):
+3. **Schedule the train** (at startup via the scheduler builder):
    ```csharp
    services.AddTrax.CoreEffects(options => options
        .AddScheduler(scheduler => scheduler
            .UsePostgresTaskServer()
-           .Schedule<IMyJobWorkflow>(
+           .Schedule<IMyJobTrain>(
                "my-job",
                new MyJobInput { SomeProperty = "value" },
                Cron.Daily())));
    ```
 
-   The input type is inferred from `IMyJobWorkflow`'s `IServiceTrain<MyJobInput, Unit>` interface — only one type parameter needed.
+   The input type is inferred from `IMyJobTrain`'s `IServiceTrain<MyJobInput, Unit>` interface — only one type parameter needed.
 
    For batch scheduling, use `ScheduleMany` with `ManifestItem`:
    ```csharp
-   scheduler.ScheduleMany<IMyJobWorkflow>(
+   scheduler.ScheduleMany<IMyJobTrain>(
        "my-batch",
        items.Select(item => new ManifestItem(
            item.Id,
@@ -128,24 +128,24 @@ Edit `appsettings.json` to customize:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Hangfire Server                               │
-│         Runs ManifestManagerWorkflow on schedule                │
+│         Runs ManifestManagerTrain on schedule                │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  ManifestManagerWorkflow                         │
+│                  ManifestManagerTrain                         │
 │  LoadManifests → ReapFailedJobs → DetermineJobs → EnqueueJobs  │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │ Enqueues
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  TaskServerExecutorWorkflow                        │
-│             Executes individual workflow from Manifest          │
+│                  TaskServerExecutorTrain                        │
+│             Executes individual train from Manifest          │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  Your Workflow (HelloWorldWorkflow)             │
+│                  Your Train (HelloWorldTrain)             │
 │                    Your business logic here                      │
 └─────────────────────────────────────────────────────────────────┘
 ```

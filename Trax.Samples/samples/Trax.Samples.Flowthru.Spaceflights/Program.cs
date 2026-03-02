@@ -27,13 +27,13 @@ using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Progress.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.Flowthru.Spaceflights;
-using Trax.Samples.Flowthru.Spaceflights.Workflows.DataProcessing;
-using Trax.Samples.Flowthru.Spaceflights.Workflows.DataScience;
-using Trax.Samples.Flowthru.Spaceflights.Workflows.Reporting;
+using Trax.Samples.Flowthru.Spaceflights.Trains.DataProcessing;
+using Trax.Samples.Flowthru.Spaceflights.Trains.DataScience;
+using Trax.Samples.Flowthru.Spaceflights.Trains.Reporting;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Scheduling;
-using Trax.Scheduler.Workflows.ManifestManager;
+using Trax.Scheduler.Trains.ManifestManager;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -76,21 +76,21 @@ builder.Services.AddFlowthru(flowthru =>
 builder.Services.AddTraxEffects(options =>
     options
         .AddServiceTrainBus(
-            assemblies: [typeof(Program).Assembly, typeof(ManifestManagerWorkflow).Assembly]
+            assemblies: [typeof(Program).Assembly, typeof(ManifestManagerTrain).Assembly]
         )
         .AddPostgresEffect(connectionString)
         .AddEffectDataContextLogging()
         .AddJsonEffect()
-        .SaveWorkflowParameters()
+        .SaveTrainParameters()
         .AddStepProgress()
         .AddScheduler(scheduler =>
         {
             scheduler
                 .AddMetadataCleanup(cleanup =>
                 {
-                    cleanup.AddWorkflowType<IDataProcessingPipelineWorkflow>();
-                    cleanup.AddWorkflowType<IDataSciencePipelineWorkflow>();
-                    cleanup.AddWorkflowType<IReportingPipelineWorkflow>();
+                    cleanup.AddTrainType<IDataProcessingTrain>();
+                    cleanup.AddTrainType<IDataScienceTrain>();
+                    cleanup.AddTrainType<IReportingTrain>();
                 })
                 .JobDispatcherPollingInterval(TimeSpan.FromSeconds(2))
                 .UsePostgresTaskServer();
@@ -100,16 +100,16 @@ builder.Services.AddTraxEffects(options =>
             //      └── data-science   (ThenInclude — depends on data-processing)
             //          └── reporting   (ThenInclude — depends on data-science)
             scheduler
-                .Schedule<IDataProcessingPipelineWorkflow>(
+                .Schedule<IDataProcessingTrain>(
                     ManifestNames.DataProcessing,
                     new DataProcessingPipelineInput(),
                     Every.Minutes(5)
                 )
-                .ThenInclude<IDataSciencePipelineWorkflow>(
+                .ThenInclude<IDataScienceTrain>(
                     ManifestNames.DataScience,
                     new DataSciencePipelineInput()
                 )
-                .ThenInclude<IReportingPipelineWorkflow>(
+                .ThenInclude<IReportingTrain>(
                     ManifestNames.Reporting,
                     new ReportingPipelineInput()
                 );
