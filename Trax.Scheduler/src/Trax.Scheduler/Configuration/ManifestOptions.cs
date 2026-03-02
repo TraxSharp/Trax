@@ -1,3 +1,5 @@
+using Trax.Effect.Enums;
+
 namespace Trax.Scheduler.Configuration;
 
 /// <summary>
@@ -73,4 +75,16 @@ public class ManifestOptions
     /// for dependent manifests (created via Include/ThenInclude).
     /// </remarks>
     public bool IsDormant { get; set; }
+
+    /// <summary>
+    /// Gets or sets the per-manifest misfire policy override.
+    /// Null means use the global default from SchedulerConfiguration.
+    /// </summary>
+    public MisfirePolicy? MisfirePolicy { get; set; }
+
+    /// <summary>
+    /// Gets or sets the per-manifest misfire threshold override.
+    /// Null means use the global default from SchedulerConfiguration.DefaultMisfireThreshold.
+    /// </summary>
+    public TimeSpan? MisfireThreshold { get; set; }
 }

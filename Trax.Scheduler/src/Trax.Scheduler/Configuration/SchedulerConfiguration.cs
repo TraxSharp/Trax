@@ -1,3 +1,5 @@
+using Trax.Effect.Enums;
+
 namespace Trax.Scheduler.Configuration;
 
 /// <summary>
@@ -118,6 +120,26 @@ public class SchedulerConfiguration
     /// may be automatically failed and potentially retried.
     /// </remarks>
     public TimeSpan DefaultJobTimeout { get; set; } = TimeSpan.FromMinutes(20);
+
+    /// <summary>
+    /// The default misfire policy applied to manifests that do not specify one.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to <see cref="MisfirePolicy.FireOnceNow"/> for backward compatibility.
+    /// Can be overridden per-manifest via the ScheduleOptions fluent API.
+    /// </remarks>
+    public MisfirePolicy DefaultMisfirePolicy { get; set; } = MisfirePolicy.FireOnceNow;
+
+    /// <summary>
+    /// The default misfire threshold — the grace period for determining when a missed
+    /// run should trigger the misfire policy.
+    /// </summary>
+    /// <remarks>
+    /// If a manifest is overdue by less than this threshold, it fires normally regardless
+    /// of its <see cref="MisfirePolicy"/>. If overdue by more, the manifest's MisfirePolicy
+    /// determines behavior. Can be overridden per-manifest via MisfireThresholdSeconds.
+    /// </remarks>
+    public TimeSpan DefaultMisfireThreshold { get; set; } = TimeSpan.FromSeconds(60);
 
     /// <summary>
     /// Whether to automatically recover stuck jobs on scheduler startup.

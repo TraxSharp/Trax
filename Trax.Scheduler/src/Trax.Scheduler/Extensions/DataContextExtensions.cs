@@ -130,6 +130,7 @@ public static class DataContextExtensions
             existing.ManifestGroupId = manifestGroupId;
             existing.Priority = options.Priority;
             ApplySchedule(existing, schedule);
+            ApplyMisfireOptions(existing, options);
 
             return existing;
         }
@@ -149,6 +150,7 @@ public static class DataContextExtensions
         };
         manifest.SetProperties(input);
         ApplySchedule(manifest, schedule);
+        ApplyMisfireOptions(manifest, options);
 
         context.Manifests.Add(manifest);
 
@@ -234,6 +236,7 @@ public static class DataContextExtensions
             existing.DependsOnManifestId = dependsOnManifestId;
             existing.CronExpression = null;
             existing.IntervalSeconds = null;
+            ApplyMisfireOptions(existing, options);
 
             return existing;
         }
@@ -253,6 +256,7 @@ public static class DataContextExtensions
             DependsOnManifestId = dependsOnManifestId,
         };
         manifest.SetProperties(input);
+        ApplyMisfireOptions(manifest, options);
 
         context.Manifests.Add(manifest);
 
@@ -268,6 +272,19 @@ public static class DataContextExtensions
         manifest.CronExpression = schedule.CronExpression;
         manifest.IntervalSeconds = schedule.Interval.HasValue
             ? (int)schedule.Interval.Value.TotalSeconds
+            : null;
+    }
+
+    /// <summary>
+    /// Applies misfire policy configuration to a manifest from the options.
+    /// </summary>
+    private static void ApplyMisfireOptions(Manifest manifest, ManifestOptions options)
+    {
+        if (options.MisfirePolicy.HasValue)
+            manifest.MisfirePolicy = options.MisfirePolicy.Value;
+
+        manifest.MisfireThresholdSeconds = options.MisfireThreshold.HasValue
+            ? (int)options.MisfireThreshold.Value.TotalSeconds
             : null;
     }
 }

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Services.EffectStep;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Trains.ManifestManager;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
 
@@ -16,8 +17,10 @@ namespace Trax.Scheduler.Trains.ManifestManager.Steps;
 /// all manifests that are due, applying only per-manifest guards (dead letters, duplicate
 /// queue entries, active executions).
 /// </remarks>
-internal class DetermineJobsToQueueStep(ILogger<DetermineJobsToQueueStep> logger)
-    : EffectStep<(List<ManifestDispatchView>, List<DeadLetter>), List<ManifestDispatchView>>
+internal class DetermineJobsToQueueStep(
+    ILogger<DetermineJobsToQueueStep> logger,
+    SchedulerConfiguration config
+) : EffectStep<(List<ManifestDispatchView>, List<DeadLetter>), List<ManifestDispatchView>>
 {
     public override async Task<List<ManifestDispatchView>> Run(
         (List<ManifestDispatchView>, List<DeadLetter>) input
@@ -59,7 +62,7 @@ internal class DetermineJobsToQueueStep(ILogger<DetermineJobsToQueueStep> logger
                 continue;
 
             // Check if this manifest is due for execution
-            if (SchedulingHelpers.ShouldRunNow(view.Manifest, now, logger))
+            if (SchedulingHelpers.ShouldRunNow(view.Manifest, now, config, logger))
             {
                 logger.LogDebug(
                     "Manifest {ManifestId} (name: {ManifestName}) is due for execution",

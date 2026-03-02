@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Scheduler.Services.BackgroundTaskServer;
 
@@ -139,6 +140,28 @@ public partial class SchedulerConfigurationBuilder
     public SchedulerConfigurationBuilder DefaultJobTimeout(TimeSpan timeout)
     {
         _configuration.DefaultJobTimeout = timeout;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the default misfire policy for manifests that do not specify one.
+    /// </summary>
+    /// <param name="policy">The default misfire policy (default: FireOnceNow)</param>
+    /// <returns>The builder for method chaining</returns>
+    public SchedulerConfigurationBuilder DefaultMisfirePolicy(MisfirePolicy policy)
+    {
+        _configuration.DefaultMisfirePolicy = policy;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the default misfire threshold — the grace period before misfire policies take effect.
+    /// </summary>
+    /// <param name="threshold">The misfire threshold (default: 60 seconds)</param>
+    /// <returns>The builder for method chaining</returns>
+    public SchedulerConfigurationBuilder DefaultMisfireThreshold(TimeSpan threshold)
+    {
+        _configuration.DefaultMisfireThreshold = threshold;
         return this;
     }
 

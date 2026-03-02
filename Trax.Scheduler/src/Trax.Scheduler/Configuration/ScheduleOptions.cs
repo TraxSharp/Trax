@@ -1,3 +1,5 @@
+using Trax.Effect.Enums;
+
 namespace Trax.Scheduler.Configuration;
 
 /// <summary>
@@ -27,6 +29,8 @@ public class ScheduleOptions
     internal int _maxRetries = 3;
     internal TimeSpan? _timeout;
     internal bool _isDormant;
+    internal MisfirePolicy? _misfirePolicy;
+    internal TimeSpan? _misfireThreshold;
 
     // Group-level state
     internal string? _groupId;
@@ -90,6 +94,33 @@ public class ScheduleOptions
         return this;
     }
 
+    /// <summary>
+    /// Sets the misfire policy for this manifest.
+    /// </summary>
+    /// <remarks>
+    /// Determines behavior when a scheduled run is missed (e.g., scheduler was down).
+    /// Only meaningful for Cron and Interval schedule types.
+    /// </remarks>
+    public ScheduleOptions OnMisfire(MisfirePolicy policy)
+    {
+        _misfirePolicy = policy;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the misfire threshold for this manifest — the grace period before the misfire
+    /// policy takes effect.
+    /// </summary>
+    /// <remarks>
+    /// If a manifest is overdue by less than this threshold, it fires normally regardless of
+    /// the misfire policy. Overrides the global DefaultMisfireThreshold.
+    /// </remarks>
+    public ScheduleOptions MisfireThreshold(TimeSpan threshold)
+    {
+        _misfireThreshold = threshold;
+        return this;
+    }
+
     // ── Group-level fluent methods ────────────────────────────────────
 
     /// <summary>
@@ -144,5 +175,7 @@ public class ScheduleOptions
             MaxRetries = _maxRetries,
             Timeout = _timeout,
             IsDormant = _isDormant,
+            MisfirePolicy = _misfirePolicy,
+            MisfireThreshold = _misfireThreshold,
         };
 }
