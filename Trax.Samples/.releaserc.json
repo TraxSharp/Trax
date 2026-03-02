@@ -6,25 +6,9 @@
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
     [
-      "@semantic-release/changelog",
-      {
-        "changelogFile": "CHANGELOG.md"
-      }
-    ],
-    [
       "@semantic-release/exec",
       {
-        "prepareCmd": "sed -i 's/<Version>[^<]*<\\/Version>/<Version>${nextRelease.version}<\\/Version>/' Directory.Build.props"
-      }
-    ],
-    [
-      "@semantic-release/git",
-      {
-        "assets": [
-          "Directory.Build.props",
-          "CHANGELOG.md"
-        ],
-        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        "prepareCmd": "echo ${nextRelease.version} > .release-version"
       }
     ],
     [

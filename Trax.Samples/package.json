@@ -1,1 +1,1 @@
-{"name":"trax-samples","version":"0.0.0-development","private":true,"devDependencies":{"semantic-release":"^23.0.0","@semantic-release/changelog":"^6.0.0","@semantic-release/exec":"^6.0.0","@semantic-release/git":"^10.0.0","@semantic-release/github":"^9.0.0","conventional-commits-parser":"^5.0.0"}}
+{"name":"trax-samples","version":"0.0.0-development","private":true,"devDependencies":{"semantic-release":"^23.0.0","@semantic-release/exec":"^6.0.0","@semantic-release/github":"^9.0.0","conventional-commits-parser":"^5.0.0"}}

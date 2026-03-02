@@ -58,11 +58,20 @@ jobs:
       - name: Release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          NUGET_TOKEN: ${{ secrets.NUGET_API_KEY }}
         run: npx semantic-release
 
+      - name: Get release version
+        id: version
+        run: |
+          if [ -f .release-version ]; then
+            echo "version=$(cat .release-version)" >> $GITHUB_OUTPUT
+            echo "released=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Pack
-        run: dotnet pack templates/Trax.Samples.Templates.csproj --configuration Release --output nupkg
+        if: steps.version.outputs.released == 'true'
+        run: dotnet pack templates/Trax.Samples.Templates.csproj --configuration Release --output nupkg -p:Version=${{ steps.version.outputs.version }}
 
       - name: Push to NuGet
+        if: steps.version.outputs.released == 'true'
         run: dotnet nuget push "nupkg/*.nupkg" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
