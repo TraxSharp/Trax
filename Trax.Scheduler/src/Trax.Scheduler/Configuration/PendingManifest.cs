@@ -20,7 +20,7 @@ internal class PendingManifest
     /// Gets or sets a closure that captures the generic type parameters and schedules the manifest.
     /// </summary>
     /// <remarks>
-    /// This closure captures the TWorkflow and TInput generic types at configuration time,
+    /// This closure captures the TTrain and TInput generic types at configuration time,
     /// avoiding the need for reflection when the manifest is actually created during startup.
     /// The closure is invoked with an <see cref="IManifestScheduler"/> instance to perform
     /// the actual scheduling operation.

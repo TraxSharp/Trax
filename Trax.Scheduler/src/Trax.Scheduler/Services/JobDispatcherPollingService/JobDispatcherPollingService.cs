@@ -3,13 +3,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Workflows.JobDispatcher;
+using Trax.Scheduler.Trains.JobDispatcher;
 
 namespace Trax.Scheduler.Services.JobDispatcherPollingService;
 
 /// <summary>
 /// Background service that polls the work queue on a configurable interval
-/// and dispatches queued jobs via <see cref="IJobDispatcherWorkflow"/>.
+/// and dispatches queued jobs via <see cref="IJobDispatcherTrain"/>.
 /// </summary>
 internal class JobDispatcherPollingService(
     IServiceProvider serviceProvider,
@@ -47,10 +47,10 @@ internal class JobDispatcherPollingService(
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var workflow = scope.ServiceProvider.GetRequiredService<IJobDispatcherWorkflow>();
+            var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
             logger.LogDebug("JobDispatcher polling cycle starting");
-            await workflow.Run(Unit.Default, cancellationToken);
+            await train.Run(Unit.Default, cancellationToken);
             logger.LogDebug("JobDispatcher polling cycle completed");
         }
         catch (Exception ex)

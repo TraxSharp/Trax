@@ -8,7 +8,7 @@ using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Mediator.Services.WorkflowRegistry;
+using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
@@ -20,28 +20,28 @@ namespace Trax.Scheduler.Services.ManifestScheduler;
 /// </summary>
 public class ManifestScheduler(
     IDataContextProviderFactory dataContextFactory,
-    IWorkflowRegistry workflowRegistry,
+    ITrainRegistry trainRegistry,
     ILogger<ManifestScheduler> logger
 ) : IManifestScheduler
 {
     /// <inheritdoc />
-    public async Task<Manifest> ScheduleAsync<TWorkflow, TInput>(
+    public async Task<Manifest> ScheduleAsync<TTrain, TInput>(
         string externalId,
         TInput input,
         Schedule schedule,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
-        workflowRegistry.ValidateWorkflowRegistration<TInput>();
+        trainRegistry.ValidateTrainRegistration<TInput>();
 
         var resolved = ResolveOptions(options);
 
         await using var context = CreateContext();
 
-        var manifest = await context.UpsertManifestAsync<TWorkflow, TInput>(
+        var manifest = await context.UpsertManifestAsync<TTrain, TInput>(
             externalId,
             input,
             schedule,
@@ -56,8 +56,8 @@ public class ManifestScheduler(
         await context.SaveChanges(ct);
 
         logger.LogInformation(
-            "Scheduled workflow {Workflow} with ExternalId {ExternalId}",
-            typeof(TWorkflow).Name,
+            "Scheduled train {Train} with ExternalId {ExternalId}",
+            typeof(TTrain).Name,
             externalId
         );
 
@@ -65,7 +65,7 @@ public class ManifestScheduler(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TWorkflow, TInput, TSource>(
+    public async Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Schedule schedule,
@@ -73,10 +73,10 @@ public class ManifestScheduler(
         Action<TSource, ManifestOptions>? configureEach = null,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
-        workflowRegistry.ValidateWorkflowRegistration<TInput>();
+        trainRegistry.ValidateTrainRegistration<TInput>();
 
         var resolved = ResolveOptions(options);
         var sourceList = sources.ToList();
@@ -103,7 +103,7 @@ public class ManifestScheduler(
                 var itemOptions = CreateItemOptions(resolved.ManifestOptions);
                 configureEach?.Invoke(source, itemOptions);
 
-                var manifest = await context.UpsertManifestAsync<TWorkflow, TInput>(
+                var manifest = await context.UpsertManifestAsync<TTrain, TInput>(
                     externalId,
                     input,
                     schedule,
@@ -128,9 +128,9 @@ public class ManifestScheduler(
             await context.CommitTransaction();
 
             logger.LogInformation(
-                "Scheduled {Count} manifests for workflow {Workflow} in single transaction",
+                "Scheduled {Count} manifests for train {Train} in single transaction",
                 results.Count,
-                typeof(TWorkflow).Name
+                typeof(TTrain).Name
             );
 
             return results;
@@ -147,17 +147,17 @@ public class ManifestScheduler(
     }
 
     /// <inheritdoc />
-    public async Task<Manifest> ScheduleDependentAsync<TWorkflow, TInput>(
+    public async Task<Manifest> ScheduleDependentAsync<TTrain, TInput>(
         string externalId,
         TInput input,
         string dependsOnExternalId,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
-        workflowRegistry.ValidateWorkflowRegistration<TInput>();
+        trainRegistry.ValidateTrainRegistration<TInput>();
 
         var resolved = ResolveOptions(options);
 
@@ -173,7 +173,7 @@ public class ManifestScheduler(
                     + "Ensure the parent manifest is scheduled before its dependents."
             );
 
-        var manifest = await context.UpsertDependentManifestAsync<TWorkflow, TInput>(
+        var manifest = await context.UpsertDependentManifestAsync<TTrain, TInput>(
             externalId,
             input,
             parentManifest.Id,
@@ -188,8 +188,8 @@ public class ManifestScheduler(
         await context.SaveChanges(ct);
 
         logger.LogInformation(
-            "Scheduled dependent workflow {Workflow} with ExternalId {ExternalId} depending on {ParentExternalId}",
-            typeof(TWorkflow).Name,
+            "Scheduled dependent train {Train} with ExternalId {ExternalId} depending on {ParentExternalId}",
+            typeof(TTrain).Name,
             externalId,
             dependsOnExternalId
         );
@@ -198,11 +198,7 @@ public class ManifestScheduler(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<
-        TWorkflow,
-        TInput,
-        TSource
-    >(
+    public async Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Func<TSource, string> dependsOn,
@@ -210,10 +206,10 @@ public class ManifestScheduler(
         Action<TSource, ManifestOptions>? configureEach = null,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
-        workflowRegistry.ValidateWorkflowRegistration<TInput>();
+        trainRegistry.ValidateTrainRegistration<TInput>();
 
         var resolved = ResolveOptions(options);
         var sourceList = sources.ToList();
@@ -254,7 +250,7 @@ public class ManifestScheduler(
                 var itemOptions = CreateItemOptions(resolved.ManifestOptions);
                 configureEach?.Invoke(source, itemOptions);
 
-                var manifest = await context.UpsertDependentManifestAsync<TWorkflow, TInput>(
+                var manifest = await context.UpsertDependentManifestAsync<TTrain, TInput>(
                     externalId,
                     input,
                     parentManifest.Id,
@@ -279,9 +275,9 @@ public class ManifestScheduler(
             await context.CommitTransaction();
 
             logger.LogInformation(
-                "Scheduled {Count} dependent manifests for workflow {Workflow} in single transaction",
+                "Scheduled {Count} dependent manifests for train {Train} in single transaction",
                 results.Count,
-                typeof(TWorkflow).Name
+                typeof(TTrain).Name
             );
 
             return results;
@@ -331,7 +327,7 @@ public class ManifestScheduler(
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = manifest.Name,
+                TrainName = manifest.Name,
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
@@ -371,7 +367,7 @@ public class ManifestScheduler(
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
-                    WorkflowName = manifest.Name,
+                    TrainName = manifest.Name,
                     Input = manifest.Properties,
                     InputTypeName = manifest.PropertyTypeName,
                     ManifestId = manifest.Id,
@@ -392,10 +388,10 @@ public class ManifestScheduler(
         return manifests.Count;
     }
 
-    // ── Internal non-generic overloads (used by WorkflowConfigurator) ───
+    // ── Internal non-generic overloads (used by TrainConfigurator) ───
 
     internal async Task<Manifest> ScheduleAsyncUntyped(
-        Type workflowType,
+        Type trainType,
         Type inputType,
         string externalId,
         IManifestProperties input,
@@ -404,14 +400,14 @@ public class ManifestScheduler(
         CancellationToken ct = default
     )
     {
-        workflowRegistry.ValidateWorkflowRegistration(inputType);
+        trainRegistry.ValidateTrainRegistration(inputType);
 
         var resolved = ResolveOptions(options);
 
         await using var context = CreateContext();
 
         var manifest = await context.UpsertManifestAsync(
-            workflowType,
+            trainType,
             externalId,
             input,
             schedule,
@@ -426,8 +422,8 @@ public class ManifestScheduler(
         await context.SaveChanges(ct);
 
         logger.LogInformation(
-            "Scheduled workflow {Workflow} with ExternalId {ExternalId}",
-            workflowType.Name,
+            "Scheduled train {Train} with ExternalId {ExternalId}",
+            trainType.Name,
             externalId
         );
 
@@ -435,7 +431,7 @@ public class ManifestScheduler(
     }
 
     internal async Task<Manifest> ScheduleDependentAsyncUntyped(
-        Type workflowType,
+        Type trainType,
         Type inputType,
         string externalId,
         IManifestProperties input,
@@ -444,7 +440,7 @@ public class ManifestScheduler(
         CancellationToken ct = default
     )
     {
-        workflowRegistry.ValidateWorkflowRegistration(inputType);
+        trainRegistry.ValidateTrainRegistration(inputType);
 
         var resolved = ResolveOptions(options);
 
@@ -461,7 +457,7 @@ public class ManifestScheduler(
             );
 
         var manifest = await context.UpsertDependentManifestAsync(
-            workflowType,
+            trainType,
             externalId,
             input,
             parentManifest.Id,
@@ -476,8 +472,8 @@ public class ManifestScheduler(
         await context.SaveChanges(ct);
 
         logger.LogInformation(
-            "Scheduled dependent workflow {Workflow} with ExternalId {ExternalId} depending on {ParentExternalId}",
-            workflowType.Name,
+            "Scheduled dependent train {Train} with ExternalId {ExternalId} depending on {ParentExternalId}",
+            trainType.Name,
             externalId,
             dependsOnExternalId
         );
@@ -486,7 +482,7 @@ public class ManifestScheduler(
     }
 
     internal async Task<IReadOnlyList<Manifest>> ScheduleManyAsyncUntyped<TSource>(
-        Type workflowType,
+        Type trainType,
         Type inputType,
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, IManifestProperties Input)> map,
@@ -496,7 +492,7 @@ public class ManifestScheduler(
         CancellationToken ct = default
     )
     {
-        workflowRegistry.ValidateWorkflowRegistration(inputType);
+        trainRegistry.ValidateTrainRegistration(inputType);
 
         var resolved = ResolveOptions(options);
         var sourceList = sources.ToList();
@@ -524,7 +520,7 @@ public class ManifestScheduler(
                 configureEach?.Invoke(source, itemOptions);
 
                 var manifest = await context.UpsertManifestAsync(
-                    workflowType,
+                    trainType,
                     externalId,
                     input,
                     schedule,
@@ -549,9 +545,9 @@ public class ManifestScheduler(
             await context.CommitTransaction();
 
             logger.LogInformation(
-                "Scheduled {Count} manifests for workflow {Workflow} in single transaction",
+                "Scheduled {Count} manifests for train {Train} in single transaction",
                 results.Count,
-                workflowType.Name
+                trainType.Name
             );
 
             return results;
@@ -568,7 +564,7 @@ public class ManifestScheduler(
     }
 
     internal async Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsyncUntyped<TSource>(
-        Type workflowType,
+        Type trainType,
         Type inputType,
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, IManifestProperties Input)> map,
@@ -578,7 +574,7 @@ public class ManifestScheduler(
         CancellationToken ct = default
     )
     {
-        workflowRegistry.ValidateWorkflowRegistration(inputType);
+        trainRegistry.ValidateTrainRegistration(inputType);
 
         var resolved = ResolveOptions(options);
         var sourceList = sources.ToList();
@@ -620,7 +616,7 @@ public class ManifestScheduler(
                 configureEach?.Invoke(source, itemOptions);
 
                 var manifest = await context.UpsertDependentManifestAsync(
-                    workflowType,
+                    trainType,
                     externalId,
                     input,
                     parentManifest.Id,
@@ -645,9 +641,9 @@ public class ManifestScheduler(
             await context.CommitTransaction();
 
             logger.LogInformation(
-                "Scheduled {Count} dependent manifests for workflow {Workflow} in single transaction",
+                "Scheduled {Count} dependent manifests for train {Train} in single transaction",
                 results.Count,
-                workflowType.Name
+                trainType.Name
             );
 
             return results;

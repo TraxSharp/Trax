@@ -16,7 +16,7 @@ using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.ManifestScheduler;
 using Trax.Scheduler.Services.SchedulerStartupService;
-using Trax.Scheduler.Tests.Integration.Examples.Workflows;
+using Trax.Scheduler.Tests.Integration.Examples.Trains;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -64,7 +64,7 @@ public class OrphanManifestPruningTests : TestSetup
         var orphan = await CreateAndSaveManifestWithExternalId("orphan-with-data");
         var workQueue = await CreateAndSaveWorkQueueEntry(orphan);
         var deadLetter = await CreateAndSaveDeadLetter(orphan);
-        var metadata = await CreateAndSaveMetadata(orphan, WorkflowState.Completed);
+        var metadata = await CreateAndSaveMetadata(orphan, TrainState.Completed);
 
         var configuration = CreateConfiguration(
             expectedExternalIds: ["some-other-manifest"],
@@ -116,7 +116,7 @@ public class OrphanManifestPruningTests : TestSetup
         // Arrange: Create manifests that are all in the expected set
         var manifestA = await CreateAndSaveManifestWithExternalId("configured-a");
         var manifestB = await CreateAndSaveManifestWithExternalId("configured-b");
-        var metadataA = await CreateAndSaveMetadata(manifestA, WorkflowState.Completed);
+        var metadataA = await CreateAndSaveMetadata(manifestA, TrainState.Completed);
         var workQueueB = await CreateAndSaveWorkQueueEntry(manifestB);
 
         var configuration = CreateConfiguration(
@@ -384,7 +384,7 @@ public class OrphanManifestPruningTests : TestSetup
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.Interval,
                 IntervalSeconds = 60,
@@ -413,7 +413,7 @@ public class OrphanManifestPruningTests : TestSetup
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.Dependent,
                 MaxRetries = 3,
@@ -432,19 +432,19 @@ public class OrphanManifestPruningTests : TestSetup
         return manifest;
     }
 
-    private async Task<Metadata> CreateAndSaveMetadata(Manifest manifest, WorkflowState state)
+    private async Task<Metadata> CreateAndSaveMetadata(Manifest manifest, TrainState state)
     {
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestWorkflow).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
             }
         );
 
-        metadata.WorkflowState = state;
+        metadata.TrainState = state;
 
         await DataContext.Track(metadata);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -478,7 +478,7 @@ public class OrphanManifestPruningTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = manifest.Name,
+                TrainName = manifest.Name,
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,

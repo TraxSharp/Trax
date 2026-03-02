@@ -1,3 +1,3 @@
 # Trax.Scheduler
 
-Task scheduling and orchestration for Trax workflows.
+Task scheduling and orchestration for Trax trains.

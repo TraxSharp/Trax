@@ -42,7 +42,7 @@ internal class SchedulerStartupService(
 
         var stuckJobs = await dataContext
             .Metadatas.Where(m =>
-                m.WorkflowState == WorkflowState.InProgress && m.StartTime < serverStartTime
+                m.TrainState == TrainState.InProgress && m.StartTime < serverStartTime
             )
             .ToListAsync(cancellationToken);
 
@@ -56,7 +56,7 @@ internal class SchedulerStartupService(
 
         foreach (var metadata in stuckJobs)
         {
-            metadata.WorkflowState = WorkflowState.Failed;
+            metadata.TrainState = TrainState.Failed;
             metadata.EndTime = DateTime.UtcNow;
             metadata.AddException(
                 new InvalidOperationException("Server restarted while job was in progress")

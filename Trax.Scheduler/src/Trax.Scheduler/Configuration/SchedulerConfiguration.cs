@@ -10,13 +10,13 @@ public class SchedulerConfiguration
     /// </summary>
     /// <remarks>
     /// Pending manifests are added via the fluent configuration API
-    /// (e.g., <c>.Schedule&lt;TWorkflow, TInput&gt;(...)</c>) and seeded
+    /// (e.g., <c>.Schedule&lt;TTrain, TInput&gt;(...)</c>) and seeded
     /// automatically on startup by the ManifestPollingService.
     /// </remarks>
     internal List<PendingManifest> PendingManifests { get; } = [];
 
     /// <summary>
-    /// Whether the ManifestManager workflow is enabled during polling cycles.
+    /// Whether the ManifestManager train is enabled during polling cycles.
     /// </summary>
     /// <remarks>
     /// When disabled, the ManifestManager will not run during polling cycles, meaning
@@ -26,7 +26,7 @@ public class SchedulerConfiguration
     public bool ManifestManagerEnabled { get; set; } = true;
 
     /// <summary>
-    /// Whether the JobDispatcher workflow is enabled during polling cycles.
+    /// Whether the JobDispatcher train is enabled during polling cycles.
     /// </summary>
     /// <remarks>
     /// When disabled, the JobDispatcher will not run during polling cycles, meaning
@@ -50,9 +50,9 @@ public class SchedulerConfiguration
     /// The maximum number of active jobs (Pending + InProgress Metadata) allowed across all manifests.
     /// </summary>
     /// <remarks>
-    /// Enforced by the JobDispatcher at dispatch time. Metadata whose workflow name appears in
-    /// <see cref="ExcludedWorkflowTypeNames"/> is excluded from the count. By default, internal
-    /// scheduler workflows (JobDispatcher, TaskServerExecutor, ManifestManager, MetadataCleanup)
+    /// Enforced by the JobDispatcher at dispatch time. Metadata whose train name appears in
+    /// <see cref="ExcludedTrainTypeNames"/> is excluded from the count. By default, internal
+    /// scheduler trains (JobDispatcher, TaskServerExecutor, ManifestManager, MetadataCleanup)
     /// are excluded. When the total number of active jobs reaches this limit, the JobDispatcher
     /// will not dispatch new work queue entries until existing jobs complete.
     /// Work queue entries remain in Queued status as a buffer.
@@ -61,7 +61,7 @@ public class SchedulerConfiguration
     public int? MaxActiveJobs { get; set; } = 10;
 
     /// <summary>
-    /// Priority boost automatically applied to dependent workflow work queue entries.
+    /// Priority boost automatically applied to dependent train work queue entries.
     /// </summary>
     /// <remarks>
     /// When the ManifestManager creates work queue entries for dependent manifests
@@ -71,15 +71,15 @@ public class SchedulerConfiguration
     public int DependentPriorityBoost { get; set; } = 16;
 
     /// <summary>
-    /// Workflow type names excluded from the MaxActiveJobs count.
+    /// Train type names excluded from the MaxActiveJobs count.
     /// </summary>
     /// <remarks>
     /// Metadata whose <c>Name</c> column matches any entry in this list is not counted
     /// toward <see cref="MaxActiveJobs"/>. Populated automatically with internal scheduler
-    /// workflow types during <c>Build()</c>. Additional types can be added via
-    /// <see cref="SchedulerConfigurationBuilder.ExcludeFromMaxActiveJobs{TWorkflow}"/>.
+    /// train types during <c>Build()</c>. Additional types can be added via
+    /// <see cref="SchedulerConfigurationBuilder.ExcludeFromMaxActiveJobs{TTrain}"/>.
     /// </remarks>
-    internal List<string> ExcludedWorkflowTypeNames { get; } = [];
+    internal List<string> ExcludedTrainTypeNames { get; } = [];
 
     /// <summary>
     /// The default number of retry attempts before a job is dead-lettered.
@@ -143,7 +143,7 @@ public class SchedulerConfiguration
     /// </summary>
     /// <remarks>
     /// When set (via <c>.AddMetadataCleanup()</c>), a background service will
-    /// periodically delete old metadata entries for the configured workflow types.
+    /// periodically delete old metadata entries for the configured train types.
     /// Null means metadata cleanup is disabled.
     /// </remarks>
     public MetadataCleanupConfiguration? MetadataCleanup { get; set; }

@@ -8,8 +8,8 @@ using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Services.ManifestScheduler;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.SchedulerStartupService;
+using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Utilities;
-using Trax.Scheduler.Workflows.JobDispatcher;
 
 namespace Trax.Scheduler.Configuration;
 
@@ -64,9 +64,9 @@ public partial class SchedulerConfigurationBuilder
     {
         ValidateNoCyclicGroupDependencies();
 
-        // Exclude internal scheduler workflows from MaxActiveJobs count
-        foreach (var name in AdminWorkflows.FullNames)
-            _configuration.ExcludedWorkflowTypeNames.Add(name);
+        // Exclude internal scheduler trains from MaxActiveJobs count
+        foreach (var name in AdminTrains.FullNames)
+            _configuration.ExcludedTrainTypeNames.Add(name);
 
         // Register the configuration
         _parentBuilder.ServiceCollection.AddSingleton(_configuration);
@@ -81,17 +81,17 @@ public partial class SchedulerConfigurationBuilder
         _parentBuilder.ServiceCollection.AddScoped<IManifestScheduler, ManifestScheduler>();
 
         // Register IDormantDependentContext with forwarding so both concrete type
-        // (for ExecuteScheduledWorkflowStep.Initialize) and interface (for user steps)
+        // (for ExecuteScheduledTrainStep.Initialize) and interface (for user steps)
         // resolve to the same scoped instance
         _parentBuilder.ServiceCollection.AddScoped<DormantDependentContext>();
         _parentBuilder.ServiceCollection.AddScoped<IDormantDependentContext>(sp =>
             sp.GetRequiredService<DormantDependentContext>()
         );
 
-        // Register JobDispatcher workflow (must use AddScopedTraxRoute for property injection)
+        // Register JobDispatcher train (must use AddScopedTraxRoute for property injection)
         _parentBuilder.ServiceCollection.AddScopedTraxRoute<
-            IJobDispatcherWorkflow,
-            JobDispatcherWorkflow
+            IJobDispatcherTrain,
+            JobDispatcherTrain
         >();
 
         // Register task server if configured

@@ -10,12 +10,12 @@ using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.DormantDependentContext;
-using Trax.Scheduler.Tests.Integration.Examples.Workflows;
+using Trax.Scheduler.Tests.Integration.Examples.Trains;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 /// <summary>
-/// Integration tests for <see cref="DormantDependentContext"/> which enables parent workflows
+/// Integration tests for <see cref="DormantDependentContext"/> which enables parent trains
 /// to selectively activate dormant dependent manifests with runtime-determined input.
 /// </summary>
 [TestFixture]
@@ -43,7 +43,7 @@ public class DormantDependentContextTests : TestSetup
         var runtimeInput = new SchedulerTestInput { Value = "RuntimeValue" };
 
         // Act
-        await _context.ActivateAsync<ISchedulerTestWorkflow, SchedulerTestInput>(
+        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
             dormant.ExternalId,
             runtimeInput
         );
@@ -57,7 +57,7 @@ public class DormantDependentContextTests : TestSetup
         entries.Should().HaveCount(1);
         var entry = entries[0];
         entry.Status.Should().Be(WorkQueueStatus.Queued);
-        entry.WorkflowName.Should().Be(dormant.Name);
+        entry.TrainName.Should().Be(dormant.Name);
         entry.InputTypeName.Should().Be(typeof(SchedulerTestInput).FullName);
         entry.Input.Should().Contain("RuntimeValue");
     }
@@ -73,7 +73,7 @@ public class DormantDependentContextTests : TestSetup
         var expectedPriority = groupPriority + _schedulerConfig.DependentPriorityBoost;
 
         // Act
-        await _context.ActivateAsync<ISchedulerTestWorkflow, SchedulerTestInput>(
+        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
             dormant.ExternalId,
             new SchedulerTestInput { Value = "PriorityTest" }
         );
@@ -107,7 +107,7 @@ public class DormantDependentContextTests : TestSetup
         };
 
         // Act
-        await _context.ActivateManyAsync<ISchedulerTestWorkflow, SchedulerTestInput>(activations);
+        await _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput>(activations);
 
         // Assert
         DataContext.Reset();
@@ -135,7 +135,7 @@ public class DormantDependentContextTests : TestSetup
         var activations = Enumerable.Empty<(string ExternalId, SchedulerTestInput Input)>();
 
         // Act
-        await _context.ActivateManyAsync<ISchedulerTestWorkflow, SchedulerTestInput>(activations);
+        await _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput>(activations);
 
         // Assert
         DataContext.Reset();
@@ -152,7 +152,7 @@ public class DormantDependentContextTests : TestSetup
     {
         // Act & Assert — context not initialized, should throw
         var act = () =>
-            _context.ActivateAsync<ISchedulerTestWorkflow, SchedulerTestInput>(
+            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
                 "any-id",
                 new SchedulerTestInput { Value = "test" }
             );
@@ -171,7 +171,7 @@ public class DormantDependentContextTests : TestSetup
 
         // Act & Assert
         var act = () =>
-            _context.ActivateAsync<ISchedulerTestWorkflow, SchedulerTestInput>(
+            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
                 "nonexistent-id",
                 new SchedulerTestInput { Value = "test" }
             );
@@ -194,7 +194,7 @@ public class DormantDependentContextTests : TestSetup
         var dependent = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.Dependent,
                 MaxRetries = 3,
@@ -211,7 +211,7 @@ public class DormantDependentContextTests : TestSetup
 
         // Act & Assert
         var act = () =>
-            _context.ActivateAsync<ISchedulerTestWorkflow, SchedulerTestInput>(
+            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
                 dependent.ExternalId,
                 new SchedulerTestInput { Value = "test" }
             );
@@ -245,7 +245,7 @@ public class DormantDependentContextTests : TestSetup
 
         // Act & Assert
         var act = () =>
-            _context.ActivateAsync<ISchedulerTestWorkflow, SchedulerTestInput>(
+            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
                 dormant.ExternalId,
                 new SchedulerTestInput { Value = "test" }
             );
@@ -270,7 +270,7 @@ public class DormantDependentContextTests : TestSetup
         var existingEntry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = dormant.Name,
+                TrainName = dormant.Name,
                 Input = dormant.Properties,
                 InputTypeName = dormant.PropertyTypeName,
                 ManifestId = dormant.Id,
@@ -281,7 +281,7 @@ public class DormantDependentContextTests : TestSetup
         DataContext.Reset();
 
         // Act — should not throw, just skip
-        await _context.ActivateAsync<ISchedulerTestWorkflow, SchedulerTestInput>(
+        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
             dormant.ExternalId,
             new SchedulerTestInput { Value = "ShouldBeSkipped" }
         );
@@ -313,13 +313,13 @@ public class DormantDependentContextTests : TestSetup
                 ManifestId = dormant.Id,
             }
         );
-        metadata.WorkflowState = WorkflowState.InProgress;
+        metadata.TrainState = TrainState.InProgress;
         await DataContext.Track(metadata);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
         // Act — should not throw, just skip
-        await _context.ActivateAsync<ISchedulerTestWorkflow, SchedulerTestInput>(
+        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
             dormant.ExternalId,
             new SchedulerTestInput { Value = "ShouldBeSkipped" }
         );
@@ -372,7 +372,7 @@ public class DormantDependentContextTests : TestSetup
 
         // Act & Assert — the second activation should fail validation
         var act = () =>
-            _context.ActivateManyAsync<ISchedulerTestWorkflow, SchedulerTestInput>(activations);
+            _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput>(activations);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
 
@@ -413,7 +413,7 @@ public class DormantDependentContextTests : TestSetup
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = scheduleType,
                 IntervalSeconds = intervalSeconds,
@@ -440,7 +440,7 @@ public class DormantDependentContextTests : TestSetup
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.DormantDependent,
                 MaxRetries = 3,

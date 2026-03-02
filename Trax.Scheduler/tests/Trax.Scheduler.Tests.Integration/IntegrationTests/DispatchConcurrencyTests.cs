@@ -8,8 +8,8 @@ using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using Trax.Scheduler.Workflows.JobDispatcher;
+using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Trains.JobDispatcher;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -129,7 +129,7 @@ public class DispatchConcurrencyTests : TestSetup
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
-                    WorkflowName = typeof(SchedulerTestWorkflow).FullName!,
+                    TrainName = typeof(SchedulerTestTrain).FullName!,
                     Input = manifest.Properties,
                     InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     ManifestId = manifest.Id,
@@ -161,7 +161,7 @@ public class DispatchConcurrencyTests : TestSetup
                 var entry = WorkQueue.Create(
                     new CreateWorkQueue
                     {
-                        WorkflowName = typeof(SchedulerTestWorkflow).FullName!,
+                        TrainName = typeof(SchedulerTestTrain).FullName!,
                         Input = "{}",
                         InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     }
@@ -208,15 +208,15 @@ public class DispatchConcurrencyTests : TestSetup
         using var scope = Scope
             .ServiceProvider.GetRequiredService<IServiceProvider>()
             .CreateScope();
-        var workflow = scope.ServiceProvider.GetRequiredService<IJobDispatcherWorkflow>();
+        var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
         try
         {
-            await workflow.Run(Unit.Default);
+            await train.Run(Unit.Default);
         }
         finally
         {
-            if (workflow is IDisposable disposable)
+            if (train is IDisposable disposable)
                 disposable.Dispose();
         }
     }
@@ -231,7 +231,7 @@ public class DispatchConcurrencyTests : TestSetup
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.None,
                 MaxRetries = 3,
@@ -252,7 +252,7 @@ public class DispatchConcurrencyTests : TestSetup
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = typeof(SchedulerTestWorkflow).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName!,
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,

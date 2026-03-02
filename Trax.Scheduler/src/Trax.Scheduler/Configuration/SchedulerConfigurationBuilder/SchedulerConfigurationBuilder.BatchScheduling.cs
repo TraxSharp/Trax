@@ -8,10 +8,10 @@ namespace Trax.Scheduler.Configuration;
 public partial class SchedulerConfigurationBuilder
 {
     /// <summary>
-    /// Schedules multiple instances of a workflow from a collection.
+    /// Schedules multiple instances of a train from a collection.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="sources">The collection of source items to create manifests from</param>
     /// <param name="map">A function that transforms each source item into an ExternalId and Input pair</param>
@@ -29,7 +29,7 @@ public partial class SchedulerConfigurationBuilder
     /// builder.Services.AddTraxEffects(options => options
     ///     .AddScheduler(scheduler => scheduler
     ///         .UseHangfire(/* ... */)
-    ///         .ScheduleMany&lt;ISyncTableWorkflow, SyncTableInput, string&gt;(
+    ///         .ScheduleMany&lt;ISyncTableTrain, SyncTableInput, string&gt;(
     ///             new[] { "users", "orders", "products" },
     ///             table => ($"sync-{table}", new SyncTableInput { TableName = table }),
     ///             Every.Minutes(5),
@@ -40,14 +40,14 @@ public partial class SchedulerConfigurationBuilder
     /// );
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder ScheduleMany<TWorkflow, TInput, TSource>(
+    public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Schedule schedule,
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
         // Materialize the sources to avoid multiple enumeration
@@ -70,7 +70,7 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler.ScheduleManyAsync<TWorkflow, TInput, TSource>(
+                    var results = await scheduler.ScheduleManyAsync<TTrain, TInput, TSource>(
                         sourceList,
                         map,
                         schedule,
@@ -90,12 +90,12 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
-    /// Schedules multiple instances of a workflow from a collection using a name-based convention.
+    /// Schedules multiple instances of a train from a collection using a name-based convention.
     /// The <paramref name="name"/> automatically derives <c>groupId</c>, <c>prunePrefix</c>, and
     /// the external ID prefix — reducing boilerplate when the naming follows the <c>{name}-{suffix}</c> pattern.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="sources">The collection of items to create manifests from</param>
@@ -106,7 +106,7 @@ public partial class SchedulerConfigurationBuilder
     /// <returns>The builder for method chaining</returns>
     /// <example>
     /// <code>
-    /// scheduler.ScheduleMany&lt;ISyncTableWorkflow, SyncTableInput, string&gt;(
+    /// scheduler.ScheduleMany&lt;ISyncTableTrain, SyncTableInput, string&gt;(
     ///     "sync-table",
     ///     new[] { "users", "orders" },
     ///     table => (table, new SyncTableInput { TableName = table }),
@@ -118,7 +118,7 @@ public partial class SchedulerConfigurationBuilder
     /// // groupId: "sync-table", prunePrefix: "sync-table-"
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder ScheduleMany<TWorkflow, TInput, TSource>(
+    public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TSource>(
         string name,
         IEnumerable<TSource> sources,
         Func<TSource, (string Suffix, TInput Input)> map,
@@ -126,9 +126,9 @@ public partial class SchedulerConfigurationBuilder
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties =>
-        ScheduleMany<TWorkflow, TInput, TSource>(
+        ScheduleMany<TTrain, TInput, TSource>(
             sources,
             source =>
             {
@@ -146,14 +146,14 @@ public partial class SchedulerConfigurationBuilder
         );
 
     /// <summary>
-    /// Schedules multiple dependent workflow instances for deeper chaining after a previous
+    /// Schedules multiple dependent train instances for deeper chaining after a previous
     /// <c>IncludeMany</c>.
     /// Each dependent manifest is linked to its parent via the <paramref name="dependsOn"/> function.
-    /// For first-level batch dependents after <see cref="ScheduleMany{TWorkflow,TInput,TSource}"/>,
+    /// For first-level batch dependents after <see cref="ScheduleMany{TTrain,TInput,TSource}"/>,
     /// use the <c>IncludeMany</c> overload with <c>dependsOn</c> instead.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
     /// <param name="map">A function that transforms each source item into an ExternalId and Input pair</param>
@@ -164,24 +164,24 @@ public partial class SchedulerConfigurationBuilder
     /// <example>
     /// <code>
     /// scheduler
-    ///     .ScheduleMany&lt;IExtractWorkflow, ExtractInput, int&gt;(...)
-    ///     .IncludeMany&lt;ITransformWorkflow, TransformInput, int&gt;(
+    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, int&gt;(...)
+    ///     .IncludeMany&lt;ITransformTrain, TransformInput, int&gt;(
     ///         ..., dependsOn: i => $"extract-{i}")
-    ///     .ThenIncludeMany&lt;ILoadWorkflow, LoadInput, int&gt;(
+    ///     .ThenIncludeMany&lt;ILoadTrain, LoadInput, int&gt;(
     ///         Enumerable.Range(0, 10),
     ///         i => ($"load-{i}", new LoadInput { Index = i }),
     ///         dependsOn: i => $"transform-{i}",
     ///         options => options.Group("load", group => group.MaxActiveJobs(3)))
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder ThenIncludeMany<TWorkflow, TInput, TSource>(
+    public SchedulerConfigurationBuilder ThenIncludeMany<TTrain, TInput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Func<TSource, string> dependsOn,
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
         var sourceList = sources.ToList();
@@ -206,7 +206,7 @@ public partial class SchedulerConfigurationBuilder
                 ScheduleFunc = async (scheduler, ct) =>
                 {
                     var results = await scheduler.ScheduleManyDependentAsync<
-                        TWorkflow,
+                        TTrain,
                         TInput,
                         TSource
                     >(sourceList, map, dependsOn, options, configureEach, ct: ct);
@@ -225,8 +225,8 @@ public partial class SchedulerConfigurationBuilder
     /// The <paramref name="name"/> automatically derives <c>groupId</c>, <c>prunePrefix</c>, and
     /// the external ID prefix — reducing boilerplate when the naming follows the <c>{name}-{suffix}</c> pattern.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
@@ -238,16 +238,16 @@ public partial class SchedulerConfigurationBuilder
     /// <example>
     /// <code>
     /// scheduler
-    ///     .ScheduleMany&lt;IExtractWorkflow, ExtractInput, int&gt;("extract", ...)
-    ///     .IncludeMany&lt;ITransformWorkflow, TransformInput, int&gt;("transform",
+    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, int&gt;("extract", ...)
+    ///     .IncludeMany&lt;ITransformTrain, TransformInput, int&gt;("transform",
     ///         ..., dependsOn: i => $"extract-{i}")
-    ///     .ThenIncludeMany&lt;ILoadWorkflow, LoadInput, int&gt;("load",
+    ///     .ThenIncludeMany&lt;ILoadTrain, LoadInput, int&gt;("load",
     ///         Enumerable.Range(0, 10),
     ///         i => ($"{i}", new LoadInput { Index = i }),
     ///         dependsOn: i => $"transform-{i}")
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder ThenIncludeMany<TWorkflow, TInput, TSource>(
+    public SchedulerConfigurationBuilder ThenIncludeMany<TTrain, TInput, TSource>(
         string name,
         IEnumerable<TSource> sources,
         Func<TSource, (string Suffix, TInput Input)> map,
@@ -255,9 +255,9 @@ public partial class SchedulerConfigurationBuilder
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties =>
-        ThenIncludeMany<TWorkflow, TInput, TSource>(
+        ThenIncludeMany<TTrain, TInput, TSource>(
             sources,
             source =>
             {
@@ -275,12 +275,12 @@ public partial class SchedulerConfigurationBuilder
         );
 
     /// <summary>
-    /// Schedules multiple dependent workflow instances that each depend on the root <see cref="Schedule{TWorkflow,TInput}"/> manifest.
-    /// Unlike <see cref="ThenIncludeMany{TWorkflow,TInput,TSource}"/> which requires an explicit <c>dependsOn</c> function,
+    /// Schedules multiple dependent train instances that each depend on the root <see cref="Schedule{TTrain,TInput}"/> manifest.
+    /// Unlike <see cref="ThenIncludeMany{TTrain,TInput,TSource}"/> which requires an explicit <c>dependsOn</c> function,
     /// <c>IncludeMany</c> automatically parents all items from the root <c>Schedule</c>, enabling fan-out patterns.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
     /// <param name="map">A function that transforms each source item into an ExternalId and Input pair</param>
@@ -288,7 +288,7 @@ public partial class SchedulerConfigurationBuilder
     /// <param name="configureEach">Optional action to configure per-item manifest options</param>
     /// <returns>The builder for method chaining</returns>
     /// <remarks>
-    /// Must be called after <see cref="Schedule{TWorkflow,TInput}"/>.
+    /// Must be called after <see cref="Schedule{TTrain,TInput}"/>.
     /// <code>
     /// .Schedule&lt;A&gt;("root", inputA, Every.Minutes(5))
     /// .IncludeMany&lt;B, InputB, int&gt;(
@@ -298,13 +298,13 @@ public partial class SchedulerConfigurationBuilder
     /// // All 10 child manifests depend on "root" (A)
     /// </code>
     /// </remarks>
-    public SchedulerConfigurationBuilder IncludeMany<TWorkflow, TInput, TSource>(
+    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
         var rootExternalId =
@@ -335,7 +335,7 @@ public partial class SchedulerConfigurationBuilder
                 ScheduleFunc = async (scheduler, ct) =>
                 {
                     var results = await scheduler.ScheduleManyDependentAsync<
-                        TWorkflow,
+                        TTrain,
                         TInput,
                         TSource
                     >(sourceList, map, _ => rootExternalId, options, configureEach, ct: ct);
@@ -353,10 +353,10 @@ public partial class SchedulerConfigurationBuilder
     /// Name-based overload of <c>IncludeMany</c> (root-based).
     /// The <paramref name="name"/> automatically derives <c>groupId</c>, <c>prunePrefix</c>, and
     /// the external ID prefix — reducing boilerplate when the naming follows the <c>{name}-{suffix}</c> pattern.
-    /// All items automatically depend on the root <see cref="Schedule{TWorkflow,TInput}"/> manifest.
+    /// All items automatically depend on the root <see cref="Schedule{TTrain,TInput}"/> manifest.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
@@ -367,9 +367,9 @@ public partial class SchedulerConfigurationBuilder
     /// <example>
     /// <code>
     /// scheduler
-    ///     .Schedule&lt;IExtractWorkflow, ExtractInput&gt;(
+    ///     .Schedule&lt;IExtractTrain, ExtractInput&gt;(
     ///         "extract-all", new ExtractInput(), Every.Hours(1))
-    ///     .IncludeMany&lt;ILoadWorkflow, LoadInput, int&gt;("load",
+    ///     .IncludeMany&lt;ILoadTrain, LoadInput, int&gt;("load",
     ///         Enumerable.Range(0, 10),
     ///         i => ($"{i}", new LoadInput { Partition = i }),
     ///         options => options.Group(group => group.MaxActiveJobs(5)))
@@ -377,16 +377,16 @@ public partial class SchedulerConfigurationBuilder
     /// // groupId: "load", prunePrefix: "load-"
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder IncludeMany<TWorkflow, TInput, TSource>(
+    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TSource>(
         string name,
         IEnumerable<TSource> sources,
         Func<TSource, (string Suffix, TInput Input)> map,
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties =>
-        IncludeMany<TWorkflow, TInput, TSource>(
+        IncludeMany<TTrain, TInput, TSource>(
             sources,
             source =>
             {
@@ -403,14 +403,14 @@ public partial class SchedulerConfigurationBuilder
         );
 
     /// <summary>
-    /// Schedules multiple dependent workflow instances from a collection, where each item
+    /// Schedules multiple dependent train instances from a collection, where each item
     /// explicitly maps to its parent via the <paramref name="dependsOn"/> function.
-    /// Use after <see cref="ScheduleMany{TWorkflow,TInput,TSource}"/> for first-level batch dependents,
-    /// or after <see cref="Schedule{TWorkflow,TInput}"/> when explicit per-item parent mapping is needed.
+    /// Use after <see cref="ScheduleMany{TTrain,TInput,TSource}"/> for first-level batch dependents,
+    /// or after <see cref="Schedule{TTrain,TInput}"/> when explicit per-item parent mapping is needed.
     /// For deeper chaining after a previous <c>IncludeMany</c>, use <c>ThenIncludeMany</c>.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
     /// <param name="map">A function that transforms each source item into an ExternalId and Input pair</param>
@@ -421,26 +421,26 @@ public partial class SchedulerConfigurationBuilder
     /// <example>
     /// <code>
     /// scheduler
-    ///     .ScheduleMany&lt;IExtractWorkflow, ExtractInput, int&gt;(
+    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, int&gt;(
     ///         Enumerable.Range(0, 10),
     ///         i => ($"extract-{i}", new ExtractInput { Index = i }),
     ///         Every.Minutes(5),
     ///         options => options.Group("extract"))
-    ///     .IncludeMany&lt;ITransformWorkflow, TransformInput, int&gt;(
+    ///     .IncludeMany&lt;ITransformTrain, TransformInput, int&gt;(
     ///         Enumerable.Range(0, 10),
     ///         i => ($"transform-{i}", new TransformInput { Index = i }),
     ///         dependsOn: i => $"extract-{i}",
     ///         options => options.Group("transform", group => group.MaxActiveJobs(5)))
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder IncludeMany<TWorkflow, TInput, TSource>(
+    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Func<TSource, string> dependsOn,
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
         var sourceList = sources.ToList();
@@ -465,7 +465,7 @@ public partial class SchedulerConfigurationBuilder
                 ScheduleFunc = async (scheduler, ct) =>
                 {
                     var results = await scheduler.ScheduleManyDependentAsync<
-                        TWorkflow,
+                        TTrain,
                         TInput,
                         TSource
                     >(sourceList, map, dependsOn, options, configureEach, ct: ct);
@@ -485,8 +485,8 @@ public partial class SchedulerConfigurationBuilder
     /// the external ID prefix — reducing boilerplate when the naming follows the <c>{name}-{suffix}</c> pattern.
     /// Each item explicitly maps to its parent via the <paramref name="dependsOn"/> function.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
@@ -498,14 +498,14 @@ public partial class SchedulerConfigurationBuilder
     /// <example>
     /// <code>
     /// scheduler
-    ///     .ScheduleMany&lt;IExtractWorkflow, ExtractInput, int&gt;("extract", ...)
-    ///     .IncludeMany&lt;ITransformWorkflow, TransformInput, int&gt;("transform",
+    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, int&gt;("extract", ...)
+    ///     .IncludeMany&lt;ITransformTrain, TransformInput, int&gt;("transform",
     ///         Enumerable.Range(0, 10),
     ///         i => ($"{i}", new TransformInput { Index = i }),
     ///         dependsOn: i => $"extract-{i}")
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder IncludeMany<TWorkflow, TInput, TSource>(
+    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TSource>(
         string name,
         IEnumerable<TSource> sources,
         Func<TSource, (string Suffix, TInput Input)> map,
@@ -513,9 +513,9 @@ public partial class SchedulerConfigurationBuilder
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties =>
-        IncludeMany<TWorkflow, TInput, TSource>(
+        IncludeMany<TTrain, TInput, TSource>(
             sources,
             source =>
             {

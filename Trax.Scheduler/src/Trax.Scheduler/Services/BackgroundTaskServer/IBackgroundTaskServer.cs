@@ -1,4 +1,4 @@
-using Trax.Scheduler.Workflows.TaskServerExecutor;
+using Trax.Scheduler.Trains.TaskServerExecutor;
 
 namespace Trax.Scheduler.Services.BackgroundTaskServer;
 
@@ -16,8 +16,8 @@ namespace Trax.Scheduler.Services.BackgroundTaskServer;
 /// - HangfireTaskServer (in Trax.Scheduler.Hangfire)
 /// - QuartzTaskServer (in Trax.Scheduler.Quartz)
 ///
-/// Implementations should resolve <see cref="ITaskServerExecutorWorkflow"/> from the DI container
-/// and call <see cref="ITaskServerExecutorWorkflow.Run"/> with an <see cref="ExecuteManifestRequest"/>.
+/// Implementations should resolve <see cref="ITaskServerExecutorTrain"/> from the DI container
+/// and call <see cref="ITaskServerExecutorTrain.Run"/> with an <see cref="ExecuteManifestRequest"/>.
 /// </remarks>
 public interface IBackgroundTaskServer
 {
@@ -31,19 +31,19 @@ public interface IBackgroundTaskServer
     /// The returned identifier is provider-specific (e.g., Hangfire job ID) and can be
     /// stored for later correlation with the background task server's native tracking system.
     ///
-    /// Implementations should enqueue a call to <see cref="ITaskServerExecutorWorkflow.Run"/>
+    /// Implementations should enqueue a call to <see cref="ITaskServerExecutorTrain.Run"/>
     /// with an <see cref="ExecuteManifestRequest"/> containing the provided metadata ID.
     /// </remarks>
     Task<string> EnqueueAsync(long metadataId);
 
     /// <summary>
-    /// Enqueues a job for immediate execution with an in-memory workflow input.
+    /// Enqueues a job for immediate execution with an in-memory train input.
     /// </summary>
     /// <param name="metadataId">The ID of the Metadata record representing this job execution</param>
-    /// <param name="input">The workflow input object to pass to the executor</param>
+    /// <param name="input">The train input object to pass to the executor</param>
     /// <returns>A background task identifier for correlation/tracking (provider-specific)</returns>
     /// <remarks>
-    /// Used for ad-hoc workflow executions (e.g., from the dashboard) where the input
+    /// Used for ad-hoc train executions (e.g., from the dashboard) where the input
     /// is provided directly rather than resolved from a Manifest's properties.
     /// </remarks>
     Task<string> EnqueueAsync(long metadataId, object input);
@@ -55,7 +55,7 @@ public interface IBackgroundTaskServer
         EnqueueAsync(metadataId);
 
     /// <summary>
-    /// Enqueues a job for immediate execution with an in-memory workflow input and cancellation support.
+    /// Enqueues a job for immediate execution with an in-memory train input and cancellation support.
     /// </summary>
     Task<string> EnqueueAsync(long metadataId, object input, CancellationToken cancellationToken) =>
         EnqueueAsync(metadataId, input);

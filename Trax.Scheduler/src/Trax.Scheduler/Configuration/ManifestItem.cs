@@ -10,8 +10,8 @@ namespace Trax.Scheduler.Configuration;
 /// The external ID suffix (for named overloads) or full external ID (for unnamed overloads).
 /// </param>
 /// <param name="Input">
-/// The workflow input. Must match the <c>TInput</c> declared by the workflow's
-/// <c>IEffectWorkflow&lt;TInput, Unit&gt;</c> interface.
+/// The train input. Must match the <c>TInput</c> declared by the train's
+/// <c>IEffectTrain&lt;TInput, Unit&gt;</c> interface.
 /// </param>
 /// <param name="DependsOn">
 /// Optional external ID of the parent manifest this item depends on.

@@ -57,23 +57,23 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
-    /// Excludes a workflow type from the MaxActiveJobs count.
+    /// Excludes a train type from the MaxActiveJobs count.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow class type to exclude</typeparam>
+    /// <typeparam name="TTrain">The train class type to exclude</typeparam>
     /// <returns>The builder for method chaining</returns>
     /// <remarks>
-    /// Internal scheduler workflows are excluded by default. Use this method to
-    /// exclude additional workflow types whose Metadata should not count toward the limit.
+    /// Internal scheduler trains are excluded by default. Use this method to
+    /// exclude additional train types whose Metadata should not count toward the limit.
     /// </remarks>
-    public SchedulerConfigurationBuilder ExcludeFromMaxActiveJobs<TWorkflow>()
-        where TWorkflow : class
+    public SchedulerConfigurationBuilder ExcludeFromMaxActiveJobs<TTrain>()
+        where TTrain : class
     {
-        _configuration.ExcludedWorkflowTypeNames.Add(typeof(TWorkflow).FullName!);
+        _configuration.ExcludedTrainTypeNames.Add(typeof(TTrain).FullName!);
         return this;
     }
 
     /// <summary>
-    /// Sets the priority boost automatically applied to dependent workflow work queue entries.
+    /// Sets the priority boost automatically applied to dependent train work queue entries.
     /// </summary>
     /// <param name="boost">The priority boost (default: 16, range: 0-31)</param>
     /// <returns>The builder for method chaining</returns>

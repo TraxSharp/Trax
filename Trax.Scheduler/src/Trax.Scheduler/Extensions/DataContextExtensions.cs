@@ -60,7 +60,7 @@ public static class DataContextExtensions
     /// <summary>
     /// Creates or updates a manifest with the specified configuration.
     /// </summary>
-    public static Task<Manifest> UpsertManifestAsync<TWorkflow, TInput>(
+    public static Task<Manifest> UpsertManifestAsync<TTrain, TInput>(
         this IDataContext context,
         string externalId,
         TInput input,
@@ -72,10 +72,10 @@ public static class DataContextExtensions
         bool groupIsEnabled = true,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties =>
         context.UpsertManifestAsync(
-            typeof(TWorkflow),
+            typeof(TTrain),
             externalId,
             input,
             schedule,
@@ -88,11 +88,11 @@ public static class DataContextExtensions
         );
 
     /// <summary>
-    /// Non-generic overload that accepts workflow type as a <see cref="Type"/> parameter.
+    /// Non-generic overload that accepts train type as a <see cref="Type"/> parameter.
     /// </summary>
     internal static async Task<Manifest> UpsertManifestAsync(
         this IDataContext context,
-        Type workflowType,
+        Type trainType,
         string externalId,
         IManifestProperties input,
         Schedule schedule,
@@ -120,7 +120,7 @@ public static class DataContextExtensions
         if (existing != null)
         {
             // Update only scheduling-related fields, preserve runtime state
-            existing.Name = workflowType.FullName!;
+            existing.Name = trainType.FullName!;
             existing.SetProperties(input);
             existing.IsEnabled = options.IsEnabled;
             existing.MaxRetries = options.MaxRetries;
@@ -138,7 +138,7 @@ public static class DataContextExtensions
         var manifest = new Manifest
         {
             ExternalId = externalId,
-            Name = workflowType.FullName!,
+            Name = trainType.FullName!,
             IsEnabled = options.IsEnabled,
             MaxRetries = options.MaxRetries,
             TimeoutSeconds = options.Timeout.HasValue
@@ -158,7 +158,7 @@ public static class DataContextExtensions
     /// <summary>
     /// Creates or updates a dependent manifest that triggers after a parent manifest succeeds.
     /// </summary>
-    public static Task<Manifest> UpsertDependentManifestAsync<TWorkflow, TInput>(
+    public static Task<Manifest> UpsertDependentManifestAsync<TTrain, TInput>(
         this IDataContext context,
         string externalId,
         TInput input,
@@ -170,10 +170,10 @@ public static class DataContextExtensions
         bool groupIsEnabled = true,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties =>
         context.UpsertDependentManifestAsync(
-            typeof(TWorkflow),
+            typeof(TTrain),
             externalId,
             input,
             dependsOnManifestId,
@@ -186,11 +186,11 @@ public static class DataContextExtensions
         );
 
     /// <summary>
-    /// Non-generic overload that accepts workflow type as a <see cref="Type"/> parameter.
+    /// Non-generic overload that accepts train type as a <see cref="Type"/> parameter.
     /// </summary>
     internal static async Task<Manifest> UpsertDependentManifestAsync(
         this IDataContext context,
-        Type workflowType,
+        Type trainType,
         string externalId,
         IManifestProperties input,
         long dependsOnManifestId,
@@ -221,7 +221,7 @@ public static class DataContextExtensions
 
         if (existing != null)
         {
-            existing.Name = workflowType.FullName!;
+            existing.Name = trainType.FullName!;
             existing.SetProperties(input);
             existing.IsEnabled = options.IsEnabled;
             existing.MaxRetries = options.MaxRetries;
@@ -241,7 +241,7 @@ public static class DataContextExtensions
         var manifest = new Manifest
         {
             ExternalId = externalId,
-            Name = workflowType.FullName!,
+            Name = trainType.FullName!,
             IsEnabled = options.IsEnabled,
             MaxRetries = options.MaxRetries,
             TimeoutSeconds = options.Timeout.HasValue

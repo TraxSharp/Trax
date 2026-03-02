@@ -11,7 +11,7 @@ using Trax.Effect.Services.EffectStep;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.StepProvider.Progress.Services.CancellationCheckProvider;
 using Trax.Scheduler.Services.CancellationRegistry;
-using Trax.Scheduler.Tests.Integration.Examples.Workflows;
+using Trax.Scheduler.Tests.Integration.Examples.Trains;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -19,7 +19,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 /// Integration tests for the cancellation feature set:
 /// - <see cref="CancellationCheckProvider"/> — checks DB cancel flag before each step
 /// - <see cref="CancellationRegistry"/> — same-server cancel via CTS
-/// - <see cref="WorkflowState.Cancelled"/> — terminal state for cancelled workflows
+/// - <see cref="TrainState.Cancelled"/> — terminal state for cancelled trains
 /// </summary>
 [TestFixture]
 public class CancellationIntegrationTests : TestSetup
@@ -136,11 +136,11 @@ public class CancellationIntegrationTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var provider = new CancellationCheckProvider(factory);
 
-        var workflow = CreateWorkflowWithMetadata(metadata);
+        var train = CreateTrainWithMetadata(metadata);
         var step = new TestProgressStep();
 
         // Act & Assert
-        var act = () => provider.BeforeStepExecution(step, workflow, CancellationToken.None);
+        var act = () => provider.BeforeStepExecution(step, train, CancellationToken.None);
         await act.Should().NotThrowAsync();
     }
 
@@ -167,11 +167,11 @@ public class CancellationIntegrationTests : TestSetup
             .Metadatas.AsNoTracking()
             .FirstAsync(m => m.Id == metadata.Id);
 
-        var workflow = CreateWorkflowWithMetadata(reloadedMetadata);
+        var train = CreateTrainWithMetadata(reloadedMetadata);
         var step = new TestProgressStep();
 
         // Act & Assert
-        var act = () => provider.BeforeStepExecution(step, workflow, CancellationToken.None);
+        var act = () => provider.BeforeStepExecution(step, train, CancellationToken.None);
         await act.Should()
             .ThrowAsync<OperationCanceledException>()
             .WithMessage("*cancellation requested*");
@@ -184,12 +184,12 @@ public class CancellationIntegrationTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var provider = new CancellationCheckProvider(factory);
 
-        var workflow = new TestProgressWorkflow();
+        var train = new TestProgressTrain();
         // Leave Metadata as null (default)
         var step = new TestProgressStep();
 
         // Act & Assert
-        var act = () => provider.BeforeStepExecution(step, workflow, CancellationToken.None);
+        var act = () => provider.BeforeStepExecution(step, train, CancellationToken.None);
         await act.Should().NotThrowAsync();
     }
 
@@ -201,11 +201,11 @@ public class CancellationIntegrationTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         var provider = new CancellationCheckProvider(factory);
 
-        var workflow = CreateWorkflowWithMetadata(metadata);
+        var train = CreateTrainWithMetadata(metadata);
         var step = new TestProgressStep();
 
         // Act & Assert — should complete without doing anything
-        var act = () => provider.AfterStepExecution(step, workflow, CancellationToken.None);
+        var act = () => provider.AfterStepExecution(step, train, CancellationToken.None);
         await act.Should().NotThrowAsync();
     }
 
@@ -243,10 +243,10 @@ public class CancellationIntegrationTests : TestSetup
 
         // Simulate the PostgresWorkerService lifecycle
         registry.Register(metadata.Id, cts);
-        // ... workflow executes ...
+        // ... train executes ...
         registry.Unregister(metadata.Id);
 
-        // Act — try to cancel after workflow completed
+        // Act — try to cancel after train completed
         var cancelled = registry.TryCancel(metadata.Id);
 
         // Assert
@@ -256,7 +256,7 @@ public class CancellationIntegrationTests : TestSetup
 
     #endregion
 
-    #region WorkflowState.Cancelled Persistence Tests
+    #region TrainState.Cancelled Persistence Tests
 
     [Test]
     public async Task CancelledState_PersistsToDatabase()
@@ -268,7 +268,7 @@ public class CancellationIntegrationTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.WorkflowState, WorkflowState.Cancelled),
+                s => s.SetProperty(m => m.TrainState, TrainState.Cancelled),
                 CancellationToken.None
             );
         DataContext.Reset();
@@ -277,7 +277,7 @@ public class CancellationIntegrationTests : TestSetup
         var loaded = await DataContext
             .Metadatas.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == metadata.Id);
-        loaded!.WorkflowState.Should().Be(WorkflowState.Cancelled);
+        loaded!.TrainState.Should().Be(TrainState.Cancelled);
     }
 
     [Test]
@@ -291,19 +291,19 @@ public class CancellationIntegrationTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == m1.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.WorkflowState, WorkflowState.Cancelled),
+                s => s.SetProperty(m => m.TrainState, TrainState.Cancelled),
                 CancellationToken.None
             );
         await DataContext
             .Metadatas.Where(m => m.Id == m2.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.WorkflowState, WorkflowState.Completed),
+                s => s.SetProperty(m => m.TrainState, TrainState.Completed),
                 CancellationToken.None
             );
         await DataContext
             .Metadatas.Where(m => m.Id == m3.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.WorkflowState, WorkflowState.Cancelled),
+                s => s.SetProperty(m => m.TrainState, TrainState.Cancelled),
                 CancellationToken.None
             );
         DataContext.Reset();
@@ -311,7 +311,7 @@ public class CancellationIntegrationTests : TestSetup
         // Act
         var cancelledCount = await DataContext
             .Metadatas.AsNoTracking()
-            .CountAsync(m => m.WorkflowState == WorkflowState.Cancelled);
+            .CountAsync(m => m.TrainState == TrainState.Cancelled);
 
         // Assert
         cancelledCount.Should().Be(2);
@@ -325,7 +325,7 @@ public class CancellationIntegrationTests : TestSetup
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.WorkflowState, WorkflowState.Cancelled),
+                s => s.SetProperty(m => m.TrainState, TrainState.Cancelled),
                 CancellationToken.None
             );
         DataContext.Reset();
@@ -334,9 +334,9 @@ public class CancellationIntegrationTests : TestSetup
         var terminalCount = await DataContext
             .Metadatas.AsNoTracking()
             .CountAsync(m =>
-                m.WorkflowState == WorkflowState.Completed
-                || m.WorkflowState == WorkflowState.Failed
-                || m.WorkflowState == WorkflowState.Cancelled
+                m.TrainState == TrainState.Completed
+                || m.TrainState == TrainState.Failed
+                || m.TrainState == TrainState.Cancelled
             );
 
         // Assert
@@ -352,7 +352,7 @@ public class CancellationIntegrationTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestWorkflow).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "test" },
             }
@@ -366,26 +366,26 @@ public class CancellationIntegrationTests : TestSetup
     }
 
     /// <summary>
-    /// Creates a TestProgressWorkflow with Metadata set via reflection (internal setter).
+    /// Creates a TestProgressTrain with Metadata set via reflection (internal setter).
     /// </summary>
-    private static TestProgressWorkflow CreateWorkflowWithMetadata(Metadata metadata)
+    private static TestProgressTrain CreateTrainWithMetadata(Metadata metadata)
     {
-        var workflow = new TestProgressWorkflow();
+        var train = new TestProgressTrain();
         var prop = typeof(ServiceTrain<string, string>).GetProperty(
             "Metadata",
             BindingFlags.Public | BindingFlags.Instance
         );
-        prop?.SetValue(workflow, metadata);
-        return workflow;
+        prop?.SetValue(train, metadata);
+        return train;
     }
 
     #endregion
 }
 
 /// <summary>
-/// Minimal concrete EffectWorkflow for testing step effect providers.
+/// Minimal concrete EffectTrain for testing step effect providers.
 /// </summary>
-public class TestProgressWorkflow : ServiceTrain<string, string>
+public class TestProgressTrain : ServiceTrain<string, string>
 {
     protected override Task<Either<Exception, string>> RunInternal(string input) =>
         Task.FromResult<Either<Exception, string>>(input);

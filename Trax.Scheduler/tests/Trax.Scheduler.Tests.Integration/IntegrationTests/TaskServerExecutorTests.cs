@@ -6,8 +6,8 @@ using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
-using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
+using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Trains.TaskServerExecutor;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -17,7 +17,7 @@ public class TaskServerExecutorTests : TestSetup
     #region Run - Null Metadata Tests
 
     [Test]
-    public async Task Run_WhenMetadataNotFound_ThrowsWorkflowException()
+    public async Task Run_WhenMetadataNotFound_ThrowsTrainException()
     {
         // Arrange
         var nonExistentMetadataId = 999999;
@@ -27,7 +27,7 @@ public class TaskServerExecutorTests : TestSetup
             await TaskServerExecutor.Run(new ExecuteManifestRequest(nonExistentMetadataId));
 
         // Assert
-        await act.Should().ThrowAsync<WorkflowException>().WithMessage("*not found*");
+        await act.Should().ThrowAsync<TrainException>().WithMessage("*not found*");
     }
 
     #endregion
@@ -35,11 +35,11 @@ public class TaskServerExecutorTests : TestSetup
     #region Run - Invalid State Tests
 
     [Test]
-    public async Task Run_WhenStateIsCompleted_ThrowsWorkflowException()
+    public async Task Run_WhenStateIsCompleted_ThrowsTrainException()
     {
         // Arrange
         var manifest = await CreateAndSaveManifest();
-        var metadata = await CreateAndSaveMetadata(manifest, WorkflowState.Completed);
+        var metadata = await CreateAndSaveMetadata(manifest, TrainState.Completed);
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
@@ -48,16 +48,16 @@ public class TaskServerExecutorTests : TestSetup
 
         // Assert
         await act.Should()
-            .ThrowAsync<WorkflowException>()
+            .ThrowAsync<TrainException>()
             .WithMessage("*Cannot execute a job with state Completed*");
     }
 
     [Test]
-    public async Task Run_WhenStateIsFailed_ThrowsWorkflowException()
+    public async Task Run_WhenStateIsFailed_ThrowsTrainException()
     {
         // Arrange
         var manifest = await CreateAndSaveManifest();
-        var metadata = await CreateAndSaveMetadata(manifest, WorkflowState.Failed);
+        var metadata = await CreateAndSaveMetadata(manifest, TrainState.Failed);
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
@@ -66,16 +66,16 @@ public class TaskServerExecutorTests : TestSetup
 
         // Assert
         await act.Should()
-            .ThrowAsync<WorkflowException>()
+            .ThrowAsync<TrainException>()
             .WithMessage("*Cannot execute a job with state Failed*");
     }
 
     [Test]
-    public async Task Run_WhenStateIsInProgress_ThrowsWorkflowException()
+    public async Task Run_WhenStateIsInProgress_ThrowsTrainException()
     {
         // Arrange
         var manifest = await CreateAndSaveManifest();
-        var metadata = await CreateAndSaveMetadata(manifest, WorkflowState.InProgress);
+        var metadata = await CreateAndSaveMetadata(manifest, TrainState.InProgress);
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
@@ -84,7 +84,7 @@ public class TaskServerExecutorTests : TestSetup
 
         // Assert
         await act.Should()
-            .ThrowAsync<WorkflowException>()
+            .ThrowAsync<TrainException>()
             .WithMessage("*Cannot execute a job with state InProgress*");
     }
 
@@ -100,7 +100,7 @@ public class TaskServerExecutorTests : TestSetup
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestWorkflow).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = input,
                 ManifestId = null,
@@ -122,11 +122,11 @@ public class TaskServerExecutorTests : TestSetup
     #region Run - Successful Execution Tests
 
     [Test]
-    public async Task Run_WhenStateIsPending_ExecutesWorkflowSuccessfully()
+    public async Task Run_WhenStateIsPending_ExecutesTrainSuccessfully()
     {
         // Arrange
         var manifest = await CreateAndSaveManifest();
-        var metadata = await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+        var metadata = await CreateAndSaveMetadata(manifest, TrainState.Pending);
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
@@ -151,7 +151,7 @@ public class TaskServerExecutorTests : TestSetup
         // Arrange
         var manifest = await CreateAndSaveManifest();
         var beforeExecution = DateTime.UtcNow;
-        var metadata = await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+        var metadata = await CreateAndSaveMetadata(manifest, TrainState.Pending);
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
@@ -176,7 +176,7 @@ public class TaskServerExecutorTests : TestSetup
         // Arrange
         var testValue = $"UniqueValue_{Guid.NewGuid():N}";
         var manifest = await CreateAndSaveManifest(testValue);
-        var metadata = await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+        var metadata = await CreateAndSaveMetadata(manifest, TrainState.Pending);
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
@@ -206,7 +206,7 @@ public class TaskServerExecutorTests : TestSetup
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.None,
                 MaxRetries = 3,
@@ -222,19 +222,19 @@ public class TaskServerExecutorTests : TestSetup
         return manifest;
     }
 
-    private async Task<Metadata> CreateAndSaveMetadata(Manifest manifest, WorkflowState state)
+    private async Task<Metadata> CreateAndSaveMetadata(Manifest manifest, TrainState state)
     {
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestWorkflow).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
             }
         );
 
-        metadata.WorkflowState = state;
+        metadata.TrainState = state;
 
         await DataContext.Track(metadata);
         await DataContext.SaveChanges(CancellationToken.None);

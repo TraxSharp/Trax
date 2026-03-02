@@ -8,7 +8,7 @@ using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Models.BackgroundJob.DTOs;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Services.BackgroundTaskServer;
-using Trax.Scheduler.Tests.Integration.Examples.Workflows;
+using Trax.Scheduler.Tests.Integration.Examples.Trains;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 

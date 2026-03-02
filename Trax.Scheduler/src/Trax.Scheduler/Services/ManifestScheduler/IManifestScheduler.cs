@@ -7,52 +7,52 @@ using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 namespace Trax.Scheduler.Services.ManifestScheduler;
 
 /// <summary>
-/// Provides a type-safe API for scheduling workflows as recurring jobs.
+/// Provides a type-safe API for scheduling trains as recurring jobs.
 /// </summary>
 public interface IManifestScheduler
 {
     /// <summary>
-    /// Schedules a single workflow to run on a recurring basis.
+    /// Schedules a single train to run on a recurring basis.
     /// </summary>
-    /// <typeparam name="TWorkflow">
-    /// The workflow interface type. Must implement IServiceTrain&lt;TInput, TOutput&gt;
-    /// for some TOutput. The scheduler resolves the workflow via WorkflowBus using the input type.
+    /// <typeparam name="TTrain">
+    /// The train interface type. Must implement IServiceTrain&lt;TInput, TOutput&gt;
+    /// for some TOutput. The scheduler resolves the train via TrainBus using the input type.
     /// </typeparam>
     /// <typeparam name="TInput">
-    /// The input type for the workflow. Must implement IManifestProperties to enable
+    /// The input type for the train. Must implement IManifestProperties to enable
     /// serialization for scheduled job storage.
     /// </typeparam>
     /// <param name="externalId">
     /// A unique identifier for this scheduled job. Used for upsert semantics -
     /// if a manifest with this ID exists, it will be updated; otherwise, a new one is created.
     /// </param>
-    /// <param name="input">The input data that will be passed to the workflow on each execution.</param>
+    /// <param name="input">The input data that will be passed to the train on each execution.</param>
     /// <param name="schedule">The schedule definition (interval or cron-based).</param>
     /// <param name="options">Optional callback to configure manifest and group options via <see cref="ScheduleOptions"/>.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The created or updated manifest.</returns>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the workflow is not registered in the WorkflowRegistry.
+    /// Thrown when the train is not registered in the TrainRegistry.
     /// </exception>
-    Task<Manifest> ScheduleAsync<TWorkflow, TInput>(
+    Task<Manifest> ScheduleAsync<TTrain, TInput>(
         string externalId,
         TInput input,
         Schedule schedule,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties;
 
     /// <summary>
-    /// Schedules multiple instances of a workflow from a collection.
+    /// Schedules multiple instances of a train from a collection.
     /// </summary>
-    /// <typeparam name="TWorkflow">
-    /// The workflow interface type. Must implement IServiceTrain&lt;TInput, TOutput&gt;
-    /// for some TOutput. The scheduler resolves the workflow via WorkflowBus using the input type.
+    /// <typeparam name="TTrain">
+    /// The train interface type. Must implement IServiceTrain&lt;TInput, TOutput&gt;
+    /// for some TOutput. The scheduler resolves the train via TrainBus using the input type.
     /// </typeparam>
     /// <typeparam name="TInput">
-    /// The input type for the workflow. Must implement IManifestProperties to enable
+    /// The input type for the train. Must implement IManifestProperties to enable
     /// serialization for scheduled job storage.
     /// </typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection.</typeparam>
@@ -76,9 +76,9 @@ public interface IManifestScheduler
     /// <see cref="ScheduleOptions.PrunePrefix"/>) is also included in the same transaction.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the workflow is not registered in the WorkflowRegistry.
+    /// Thrown when the train is not registered in the TrainRegistry.
     /// </exception>
-    Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TWorkflow, TInput, TSource>(
+    Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Schedule schedule,
@@ -86,35 +86,35 @@ public interface IManifestScheduler
         Action<TSource, ManifestOptions>? configureEach = null,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties;
 
     /// <summary>
-    /// Schedules a single workflow that depends on another manifest's successful completion.
+    /// Schedules a single train that depends on another manifest's successful completion.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type.</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow.</typeparam>
+    /// <typeparam name="TTrain">The train interface type.</typeparam>
+    /// <typeparam name="TInput">The input type for the train.</typeparam>
     /// <param name="externalId">A unique identifier for this dependent job.</param>
-    /// <param name="input">The input data that will be passed to the workflow on each execution.</param>
+    /// <param name="input">The input data that will be passed to the train on each execution.</param>
     /// <param name="dependsOnExternalId">The external ID of the parent manifest this job depends on.</param>
     /// <param name="options">Optional callback to configure manifest and group options via <see cref="ScheduleOptions"/>.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The created or updated manifest.</returns>
-    Task<Manifest> ScheduleDependentAsync<TWorkflow, TInput>(
+    Task<Manifest> ScheduleDependentAsync<TTrain, TInput>(
         string externalId,
         TInput input,
         string dependsOnExternalId,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties;
 
     /// <summary>
-    /// Schedules multiple dependent workflow instances from a collection.
+    /// Schedules multiple dependent train instances from a collection.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type.</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow.</typeparam>
+    /// <typeparam name="TTrain">The train interface type.</typeparam>
+    /// <typeparam name="TInput">The input type for the train.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection.</typeparam>
     /// <param name="sources">The collection of source items to create manifests from.</param>
     /// <param name="map">A function that transforms each source item into an ExternalId and Input pair.</param>
@@ -123,7 +123,7 @@ public interface IManifestScheduler
     /// <param name="configureEach">Optional action to configure per-item manifest options.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A read-only list of the created or updated manifests.</returns>
-    Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TWorkflow, TInput, TSource>(
+    Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Func<TSource, string> dependsOn,
@@ -131,7 +131,7 @@ public interface IManifestScheduler
         Action<TSource, ManifestOptions>? configureEach = null,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties;
 
     /// <summary>

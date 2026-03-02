@@ -13,9 +13,9 @@ using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Mediator.Extensions;
-using Trax.Mediator.Services.WorkflowBus;
+using Trax.Mediator.Services.TrainBus;
 using Trax.Scheduler.Extensions;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
+using Trax.Scheduler.Trains.TaskServerExecutor;
 
 namespace Trax.Scheduler.Tests.Integration;
 
@@ -26,9 +26,9 @@ public abstract class TestSetup
 
     public IServiceScope Scope { get; private set; } = null!;
 
-    public IWorkflowBus WorkflowBus { get; private set; } = null!;
+    public ITrainBus TrainBus { get; private set; } = null!;
 
-    public ITaskServerExecutorWorkflow TaskServerExecutor { get; private set; } = null!;
+    public ITaskServerExecutorTrain TaskServerExecutor { get; private set; } = null!;
 
     public IDataContext DataContext { get; private set; } = null!;
 
@@ -55,11 +55,11 @@ public abstract class TestSetup
                         assemblies:
                         [
                             typeof(AssemblyMarker).Assembly,
-                            typeof(TaskServerExecutorWorkflow).Assembly,
+                            typeof(TaskServerExecutorTrain).Assembly,
                         ]
                     )
                     .SetEffectLogLevel(LogLevel.Information)
-                    .SaveWorkflowParameters()
+                    .SaveTrainParameters()
                     .AddPostgresEffect(connectionString)
                     .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
                     .AddJsonEffect()
@@ -87,9 +87,8 @@ public abstract class TestSetup
     public virtual async Task TestSetUp()
     {
         Scope = ServiceProvider.CreateScope();
-        WorkflowBus = Scope.ServiceProvider.GetRequiredService<IWorkflowBus>();
-        TaskServerExecutor =
-            Scope.ServiceProvider.GetRequiredService<ITaskServerExecutorWorkflow>();
+        TrainBus = Scope.ServiceProvider.GetRequiredService<ITrainBus>();
+        TaskServerExecutor = Scope.ServiceProvider.GetRequiredService<ITaskServerExecutorTrain>();
         DataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         await CleanupDatabase(DataContext);

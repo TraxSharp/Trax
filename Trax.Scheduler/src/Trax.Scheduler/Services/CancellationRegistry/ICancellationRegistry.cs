@@ -1,8 +1,8 @@
 namespace Trax.Scheduler.Services.CancellationRegistry;
 
 /// <summary>
-/// Tracks in-flight workflow CancellationTokenSources by metadata ID so that
-/// running workflows can be cancelled from the dashboard or other external callers.
+/// Tracks in-flight train CancellationTokenSources by metadata ID so that
+/// running trains can be cancelled from the dashboard or other external callers.
 /// </summary>
 public interface ICancellationRegistry
 {
@@ -18,7 +18,7 @@ public interface ICancellationRegistry
     void Unregister(long metadataId);
 
     /// <summary>
-    /// Attempts to cancel the workflow with the given metadata ID.
+    /// Attempts to cancel the train with the given metadata ID.
     /// Returns true if the CTS was found and Cancel() was called.
     /// </summary>
     bool TryCancel(long metadataId);

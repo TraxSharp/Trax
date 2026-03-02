@@ -1,16 +1,16 @@
-using Trax.Scheduler.Workflows.ManifestManager;
-using Trax.Scheduler.Workflows.MetadataCleanup;
+using Trax.Scheduler.Trains.ManifestManager;
+using Trax.Scheduler.Trains.MetadataCleanup;
 
 namespace Trax.Scheduler.Configuration;
 
 public partial class SchedulerConfigurationBuilder
 {
     /// <summary>
-    /// Enables automatic cleanup of metadata for system and other noisy workflows.
+    /// Enables automatic cleanup of metadata for system and other noisy trains.
     /// </summary>
     /// <remarks>
-    /// By default, metadata from <c>ManifestManagerWorkflow</c> and
-    /// <c>MetadataCleanupWorkflow</c> will be cleaned up. Additional workflow types
+    /// By default, metadata from <c>ManifestManagerTrain</c> and
+    /// <c>MetadataCleanupTrain</c> will be cleaned up. Additional train types
     /// can be added via the configure action.
     ///
     /// <code>
@@ -19,7 +19,7 @@ public partial class SchedulerConfigurationBuilder
     ///     {
     ///         cleanup.RetentionPeriod = TimeSpan.FromHours(2);
     ///         cleanup.CleanupInterval = TimeSpan.FromMinutes(1);
-    ///         cleanup.AddWorkflowType&lt;MyNoisyWorkflow&gt;();
+    ///         cleanup.AddTrainType&lt;MyNoisyTrain&gt;();
     ///     })
     /// )
     /// </code>
@@ -32,9 +32,9 @@ public partial class SchedulerConfigurationBuilder
     {
         var config = new MetadataCleanupConfiguration();
 
-        // Add default workflow types whose metadata should be cleaned up
-        config.AddWorkflowType<ManifestManagerWorkflow>();
-        config.AddWorkflowType<MetadataCleanupWorkflow>();
+        // Add default train types whose metadata should be cleaned up
+        config.AddTrainType<ManifestManagerTrain>();
+        config.AddTrainType<MetadataCleanupTrain>();
 
         configure?.Invoke(config);
 

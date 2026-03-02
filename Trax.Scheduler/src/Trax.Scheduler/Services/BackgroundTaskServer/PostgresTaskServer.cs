@@ -3,7 +3,7 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Models.BackgroundJob.DTOs;
 using Trax.Effect.Utils;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
+using Trax.Scheduler.Trains.TaskServerExecutor;
 
 namespace Trax.Scheduler.Services.BackgroundTaskServer;
 

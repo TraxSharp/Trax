@@ -20,7 +20,7 @@ namespace Trax.Scheduler.Services.DormantDependentContext;
 /// <remarks>
 /// Registered as Scoped so that each Hangfire job execution gets its own instance.
 /// Must be initialized via <see cref="Initialize"/> before use — this is done automatically
-/// by <c>ExecuteScheduledWorkflowStep</c> in the TaskServerExecutor pipeline.
+/// by <c>ExecuteScheduledTrainStep</c> in the TaskServerExecutor pipeline.
 /// </remarks>
 internal class DormantDependentContext(
     IDataContextProviderFactory dataContextFactory,
@@ -32,7 +32,7 @@ internal class DormantDependentContext(
 
     /// <summary>
     /// Binds this context to the currently executing parent manifest.
-    /// Called by <c>ExecuteScheduledWorkflowStep</c> before the user's workflow runs.
+    /// Called by <c>ExecuteScheduledTrainStep</c> before the user's train runs.
     /// </summary>
     /// <param name="parentManifestId">The database ID of the parent manifest.</param>
     internal void Initialize(long parentManifestId)
@@ -41,12 +41,12 @@ internal class DormantDependentContext(
     }
 
     /// <inheritdoc />
-    public async Task ActivateAsync<TWorkflow, TInput>(
+    public async Task ActivateAsync<TTrain, TInput>(
         string externalId,
         TInput input,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
         EnsureInitialized();
@@ -57,11 +57,11 @@ internal class DormantDependentContext(
     }
 
     /// <inheritdoc />
-    public async Task ActivateManyAsync<TWorkflow, TInput>(
+    public async Task ActivateManyAsync<TTrain, TInput>(
         IEnumerable<(string ExternalId, TInput Input)> activations,
         CancellationToken ct = default
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
         EnsureInitialized();
@@ -154,10 +154,7 @@ internal class DormantDependentContext(
         var hasActiveExecution = await context.Metadatas.AnyAsync(
             m =>
                 m.ManifestId == manifest.Id
-                && (
-                    m.WorkflowState == WorkflowState.Pending
-                    || m.WorkflowState == WorkflowState.InProgress
-                ),
+                && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress),
             ct
         );
         if (hasActiveExecution)
@@ -185,7 +182,7 @@ internal class DormantDependentContext(
         var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = manifest.Name,
+                TrainName = manifest.Name,
                 Input = inputJson,
                 InputTypeName = typeof(TInput).FullName,
                 ManifestId = manifest.Id,
@@ -210,8 +207,8 @@ internal class DormantDependentContext(
         if (_parentManifestId is null)
             throw new InvalidOperationException(
                 "DormantDependentContext has not been initialized. "
-                    + "This service can only be used within a scheduled workflow execution. "
-                    + "Ensure the workflow is running via the scheduler, not invoked directly."
+                    + "This service can only be used within a scheduled train execution. "
+                    + "Ensure the train is running via the scheduler, not invoked directly."
             );
     }
 

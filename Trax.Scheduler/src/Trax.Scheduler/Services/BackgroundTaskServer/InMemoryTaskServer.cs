@@ -1,4 +1,4 @@
-using Trax.Scheduler.Workflows.TaskServerExecutor;
+using Trax.Scheduler.Trains.TaskServerExecutor;
 
 namespace Trax.Scheduler.Services.BackgroundTaskServer;
 
@@ -13,7 +13,7 @@ namespace Trax.Scheduler.Services.BackgroundTaskServer;
 /// - Simple scenarios where background processing isn't needed
 ///
 /// Jobs are executed inline when <see cref="EnqueueAsync"/> is called, so the method
-/// returns only after the workflow completes.
+/// returns only after the train completes.
 ///
 /// Example usage:
 /// ```csharp
@@ -22,14 +22,14 @@ namespace Trax.Scheduler.Services.BackgroundTaskServer;
 /// );
 /// ```
 /// </remarks>
-public class InMemoryTaskServer(ITaskServerExecutorWorkflow taskServerExecutorWorkflow)
+public class InMemoryTaskServer(ITaskServerExecutorTrain taskServerExecutorTrain)
     : IBackgroundTaskServer
 {
     private int _jobCounter;
 
     /// <inheritdoc />
     /// <remarks>
-    /// Executes the workflow immediately and synchronously. The returned job ID is
+    /// Executes the train immediately and synchronously. The returned job ID is
     /// a simple incrementing counter prefixed with "inmemory-".
     /// </remarks>
     public Task<string> EnqueueAsync(long metadataId) =>
@@ -44,7 +44,7 @@ public class InMemoryTaskServer(ITaskServerExecutorWorkflow taskServerExecutorWo
     {
         var jobId = $"inmemory-{Interlocked.Increment(ref _jobCounter)}";
 
-        await taskServerExecutorWorkflow.Run(
+        await taskServerExecutorTrain.Run(
             new ExecuteManifestRequest(metadataId),
             cancellationToken
         );
@@ -61,7 +61,7 @@ public class InMemoryTaskServer(ITaskServerExecutorWorkflow taskServerExecutorWo
     {
         var jobId = $"inmemory-{Interlocked.Increment(ref _jobCounter)}";
 
-        await taskServerExecutorWorkflow.Run(
+        await taskServerExecutorTrain.Run(
             new ExecuteManifestRequest(metadataId, input),
             cancellationToken
         );

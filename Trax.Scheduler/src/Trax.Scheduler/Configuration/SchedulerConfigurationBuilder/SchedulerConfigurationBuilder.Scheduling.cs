@@ -8,12 +8,12 @@ namespace Trax.Scheduler.Configuration;
 public partial class SchedulerConfigurationBuilder
 {
     /// <summary>
-    /// Schedules a workflow to run on a recurring basis.
+    /// Schedules a train to run on a recurring basis.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <param name="externalId">A unique identifier for this scheduled job</param>
-    /// <param name="input">The input data that will be passed to the workflow on each execution</param>
+    /// <param name="input">The input data that will be passed to the train on each execution</param>
     /// <param name="schedule">The schedule definition (interval or cron-based)</param>
     /// <param name="options">Optional callback to configure manifest and group options via <see cref="ScheduleOptions"/></param>
     /// <returns>The builder for method chaining</returns>
@@ -27,7 +27,7 @@ public partial class SchedulerConfigurationBuilder
     /// builder.Services.AddTraxEffects(options => options
     ///     .AddScheduler(scheduler => scheduler
     ///         .UseHangfire(/* ... */)
-    ///         .Schedule&lt;IHelloWorldWorkflow, HelloWorldInput&gt;(
+    ///         .Schedule&lt;IHelloWorldTrain, HelloWorldInput&gt;(
     ///             "hello-world",
     ///             new HelloWorldInput { Name = "Scheduler" },
     ///             Every.Minutes(1),
@@ -38,13 +38,13 @@ public partial class SchedulerConfigurationBuilder
     /// );
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder Schedule<TWorkflow, TInput>(
+    public SchedulerConfigurationBuilder Schedule<TTrain, TInput>(
         string externalId,
         TInput input,
         Schedule schedule,
         Action<ScheduleOptions>? options = null
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
         var resolved = new ScheduleOptions();
@@ -57,7 +57,7 @@ public partial class SchedulerConfigurationBuilder
                 ExternalId = externalId,
                 ExpectedExternalIds = [externalId],
                 ScheduleFunc = (scheduler, ct) =>
-                    scheduler.ScheduleAsync<TWorkflow, TInput>(
+                    scheduler.ScheduleAsync<TTrain, TInput>(
                         externalId,
                         input,
                         schedule,
@@ -74,26 +74,26 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
-    /// Schedules a dependent workflow that runs after the previously scheduled manifest succeeds.
+    /// Schedules a dependent train that runs after the previously scheduled manifest succeeds.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <param name="externalId">A unique identifier for this dependent job</param>
-    /// <param name="input">The input data that will be passed to the workflow on each execution</param>
+    /// <param name="input">The input data that will be passed to the train on each execution</param>
     /// <param name="options">Optional callback to configure manifest and group options via <see cref="ScheduleOptions"/></param>
     /// <returns>The builder for method chaining</returns>
     /// <remarks>
-    /// Must be called after <see cref="Schedule{TWorkflow,TInput}"/>, <see cref="Include{TWorkflow,TInput}"/>,
+    /// Must be called after <see cref="Schedule{TTrain,TInput}"/>, <see cref="Include{TTrain,TInput}"/>,
     /// or another <c>ThenInclude</c> call.
     /// The dependent manifest will be queued when the parent's LastSuccessfulRun is newer than its own.
     /// Supports chaining: <c>.Schedule(...).Include(...).ThenInclude(...)</c> for branched dependency chains.
     /// </remarks>
-    public SchedulerConfigurationBuilder ThenInclude<TWorkflow, TInput>(
+    public SchedulerConfigurationBuilder ThenInclude<TTrain, TInput>(
         string externalId,
         TInput input,
         Action<ScheduleOptions>? options = null
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
         var parentExternalId =
@@ -114,7 +114,7 @@ public partial class SchedulerConfigurationBuilder
                 ExternalId = externalId,
                 ExpectedExternalIds = [externalId],
                 ScheduleFunc = (scheduler, ct) =>
-                    scheduler.ScheduleDependentAsync<TWorkflow, TInput>(
+                    scheduler.ScheduleDependentAsync<TTrain, TInput>(
                         externalId,
                         input,
                         parentExternalId,
@@ -130,18 +130,18 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
-    /// Schedules a dependent workflow that runs after the root <see cref="Schedule{TWorkflow,TInput}"/> manifest succeeds.
-    /// Unlike <see cref="ThenInclude{TWorkflow,TInput}"/> which chains from the most recent manifest,
+    /// Schedules a dependent train that runs after the root <see cref="Schedule{TTrain,TInput}"/> manifest succeeds.
+    /// Unlike <see cref="ThenInclude{TTrain,TInput}"/> which chains from the most recent manifest,
     /// <c>Include</c> always branches from the root <c>Schedule</c>, enabling fan-out patterns.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow interface type</typeparam>
-    /// <typeparam name="TInput">The input type for the workflow (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <param name="externalId">A unique identifier for this dependent job</param>
-    /// <param name="input">The input data that will be passed to the workflow on each execution</param>
+    /// <param name="input">The input data that will be passed to the train on each execution</param>
     /// <param name="options">Optional callback to configure manifest and group options via <see cref="ScheduleOptions"/></param>
     /// <returns>The builder for method chaining</returns>
     /// <remarks>
-    /// Must be called after <see cref="Schedule{TWorkflow,TInput}"/>.
+    /// Must be called after <see cref="Schedule{TTrain,TInput}"/>.
     /// Use <c>Include</c> to create multiple independent branches from a single root:
     /// <code>
     /// .Schedule&lt;A&gt;(...)           // root=A
@@ -151,12 +151,12 @@ public partial class SchedulerConfigurationBuilder
     /// </code>
     /// Result: A → B, A → C → D
     /// </remarks>
-    public SchedulerConfigurationBuilder Include<TWorkflow, TInput>(
+    public SchedulerConfigurationBuilder Include<TTrain, TInput>(
         string externalId,
         TInput input,
         Action<ScheduleOptions>? options = null
     )
-        where TWorkflow : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, Unit>
         where TInput : IManifestProperties
     {
         var parentExternalId =
@@ -177,7 +177,7 @@ public partial class SchedulerConfigurationBuilder
                 ExternalId = externalId,
                 ExpectedExternalIds = [externalId],
                 ScheduleFunc = (scheduler, ct) =>
-                    scheduler.ScheduleDependentAsync<TWorkflow, TInput>(
+                    scheduler.ScheduleDependentAsync<TTrain, TInput>(
                         externalId,
                         input,
                         parentExternalId,

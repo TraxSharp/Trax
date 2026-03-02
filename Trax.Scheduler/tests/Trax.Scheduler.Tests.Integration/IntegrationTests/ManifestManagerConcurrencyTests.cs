@@ -7,8 +7,8 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.WorkQueue;
-using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using Trax.Scheduler.Workflows.ManifestManager;
+using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Trains.ManifestManager;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -19,7 +19,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 /// </summary>
 /// <remarks>
 /// Since tests use PostgreSQL (not InMemory), the advisory lock path is exercised.
-/// The ManifestManager wraps its entire workflow cycle in a transaction with
+/// The ManifestManager wraps its entire train cycle in a transaction with
 /// <c>pg_try_advisory_xact_lock</c>, ensuring only one server evaluates manifests per cycle.
 /// </remarks>
 [TestFixture]
@@ -37,7 +37,7 @@ public class ManifestManagerConcurrencyTests : TestSetup
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.Interval,
                 IntervalSeconds = 300, // 5 minutes
@@ -53,7 +53,7 @@ public class ManifestManagerConcurrencyTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        // Act - Run two ManifestManager workflows concurrently.
+        // Act - Run two ManifestManager trains concurrently.
         // The advisory lock ensures only one actually runs; the other skips.
         // (In tests, the DataContext is a DbContext, so the advisory lock path is taken.)
         var task1 = RunManifestManagerInScope();
@@ -88,7 +88,7 @@ public class ManifestManagerConcurrencyTests : TestSetup
             var manifest = Manifest.Create(
                 new CreateManifest
                 {
-                    Name = typeof(SchedulerTestWorkflow),
+                    Name = typeof(SchedulerTestTrain),
                     IsEnabled = true,
                     ScheduleType = ScheduleType.Interval,
                     IntervalSeconds = 300,
@@ -140,7 +140,7 @@ public class ManifestManagerConcurrencyTests : TestSetup
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.Interval,
                 IntervalSeconds = 300,
@@ -193,15 +193,15 @@ public class ManifestManagerConcurrencyTests : TestSetup
                 return;
             }
 
-            var workflow = scope.ServiceProvider.GetRequiredService<IManifestManagerWorkflow>();
-            await workflow.Run(Unit.Default);
+            var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
+            await train.Run(Unit.Default);
 
             await dataContext.CommitTransaction();
         }
         else
         {
-            var workflow = scope.ServiceProvider.GetRequiredService<IManifestManagerWorkflow>();
-            await workflow.Run(Unit.Default);
+            var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
+            await train.Run(Unit.Default);
         }
     }
 

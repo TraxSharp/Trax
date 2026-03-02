@@ -4,14 +4,14 @@ namespace Trax.Scheduler.Configuration;
 /// Configuration options for the metadata cleanup background service.
 /// </summary>
 /// <remarks>
-/// Controls which workflow types have their metadata automatically purged
+/// Controls which train types have their metadata automatically purged
 /// and how aggressively old entries are cleaned up.
 ///
-/// Default behavior cleans up <c>ManifestManagerWorkflow</c> and
-/// <c>MetadataCleanupWorkflow</c> metadata older than 1 hour, running every minute.
+/// Default behavior cleans up <c>ManifestManagerTrain</c> and
+/// <c>MetadataCleanupTrain</c> metadata older than 1 hour, running every minute.
 ///
-/// Additional workflow types can be added via <see cref="AddWorkflowType{TWorkflow}"/>
-/// or <see cref="AddWorkflowType(string)"/>.
+/// Additional train types can be added via <see cref="AddTrainType{TTrain}"/>
+/// or <see cref="AddTrainType(string)"/>.
 /// </remarks>
 public class MetadataCleanupConfiguration
 {
@@ -30,32 +30,32 @@ public class MetadataCleanupConfiguration
     public TimeSpan RetentionPeriod { get; set; } = TimeSpan.FromMinutes(30);
 
     /// <summary>
-    /// The list of workflow type names whose metadata should be cleaned up.
+    /// The list of train type names whose metadata should be cleaned up.
     /// </summary>
     /// <remarks>
     /// Names are matched against the <c>name</c> column in the metadata table,
-    /// which stores <c>GetType().FullName</c> of the workflow class.
+    /// which stores <c>GetType().FullName</c> of the train class.
     /// </remarks>
-    internal List<string> WorkflowTypeWhitelist { get; } = [];
+    internal List<string> TrainTypeWhitelist { get; } = [];
 
     /// <summary>
-    /// Adds a workflow type to the cleanup whitelist by its class name.
+    /// Adds a train type to the cleanup whitelist by its class name.
     /// </summary>
-    /// <typeparam name="TWorkflow">The workflow class type to clean up</typeparam>
-    public void AddWorkflowType<TWorkflow>()
-        where TWorkflow : class
+    /// <typeparam name="TTrain">The train class type to clean up</typeparam>
+    public void AddTrainType<TTrain>()
+        where TTrain : class
     {
-        WorkflowTypeWhitelist.Add(typeof(TWorkflow).FullName!);
+        TrainTypeWhitelist.Add(typeof(TTrain).FullName!);
     }
 
     /// <summary>
-    /// Adds a workflow type to the cleanup whitelist by name string.
+    /// Adds a train type to the cleanup whitelist by name string.
     /// </summary>
-    /// <param name="workflowTypeName">
-    /// The workflow type name as it appears in the metadata <c>name</c> column.
+    /// <param name="trainTypeName">
+    /// The train type name as it appears in the metadata <c>name</c> column.
     /// </param>
-    public void AddWorkflowType(string workflowTypeName)
+    public void AddTrainType(string trainTypeName)
     {
-        WorkflowTypeWhitelist.Add(workflowTypeName);
+        TrainTypeWhitelist.Add(trainTypeName);
     }
 }

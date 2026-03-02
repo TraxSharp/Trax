@@ -9,7 +9,7 @@ using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
+using Trax.Scheduler.Trains.TaskServerExecutor;
 
 namespace Trax.Scheduler.Services.PostgresWorkerService;
 
@@ -21,7 +21,7 @@ namespace Trax.Scheduler.Services.PostgresWorkerService;
 /// Workers use PostgreSQL's <c>FOR UPDATE SKIP LOCKED</c> for atomic, lock-free dequeue
 /// across multiple workers and processes. Each worker:
 /// 1. Claims a job by setting <c>fetched_at</c> within a transaction
-/// 2. Executes the workflow via <see cref="ITaskServerExecutorWorkflow"/>
+/// 2. Executes the train via <see cref="ITaskServerExecutorTrain"/>
 /// 3. Deletes the job row on completion (success or failure)
 ///
 /// Crash recovery: if a worker dies mid-execution, the <c>fetched_at</c> timestamp becomes
@@ -135,7 +135,7 @@ internal class PostgresWorkerService(
             );
         }
 
-        // Phase 2: Execute the workflow in a fresh scope
+        // Phase 2: Execute the train in a fresh scope
         try
         {
             using var executeScope = serviceProvider.CreateScope();
@@ -151,8 +151,7 @@ internal class PostgresWorkerService(
                 );
             }
 
-            var workflow =
-                executeScope.ServiceProvider.GetRequiredService<ITaskServerExecutorWorkflow>();
+            var train = executeScope.ServiceProvider.GetRequiredService<ITaskServerExecutorTrain>();
 
             var request =
                 deserializedInput != null
@@ -160,7 +159,7 @@ internal class PostgresWorkerService(
                     : new ExecuteManifestRequest(metadataId);
 
             // Use shutdown timeout for in-flight jobs: when the host requests shutdown,
-            // give the workflow a grace period before forcefully cancelling.
+            // give the train a grace period before forcefully cancelling.
             // Use an unlinked CTS so we don't cancel immediately — the registration
             // triggers CancelAfter(ShutdownTimeout) to provide a grace period.
             using var shutdownCts = new CancellationTokenSource();
@@ -171,7 +170,7 @@ internal class PostgresWorkerService(
                     shutdownCts.CancelAfter(options.ShutdownTimeout)
                 );
 
-                await workflow.Run(request, shutdownCts.Token);
+                await train.Run(request, shutdownCts.Token);
 
                 logger.LogDebug(
                     "Worker {WorkerId} completed job {JobId} (Metadata: {MetadataId})",

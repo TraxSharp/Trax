@@ -25,9 +25,9 @@ using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Effect.Utils;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
-using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using Trax.Scheduler.Workflows.JobDispatcher;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
+using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Trains.JobDispatcher;
+using Trax.Scheduler.Trains.TaskServerExecutor;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -43,7 +43,7 @@ public class ManifestGroupMaxActiveJobsTests
 
     private ServiceProvider _serviceProvider = null!;
     private IServiceScope _scope = null!;
-    private IJobDispatcherWorkflow _workflow = null!;
+    private IJobDispatcherTrain _train = null!;
     private IDataContext _dataContext = null!;
 
     [OneTimeSetUp]
@@ -69,11 +69,11 @@ public class ManifestGroupMaxActiveJobsTests
                         assemblies:
                         [
                             typeof(AssemblyMarker).Assembly,
-                            typeof(TaskServerExecutorWorkflow).Assembly,
+                            typeof(TaskServerExecutorTrain).Assembly,
                         ]
                     )
                     .SetEffectLogLevel(LogLevel.Information)
-                    .SaveWorkflowParameters()
+                    .SaveTrainParameters()
                     .AddPostgresEffect(connectionString)
                     .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
                     .AddJsonEffect()
@@ -97,7 +97,7 @@ public class ManifestGroupMaxActiveJobsTests
     public async Task TestSetUp()
     {
         _scope = _serviceProvider.CreateScope();
-        _workflow = _scope.ServiceProvider.GetRequiredService<IJobDispatcherWorkflow>();
+        _train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         await TestSetup.CleanupDatabase(_dataContext);
@@ -106,7 +106,7 @@ public class ManifestGroupMaxActiveJobsTests
     [TearDown]
     public async Task TestTearDown()
     {
-        if (_workflow is IDisposable disposable)
+        if (_train is IDisposable disposable)
             disposable.Dispose();
 
         if (_dataContext is IDisposable dataContextDisposable)
@@ -127,7 +127,7 @@ public class ManifestGroupMaxActiveJobsTests
         for (var i = 0; i < 2; i++)
         {
             var activeManifest = await CreateAndSaveManifest(groupA, inputValue: $"Active_A_{i}");
-            await CreateAndSaveMetadata(activeManifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(activeManifest, TrainState.Pending);
         }
 
         // Create a queued entry for group A - should NOT be dispatched
@@ -135,7 +135,7 @@ public class ManifestGroupMaxActiveJobsTests
         var queuedEntry = await CreateAndSaveWorkQueueEntry(queuedManifest);
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Entry should remain queued since group is at capacity
         _dataContext.Reset();
@@ -157,7 +157,7 @@ public class ManifestGroupMaxActiveJobsTests
         for (var i = 0; i < 2; i++)
         {
             var activeManifest = await CreateAndSaveManifest(groupA, inputValue: $"Active_A_{i}");
-            await CreateAndSaveMetadata(activeManifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(activeManifest, TrainState.Pending);
         }
 
         // Queue entries for both groups
@@ -168,7 +168,7 @@ public class ManifestGroupMaxActiveJobsTests
         var groupBEntry = await CreateAndSaveWorkQueueEntry(groupBManifest);
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Group A entry stays queued, Group B entry gets dispatched
         _dataContext.Reset();
@@ -192,7 +192,7 @@ public class ManifestGroupMaxActiveJobsTests
         for (var i = 0; i < 5; i++)
         {
             var manifest = await CreateAndSaveManifest(group, inputValue: $"Active_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         // Queue more entries - should be dispatched (up to global limit)
@@ -200,7 +200,7 @@ public class ManifestGroupMaxActiveJobsTests
         var queuedEntry = await CreateAndSaveWorkQueueEntry(queuedManifest);
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Should be dispatched since no per-group limit
         _dataContext.Reset();
@@ -226,7 +226,7 @@ public class ManifestGroupMaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Exactly 3 dispatched (per-group limit)
         _dataContext.Reset();
@@ -264,7 +264,7 @@ public class ManifestGroupMaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Group A: 2 dispatched, Group B: 3 dispatched
         _dataContext.Reset();
@@ -298,7 +298,7 @@ public class ManifestGroupMaxActiveJobsTests
         for (var i = 0; i < 2; i++)
         {
             var activeManifest = await CreateAndSaveManifest(group, inputValue: $"Active_{i}");
-            await CreateAndSaveMetadata(activeManifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(activeManifest, TrainState.Pending);
         }
 
         // Queue a high-priority entry for the full group
@@ -306,7 +306,7 @@ public class ManifestGroupMaxActiveJobsTests
         var entry = await CreateAndSaveWorkQueueEntry(manifest, priority: 31);
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Should remain queued despite high priority
         _dataContext.Reset();
@@ -336,7 +336,7 @@ public class ManifestGroupMaxActiveJobsTests
         for (var i = 0; i < GlobalMaxActiveJobs - 1; i++)
         {
             var filler = await CreateAndSaveManifest(fillerGroup, inputValue: $"Filler_{i}");
-            await CreateAndSaveMetadata(filler, WorkflowState.Pending);
+            await CreateAndSaveMetadata(filler, TrainState.Pending);
         }
 
         // Queue one entry for each group - low priority first (earlier CreatedAt)
@@ -349,7 +349,7 @@ public class ManifestGroupMaxActiveJobsTests
         var highEntry = await CreateAndSaveWorkQueueEntry(highManifest);
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - High priority group's entry should be dispatched
         _dataContext.Reset();
@@ -382,7 +382,7 @@ public class ManifestGroupMaxActiveJobsTests
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Entry should remain queued (LoadQueuedJobsStep filters disabled groups)
         _dataContext.Reset();
@@ -414,7 +414,7 @@ public class ManifestGroupMaxActiveJobsTests
         var enabledEntry = await CreateAndSaveWorkQueueEntry(enabledManifest);
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Disabled group's entry stays queued, enabled group's entry dispatches
         _dataContext.Reset();
@@ -440,13 +440,13 @@ public class ManifestGroupMaxActiveJobsTests
         for (var i = 0; i < GlobalMaxActiveJobs; i++)
         {
             var filler = await CreateAndSaveManifest(fillerGroup, inputValue: $"Filler_{i}");
-            await CreateAndSaveMetadata(filler, WorkflowState.Pending);
+            await CreateAndSaveMetadata(filler, TrainState.Pending);
         }
 
         var manualEntry = await CreateAndSaveManualWorkQueueEntry();
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Manual entry should remain queued (global limit reached)
         _dataContext.Reset();
@@ -465,7 +465,7 @@ public class ManifestGroupMaxActiveJobsTests
         // Arrange - A group at per-group capacity + a manual entry with no manifest
         var group = await CreateAndSaveManifestGroup("full-group", maxActiveJobs: 1, priority: 31);
         var activeManifest = await CreateAndSaveManifest(group, inputValue: "Active");
-        await CreateAndSaveMetadata(activeManifest, WorkflowState.Pending);
+        await CreateAndSaveMetadata(activeManifest, TrainState.Pending);
 
         // Group entry should be skipped (at capacity)
         var groupManifest = await CreateAndSaveManifest(group, inputValue: "Queued_Group");
@@ -475,7 +475,7 @@ public class ManifestGroupMaxActiveJobsTests
         var manualEntry = await CreateAndSaveManualWorkQueueEntry();
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert
         _dataContext.Reset();
@@ -522,7 +522,7 @@ public class ManifestGroupMaxActiveJobsTests
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.None,
                 MaxRetries = 3,
@@ -538,19 +538,19 @@ public class ManifestGroupMaxActiveJobsTests
         return manifest;
     }
 
-    private async Task<Metadata> CreateAndSaveMetadata(Manifest manifest, WorkflowState state)
+    private async Task<Metadata> CreateAndSaveMetadata(Manifest manifest, TrainState state)
     {
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestWorkflow).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
             }
         );
 
-        metadata.WorkflowState = state;
+        metadata.TrainState = state;
 
         await _dataContext.Track(metadata);
         await _dataContext.SaveChanges(CancellationToken.None);
@@ -564,7 +564,7 @@ public class ManifestGroupMaxActiveJobsTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = typeof(SchedulerTestWorkflow).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName!,
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
@@ -592,7 +592,7 @@ public class ManifestGroupMaxActiveJobsTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = typeof(SchedulerTestWorkflow).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName!,
                 Input = serializedInput,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 Priority = priority,

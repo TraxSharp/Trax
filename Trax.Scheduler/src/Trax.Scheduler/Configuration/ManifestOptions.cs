@@ -10,7 +10,7 @@ namespace Trax.Scheduler.Configuration;
 /// </remarks>
 /// <example>
 /// <code>
-/// await scheduler.ScheduleAsync&lt;IMyWorkflow, MyInput&gt;(
+/// await scheduler.ScheduleAsync&lt;IMyTrain, MyInput&gt;(
 ///     "my-job",
 ///     new MyInput(),
 ///     Every.Minutes(5),
@@ -69,7 +69,7 @@ public class ManifestOptions
     /// <remarks>
     /// Dormant dependents are declared in the fluent API like normal dependents but are
     /// never auto-fired when the parent succeeds. They must be explicitly activated at
-    /// runtime by the parent workflow via <c>IDormantDependentContext</c>. Only meaningful
+    /// runtime by the parent train via <c>IDormantDependentContext</c>. Only meaningful
     /// for dependent manifests (created via Include/ThenInclude).
     /// </remarks>
     public bool IsDormant { get; set; }

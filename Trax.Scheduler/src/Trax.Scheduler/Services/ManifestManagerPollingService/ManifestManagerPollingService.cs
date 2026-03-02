@@ -5,13 +5,13 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Workflows.ManifestManager;
+using Trax.Scheduler.Trains.ManifestManager;
 
 namespace Trax.Scheduler.Services.ManifestManagerPollingService;
 
 /// <summary>
 /// Background service that polls for due manifests on a configurable interval
-/// and runs <see cref="IManifestManagerWorkflow"/> each cycle.
+/// and runs <see cref="IManifestManagerTrain"/> each cycle.
 /// </summary>
 /// <remarks>
 /// Uses a PostgreSQL advisory lock (<c>pg_try_advisory_xact_lock</c>) to ensure
@@ -75,11 +75,11 @@ internal class ManifestManagerPollingService(
                     return;
                 }
 
-                // Run workflow within the advisory lock transaction
-                var workflow = scope.ServiceProvider.GetRequiredService<IManifestManagerWorkflow>();
+                // Run train within the advisory lock transaction
+                var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
 
                 logger.LogDebug("ManifestManager polling cycle starting");
-                await workflow.Run(Unit.Default, cancellationToken);
+                await train.Run(Unit.Default, cancellationToken);
                 logger.LogDebug("ManifestManager polling cycle completed");
 
                 await dataContext.CommitTransaction();
@@ -87,10 +87,10 @@ internal class ManifestManagerPollingService(
             else
             {
                 // Non-EF provider (e.g., InMemory for tests) — run without lock
-                var workflow = scope.ServiceProvider.GetRequiredService<IManifestManagerWorkflow>();
+                var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
 
                 logger.LogDebug("ManifestManager polling cycle starting");
-                await workflow.Run(Unit.Default, cancellationToken);
+                await train.Run(Unit.Default, cancellationToken);
                 logger.LogDebug("ManifestManager polling cycle completed");
             }
         }

@@ -23,9 +23,9 @@ using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
-using Trax.Scheduler.Tests.Integration.Examples.Workflows;
-using Trax.Scheduler.Workflows.JobDispatcher;
-using Trax.Scheduler.Workflows.TaskServerExecutor;
+using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Trains.JobDispatcher;
+using Trax.Scheduler.Trains.TaskServerExecutor;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -47,7 +47,7 @@ public class MaxActiveJobsTests
 
     private ServiceProvider _serviceProvider = null!;
     private IServiceScope _scope = null!;
-    private IJobDispatcherWorkflow _workflow = null!;
+    private IJobDispatcherTrain _train = null!;
     private IDataContext _dataContext = null!;
 
     [OneTimeSetUp]
@@ -73,11 +73,11 @@ public class MaxActiveJobsTests
                         assemblies:
                         [
                             typeof(AssemblyMarker).Assembly,
-                            typeof(TaskServerExecutorWorkflow).Assembly,
+                            typeof(TaskServerExecutorTrain).Assembly,
                         ]
                     )
                     .SetEffectLogLevel(LogLevel.Information)
-                    .SaveWorkflowParameters()
+                    .SaveTrainParameters()
                     .AddPostgresEffect(connectionString)
                     .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
                     .AddJsonEffect()
@@ -101,7 +101,7 @@ public class MaxActiveJobsTests
     public async Task TestSetUp()
     {
         _scope = _serviceProvider.CreateScope();
-        _workflow = _scope.ServiceProvider.GetRequiredService<IJobDispatcherWorkflow>();
+        _train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         await TestSetup.CleanupDatabase(_dataContext);
@@ -110,7 +110,7 @@ public class MaxActiveJobsTests
     [TearDown]
     public async Task TestTearDown()
     {
-        if (_workflow is IDisposable disposable)
+        if (_train is IDisposable disposable)
             disposable.Dispose();
 
         if (_dataContext is IDisposable dataContextDisposable)
@@ -128,7 +128,7 @@ public class MaxActiveJobsTests
         for (var i = 0; i < MaxActiveJobsLimit; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         // Create queued work queue entries that should NOT be dispatched
@@ -141,7 +141,7 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - No entries should be dispatched
         _dataContext.Reset();
@@ -159,7 +159,7 @@ public class MaxActiveJobsTests
         for (var i = 0; i < 3; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         // Create 3 queued entries — only 2 should be dispatched
@@ -171,7 +171,7 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Exactly 2 dispatched (5 - 3 = 2 slots)
         _dataContext.Reset();
@@ -193,7 +193,7 @@ public class MaxActiveJobsTests
         for (var i = 0; i < MaxActiveJobsLimit - 1; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         // Create multiple queued entries
@@ -205,7 +205,7 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Exactly 1 dispatched
         _dataContext.Reset();
@@ -234,13 +234,13 @@ public class MaxActiveJobsTests
         for (var i = 0; i < pendingCount; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Pending_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         for (var i = 0; i < inProgressCount; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"InProgress_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.InProgress);
+            await CreateAndSaveMetadata(manifest, TrainState.InProgress);
         }
 
         // Create queued entries (each needs its own manifest — unique partial index)
@@ -252,7 +252,7 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - No entries dispatched
         _dataContext.Reset();
@@ -275,7 +275,7 @@ public class MaxActiveJobsTests
         for (var i = 0; i < MaxActiveJobsLimit; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"InProgress_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.InProgress);
+            await CreateAndSaveMetadata(manifest, TrainState.InProgress);
         }
 
         var entries = new List<WorkQueue>();
@@ -286,7 +286,7 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert
         _dataContext.Reset();
@@ -306,7 +306,7 @@ public class MaxActiveJobsTests
         for (var i = 0; i < MaxActiveJobsLimit + 5; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Completed_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Completed);
+            await CreateAndSaveMetadata(manifest, TrainState.Completed);
         }
 
         // Create queued entries — all should be dispatched since no active jobs
@@ -318,7 +318,7 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - All 3 dispatched
         _dataContext.Reset();
@@ -341,7 +341,7 @@ public class MaxActiveJobsTests
         for (var i = 0; i < MaxActiveJobsLimit + 5; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Failed_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Failed);
+            await CreateAndSaveMetadata(manifest, TrainState.Failed);
         }
 
         // Create queued entries — all should be dispatched
@@ -353,7 +353,7 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - All 3 dispatched
         _dataContext.Reset();
@@ -385,7 +385,7 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Exactly MaxActiveJobsLimit dispatched
         _dataContext.Reset();
@@ -412,7 +412,7 @@ public class MaxActiveJobsTests
         for (var i = 0; i < MaxActiveJobsLimit + 3; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         var entries = new List<WorkQueue>();
@@ -423,7 +423,7 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert
         _dataContext.Reset();
@@ -442,7 +442,7 @@ public class MaxActiveJobsTests
         var entry = await CreateAndSaveWorkQueueEntry(manifest);
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert
         _dataContext.Reset();
@@ -461,7 +461,7 @@ public class MaxActiveJobsTests
         for (var i = 0; i < MaxActiveJobsLimit - 1; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         // Create a low-priority entry FIRST (earlier CreatedAt)
@@ -479,7 +479,7 @@ public class MaxActiveJobsTests
         );
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - The high-priority entry should be dispatched (not the low-priority one)
         _dataContext.Reset();
@@ -512,7 +512,7 @@ public class MaxActiveJobsTests
         for (var i = 0; i < MaxActiveJobsLimit - 1; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         // Create first entry (earlier CreatedAt, same priority)
@@ -527,7 +527,7 @@ public class MaxActiveJobsTests
         var secondEntry = await CreateAndSaveWorkQueueEntry(secondManifest, priority: 10);
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - The first entry (earlier CreatedAt) should be dispatched
         _dataContext.Reset();
@@ -560,7 +560,7 @@ public class MaxActiveJobsTests
         for (var i = 0; i < MaxActiveJobsLimit - 1; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         // Create multiple queued entries
@@ -572,7 +572,7 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Exactly one dispatched
         _dataContext.Reset();
@@ -596,19 +596,19 @@ public class MaxActiveJobsTests
         for (var i = 0; i < 2; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Pending_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(manifest, TrainState.Pending);
         }
 
         for (var i = 0; i < 2; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"InProgress_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.InProgress);
+            await CreateAndSaveMetadata(manifest, TrainState.InProgress);
         }
 
         for (var i = 0; i < 5; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Completed_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Completed);
+            await CreateAndSaveMetadata(manifest, TrainState.Completed);
         }
 
         // Create queued entries
@@ -620,7 +620,7 @@ public class MaxActiveJobsTests
         }
 
         // Act
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - Only 1 dispatched (4 active, limit 5)
         _dataContext.Reset();
@@ -637,7 +637,7 @@ public class MaxActiveJobsTests
 
     #endregion
 
-    #region Multiple Workflow Cycles
+    #region Multiple Train Cycles
 
     [Test]
     public async Task Run_MultipleConsecutiveCycles_RespectsLimitEachTime()
@@ -647,7 +647,7 @@ public class MaxActiveJobsTests
         for (var i = 0; i < MaxActiveJobsLimit; i++)
         {
             var manifest = await CreateAndSaveManifest(inputValue: $"Active_{i}");
-            await CreateAndSaveMetadata(manifest, WorkflowState.Pending);
+            await CreateAndSaveMetadata(manifest, TrainState.Pending);
             activeManifests.Add(manifest);
         }
 
@@ -660,7 +660,7 @@ public class MaxActiveJobsTests
         }
 
         // Act - Run first cycle (at limit, nothing should dispatch)
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - No entries dispatched from first cycle
         _dataContext.Reset();
@@ -676,24 +676,24 @@ public class MaxActiveJobsTests
             var metadata = await _dataContext
                 .Metadatas.Where(m => m.ManifestId == activeManifest.Id)
                 .FirstAsync();
-            metadata.WorkflowState = WorkflowState.Completed;
+            metadata.TrainState = TrainState.Completed;
         }
         await _dataContext.SaveChanges(CancellationToken.None);
         _dataContext.Reset();
 
         // Create a fresh scope for the second cycle (scoped services return the same instance within a scope)
-        if (_workflow is IDisposable disposable)
+        if (_train is IDisposable disposable)
             disposable.Dispose();
         if (_dataContext is IDisposable dataContextDisposable)
             dataContextDisposable.Dispose();
         _scope.Dispose();
 
         _scope = _serviceProvider.CreateScope();
-        _workflow = _scope.ServiceProvider.GetRequiredService<IJobDispatcherWorkflow>();
+        _train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         // Act - Run second cycle (2 slots available)
-        await _workflow.Run(Unit.Default);
+        await _train.Run(Unit.Default);
 
         // Assert - 2 entries dispatched in second cycle
         _dataContext.Reset();
@@ -736,11 +736,11 @@ public class MaxActiveJobsTests
                         assemblies:
                         [
                             typeof(AssemblyMarker).Assembly,
-                            typeof(TaskServerExecutorWorkflow).Assembly,
+                            typeof(TaskServerExecutorTrain).Assembly,
                         ]
                     )
                     .SetEffectLogLevel(LogLevel.Information)
-                    .SaveWorkflowParameters()
+                    .SaveTrainParameters()
                     .AddPostgresEffect(connectionString)
                     .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
                     .AddJsonEffect()
@@ -757,7 +757,7 @@ public class MaxActiveJobsTests
             .BuildServiceProvider();
 
         using var scope = unlimitedProvider.CreateScope();
-        var workflow = scope.ServiceProvider.GetRequiredService<IJobDispatcherWorkflow>();
+        var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         // Create many active metadata (well over the default limit of 10)
@@ -771,7 +771,7 @@ public class MaxActiveJobsTests
             var activeManifest = Manifest.Create(
                 new CreateManifest
                 {
-                    Name = typeof(SchedulerTestWorkflow),
+                    Name = typeof(SchedulerTestTrain),
                     IsEnabled = true,
                     ScheduleType = ScheduleType.None,
                     MaxRetries = 3,
@@ -785,13 +785,13 @@ public class MaxActiveJobsTests
             var metadata = Metadata.Create(
                 new CreateMetadata
                 {
-                    Name = typeof(SchedulerTestWorkflow).FullName!,
+                    Name = typeof(SchedulerTestTrain).FullName!,
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = new SchedulerTestInput { Value = $"Active_{i}" },
                     ManifestId = activeManifest.Id,
                 }
             );
-            metadata.WorkflowState = WorkflowState.Pending;
+            metadata.TrainState = TrainState.Pending;
             await dataContext.Track(metadata);
             await dataContext.SaveChanges(CancellationToken.None);
         }
@@ -809,7 +809,7 @@ public class MaxActiveJobsTests
             var manifest = Manifest.Create(
                 new CreateManifest
                 {
-                    Name = typeof(SchedulerTestWorkflow),
+                    Name = typeof(SchedulerTestTrain),
                     IsEnabled = true,
                     ScheduleType = ScheduleType.None,
                     MaxRetries = 3,
@@ -823,7 +823,7 @@ public class MaxActiveJobsTests
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
-                    WorkflowName = typeof(SchedulerTestWorkflow).FullName!,
+                    TrainName = typeof(SchedulerTestTrain).FullName!,
                     Input = manifest.Properties,
                     InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                     ManifestId = manifest.Id,
@@ -837,7 +837,7 @@ public class MaxActiveJobsTests
         dataContext.Reset();
 
         // Act
-        await workflow.Run(Unit.Default);
+        await train.Run(Unit.Default);
 
         // Assert - All entries should be dispatched (no limit)
         dataContext.Reset();
@@ -853,7 +853,7 @@ public class MaxActiveJobsTests
             .Should()
             .Be(entryCount, "MaxActiveJobs is null so all entries should be dispatched");
 
-        if (workflow is IDisposable d)
+        if (train is IDisposable d)
             d.Dispose();
     }
 
@@ -871,7 +871,7 @@ public class MaxActiveJobsTests
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.None,
                 MaxRetries = 3,
@@ -888,19 +888,19 @@ public class MaxActiveJobsTests
         return manifest;
     }
 
-    private async Task<Metadata> CreateAndSaveMetadata(Manifest manifest, WorkflowState state)
+    private async Task<Metadata> CreateAndSaveMetadata(Manifest manifest, TrainState state)
     {
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestWorkflow).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,
             }
         );
 
-        metadata.WorkflowState = state;
+        metadata.TrainState = state;
 
         await _dataContext.Track(metadata);
         await _dataContext.SaveChanges(CancellationToken.None);
@@ -914,7 +914,7 @@ public class MaxActiveJobsTests
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                WorkflowName = typeof(SchedulerTestWorkflow).FullName!,
+                TrainName = typeof(SchedulerTestTrain).FullName!,
                 Input = manifest.Properties,
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,

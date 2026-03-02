@@ -19,7 +19,7 @@ public static class SchedulerExtensions
     ///
     /// <code>
     /// services.AddTraxEffects(options => options
-    ///     .AddEffectWorkflowBus(assemblies)
+    ///     .AddEffectTrainBus(assemblies)
     ///     .AddPostgresEffect(connectionString)
     ///     .AddScheduler(scheduler => scheduler
     ///         .PollingInterval(TimeSpan.FromSeconds(30))

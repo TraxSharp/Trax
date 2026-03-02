@@ -18,7 +18,7 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.BackgroundTaskServer;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.PostgresWorkerService;
-using Trax.Scheduler.Tests.Integration.Examples.Workflows;
+using Trax.Scheduler.Tests.Integration.Examples.Trains;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -48,7 +48,7 @@ public class PostgresWorkerServiceTests : TestSetup
     public async Task Worker_ClaimsAndExecutes_AvailableJob()
     {
         // Arrange - Create a metadata record and a background job
-        var metadata = await CreateMetadataForTestWorkflow();
+        var metadata = await CreateMetadataForTestTrain();
         var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -94,7 +94,7 @@ public class PostgresWorkerServiceTests : TestSetup
     }
 
     [Test]
-    public async Task Worker_ExecutesWorkflow_UpdatesMetadata()
+    public async Task Worker_ExecutesTrain_UpdatesMetadata()
     {
         // Arrange - Create manifest, metadata, and a background job pointing to it
         var group = await CreateAndSaveManifestGroup(DataContext);
@@ -145,15 +145,15 @@ public class PostgresWorkerServiceTests : TestSetup
         }
         catch (OperationCanceledException) { }
 
-        // Assert - Metadata should be updated by the workflow execution
+        // Assert - Metadata should be updated by the train execution
         DataContext.Reset();
         var updatedMetadata = await DataContext.Metadatas.FirstOrDefaultAsync(m =>
             m.Id == metadata.Id
         );
 
         updatedMetadata.Should().NotBeNull();
-        // The TaskServerExecutorWorkflow should have run the workflow
-        updatedMetadata!.WorkflowState.Should().NotBe(WorkflowState.Pending);
+        // The TaskServerExecutorTrain should have run the train
+        updatedMetadata!.TrainState.Should().NotBe(TrainState.Pending);
     }
 
     #endregion
@@ -164,7 +164,7 @@ public class PostgresWorkerServiceTests : TestSetup
     public async Task Worker_DeletesJob_AfterSuccessfulExecution()
     {
         // Arrange
-        var metadata = await CreateMetadataForTestWorkflow();
+        var metadata = await CreateMetadataForTestTrain();
         var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
         await DataContext.Track(job);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -205,7 +205,7 @@ public class PostgresWorkerServiceTests : TestSetup
     [Test]
     public async Task Worker_DeletesJob_AfterFailedExecution()
     {
-        // Arrange - Create a metadata pointing to a workflow that will fail
+        // Arrange - Create a metadata pointing to a train that will fail
         var group = await CreateAndSaveManifestGroup(DataContext);
         var manifest = await CreateAndSaveFailingManifest(group);
         var metadata = await CreateMetadataForManifest(manifest);
@@ -296,7 +296,7 @@ public class PostgresWorkerServiceTests : TestSetup
     public async Task Worker_ReclainsStaleJob_AfterVisibilityTimeout()
     {
         // Arrange - Create a job that was claimed but never completed (simulates crash)
-        var metadata = await CreateMetadataForTestWorkflow();
+        var metadata = await CreateMetadataForTestTrain();
         var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
         // Set FetchedAt to simulate a worker that crashed 2 seconds ago
         job.FetchedAt = DateTime.UtcNow.AddSeconds(-2);
@@ -342,7 +342,7 @@ public class PostgresWorkerServiceTests : TestSetup
     public async Task Worker_DoesNotReclaim_RecentlyClaimedJob()
     {
         // Arrange - Create a job that was claimed just now (simulates in-progress by another worker)
-        var metadata = await CreateMetadataForTestWorkflow();
+        var metadata = await CreateMetadataForTestTrain();
         var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
         // Set FetchedAt to now (within visibility timeout of 30m)
         job.FetchedAt = DateTime.UtcNow;
@@ -396,7 +396,7 @@ public class PostgresWorkerServiceTests : TestSetup
         var metadataIds = new List<long>();
         for (var i = 0; i < 5; i++)
         {
-            var metadata = await CreateMetadataForTestWorkflow();
+            var metadata = await CreateMetadataForTestTrain();
             metadataIds.Add(metadata.Id);
 
             var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
@@ -442,7 +442,7 @@ public class PostgresWorkerServiceTests : TestSetup
     #region Input Deserialization Tests
 
     [Test]
-    public async Task Worker_WithInputJob_DeserializesAndPassesToWorkflow()
+    public async Task Worker_WithInputJob_DeserializesAndPassesToTrain()
     {
         // Arrange - Create a job with serialized input
         var group = await CreateAndSaveManifestGroup(DataContext);
@@ -504,12 +504,12 @@ public class PostgresWorkerServiceTests : TestSetup
 
     #region Helper Methods
 
-    private async Task<Metadata> CreateMetadataForTestWorkflow()
+    private async Task<Metadata> CreateMetadataForTestTrain()
     {
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestWorkflow).FullName!,
+                Name = typeof(SchedulerTestTrain).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = new SchedulerTestInput { Value = "worker-test" },
             }
@@ -527,7 +527,7 @@ public class PostgresWorkerServiceTests : TestSetup
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(SchedulerTestWorkflow),
+                Name = typeof(SchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.None,
                 MaxRetries = 3,
@@ -548,7 +548,7 @@ public class PostgresWorkerServiceTests : TestSetup
         var manifest = Manifest.Create(
             new CreateManifest
             {
-                Name = typeof(FailingSchedulerTestWorkflow),
+                Name = typeof(FailingSchedulerTestTrain),
                 IsEnabled = true,
                 ScheduleType = ScheduleType.None,
                 MaxRetries = 0,

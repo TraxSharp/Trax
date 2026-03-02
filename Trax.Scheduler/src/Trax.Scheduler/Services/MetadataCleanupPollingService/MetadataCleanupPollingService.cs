@@ -2,16 +2,16 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Workflows.MetadataCleanup;
+using Trax.Scheduler.Trains.MetadataCleanup;
 
 namespace Trax.Scheduler.Services.MetadataCleanupPollingService;
 
 /// <summary>
-/// Background service that periodically runs the metadata cleanup workflow.
+/// Background service that periodically runs the metadata cleanup train.
 /// </summary>
 /// <remarks>
 /// This service polls on the configured <see cref="MetadataCleanupConfiguration.CleanupInterval"/>
-/// and delegates the actual cleanup logic to <see cref="IMetadataCleanupWorkflow"/>.
+/// and delegates the actual cleanup logic to <see cref="IMetadataCleanupTrain"/>.
 /// Errors are logged and swallowed to keep the polling loop running.
 /// </remarks>
 internal class MetadataCleanupPollingService(
@@ -31,7 +31,7 @@ internal class MetadataCleanupPollingService(
             "MetadataCleanupPollingService starting with interval {Interval}, retention {Retention}, whitelist [{Whitelist}]",
             cleanupConfig.CleanupInterval,
             cleanupConfig.RetentionPeriod,
-            string.Join(", ", cleanupConfig.WorkflowTypeWhitelist)
+            string.Join(", ", cleanupConfig.TrainTypeWhitelist)
         );
 
         using var timer = new PeriodicTimer(cleanupConfig.CleanupInterval);
@@ -52,10 +52,10 @@ internal class MetadataCleanupPollingService(
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var workflow = scope.ServiceProvider.GetRequiredService<IMetadataCleanupWorkflow>();
+            var train = scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
 
             logger.LogDebug("Metadata cleanup cycle starting");
-            await workflow.Run(new MetadataCleanupRequest(), cancellationToken);
+            await train.Run(new MetadataCleanupRequest(), cancellationToken);
             logger.LogDebug("Metadata cleanup cycle completed");
         }
         catch (Exception ex)

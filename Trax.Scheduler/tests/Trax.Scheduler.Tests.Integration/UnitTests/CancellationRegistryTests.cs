@@ -5,7 +5,7 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 
 /// <summary>
 /// Unit tests for <see cref="CancellationRegistry"/>, the in-memory CTS registry
-/// used for same-server instant workflow cancellation.
+/// used for same-server instant train cancellation.
 /// </summary>
 [TestFixture]
 public class CancellationRegistryTests

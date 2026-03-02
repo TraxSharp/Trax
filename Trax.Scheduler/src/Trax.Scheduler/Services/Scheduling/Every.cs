@@ -10,13 +10,13 @@ namespace Trax.Scheduler.Services.Scheduling;
 /// <example>
 /// <code>
 /// // Schedule a job to run every 30 seconds
-/// await scheduler.ScheduleAsync&lt;IMyWorkflow, MyInput&gt;(
+/// await scheduler.ScheduleAsync&lt;IMyTrain, MyInput&gt;(
 ///     "my-job",
 ///     new MyInput(),
 ///     Every.Seconds(30));
 ///
 /// // Schedule a job to run every 5 minutes
-/// await scheduler.ScheduleAsync&lt;IMyWorkflow, MyInput&gt;(
+/// await scheduler.ScheduleAsync&lt;IMyTrain, MyInput&gt;(
 ///     "my-job",
 ///     new MyInput(),
 ///     Every.Minutes(5));
