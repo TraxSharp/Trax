@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/TraxSharp/Trax.Core/compare/v1.0.3...v1.1.0) (2026-03-02)
+
+
+### Features
+
+* rename Workflow to Train across Trax.Core ([#2](https://github.com/TraxSharp/Trax.Core/issues/2)) ([5804094](https://github.com/TraxSharp/Trax.Core/commit/5804094c5dab1bf0b10cfe23263fb597e6f45ee3))
+
 ## [1.0.3](https://github.com/TraxSharp/Trax.Core/compare/v1.0.2...v1.0.3) (2026-02-27)
 
 
