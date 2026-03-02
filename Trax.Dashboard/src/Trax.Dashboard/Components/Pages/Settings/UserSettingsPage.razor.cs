@@ -14,7 +14,7 @@ public partial class UserSettingsPage
     private NotificationService NotificationService { get; set; } = default!;
 
     private int _pollingIntervalSeconds;
-    private bool _hideAdminWorkflows;
+    private bool _hideAdminTrains;
 
     // Component visibility
     private bool _showServerHealth;
@@ -28,7 +28,7 @@ public partial class UserSettingsPage
 
     // Saved-state snapshots for dirty tracking
     private int _savedPollingIntervalSeconds;
-    private bool _savedHideAdminWorkflows;
+    private bool _savedHideAdminTrains;
     private bool _savedShowServerHealth;
     private bool _savedShowSummaryCards;
     private bool _savedShowExecutionsChart;
@@ -40,7 +40,7 @@ public partial class UserSettingsPage
 
     private bool IsDataRefreshDirty => _pollingIntervalSeconds != _savedPollingIntervalSeconds;
 
-    private bool IsAdminWorkflowsDirty => _hideAdminWorkflows != _savedHideAdminWorkflows;
+    private bool IsAdminTrainsDirty => _hideAdminTrains != _savedHideAdminTrains;
 
     private bool IsComponentsDirty =>
         _showServerHealth != _savedShowServerHealth
@@ -56,7 +56,7 @@ public partial class UserSettingsPage
     {
         await DashboardSettings.InitializeAsync();
         _pollingIntervalSeconds = (int)DashboardSettings.PollingInterval.TotalSeconds;
-        _hideAdminWorkflows = DashboardSettings.HideAdminWorkflows;
+        _hideAdminTrains = DashboardSettings.HideAdminTrains;
 
         _showServerHealth = DashboardSettings.ShowServerHealth;
         _showSummaryCards = DashboardSettings.ShowSummaryCards;
@@ -73,7 +73,7 @@ public partial class UserSettingsPage
     private async Task Save()
     {
         await DashboardSettings.SetPollingIntervalAsync(_pollingIntervalSeconds);
-        await DashboardSettings.SetHideAdminWorkflowsAsync(_hideAdminWorkflows);
+        await DashboardSettings.SetHideAdminTrainsAsync(_hideAdminTrains);
 
         await DashboardSettings.SetComponentVisibilityAsync(
             StorageKeys.ShowServerHealth,
@@ -124,9 +124,9 @@ public partial class UserSettingsPage
     private async Task ResetDefault()
     {
         _pollingIntervalSeconds = DashboardSettingsService.DefaultPollingIntervalSeconds;
-        _hideAdminWorkflows = DashboardSettingsService.DefaultHideAdminWorkflows;
+        _hideAdminTrains = DashboardSettingsService.DefaultHideAdminTrains;
         await DashboardSettings.SetPollingIntervalAsync(_pollingIntervalSeconds);
-        await DashboardSettings.SetHideAdminWorkflowsAsync(_hideAdminWorkflows);
+        await DashboardSettings.SetHideAdminTrainsAsync(_hideAdminTrains);
 
         _showServerHealth = DashboardSettingsService.DefaultComponentVisibility;
         _showSummaryCards = DashboardSettingsService.DefaultComponentVisibility;
@@ -186,7 +186,7 @@ public partial class UserSettingsPage
     private void SnapshotSavedState()
     {
         _savedPollingIntervalSeconds = _pollingIntervalSeconds;
-        _savedHideAdminWorkflows = _hideAdminWorkflows;
+        _savedHideAdminTrains = _hideAdminTrains;
         _savedShowServerHealth = _showServerHealth;
         _savedShowSummaryCards = _showSummaryCards;
         _savedShowExecutionsChart = _showExecutionsChart;

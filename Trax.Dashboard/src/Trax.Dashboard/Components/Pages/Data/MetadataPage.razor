@@ -10,7 +10,7 @@
 
 <RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Metadata</RadzenText>
 <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
-    Execution records for each workflow run, tracking state, timing, input/output, and failure details.
+    Execution records for each train run, tracking state, timing, input/output, and failure details.
 </RadzenText>
 
 <TraxDataGrid @ref="_grid"
@@ -30,13 +30,13 @@
                                   Variant="Variant.Text"
                                   Size="ButtonSize.Small"
                                   Click="@(() => Navigation.NavigateTo($"trax/data/metadata/{m.Id}"))" />
-                    @if (m.WorkflowState == WorkflowState.InProgress)
+                    @if (m.TrainState == TrainState.InProgress)
                     {
                         <RadzenButton Icon="cancel"
                                       Variant="Variant.Text"
                                       Size="ButtonSize.Small"
                                       ButtonStyle="ButtonStyle.Danger"
-                                      Click="@(() => CancelWorkflow(m.Id, m.Name))" />
+                                      Click="@(() => CancelTrain(m.Id, m.Name))" />
                     }
                 </RadzenStack>
             </Template>
@@ -53,14 +53,14 @@
             <Template Context="m">@ShortName(m.Name)</Template>
         </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="Metadata"
-                              Property="WorkflowState"
+                              Property="TrainState"
                               Title="State"
                               Width="120px" />
         <RadzenDataGridColumn TItem="Metadata"
                               Property="CurrentlyRunningStep"
                               Title="Current Step"
                               Width="150px">
-            <Template Context="m">@(m.WorkflowState == WorkflowState.InProgress ? (m.CurrentlyRunningStep ?? "—") : "—")</Template>
+            <Template Context="m">@(m.TrainState == TrainState.InProgress ? (m.CurrentlyRunningStep ?? "—") : "—")</Template>
         </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="Metadata"
                               Property="ExternalId"
@@ -102,7 +102,7 @@
 @code {
     private TraxDataGrid<Metadata>? _grid;
 
-    private async Task CancelWorkflow(long metadataId, string workflowName)
+    private async Task CancelTrain(long metadataId, string trainName)
     {
         try
         {
@@ -119,7 +119,7 @@
             NotificationService.Notify(
                 NotificationSeverity.Success,
                 "Cancellation Requested",
-                $"Cancel signal sent for {ShortName(workflowName)}.",
+                $"Cancel signal sent for {ShortName(trainName)}.",
                 duration: 4000
             );
         }
@@ -147,8 +147,8 @@
         using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
         IQueryable<Metadata> query = context.Metadatas.AsNoTracking();
 
-        if (DashboardSettings.HideAdminWorkflows)
-            query = query.ExcludeAdmin(DashboardSettings.AdminWorkflowNames);
+        if (DashboardSettings.HideAdminTrains)
+            query = query.ExcludeAdmin(DashboardSettings.AdminTrainNames);
 
         if (!string.IsNullOrEmpty(args.Filter))
             query = query.Where(args.Filter);

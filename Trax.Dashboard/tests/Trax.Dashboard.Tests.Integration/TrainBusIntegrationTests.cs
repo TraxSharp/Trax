@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Dashboard.Extensions;
-using Trax.Dashboard.Services.WorkflowDiscovery;
+using Trax.Dashboard.Services.TrainDiscovery;
 using Trax.Dashboard.Tests.Integration.Fakes;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -9,29 +9,28 @@ using Trax.Mediator.Extensions;
 namespace Trax.Dashboard.Tests.Integration;
 
 [TestFixture]
-public class WorkflowBusIntegrationTests
+public class TrainBusIntegrationTests
 {
     [Test]
-    public void DiscoverWorkflows_WithEffectWorkflowBus_FindsAssemblyScannedWorkflows()
+    public void DiscoverTrains_WithEffectTrainBus_FindsAssemblyScannedTrains()
     {
-        // Arrange — register workflows via assembly scanning (as in a real app)
+        // Arrange — register trains via assembly scanning (as in a real app)
         var services = new ServiceCollection();
 
         services.AddTraxEffects(o =>
-            o.AddServiceTrainBus(assemblies: [typeof(FakeWorkflowA).Assembly])
+            o.AddServiceTrainBus(assemblies: [typeof(FakeTrainA).Assembly])
         );
 
         services.AddTraxDashboard();
 
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
-        var discoveryService =
-            scope.ServiceProvider.GetRequiredService<IWorkflowDiscoveryService>();
+        var discoveryService = scope.ServiceProvider.GetRequiredService<ITrainDiscoveryService>();
 
         // Act
-        var result = discoveryService.DiscoverWorkflows();
+        var result = discoveryService.DiscoverTrains();
 
-        // Assert — fake workflows from this test assembly should be discovered
+        // Assert — fake trains from this test assembly should be discovered
         result.Should().Contain(r => r.InputType == typeof(FakeInputA));
         result.Should().Contain(r => r.InputType == typeof(FakeInputB));
         result.Should().Contain(r => r.InputType == typeof(FakeInputC));

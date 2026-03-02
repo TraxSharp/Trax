@@ -62,7 +62,7 @@ public partial class ServerSettingsPage
     ];
 
     // ── Dirty tracking ──
-    private bool IsAdminWorkflowsDirty =>
+    private bool IsAdminTrainsDirty =>
         _schedulerAvailable
         && (
             _schedulerConfig!.ManifestManagerEnabled != _savedManifestManagerEnabled

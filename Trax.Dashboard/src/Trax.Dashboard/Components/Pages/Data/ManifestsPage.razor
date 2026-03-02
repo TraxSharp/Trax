@@ -5,7 +5,7 @@
 
 <RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Manifests</RadzenText>
 <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
-    Scheduled workflow definitions with their scheduling configuration, retry policies, and execution history.
+    Scheduled train definitions with their scheduling configuration, retry policies, and execution history.
 </RadzenText>
 
 <TraxDataGrid Data="@_items"
@@ -90,8 +90,8 @@
         using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
         IQueryable<Manifest> query = context.Manifests.Include(m => m.ManifestGroup).AsNoTracking();
 
-        if (DashboardSettings.HideAdminWorkflows)
-            query = query.ExcludeAdmin(DashboardSettings.AdminWorkflowNames);
+        if (DashboardSettings.HideAdminTrains)
+            query = query.ExcludeAdmin(DashboardSettings.AdminTrainNames);
 
         _items = await query.ToListAsync(cancellationToken);
     }

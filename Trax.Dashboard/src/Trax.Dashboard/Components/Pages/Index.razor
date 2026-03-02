@@ -123,8 +123,8 @@
             <RadzenCard>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                     <RadzenIcon Icon="account_tree" Style="font-size: 2rem; color: var(--rz-secondary);" />
-                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_registeredWorkflows</RadzenText>
-                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Registered Workflows</RadzenText>
+                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_registeredTrains</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Registered Trains</RadzenText>
                 </RadzenStack>
             </RadzenCard>
         </RadzenColumn>
@@ -212,7 +212,7 @@
         {
             <RadzenColumn Size="12" SizeLG="@(DashboardSettings.ShowAvgDuration ? 6 : 12)">
                 <RadzenCard>
-                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Top Failing Workflows (7d)</RadzenText>
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Top Failing Trains (7d)</RadzenText>
                     @if (_topFailures.Count > 0)
                     {
                         <RadzenChart Style="height: 300px;">
@@ -266,7 +266,7 @@
                     else
                     {
                         <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="height: 300px;">
-                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color);">No completed workflows in the last 7 days</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color);">No completed trains in the last 7 days</RadzenText>
                         </RadzenStack>
                     }
                 </RadzenCard>
@@ -291,7 +291,7 @@
                                         AllowColumnResize="true"
                                         class="rz-datatable-striped">
                             <Columns>
-                                <RadzenDataGridColumn TItem="Metadata" Property="Name" Title="Workflow" Width="180px">
+                                <RadzenDataGridColumn TItem="Metadata" Property="Name" Title="Train" Width="180px">
                                 <Template Context="m">@ShortName(m.Name)</Template>
                             </RadzenDataGridColumn>
                                 <RadzenDataGridColumn TItem="Metadata" Property="FailureReason" Title="Reason" />
@@ -318,7 +318,7 @@
                                         AllowColumnResize="true"
                                         class="rz-datatable-striped">
                             <Columns>
-                                <RadzenDataGridColumn TItem="Manifest" Property="Name" Title="Workflow" Width="200px">
+                                <RadzenDataGridColumn TItem="Manifest" Property="Name" Title="Train" Width="200px">
                                     <Template Context="manifest">@ShortName(manifest.Name)</Template>
                                 </RadzenDataGridColumn>
                                 <RadzenDataGridColumn TItem="Manifest" Title="Schedule" Width="140px">

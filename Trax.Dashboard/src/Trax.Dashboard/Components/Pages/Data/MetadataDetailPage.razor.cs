@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
-using Trax.Dashboard.Services.WorkflowDiscovery;
+using Trax.Dashboard.Services.TrainDiscovery;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Log;
@@ -25,7 +25,7 @@ public partial class MetadataDetailPage
     private NavigationManager Navigation { get; set; } = default!;
 
     [Inject]
-    private IWorkflowDiscoveryService WorkflowDiscovery { get; set; } = default!;
+    private ITrainDiscoveryService TrainDiscovery { get; set; } = default!;
 
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
@@ -62,9 +62,9 @@ public partial class MetadataDetailPage
         }
     }
 
-    private async Task CancelWorkflow()
+    private async Task CancelTrain()
     {
-        if (_metadata is null || _metadata.WorkflowState != WorkflowState.InProgress)
+        if (_metadata is null || _metadata.TrainState != TrainState.InProgress)
             return;
 
         _cancelError = null;
@@ -101,7 +101,7 @@ public partial class MetadataDetailPage
         }
     }
 
-    private async Task RequeueWorkflow()
+    private async Task RequeueTrain()
     {
         if (_metadata is null || string.IsNullOrWhiteSpace(_metadata.Input))
             return;
@@ -111,8 +111,8 @@ public partial class MetadataDetailPage
 
         try
         {
-            var registration = WorkflowDiscovery
-                .DiscoverWorkflows()
+            var registration = TrainDiscovery
+                .DiscoverTrains()
                 .FirstOrDefault(r =>
                     r.ServiceType.FullName == _metadata.Name
                     || r.ImplementationType.FullName == _metadata.Name
@@ -121,7 +121,7 @@ public partial class MetadataDetailPage
             if (registration is null)
             {
                 _rerunError =
-                    $"No workflow registration found for '{ShortName(_metadata.Name)}'. Is the workflow still registered?";
+                    $"No train registration found for '{ShortName(_metadata.Name)}'. Is the train still registered?";
                 return;
             }
 
@@ -147,7 +147,7 @@ public partial class MetadataDetailPage
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
-                    WorkflowName = _metadata.Name,
+                    TrainName = _metadata.Name,
                     Input = serializedInput,
                     InputTypeName = registration.InputType.FullName,
                 }
@@ -159,7 +159,7 @@ public partial class MetadataDetailPage
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
-                "Workflow Queued",
+                "Train Queued",
                 $"{ShortName(_metadata.Name)} has been re-queued (ID {entry.Id}).",
                 duration: 4000
             );

@@ -1,34 +1,34 @@
-@page "/trax/workflows"
-@inject IWorkflowDiscoveryService WorkflowDiscovery
+@page "/trax/trains"
+@inject ITrainDiscoveryService TrainDiscovery
 @inject IDashboardSettingsService DashboardSettings
 @inject DialogService DialogService
 
-<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">Registered Workflows</RadzenText>
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">Registered Trains</RadzenText>
 
-<TraxDataGrid Data="@_workflows"
-                    TItem="WorkflowRegistration">
+<TraxDataGrid Data="@_trains"
+                    TItem="TrainRegistration">
     <Columns>
-        <RadzenDataGridColumn TItem="WorkflowRegistration"
+        <RadzenDataGridColumn TItem="TrainRegistration"
                               Property="ServiceTypeName"
-                              Title="Workflow"
+                              Title="Train"
                               Width="250px" />
-        <RadzenDataGridColumn TItem="WorkflowRegistration"
+        <RadzenDataGridColumn TItem="TrainRegistration"
                               Property="ImplementationTypeName"
                               Title="Implementation"
                               Width="250px" />
-        <RadzenDataGridColumn TItem="WorkflowRegistration"
+        <RadzenDataGridColumn TItem="TrainRegistration"
                               Property="InputTypeName"
                               Title="Input Type"
                               Width="200px" />
-        <RadzenDataGridColumn TItem="WorkflowRegistration"
+        <RadzenDataGridColumn TItem="TrainRegistration"
                               Property="OutputTypeName"
                               Title="Output Type"
                               Width="200px" />
-        <RadzenDataGridColumn TItem="WorkflowRegistration"
+        <RadzenDataGridColumn TItem="TrainRegistration"
                               Property="Lifetime"
                               Title="Lifetime"
                               Width="120px" />
-        <RadzenDataGridColumn TItem="WorkflowRegistration"
+        <RadzenDataGridColumn TItem="TrainRegistration"
                               Title="Actions"
                               Width="100px"
                               Filterable="false"
@@ -45,28 +45,28 @@
 </TraxDataGrid>
 
 @code {
-    private IReadOnlyList<WorkflowRegistration> _workflows = [];
+    private IReadOnlyList<TrainRegistration> _trains = [];
 
     protected override async Task OnInitializedAsync()
     {
         await DashboardSettings.InitializeAsync();
 
-        var all = WorkflowDiscovery.DiscoverWorkflows();
+        var all = TrainDiscovery.DiscoverTrains();
 
-        if (DashboardSettings.HideAdminWorkflows)
+        if (DashboardSettings.HideAdminTrains)
         {
-            var adminNames = DashboardSettings.AdminWorkflowNames;
-            _workflows = all.Where(w => !adminNames.Contains(w.ImplementationTypeName)).ToList();
+            var adminNames = DashboardSettings.AdminTrainNames;
+            _trains = all.Where(w => !adminNames.Contains(w.ImplementationTypeName)).ToList();
         }
         else
         {
-            _workflows = all;
+            _trains = all;
         }
     }
 
-    private async Task OpenQueueDialog(WorkflowRegistration registration)
+    private async Task OpenQueueDialog(TrainRegistration registration)
     {
-        await DialogService.OpenAsync<QueueWorkflowDialog>(
+        await DialogService.OpenAsync<QueueTrainDialog>(
             $"Queue {registration.ServiceTypeName}",
             new Dictionary<string, object> { ["Registration"] = registration },
             new DialogOptions

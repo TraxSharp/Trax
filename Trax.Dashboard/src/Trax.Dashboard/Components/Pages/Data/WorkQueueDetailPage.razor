@@ -8,7 +8,7 @@
     <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
         @if (_entry is not null)
         {
-            @ShortName(_entry.WorkflowName)
+            @ShortName(_entry.TrainName)
         }
         else if (!IsLoading)
         {
@@ -57,7 +57,7 @@
             <RadzenStack Gap="0.75rem">
                 <FieldDisplay Label="ID" Value="@_entry.Id.ToString()" />
                 <FieldDisplay Label="External ID" Value="@_entry.ExternalId" />
-                <FieldDisplay Label="Workflow Name" Value="@ShortName(_entry.WorkflowName)" />
+                <FieldDisplay Label="Train Name" Value="@ShortName(_entry.TrainName)" />
                 <FieldDisplay Label="Status">
                     <RadzenBadge BadgeStyle="@GetStatusBadgeStyle(_entry.Status)"
                                  Text="@_entry.Status.ToString()" />

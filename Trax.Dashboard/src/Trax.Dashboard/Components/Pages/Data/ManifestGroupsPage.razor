@@ -95,8 +95,8 @@
                 IsEnabled = g.IsEnabled,
                 ManifestCount = g.Manifests.Count,
                 TotalExecutions = g.Manifests.SelectMany(m => m.Metadatas).Count(),
-                CompletedCount = g.Manifests.SelectMany(m => m.Metadatas).Count(md => md.WorkflowState == WorkflowState.Completed),
-                FailedCount = g.Manifests.SelectMany(m => m.Metadatas).Count(md => md.WorkflowState == WorkflowState.Failed),
+                CompletedCount = g.Manifests.SelectMany(m => m.Metadatas).Count(md => md.TrainState == TrainState.Completed),
+                FailedCount = g.Manifests.SelectMany(m => m.Metadatas).Count(md => md.TrainState == TrainState.Failed),
                 LastRun = g.Manifests.SelectMany(m => m.Metadatas).Max(md => (DateTime?)md.StartTime),
             })
             .ToListAsync(cancellationToken);

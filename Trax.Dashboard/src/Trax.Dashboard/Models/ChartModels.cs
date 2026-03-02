@@ -14,13 +14,13 @@ public class StateCount
     public int Count { get; init; }
 }
 
-public class WorkflowFailureCount
+public class TrainFailureCount
 {
     public string Name { get; init; } = "";
     public int Count { get; init; }
 }
 
-public class WorkflowDuration
+public class TrainDuration
 {
     public string Name { get; init; } = "";
     public double AvgMs { get; init; }

@@ -5,7 +5,7 @@ public static class StorageKeys
     public const string Theme = "trax-theme";
     public const string SidebarExpanded = "trax-sidebar-expanded";
     public const string PollingInterval = "trax-polling-interval";
-    public const string HideAdminWorkflows = "trax-hide-admin-workflows";
+    public const string HideAdminTrains = "trax-hide-admin-trains";
 
     // Dashboard component visibility
     public const string ShowSummaryCards = "trax-show-summary-cards";

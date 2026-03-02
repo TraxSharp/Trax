@@ -111,15 +111,15 @@ public partial class ManifestGroupDetailPage
             .Where(m => m.ManifestId.HasValue && manifestIdsSubquery.Contains(m.ManifestId.Value));
 
         _completedCount = await executionsBase.CountAsync(
-            m => m.WorkflowState == WorkflowState.Completed,
+            m => m.TrainState == TrainState.Completed,
             cancellationToken
         );
         _failedCount = await executionsBase.CountAsync(
-            m => m.WorkflowState == WorkflowState.Failed,
+            m => m.TrainState == TrainState.Failed,
             cancellationToken
         );
         _inProgressCount = await executionsBase.CountAsync(
-            m => m.WorkflowState == WorkflowState.InProgress,
+            m => m.TrainState == TrainState.InProgress,
             cancellationToken
         );
 
@@ -418,7 +418,7 @@ public partial class ManifestGroupDetailPage
                 .Where(m =>
                     m.ManifestId.HasValue
                     && manifestIdsSubquery.Contains(m.ManifestId.Value)
-                    && m.WorkflowState == WorkflowState.InProgress
+                    && m.TrainState == TrainState.InProgress
                 )
                 .Select(m => m.Id)
                 .ToListAsync(DisposalToken);
@@ -427,8 +427,8 @@ public partial class ManifestGroupDetailPage
             {
                 NotificationService.Notify(
                     NotificationSeverity.Info,
-                    "No Running Workflows",
-                    "There are no in-progress workflows in this group.",
+                    "No Running Trains",
+                    "There are no in-progress trains in this group.",
                     duration: 4000
                 );
                 return;
@@ -453,7 +453,7 @@ public partial class ManifestGroupDetailPage
             NotificationService.Notify(
                 NotificationSeverity.Success,
                 "Cancellation Requested",
-                $"Cancel signal sent for {inProgressIds.Count} workflow(s).",
+                $"Cancel signal sent for {inProgressIds.Count} train(s).",
                 duration: 4000
             );
         }

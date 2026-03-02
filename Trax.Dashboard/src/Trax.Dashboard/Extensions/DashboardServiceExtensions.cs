@@ -9,14 +9,14 @@ using Trax.Dashboard.Configuration;
 using Trax.Dashboard.Services.DashboardSettings;
 using Trax.Dashboard.Services.LocalStorage;
 using Trax.Dashboard.Services.ThemeState;
-using Trax.Dashboard.Services.WorkflowDiscovery;
+using Trax.Dashboard.Services.TrainDiscovery;
 
 namespace Trax.Dashboard.Extensions;
 
 public static class DashboardServiceExtensions
 {
     /// <summary>
-    /// Registers Trax.Core Dashboard services including Radzen components and workflow discovery.
+    /// Registers Trax.Core Dashboard services including Radzen components and train discovery.
     /// Also ensures static web assets (CSS, JS) from NuGet packages are available in all environments.
     /// This is the recommended overload for dashboard consumers.
     /// </summary>
@@ -42,7 +42,7 @@ public static class DashboardServiceExtensions
     }
 
     /// <summary>
-    /// Registers Trax.Core Dashboard services including Radzen components and workflow discovery.
+    /// Registers Trax.Core Dashboard services including Radzen components and train discovery.
     /// When using this overload, ensure static web assets are configured for non-Development environments
     /// by calling <c>builder.WebHost.UseStaticWebAssets()</c> before <c>builder.Build()</c>.
     /// Prefer the <see cref="AddTraxDashboard(WebApplicationBuilder, Action{DashboardOptions}?)"/> overload instead.
@@ -57,10 +57,10 @@ public static class DashboardServiceExtensions
 
         services.AddSingleton(options);
 
-        // Capture IServiceCollection so WorkflowDiscoveryService can scan descriptors at runtime
+        // Capture IServiceCollection so TrainDiscoveryService can scan descriptors at runtime
         services.AddSingleton<IServiceCollection>(services);
 
-        services.AddScoped<IWorkflowDiscoveryService, WorkflowDiscoveryService>();
+        services.AddScoped<ITrainDiscoveryService, TrainDiscoveryService>();
         services.AddScoped<ILocalStorageService, LocalStorageService>();
         services.AddScoped<IThemeStateService, ThemeStateService>();
         services.AddScoped<IDashboardSettingsService, DashboardSettingsService>();

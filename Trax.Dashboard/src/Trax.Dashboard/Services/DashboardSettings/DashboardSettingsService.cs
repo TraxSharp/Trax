@@ -6,7 +6,7 @@ namespace Trax.Dashboard.Services.DashboardSettings;
 public class DashboardSettingsService(ILocalStorageService localStorage) : IDashboardSettingsService
 {
     public const int DefaultPollingIntervalSeconds = 5;
-    public const bool DefaultHideAdminWorkflows = true;
+    public const bool DefaultHideAdminTrains = true;
     public const bool DefaultComponentVisibility = true;
 
     private bool _isInitialized;
@@ -16,9 +16,9 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
 
     public DateTime LastPollTime { get; private set; } = DateTime.UtcNow;
 
-    public bool HideAdminWorkflows { get; private set; } = DefaultHideAdminWorkflows;
+    public bool HideAdminTrains { get; private set; } = DefaultHideAdminTrains;
 
-    public IReadOnlyList<string> AdminWorkflowNames => AdminWorkflows.ShortNames;
+    public IReadOnlyList<string> AdminTrainNames => AdminTrains.ShortNames;
 
     // Dashboard component visibility (all default to true)
     public bool ShowSummaryCards { get; private set; } = DefaultComponentVisibility;
@@ -39,9 +39,9 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
         if (stored is > 0)
             PollingInterval = TimeSpan.FromSeconds(stored.Value);
 
-        var hideAdmin = await localStorage.GetAsync<bool?>(StorageKeys.HideAdminWorkflows);
+        var hideAdmin = await localStorage.GetAsync<bool?>(StorageKeys.HideAdminTrains);
         if (hideAdmin.HasValue)
-            HideAdminWorkflows = hideAdmin.Value;
+            HideAdminTrains = hideAdmin.Value;
 
         // Component visibility
         ShowSummaryCards = await LoadVisibilityAsync(StorageKeys.ShowSummaryCards);
@@ -63,10 +63,10 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
         await localStorage.SetAsync(StorageKeys.PollingInterval, seconds);
     }
 
-    public async Task SetHideAdminWorkflowsAsync(bool hide)
+    public async Task SetHideAdminTrainsAsync(bool hide)
     {
-        HideAdminWorkflows = hide;
-        await localStorage.SetAsync(StorageKeys.HideAdminWorkflows, hide);
+        HideAdminTrains = hide;
+        await localStorage.SetAsync(StorageKeys.HideAdminTrains, hide);
     }
 
     public async Task SetComponentVisibilityAsync(string key, bool visible)

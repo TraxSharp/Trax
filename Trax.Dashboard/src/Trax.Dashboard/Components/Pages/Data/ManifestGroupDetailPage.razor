@@ -232,17 +232,17 @@
                                   Width="80px"
                                   SortOrder="SortOrder.Descending" />
             <RadzenDataGridColumn TItem="Metadata"
-                                  Property="WorkflowState"
+                                  Property="TrainState"
                                   Title="State"
                                   Width="120px">
                 <Template Context="m">
-                    <RadzenBadge BadgeStyle="@GetStateBadgeStyle(m.WorkflowState)"
-                                 Text="@m.WorkflowState.ToString()" />
+                    <RadzenBadge BadgeStyle="@GetStateBadgeStyle(m.TrainState)"
+                                 Text="@m.TrainState.ToString()" />
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn TItem="Metadata"
                                   Property="Name"
-                                  Title="Workflow"
+                                  Title="Train"
                                   Width="200px">
                 <Template Context="m">@ShortName(m.Name)</Template>
             </RadzenDataGridColumn>

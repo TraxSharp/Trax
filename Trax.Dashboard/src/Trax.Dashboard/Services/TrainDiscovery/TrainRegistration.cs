@@ -1,11 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Trax.Dashboard.Services.WorkflowDiscovery;
+namespace Trax.Dashboard.Services.TrainDiscovery;
 
 /// <summary>
-/// Represents a discovered IEffectWorkflow registration in the DI container.
+/// Represents a discovered IEffectTrain registration in the DI container.
 /// </summary>
-public class WorkflowRegistration
+public class TrainRegistration
 {
     public required Type ServiceType { get; init; }
     public required Type ImplementationType { get; init; }

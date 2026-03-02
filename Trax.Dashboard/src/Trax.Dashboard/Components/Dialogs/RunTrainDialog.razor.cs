@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
 using Radzen;
-using Trax.Dashboard.Services.WorkflowDiscovery;
+using Trax.Dashboard.Services.TrainDiscovery;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.Metadata;
@@ -13,7 +13,7 @@ using Trax.Scheduler.Services.BackgroundTaskServer;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
-public partial class RunWorkflowDialog
+public partial class RunTrainDialog
 {
     [Inject]
     private IDataContextProviderFactory DataContextFactory { get; set; } = default!;
@@ -28,7 +28,7 @@ public partial class RunWorkflowDialog
     private DialogService DialogService { get; set; } = default!;
 
     [Parameter]
-    public required WorkflowRegistration Registration { get; set; }
+    public required TrainRegistration Registration { get; set; }
 
     private int _selectedTab;
     private string _jsonInput = "";
@@ -63,7 +63,7 @@ public partial class RunWorkflowDialog
 
     private void SetFormValue(string name, object? value) => _formValues[name] = value;
 
-    private async Task EnqueueWorkflow()
+    private async Task EnqueueTrain()
     {
         _error = null;
         _running = true;

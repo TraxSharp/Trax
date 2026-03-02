@@ -28,7 +28,7 @@ public class CyclicDependencyValidationTests
         // Arrange & Act
         var act = () =>
             _parentBuilder.AddScheduler(scheduler =>
-                scheduler.Schedule<IFakeSchedulerWorkflowA>(
+                scheduler.Schedule<IFakeSchedulerTrainA>(
                     "job-a",
                     new FakeManifestInputA(),
                     Every.Minutes(5)
@@ -46,18 +46,18 @@ public class CyclicDependencyValidationTests
         var act = () =>
             _parentBuilder.AddScheduler(scheduler =>
                 scheduler
-                    .Schedule<IFakeSchedulerWorkflowA>(
+                    .Schedule<IFakeSchedulerTrainA>(
                         "job-a",
                         new FakeManifestInputA(),
                         Every.Minutes(5),
                         options => options.Group("group-a")
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowB>(
+                    .ThenInclude<IFakeSchedulerTrainB>(
                         "job-b",
                         new FakeManifestInputB(),
                         options => options.Group("group-b")
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowC>(
+                    .ThenInclude<IFakeSchedulerTrainC>(
                         "job-c",
                         new FakeManifestInputC(),
                         options => options.Group("group-c")
@@ -75,13 +75,13 @@ public class CyclicDependencyValidationTests
         var act = () =>
             _parentBuilder.AddScheduler(scheduler =>
                 scheduler
-                    .Schedule<IFakeSchedulerWorkflowA>(
+                    .Schedule<IFakeSchedulerTrainA>(
                         "job-a",
                         new FakeManifestInputA(),
                         Every.Minutes(5),
                         options => options.Group("same-group")
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowB>(
+                    .ThenInclude<IFakeSchedulerTrainB>(
                         "job-b",
                         new FakeManifestInputB(),
                         options => options.Group("same-group")
@@ -99,24 +99,24 @@ public class CyclicDependencyValidationTests
         var act = () =>
             _parentBuilder.AddScheduler(scheduler =>
                 scheduler
-                    .Schedule<IFakeSchedulerWorkflowA>(
+                    .Schedule<IFakeSchedulerTrainA>(
                         "job-a",
                         new FakeManifestInputA(),
                         Every.Minutes(5),
                         options => options.Group("group-a")
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowB>(
+                    .ThenInclude<IFakeSchedulerTrainB>(
                         "job-b",
                         new FakeManifestInputB(),
                         options => options.Group("group-b")
                     )
-                    .Schedule<IFakeSchedulerWorkflowC>(
+                    .Schedule<IFakeSchedulerTrainC>(
                         "job-c",
                         new FakeManifestInputC(),
                         Every.Minutes(5),
                         options => options.Group("group-a")
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowD>(
+                    .ThenInclude<IFakeSchedulerTrainD>(
                         "job-d",
                         new FakeManifestInputD(),
                         options => options.Group("group-c")
@@ -139,25 +139,25 @@ public class CyclicDependencyValidationTests
             _parentBuilder.AddScheduler(scheduler =>
                 scheduler
                     // Chain 1: group-a → group-b
-                    .Schedule<IFakeSchedulerWorkflowA>(
+                    .Schedule<IFakeSchedulerTrainA>(
                         "job-a",
                         new FakeManifestInputA(),
                         Every.Minutes(5),
                         options => options.Group("group-a")
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowB>(
+                    .ThenInclude<IFakeSchedulerTrainB>(
                         "job-b",
                         new FakeManifestInputB(),
                         options => options.Group("group-b")
                     )
                     // Chain 2: group-b → group-a (creates cycle)
-                    .Schedule<IFakeSchedulerWorkflowC>(
+                    .Schedule<IFakeSchedulerTrainC>(
                         "job-c",
                         new FakeManifestInputC(),
                         Every.Minutes(5),
                         options => options.Group("group-b")
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowD>(
+                    .ThenInclude<IFakeSchedulerTrainD>(
                         "job-d",
                         new FakeManifestInputD(),
                         options => options.Group("group-a")
@@ -177,30 +177,30 @@ public class CyclicDependencyValidationTests
         var act = () =>
             _parentBuilder.AddScheduler(scheduler =>
                 scheduler
-                    .Schedule<IFakeSchedulerWorkflowA>(
+                    .Schedule<IFakeSchedulerTrainA>(
                         "job-a",
                         new FakeManifestInputA(),
                         Every.Minutes(5),
                         options => options.Group("group-a")
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowB>(
+                    .ThenInclude<IFakeSchedulerTrainB>(
                         "job-b",
                         new FakeManifestInputB(),
                         options => options.Group("group-b")
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowC>(
+                    .ThenInclude<IFakeSchedulerTrainC>(
                         "job-c",
                         new FakeManifestInputC(),
                         options => options.Group("group-c")
                     )
                     // Close the cycle: group-c → group-a
-                    .Schedule<IFakeSchedulerWorkflowD>(
+                    .Schedule<IFakeSchedulerTrainD>(
                         "job-d",
                         new FakeManifestInputD(),
                         Every.Minutes(5),
                         options => options.Group("group-c")
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowA>(
+                    .ThenInclude<IFakeSchedulerTrainA>(
                         "job-a2",
                         new FakeManifestInputA(),
                         options => options.Group("group-a")
@@ -224,18 +224,18 @@ public class CyclicDependencyValidationTests
         var act = () =>
             _parentBuilder.AddScheduler(scheduler =>
                 scheduler
-                    .Schedule<IFakeSchedulerWorkflowA>(
+                    .Schedule<IFakeSchedulerTrainA>(
                         "ext-a",
                         new FakeManifestInputA(),
                         Every.Minutes(5)
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowB>("ext-b", new FakeManifestInputB())
-                    .Schedule<IFakeSchedulerWorkflowC>(
+                    .ThenInclude<IFakeSchedulerTrainB>("ext-b", new FakeManifestInputB())
+                    .Schedule<IFakeSchedulerTrainC>(
                         "ext-b",
                         new FakeManifestInputC(),
                         Every.Minutes(5)
                     )
-                    .ThenInclude<IFakeSchedulerWorkflowD>("ext-a", new FakeManifestInputD())
+                    .ThenInclude<IFakeSchedulerTrainD>("ext-a", new FakeManifestInputD())
             );
 
         // Assert

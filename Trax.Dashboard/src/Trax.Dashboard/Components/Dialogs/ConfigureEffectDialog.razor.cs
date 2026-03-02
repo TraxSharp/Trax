@@ -95,7 +95,7 @@ public partial class ConfigureEffectDialog
                     Severity = NotificationSeverity.Success,
                     Summary = "Configuration Saved",
                     Detail =
-                        $"{ConfigurationType.Name} updated. Changes apply to the next workflow execution.",
+                        $"{ConfigurationType.Name} updated. Changes apply to the next train execution.",
                     Duration = 4000,
                 }
             );

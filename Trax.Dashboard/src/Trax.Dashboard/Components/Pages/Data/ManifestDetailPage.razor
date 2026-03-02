@@ -104,7 +104,7 @@
         <RadzenCard>
             <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                 <RadzenIcon Icon="check_circle" Style="font-size: 2rem; color: var(--rz-success);" />
-                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.WorkflowState == WorkflowState.Completed)</RadzenText>
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.TrainState == TrainState.Completed)</RadzenText>
                 <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Completed</RadzenText>
             </RadzenStack>
         </RadzenCard>
@@ -113,7 +113,7 @@
         <RadzenCard>
             <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                 <RadzenIcon Icon="error" Style="font-size: 2rem; color: var(--rz-danger);" />
-                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.WorkflowState == WorkflowState.Failed)</RadzenText>
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.TrainState == TrainState.Failed)</RadzenText>
                 <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Failed</RadzenText>
             </RadzenStack>
         </RadzenCard>
@@ -122,7 +122,7 @@
         <RadzenCard>
             <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                 <RadzenIcon Icon="sync" Style="font-size: 2rem; color: var(--rz-info);" />
-                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.WorkflowState == WorkflowState.InProgress)</RadzenText>
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.TrainState == TrainState.InProgress)</RadzenText>
                 <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">In Progress</RadzenText>
             </RadzenStack>
         </RadzenCard>
@@ -157,12 +157,12 @@
                                       Width="80px"
                                       SortOrder="SortOrder.Descending" />
                 <RadzenDataGridColumn TItem="Metadata"
-                                      Property="WorkflowState"
+                                      Property="TrainState"
                                       Title="State"
                                       Width="120px">
                     <Template Context="m">
-                        <RadzenBadge BadgeStyle="@GetStateBadgeStyle(m.WorkflowState)"
-                                     Text="@m.WorkflowState.ToString()" />
+                        <RadzenBadge BadgeStyle="@GetStateBadgeStyle(m.TrainState)"
+                                     Text="@m.TrainState.ToString()" />
                     </Template>
                 </RadzenDataGridColumn>
                 <RadzenDataGridColumn TItem="Metadata"

@@ -1,25 +1,25 @@
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Services.ServiceTrain;
 
-namespace Trax.Dashboard.Services.WorkflowDiscovery;
+namespace Trax.Dashboard.Services.TrainDiscovery;
 
-public class WorkflowDiscoveryService : IWorkflowDiscoveryService
+public class TrainDiscoveryService : ITrainDiscoveryService
 {
     private readonly IServiceCollection _serviceCollection;
-    private IReadOnlyList<WorkflowRegistration>? _cachedRegistrations;
+    private IReadOnlyList<TrainRegistration>? _cachedRegistrations;
 
-    public WorkflowDiscoveryService(IServiceCollection serviceCollection)
+    public TrainDiscoveryService(IServiceCollection serviceCollection)
     {
         _serviceCollection = serviceCollection;
     }
 
-    public IReadOnlyList<WorkflowRegistration> DiscoverWorkflows()
+    public IReadOnlyList<TrainRegistration> DiscoverTrains()
     {
         if (_cachedRegistrations != null)
             return _cachedRegistrations;
 
         var serviceTrainType = typeof(IServiceTrain<,>);
-        var registrations = new List<WorkflowRegistration>();
+        var registrations = new List<TrainRegistration>();
 
         foreach (var descriptor in _serviceCollection)
         {
@@ -46,7 +46,7 @@ public class WorkflowDiscoveryService : IWorkflowDiscoveryService
                 ?? descriptor.ServiceType;
 
             registrations.Add(
-                new WorkflowRegistration
+                new TrainRegistration
                 {
                     ServiceType = serviceType,
                     ImplementationType = implementationType,
@@ -61,7 +61,7 @@ public class WorkflowDiscoveryService : IWorkflowDiscoveryService
             );
         }
 
-        // Deduplicate: each InputType maps to one workflow in the registry.
+        // Deduplicate: each InputType maps to one train in the registry.
         // Prefer the interface for ServiceType and the concrete class for ImplementationType.
         _cachedRegistrations = registrations
             .GroupBy(r => r.InputType)
@@ -71,7 +71,7 @@ public class WorkflowDiscoveryService : IWorkflowDiscoveryService
                 var concreteReg = g.FirstOrDefault(r => !r.ServiceType.IsInterface);
                 var preferred = interfaceReg ?? concreteReg ?? g.First();
 
-                return new WorkflowRegistration
+                return new TrainRegistration
                 {
                     ServiceType = preferred.ServiceType,
                     ImplementationType =

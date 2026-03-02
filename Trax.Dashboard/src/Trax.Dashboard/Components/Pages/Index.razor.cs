@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Trax.Dashboard.Components.Shared;
 using Trax.Dashboard.Models;
-using Trax.Dashboard.Services.WorkflowDiscovery;
+using Trax.Dashboard.Services.TrainDiscovery;
 using Trax.Dashboard.Utilities;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -19,7 +19,7 @@ public partial class Index
     private IDataContextProviderFactory DataContextFactory { get; set; } = default!;
 
     [Inject]
-    private IWorkflowDiscoveryService WorkflowDiscovery { get; set; } = default!;
+    private ITrainDiscoveryService TrainDiscovery { get; set; } = default!;
 
     [Inject]
     private IServiceProvider ServiceProvider { get; set; } = default!;
@@ -30,13 +30,13 @@ public partial class Index
     private int _currentlyRunning;
     private int _unresolvedDeadLetters;
     private int _activeManifests;
-    private int _registeredWorkflows;
+    private int _registeredTrains;
 
     // Chart data
     private List<ExecutionTimePoint> _executionsOverTime = [];
     private List<StateCount> _stateCounts = [];
-    private List<WorkflowFailureCount> _topFailures = [];
-    private List<WorkflowDuration> _avgDurations = [];
+    private List<TrainFailureCount> _topFailures = [];
+    private List<TrainDuration> _avgDurations = [];
 
     // Tables
     private List<Metadata> _recentFailures = [];
@@ -65,8 +65,8 @@ public partial class Index
         var now = DateTime.UtcNow;
         var todayStart = now.Date;
 
-        var hideAdmin = DashboardSettings.HideAdminWorkflows;
-        var adminNames = DashboardSettings.AdminWorkflowNames;
+        var hideAdmin = DashboardSettings.HideAdminTrains;
+        var adminNames = DashboardSettings.AdminTrainNames;
 
         // Summary cards — single GroupBy instead of materializing all today's metadata
         var todayQuery = context.Metadatas.AsNoTracking().Where(m => m.StartTime >= todayStart);
@@ -75,21 +75,21 @@ public partial class Index
             todayQuery = todayQuery.ExcludeAdmin(adminNames);
 
         var todayStateCounts = await todayQuery
-            .GroupBy(m => m.WorkflowState)
+            .GroupBy(m => m.TrainState)
             .Select(g => new { State = g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);
 
-        int CountForState(WorkflowState s) =>
+        int CountForState(TrainState s) =>
             todayStateCounts.FirstOrDefault(x => x.State == s)?.Count ?? 0;
 
         _executionsToday = todayStateCounts.Sum(x => x.Count);
 
-        var completed = CountForState(WorkflowState.Completed);
-        var terminal = completed + CountForState(WorkflowState.Failed);
+        var completed = CountForState(TrainState.Completed);
+        var terminal = completed + CountForState(TrainState.Failed);
         _successRate = terminal > 0 ? Math.Round(100.0 * completed / terminal, 1) : 0;
         var runningQuery = context
             .Metadatas.AsNoTracking()
-            .Where(m => m.WorkflowState == WorkflowState.InProgress);
+            .Where(m => m.TrainState == TrainState.InProgress);
 
         if (hideAdmin)
             runningQuery = runningQuery.ExcludeAdmin(adminNames);
@@ -107,10 +107,10 @@ public partial class Index
 
         _activeManifests = await activeManifestsQuery.CountAsync(cancellationToken);
 
-        var allWorkflows = WorkflowDiscovery.DiscoverWorkflows();
-        _registeredWorkflows = hideAdmin
-            ? allWorkflows.Count(w => !adminNames.Contains(w.ImplementationTypeName))
-            : allWorkflows.Count;
+        var allTrains = TrainDiscovery.DiscoverTrains();
+        _registeredTrains = hideAdmin
+            ? allTrains.Count(w => !adminNames.Contains(w.ImplementationTypeName))
+            : allTrains.Count;
 
         // Executions over time (last 24h, grouped by hour) — aggregated in SQL
         var last24h = now.AddHours(-24);
@@ -124,13 +124,13 @@ public partial class Index
             {
                 m.StartTime.Date,
                 m.StartTime.Hour,
-                m.WorkflowState,
+                m.TrainState,
             })
             .Select(g => new
             {
                 g.Key.Date,
                 g.Key.Hour,
-                g.Key.WorkflowState,
+                g.Key.TrainState,
                 Count = g.Count(),
             })
             .ToListAsync(cancellationToken);
@@ -149,21 +149,21 @@ public partial class Index
                         .Where(x =>
                             x.Date == targetDate
                             && x.Hour == targetHour
-                            && x.WorkflowState == WorkflowState.Completed
+                            && x.TrainState == TrainState.Completed
                         )
                         .Sum(x => x.Count),
                     Failed = hourlyStats
                         .Where(x =>
                             x.Date == targetDate
                             && x.Hour == targetHour
-                            && x.WorkflowState == WorkflowState.Failed
+                            && x.TrainState == TrainState.Failed
                         )
                         .Sum(x => x.Count),
                     Cancelled = hourlyStats
                         .Where(x =>
                             x.Date == targetDate
                             && x.Hour == targetHour
-                            && x.WorkflowState == WorkflowState.Cancelled
+                            && x.TrainState == TrainState.Cancelled
                         )
                         .Sum(x => x.Count),
                 };
@@ -173,18 +173,18 @@ public partial class Index
         // State breakdown — derived from the GroupBy above, no extra query
         _stateCounts =
         [
-            new() { State = "Completed", Count = CountForState(WorkflowState.Completed) },
-            new() { State = "Failed", Count = CountForState(WorkflowState.Failed) },
-            new() { State = "In Progress", Count = CountForState(WorkflowState.InProgress) },
-            new() { State = "Pending", Count = CountForState(WorkflowState.Pending) },
-            new() { State = "Cancelled", Count = CountForState(WorkflowState.Cancelled) },
+            new() { State = "Completed", Count = CountForState(TrainState.Completed) },
+            new() { State = "Failed", Count = CountForState(TrainState.Failed) },
+            new() { State = "In Progress", Count = CountForState(TrainState.InProgress) },
+            new() { State = "Pending", Count = CountForState(TrainState.Pending) },
+            new() { State = "Cancelled", Count = CountForState(TrainState.Cancelled) },
         ];
 
-        // Top failing workflows (last 7 days)
+        // Top failing trains (last 7 days)
         var last7d = now.AddDays(-7);
         var failuresQuery = context
             .Metadatas.AsNoTracking()
-            .Where(m => m.WorkflowState == WorkflowState.Failed && m.StartTime >= last7d);
+            .Where(m => m.TrainState == TrainState.Failed && m.StartTime >= last7d);
 
         if (hideAdmin)
             failuresQuery = failuresQuery.ExcludeAdmin(adminNames);
@@ -192,19 +192,19 @@ public partial class Index
         _topFailures = (
             await failuresQuery
                 .GroupBy(m => m.Name)
-                .Select(g => new WorkflowFailureCount { Name = g.Key, Count = g.Count() })
+                .Select(g => new TrainFailureCount { Name = g.Key, Count = g.Count() })
                 .OrderByDescending(x => x.Count)
                 .Take(10)
                 .ToListAsync(cancellationToken)
         )
-            .Select(x => new WorkflowFailureCount { Name = ShortName(x.Name), Count = x.Count })
+            .Select(x => new TrainFailureCount { Name = ShortName(x.Name), Count = x.Count })
             .ToList();
 
-        // Average duration by workflow (completed in last 7 days) — aggregated in SQL
+        // Average duration by train (completed in last 7 days) — aggregated in SQL
         var durationsQuery = context
             .Metadatas.AsNoTracking()
             .Where(m =>
-                m.WorkflowState == WorkflowState.Completed
+                m.TrainState == TrainState.Completed
                 && m.EndTime != null
                 && m.StartTime >= last7d
                 && m.ParentId == null
@@ -225,7 +225,7 @@ public partial class Index
             .ToListAsync(cancellationToken);
 
         _avgDurations = avgDurationData
-            .Select(x => new WorkflowDuration
+            .Select(x => new TrainDuration
             {
                 Name = ShortName(x.Name),
                 AvgMs = Math.Round(x.AvgSeconds * 1000, 0),
@@ -235,7 +235,7 @@ public partial class Index
         // Recent failures
         var recentFailuresQuery = context
             .Metadatas.AsNoTracking()
-            .Where(m => m.WorkflowState == WorkflowState.Failed);
+            .Where(m => m.TrainState == TrainState.Failed);
 
         if (hideAdmin)
             recentFailuresQuery = recentFailuresQuery.ExcludeAdmin(adminNames);

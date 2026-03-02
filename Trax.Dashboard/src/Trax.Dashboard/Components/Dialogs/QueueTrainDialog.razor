@@ -52,6 +52,15 @@
         </Tabs>
     </RadzenTabs>
 
+    <RadzenFormField Text="Priority" Variant="Variant.Outlined" class="rz-w-100">
+        <RadzenNumeric TValue="int"
+                       Min="@WorkQueue.MinPriority"
+                       Max="@WorkQueue.MaxPriority"
+                       @bind-Value="_priority"
+                       Disabled="@_running"
+                       Placeholder="0 (lowest) – 31 (highest)" />
+    </RadzenFormField>
+
     @if (_error is not null)
     {
         <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat">
@@ -64,10 +73,10 @@
                       ButtonStyle="ButtonStyle.Light"
                       Click="@(() => DialogService.Close())"
                       Disabled="@_running" />
-        <RadzenButton Text="Enqueue"
-                      Icon="play_arrow"
+        <RadzenButton Text="Queue"
+                      Icon="queue"
                       ButtonStyle="ButtonStyle.Primary"
-                      Click="@EnqueueWorkflow"
+                      Click="@QueueTrain"
                       IsBusy="@_running"
                       Disabled="@_running" />
     </RadzenStack>

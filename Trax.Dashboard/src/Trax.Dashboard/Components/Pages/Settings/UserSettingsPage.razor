@@ -23,13 +23,13 @@
         </RadzenStack>
     </RadzenFieldset>
 
-    <RadzenFieldset Text="Administration Workflows" class="@(IsAdminWorkflowsDirty ? "cs-fieldset-dirty" : "")">
+    <RadzenFieldset Text="Administration Trains" class="@(IsAdminTrainsDirty ? "cs-fieldset-dirty" : "")">
         <RadzenStack Gap="0.25rem">
-            <RadzenLabel Text="Hide Administration Workflows" Component="HideAdminWorkflows" />
+            <RadzenLabel Text="Hide Administration Trains" Component="HideAdminTrains" />
             <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                 Exclude scheduler internals (ManifestManager, TaskServerExecutor, MetadataCleanup) from dashboard statistics and charts.
             </RadzenText>
-            <RadzenSwitch @bind-Value="_hideAdminWorkflows" Name="HideAdminWorkflows" />
+            <RadzenSwitch @bind-Value="_hideAdminTrains" Name="HideAdminTrains" />
         </RadzenStack>
     </RadzenFieldset>
 
@@ -48,7 +48,7 @@
             <RadzenStack Gap="0.25rem">
                 <RadzenLabel Text="Summary Cards" />
                 <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Executions Today, Success Rate, Currently Running, Dead Letters, Active Manifests, Registered Workflows.
+                    Executions Today, Success Rate, Currently Running, Dead Letters, Active Manifests, Registered Trains.
                 </RadzenText>
                 <RadzenSwitch @bind-Value="_showSummaryCards" />
             </RadzenStack>
@@ -62,28 +62,28 @@
             <RadzenStack Gap="0.25rem">
                 <RadzenLabel Text="Status Breakdown" />
                 <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Donut chart showing today's workflow state distribution.
+                    Donut chart showing today's train state distribution.
                 </RadzenText>
                 <RadzenSwitch @bind-Value="_showStatusBreakdown" />
             </RadzenStack>
             <RadzenStack Gap="0.25rem">
-                <RadzenLabel Text="Top Failing Workflows" />
+                <RadzenLabel Text="Top Failing Trains" />
                 <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Bar chart of the most-failing workflows over the last 7 days.
+                    Bar chart of the most-failing trains over the last 7 days.
                 </RadzenText>
                 <RadzenSwitch @bind-Value="_showTopFailures" />
             </RadzenStack>
             <RadzenStack Gap="0.25rem">
                 <RadzenLabel Text="Avg Execution Duration" />
                 <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Bar chart of average workflow execution times over the last 7 days.
+                    Bar chart of average train execution times over the last 7 days.
                 </RadzenText>
                 <RadzenSwitch @bind-Value="_showAvgDuration" />
             </RadzenStack>
             <RadzenStack Gap="0.25rem">
                 <RadzenLabel Text="Recent Failures" />
                 <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Table of the most recent failed workflow executions.
+                    Table of the most recent failed train executions.
                 </RadzenText>
                 <RadzenSwitch @bind-Value="_showRecentFailures" />
             </RadzenStack>

@@ -20,11 +20,11 @@
     }
     else
     {
-        @* ── Administrative Workflows ── *@
-        <RadzenFieldset Text="Administrative Workflows" class="@(IsAdminWorkflowsDirty ? "cs-fieldset-dirty" : "")">
+        @* ── Administrative Trains ── *@
+        <RadzenFieldset Text="Administrative Trains" class="@(IsAdminTrainsDirty ? "cs-fieldset-dirty" : "")">
             <RadzenStack Gap="1.5rem">
                 <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false" Variant="Variant.Flat">
-                    Disabling these workflows takes effect on the next polling cycle. While disabled, the ManifestManager will not queue new work and the JobDispatcher will not dispatch queued entries.
+                    Disabling these trains takes effect on the next polling cycle. While disabled, the ManifestManager will not queue new work and the JobDispatcher will not dispatch queued entries.
                 </RadzenAlert>
 
                 <RadzenStack Gap="0.25rem">

@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
-using Trax.Dashboard.Services.WorkflowDiscovery;
+using Trax.Dashboard.Services.TrainDiscovery;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -23,7 +23,7 @@ public partial class DeadLetterDetailPage
     private NavigationManager Navigation { get; set; } = default!;
 
     [Inject]
-    private IWorkflowDiscoveryService WorkflowDiscovery { get; set; } = default!;
+    private ITrainDiscoveryService TrainDiscovery { get; set; } = default!;
 
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
@@ -57,8 +57,7 @@ public partial class DeadLetterDetailPage
             _failedRuns = await context
                 .Metadatas.AsNoTracking()
                 .Where(m =>
-                    m.ManifestId == _deadLetter.ManifestId
-                    && m.WorkflowState == WorkflowState.Failed
+                    m.ManifestId == _deadLetter.ManifestId && m.TrainState == TrainState.Failed
                 )
                 .OrderByDescending(m => m.StartTime)
                 .ToListAsync(cancellationToken);
@@ -79,8 +78,8 @@ public partial class DeadLetterDetailPage
         {
             var manifest = _deadLetter.Manifest;
 
-            var registration = WorkflowDiscovery
-                .DiscoverWorkflows()
+            var registration = TrainDiscovery
+                .DiscoverTrains()
                 .FirstOrDefault(r =>
                     r.ServiceType.FullName == manifest.Name
                     || r.ImplementationType.FullName == manifest.Name
@@ -89,7 +88,7 @@ public partial class DeadLetterDetailPage
             if (registration is null)
             {
                 _actionError =
-                    $"No workflow registration found for '{ShortName(manifest.Name)}'. Is the workflow still registered?";
+                    $"No train registration found for '{ShortName(manifest.Name)}'. Is the train still registered?";
                 return;
             }
 
@@ -118,7 +117,7 @@ public partial class DeadLetterDetailPage
             var entry = WorkQueue.Create(
                 new CreateWorkQueue
                 {
-                    WorkflowName = manifest.Name,
+                    TrainName = manifest.Name,
                     Input = serializedInput,
                     InputTypeName = inputTypeName,
                     ManifestId = manifest.Id,
@@ -149,7 +148,7 @@ public partial class DeadLetterDetailPage
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
-                "Workflow Re-queued",
+                "Train Re-queued",
                 $"{ShortName(manifest.Name)} has been re-queued (WorkQueue ID {entry.Id}).",
                 duration: 4000
             );

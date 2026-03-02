@@ -62,14 +62,14 @@ public static class DashboardFormatters
         }
     }
 
-    public static BadgeStyle GetStateBadgeStyle(WorkflowState state) =>
+    public static BadgeStyle GetStateBadgeStyle(TrainState state) =>
         state switch
         {
-            WorkflowState.Completed => BadgeStyle.Success,
-            WorkflowState.Failed => BadgeStyle.Danger,
-            WorkflowState.InProgress => BadgeStyle.Info,
-            WorkflowState.Pending => BadgeStyle.Warning,
-            WorkflowState.Cancelled => BadgeStyle.Warning,
+            TrainState.Completed => BadgeStyle.Success,
+            TrainState.Failed => BadgeStyle.Danger,
+            TrainState.InProgress => BadgeStyle.Info,
+            TrainState.Pending => BadgeStyle.Warning,
+            TrainState.Cancelled => BadgeStyle.Warning,
             _ => BadgeStyle.Light,
         };
 

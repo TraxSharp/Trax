@@ -67,7 +67,7 @@ public partial class ManifestDetailPage
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
-                "Workflow Queued",
+                "Train Queued",
                 $"{ShortName(_manifest.Name)} has been queued for execution.",
                 duration: 4000
             );
