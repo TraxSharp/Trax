@@ -25,17 +25,17 @@ public class Ferment : Step<BrewingJug, Unit>, IFerment
         return Unit.Default;
     }
 
-    public async Task<Either<WorkflowException, Unit>> AddCinnamonSticks(BrewingJug jug)
+    public async Task<Either<TrainException, Unit>> AddCinnamonSticks(BrewingJug jug)
     {
         jug.HasCinnamonSticks = jug.Ingredients.Cinnamon > 0;
 
         return Unit.Default;
     }
 
-    public async Task<Either<WorkflowException, Unit>> AddYeast(BrewingJug jug)
+    public async Task<Either<TrainException, Unit>> AddYeast(BrewingJug jug)
     {
         if (jug.Ingredients.Yeast <= 0)
-            return new WorkflowException("We need yeast to make Cider!");
+            return new TrainException("We need yeast to make Cider!");
 
         jug.Yeast = jug.Ingredients.Yeast;
 

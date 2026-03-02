@@ -54,9 +54,9 @@ public static class MonadExtensions
         if (cached is null)
         {
             if (!stepType.IsClass)
-                monad.Exception ??= new WorkflowException($"Step ({stepType}) must be a class.");
+                monad.Exception ??= new TrainException($"Step ({stepType}) must be a class.");
             else
-                monad.Exception ??= new WorkflowException(
+                monad.Exception ??= new TrainException(
                     $"Step classes can only have a single constructor ({stepType})."
                 );
             return null;
@@ -75,7 +75,7 @@ public static class MonadExtensions
 
         if (initializedStep is null)
         {
-            monad.Exception ??= new WorkflowException(
+            monad.Exception ??= new TrainException(
                 $"Could not invoke constructor for ({stepType})."
             );
             return null;
@@ -124,14 +124,14 @@ public static class MonadExtensions
             monad.Memory.GetValueOrDefault(typeof(ILoggerFactory))
             is not ILoggerFactory loggerFactory
         )
-            throw new WorkflowException(
+            throw new TrainException(
                 $"Could not find ILoggerFactory for input type: ({tIn}). Have you injected an ILoggerFactory into the Monad's services?"
             );
 
         var generics = tIn.GetGenericArguments();
 
         if (generics.Length != 1)
-            throw new WorkflowException(
+            throw new TrainException(
                 $"Incorrect number of generic arguments for input type ({tIn}). Found ({generics.Length}) generics with types ({string.Join(", ", generics.Select(x => x.Name))})."
             );
 
@@ -171,7 +171,7 @@ public static class MonadExtensions
                     ?? monad.ExtractLoggerFromLoggerFactory(tIn);
 
             if (input is null)
-                throw new WorkflowException($"Could not find type: ({tIn}).");
+                throw new TrainException($"Could not find type: ({tIn}).");
 
             return input;
         }
@@ -194,8 +194,8 @@ public static class MonadExtensions
 
         return typeTuples.Count switch
         {
-            0 => throw new WorkflowException($"Cannot have Tuple of length 0."),
-            1 => throw new WorkflowException(
+            0 => throw new TrainException($"Cannot have Tuple of length 0."),
+            1 => throw new TrainException(
                 "Tuple of a single length should be passed as the value itself."
             ),
             2 => TypeHelpers.ConvertTwoTuple(typeTuples),
@@ -204,7 +204,7 @@ public static class MonadExtensions
             5 => TypeHelpers.ConvertFiveTuple(typeTuples),
             6 => TypeHelpers.ConvertSixTuple(typeTuples),
             7 => TypeHelpers.ConvertSevenTuple(typeTuples),
-            _ => throw new WorkflowException($"Could not create Tuple for type ({inputType})"),
+            _ => throw new TrainException($"Could not create Tuple for type ({inputType})"),
         };
     }
 
@@ -217,17 +217,17 @@ public static class MonadExtensions
     )
     {
         if (!typeof(TIn).IsTuple())
-            throw new WorkflowException(
+            throw new TrainException(
                 $"({typeof(TIn)}) is not a Tuple but was attempted to be extracted as one."
             );
 
         if (input is null)
-            throw new WorkflowException($"Input of type ({typeof(TIn)} cannot be null.");
+            throw new TrainException($"Input of type ({typeof(TIn)} cannot be null.");
 
         var inputTuple = (ITuple)input;
 
         if (inputTuple.Length > 7)
-            throw new WorkflowException(
+            throw new TrainException(
                 $"Tuple input ({typeof(TIn)}) cannot have a length greater than 7."
             );
 

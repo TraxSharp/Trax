@@ -3,7 +3,7 @@ using LanguageExt;
 using Trax.Core.Monad;
 using Trax.Core.Train;
 
-namespace Trax.Core.Tests.Unit.UnitTests.Workflow;
+namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
 public class ExtractTests : TestSetup
 {
@@ -14,10 +14,10 @@ public class ExtractTests : TestSetup
         var input = 1;
         var inputObject = new TestClass() { TestString = "hello" };
 
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(input, inputObject);
+        var monad = train.Activate(input, inputObject);
         monad.Extract<TestClass, string>();
 
         // Assert
@@ -33,10 +33,10 @@ public class ExtractTests : TestSetup
         var input = 1;
         var inputObject = new TestClass() { TestString = "hello" };
 
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(input);
+        var monad = train.Activate(input);
         monad.Extract<TestClass, string>(inputObject);
 
         // Assert
@@ -52,10 +52,10 @@ public class ExtractTests : TestSetup
         var input = 1;
         var inputObject = new TestClass() { TestString = "hello" };
 
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(input, inputObject);
+        var monad = train.Activate(input, inputObject);
         monad.Extract<TestClass, bool>();
 
         // Assert
@@ -69,10 +69,10 @@ public class ExtractTests : TestSetup
         // Arrange
         var input = 1;
 
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(input);
+        var monad = train.Activate(input);
         monad.Extract<TestClass, bool>();
 
         // Assert
@@ -85,10 +85,10 @@ public class ExtractTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(input);
+        var monad = train.Activate(input);
         monad.Extract<TestClass, string>(null!);
 
         // Assert
@@ -101,7 +101,7 @@ public class ExtractTests : TestSetup
         public string TestString { get; set; }
     }
 
-    private class TestWorkflow : Train<int, string>
+    private class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> RunInternal(int input) =>
             throw new NotImplementedException();

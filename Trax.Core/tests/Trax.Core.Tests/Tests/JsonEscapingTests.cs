@@ -14,7 +14,7 @@ namespace Trax.Core.Tests.Tests;
 /// </summary>
 public class JsonEscapingTests
 {
-    private class DummyWorkflow : Train<string, string>
+    private class DummyTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> RunInternal(string input) =>
             Task.FromResult(Either<Exception, string>.Right(input));
@@ -43,10 +43,10 @@ public class JsonEscapingTests
         // Arrange
         var step = new TestStepWithJsonException();
         var input = Either<Exception, string>.Right("test input");
-        var workflow = new DummyWorkflow();
+        var train = new DummyTrain();
 
         // Act
-        var result = await step.RailwayStep(input, workflow);
+        var result = await step.RailwayStep(input, train);
 
         // Assert
         Assert.That(result.IsLeft, Is.True, "Expected the step to fail and return Left(Exception)");
@@ -62,7 +62,7 @@ public class JsonEscapingTests
         );
 
         // Verify that we can deserialize the exception message
-        var exceptionData = JsonSerializer.Deserialize<WorkflowExceptionData>(exceptionMessage);
+        var exceptionData = JsonSerializer.Deserialize<TrainExceptionData>(exceptionMessage);
         Assert.That(exceptionData, Is.Not.Null);
         Assert.That(exceptionData.Step, Is.EqualTo("TestStepWithJsonException"));
         Assert.That(exceptionData.Type, Is.EqualTo("InvalidOperationException"));
@@ -78,10 +78,10 @@ public class JsonEscapingTests
         // Arrange
         var step = new TestStepWithSpecialCharacters();
         var input = Either<Exception, string>.Right("test input");
-        var workflow = new DummyWorkflow();
+        var train = new DummyTrain();
 
         // Act
-        var result = await step.RailwayStep(input, workflow);
+        var result = await step.RailwayStep(input, train);
 
         // Assert
         Assert.That(result.IsLeft, Is.True, "Expected the step to fail and return Left(Exception)");
@@ -97,7 +97,7 @@ public class JsonEscapingTests
         );
 
         // Verify that we can deserialize the exception message
-        var exceptionData = JsonSerializer.Deserialize<WorkflowExceptionData>(exceptionMessage);
+        var exceptionData = JsonSerializer.Deserialize<TrainExceptionData>(exceptionMessage);
         Assert.That(exceptionData, Is.Not.Null);
         Assert.That(exceptionData.Step, Is.EqualTo("TestStepWithSpecialCharacters"));
         Assert.That(exceptionData.Type, Is.EqualTo("InvalidOperationException"));

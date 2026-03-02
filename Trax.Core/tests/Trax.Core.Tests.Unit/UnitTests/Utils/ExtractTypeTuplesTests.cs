@@ -38,7 +38,7 @@ public class ExtractTypeTuplesTests : TestSetup
         var inputType = typeof(ValueTuple<int, string, bool>);
 
         // Act
-        Assert.Throws<WorkflowException>(() =>
+        Assert.Throws<TrainException>(() =>
             Trax.Core.Utils.TypeHelpers.ExtractTypeTuples(memory, inputType)
         );
     }

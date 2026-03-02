@@ -10,7 +10,7 @@ using Trax.Core.Analyzers.Diagnostics;
 namespace Trax.Core.Analyzers;
 
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public sealed class WorkflowChainAnalyzer : DiagnosticAnalyzer
+public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
 {
     private const string MonadTypeName = "Monad";
     private const string MonadNamespace = "Trax.Core.Monad";
@@ -38,7 +38,7 @@ public sealed class WorkflowChainAnalyzer : DiagnosticAnalyzer
         if (!IsResolveCall(invocation, context.SemanticModel))
             return;
 
-        // Verify the receiver is a Workflow<,> subclass
+        // Verify the receiver is a Train<,> subclass
         var methodSymbol = context.SemanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
         if (methodSymbol?.ContainingType == null)
             return;
@@ -261,7 +261,7 @@ public sealed class WorkflowChainAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// Checks if an invocation is a call to a method named "Resolve" on a Workflow type.
+    /// Checks if an invocation is a call to a method named "Resolve" on a Train type.
     /// </summary>
     private static bool IsResolveCall(
         InvocationExpressionSyntax invocation,

@@ -7,11 +7,11 @@ using Trax.Core.Analyzers;
 namespace Trax.Core.Tests.Analyzers;
 
 /// <summary>
-/// Tests for the WorkflowChainAnalyzer covering Phase 1 (basic chain validation)
+/// Tests for the TrainChainAnalyzer covering Phase 1 (basic chain validation)
 /// and Phase 2 (tuple decomposition, interface resolution).
 /// </summary>
 [TestFixture]
-public class WorkflowChainAnalyzerTests
+public class TrainChainAnalyzerTests
 {
     /// <summary>
     /// Minimal stub types that mirror Trax.Core's type structure.
@@ -57,12 +57,12 @@ namespace Trax.Core.Monad
 }
 ";
 
-    private static CSharpAnalyzerTest<WorkflowChainAnalyzer, DefaultVerifier> CreateTest(
+    private static CSharpAnalyzerTest<TrainChainAnalyzer, DefaultVerifier> CreateTest(
         string testSource,
         params DiagnosticResult[] expected
     )
     {
-        var test = new CSharpAnalyzerTest<WorkflowChainAnalyzer, DefaultVerifier>
+        var test = new CSharpAnalyzerTest<TrainChainAnalyzer, DefaultVerifier>
         {
             TestCode = testSource,
             ReferenceAssemblies = ReferenceAssemblies.Net.Net80,
@@ -89,7 +89,7 @@ namespace TestApp
 
     public class ProcessOrderStep : Trax.Core.Step.IStep<OrderRequest, OrderResult> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<OrderRequest, OrderResult>
+    public class TestTrain : Trax.Core.Train.Train<OrderRequest, OrderResult>
     {
         public void Run(OrderRequest input)
         {
@@ -119,7 +119,7 @@ namespace TestApp
     public class StepA : Trax.Core.Step.IStep<MyInput, Intermediate> { }
     public class StepB : Trax.Core.Step.IStep<NeedsSpecial, LanguageExt.Unit> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<MyInput, LanguageExt.Unit>
+    public class TestTrain : Trax.Core.Train.Train<MyInput, LanguageExt.Unit>
     {
         public void Run(MyInput input)
         {
@@ -153,7 +153,7 @@ namespace TestApp
 
     public class ValidateStep : Trax.Core.Step.IStep<OrderRequest, Validated> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<OrderRequest, Receipt>
+    public class TestTrain : Trax.Core.Train.Train<OrderRequest, Receipt>
     {
         public void Run(OrderRequest input)
         {
@@ -192,7 +192,7 @@ namespace TestApp
     public class ProduceOrderStep : Trax.Core.Step.IStep<User, Order> { }
     public class CombineStep : Trax.Core.Step.IStep<(User, Order), Combined> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<string, Combined>
+    public class TestTrain : Trax.Core.Train.Train<string, Combined>
     {
         public void Run(string input)
         {
@@ -226,7 +226,7 @@ namespace TestApp
     // Note: no step produces Order
     public class CombineStep : Trax.Core.Step.IStep<(User, Order), Combined> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<MyInput, Combined>
+    public class TestTrain : Trax.Core.Train.Train<MyInput, Combined>
     {
         public void Run(MyInput input)
         {
@@ -260,7 +260,7 @@ namespace TestApp
     public class ProducePairStep : Trax.Core.Step.IStep<string, (User, Order)> { }
     public class ConsumeUserStep : Trax.Core.Step.IStep<User, LanguageExt.Unit> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<string, LanguageExt.Unit>
+    public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
     {
         public void Run(string input)
         {
@@ -295,7 +295,7 @@ namespace TestApp
     public class ProduceUserStep : Trax.Core.Step.IStep<string, ConcreteUser> { }
     public class ConsumeInterfaceStep : Trax.Core.Step.IStep<IUser, Result> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<string, Result>
+    public class TestTrain : Trax.Core.Train.Train<string, Result>
     {
         public void Run(string input)
         {
@@ -327,7 +327,7 @@ namespace TestApp
     public class ProduceUnrelatedStep : Trax.Core.Step.IStep<MyInput, UnrelatedType> { }
     public class ConsumeInterfaceStep : Trax.Core.Step.IStep<IUser, Result> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<MyInput, Result>
+    public class TestTrain : Trax.Core.Train.Train<MyInput, Result>
     {
         public void Run(MyInput input)
         {
@@ -365,7 +365,7 @@ namespace TestApp
     public class ProduceUserStep : Trax.Core.Step.IStep<string, User> { }
     public class ProduceOrderStep : Trax.Core.Step.IStep<User, Order> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<string, (User, Order)>
+    public class TestTrain : Trax.Core.Train.Train<string, (User, Order)>
     {
         public void Run(string input)
         {
@@ -396,7 +396,7 @@ namespace TestApp
     public class ProduceUserStep : Trax.Core.Step.IStep<MyInput, User> { }
     // Note: no step produces Order
 
-    public class TestWorkflow : Trax.Core.Train.Train<MyInput, (User, Order)>
+    public class TestTrain : Trax.Core.Train.Train<MyInput, (User, Order)>
     {
         public void Run(MyInput input)
         {
@@ -432,7 +432,7 @@ namespace TestApp
 
     public class ConsumeRepoStep : Trax.Core.Step.IStep<IRepository, Result> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<string, Result>
+    public class TestTrain : Trax.Core.Train.Train<string, Result>
     {
         public void Run(string input)
         {
@@ -461,7 +461,7 @@ namespace TestApp
 
     public class ConsumeResultStep : Trax.Core.Step.IStep<Result, LanguageExt.Unit> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<string, LanguageExt.Unit>
+    public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
     {
         public void Run(string input)
         {
@@ -491,7 +491,7 @@ namespace TestApp
     public class ProduceContainerStep : Trax.Core.Step.IStep<string, Container> { }
     public class ConsumeInnerStep : Trax.Core.Step.IStep<Inner, LanguageExt.Unit> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<string, LanguageExt.Unit>
+    public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
     {
         public void Run(string input)
         {
@@ -525,7 +525,7 @@ namespace TestApp
 
     public class ProcessOrderStep : Trax.Core.Step.IStep<OrderRequest, OrderResult> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<OrderRequest, OrderResult>
+    public class TestTrain : Trax.Core.Train.Train<OrderRequest, OrderResult>
     {
         public void Run(OrderRequest input)
         {
@@ -554,7 +554,7 @@ namespace TestApp
 
     public class BadStep : Trax.Core.Step.IStep<NeedsSpecial, Result> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<MyInput, Result>
+    public class TestTrain : Trax.Core.Train.Train<MyInput, Result>
     {
         public void Run(MyInput input)
         {
@@ -588,7 +588,7 @@ namespace TestApp
     public class ValidateStep : Trax.Core.Step.IStep<OrderRequest, Validated> { }
     public class CacheCheckStep : Trax.Core.Step.IStep<OrderRequest, Receipt> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<OrderRequest, Receipt>
+    public class TestTrain : Trax.Core.Train.Train<OrderRequest, Receipt>
     {
         public void Run(OrderRequest input)
         {
@@ -618,7 +618,7 @@ namespace TestApp
 
     public class MissStep : Trax.Core.Step.IStep<OrderRequest, Intermediate> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<OrderRequest, Receipt>
+    public class TestTrain : Trax.Core.Train.Train<OrderRequest, Receipt>
     {
         public void Run(OrderRequest input)
         {
@@ -652,7 +652,7 @@ namespace TestApp
     public class CacheStep : Trax.Core.Step.IStep<OrderRequest, CachedData> { }
     public class ProcessStep : Trax.Core.Step.IStep<CachedData, FinalResult> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<OrderRequest, FinalResult>
+    public class TestTrain : Trax.Core.Train.Train<OrderRequest, FinalResult>
     {
         public void Run(OrderRequest input)
         {
@@ -682,7 +682,7 @@ namespace TestApp
     public class ProducePairStep : Trax.Core.Step.IStep<string, (User, Order)> { }
     public class ConsumeUserStep : Trax.Core.Step.IStep<User, LanguageExt.Unit> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<string, LanguageExt.Unit>
+    public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
     {
         public void Run(string input)
         {
@@ -712,7 +712,7 @@ namespace TestApp
 {
     public class MyInput { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<MyInput, TestWorkflow>
+    public class TestTrain : Trax.Core.Train.Train<MyInput, TestTrain>
     {
         public void Run(MyInput input)
         {
@@ -740,7 +740,7 @@ namespace TestApp
 
     public class NeedsServiceStep : Trax.Core.Step.IStep<ExtraService, Result> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<MyInput, Result>
+    public class TestTrain : Trax.Core.Train.Train<MyInput, Result>
     {
         public void Run(MyInput input, ExtraService svc)
         {
@@ -770,7 +770,7 @@ namespace TestApp
 
     public class NeedsInterfaceStep : Trax.Core.Step.IStep<IService, Result> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<MyInput, Result>
+    public class TestTrain : Trax.Core.Train.Train<MyInput, Result>
     {
         public void Run(MyInput input, ConcreteService svc)
         {
@@ -800,7 +800,7 @@ namespace TestApp
 
     public class NeedsBothStep : Trax.Core.Step.IStep<(ServiceA, ServiceB), Result> { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<MyInput, Result>
+    public class TestTrain : Trax.Core.Train.Train<MyInput, Result>
     {
         public void Run(MyInput input, ServiceA a, ServiceB b)
         {
@@ -826,7 +826,7 @@ namespace TestApp
     public class MyInput { }
     public class MissingType { }
 
-    public class TestWorkflow : Trax.Core.Train.Train<MyInput, MissingType>
+    public class TestTrain : Trax.Core.Train.Train<MyInput, MissingType>
     {
         public void Run(MyInput input)
         {

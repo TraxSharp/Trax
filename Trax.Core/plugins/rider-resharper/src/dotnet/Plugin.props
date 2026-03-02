@@ -5,11 +5,11 @@
     <SdkVersion>2025.3.0.1</SdkVersion>
 
     <Title>Trax.Core Chain Hints</Title>
-    <Description>Inlay hints showing TIn/TOut types for Trax.Core workflow chain steps</Description>
+    <Description>Inlay hints showing TIn/TOut types for Trax.Core train chain steps</Description>
 
     <Authors>Trax.Core</Authors>
     <Copyright>Copyright $([System.DateTime]::Now.Year) Maintainers of Trax.Core</Copyright>
-    <PackageTags>resharper rider plugin trax inlay-hints workflow</PackageTags>
+    <PackageTags>resharper rider plugin trax inlay-hints train</PackageTags>
 
     <PackageProjectUrl>https://github.com/theauxm/Trax.Core</PackageProjectUrl>
     <PackageLicenseUrl></PackageLicenseUrl>

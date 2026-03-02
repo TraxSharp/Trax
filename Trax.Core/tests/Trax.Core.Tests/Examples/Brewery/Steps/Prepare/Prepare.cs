@@ -20,7 +20,7 @@ public class Prepare(IFerment ferment) : Step<Ingredients, BrewingJug>, IPrepare
         return new BrewingJug() { Gallons = gallonAppleJuice.ValueUnsafe(), Ingredients = input };
     }
 
-    private async Task<Either<WorkflowException, int>> Boil(
+    private async Task<Either<TrainException, int>> Boil(
         int gallonWater,
         int numApples,
         int ozBrownSugar

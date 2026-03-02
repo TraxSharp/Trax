@@ -9,9 +9,9 @@ internal static class DiagnosticDescriptors
     /// </summary>
     public static readonly DiagnosticDescriptor StepInputNotInMemory = new(
         id: "CHAIN001",
-        title: "Step input type not available in workflow memory",
+        title: "Step input type not available in train memory",
         messageFormat: "Step '{0}' requires input type '{1}' which has not been produced by a previous step. Available: [{2}].",
-        category: "Trax.Core.Workflow",
+        category: "Trax.Core.Train",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true
     );
@@ -22,9 +22,9 @@ internal static class DiagnosticDescriptors
     /// </summary>
     public static readonly DiagnosticDescriptor ResolveTypeNotInMemory = new(
         id: "CHAIN002",
-        title: "Workflow return type not available in memory",
-        messageFormat: "Workflow return type '{0}' has not been produced by any step. Available: [{1}].",
-        category: "Trax.Core.Workflow",
+        title: "Train return type not available in memory",
+        messageFormat: "Train return type '{0}' has not been produced by any step. Available: [{1}].",
+        category: "Trax.Core.Train",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true
     );

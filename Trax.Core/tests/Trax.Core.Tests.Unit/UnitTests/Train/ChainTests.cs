@@ -4,7 +4,7 @@ using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Step;
 using Trax.Core.Train;
 
-namespace Trax.Core.Tests.Unit.UnitTests.Workflow;
+namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
 public class ChainTests : TestSetup
 {
@@ -13,18 +13,18 @@ public class ChainTests : TestSetup
     public async Task TestChainThreeTypes()
     {
         // Arrange
-        var workflowInput = 1;
+        var trainInput = 1;
         var stringInput = "hello";
-        var workflow = new TestWorkflow().Activate(workflowInput);
+        var train = new TestTrain().Activate(trainInput);
 
         // Act
-        workflow.Chain<TestStep, string, bool>(new TestStep(), stringInput, out var returnValue);
+        train.Chain<TestStep, string, bool>(new TestStep(), stringInput, out var returnValue);
 
         // Assert
         returnValue.IsRight.Should().BeTrue();
         returnValue.ValueUnsafe().Should().Be(stringInput.Equals("hello"));
-        workflow.Memory.Should().ContainValue(stringInput.Equals("hello"));
-        workflow.Exception.Should().BeNull();
+        train.Memory.Should().ContainValue(stringInput.Equals("hello"));
+        train.Exception.Should().BeNull();
     }
 
     // Chain<TStep, TIn, TOut>(TStep, TIn, TOut)
@@ -32,20 +32,16 @@ public class ChainTests : TestSetup
     public async Task TestChainThreeTypesPreviousStepException()
     {
         // Arrange
-        var workflowInput = 1;
-        var workflow = new TestWorkflow().Activate(workflowInput);
+        var trainInput = 1;
+        var train = new TestTrain().Activate(trainInput);
 
         // Act
-        workflow.Chain<TestStep, string, bool>(
-            new TestStep(),
-            new Exception(),
-            out var returnValue
-        );
+        train.Chain<TestStep, string, bool>(new TestStep(), new Exception(), out var returnValue);
 
         // Assert
         returnValue.IsLeft.Should().BeTrue();
         returnValue.Swap().ValueUnsafe().Should().BeOfType<Exception>();
-        workflow.Exception.Should().NotBeNull();
+        train.Exception.Should().NotBeNull();
     }
 
     // Chain<TStep, TIn, TOut>(TStep, TIn, TOut)
@@ -53,12 +49,12 @@ public class ChainTests : TestSetup
     public async Task TestChainThreeTypesStepException()
     {
         // Arrange
-        var workflowInput = 1;
+        var trainInput = 1;
         var stringInput = "hello";
-        var workflow = new TestWorkflow().Activate(workflowInput);
+        var train = new TestTrain().Activate(trainInput);
 
         // Act
-        workflow.Chain<TestExceptionStep, string, bool>(
+        train.Chain<TestExceptionStep, string, bool>(
             new TestExceptionStep(),
             stringInput,
             out var returnValue
@@ -67,7 +63,7 @@ public class ChainTests : TestSetup
         // Assert
         returnValue.IsLeft.Should().BeTrue();
         returnValue.Swap().ValueUnsafe().Should().BeOfType<NotImplementedException>();
-        workflow.Exception.Should().NotBeNull();
+        train.Exception.Should().NotBeNull();
     }
 
     // Chain<TStep, TIn, TOut>(TStep, TIn, TOut)
@@ -75,12 +71,12 @@ public class ChainTests : TestSetup
     public async Task TestChainThreeTypesTupleOutput()
     {
         // Arrange
-        var workflowInput = 1;
+        var trainInput = 1;
         var stringInput = "hello";
-        var workflow = new TestWorkflow().Activate(workflowInput);
+        var train = new TestTrain().Activate(trainInput);
 
         // Act
-        workflow.Chain<TestTupleOutputStep, string, (bool, char)>(
+        train.Chain<TestTupleOutputStep, string, (bool, char)>(
             new TestTupleOutputStep(),
             stringInput,
             out var returnValue
@@ -89,9 +85,9 @@ public class ChainTests : TestSetup
         // Assert
         returnValue.IsRight.Should().BeTrue();
         returnValue.ValueUnsafe().Should().Be((stringInput.Equals("hello"), stringInput.First()));
-        workflow.Memory.Should().ContainValue(stringInput.Equals("hello"));
-        workflow.Memory.Should().ContainValue(stringInput.First());
-        workflow.Exception.Should().BeNull();
+        train.Memory.Should().ContainValue(stringInput.Equals("hello"));
+        train.Memory.Should().ContainValue(stringInput.First());
+        train.Exception.Should().BeNull();
     }
 
     // Chain<TStep, TIn, TOut>(TStep)
@@ -101,15 +97,15 @@ public class ChainTests : TestSetup
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var workflow = new TestWorkflow().Activate(input, inputString);
+        var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        workflow.Chain<TestStep, string, bool>(new TestStep());
+        train.Chain<TestStep, string, bool>(new TestStep());
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
-        workflow.Memory.Should().ContainValue(inputString.Equals("hello"));
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
+        train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
     // Chain<TStep, TIn, TOut>(TIn, TOut)
@@ -119,15 +115,15 @@ public class ChainTests : TestSetup
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var workflow = new TestWorkflow().Activate(input);
+        var train = new TestTrain().Activate(input);
 
         // Act
-        workflow.Chain<TestStep, string, bool>(inputString, out var returnValue);
+        train.Chain<TestStep, string, bool>(inputString, out var returnValue);
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
-        workflow.Memory.Should().ContainValue(inputString.Equals("hello"));
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
+        train.Memory.Should().ContainValue(inputString.Equals("hello"));
         returnValue.IsRight.Should().BeTrue();
         returnValue.ValueUnsafe().Should().BeTrue();
     }
@@ -139,15 +135,15 @@ public class ChainTests : TestSetup
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var workflow = new TestWorkflow().Activate(input, inputString);
+        var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        workflow.Chain<TestStep, string, bool>();
+        train.Chain<TestStep, string, bool>();
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
-        workflow.Memory.Should().ContainValue(inputString.Equals("hello"));
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
+        train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
     // IChain<TStep>()
@@ -158,15 +154,15 @@ public class ChainTests : TestSetup
         var input = 1;
         var inputString = "hello";
         var testStep = (ITestStep)new TestStep();
-        var workflow = new TestWorkflow().Activate(input, inputString).AddServices(testStep);
+        var train = new TestTrain().Activate(input, inputString).AddServices(testStep);
 
         // Act
-        workflow.IChain<ITestStep>();
+        train.IChain<ITestStep>();
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
-        workflow.Memory.Should().ContainValue(inputString.Equals("hello"));
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
+        train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
     // IChain<TStep>()
@@ -176,14 +172,14 @@ public class ChainTests : TestSetup
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var workflow = new TestWorkflow().Activate(input, inputString);
+        var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        workflow.IChain<TestStep>();
+        train.IChain<TestStep>();
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().NotBeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().NotBeNull();
     }
 
     // Chain<TStep>()
@@ -193,15 +189,15 @@ public class ChainTests : TestSetup
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var workflow = new TestWorkflow().Activate(input, inputString);
+        var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        workflow.Chain<TestStep>();
+        train.Chain<TestStep>();
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
-        workflow.Memory.Should().ContainValue(inputString.Equals("hello"));
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
+        train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
     // Chain<TStep>(TStep)
@@ -212,15 +208,15 @@ public class ChainTests : TestSetup
         var input = 1;
         var inputString = "hello";
         var testStep = new TestStep();
-        var workflow = new TestWorkflow().Activate(input, inputString);
+        var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        workflow.Chain<TestStep>(testStep);
+        train.Chain<TestStep>(testStep);
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
-        workflow.Memory.Should().ContainValue(inputString.Equals("hello"));
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
+        train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
     // Chain<TStep, TIn>(TStep, TIn)
@@ -231,14 +227,14 @@ public class ChainTests : TestSetup
         var input = 1;
         var inputString = "hello";
         var testStep = new TestUnitStep();
-        var workflow = new TestWorkflow().Activate(input, inputString);
+        var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        workflow.Chain<TestUnitStep, string>(testStep, inputString);
+        train.Chain<TestUnitStep, string>(testStep, inputString);
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
     }
 
     // Chain<TStep, TIn>(TStep, TIn)
@@ -249,14 +245,14 @@ public class ChainTests : TestSetup
         var input = 1;
         var inputString = "hello";
         var testStep = new TestUnitStep();
-        var workflow = new TestWorkflow().Activate(input, inputString);
+        var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        workflow.Chain<TestUnitStep, string>(testStep, new Exception());
+        train.Chain<TestUnitStep, string>(testStep, new Exception());
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().NotBeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().NotBeNull();
     }
 
     // Chain<TStep, TIn>(TStep)
@@ -267,14 +263,14 @@ public class ChainTests : TestSetup
         var input = 1;
         var inputString = "hello";
         var testStep = new TestUnitStep();
-        var workflow = new TestWorkflow().Activate(input, inputString);
+        var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        workflow.Chain<TestUnitStep, string>(testStep);
+        train.Chain<TestUnitStep, string>(testStep);
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
     }
 
     // Chain<TStep, TIn>(TIn)
@@ -284,14 +280,14 @@ public class ChainTests : TestSetup
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var workflow = new TestWorkflow().Activate(input);
+        var train = new TestTrain().Activate(input);
 
         // Act
-        workflow.Chain<TestUnitStep, string>(inputString);
+        train.Chain<TestUnitStep, string>(inputString);
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
     }
 
     // Chain<TStep, TIn>(TIn)
@@ -300,14 +296,14 @@ public class ChainTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var workflow = new TestWorkflow().Activate(input);
+        var train = new TestTrain().Activate(input);
 
         // Act
-        workflow.Chain<TestUnitStep, string>(new Exception());
+        train.Chain<TestUnitStep, string>(new Exception());
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().NotBeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().NotBeNull();
     }
 
     // Chain<TStep, TIn>()
@@ -317,14 +313,14 @@ public class ChainTests : TestSetup
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var workflow = new TestWorkflow().Activate(input, inputString);
+        var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        workflow.Chain<TestUnitStep, string>();
+        train.Chain<TestUnitStep, string>();
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
     }
 
     private class TestTupleOutputStep : Step<string, (bool, char)>
@@ -352,7 +348,7 @@ public class ChainTests : TestSetup
         public override async Task<bool> Run(string input) => input.Equals("hello");
     }
 
-    private class TestWorkflow : Train<int, string>
+    private class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> RunInternal(int input) =>
             throw new NotImplementedException();

@@ -4,7 +4,7 @@ using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Step;
 using Trax.Core.Train;
 
-namespace Trax.Core.Tests.Unit.UnitTests.Workflow;
+namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
 public class ShortCircuitTests : TestSetup
 {
@@ -15,21 +15,17 @@ public class ShortCircuitTests : TestSetup
         var input = 1;
         var testStep = new TestStep();
         var inputString = "hello";
-        var workflow = new TestWorkflow().Activate(input);
+        var train = new TestTrain().Activate(input);
 
         // Act
-        workflow.ShortCircuitChain<TestStep, string, bool>(
-            testStep,
-            inputString,
-            out var returnValue
-        );
+        train.ShortCircuitChain<TestStep, string, bool>(testStep, inputString, out var returnValue);
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
         returnValue.IsRight.Should().BeTrue();
         returnValue.ValueUnsafe().Should().BeTrue();
-        workflow.Memory.Should().ContainValue(inputString.Equals("hello"));
+        train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
     [Theory]
@@ -39,22 +35,22 @@ public class ShortCircuitTests : TestSetup
         var input = 1;
         var testStep = new TestTupleOutputStep();
         var inputString = "hello";
-        var workflow = new TestWorkflow().Activate(input);
+        var train = new TestTrain().Activate(input);
 
         // Act
-        workflow.ShortCircuitChain<TestTupleOutputStep, string, (bool, char)>(
+        train.ShortCircuitChain<TestTupleOutputStep, string, (bool, char)>(
             testStep,
             inputString,
             out var returnValue
         );
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
         returnValue.IsRight.Should().BeTrue();
         returnValue.ValueUnsafe().Should().Be((inputString.Equals("hello"), inputString.First()));
-        workflow.Memory.Should().ContainValue(inputString.Equals("hello"));
-        workflow.Memory.Should().ContainValue(inputString.First());
+        train.Memory.Should().ContainValue(inputString.Equals("hello"));
+        train.Memory.Should().ContainValue(inputString.First());
     }
 
     [Theory]
@@ -64,21 +60,21 @@ public class ShortCircuitTests : TestSetup
         var input = 1;
         var testStep = new TestExceptionStep();
         var inputString = "hello";
-        var workflow = new TestWorkflow().Activate(input);
+        var train = new TestTrain().Activate(input);
 
         // Act
-        workflow.ShortCircuitChain<TestExceptionStep, string, bool>(
+        train.ShortCircuitChain<TestExceptionStep, string, bool>(
             testStep,
             inputString,
             out var returnValue
         );
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
         returnValue.IsLeft.Should().BeTrue();
         returnValue.Swap().ValueUnsafe().Should().BeOfType<NotImplementedException>();
-        workflow.Memory.Should().NotContainValue(inputString.Equals("hello"));
+        train.Memory.Should().NotContainValue(inputString.Equals("hello"));
     }
 
     [Theory]
@@ -87,15 +83,15 @@ public class ShortCircuitTests : TestSetup
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var workflow = new TestWorkflow().Activate(input, inputString);
+        var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        workflow.ShortCircuit<TestStepStringOutput>();
+        train.ShortCircuit<TestStepStringOutput>();
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
-        workflow.Memory.Should().ContainValue("helloworld");
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
+        train.Memory.Should().ContainValue("helloworld");
     }
 
     [Theory]
@@ -103,14 +99,14 @@ public class ShortCircuitTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var workflow = new TestWorkflow().Activate(input);
+        var train = new TestTrain().Activate(input);
 
         // Act
-        workflow.ShortCircuit<TestStepStringOutput>();
+        train.ShortCircuit<TestStepStringOutput>();
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().NotBeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().NotBeNull();
     }
 
     [Theory]
@@ -118,14 +114,14 @@ public class ShortCircuitTests : TestSetup
     {
         // Arrange
         var input = new Option<object>();
-        var workflow = new TestWorkflowOption().Activate(input);
+        var train = new TestTrainOption().Activate(input);
 
         // Act
-        workflow.ShortCircuit<TestOptionStepTest>();
+        train.ShortCircuit<TestOptionStepTest>();
 
         // Assert
-        workflow.Memory.Should().NotBeNull();
-        workflow.Exception.Should().BeNull();
+        train.Memory.Should().NotBeNull();
+        train.Exception.Should().BeNull();
     }
 
     private class TestExceptionStep : Step<string, bool>
@@ -149,7 +145,7 @@ public class ShortCircuitTests : TestSetup
         public override async Task<string> Run(string input) => input + "world";
     }
 
-    private class TestWorkflow : Train<int, string>
+    private class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> RunInternal(int input) =>
             throw new NotImplementedException();
@@ -163,7 +159,7 @@ public class ShortCircuitTests : TestSetup
         }
     }
 
-    private class TestWorkflowOption : Train<Option<object>, string>
+    private class TestTrainOption : Train<Option<object>, string>
     {
         protected override Task<Either<Exception, string>> RunInternal(Option<object> input) =>
             throw new NotImplementedException();

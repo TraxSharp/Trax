@@ -6,7 +6,7 @@ namespace Trax.Core.Analyzers.Analysis;
 
 /// <summary>
 /// Simulates the runtime Memory dictionary as a set of type symbols.
-/// Tracks which types are available at each point in the workflow chain.
+/// Tracks which types are available at each point in the train chain.
 ///
 /// Matches runtime behavior:
 /// - Tuple outputs are decomposed into individual component types (not stored as tuples)
@@ -24,7 +24,7 @@ internal sealed class MemorySimulator
     }
 
     /// <summary>
-    /// Seeds Memory with Unit and the workflow input type.
+    /// Seeds Memory with Unit and the train input type.
     /// Routes through AddType so tuple inputs get decomposed and interfaces are stored.
     /// </summary>
     public void Initialize(ITypeSymbol inputType, INamedTypeSymbol? unitType)

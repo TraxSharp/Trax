@@ -14,13 +14,13 @@ public class StepCancellationTests : TestSetup
         // Arrange
         using var cts = new CancellationTokenSource();
         var step = new TokenVerifyingStep();
-        var workflow = new TestWorkflow();
-        workflow.CancellationToken = cts.Token;
+        var train = new TestTrain();
+        train.CancellationToken = cts.Token;
 
         Either<Exception, string> input = "hello";
 
         // Act
-        var result = await step.RailwayStep(input, workflow);
+        var result = await step.RailwayStep(input, train);
 
         // Assert
         result.IsRight.Should().BeTrue();
@@ -34,13 +34,13 @@ public class StepCancellationTests : TestSetup
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         var step = new CountingStep();
-        var workflow = new TestWorkflow();
-        workflow.CancellationToken = cts.Token;
+        var train = new TestTrain();
+        train.CancellationToken = cts.Token;
 
         Either<Exception, string> input = "hello";
 
         // Act
-        var act = () => step.RailwayStep(input, workflow);
+        var act = () => step.RailwayStep(input, train);
 
         // Assert
         await act.Should().ThrowAsync<OperationCanceledException>();
@@ -54,13 +54,13 @@ public class StepCancellationTests : TestSetup
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         var step = new CountingStep();
-        var workflow = new TestWorkflow();
-        workflow.CancellationToken = cts.Token;
+        var train = new TestTrain();
+        train.CancellationToken = cts.Token;
 
         Either<Exception, string> input = new InvalidOperationException("previous failure");
 
         // Act
-        var result = await step.RailwayStep(input, workflow);
+        var result = await step.RailwayStep(input, train);
 
         // Assert — short-circuits without throwing OperationCanceledException
         result.IsLeft.Should().BeTrue();
@@ -73,14 +73,14 @@ public class StepCancellationTests : TestSetup
         // Arrange
         using var cts = new CancellationTokenSource();
         var step = new CancellingStep(cts);
-        var workflow = new TestWorkflow();
-        workflow.CancellationToken = cts.Token;
+        var train = new TestTrain();
+        train.CancellationToken = cts.Token;
 
         Either<Exception, string> input = "hello";
 
         // Act & Assert
         await FluentActions
-            .Invoking(() => step.RailwayStep(input, workflow))
+            .Invoking(() => step.RailwayStep(input, train))
             .Should()
             .ThrowAsync<OperationCanceledException>();
 
@@ -92,12 +92,12 @@ public class StepCancellationTests : TestSetup
     {
         // Arrange
         var step = new ThrowingStep();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         Either<Exception, string> input = "hello";
 
         // Act
-        var result = await step.RailwayStep(input, workflow);
+        var result = await step.RailwayStep(input, train);
 
         // Assert
         result.IsLeft.Should().BeTrue();
@@ -149,7 +149,7 @@ public class StepCancellationTests : TestSetup
             throw new InvalidOperationException("test error");
     }
 
-    private class TestWorkflow : Train<string, string>
+    private class TestTrain : Train<string, string>
     {
         protected override Task<Either<Exception, string>> RunInternal(string input) =>
             throw new NotImplementedException();

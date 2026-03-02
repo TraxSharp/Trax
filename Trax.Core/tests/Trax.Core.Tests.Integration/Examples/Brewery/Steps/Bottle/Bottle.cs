@@ -10,7 +10,7 @@ public class Bottle(IFerment _ferment) : Step<BrewingJug, List<GlassBottle>>, IB
     public override async Task<List<GlassBottle>> Run(BrewingJug input)
     {
         if (!input.IsBrewed)
-            throw new WorkflowException(
+            throw new TrainException(
                 "We don't want to bottle un-brewed beer! What are we, trying to make poison?"
             );
 

@@ -201,7 +201,7 @@ public partial class Monad<TInput, TReturn>
             // Services must be classes
             if (!serviceType.IsClass)
             {
-                Exception ??= new WorkflowException(
+                Exception ??= new TrainException(
                     $"Params ({serviceType}) to AddServices must be Classes."
                 );
                 return this;
@@ -213,7 +213,7 @@ public partial class Monad<TInput, TReturn>
 
             if (foundInterface is null)
             {
-                Exception ??= new WorkflowException(
+                Exception ??= new TrainException(
                     $"Class ({serviceType}) does not have any interfaces."
                 );
                 return this;

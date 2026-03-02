@@ -6,7 +6,7 @@ namespace Trax.Core.Monad;
 /// <summary>
 /// The composable monadic computation context for Trax.Core.
 /// Returned by Train.Activate(), this class provides the fluent Chain/Resolve/Extract API
-/// for building Railway-oriented workflows as a sequence of steps.
+/// for building Railway-oriented trains as a sequence of steps.
 /// </summary>
 /// <typeparam name="TInput">The type of input the owning train accepts</typeparam>
 /// <typeparam name="TReturn">The type of result the owning train produces</typeparam>

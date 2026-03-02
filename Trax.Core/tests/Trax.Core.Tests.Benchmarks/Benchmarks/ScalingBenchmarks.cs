@@ -1,14 +1,14 @@
 using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Tests.Benchmarks.Serial;
-using Trax.Core.Tests.Benchmarks.Workflows;
+using Trax.Core.Tests.Benchmarks.Trains;
 using Trax.Effect.Extensions;
 
 namespace Trax.Core.Tests.Benchmarks.Benchmarks;
 
 /// <summary>
 /// Measures how overhead scales with step count.
-/// Compares Serial vs Base Workflow vs EffectWorkflow (no effects) at 1, 3, 5, and 10 steps.
+/// Compares Serial vs Base Train vs EffectTrain (no effects) at 1, 3, 5, and 10 steps.
 /// </summary>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 10)]
@@ -24,10 +24,10 @@ public class ScalingBenchmarks
     {
         var services = new ServiceCollection();
         services.AddTraxEffects();
-        services.AddScopedTraxRoute<IEffectAddOneX1Workflow, EffectAddOneX1Workflow>();
-        services.AddScopedTraxRoute<IEffectAddOneX3Workflow, EffectAddOneX3Workflow>();
-        services.AddScopedTraxRoute<IEffectAddOneX5Workflow, EffectAddOneX5Workflow>();
-        services.AddScopedTraxRoute<IEffectAddOneX10Workflow, EffectAddOneX10Workflow>();
+        services.AddScopedTraxRoute<IEffectAddOneX1Train, EffectAddOneX1Train>();
+        services.AddScopedTraxRoute<IEffectAddOneX3Train, EffectAddOneX3Train>();
+        services.AddScopedTraxRoute<IEffectAddOneX5Train, EffectAddOneX5Train>();
+        services.AddScopedTraxRoute<IEffectAddOneX10Train, EffectAddOneX10Train>();
         _provider = services.BuildServiceProvider();
     }
 
@@ -37,27 +37,27 @@ public class ScalingBenchmarks
     [Benchmark(Baseline = true, Description = "Serial")]
     public Task<int> Serial() => SerialOperations.AddNSerial(0, StepCount);
 
-    [Benchmark(Description = "BaseWorkflow")]
-    public Task<int> BaseWorkflow() =>
+    [Benchmark(Description = "BaseTrain")]
+    public Task<int> BaseTrain() =>
         StepCount switch
         {
-            1 => new AddOneX1Workflow().Run(0),
-            3 => new AddOneX3Workflow().Run(0),
-            5 => new AddOneX5Workflow().Run(0),
-            10 => new AddOneX10Workflow().Run(0),
+            1 => new AddOneX1Train().Run(0),
+            3 => new AddOneX3Train().Run(0),
+            5 => new AddOneX5Train().Run(0),
+            10 => new AddOneX10Train().Run(0),
             _ => throw new ArgumentOutOfRangeException(),
         };
 
-    [Benchmark(Description = "EffectWorkflow_NoEffects")]
-    public async Task<int> EffectWorkflow_NoEffects()
+    [Benchmark(Description = "EffectTrain_NoEffects")]
+    public async Task<int> EffectTrain_NoEffects()
     {
         using var scope = _provider.CreateScope();
         return StepCount switch
         {
-            1 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX1Workflow>().Run(0),
-            3 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX3Workflow>().Run(0),
-            5 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX5Workflow>().Run(0),
-            10 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX10Workflow>().Run(0),
+            1 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX1Train>().Run(0),
+            3 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX3Train>().Run(0),
+            5 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX5Train>().Run(0),
+            10 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX10Train>().Run(0),
             _ => throw new ArgumentOutOfRangeException(),
         };
     }

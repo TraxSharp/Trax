@@ -8,7 +8,7 @@
 
   <description>
     <![CDATA[
-<p>Inlay hints for Trax.Core workflow chains, showing TIn and TOut
+<p>Inlay hints for Trax.Core train chains, showing TIn and TOut
 types for each .Chain&lt;StepType&gt;(), .ShortCircuit&lt;StepType&gt;(),
 and .IChain&lt;StepType&gt;() call.</p>
 ]]>

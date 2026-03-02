@@ -15,8 +15,8 @@ public class ExtractTupleTests : TestSetup
         var input = 1;
 
         var inputObject = new object();
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input, "hello", false, 'c', inputObject);
+        var train = new TestTrain();
+        var monad = train.Activate(input, "hello", false, 'c', inputObject);
 
         var inputTuple = typeof(ValueTuple<int, string, bool, char, object>);
 
@@ -38,16 +38,16 @@ public class ExtractTupleTests : TestSetup
         // Arrange
         var input = 1;
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input);
+        var train = new TestTrain();
+        var monad = train.Activate(input);
 
         var inputTuple = typeof(ValueTuple<int>);
 
         // Act
-        Assert.Throws<WorkflowException>(() => monad.ExtractTuple(inputTuple));
+        Assert.Throws<TrainException>(() => monad.ExtractTuple(inputTuple));
     }
 
-    private class TestWorkflow : Train<int, string>
+    private class TestTrain : Train<int, string>
     {
         protected override async Task<Either<Exception, string>> RunInternal(int input) =>
             Activate(input).Resolve();

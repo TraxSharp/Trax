@@ -1,19 +1,37 @@
 using LanguageExt;
 using Trax.Core.Tests.Benchmarks.Models;
 using Trax.Core.Tests.Benchmarks.Steps;
-using Trax.Core.Train;
+using Trax.Effect.Services.ServiceTrain;
 
-namespace Trax.Core.Tests.Benchmarks.Workflows;
+namespace Trax.Core.Tests.Benchmarks.Trains;
 
-// --- Arithmetic workflows (int -> int) ---
+// --- Interfaces ---
 
-public class AddOneWorkflow : Train<int, int>
+public interface IEffectAddOneTrain : IServiceTrain<int, int>;
+
+public interface IEffectAddThreeTrain : IServiceTrain<int, int>;
+
+public interface IEffectTransformTrain : IServiceTrain<PersonDto, PersonEntity>;
+
+public interface IEffectSimulatedIoTrain : IServiceTrain<int, int>;
+
+public interface IEffectAddOneX1Train : IServiceTrain<int, int>;
+
+public interface IEffectAddOneX3Train : IServiceTrain<int, int>;
+
+public interface IEffectAddOneX5Train : IServiceTrain<int, int>;
+
+public interface IEffectAddOneX10Train : IServiceTrain<int, int>;
+
+// --- Implementations ---
+
+public class EffectAddOneTrain : ServiceTrain<int, int>, IEffectAddOneTrain
 {
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(Activate(input).Chain<AddOneStep>().Resolve());
 }
 
-public class AddThreeWorkflow : Train<int, int>
+public class EffectAddThreeTrain : ServiceTrain<int, int>, IEffectAddThreeTrain
 {
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(
@@ -21,17 +39,13 @@ public class AddThreeWorkflow : Train<int, int>
         );
 }
 
-// --- Transform workflow (PersonDto -> PersonEntity) ---
-
-public class TransformWorkflow : Train<PersonDto, PersonEntity>
+public class EffectTransformTrain : ServiceTrain<PersonDto, PersonEntity>, IEffectTransformTrain
 {
     protected override Task<Either<Exception, PersonEntity>> RunInternal(PersonDto input) =>
         Task.FromResult(Activate(input).Chain<TransformStep>().Resolve());
 }
 
-// --- Simulated I/O workflow ---
-
-public class SimulatedIoWorkflow : Train<int, int>
+public class EffectSimulatedIoTrain : ServiceTrain<int, int>, IEffectSimulatedIoTrain
 {
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(
@@ -43,15 +57,15 @@ public class SimulatedIoWorkflow : Train<int, int>
         );
 }
 
-// --- Scaling workflows (parameterized by step count) ---
+// --- Scaling variants ---
 
-public class AddOneX1Workflow : Train<int, int>
+public class EffectAddOneX1Train : ServiceTrain<int, int>, IEffectAddOneX1Train
 {
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(Activate(input).Chain<AddOneStep>().Resolve());
 }
 
-public class AddOneX3Workflow : Train<int, int>
+public class EffectAddOneX3Train : ServiceTrain<int, int>, IEffectAddOneX3Train
 {
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(
@@ -59,7 +73,7 @@ public class AddOneX3Workflow : Train<int, int>
         );
 }
 
-public class AddOneX5Workflow : Train<int, int>
+public class EffectAddOneX5Train : ServiceTrain<int, int>, IEffectAddOneX5Train
 {
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(
@@ -73,7 +87,7 @@ public class AddOneX5Workflow : Train<int, int>
         );
 }
 
-public class AddOneX10Workflow : Train<int, int>
+public class EffectAddOneX10Train : ServiceTrain<int, int>, IEffectAddOneX10Train
 {
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(

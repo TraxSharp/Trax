@@ -9,7 +9,7 @@ interface ChainMatch {
 }
 
 /**
- * Provides inlay hints for Trax.Core workflow chains, showing TIn → TOut
+ * Provides inlay hints for Trax.Core train chains, showing TIn → TOut
  * for each .Chain<StepType>(), .ShortCircuit<StepType>(), and .IChain<StepType>() call.
  */
 export class ChainHintsProvider implements vscode.InlayHintsProvider {

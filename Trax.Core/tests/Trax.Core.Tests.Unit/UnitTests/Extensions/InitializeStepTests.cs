@@ -15,8 +15,8 @@ public class InitializeStepTests : TestSetup
         // Arrange
         var input = 1;
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(1);
+        var train = new TestTrain();
+        var monad = train.Activate(1);
 
         // Act
         var step = monad.InitializeStep<TestValidStep, int, string>();
@@ -32,8 +32,8 @@ public class InitializeStepTests : TestSetup
     public async Task TestInvalidInitializeStep()
     {
         // Arrange
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(1);
+        var train = new TestTrain();
+        var monad = train.Activate(1);
 
         // Act
         var step = monad.InitializeStep<TestInvalidStep, int, string>();
@@ -42,7 +42,7 @@ public class InitializeStepTests : TestSetup
         monad.Exception.Should().NotBeNull();
     }
 
-    private class TestWorkflow : Train<int, string>
+    private class TestTrain : Train<int, string>
     {
         protected override async Task<Either<Exception, string>> RunInternal(int input) =>
             Activate(input).Resolve();

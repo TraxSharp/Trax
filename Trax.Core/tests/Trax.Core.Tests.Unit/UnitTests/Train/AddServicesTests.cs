@@ -3,7 +3,7 @@ using LanguageExt;
 using Trax.Core.Monad;
 using Trax.Core.Train;
 
-namespace Trax.Core.Tests.Unit.UnitTests.Workflow;
+namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
 public class AddServicesTests : TestSetup
 {
@@ -12,13 +12,13 @@ public class AddServicesTests : TestSetup
     {
         // Arrange
         var inputService = new TestService();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         var services = new object[] { inputService };
         var serviceTypes = new[] { typeof(ITestService) };
 
         // Act
-        var monad = workflow.Activate(0);
+        var monad = train.Activate(0);
         monad.AddServices(services, serviceTypes);
 
         // Assert
@@ -33,13 +33,13 @@ public class AddServicesTests : TestSetup
     {
         // Arrange
         var inputService = 1;
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         var services = new object[] { inputService };
         var serviceTypes = new[] { typeof(ITestService) };
 
         // Act
-        var monad = workflow.Activate(0);
+        var monad = train.Activate(0);
         monad.AddServices(services, serviceTypes);
 
         // Assert
@@ -52,13 +52,13 @@ public class AddServicesTests : TestSetup
     {
         // Arrange
         var inputService = new TestServiceNoInterface();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         var services = new object[] { inputService };
         var serviceTypes = new[] { typeof(ITestService) };
 
         // Act
-        var monad = workflow.Activate(0);
+        var monad = train.Activate(0);
         monad.AddServices(services, serviceTypes);
 
         // Assert
@@ -71,10 +71,10 @@ public class AddServicesTests : TestSetup
     {
         // Arrange
         var inputService = new TestService();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(0);
+        var monad = train.Activate(0);
         var baselineCount = monad.Memory.Count;
         monad.AddServices<ITestService>(inputService);
 
@@ -90,10 +90,10 @@ public class AddServicesTests : TestSetup
         // Arrange
         var service1 = new TestService1();
         var service2 = new TestService2();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(0);
+        var monad = train.Activate(0);
         var baselineCount = monad.Memory.Count;
         monad.AddServices<ITestService1, ITestService2>(service1, service2);
 
@@ -110,10 +110,10 @@ public class AddServicesTests : TestSetup
         var service1 = new TestService1();
         var service2 = new TestService2();
         var service3 = new TestService3();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(0);
+        var monad = train.Activate(0);
         var baselineCount = monad.Memory.Count;
         monad.AddServices<ITestService1, ITestService2, ITestService3>(
             service1,
@@ -135,10 +135,10 @@ public class AddServicesTests : TestSetup
         var service2 = new TestService2();
         var service3 = new TestService3();
         var service4 = new TestService4();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(0);
+        var monad = train.Activate(0);
         var baselineCount = monad.Memory.Count;
         monad.AddServices<ITestService1, ITestService2, ITestService3, ITestService4>(
             service1,
@@ -162,10 +162,10 @@ public class AddServicesTests : TestSetup
         var service3 = new TestService3();
         var service4 = new TestService4();
         var service5 = new TestService5();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(0);
+        var monad = train.Activate(0);
         var baselineCount = monad.Memory.Count;
         monad.AddServices<
             ITestService1,
@@ -191,10 +191,10 @@ public class AddServicesTests : TestSetup
         var service4 = new TestService4();
         var service5 = new TestService5();
         var service6 = new TestService6();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(0);
+        var monad = train.Activate(0);
         var baselineCount = monad.Memory.Count;
         monad.AddServices<
             ITestService1,
@@ -222,10 +222,10 @@ public class AddServicesTests : TestSetup
         var service5 = new TestService5();
         var service6 = new TestService6();
         var service7 = new TestService7();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(0);
+        var monad = train.Activate(0);
         var baselineCount = monad.Memory.Count;
         monad.AddServices<
             ITestService1,
@@ -277,7 +277,7 @@ public class AddServicesTests : TestSetup
 
     private interface ITestService7 { }
 
-    private class TestWorkflow : Train<int, string>
+    private class TestTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> RunInternal(int input) =>
             throw new NotImplementedException();

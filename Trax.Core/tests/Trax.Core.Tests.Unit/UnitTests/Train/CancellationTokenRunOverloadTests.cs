@@ -4,7 +4,7 @@ using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Step;
 using Trax.Core.Train;
 
-namespace Trax.Core.Tests.Unit.UnitTests.Workflow;
+namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
 public class CancellationTokenRunOverloadTests : TestSetup
 {
@@ -13,10 +13,10 @@ public class CancellationTokenRunOverloadTests : TestSetup
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        var workflow = new SimpleWorkflow();
+        var train = new SimpleTrain();
 
         // Act
-        var result = await workflow.Run("hello", cts.Token);
+        var result = await train.Run("hello", cts.Token);
 
         // Assert
         result.Should().Be("hello_processed");
@@ -27,11 +27,11 @@ public class CancellationTokenRunOverloadTests : TestSetup
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        var workflow = new SimpleWorkflow();
+        var train = new SimpleTrain();
 
         // Act
-        workflow.CancellationToken = cts.Token;
-        var result = await workflow.RunEither("hello");
+        train.CancellationToken = cts.Token;
+        var result = await train.RunEither("hello");
 
         // Assert
         result.IsRight.Should().BeTrue();
@@ -43,11 +43,11 @@ public class CancellationTokenRunOverloadTests : TestSetup
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        var workflow = new FailingWorkflow();
+        var train = new FailingTrain();
 
         // Act
-        workflow.CancellationToken = cts.Token;
-        var result = await workflow.RunEither("hello");
+        train.CancellationToken = cts.Token;
+        var result = await train.RunEither("hello");
 
         // Assert
         result.IsLeft.Should().BeTrue();
@@ -58,13 +58,13 @@ public class CancellationTokenRunOverloadTests : TestSetup
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        var workflow = new TokenCapturingWorkflow();
+        var train = new TokenCapturingTrain();
 
         // Act
-        await workflow.Run("hello", cts.Token);
+        await train.Run("hello", cts.Token);
 
         // Assert
-        workflow.TokenDuringExecution.Should().Be(cts.Token);
+        train.TokenDuringExecution.Should().Be(cts.Token);
     }
 
     [Theory]
@@ -74,14 +74,14 @@ public class CancellationTokenRunOverloadTests : TestSetup
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         var step = new CountingStep();
-        var workflow = new StepWorkflow(step);
+        var train = new StepTrain(step);
 
         // Act & Assert — Chain uses Task.Run().Result which wraps
         // OperationCanceledException; verify the step was never executed
         Exception? caught = null;
         try
         {
-            await workflow.Run("hello", cts.Token);
+            await train.Run("hello", cts.Token);
         }
         catch (Exception ex)
         {
@@ -94,19 +94,19 @@ public class CancellationTokenRunOverloadTests : TestSetup
 
     #region Test Helpers
 
-    private class SimpleWorkflow : Train<string, string>
+    private class SimpleTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> RunInternal(string input) =>
             Activate(input).Chain(new ProcessStep()).Resolve();
     }
 
-    private class FailingWorkflow : Train<string, string>
+    private class FailingTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> RunInternal(string input) =>
             Activate(input).Chain(new FailStep()).Resolve();
     }
 
-    private class TokenCapturingWorkflow : Train<string, string>
+    private class TokenCapturingTrain : Train<string, string>
     {
         public CancellationToken TokenDuringExecution { get; private set; }
 
@@ -117,11 +117,11 @@ public class CancellationTokenRunOverloadTests : TestSetup
         }
     }
 
-    private class StepWorkflow : Train<string, string>
+    private class StepTrain : Train<string, string>
     {
         private readonly Step<string, string> _step;
 
-        public StepWorkflow(Step<string, string> step) => _step = step;
+        public StepTrain(Step<string, string> step) => _step = step;
 
         protected override async Task<Either<Exception, string>> RunInternal(string input) =>
             Activate(input).Chain(_step).Resolve();

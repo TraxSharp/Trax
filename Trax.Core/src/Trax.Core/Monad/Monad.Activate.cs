@@ -22,7 +22,7 @@ public partial class Monad<TInput, TReturn>
         // Validate input is not null
         if (input is null)
         {
-            Exception ??= new WorkflowException($"Input ({typeof(TInput)}) is null.");
+            Exception ??= new TrainException($"Input ({typeof(TInput)}) is null.");
             return this;
         }
 

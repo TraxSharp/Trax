@@ -16,8 +16,8 @@ public class AddTupleToMemoryTests : TestSetup
         var input = 1;
         var inputTuple = ("hello", false);
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input);
+        var train = new TestTrain();
+        var monad = train.Activate(input);
 
         // Act
         monad.AddTupleToMemory(inputTuple);
@@ -36,11 +36,11 @@ public class AddTupleToMemoryTests : TestSetup
         var input = 1;
         var inputTuple = "hello";
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input);
+        var train = new TestTrain();
+        var monad = train.Activate(input);
 
         // Act
-        Assert.Throws<WorkflowException>(() => monad.AddTupleToMemory(inputTuple));
+        Assert.Throws<TrainException>(() => monad.AddTupleToMemory(inputTuple));
     }
 
     [Theory]
@@ -48,11 +48,11 @@ public class AddTupleToMemoryTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input);
+        var train = new TestTrain();
+        var monad = train.Activate(input);
 
         // Act
-        Assert.Throws<WorkflowException>(() => monad.AddTupleToMemory((ITuple)null!));
+        Assert.Throws<TrainException>(() => monad.AddTupleToMemory((ITuple)null!));
     }
 
     [Theory]
@@ -62,8 +62,8 @@ public class AddTupleToMemoryTests : TestSetup
         var input = 1;
         var inputTuple = (42, "world", 3.14);
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input);
+        var train = new TestTrain();
+        var monad = train.Activate(input);
 
         // Act
         monad.AddTupleToMemory(inputTuple);
@@ -83,11 +83,11 @@ public class AddTupleToMemoryTests : TestSetup
         var input = 1;
         var inputTuple = new ValueTuple();
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input);
+        var train = new TestTrain();
+        var monad = train.Activate(input);
 
         // Act
-        Assert.Throws<WorkflowException>(() => monad.AddTupleToMemory(inputTuple));
+        Assert.Throws<TrainException>(() => monad.AddTupleToMemory(inputTuple));
     }
 
     [Theory]
@@ -97,11 +97,11 @@ public class AddTupleToMemoryTests : TestSetup
         var input = 1;
         var inputTuple = (1, 2, 3, 4, 5, 6, 7, 8);
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input);
+        var train = new TestTrain();
+        var monad = train.Activate(input);
 
         // Act
-        Assert.Throws<WorkflowException>(() => monad.AddTupleToMemory(inputTuple));
+        Assert.Throws<TrainException>(() => monad.AddTupleToMemory(inputTuple));
     }
 
     [Theory]
@@ -112,8 +112,8 @@ public class AddTupleToMemoryTests : TestSetup
         var inputTuple1 = (1, "first");
         var inputTuple2 = (2, "second");
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input);
+        var train = new TestTrain();
+        var monad = train.Activate(input);
         monad.AddTupleToMemory(inputTuple1);
 
         // Act
@@ -126,7 +126,7 @@ public class AddTupleToMemoryTests : TestSetup
         monad.Memory.Values.Should().Contain("second");
     }
 
-    private class TestWorkflow : Train<int, string>
+    private class TestTrain : Train<int, string>
     {
         protected override async Task<Either<Exception, string>> RunInternal(int input) =>
             Activate(input).Resolve();

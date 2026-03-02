@@ -3,7 +3,7 @@ using LanguageExt;
 using Trax.Core.Monad;
 using Trax.Core.Train;
 
-namespace Trax.Core.Tests.Unit.UnitTests.Workflow;
+namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
 public class ActivateTests : TestSetup
 {
@@ -12,10 +12,10 @@ public class ActivateTests : TestSetup
     {
         // Arrange
         var input = new object();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(input);
+        var monad = train.Activate(input);
 
         // Assert
         monad.Memory.Should().NotBeNull();
@@ -29,10 +29,10 @@ public class ActivateTests : TestSetup
     {
         // Arrange
         object input = null!;
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(input);
+        var monad = train.Activate(input);
 
         // Assert
         monad.Memory.Should().NotBeNull();
@@ -44,10 +44,10 @@ public class ActivateTests : TestSetup
     {
         // Arrange
         var input = new object();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(input, 1, "hello", false);
+        var monad = train.Activate(input, 1, "hello", false);
 
         // Assert
         monad.Memory.Should().NotBeNull();
@@ -65,10 +65,10 @@ public class ActivateTests : TestSetup
         // Arrange
         var inputObject = new object();
         var input = (1, inputObject);
-        var workflow = new TestTupleWorkflow();
+        var train = new TestTupleTrain();
 
         // Act
-        var monad = workflow.Activate(input, 2, "hello", false);
+        var monad = train.Activate(input, 2, "hello", false);
 
         // Assert
         monad.Memory.Should().NotBeNull();
@@ -85,10 +85,10 @@ public class ActivateTests : TestSetup
     {
         // Arrange
         var input = new object();
-        var workflow = new TestWorkflow();
+        var train = new TestTrain();
 
         // Act
-        var monad = workflow.Activate(input, (1, "hello", false));
+        var monad = train.Activate(input, (1, "hello", false));
 
         // Assert
         monad.Memory.Should().NotBeNull();
@@ -100,13 +100,13 @@ public class ActivateTests : TestSetup
         monad.Exception.Should().BeNull();
     }
 
-    private class TestWorkflow : Train<object, string>
+    private class TestTrain : Train<object, string>
     {
         protected override Task<Either<Exception, string>> RunInternal(object input) =>
             throw new NotImplementedException();
     }
 
-    private class TestTupleWorkflow : Train<(int, object), string>
+    private class TestTupleTrain : Train<(int, object), string>
     {
         protected override Task<Either<Exception, string>> RunInternal((int, object) input) =>
             throw new NotImplementedException();

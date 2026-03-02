@@ -35,7 +35,7 @@ public partial class Monad<TInput, TReturn>
 
         // If the result type can't be found, return an exception
         if (result is null)
-            return new WorkflowException($"Could not find type: ({typeof(TReturn)}).");
+            return new TrainException($"Could not find type: ({typeof(TReturn)}).");
 
         return (TReturn)result;
     }

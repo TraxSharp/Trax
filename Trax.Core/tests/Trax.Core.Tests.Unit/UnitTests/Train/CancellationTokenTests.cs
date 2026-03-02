@@ -3,61 +3,61 @@ using LanguageExt;
 using Trax.Core.Step;
 using Trax.Core.Train;
 
-namespace Trax.Core.Tests.Unit.UnitTests.Workflow;
+namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
 public class CancellationTokenTests : TestSetup
 {
     [Theory]
-    public async Task Run_WithCancellationToken_SetsPropertyOnWorkflow()
+    public async Task Run_WithCancellationToken_SetsPropertyOnTrain()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        var workflow = new TokenCapturingWorkflow();
+        var train = new TokenCapturingTrain();
 
         // Act
-        await workflow.Run("input", cts.Token);
+        await train.Run("input", cts.Token);
 
         // Assert
-        workflow.CapturedToken.Should().Be(cts.Token);
+        train.CapturedToken.Should().Be(cts.Token);
     }
 
     [Theory]
     public async Task Run_WithoutCancellationToken_DefaultsToNone()
     {
         // Arrange
-        var workflow = new TokenCapturingWorkflow();
+        var train = new TokenCapturingTrain();
 
         // Act
-        await workflow.Run("input");
+        await train.Run("input");
 
         // Assert
-        workflow.CapturedToken.Should().Be(CancellationToken.None);
+        train.CapturedToken.Should().Be(CancellationToken.None);
     }
 
     [Theory]
-    public async Task Step_CancellationToken_IsSetFromWorkflow()
+    public async Task Step_CancellationToken_IsSetFromTrain()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
         var step = new TokenCapturingStep();
-        var workflow = new SingleStepWorkflow(step);
+        var train = new SingleStepTrain(step);
 
         // Act
-        await workflow.Run("input", cts.Token);
+        await train.Run("input", cts.Token);
 
         // Assert
         step.CapturedToken.Should().Be(cts.Token);
     }
 
     [Theory]
-    public async Task Step_CancellationToken_IsNone_WhenWorkflowCalledWithoutToken()
+    public async Task Step_CancellationToken_IsNone_WhenTrainCalledWithoutToken()
     {
         // Arrange
         var step = new TokenCapturingStep();
-        var workflow = new SingleStepWorkflow(step);
+        var train = new SingleStepTrain(step);
 
         // Act
-        await workflow.Run("input");
+        await train.Run("input");
 
         // Assert
         step.CapturedToken.Should().Be(CancellationToken.None);
@@ -70,14 +70,14 @@ public class CancellationTokenTests : TestSetup
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         var step = new CountingStep();
-        var workflow = new SingleStepWorkflow(step);
+        var train = new SingleStepTrain(step);
 
         // Act & Assert — Chain uses Task.Run().Result which may wrap the
         // OperationCanceledException; verify the step was never executed
         Exception? caught = null;
         try
         {
-            await workflow.Run("input", cts.Token);
+            await train.Run("input", cts.Token);
         }
         catch (Exception ex)
         {
@@ -96,13 +96,13 @@ public class CancellationTokenTests : TestSetup
         using var cts = new CancellationTokenSource();
         var step1 = new CancellationTriggerStep(cts);
         var step2 = new CountingStep();
-        var workflow = new TwoStepWorkflow(step1, step2);
+        var train = new TwoStepTrain(step1, step2);
 
         // Act & Assert — step1 cancels the token; step2 should not run
         Exception? caught = null;
         try
         {
-            await workflow.Run("input", cts.Token);
+            await train.Run("input", cts.Token);
         }
         catch (Exception ex)
         {
@@ -121,7 +121,7 @@ public class CancellationTokenTests : TestSetup
         // Arrange
         using var cts = new CancellationTokenSource();
         var step = new SlowStep();
-        var workflow = new SingleStepWorkflow(step);
+        var train = new SingleStepTrain(step);
 
         // Cancel after a short delay
         cts.CancelAfter(TimeSpan.FromMilliseconds(50));
@@ -130,7 +130,7 @@ public class CancellationTokenTests : TestSetup
         Exception? caught = null;
         try
         {
-            await workflow.Run("input", cts.Token);
+            await train.Run("input", cts.Token);
         }
         catch (Exception ex)
         {
@@ -142,19 +142,19 @@ public class CancellationTokenTests : TestSetup
     }
 
     [Theory]
-    public async Task CancelledToken_DoesNotWrap_InWorkflowExceptionData()
+    public async Task CancelledToken_DoesNotWrap_InTrainExceptionData()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         var step = new TokenCapturingStep();
-        var workflow = new SingleStepWorkflow(step);
+        var train = new SingleStepTrain(step);
 
         // Act — the step never runs because the token is already cancelled
         Exception? caught = null;
         try
         {
-            await workflow.Run("input", cts.Token);
+            await train.Run("input", cts.Token);
         }
         catch (Exception ex)
         {
@@ -188,10 +188,10 @@ public class CancellationTokenTests : TestSetup
         using var cts = new CancellationTokenSource();
         var step1 = new TokenCapturingStep();
         var step2 = new TokenCapturingPassthroughStep();
-        var workflow = new TwoStepWorkflow(step1, step2);
+        var train = new TwoStepTrain(step1, step2);
 
         // Act
-        await workflow.Run("input", cts.Token);
+        await train.Run("input", cts.Token);
 
         // Assert
         step1.CapturedToken.Should().Be(cts.Token);
@@ -200,7 +200,7 @@ public class CancellationTokenTests : TestSetup
 
     #region Test Helpers
 
-    private class TokenCapturingWorkflow : Train<string, string>
+    private class TokenCapturingTrain : Train<string, string>
     {
         public CancellationToken CapturedToken { get; private set; }
 
@@ -268,22 +268,22 @@ public class CancellationTokenTests : TestSetup
         }
     }
 
-    private class SingleStepWorkflow : Train<string, string>
+    private class SingleStepTrain : Train<string, string>
     {
         private readonly Step<string, string> _step;
 
-        public SingleStepWorkflow(Step<string, string> step) => _step = step;
+        public SingleStepTrain(Step<string, string> step) => _step = step;
 
         protected override async Task<Either<Exception, string>> RunInternal(string input) =>
             Activate(input).Chain(_step).Resolve();
     }
 
-    private class TwoStepWorkflow : Train<string, string>
+    private class TwoStepTrain : Train<string, string>
     {
         private readonly Step<string, string> _step1;
         private readonly Step<string, string> _step2;
 
-        public TwoStepWorkflow(Step<string, string> step1, Step<string, string> step2)
+        public TwoStepTrain(Step<string, string> step1, Step<string, string> step2)
         {
             _step1 = step1;
             _step2 = step2;

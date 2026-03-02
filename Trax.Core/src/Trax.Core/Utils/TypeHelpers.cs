@@ -14,7 +14,7 @@ internal static class TypeHelpers
     /// <param name="memory">The Memory dictionary</param>
     /// <param name="inputType">The tuple type</param>
     /// <returns>A list of type-value pairs</returns>
-    /// <exception cref="WorkflowException">Thrown if a type is not found in Memory</exception>
+    /// <exception cref="TrainException">Thrown if a type is not found in Memory</exception>
     /// <remarks>
     /// This method is used to extract the components of a tuple type from Memory.
     /// It's used by the Extract method to create tuples from individual components.
@@ -33,7 +33,7 @@ internal static class TypeHelpers
 
             // Ensure the value exists in Memory
             if (value is null)
-                throw new WorkflowException(
+                throw new TrainException(
                     $"Could not extract type ({type}) from Tuple. Value not in Memory."
                 );
 

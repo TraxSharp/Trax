@@ -29,7 +29,7 @@ public static class LoggerExtensions
     /// <param name="loggerFactory">The logger factory</param>
     /// <param name="genericType">The type to create a logger for</param>
     /// <returns>A logger for the specified type</returns>
-    /// <exception cref="WorkflowException">Thrown if the logger cannot be created</exception>
+    /// <exception cref="TrainException">Thrown if the logger cannot be created</exception>
     /// <remarks>
     /// This method uses reflection to call LoggerFactoryExtensions.CreateLogger&lt;T&gt;
     /// with the specified type. The generic MethodInfo is cached via Lazy&lt;T&gt;.
@@ -43,7 +43,7 @@ public static class LoggerExtensions
         var loggerInstance = specificMethod.Invoke(null, [loggerFactory]);
 
         if (loggerInstance is null)
-            throw new WorkflowException(
+            throw new TrainException(
                 $"Could not create generic logger CreateLogger<({genericType.Name})>."
             );
 

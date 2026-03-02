@@ -13,7 +13,7 @@ using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Tests;
 
-public class WorkflowTests : TestSetup
+public class TrainTests : TestSetup
 {
     private IBrew _brew;
 
@@ -166,7 +166,7 @@ public class WorkflowTests : TestSetup
         }
     }
 
-    private class WorkflowTestWithTupleInput : Train<(int, string, object), (bool, double, object)>
+    private class TrainTestWithTupleInput : Train<(int, string, object), (bool, double, object)>
     {
         protected override async Task<Either<Exception, (bool, double, object)>> RunInternal(
             (int, string, object) input
@@ -260,14 +260,14 @@ public class WorkflowTests : TestSetup
         public int Number;
     }
 
-    private class AccessInnerPropertyTypeWorkflow : Train<OuterProperty, InnerProperty>
+    private class AccessInnerPropertyTypeTrain : Train<OuterProperty, InnerProperty>
     {
         protected override async Task<Either<Exception, InnerProperty>> RunInternal(
             OuterProperty input
         ) => Activate(input).Extract<OuterProperty, InnerProperty>().Resolve();
     }
 
-    private class AccessInnerFieldTypeWorkflow : Train<OuterField, InnerField>
+    private class AccessInnerFieldTypeTrain : Train<OuterField, InnerField>
     {
         protected override async Task<Either<Exception, InnerField>> RunInternal(
             OuterField input
@@ -344,7 +344,7 @@ public class WorkflowTests : TestSetup
         // Arrange
 
         // Act
-        var result = await new WorkflowTestWithTupleInput().Run((1, "hello", new object()));
+        var result = await new TrainTestWithTupleInput().Run((1, "hello", new object()));
 
         // Assert
     }
@@ -366,8 +366,8 @@ public class WorkflowTests : TestSetup
         };
 
         // Act
-        var propertyResult = await new AccessInnerPropertyTypeWorkflow().Run(outerProperty);
-        var fieldResult = await new AccessInnerFieldTypeWorkflow().Run(outerField);
+        var propertyResult = await new AccessInnerPropertyTypeTrain().Run(outerProperty);
+        var fieldResult = await new AccessInnerFieldTypeTrain().Run(outerField);
 
         // Assert
         propertyResult.Number.Should().Be(7);
@@ -380,7 +380,7 @@ public class WorkflowTests : TestSetup
         var prepare = ServiceProvider.GetRequiredService<IPrepare>();
         var bottle = ServiceProvider.GetRequiredService<IBottle>();
 
-        var workflow = new ChainTest(_brew, prepare, bottle);
+        var train = new ChainTest(_brew, prepare, bottle);
 
         var ingredients = new Ingredients()
         {
@@ -390,13 +390,13 @@ public class WorkflowTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await workflow.Run(ingredients);
+        var result = await train.Run(ingredients);
     }
 
     [Theory]
     public async Task TestChainWithMockedService()
     {
-        var workflow = new ChainTestWithMockedService();
+        var train = new ChainTestWithMockedService();
 
         var ingredients = new Ingredients()
         {
@@ -406,13 +406,13 @@ public class WorkflowTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await workflow.Run(ingredients);
+        var result = await train.Run(ingredients);
     }
 
     [Theory]
     public async Task TestChainWithNoInputs()
     {
-        var workflow = new ChainTestWithNoInputs();
+        var train = new ChainTestWithNoInputs();
 
         var ingredients = new Ingredients()
         {
@@ -422,13 +422,13 @@ public class WorkflowTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await workflow.Run(ingredients);
+        var result = await train.Run(ingredients);
     }
 
     [Theory]
     public async Task TestChainWithInterfaceTupleArgument()
     {
-        var workflow = new ChainTestWithInterfaceTuple();
+        var train = new ChainTestWithInterfaceTuple();
 
         var ingredients = new Ingredients()
         {
@@ -438,13 +438,13 @@ public class WorkflowTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await workflow.Run(ingredients);
+        var result = await train.Run(ingredients);
     }
 
     [Theory]
     public async Task TestChainWithOneTypedService()
     {
-        var workflow = new ChainTestWithOneTypedService();
+        var train = new ChainTestWithOneTypedService();
 
         var ingredients = new Ingredients()
         {
@@ -454,13 +454,13 @@ public class WorkflowTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await workflow.Run(ingredients);
+        var result = await train.Run(ingredients);
     }
 
     [Theory]
     public async Task TestChainWithTwoTypedService()
     {
-        var workflow = new ChainTestWithTwoTypedServices();
+        var train = new ChainTestWithTwoTypedServices();
 
         var ingredients = new Ingredients()
         {
@@ -470,7 +470,7 @@ public class WorkflowTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await workflow.Run(ingredients);
+        var result = await train.Run(ingredients);
     }
 
     [Theory]
@@ -479,7 +479,7 @@ public class WorkflowTests : TestSetup
         var prepare = ServiceProvider.GetRequiredService<IPrepare>();
         var ferment = ServiceProvider.GetRequiredService<IFerment>();
 
-        var workflow = new ChainTestWithShortCircuit(prepare, ferment);
+        var train = new ChainTestWithShortCircuit(prepare, ferment);
 
         var ingredients = new Ingredients()
         {
@@ -489,7 +489,7 @@ public class WorkflowTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await workflow.Run(ingredients);
+        var result = await train.Run(ingredients);
     }
 
     [Theory]
@@ -497,7 +497,7 @@ public class WorkflowTests : TestSetup
     {
         var prepare = ServiceProvider.GetRequiredService<IPrepare>();
 
-        var workflow = new ChainTestWithUnitInput();
+        var train = new ChainTestWithUnitInput();
 
         var ingredients = new Ingredients()
         {
@@ -507,7 +507,7 @@ public class WorkflowTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await workflow.Run(ingredients);
+        var result = await train.Run(ingredients);
     }
 
     [Theory]
@@ -516,7 +516,7 @@ public class WorkflowTests : TestSetup
         var prepare = ServiceProvider.GetRequiredService<IPrepare>();
         var ferment = ServiceProvider.GetRequiredService<IFerment>();
 
-        var workflow = new ChainTestWithShortCircuitStaysLeft(prepare, ferment);
+        var train = new ChainTestWithShortCircuitStaysLeft(prepare, ferment);
 
         var ingredients = new Ingredients()
         {
@@ -526,6 +526,6 @@ public class WorkflowTests : TestSetup
             Yeast = 1,
         };
 
-        var result = await workflow.Run(ingredients);
+        var result = await train.Run(ingredients);
     }
 }

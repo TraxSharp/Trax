@@ -14,7 +14,7 @@ public partial class Monad<TInput, TReturn>
 
         if (typeFromMemory is null)
         {
-            Exception ??= new WorkflowException($"Could not find type: ({typeof(TIn)}).");
+            Exception ??= new TrainException($"Could not find type: ({typeof(TIn)}).");
 
             return this;
         }
@@ -29,7 +29,7 @@ public partial class Monad<TInput, TReturn>
     {
         if (input is null)
         {
-            Exception ??= new WorkflowException(
+            Exception ??= new TrainException(
                 $"Null value for type: ({typeof(TIn)}) passed to Extract function."
             );
             return this;
@@ -40,7 +40,7 @@ public partial class Monad<TInput, TReturn>
 
         if (value is null)
         {
-            Exception ??= new WorkflowException(
+            Exception ??= new TrainException(
                 $"Could not find non-null value of type: ({typeof(TOut)}) in properties or fields for ({typeof(TIn)}). Is it public?"
             );
             return this;

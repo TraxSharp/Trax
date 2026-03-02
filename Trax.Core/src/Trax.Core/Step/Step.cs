@@ -16,7 +16,7 @@ namespace Trax.Core.Step;
 /// <typeparam name="TOut">The output type produced by this step</typeparam>
 public abstract class Step<TIn, TOut> : IStep<TIn, TOut>
 {
-    public WorkflowExceptionData? ExceptionData { get; private set; }
+    public TrainExceptionData? ExceptionData { get; private set; }
 
     public Either<Exception, TIn> PreviousResult { get; private set; }
     public Either<Exception, TOut> Result { get; private set; }
@@ -89,10 +89,10 @@ public abstract class Step<TIn, TOut> : IStep<TIn, TOut>
             if (messageField is null)
                 return e;
 
-            var exceptionData = new WorkflowExceptionData
+            var exceptionData = new TrainExceptionData
             {
-                WorkflowName = train.GetType().Name,
-                WorkflowExternalId = train.ExternalId,
+                TrainName = train.GetType().Name,
+                TrainExternalId = train.ExternalId,
                 Step = GetType().Name,
                 Type = e.GetType().Name,
                 Message = e.Message,

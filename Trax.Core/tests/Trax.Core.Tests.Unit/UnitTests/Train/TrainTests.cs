@@ -3,43 +3,43 @@ using LanguageExt;
 using Trax.Core.Exceptions;
 using Trax.Core.Train;
 
-namespace Trax.Core.Tests.Unit.UnitTests.Workflow;
+namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
-public class WorkflowTests
+public class TrainTests
 {
     [Theory]
-    public async Task TestUnitWorkflow()
+    public async Task TestUnitTrain()
     {
         // Arrange
-        var workflow = new UnitWorkflow();
+        var train = new UnitTrain();
 
         // Act
-        var result = await workflow.Run(LanguageExt.Unit.Default);
+        var result = await train.Run(LanguageExt.Unit.Default);
 
         // Assert
         result.Should().Be(LanguageExt.Unit.Default);
     }
 
     [Theory]
-    public async Task TestInvalidWorkflow()
+    public async Task TestInvalidTrain()
     {
         // Arrange
-        var workflow = new NotImplementedWorkflow();
+        var train = new NotImplementedTrain();
 
         // Act
         Assert.ThrowsAsync<NotImplementedException>(async () =>
-            await workflow.Run(LanguageExt.Unit.Default)
+            await train.Run(LanguageExt.Unit.Default)
         );
     }
 
-    private class UnitWorkflow : Train<LanguageExt.Unit, LanguageExt.Unit>
+    private class UnitTrain : Train<LanguageExt.Unit, LanguageExt.Unit>
     {
         protected override async Task<Either<Exception, LanguageExt.Unit>> RunInternal(
             LanguageExt.Unit input
         ) => Activate(input).Resolve();
     }
 
-    private class NotImplementedWorkflow : Train<LanguageExt.Unit, LanguageExt.Unit>
+    private class NotImplementedTrain : Train<LanguageExt.Unit, LanguageExt.Unit>
     {
         protected override async Task<Either<Exception, LanguageExt.Unit>> RunInternal(
             LanguageExt.Unit input

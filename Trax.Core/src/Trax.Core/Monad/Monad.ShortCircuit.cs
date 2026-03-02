@@ -84,7 +84,7 @@ public partial class Monad<TInput, TReturn>
 
         if (input is null)
         {
-            Exception ??= new WorkflowException($"Could not find ({tIn}) in Memory.");
+            Exception ??= new TrainException($"Could not find ({tIn}) in Memory.");
             return this;
         }
 

@@ -41,7 +41,7 @@ public class StepTests : TestSetup
         var step = new TestStep();
 
         // Act
-        var result = await step.RailwayStep(input, UnitWorkflow.Create());
+        var result = await step.RailwayStep(input, UnitTrain.Create());
 
         // Assert
         result.IsRight.Should().BeTrue();
@@ -56,7 +56,7 @@ public class StepTests : TestSetup
         var step = new TestStep();
 
         // Act
-        var result = await step.RailwayStep(testException, UnitWorkflow.Create());
+        var result = await step.RailwayStep(testException, UnitTrain.Create());
 
         // Assert
         result.IsLeft.Should().BeTrue();

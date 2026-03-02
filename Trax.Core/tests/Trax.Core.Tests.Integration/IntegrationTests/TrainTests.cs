@@ -16,7 +16,7 @@ namespace Trax.Core.Tests.Integration.IntegrationTests;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 
-public class WorkflowTests : TestSetup
+public class TrainTests : TestSetup
 {
     private IBrew _brew;
 
@@ -47,10 +47,10 @@ public class WorkflowTests : TestSetup
         var stringInput = "hello";
         var objectInput = new object();
         var input = (intInput, stringInput, objectInput);
-        var workflow = new WorkflowTestWithTupleInput();
+        var train = new TrainTestWithTupleInput();
 
         // Act
-        var resultEither = await workflow.RunEither(input);
+        var resultEither = await train.RunEither(input);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -73,10 +73,10 @@ public class WorkflowTests : TestSetup
             OuterString = "hello world",
             InnerProperty = new InnerProperty() { Number = 7 },
         };
-        var workflow = new AccessInnerPropertyTypeWorkflow();
+        var train = new AccessInnerPropertyTypeTrain();
 
         // Act
-        var resultEither = await workflow.RunEither(outerProperty);
+        var resultEither = await train.RunEither(outerProperty);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -93,10 +93,10 @@ public class WorkflowTests : TestSetup
             OuterString = "hello mars",
             InnerProperty = new InnerField() { Number = 8 },
         };
-        var workflow = new AccessInnerFieldTypeWorkflow();
+        var train = new AccessInnerFieldTypeTrain();
 
         // Act
-        var resultEither = await workflow.RunEither(outerField);
+        var resultEither = await train.RunEither(outerField);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -111,7 +111,7 @@ public class WorkflowTests : TestSetup
         var prepare = ServiceProvider.GetRequiredService<IPrepare>();
         var bottle = ServiceProvider.GetRequiredService<IBottle>();
 
-        var workflow = new ChainTest(_brew, prepare, bottle);
+        var train = new ChainTest(_brew, prepare, bottle);
 
         var ingredients = new Ingredients()
         {
@@ -122,7 +122,7 @@ public class WorkflowTests : TestSetup
         };
 
         // Act
-        var resultEither = await workflow.RunEither(ingredients);
+        var resultEither = await train.RunEither(ingredients);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -133,7 +133,7 @@ public class WorkflowTests : TestSetup
     public async Task TestChainWithMockedService()
     {
         // Arrange
-        var workflow = new ChainTestWithMockedService();
+        var train = new ChainTestWithMockedService();
 
         var ingredients = new Ingredients()
         {
@@ -144,7 +144,7 @@ public class WorkflowTests : TestSetup
         };
 
         // Act
-        var resultEither = await workflow.RunEither(ingredients);
+        var resultEither = await train.RunEither(ingredients);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -155,7 +155,7 @@ public class WorkflowTests : TestSetup
     public async Task TestChainWithNoInputs()
     {
         // Arrange
-        var workflow = new ChainTestWithNoInputs();
+        var train = new ChainTestWithNoInputs();
 
         var ingredients = new Ingredients()
         {
@@ -166,7 +166,7 @@ public class WorkflowTests : TestSetup
         };
 
         // Act
-        var resultEither = await workflow.RunEither(ingredients);
+        var resultEither = await train.RunEither(ingredients);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -177,7 +177,7 @@ public class WorkflowTests : TestSetup
     public async Task TestChainWithInterfaceTupleArgument()
     {
         // Arrange
-        var workflow = new ChainTestWithInterfaceTuple();
+        var train = new ChainTestWithInterfaceTuple();
 
         var ingredients = new Ingredients()
         {
@@ -188,7 +188,7 @@ public class WorkflowTests : TestSetup
         };
 
         // Act
-        var resultEither = await workflow.RunEither(ingredients);
+        var resultEither = await train.RunEither(ingredients);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -199,7 +199,7 @@ public class WorkflowTests : TestSetup
     public async Task TestChainWithOneTypedService()
     {
         // Arrange
-        var workflow = new ChainTestWithOneTypedService();
+        var train = new ChainTestWithOneTypedService();
 
         var ingredients = new Ingredients()
         {
@@ -210,7 +210,7 @@ public class WorkflowTests : TestSetup
         };
 
         // Act
-        var resultEither = await workflow.RunEither(ingredients);
+        var resultEither = await train.RunEither(ingredients);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -221,7 +221,7 @@ public class WorkflowTests : TestSetup
     public async Task TestChainWithTwoTypedService()
     {
         // Arrange
-        var workflow = new ChainTestWithTwoTypedServices();
+        var train = new ChainTestWithTwoTypedServices();
 
         var ingredients = new Ingredients()
         {
@@ -232,7 +232,7 @@ public class WorkflowTests : TestSetup
         };
 
         // Act
-        var resultEither = await workflow.RunEither(ingredients);
+        var resultEither = await train.RunEither(ingredients);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -246,7 +246,7 @@ public class WorkflowTests : TestSetup
         var prepare = ServiceProvider.GetRequiredService<IPrepare>();
         var ferment = ServiceProvider.GetRequiredService<IFerment>();
 
-        var workflow = new ChainTestWithShortCircuit(prepare, ferment);
+        var train = new ChainTestWithShortCircuit(prepare, ferment);
 
         var ingredients = new Ingredients()
         {
@@ -257,7 +257,7 @@ public class WorkflowTests : TestSetup
         };
 
         // Act
-        var resultEither = await workflow.RunEither(ingredients);
+        var resultEither = await train.RunEither(ingredients);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -268,7 +268,7 @@ public class WorkflowTests : TestSetup
     public async Task TestChainWithUnitInput()
     {
         // Arrange
-        var workflow = new ChainTestWithUnitInput();
+        var train = new ChainTestWithUnitInput();
 
         var ingredients = new Ingredients()
         {
@@ -279,7 +279,7 @@ public class WorkflowTests : TestSetup
         };
 
         // Act
-        var resultEither = await workflow.RunEither(ingredients);
+        var resultEither = await train.RunEither(ingredients);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -293,7 +293,7 @@ public class WorkflowTests : TestSetup
         var prepare = ServiceProvider.GetRequiredService<IPrepare>();
         var ferment = ServiceProvider.GetRequiredService<IFerment>();
 
-        var workflow = new ChainTestWithShortCircuitStaysLeft(prepare, ferment);
+        var train = new ChainTestWithShortCircuitStaysLeft(prepare, ferment);
 
         var ingredients = new Ingredients()
         {
@@ -304,7 +304,7 @@ public class WorkflowTests : TestSetup
         };
 
         // Act
-        var resultEither = await workflow.RunEither(ingredients);
+        var resultEither = await train.RunEither(ingredients);
 
         // Assert
         resultEither.IsRight.Should().BeTrue();
@@ -315,12 +315,12 @@ public class WorkflowTests : TestSetup
     public async Task TestWithException()
     {
         // Arrange
-        var workflow = new ChainTestWithException();
+        var train = new ChainTestWithException();
 
         // Act
         // Assert
 
-        Assert.ThrowsAsync<WorkflowException>(async () => await workflow.Run(Unit.Default));
+        Assert.ThrowsAsync<TrainException>(async () => await train.Run(Unit.Default));
     }
 
     [Theory]
@@ -331,10 +331,10 @@ public class WorkflowTests : TestSetup
 
         var testService = new TestService();
 
-        var workflow = new ChainTestWithLoggerProvider(loggerProvider, testService);
+        var train = new ChainTestWithLoggerProvider(loggerProvider, testService);
 
         // Act
-        var result = await workflow.Run(Unit.Default);
+        var result = await train.Run(Unit.Default);
 
         // Assert
         result.Should().Be(Unit.Default);
@@ -349,10 +349,10 @@ public class WorkflowTests : TestSetup
             .AddScoped<ITestService, TestService>()
             .BuildServiceProvider();
 
-        var workflow = new ChainTestWithServiceProvider(serviceProvider);
+        var train = new ChainTestWithServiceProvider(serviceProvider);
 
         // Act
-        var result = await workflow.Run(Unit.Default);
+        var result = await train.Run(Unit.Default);
 
         // Assert
         result.Should().Be(Unit.Default);
@@ -364,10 +364,10 @@ public class WorkflowTests : TestSetup
         // Arrange
         var inheritedObject = new InheritedObject();
 
-        var workflow = new MemoryInterfaceTest();
+        var train = new MemoryInterfaceTest();
 
         // Act
-        var result = await workflow.Run(inheritedObject);
+        var result = await train.Run(inheritedObject);
 
         // Assert
         result.Should().Be(Unit.Default);
@@ -381,7 +381,7 @@ public class WorkflowTests : TestSetup
     private class ThrowsStep : Step<Unit, Unit>
     {
         public override Task<Unit> Run(Unit input) =>
-            throw new WorkflowException("This is a workflow exception.");
+            throw new TrainException("This is a train exception.");
     }
 
     private class OuterProperty
@@ -408,14 +408,14 @@ public class WorkflowTests : TestSetup
         public int Number;
     }
 
-    private class AccessInnerPropertyTypeWorkflow : Train<OuterProperty, InnerProperty>
+    private class AccessInnerPropertyTypeTrain : Train<OuterProperty, InnerProperty>
     {
         protected override async Task<Either<Exception, InnerProperty>> RunInternal(
             OuterProperty input
         ) => Activate(input).Extract<OuterProperty, InnerProperty>().Resolve();
     }
 
-    private class AccessInnerFieldTypeWorkflow : Train<OuterField, InnerField>
+    private class AccessInnerFieldTypeTrain : Train<OuterField, InnerField>
     {
         protected override async Task<Either<Exception, InnerField>> RunInternal(
             OuterField input
@@ -651,7 +651,7 @@ public class WorkflowTests : TestSetup
         }
     }
 
-    private class WorkflowTestWithTupleInput : Train<(int, string, object), (bool, double, object)>
+    private class TrainTestWithTupleInput : Train<(int, string, object), (bool, double, object)>
     {
         protected override async Task<Either<Exception, (bool, double, object)>> RunInternal(
             (int, string, object) input

@@ -97,7 +97,7 @@ public partial class Monad<TInput, TReturn>
         // Verify that TStep is an interface
         if (!stepType.IsInterface)
         {
-            Exception ??= new WorkflowException(
+            Exception ??= new TrainException(
                 $"Step ({stepType}) must be an interface to call IChain."
             );
 

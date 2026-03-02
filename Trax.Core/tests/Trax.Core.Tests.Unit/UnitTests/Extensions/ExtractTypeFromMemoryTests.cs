@@ -13,8 +13,8 @@ public class ExtractTypeFromMemoryTests : TestSetup
         // Arrange
         var input = 1;
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input);
+        var train = new TestTrain();
+        var monad = train.Activate(input);
 
         // Act
         var result = monad.ExtractTypeFromMemory<int, int, string>();
@@ -31,8 +31,8 @@ public class ExtractTypeFromMemoryTests : TestSetup
         var input = 1;
         var tupleInput = ("hello", false);
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input, tupleInput);
+        var train = new TestTrain();
+        var monad = train.Activate(input, tupleInput);
 
         // Act
         var result = monad.ExtractTypeFromMemory<(string, bool), int, string>();
@@ -50,8 +50,8 @@ public class ExtractTypeFromMemoryTests : TestSetup
         var input = 1;
         var tupleInput = ("hello", false);
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input, tupleInput);
+        var train = new TestTrain();
+        var monad = train.Activate(input, tupleInput);
 
         // Act
         var result = ((string, bool)?)monad.ExtractTypeFromMemory(typeof((string, bool)));
@@ -69,8 +69,8 @@ public class ExtractTypeFromMemoryTests : TestSetup
         var input = 1;
         var tupleInput = ValueTuple.Create(1);
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input, tupleInput);
+        var train = new TestTrain();
+        var monad = train.Activate(input, tupleInput);
 
         // Act
         var result = (ValueTuple<int>?)monad.ExtractTypeFromMemory(typeof(ValueTuple<int>));
@@ -87,8 +87,8 @@ public class ExtractTypeFromMemoryTests : TestSetup
         var input = 1;
         var tupleInput = ValueTuple.Create(1);
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input, tupleInput);
+        var train = new TestTrain();
+        var monad = train.Activate(input, tupleInput);
 
         // Act
         var result = monad.ExtractTypeFromMemory<ValueTuple<int>?, int, string>();
@@ -105,8 +105,8 @@ public class ExtractTypeFromMemoryTests : TestSetup
         var input = 1;
         var tupleInput = ("hello", false);
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input, tupleInput);
+        var train = new TestTrain();
+        var monad = train.Activate(input, tupleInput);
 
         List<Type> typesToExtract = [typeof(bool), typeof(string), typeof(int)];
 
@@ -126,8 +126,8 @@ public class ExtractTypeFromMemoryTests : TestSetup
         // Arrange
         var input = 1;
 
-        var workflow = new TestWorkflow();
-        var monad = workflow.Activate(input);
+        var train = new TestTrain();
+        var monad = train.Activate(input);
 
         List<Type> typesToExtract = [typeof(bool), typeof(string), typeof(int)];
 
@@ -139,7 +139,7 @@ public class ExtractTypeFromMemoryTests : TestSetup
         monad.Exception.Should().NotBeNull();
     }
 
-    private class TestWorkflow : Train<int, string>
+    private class TestTrain : Train<int, string>
     {
         protected override async Task<Either<Exception, string>> RunInternal(int input) =>
             Activate(input).Resolve();

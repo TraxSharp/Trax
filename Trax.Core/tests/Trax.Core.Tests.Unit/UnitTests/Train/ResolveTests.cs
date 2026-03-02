@@ -5,7 +5,7 @@ using Trax.Core.Exceptions;
 using Trax.Core.Step;
 using Trax.Core.Train;
 
-namespace Trax.Core.Tests.Unit.UnitTests.Workflow;
+namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
 public class ResolveTests : TestSetup
 {
@@ -14,10 +14,10 @@ public class ResolveTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var workflow = new TestWorkflow().Activate(input);
+        var train = new TestTrain().Activate(input);
 
         // Act
-        var result = workflow.Resolve();
+        var result = train.Resolve();
 
         // Assert
         result.Should().NotBeNull();
@@ -30,10 +30,10 @@ public class ResolveTests : TestSetup
     {
         // Arrange
         var input = new object();
-        var workflow = new TestObjectWorkflow().Activate(input);
+        var train = new TestObjectTrain().Activate(input);
 
         // Act
-        var result = workflow.Resolve();
+        var result = train.Resolve();
 
         // Assert
         result.Should().NotBeNull();
@@ -47,14 +47,10 @@ public class ResolveTests : TestSetup
         // Arrange
         var intInput = 1;
         var stringInput = "string";
-        var workflow = new TestTupleWorkflow().Activate(
-            LanguageExt.Unit.Default,
-            intInput,
-            stringInput
-        );
+        var train = new TestTupleTrain().Activate(LanguageExt.Unit.Default, intInput, stringInput);
 
         // Act
-        var result = workflow.Resolve();
+        var result = train.Resolve();
 
         // Assert
         result.Should().NotBeNull();
@@ -67,12 +63,10 @@ public class ResolveTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var workflow = new TestStringWorkflow()
-            .Activate(input)
-            .ShortCircuit<TestShortCircuitStep>();
+        var train = new TestStringTrain().Activate(input).ShortCircuit<TestShortCircuitStep>();
 
         // Act
-        var result = workflow.Resolve();
+        var result = train.Resolve();
 
         // Assert
         result.Should().NotBeNull();
@@ -85,36 +79,36 @@ public class ResolveTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var workflow = new TestStringWorkflow().Activate(input);
+        var train = new TestStringTrain().Activate(input);
 
         // Act
-        var result = workflow.Resolve();
+        var result = train.Resolve();
 
         // Assert
         result.Should().NotBeNull();
         result.IsLeft.Should().BeTrue();
-        result.Swap().ValueUnsafe().Should().BeOfType<WorkflowException>();
+        result.Swap().ValueUnsafe().Should().BeOfType<TrainException>();
     }
 
-    private class TestWorkflow : Train<int, int>
+    private class TestTrain : Train<int, int>
     {
         protected override Task<Either<Exception, int>> RunInternal(int input) =>
             throw new NotImplementedException();
     }
 
-    private class TestStringWorkflow : Train<int, string>
+    private class TestStringTrain : Train<int, string>
     {
         protected override Task<Either<Exception, string>> RunInternal(int input) =>
             throw new NotImplementedException();
     }
 
-    private class TestObjectWorkflow : Train<object, object>
+    private class TestObjectTrain : Train<object, object>
     {
         protected override Task<Either<Exception, object>> RunInternal(object input) =>
             throw new NotImplementedException();
     }
 
-    private class TestTupleWorkflow : Train<LanguageExt.Unit, (int, string)>
+    private class TestTupleTrain : Train<LanguageExt.Unit, (int, string)>
     {
         protected override Task<Either<Exception, (int, string)>> RunInternal(
             LanguageExt.Unit input

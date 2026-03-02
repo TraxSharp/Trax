@@ -1,7 +1,7 @@
 {
   "name": "trax-hints",
   "displayName": "Trax.Core Chain Hints",
-  "description": "Inlay hints showing TIn/TOut types for Trax.Core workflow chain steps",
+  "description": "Inlay hints showing TIn/TOut types for Trax.Core train chain steps",
   "version": "0.2.0",
   "publisher": "Trax.Core",
   "license": "MIT",
@@ -19,7 +19,7 @@
   "keywords": [
     "csharp",
     "dotnet",
-    "workflow",
+    "train",
     "inlay hints",
     "trax"
   ],
