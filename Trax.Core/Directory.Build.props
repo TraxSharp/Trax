@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <Version>1.1.1</Version>
+    <Version>99.99.99</Version>
   </PropertyGroup>
 
   <!-- Propagate the Trax.Core analyzer to all projects in the solution -->
