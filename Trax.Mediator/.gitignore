@@ -141,3 +141,5 @@ _NCrunch*
 
 # BenchmarkDotNet
 BenchmarkDotNet.Artifacts/
+# Semantic Release version file
+.release-version
