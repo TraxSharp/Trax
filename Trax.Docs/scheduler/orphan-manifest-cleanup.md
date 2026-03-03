@@ -39,7 +39,7 @@ Orphan manifest cleanup is **enabled by default**. No additional configuration i
 
 ### Disabling Cleanup
 
-If you create manifests dynamically at runtime via `IManifestScheduler` (outside of the startup configuration), disable orphan pruning to prevent those manifests from being deleted on restart:
+If you create manifests dynamically at runtime via `ITraxScheduler` (outside of the startup configuration), disable orphan pruning to prevent those manifests from being deleted on restart:
 
 ```csharp
 services.AddTrax.CoreEffects(options => options
@@ -102,7 +102,7 @@ services.AddTrax.CoreEffects(options => options
 
 ### Interaction with ScheduleMany PrunePrefix
 
-Orphan manifest cleanup and [ScheduleMany's PrunePrefix]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %}#with-pruning-automatic-stale-cleanup) are complementary:
+Orphan manifest cleanup and [ScheduleMany's PrunePrefix]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %}#with-pruning-automatic-stale-cleanup) are complementary:
 
 - **PrunePrefix** operates within a single `ScheduleMany` batch during seeding, removing items that were in a previous deployment but not in the current batch. It runs as part of the seeding transaction.
 - **Orphan manifest cleanup** operates globally after all seeding is complete, removing any manifest not in the configured set — including entire `Schedule` definitions that were removed.

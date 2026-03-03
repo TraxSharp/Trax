@@ -30,7 +30,7 @@ public interface IStep<TIn, TOut>
 
 // Chaining is done via methods on Train<TIn, TOut> itself
 // e.g. Activate(input).Chain<MyStep>().Chain<MyOtherStep>().Resolve()
-// See API Reference > Train Methods for all overloads
+// See SDK Reference > Train Methods for all overloads
 ```
 
 This layer handles chaining, error propagation, and the core train lifecycle.

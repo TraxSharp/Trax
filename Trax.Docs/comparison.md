@@ -88,6 +88,7 @@ Trax and Hangfire both handle retries automatically; Quartz leaves it to the job
 | Feature | Trax | Quartz.NET | Hangfire |
 |---|---|---|---|
 | Dashboard | Blazor Server + Radzen at `/trax` | Blazor Server at `/quartz` | Built-in middleware at `/hangfire` |
+| REST / GraphQL API | Both — `AddTraxRestApi()` + `AddTraxGraphQL()` | No built-in API | REST API via community extensions |
 | Manual job actions | Dashboard-triggered runs with **custom inputs** | Pause/resume, manual trigger | Requeue, delete, reschedule |
 | Exception inspection | Expandable stack traces with syntax highlighting + copy button | Via history plugins | Expandable stack traces |
 | Real-time statistics | Throughput/min, queue depth, success rate, state timeline | Job/trigger counts, health checks | Succeeded/failed rates, queue depth |

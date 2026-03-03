@@ -24,7 +24,7 @@ services.AddTrax.CoreEffects(options =>
 );
 ```
 
-*API Reference: [SaveTrainParameters]({{ site.baseurl }}{% link api-reference/configuration/save-train-parameters.md %})*
+*SDK Reference: [SaveTrainParameters]({{ site.baseurl }}{% link sdk-reference/configuration/save-train-parameters.md %})*
 
 You can pass custom serialization options:
 

@@ -22,7 +22,7 @@ services.AddTrax.CoreEffects(options =>
 );
 ```
 
-*API Reference: [AddStepProgress]({{ site.baseurl }}{% link api-reference/configuration/add-step-progress.md %})*
+*SDK Reference: [AddStepProgress]({{ site.baseurl }}{% link sdk-reference/configuration/add-step-progress.md %})*
 
 ## What It Registers
 

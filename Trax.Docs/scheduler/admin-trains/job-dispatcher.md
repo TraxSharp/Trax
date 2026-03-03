@@ -75,7 +75,7 @@ Setting `MaxActiveJobs` to `null` disables the global check entirely—all queue
 )
 ```
 
-*API Reference: [AddScheduler — MaxActiveJobs]({{ site.baseurl }}{% link api-reference/scheduler-api/add-scheduler.md %})*
+*SDK Reference: [AddScheduler — MaxActiveJobs]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %})*
 
 ### Per-Group MaxActiveJobs
 

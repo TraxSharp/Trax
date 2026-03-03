@@ -30,7 +30,7 @@ This is useful when you already have a manifest for the train and want to queue 
 
 For work that has no pre-existing manifest — a transient job that should run once and never again — use `ScheduleOnceAsync`. It creates a manifest with `ScheduleType.Once`, sets `ScheduledAt` to the current time plus the delay, and auto-disables the manifest after the first successful execution.
 
-### Runtime API (IManifestScheduler)
+### Runtime API (ITraxScheduler)
 
 ```csharp
 // Auto-generated externalId (format: "once-{guid}")
@@ -103,4 +103,4 @@ await scheduler.ScheduleOnceAsync<ICleanupTrain, CleanupInput>(
         .Group("maintenance"));
 ```
 
-*API Reference: [TriggerAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}#triggerasync), [ScheduleOnceAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}#scheduleonceasync), [ScheduleOptions]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
+*SDK Reference: [TriggerAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}#triggerasync), [ScheduleOnceAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}#scheduleonceasync), [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*

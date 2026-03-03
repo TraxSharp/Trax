@@ -24,7 +24,7 @@ services.AddTrax.CoreEffects(options =>
 );
 ```
 
-*API Reference: [AddJsonEffect]({{ site.baseurl }}{% link api-reference/configuration/add-json-effect.md %})*
+*SDK Reference: [AddJsonEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-json-effect.md %})*
 
 No configuration required. The provider uses the JSON serialization options from `ITrax.CoreEffectConfiguration` and logs at the level configured there.
 

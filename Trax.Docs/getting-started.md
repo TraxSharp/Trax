@@ -55,7 +55,7 @@ var app = builder.Build();
 app.Run();
 ```
 
-*API Reference: [AddTrax.CoreEffects]({{ site.baseurl }}{% link api-reference/configuration.md %}), [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-train-bus.md %})*
+*SDK Reference: [AddTrax.CoreEffects]({{ site.baseurl }}{% link sdk-reference/configuration.md %}), [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-train-bus.md %})*
 
 ## Creating Your First Train
 
@@ -97,7 +97,7 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 }
 ```
 
-*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
+*SDK Reference: [Activate]({{ site.baseurl }}{% link sdk-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link sdk-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %})*
 
 ### 3. Implement the Stops
 
@@ -174,7 +174,7 @@ public class UsersController(ITrainBus trainBus) : ControllerBase
 }
 ```
 
-*API Reference: [TrainBus.RunAsync]({{ site.baseurl }}{% link api-reference/mediator-api/train-bus.md %})*
+*SDK Reference: [TrainBus.RunAsync]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %})*
 
 ## Next Steps
 

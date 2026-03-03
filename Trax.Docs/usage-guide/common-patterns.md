@@ -40,7 +40,7 @@ public class RobustTrain : ServiceTrain<ProcessOrderRequest, ProcessOrderResult>
 }
 ```
 
-*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
+*SDK Reference: [Activate]({{ site.baseurl }}{% link sdk-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link sdk-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %})*
 
 ### Step-Level Error Handling
 

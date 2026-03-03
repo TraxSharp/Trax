@@ -13,7 +13,7 @@ nav_order: 2
 
 For static bulk jobs, use the builder-time `ScheduleMany` during DI configuration. No async startup code or service resolution needed. The **name-based overload** derives `groupId`, `prunePrefix`, and the external ID prefix from a single `name` parameter. The **explicit overload** gives full control over each independently.
 
-*API Reference: [ScheduleMany]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %}) — all overloads, parameter tables, and examples including pruning.*
+*SDK Reference: [ScheduleMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %}) — all overloads, parameter tables, and examples including pruning.*
 
 The builder captures the manifests and seeds them when the `BackgroundService` starts—same upsert semantics as `Schedule`.
 
@@ -50,7 +50,7 @@ services.AddTrax.CoreEffects(options => options
 );
 ```
 
-*API Reference: [Schedule]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}), [ScheduleMany]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %})*
+*SDK Reference: [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}), [ScheduleMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %})*
 
 The dashboard's **Manifest Groups** page shows each group's settings and aggregate execution stats, which is useful when a logical operation is split across many manifests (e.g., syncing 1000 table slices).
 
@@ -58,7 +58,7 @@ The dashboard's **Manifest Groups** page shows each group's settings and aggrega
 
 Use `ScheduleManyAsync` when the set of jobs is determined at runtime (loaded from a database, config file, or external API). It creates multiple manifests in a single transaction—if any fails, the entire batch rolls back. Both startup and runtime variants accept the same `ScheduleOptions` builder and use upsert semantics.
 
-*API Reference: [ScheduleManyAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %})*
+*SDK Reference: [ScheduleManyAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %})*
 
 ### Configuration Per Item
 
@@ -83,7 +83,7 @@ foreach (var config in tableConfigs)
 }
 ```
 
-*API Reference: [ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}), [ScheduleOptions]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
+*SDK Reference: [ScheduleAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}), [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*
 
 ### Multi-Dimensional Bulk Jobs
 
@@ -110,13 +110,13 @@ await scheduler.ScheduleManyAsync<ISyncTableTrain, SyncTableInput, (string Table
     Every.Minutes(5));
 ```
 
-*API Reference: [ScheduleManyAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %})*
+*SDK Reference: [ScheduleManyAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %})*
 
 ### Pruning Stale Manifests
 
 When the source collection shrinks between deployments—tables removed, slices reduced—old manifests stick around in the database. The name-based overload handles this automatically (`prunePrefix: "{name}-"`). With the explicit overload, specify `prunePrefix` manually. After upserting the batch, any existing manifests whose `ExternalId` starts with the prefix but weren't in the current batch are deleted—keeping the manifest table in sync with your source data.
 
-*API Reference: [ScheduleMany — prunePrefix]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %})*
+*SDK Reference: [ScheduleMany — prunePrefix]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %})*
 
 ## Per-Group Dispatch Controls
 
@@ -151,11 +151,11 @@ scheduler.Schedule<IMyTrain>(
 
 ## Management Operations
 
-`IManifestScheduler` includes methods for runtime job control: `DisableAsync`, `EnableAsync`, `TriggerAsync`, `CancelAsync`, `CancelGroupAsync`, `ScheduleDependentAsync`, and `ScheduleOnceAsync`. Disabled jobs remain in the database but are skipped by the ManifestManager until re-enabled. `CancelAsync` and `CancelGroupAsync` cancel all in-progress executions of a manifest or group using dual-layer cancellation (database flag + same-server CTS).
+`ITraxScheduler` includes methods for runtime job control: `DisableAsync`, `EnableAsync`, `TriggerAsync`, `CancelAsync`, `CancelGroupAsync`, `ScheduleDependentAsync`, and `ScheduleOnceAsync`. Disabled jobs remain in the database but are skipped by the ManifestManager until re-enabled. `CancelAsync` and `CancelGroupAsync` cancel all in-progress executions of a manifest or group using dual-layer cancellation (database flag + same-server CTS).
 
 `TriggerAsync` accepts an optional `TimeSpan delay` parameter to schedule a delayed execution of an existing manifest. `ScheduleOnceAsync` creates a new one-off manifest with `ScheduleType.Once` that fires after a delay and auto-disables on success. See [Delayed / One-Off Jobs](delayed-jobs.md) for usage patterns.
 
-*API Reference: [DisableAsync / EnableAsync / TriggerAsync / CancelAsync / CancelGroupAsync / ScheduleOnceAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}), [ScheduleDependentAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %})*
+*SDK Reference: [DisableAsync / EnableAsync / TriggerAsync / CancelAsync / CancelGroupAsync / ScheduleOnceAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}), [ScheduleDependentAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %})*
 
 ## Manifest Options
 
@@ -185,7 +185,7 @@ scheduler
 
 See [Dormant Dependents](dependent-trains.md#dormant-dependents) for full details on registration and runtime activation.
 
-*API Reference: [ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}), [ScheduleOptions]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
+*SDK Reference: [ScheduleAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}), [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*
 
 ## Schedule Types
 
@@ -221,7 +221,7 @@ Four built-in exclusion types: `DaysOfWeek`, `Dates`, `DateRange`, `TimeWindow` 
 
 See [Exclusion Windows](exclusions.md) for full details, examples, and misfire interaction.
 
-*API Reference: [ScheduleOptions — Exclude()]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
+*SDK Reference: [ScheduleOptions — Exclude()]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*
 
 ## Misfire Policies
 
@@ -282,7 +282,7 @@ For cron-based schedules, the scheduler uses precise next-occurrence calculation
 
 Misfire policies only apply to `Cron` and `Interval` schedule types. Dependent manifests fire based on parent completion, not time — misfire policies are ignored for them.
 
-*API Reference: [AddScheduler]({{ site.baseurl }}{% link api-reference/scheduler-api/add-scheduler.md %}), [ScheduleOptions]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
+*SDK Reference: [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}), [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*
 
 ## Timeout Enforcement
 
@@ -318,4 +318,4 @@ Key options to know:
 - **`DefaultMisfirePolicy`** (default: `FireOnceNow`) — how missed runs are handled
 - **`DefaultMisfireThreshold`** (default: 60 seconds) — grace period for misfire detection
 
-*API Reference: [AddScheduler]({{ site.baseurl }}{% link api-reference/scheduler-api/add-scheduler.md %}) — full options table with all defaults including retry backoff, timeouts, and stuck job recovery.*
+*SDK Reference: [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}) — full options table with all defaults including retry backoff, timeouts, and stuck job recovery.*

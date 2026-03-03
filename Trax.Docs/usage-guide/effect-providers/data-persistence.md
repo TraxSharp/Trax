@@ -24,7 +24,7 @@ services.AddTrax.CoreEffects(options =>
 );
 ```
 
-*API Reference: [AddPostgresEffect]({{ site.baseurl }}{% link api-reference/configuration/add-postgres-effect.md %})*
+*SDK Reference: [AddPostgresEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %})*
 
 On first startup, the Postgres provider runs automatic migrations to create the `trax` schema and its tables (`metadata`, `logs`, `manifests`, `dead_letters`). Subsequent startups apply any pending migrations.
 
@@ -61,7 +61,7 @@ services.AddTrax.CoreEffects(options =>
 );
 ```
 
-*API Reference: [AddInMemoryEffect]({{ site.baseurl }}{% link api-reference/configuration/add-in-memory-effect.md %})*
+*SDK Reference: [AddInMemoryEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})*
 
 Uses Entity Framework Core's in-memory provider. No connection string, no migrations, no external dependencies. Data is lost when the process exits.
 
@@ -106,4 +106,4 @@ Log levels can also be changed at runtime via the Dashboard's Server Settings pa
 
 Blacklist entries support exact matches and wildcard patterns.
 
-*API Reference: [AddEffectDataContextLogging]({{ site.baseurl }}{% link api-reference/configuration/add-effect-data-context-logging.md %})*
+*SDK Reference: [AddEffectDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %})*

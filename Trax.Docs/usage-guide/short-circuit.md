@@ -23,13 +23,13 @@ public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderResult>
 }
 ```
 
-*API Reference: [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [ShortCircuit]({{ site.baseurl }}{% link api-reference/train-methods/short-circuit.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
+*SDK Reference: [Chain]({{ site.baseurl }}{% link sdk-reference/train-methods/chain.md %}), [ShortCircuit]({{ site.baseurl }}{% link sdk-reference/train-methods/short-circuit.md %}), [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %})*
 
 ## The Step
 
 > **This behavior is intentionally inverted from Chain.** A `Chain` step that throws stops the train with an error. A `ShortCircuit` step that throws means "no short-circuit available, keep going." The exception is swallowed, not propagated.
 
-See [API Reference: ShortCircuit]({{ site.baseurl }}{% link api-reference/train-methods/short-circuit.md %}) for all overloads, the step signature, and a full example.
+See [SDK Reference: ShortCircuit]({{ site.baseurl }}{% link sdk-reference/train-methods/short-circuit.md %}) for all overloads, the step signature, and a full example.
 
 ## When to Use It
 

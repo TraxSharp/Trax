@@ -41,7 +41,7 @@ app.UseTrax.CoreDashboard("/trax");
 app.Run();
 ```
 
-*API Reference: [AddTrax.CoreDashboard]({{ site.baseurl }}{% link api-reference/dashboard-api/add-trax-dashboard.md %}), [UseTrax.CoreDashboard]({{ site.baseurl }}{% link api-reference/dashboard-api/use-trax-dashboard.md %})*
+*SDK Reference: [AddTrax.CoreDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/add-trax-dashboard.md %}), [UseTrax.CoreDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/use-trax-dashboard.md %})*
 
 Navigate to `/trax/trains` and you'll see every `IServiceTrain` registered in your application.
 
@@ -157,9 +157,13 @@ Per-group `MaxActiveJobs` prevents starvation — when a high-priority group hit
 
 ## How Discovery Works
 
-The dashboard reads from the same `IServiceCollection` that your application builds. When you call `AddTrax.CoreDashboard()`, it captures a reference to the service collection. At request time, it scans the registered `ServiceDescriptor` entries for anything that implements `IServiceTrain<,>`, extracts the generic type arguments, and deduplicates.
+Train discovery is handled by `ITrainDiscoveryService` in `Trax.Mediator`. When you call `AddServiceTrainBus()`, it registers the discovery service, captures the `IServiceCollection`, and makes it available to both the dashboard and the [REST/GraphQL API]({{ site.baseurl }}{% link api.md %}).
+
+At request time, the discovery service scans the registered `ServiceDescriptor` entries for anything that implements `IServiceTrain<,>`, extracts the generic type arguments, and deduplicates by input type (preferring interface registrations over concrete types).
 
 If you register trains with `AddServiceTrainBus` (which calls `AddScopedTrax.CoreRoute` under the hood), they show up automatically. Trains registered manually via `AddScoped<IMyTrain, MyTrain>()` will also appear as long as their interface extends `IServiceTrain<TIn, TOut>`.
+
+*SDK Reference: [TrainDiscovery]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-discovery.md %})*
 
 ## Options
 
@@ -170,7 +174,7 @@ builder.Services.AddTrax.CoreDashboard(options =>
 });
 ```
 
-*API Reference: [AddTrax.CoreDashboard]({{ site.baseurl }}{% link api-reference/dashboard-api/add-trax-dashboard.md %}), [DashboardOptions]({{ site.baseurl }}{% link api-reference/dashboard-api/dashboard-options.md %})*
+*SDK Reference: [AddTrax.CoreDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/add-trax-dashboard.md %}), [DashboardOptions]({{ site.baseurl }}{% link sdk-reference/dashboard-api/dashboard-options.md %})*
 
 The route prefix is set in `UseTrax.CoreDashboard`:
 

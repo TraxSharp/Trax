@@ -103,4 +103,4 @@ Exclusions are stored as a JSONB column on the manifest table. They are configur
 
 The ManifestDetailPage displays configured exclusion windows in an "Exclusion Windows" card when present, showing the type and formatted description of each exclusion.
 
-*API Reference: [ScheduleOptions — Exclude()]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
+*SDK Reference: [ScheduleOptions — Exclude()]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*

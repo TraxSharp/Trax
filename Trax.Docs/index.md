@@ -92,6 +92,9 @@ Trax.Core 5.x requires `net10.0`. See [Getting Started](getting-started.md) for 
 | [Trax.Effect.Provider.Parameter](https://www.nuget.org/packages/Trax.Effect.Provider.Parameter/) | Cargo serialization station service | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect.Provider.Parameter) |
 | [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/) | Timetable management — manifests, retries, dead letters | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Scheduler) |
 | [Trax.Scheduler.Hangfire](https://www.nuget.org/packages/Trax.Scheduler.Hangfire/) | Hangfire integration for the timetable | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Scheduler.Hangfire) |
+| [Trax.Api](https://www.nuget.org/packages/Trax.Api/) | API core — train catalog, health checks, shared DTOs | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Api) |
+| [Trax.Api.Rest](https://www.nuget.org/packages/Trax.Api.Rest/) | REST API endpoints via ASP.NET Core minimal APIs | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Api.Rest) |
+| [Trax.Api.GraphQL](https://www.nuget.org/packages/Trax.Api.GraphQL/) | GraphQL API via HotChocolate | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Api.GraphQL) |
 | [Trax.Samples.Templates](https://www.nuget.org/packages/Trax.Samples.Templates/) | `dotnet new` project template for Trax servers | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Samples.Templates) |
 
 ## License

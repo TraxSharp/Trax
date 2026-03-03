@@ -46,7 +46,7 @@ services.AddTrax.CoreEffects(options => options
 );
 ```
 
-*API Reference: [Schedule]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}), [ThenInclude]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %})*
+*SDK Reference: [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}), [ThenInclude]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %})*
 
 `ThenInclude` captures the previous call's external ID as the parent. No schedule parameter—dependent manifests don't have one.
 
@@ -72,7 +72,7 @@ scheduler
         options => options.Group("etl"));
 ```
 
-*API Reference: [Include]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %})*
+*SDK Reference: [Include]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %})*
 
 This creates: `extract` &rarr; `transform`, `extract` &rarr; `validate`. When extract succeeds, both transform and validate are queued independently. If transform fails, validate is unaffected.
 
@@ -80,7 +80,7 @@ This creates: `extract` &rarr; `transform`, `extract` &rarr; `validate`. When ex
 
 `Include` and `ThenInclude` compose naturally. The builder tracks two pointers: the **root** (set by `Schedule`) and the **cursor** (moved by every `ThenInclude` or `Include`). `Include` always parents from the root. `ThenInclude` always parents from the cursor.
 
-*API Reference: [Dependent Scheduling — mixed fan-out and chaining]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %}) for the full code example.*
+*SDK Reference: [Dependent Scheduling — mixed fan-out and chaining]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %}) for the full code example.*
 
 ## Bulk Dependencies: IncludeMany
 
@@ -106,13 +106,13 @@ scheduler
 //          load-0..load-99 (groupId: "load", prunePrefix: "load-")
 ```
 
-*API Reference: [ScheduleMany]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %}), [IncludeMany]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %})*
+*SDK Reference: [ScheduleMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %}), [IncludeMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %})*
 
 The `DependsOn` property on each `ManifestItem` specifies the parent's external ID. In this example, `load-0` depends on `extract-0`, `load-1` on `extract-1`, and so on. When `extract-42` succeeds, only `load-42` gets queued—the rest are unaffected.
 
 The mapping is flexible. You aren't limited to 1:1—multiple dependents can point to the same parent. The name-based overloads automatically set `groupId` and `prunePrefix` from the `name` parameter. For deeper chaining (a third batch level), use `ThenIncludeMany`.
 
-*API Reference: [IncludeMany / ThenIncludeMany]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %}) — all overloads including many-to-one and batch chaining examples.*
+*SDK Reference: [IncludeMany / ThenIncludeMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %}) — all overloads including many-to-one and batch chaining examples.*
 
 ## Bulk Fan-Out: IncludeMany
 
@@ -133,15 +133,15 @@ scheduler
         )));
 ```
 
-*API Reference: [IncludeMany]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %})*
+*SDK Reference: [IncludeMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %})*
 
 All 10 `load-*` manifests depend on `extract-all`. No `DependsOn` needed — `IncludeMany` automatically parents every item from the root `Schedule`. The name `"load"` derives `groupId: "load"` and `prunePrefix: "load-"`.
 
 ## Runtime API
 
-For jobs created at runtime rather than startup, use `IManifestScheduler.ScheduleDependentAsync` (single) or `ScheduleManyDependentAsync` (batch). Both use upsert semantics, same as their non-dependent counterparts. `ScheduleManyDependentAsync` runs in a single transaction.
+For jobs created at runtime rather than startup, use `ITraxScheduler.ScheduleDependentAsync` (single) or `ScheduleManyDependentAsync` (batch). Both use upsert semantics, same as their non-dependent counterparts. `ScheduleManyDependentAsync` runs in a single transaction.
 
-*API Reference: [ScheduleDependentAsync / ScheduleManyDependentAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %}) — signatures, parameters, and examples.*
+*SDK Reference: [ScheduleDependentAsync / ScheduleManyDependentAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %}) — signatures, parameters, and examples.*
 
 ## Cycle Detection
 
@@ -229,10 +229,10 @@ Each call creates a `WorkQueue` entry with the runtime-supplied input. The `Depe
 
 If a dormant dependent already has a queued `WorkQueue` entry or an active execution (`Pending`/`InProgress` metadata), the activation is silently skipped with a warning log. This prevents duplicate work when the parent runs faster than its children can complete.
 
-### API Reference
+### SDK Reference
 
-- [`IDormantDependentContext`]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %}#idormantdependentcontext) — `ActivateAsync` and `ActivateManyAsync` signatures
-- [`.Dormant()`]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %}#dormant-option) — `ScheduleOptions` builder method
+- [`IDormantDependentContext`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %}#idormantdependentcontext) — `ActivateAsync` and `ActivateManyAsync` signatures
+- [`.Dormant()`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %}#dormant-option) — `ScheduleOptions` builder method
 
 ## Under the Hood
 

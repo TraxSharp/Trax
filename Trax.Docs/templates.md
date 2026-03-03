@@ -78,7 +78,7 @@ public class HelloWorldTrain : ServiceTrain<HelloWorldInput, Unit>, IHelloWorldT
 }
 ```
 
-*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
+*SDK Reference: [Activate]({{ site.baseurl }}{% link sdk-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link sdk-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %})*
 
 ### Package References
 
@@ -152,7 +152,7 @@ scheduler
     );
 ```
 
-*API Reference: [AddMetadataCleanup]({{ site.baseurl }}{% link api-reference/scheduler-api/add-metadata-cleanup.md %}), [UseHangfire]({{ site.baseurl }}{% link api-reference/scheduler-api/use-hangfire.md %}), [Schedule]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %})*
+*SDK Reference: [AddMetadataCleanup]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-metadata-cleanup.md %}), [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}), [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %})*
 
 See [Scheduling](scheduler.md) for dependent trains, bulk scheduling, and dead letter handling.
 

@@ -22,7 +22,7 @@ services.AddTrax.CoreEffects(options =>
 );
 ```
 
-*API Reference: [AddStepLogger]({{ site.baseurl }}{% link api-reference/configuration/add-step-logger.md %})*
+*SDK Reference: [AddStepLogger]({{ site.baseurl }}{% link sdk-reference/configuration/add-step-logger.md %})*
 
 ## The `serializeStepData` Option
 

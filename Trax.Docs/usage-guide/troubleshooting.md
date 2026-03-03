@@ -23,7 +23,7 @@ services.AddTrax.CoreEffects(o =>
 );
 ```
 
-*API Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-train-bus.md %})*
+*SDK Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-train-bus.md %})*
 
 ## "Unable to resolve service for type 'IStep'"
 
@@ -64,7 +64,7 @@ Check `FailureException` and `FailureReason` in the metadata record for details.
 
 ## Steps execute out of order or skip unexpectedly
 
-If you're using `ShortCircuit`, remember that throwing an exception means "continue" not "stop." See [ShortCircuit](short-circuit.md) for details or [API Reference: ShortCircuit]({{ site.baseurl }}{% link api-reference/train-methods/short-circuit.md %}) for all overloads.
+If you're using `ShortCircuit`, remember that throwing an exception means "continue" not "stop." See [ShortCircuit](short-circuit.md) for details or [SDK Reference: ShortCircuit]({{ site.baseurl }}{% link sdk-reference/train-methods/short-circuit.md %}) for all overloads.
 
 ## Scheduled jobs don't execute (no errors)
 
@@ -79,7 +79,7 @@ The most common cause: `TaskServerExecutorTrain.Assembly` isn't registered with 
 ```
 
 Other causes:
-- The manifest's `IsEnabled` is `false`—check via `IManifestScheduler` or the database
+- The manifest's `IsEnabled` is `false`—check via `ITraxScheduler` or the database
 - `ManifestManagerPollingInterval` or `JobDispatcherPollingInterval` is set too high and the job hasn't been picked up yet
 - The train's input type doesn't implement `IManifestProperties`
 

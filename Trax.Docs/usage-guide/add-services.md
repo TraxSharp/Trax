@@ -24,9 +24,9 @@ protected override async Task<Either<Exception, User>> RunInternal(CreateUserReq
 }
 ```
 
-*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/train-methods/activate.md %}), [AddServices]({{ site.baseurl }}{% link api-reference/train-methods/add-services.md %}), [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
+*SDK Reference: [Activate]({{ site.baseurl }}{% link sdk-reference/train-methods/activate.md %}), [AddServices]({{ site.baseurl }}{% link sdk-reference/train-methods/add-services.md %}), [Chain]({{ site.baseurl }}{% link sdk-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %})*
 
-Each type argument is stored in Memory with the corresponding instance. See [API Reference: AddServices]({{ site.baseurl }}{% link api-reference/train-methods/add-services.md %}) for all overloads and interface-type storage behavior.
+Each type argument is stored in Memory with the corresponding instance. See [SDK Reference: AddServices]({{ site.baseurl }}{% link sdk-reference/train-methods/add-services.md %}) for all overloads and interface-type storage behavior.
 
 ## When to Use It
 

@@ -26,7 +26,7 @@ services.AddTrax.CoreEffects(options =>
 );
 ```
 
-*API Reference: [AddPostgresEffect]({{ site.baseurl }}{% link api-reference/configuration/add-postgres-effect.md %}), [AddInMemoryEffect]({{ site.baseurl }}{% link api-reference/configuration/add-in-memory-effect.md %})*
+*SDK Reference: [AddPostgresEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}), [AddInMemoryEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})*
 
 This persists a `Metadata` record for each train execution containing:
 - Train name and state (Pending → InProgress → Completed/Failed)
@@ -47,7 +47,7 @@ services.AddTrax.CoreEffects(options =>
 );
 ```
 
-*API Reference: [AddJsonEffect]({{ site.baseurl }}{% link api-reference/configuration/add-json-effect.md %})*
+*SDK Reference: [AddJsonEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-json-effect.md %})*
 
 This doesn't persist anything—it just logs. Useful for seeing what's happening without setting up a database.
 
@@ -65,7 +65,7 @@ services.AddTrax.CoreEffects(options =>
 );
 ```
 
-*API Reference: [SaveTrainParameters]({{ site.baseurl }}{% link api-reference/configuration/save-train-parameters.md %})*
+*SDK Reference: [SaveTrainParameters]({{ site.baseurl }}{% link sdk-reference/configuration/save-train-parameters.md %})*
 
 Without this, the `Input` and `Output` columns in `Metadata` are null. With it, they contain JSON-serialized versions of your request and response objects. You can control which parameters are saved:
 
@@ -91,7 +91,7 @@ services.AddTrax.CoreEffects(options =>
 );
 ```
 
-*API Reference: [AddStepLogger]({{ site.baseurl }}{% link api-reference/configuration/add-step-logger.md %})*
+*SDK Reference: [AddStepLogger]({{ site.baseurl }}{% link sdk-reference/configuration/add-step-logger.md %})*
 
 This hooks into `EffectStep` (not base `Step`) lifecycle events. Before and after each step runs, it logs structured `StepMetadata` containing the step name, input/output types, timing, and Railway state (`Right`/`Left`). When `serializeStepData` is `true`, the step's output is also serialized to JSON in the log entry.
 
@@ -109,7 +109,7 @@ services.AddTrax.CoreEffects(options =>
 );
 ```
 
-*API Reference: [AddStepProgress]({{ site.baseurl }}{% link api-reference/configuration/add-step-progress.md %})*
+*SDK Reference: [AddStepProgress]({{ site.baseurl }}{% link sdk-reference/configuration/add-step-progress.md %})*
 
 This registers two step-level effect providers:
 

@@ -59,7 +59,7 @@ var app = builder.Build();
 app.Run();
 ```
 
-*API Reference: [AddScheduler]({{ site.baseurl }}{% link api-reference/scheduler-api/add-scheduler.md %}), [UsePostgresTaskServer]({{ site.baseurl }}{% link api-reference/scheduler-api/use-postgres-task-server.md %}), [Schedule]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %})*
+*SDK Reference: [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}), [UsePostgresTaskServer]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-postgres-task-server.md %}), [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %})*
 
 `AddScheduler` registers three hosted services — `SchedulerStartupService` (seeds manifests and recovers stuck jobs on startup), `ManifestManagerPollingService` (evaluates manifests on a timer), and `JobDispatcherPollingService` (dispatches work queue entries on a timer). No extra startup call needed.
 
@@ -81,7 +81,7 @@ You can customize the task server's worker count, polling interval, and timeouts
 })
 ```
 
-See [UsePostgresTaskServer]({{ site.baseurl }}{% link api-reference/scheduler-api/use-postgres-task-server.md %}) for full parameter documentation.
+See [UsePostgresTaskServer]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-postgres-task-server.md %}) for full parameter documentation.
 
 > **Migrating from Hangfire?** See the [migration guide]({{ site.baseurl }}{% link scheduler/task-server.md %}#migrating-from-hangfire).
 
@@ -138,10 +138,10 @@ public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, Unit>, ISyncC
 )
 ```
 
-**Option B: Runtime via IManifestScheduler (for dynamic jobs)**
+**Option B: Runtime via ITraxScheduler (for dynamic jobs)**
 
 ```csharp
-public class JobSetupService(IManifestScheduler scheduler)
+public class JobSetupService(ITraxScheduler scheduler)
 {
     public async Task SetupJobs()
     {
@@ -163,7 +163,7 @@ The `Schedule` type defines when a job runs. Two static factory classes create `
 - **`Every`** — interval-based: `Every.Seconds(30)`, `Every.Minutes(5)`, `Every.Hours(1)`, `Every.Days(1)`
 - **`Cron`** — cron-based: `Cron.Minutely()`, `Cron.Daily(hour: 3)`, `Cron.Weekly(DayOfWeek.Sunday, hour: 2)`, `Cron.Expression("0 */6 * * *")`
 
-*API Reference: [Scheduling Helpers]({{ site.baseurl }}{% link api-reference/scheduler-api/scheduling-helpers.md %}) — all method signatures, cron expression format, and `ManifestOptions`.*
+*SDK Reference: [Scheduling Helpers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) — all method signatures, cron expression format, and `ManifestOptions`.*
 
 ## Namespace Reference
 
@@ -177,6 +177,6 @@ The scheduler spans multiple packages. This table lists every public type you're
 | `Cron` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
 | `Every` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
 | `Schedule` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
-| `IManifestScheduler` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
+| `ITraxScheduler` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
 | `ManifestOptions` | `Trax.Scheduler.Configuration` | `Trax.Scheduler` |
 | `IDormantDependentContext` | `Trax.Scheduler.Services.DormantDependentContext` | `Trax.Scheduler` |

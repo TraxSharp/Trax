@@ -1,0 +1,86 @@
+---
+layout: default
+title: AddTraxGraphQL
+parent: GraphQL API
+grand_parent: SDK Reference
+nav_order: 1
+---
+
+# AddTraxGraphQL
+
+Registers the Trax GraphQL schema and services using HotChocolate. This adds the query type, mutation type, and all type extensions needed to serve the Trax GraphQL API.
+
+## Signatures
+
+### AddTraxGraphQL
+
+```csharp
+public static IServiceCollection AddTraxGraphQL(this IServiceCollection services)
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `services` | `IServiceCollection` | Yes | The service collection |
+
+**Returns**: `IServiceCollection` for continued chaining.
+
+### UseTraxGraphQL
+
+```csharp
+public static WebApplication UseTraxGraphQL(
+    this WebApplication app,
+    string routePrefix = "/graphql"
+)
+```
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `app` | `WebApplication` | Yes | — | The built application |
+| `routePrefix` | `string` | No | `"/graphql"` | The URL path where the GraphQL endpoint is mapped |
+
+**Returns**: `WebApplication` for continued chaining.
+
+## What It Registers
+
+`AddTraxGraphQL` calls `AddTraxApi()` internally (shared API services), then configures HotChocolate:
+
+- **GraphQL server** via `AddGraphQLServer()`
+- **Query type**: `TrainQueries` — registered as the root query type
+- **Mutation type**: empty root created via `AddMutationType()`, extended by:
+  - `TrainMutations` — `queueTrain`, `runTrain`
+  - `SchedulerMutations` — `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
+
+## Prerequisites
+
+`AddTraxGraphQL` depends on services registered by `AddServiceTrainBus()` (provides `ITrainDiscoveryService` and `ITrainExecutionService`) and a configured data context (provides `IDataContextProviderFactory`). These are normally set up through `AddTraxEffects`.
+
+## Example
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services
+    .AddTraxEffects(options => options
+        .AddPostgresEffect(builder.Configuration.GetConnectionString("TraxDatabase")!)
+        .AddServiceTrainBus(ServiceLifetime.Scoped, typeof(Program).Assembly)
+    )
+    .AddTraxGraphQL();
+
+var app = builder.Build();
+
+app.UseTraxGraphQL(); // serves at /graphql
+
+app.Run();
+```
+
+To serve the endpoint at a different path:
+
+```csharp
+app.UseTraxGraphQL(routePrefix: "/api/graphql");
+```
+
+## Package
+
+```
+dotnet add package Trax.Api.GraphQL
+```

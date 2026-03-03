@@ -19,7 +19,7 @@ A hosted service with a timer works fine for simple recurring tasks. The Schedul
 
 ### Manifest = Job Definition
 
-A `Manifest` is the scheduling equivalent of a shipping manifest — it describes what train to run, when to dispatch it, how to handle failures, and what cargo (input) to load. The `IManifestScheduler` handles the boilerplate—no need to worry about assembly-qualified names or JSON serialization:
+A `Manifest` is the scheduling equivalent of a shipping manifest — it describes what train to run, when to dispatch it, how to handle failures, and what cargo (input) to load. The `ITraxScheduler` handles the boilerplate—no need to worry about assembly-qualified names or JSON serialization:
 
 ```csharp
 await scheduler.ScheduleAsync<ISyncCustomersTrain, SyncCustomersInput>(
@@ -36,7 +36,7 @@ scheduler.ScheduleMany<ISyncTableTrain, SyncTableInput, string>(
     Every.Minutes(5));
 ```
 
-*API Reference: [ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}), [ScheduleMany]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %})*
+*SDK Reference: [ScheduleAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}), [ScheduleMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %})*
 
 The scheduler creates the manifest, resolves the correct type names, and serializes the input automatically. Every call is an upsert—safe to run on every startup without duplicating jobs.
 
@@ -82,7 +82,7 @@ await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput>(
     TimeSpan.FromHours(24));
 ```
 
-*API Reference: [TriggerAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}#triggerasync), [ScheduleOnceAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}#scheduleonceasync)*
+*SDK Reference: [TriggerAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}#triggerasync), [ScheduleOnceAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}#scheduleonceasync)*
 
 ### Dependent Manifests
 
@@ -96,7 +96,7 @@ scheduler
         "load", new LoadInput());
 ```
 
-*API Reference: [Schedule]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}), [Include]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %})*
+*SDK Reference: [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}), [Include]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %})*
 
 ### Manifest Groups
 
@@ -172,15 +172,17 @@ The **TaskServerExecutorTrain** runs on the task server's worker threads for eac
 
 See [Administrative Trains](scheduler/admin-trains.md) for detailed documentation on each internal train.
 
-## API Reference
+## SDK Reference
 
-For complete method signatures, all parameters, and detailed usage examples for every scheduling function, see the [Scheduler API Reference]({{ site.baseurl }}{% link api-reference/scheduler-api.md %}):
+For complete method signatures, all parameters, and detailed usage examples for every scheduling function, see the [Scheduler SDK Reference]({{ site.baseurl }}{% link sdk-reference/scheduler-api.md %}):
 
-- [Schedule / ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}) — single recurring train
-- [ScheduleMany / ScheduleManyAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %}) — batch scheduling with pruning
-- [Dependent Scheduling]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %}) — ThenInclude, ThenIncludeMany, Include, IncludeMany, ScheduleDependentAsync
-- [Manifest Management]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}) — DisableAsync, EnableAsync, TriggerAsync, ScheduleOnceAsync
-- [Scheduling Helpers]({{ site.baseurl }}{% link api-reference/scheduler-api/scheduling-helpers.md %}) — Every, Cron, Schedule record, ManifestOptions
+- [Schedule / ScheduleAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}) — single recurring train
+- [ScheduleMany / ScheduleManyAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %}) — batch scheduling with pruning
+- [Dependent Scheduling]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %}) — ThenInclude, ThenIncludeMany, Include, IncludeMany, ScheduleDependentAsync
+- [Manifest Management]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}) — DisableAsync, EnableAsync, TriggerAsync, ScheduleOnceAsync
+- [Scheduling Helpers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) — Every, Cron, Schedule record, ManifestOptions
+
+The same scheduler operations are also available through the [REST API]({{ site.baseurl }}{% link sdk-reference/rest-api/scheduler-endpoints.md %}) and [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api/mutations.md %}) for remote access.
 
 ## Sample Project
 

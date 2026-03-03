@@ -62,7 +62,7 @@ public class TrainBus : ITrainBus
 
 ### Input Type Uniqueness
 
-Each input type maps to exactly one train. This is enforced at startup by the `TrainRegistry`'s `ToDictionary` call—duplicate input types cause an exception. See [API Reference: AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-train-bus.md %}) for the full uniqueness rules and code examples.
+Each input type maps to exactly one train. This is enforced at startup by the `TrainRegistry`'s `ToDictionary` call—duplicate input types cause an exception. See [SDK Reference: AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-train-bus.md %}) for the full uniqueness rules and code examples.
 
 ### Train Discovery Rules
 

@@ -18,11 +18,11 @@ protected override async Task<Either<Exception, User>> RunInternal(CreateUserReq
         .Resolve();
 ```
 
-*API Reference: [Activate]({{ site.baseurl }}{% link api-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link api-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %})*
+*SDK Reference: [Activate]({{ site.baseurl }}{% link sdk-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link sdk-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %})*
 
 ## How It Works
 
-`Resolve` checks for a captured exception, then a [ShortCircuit](short-circuit.md) value, then looks up `TReturn` in [Memory](../concepts/memory.md)—in that order. See [API Reference: Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %}) for the full resolution priority and error behavior.
+`Resolve` checks for a captured exception, then a [ShortCircuit](short-circuit.md) value, then looks up `TReturn` in [Memory](../concepts/memory.md)—in that order. See [SDK Reference: Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %}) for the full resolution priority and error behavior.
 
 The [Analyzer](../analyzer.md) catches missing return types at compile time with **CHAIN002**.
 
@@ -48,7 +48,7 @@ protected override async Task<Either<Exception, ParentResult>> RunInternal(Paren
 }
 ```
 
-*API Reference: [Resolve]({{ site.baseurl }}{% link api-reference/train-methods/resolve.md %}), [TrainBus.RunAsync]({{ site.baseurl }}{% link api-reference/mediator-api/train-bus.md %})*
+*SDK Reference: [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %}), [TrainBus.RunAsync]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %})*
 
 This skips the Memory lookup—you're providing the result directly. If an exception exists from the chain, it still takes precedence and the provided value is ignored. This is useful when you need to construct the return value manually, like combining results from nested trains with the chain's output.
 

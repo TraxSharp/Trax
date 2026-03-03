@@ -99,7 +99,7 @@ public async Task CreateUserTrain_CreatesUser()
 }
 ```
 
-*API Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-train-bus.md %}), [TrainBus.RunAsync]({{ site.baseurl }}{% link api-reference/mediator-api/train-bus.md %})*
+*SDK Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-train-bus.md %}), [TrainBus.RunAsync]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %})*
 
 ## Integration Testing with InMemory Provider
 
@@ -132,7 +132,7 @@ public async Task Train_PersistsMetadata()
 }
 ```
 
-*API Reference: [AddInMemoryEffect]({{ site.baseurl }}{% link api-reference/configuration/add-in-memory-effect.md %}), [AddServiceTrainBus]({{ site.baseurl }}{% link api-reference/configuration/add-effect-train-bus.md %})*
+*SDK Reference: [AddInMemoryEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %}), [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-train-bus.md %})*
 
 ## Testing Cancellation
 

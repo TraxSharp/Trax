@@ -71,7 +71,7 @@ Enable cleanup with `.AddMetadataCleanup()`:
 )
 ```
 
-*API Reference: [AddMetadataCleanup]({{ site.baseurl }}{% link api-reference/scheduler-api/add-metadata-cleanup.md %})*
+*SDK Reference: [AddMetadataCleanup]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-metadata-cleanup.md %})*
 
 With no arguments, this cleans up `ManifestManagerTrain`, `JobDispatcherTrain`, and `MetadataCleanupTrain` metadata older than 1 hour, checking every minute.
 

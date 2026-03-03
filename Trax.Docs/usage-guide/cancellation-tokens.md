@@ -52,7 +52,7 @@ await train.RunEither(input, serviceProvider, cancellationToken);
 
 If you call `Run(input)` without a token, `CancellationToken` defaults to `CancellationToken.None` — all existing code works unchanged.
 
-*API Reference: [Run / RunEither]({{ site.baseurl }}{% link api-reference/train-methods/run.md %})*
+*SDK Reference: [Run / RunEither]({{ site.baseurl }}{% link sdk-reference/train-methods/run.md %})*
 
 ## Using the Token Inside Steps
 
@@ -201,7 +201,7 @@ Task<TOut> RunAsync<TOut>(object input, CancellationToken ct, Metadata? metadata
 Task RunAsync(object input, CancellationToken ct, Metadata? metadata = null);
 ```
 
-*API Reference: [TrainBus]({{ site.baseurl }}{% link api-reference/mediator-api/train-bus.md %})*
+*SDK Reference: [TrainBus]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %})*
 
 ## Background Services and Shutdown
 
@@ -309,7 +309,7 @@ services.AddTrax.CoreEffects(options => options
 
 ## Programmatic Cancellation API
 
-`IManifestScheduler` provides methods for cancelling running jobs from user code:
+`ITraxScheduler` provides methods for cancelling running jobs from user code:
 
 ```csharp
 // Cancel all running executions of a specific manifest
@@ -325,7 +325,7 @@ Both methods use dual-layer cancellation:
 
 Cancelled trains transition to `TrainState.Cancelled`, are **not retried**, and **do not create dead letters**.
 
-*API Reference: [CancelAsync / CancelGroupAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %})*
+*SDK Reference: [CancelAsync / CancelGroupAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %})*
 
 ## Automatic Timeout Cancellation
 
