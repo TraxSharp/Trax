@@ -43,6 +43,12 @@ public static class DashboardFormatters
                 < 3600 => $"Every {manifest.IntervalSeconds / 60}m",
                 _ => $"Every {manifest.IntervalSeconds / 3600}h",
             },
+            ScheduleType.Once => manifest.ScheduledAt switch
+            {
+                null => "Once (no time set)",
+                var t when t <= DateTime.UtcNow => "Once (fired)",
+                var t => $"Once at {t:g}",
+            },
             _ => manifest.ScheduleType.ToString(),
         };
 
