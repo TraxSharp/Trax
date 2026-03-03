@@ -26,6 +26,11 @@ internal static class SchedulingHelpers
         ILogger logger
     )
     {
+        // Check exclusions first — if the current time falls within any exclusion,
+        // skip this manifest. Excluded periods are "intentionally skipped", not misfires.
+        if (IsExcluded(manifest, now, logger))
+            return false;
+
         return manifest.ScheduleType switch
         {
             ScheduleType.Cron => ShouldRunByCron(manifest, now, config, logger),
@@ -348,5 +353,30 @@ internal static class SchedulingHelpers
 
         var nextScheduledTime = lastSuccessfulRun.Value.AddSeconds(intervalSeconds);
         return nextScheduledTime <= now;
+    }
+
+    /// <summary>
+    /// Checks whether the current time falls within any of the manifest's exclusion windows.
+    /// </summary>
+    private static bool IsExcluded(Manifest manifest, DateTime now, ILogger logger)
+    {
+        var exclusions = manifest.GetExclusions();
+        if (exclusions.Count == 0)
+            return false;
+
+        foreach (var exclusion in exclusions)
+        {
+            if (exclusion.IsExcluded(now))
+            {
+                logger.LogDebug(
+                    "Manifest {ManifestId} is excluded by {ExclusionType} exclusion, skipping",
+                    manifest.Id,
+                    exclusion.Type
+                );
+                return true;
+            }
+        }
+
+        return false;
     }
 }

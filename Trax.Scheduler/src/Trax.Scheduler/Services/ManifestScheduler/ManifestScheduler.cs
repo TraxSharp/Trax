@@ -887,6 +887,7 @@ public class ManifestScheduler(
             MaxRetries = baseOptions.MaxRetries,
             Timeout = baseOptions.Timeout,
             IsDormant = baseOptions.IsDormant,
+            Exclusions = baseOptions.Exclusions,
         };
 
     private static async Task<Manifest> GetManifestByExternalIdAsync(

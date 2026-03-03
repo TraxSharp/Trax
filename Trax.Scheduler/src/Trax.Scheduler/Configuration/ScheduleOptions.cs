@@ -1,4 +1,5 @@
 using Trax.Effect.Enums;
+using Trax.Effect.Models.Manifest;
 
 namespace Trax.Scheduler.Configuration;
 
@@ -31,6 +32,7 @@ public class ScheduleOptions
     internal bool _isDormant;
     internal MisfirePolicy? _misfirePolicy;
     internal TimeSpan? _misfireThreshold;
+    internal List<Exclusion> _exclusions = [];
 
     // Group-level state
     internal string? _groupId;
@@ -121,6 +123,21 @@ public class ScheduleOptions
         return this;
     }
 
+    /// <summary>
+    /// Adds an exclusion window to this manifest. The manifest will not be scheduled
+    /// during any period matched by the exclusion.
+    /// </summary>
+    /// <remarks>
+    /// Multiple exclusions can be added. If ANY exclusion matches the current time,
+    /// the manifest is skipped. Excluded periods are treated as "intentionally skipped"
+    /// — not as misfires.
+    /// </remarks>
+    public ScheduleOptions Exclude(Exclusion exclusion)
+    {
+        _exclusions.Add(exclusion);
+        return this;
+    }
+
     // ── Group-level fluent methods ────────────────────────────────────
 
     /// <summary>
@@ -177,5 +194,6 @@ public class ScheduleOptions
             IsDormant = _isDormant,
             MisfirePolicy = _misfirePolicy,
             MisfireThreshold = _misfireThreshold,
+            Exclusions = _exclusions,
         };
 }

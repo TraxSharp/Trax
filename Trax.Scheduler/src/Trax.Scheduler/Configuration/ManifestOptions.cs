@@ -1,4 +1,5 @@
 using Trax.Effect.Enums;
+using Trax.Effect.Models.Manifest;
 
 namespace Trax.Scheduler.Configuration;
 
@@ -87,4 +88,14 @@ public class ManifestOptions
     /// Null means use the global default from SchedulerConfiguration.DefaultMisfireThreshold.
     /// </summary>
     public TimeSpan? MisfireThreshold { get; set; }
+
+    /// <summary>
+    /// Gets or sets the exclusion windows for this manifest.
+    /// </summary>
+    /// <remarks>
+    /// When any exclusion matches the current time, the manifest is not scheduled.
+    /// Excluded periods are treated as "intentionally skipped", not as misfires.
+    /// Empty list means no exclusions.
+    /// </remarks>
+    public List<Exclusion> Exclusions { get; set; } = [];
 }

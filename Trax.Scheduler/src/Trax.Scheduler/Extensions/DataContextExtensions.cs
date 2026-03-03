@@ -131,6 +131,7 @@ public static class DataContextExtensions
             existing.Priority = options.Priority;
             ApplySchedule(existing, schedule);
             ApplyMisfireOptions(existing, options);
+            ApplyExclusions(existing, options);
 
             return existing;
         }
@@ -151,6 +152,7 @@ public static class DataContextExtensions
         manifest.SetProperties(input);
         ApplySchedule(manifest, schedule);
         ApplyMisfireOptions(manifest, options);
+        ApplyExclusions(manifest, options);
 
         context.Manifests.Add(manifest);
 
@@ -237,6 +239,7 @@ public static class DataContextExtensions
             existing.CronExpression = null;
             existing.IntervalSeconds = null;
             ApplyMisfireOptions(existing, options);
+            ApplyExclusions(existing, options);
 
             return existing;
         }
@@ -257,6 +260,7 @@ public static class DataContextExtensions
         };
         manifest.SetProperties(input);
         ApplyMisfireOptions(manifest, options);
+        ApplyExclusions(manifest, options);
 
         context.Manifests.Add(manifest);
 
@@ -339,6 +343,7 @@ public static class DataContextExtensions
             existing.CronExpression = null;
             existing.IntervalSeconds = null;
             ApplyMisfireOptions(existing, options);
+            ApplyExclusions(existing, options);
 
             return existing;
         }
@@ -359,6 +364,7 @@ public static class DataContextExtensions
         };
         manifest.SetProperties(input);
         ApplyMisfireOptions(manifest, options);
+        ApplyExclusions(manifest, options);
 
         context.Manifests.Add(manifest);
 
@@ -388,5 +394,13 @@ public static class DataContextExtensions
         manifest.MisfireThresholdSeconds = options.MisfireThreshold.HasValue
             ? (int)options.MisfireThreshold.Value.TotalSeconds
             : null;
+    }
+
+    /// <summary>
+    /// Applies exclusion window configuration to a manifest from the options.
+    /// </summary>
+    private static void ApplyExclusions(Manifest manifest, ManifestOptions options)
+    {
+        manifest.SetExclusions(options.Exclusions);
     }
 }
