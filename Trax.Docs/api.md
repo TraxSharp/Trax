@@ -42,8 +42,8 @@ builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
 
-app.UseTraxRestApi();          // maps at /api by default
-app.MapHealthChecks("/health");
+app.UseTraxRestApi();              // maps at /trax/api by default
+app.MapHealthChecks("/trax/health");
 
 app.Run();
 ```
@@ -61,7 +61,7 @@ builder.Services.AddTraxGraphQL();
 
 var app = builder.Build();
 
-app.UseTraxGraphQL();  // maps at /graphql — opens Banana Cake Pop IDE in browser
+app.UseTraxGraphQL();  // maps at /trax/graphql — opens Banana Cake Pop IDE in browser
 ```
 
 *SDK Reference: [AddTraxGraphQL]({{ site.baseurl }}{% link sdk-reference/graphql-api/add-trax-graphql.md %})*
@@ -75,9 +75,9 @@ builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
 
-app.UseTraxRestApi("/api");
-app.UseTraxGraphQL("/graphql");
-app.MapHealthChecks("/health");
+app.UseTraxRestApi();
+app.UseTraxGraphQL();
+app.MapHealthChecks("/trax/health");
 ```
 
 ## Packages
@@ -129,12 +129,40 @@ The API includes an ASP.NET Core `IHealthCheck` that queries the database and re
 - **Failed (last hour)** — recent failures
 - **Dead letters** — unresolved dead letter entries
 
-Returns `Healthy` when everything looks normal, `Degraded` when dead letters exist or recent failures exceed a threshold. Use it with Kubernetes liveness/readiness probes or any monitoring system that understands the standard `/health` endpoint.
+Returns `Healthy` when everything looks normal, `Degraded` when dead letters exist or recent failures exceed a threshold. The same data is available as a [GraphQL query]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}#health) for consumers that prefer structured access over the standard health endpoint.
 
 ```csharp
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/trax/health");
 ```
+
+## Authentication & Middleware
+
+Trax doesn't include built-in auth — you add it with standard ASP.NET Core middleware. Both `UseTraxRestApi` and `UseTraxGraphQL` accept a `configure` callback for applying endpoint conventions like authorization, rate limiting, or CORS to all Trax endpoints:
+
+```csharp
+// Require auth on all Trax REST endpoints
+app.UseTraxRestApi(configure: group => group
+    .RequireAuthorization("AdminPolicy")
+    .RequireRateLimiting("fixed"));
+
+// Require auth on the GraphQL endpoint
+app.UseTraxGraphQL(configure: endpoint => endpoint
+    .RequireAuthorization("AdminPolicy"));
+```
+
+The REST callback receives a `RouteGroupBuilder`, the GraphQL callback receives an `IEndpointConventionBuilder`. Both support `.RequireAuthorization()`, `.RequireRateLimiting()`, `.RequireCors()`, `.AddEndpointFilter<T>()`, and any other endpoint convention.
+
+For global auth that applies to everything (including non-Trax routes), use middleware instead:
+
+```csharp
+app.UseAuthentication();
+app.UseAuthorization();
+```
+
+## Named GraphQL Schema
+
+The GraphQL API registers on a **named HotChocolate schema** (`"trax"`) rather than the default unnamed schema. This means it won't conflict with your own `AddGraphQLServer()` calls — both can coexist in the same application at different paths.
 
 ## Sample Projects
 

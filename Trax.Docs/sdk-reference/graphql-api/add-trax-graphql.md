@@ -29,14 +29,16 @@ public static IServiceCollection AddTraxGraphQL(this IServiceCollection services
 ```csharp
 public static WebApplication UseTraxGraphQL(
     this WebApplication app,
-    string routePrefix = "/graphql"
+    string routePrefix = "/trax/graphql",
+    Action<IEndpointConventionBuilder>? configure = null
 )
 ```
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `app` | `WebApplication` | Yes | — | The built application |
-| `routePrefix` | `string` | No | `"/graphql"` | The URL path where the GraphQL endpoint is mapped |
+| `routePrefix` | `string` | No | `"/trax/graphql"` | The URL path where the GraphQL endpoint is mapped |
+| `configure` | `Action<IEndpointConventionBuilder>?` | No | `null` | Optional callback to apply endpoint conventions (authorization, rate limiting, CORS) to the GraphQL endpoint. |
 
 **Returns**: `WebApplication` for continued chaining.
 
@@ -44,8 +46,8 @@ public static WebApplication UseTraxGraphQL(
 
 `AddTraxGraphQL` calls `AddTraxApi()` internally (shared API services), then configures HotChocolate:
 
-- **GraphQL server** via `AddGraphQLServer()`
-- **Query type**: `TrainQueries` — registered as the root query type
+- **Named GraphQL server** via `AddGraphQLServer("trax")` — uses a named schema so it coexists with your own HotChocolate schemas in the same application
+- **Query type**: `TrainQueries` — registered as the root query type (includes `health` query)
 - **Mutation type**: empty root created via `AddMutationType()`, extended by:
   - `TrainMutations` — `queueTrain`, `runTrain`
   - `SchedulerMutations` — `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
@@ -68,7 +70,7 @@ builder.Services
 
 var app = builder.Build();
 
-app.UseTraxGraphQL(); // serves at /graphql
+app.UseTraxGraphQL(); // serves at /trax/graphql
 
 app.Run();
 ```
@@ -77,6 +79,13 @@ To serve the endpoint at a different path:
 
 ```csharp
 app.UseTraxGraphQL(routePrefix: "/api/graphql");
+```
+
+With authorization:
+
+```csharp
+app.UseTraxGraphQL(configure: endpoint => endpoint
+    .RequireAuthorization("AdminPolicy"));
 ```
 
 ## Package

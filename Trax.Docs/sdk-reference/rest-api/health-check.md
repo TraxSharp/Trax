@@ -10,6 +10,8 @@ nav_order: 5
 
 `TraxHealthCheck` implements ASP.NET Core's `IHealthCheck` interface to report scheduler system health from database queries. It's registered via the `AddTraxHealthCheck` extension method on `IHealthChecksBuilder`.
 
+The underlying queries are handled by `ITraxHealthService`, a shared service that both the `IHealthCheck` and the [GraphQL `health` query]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}#health) use. This means both paths return identical metrics from the same code.
+
 ## TraxHealthCheck
 
 Queries the database for four metrics on every health check invocation:
@@ -70,7 +72,7 @@ builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
 
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/trax/health");
 
 app.Run();
 ```
@@ -94,7 +96,7 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions
 
 ## Example Response
 
-`GET /health`
+`GET /trax/health`
 
 ```json
 {

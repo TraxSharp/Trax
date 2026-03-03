@@ -36,7 +36,7 @@ Triggers a manifest for immediate execution. Creates a work queue entry that the
 ### curl
 
 ```bash
-curl -X POST http://localhost:5000/api/scheduler/trigger/sync-daily
+curl -X POST http://localhost:5000/trax/api/scheduler/trigger/sync-daily
 ```
 
 ## POST /scheduler/trigger/{externalId}/delayed
@@ -77,7 +77,7 @@ Triggers a manifest after a specified delay. The work queue entry is created wit
 ### curl
 
 ```bash
-curl -X POST http://localhost:5000/api/scheduler/trigger/sync-daily/delayed \
+curl -X POST http://localhost:5000/trax/api/scheduler/trigger/sync-daily/delayed \
   -H "Content-Type: application/json" \
   -d '{"delay": "00:30:00"}'
 ```
@@ -106,7 +106,7 @@ Intended to schedule a one-off train execution. Currently returns `501` because 
 
 ```bash
 # Returns 501
-curl -X POST http://localhost:5000/api/scheduler/schedule-once \
+curl -X POST http://localhost:5000/trax/api/scheduler/schedule-once \
   -H "Content-Type: application/json" \
   -d '{
     "trainName": "MyApp.Trains.ISyncTrain",
@@ -139,7 +139,7 @@ Disables a manifest. The scheduler skips disabled manifests during polling — n
 ### curl
 
 ```bash
-curl -X POST http://localhost:5000/api/scheduler/disable/sync-daily
+curl -X POST http://localhost:5000/trax/api/scheduler/disable/sync-daily
 ```
 
 ## POST /scheduler/enable/{externalId}
@@ -166,7 +166,7 @@ Re-enables a previously disabled manifest.
 ### curl
 
 ```bash
-curl -X POST http://localhost:5000/api/scheduler/enable/sync-daily
+curl -X POST http://localhost:5000/trax/api/scheduler/enable/sync-daily
 ```
 
 ## POST /scheduler/cancel/{externalId}
@@ -198,7 +198,7 @@ Requests cancellation for all in-progress executions of the given manifest. Sets
 ### curl
 
 ```bash
-curl -X POST http://localhost:5000/api/scheduler/cancel/sync-daily
+curl -X POST http://localhost:5000/trax/api/scheduler/cancel/sync-daily
 ```
 
 ## POST /scheduler/groups/{groupId}/trigger
@@ -230,7 +230,7 @@ Triggers all enabled manifests in a manifest group. Each manifest gets a work qu
 ### curl
 
 ```bash
-curl -X POST http://localhost:5000/api/scheduler/groups/1/trigger
+curl -X POST http://localhost:5000/trax/api/scheduler/groups/1/trigger
 ```
 
 ## POST /scheduler/groups/{groupId}/cancel
@@ -262,7 +262,7 @@ Requests cancellation for all in-progress executions across all manifests in a g
 ### curl
 
 ```bash
-curl -X POST http://localhost:5000/api/scheduler/groups/1/cancel
+curl -X POST http://localhost:5000/trax/api/scheduler/groups/1/cancel
 ```
 
 ## Remarks

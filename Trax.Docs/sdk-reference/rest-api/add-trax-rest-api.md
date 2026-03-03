@@ -37,7 +37,8 @@ Maps all REST API endpoints under a route prefix using `MapGroup`.
 ```csharp
 public static WebApplication UseTraxRestApi(
     this WebApplication app,
-    string routePrefix = "/api"
+    string routePrefix = "/trax/api",
+    Action<RouteGroupBuilder>? configure = null
 )
 ```
 
@@ -45,7 +46,8 @@ public static WebApplication UseTraxRestApi(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `routePrefix` | `string` | No | `"/api"` | The base path for all REST endpoints. All train, scheduler, and query endpoints are mapped under this prefix. |
+| `routePrefix` | `string` | No | `"/trax/api"` | The base path for all REST endpoints. All train, scheduler, and query endpoints are mapped under this prefix. |
+| `configure` | `Action<RouteGroupBuilder>?` | No | `null` | Optional callback to apply endpoint conventions (authorization, rate limiting, CORS, endpoint filters) to all Trax REST endpoints. |
 
 ### Returns
 
@@ -89,7 +91,7 @@ builder.Services.AddTraxRestApi();
 
 var app = builder.Build();
 
-app.UseTraxRestApi(); // endpoints at /api/*
+app.UseTraxRestApi(); // endpoints at /trax/api/*
 
 app.Run();
 ```
@@ -97,8 +99,16 @@ app.Run();
 ### Custom Route Prefix
 
 ```csharp
-app.UseTraxRestApi("/v1/trax");
-// endpoints at /v1/trax/trains, /v1/trax/scheduler/*, etc.
+app.UseTraxRestApi("/v1/api");
+// endpoints at /v1/api/trains, /v1/api/scheduler/*, etc.
+```
+
+### With Authorization and Rate Limiting
+
+```csharp
+app.UseTraxRestApi(configure: group => group
+    .RequireAuthorization("AdminPolicy")
+    .RequireRateLimiting("fixed"));
 ```
 
 ### With Health Check
@@ -110,7 +120,7 @@ builder.Services.AddHealthChecks().AddTraxHealthCheck();
 var app = builder.Build();
 
 app.UseTraxRestApi();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/trax/health");
 ```
 
 ### Combined with Scheduler

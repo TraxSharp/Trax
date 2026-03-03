@@ -10,6 +10,32 @@ nav_order: 6
 
 All request, response, and summary types used by the REST API. These are C# records defined in the `Trax.Api.DTOs` namespace and serialized as JSON by ASP.NET Core's `System.Text.Json`.
 
+## Health DTOs
+
+### HealthStatus
+
+Returned by the GraphQL `health` query and used internally by `TraxHealthCheck`. Represents a point-in-time snapshot of scheduler system health.
+
+```csharp
+public record HealthStatus(
+    string Status,
+    string Description,
+    int QueueDepth,
+    int InProgress,
+    int FailedLastHour,
+    int DeadLetters
+);
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Status` | `string` | `"Healthy"` or `"Degraded"` |
+| `Description` | `string` | Human-readable summary (e.g. `"All systems operational"`) |
+| `QueueDepth` | `int` | Work items with status `Queued` |
+| `InProgress` | `int` | Executions with `TrainState.InProgress` |
+| `FailedLastHour` | `int` | Failed executions in the last hour |
+| `DeadLetters` | `int` | Dead letters with status `AwaitingIntervention` |
+
 ## Train DTOs
 
 ### TrainInfo

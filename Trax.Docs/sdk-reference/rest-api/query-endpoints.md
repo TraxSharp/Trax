@@ -77,7 +77,7 @@ Returns all manifests, ordered by ID descending (newest first).
 #### curl
 
 ```bash
-curl "http://localhost:5000/api/manifests?skip=0&take=10"
+curl "http://localhost:5000/trax/api/manifests?skip=0&take=10"
 ```
 
 ### GET /manifests/{id}
@@ -99,7 +99,7 @@ Returns a single manifest by database ID.
 #### curl
 
 ```bash
-curl http://localhost:5000/api/manifests/5
+curl http://localhost:5000/trax/api/manifests/5
 ```
 
 ## Manifest Groups
@@ -134,7 +134,7 @@ Returns all manifest groups, ordered by ID descending.
 #### curl
 
 ```bash
-curl "http://localhost:5000/api/manifest-groups?skip=0&take=10"
+curl "http://localhost:5000/trax/api/manifest-groups?skip=0&take=10"
 ```
 
 ### GET /manifest-groups/{id}
@@ -156,7 +156,7 @@ Returns a single manifest group by database ID.
 #### curl
 
 ```bash
-curl http://localhost:5000/api/manifest-groups/1
+curl http://localhost:5000/trax/api/manifest-groups/1
 ```
 
 ## Executions
@@ -196,7 +196,7 @@ The `trainState` field uses the `TrainState` enum values: `Pending`, `InProgress
 #### curl
 
 ```bash
-curl "http://localhost:5000/api/executions?skip=0&take=10"
+curl "http://localhost:5000/trax/api/executions?skip=0&take=10"
 ```
 
 ### GET /executions/{id}
@@ -218,7 +218,7 @@ Returns a single execution record by database ID.
 #### curl
 
 ```bash
-curl http://localhost:5000/api/executions/42
+curl http://localhost:5000/trax/api/executions/42
 ```
 
 ## Remarks

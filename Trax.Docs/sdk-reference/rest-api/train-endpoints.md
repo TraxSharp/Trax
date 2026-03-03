@@ -44,7 +44,7 @@ Each `TrainInfo` includes an `inputSchema` array describing the public propertie
 ### curl
 
 ```bash
-curl http://localhost:5000/api/trains
+curl http://localhost:5000/trax/api/trains
 ```
 
 ## POST /trains/queue
@@ -88,7 +88,7 @@ Creates a `WorkQueue` entry in the database. The scheduler picks it up on its ne
 ### curl
 
 ```bash
-curl -X POST http://localhost:5000/api/trains/queue \
+curl -X POST http://localhost:5000/trax/api/trains/queue \
   -H "Content-Type: application/json" \
   -d '{
     "trainName": "Trax.Samples.Api.Rest.Trains.Greet.IGreetTrain",
@@ -136,7 +136,7 @@ The train's assemblies must be registered on the API machine — this endpoint c
 ### curl
 
 ```bash
-curl -X POST http://localhost:5000/api/trains/run \
+curl -X POST http://localhost:5000/trax/api/trains/run \
   -H "Content-Type: application/json" \
   -d '{
     "trainName": "Trax.Samples.Api.Rest.Trains.Greet.IGreetTrain",

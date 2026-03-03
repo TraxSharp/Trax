@@ -8,7 +8,41 @@ nav_order: 2
 
 # Queries
 
-All queries are defined on `TrainQueries`, the root query type. They provide read access to registered trains, scheduled manifests, manifest groups, and train executions.
+All queries are defined on `TrainQueries`, the root query type. They provide read access to system health, registered trains, scheduled manifests, manifest groups, and train executions.
+
+## health
+
+Returns the current health status of the Trax scheduler system. This is the same data reported by the ASP.NET `IHealthCheck` at `/trax/health`, exposed as a structured GraphQL type.
+
+```graphql
+query {
+  health {
+    status
+    description
+    queueDepth
+    inProgress
+    failedLastHour
+    deadLetters
+  }
+}
+```
+
+**Returns**: `HealthStatus!`
+
+### HealthStatus fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `String!` | `"Healthy"` or `"Degraded"` |
+| `description` | `String!` | Human-readable summary |
+| `queueDepth` | `Int!` | Work items with status `Queued` |
+| `inProgress` | `Int!` | Executions with `TrainState.InProgress` |
+| `failedLastHour` | `Int!` | Failed executions in the last hour |
+| `deadLetters` | `Int!` | Dead letters with status `AwaitingIntervention` |
+
+Status is `Degraded` when `deadLetters > 0` or `failedLastHour > 10`.
+
+---
 
 ## trains
 

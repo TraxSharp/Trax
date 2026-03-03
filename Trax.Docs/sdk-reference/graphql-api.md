@@ -17,7 +17,7 @@ builder.Services.AddTraxGraphQL();
 
 var app = builder.Build();
 
-app.UseTraxGraphQL(); // default: /graphql
+app.UseTraxGraphQL(); // default: /trax/graphql (named schema — won't conflict with your own)
 
 app.Run();
 ```
@@ -29,7 +29,7 @@ Navigate to the endpoint URL in a browser to open [Banana Cake Pop](https://chil
 | Page | Description |
 |------|-------------|
 | [AddTraxGraphQL]({{ site.baseurl }}{% link sdk-reference/graphql-api/add-trax-graphql.md %}) | Registration and endpoint mapping |
-| [Queries]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}) | `trains`, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution` |
+| [Queries]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}) | `health`, `trains`, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution` |
 | [Mutations]({{ site.baseurl }}{% link sdk-reference/graphql-api/mutations.md %}) | `queueTrain`, `runTrain`, `triggerManifest`, `disableManifest`, `cancelManifest`, and more |
 
 ## Package

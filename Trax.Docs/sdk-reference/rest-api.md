@@ -27,8 +27,8 @@ builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
 
-app.UseTraxRestApi();          // maps at /api by default
-app.MapHealthChecks("/health");
+app.UseTraxRestApi();              // maps at /trax/api by default
+app.MapHealthChecks("/trax/health");
 
 app.Run();
 ```
@@ -46,7 +46,7 @@ app.Run();
 
 ## Endpoint Summary
 
-All endpoints are mapped under the route prefix (default: `/api`).
+All endpoints are mapped under the route prefix (default: `/trax/api`).
 
 ### Train Endpoints
 
