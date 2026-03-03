@@ -88,11 +88,12 @@ Trax and Hangfire both handle retries automatically; Quartz leaves it to the job
 | Feature | Trax | Quartz.NET | Hangfire |
 |---|---|---|---|
 | Dashboard | Blazor Server + Radzen at `/trax` | Blazor Server at `/quartz` | Built-in middleware at `/hangfire` |
-| Manual job actions | Dashboard-triggered runs | Pause/resume, manual trigger | Requeue, delete, reschedule |
-| Exception inspection | Via metadata records | Via history plugins | Expandable stack traces |
-| Real-time statistics | Execution history | Job/trigger counts, health checks | Succeeded/failed rates, queue depth |
+| Manual job actions | Dashboard-triggered runs with **custom inputs** | Pause/resume, manual trigger | Requeue, delete, reschedule |
+| Exception inspection | Expandable stack traces with syntax highlighting + copy button | Via history plugins | Expandable stack traces |
+| Real-time statistics | Throughput/min, queue depth, success rate, state timeline | Job/trigger counts, health checks | Succeeded/failed rates, queue depth |
+| Run with new inputs | Yes — form builder or JSON for any train | No | No (requeue with original only) |
 
-Hangfire's dashboard is its flagship feature — battle-tested, rich, and purpose-built for job monitoring. Quartz recently added a Blazor dashboard. Trax's dashboard covers train and execution visibility but is younger and less feature-rich for manual intervention workflows.
+Hangfire's dashboard is its flagship feature — battle-tested, rich, and purpose-built for job monitoring. Quartz recently added a Blazor dashboard. Trax's dashboard includes state transition timelines, syntax-highlighted exception viewers, real-time throughput metrics, and the ability to run any train with custom inputs from the UI — a capability unique to Trax.
 
 ### Developer Experience
 
@@ -129,7 +130,7 @@ Hangfire wins on ceremony. You can go from zero to a running background job in f
 
 **You want the lowest learning curve.** Trax requires understanding trains, steps, the effect system, railway programming, manifests, and the mediator pattern before writing your first scheduled job. Hangfire requires understanding `BackgroundJob.Enqueue()`. For teams that need to onboard quickly or for projects where background work is a small part of the system, the abstraction cost isn't justified.
 
-**You need a mature monitoring dashboard.** Hangfire's dashboard is a production-hardened tool with manual requeue, exception drill-down, real-time statistics, and access control. Trax's dashboard is functional but younger. If dashboard quality is a deciding factor today, Hangfire has the edge.
+**You need built-in access control on the dashboard.** Hangfire's dashboard includes middleware-based authorization out of the box. Trax's dashboard does not currently provide built-in authentication or authorization — you'd need to add it via ASP.NET Core middleware. Both dashboards now offer comparable monitoring features (real-time statistics, exception inspection, manual actions), but Hangfire has the edge on access control.
 
 **You want a standalone scheduler.** Trax.Scheduler doesn't exist in isolation — it depends on Trax.Effect, Trax.Mediator, and Trax.Core. You're adopting a framework, not plugging in a library. Quartz.NET and Hangfire are self-contained: add the NuGet package, configure storage, schedule jobs.
 

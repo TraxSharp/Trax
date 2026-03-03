@@ -93,11 +93,37 @@ Two action buttons appear when the dead letter is in `AwaitingIntervention` stat
 
 Clicking a metadata row opens a detail page with train state, timing, input/output, and exception details.
 
+**State Transition Timeline** — A visual horizontal stepper at the top of the detail page shows the train's state progression: Pending → InProgress → Completed/Failed/Cancelled. Each step is color-coded and displays the timestamp when that state was reached, along with the duration between transitions (wait time, execution time). Past states are filled, the current state pulses, and future states are dimmed.
+
+**Exception Viewer** — When a train has failed, the failure details card includes a collapsible stack trace viewer with:
+- Syntax highlighting for C# stack traces (method names, file paths, and line numbers each in distinct colors)
+- A **Copy** button for copying the raw stack trace to the clipboard
+- Auto-collapse for long stack traces (expanded by default for short ones)
+- Inner exception separator formatting
+
 When `AddStepProgress()` is registered and the train is `InProgress`, a **Step Progress** card appears showing:
 - **Currently Running** — the name of the step currently executing
 - **Step Started** — when the step began (HH:mm:ss)
 
 A **Cancel** button appears for InProgress trains. Clicking it sets `cancel_requested = true` in the database and attempts to cancel the train via `ICancellationRegistry` (instant for same-server). Cancelled trains transition to `TrainState.Cancelled`.
+
+#### Run Train with Custom Inputs
+
+The dashboard supports running any registered train with **custom inputs** — a capability that differentiates Trax from Hangfire, which can only requeue jobs with their original inputs.
+
+- **From the Trains page**: Click the **Queue** button next to any train to open a dialog with a form builder (auto-generated from the input type's properties) or a raw JSON editor.
+- **From the Metadata Detail page**: Click the **Re-queue** button to re-run a train with its original input.
+
+#### Real-Time Metrics on Home Page
+
+The dashboard home page includes real-time operational metrics that update on each polling cycle:
+
+- **Queue Depth** — number of work items waiting to be dispatched
+- **Completed/min** — jobs completed per minute (5-minute rolling window)
+- **Failed/min** — jobs failed per minute (5-minute rolling window)
+- **Throughput Chart** — per-minute completed/failed chart for the last 60 minutes
+
+These complement the existing summary cards (executions today, success rate, currently running, dead letters, active manifests, registered trains).
 
 #### Cancellation Metrics on Home Page
 
@@ -164,7 +190,7 @@ The **User Settings** page (`/trax/settings/user`) lets each user customize thei
 |---------|---------|-------------|
 | **Polling Interval** | 5 seconds | How often dashboard pages re-query for fresh data. Range: 1–300 seconds. |
 | **Hide Administration Trains** | `true` | Exclude scheduler internals (ManifestManager, TaskServerExecutor, MetadataCleanup) from statistics and charts. |
-| **Dashboard Components** | All visible | Toggle visibility of individual home page sections (summary cards, charts, tables). |
+| **Dashboard Components** | All visible | Toggle visibility of individual home page sections (summary cards, charts, tables, real-time metrics, throughput chart). |
 
 ## Integration with Existing Blazor Apps
 

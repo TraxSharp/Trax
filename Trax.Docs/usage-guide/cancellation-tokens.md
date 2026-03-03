@@ -307,6 +307,45 @@ services.AddTrax.CoreEffects(options => options
 
 *See also: [Step Progress]({{ site.baseurl }}{% link usage-guide/effect-providers/step-progress.md %})*
 
+## Programmatic Cancellation API
+
+`IManifestScheduler` provides methods for cancelling running jobs from user code:
+
+```csharp
+// Cancel all running executions of a specific manifest
+int cancelled = await scheduler.CancelAsync("my-job-external-id");
+
+// Cancel all running executions in a manifest group
+int cancelled = await scheduler.CancelGroupAsync(groupId);
+```
+
+Both methods use dual-layer cancellation:
+1. **Database flag** (`CancellationRequested = true`) — works cross-server, picked up by `CancellationCheckProvider` at the next step boundary
+2. **Same-server instant cancel** (`ICancellationRegistry.TryCancel()`) — immediately fires the `CancellationTokenSource` if the job is running on the same server
+
+Cancelled trains transition to `TrainState.Cancelled`, are **not retried**, and **do not create dead letters**.
+
+*API Reference: [CancelAsync / CancelGroupAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %})*
+
+## Automatic Timeout Cancellation
+
+The ManifestManager automatically cancels jobs that exceed their configured timeout. Each polling cycle, the `CancelTimedOutJobsStep` checks all InProgress metadata and cancels any where the elapsed time exceeds the manifest's `TimeoutSeconds` (or the global `DefaultJobTimeout`).
+
+This is distinct from dead-lettering — timeout cancellation actively interrupts the running train rather than waiting for it to fail and then moving it to the dead letter queue. The job transitions to `TrainState.Cancelled` and is not retried.
+
+Configure timeouts per-manifest or globally:
+
+```csharp
+// Per-manifest timeout
+await scheduler.ScheduleAsync<IMyTrain, MyInput>(
+    "my-job", new MyInput(), Every.Minutes(5),
+    options => options.Timeout(TimeSpan.FromMinutes(10)));
+
+// Global default timeout
+.AddScheduler(scheduler => scheduler
+    .DefaultJobTimeout(TimeSpan.FromMinutes(30)))
+```
+
 ## IBackgroundTaskServer
 
 Custom task server implementations can accept a `CancellationToken` via default interface methods:

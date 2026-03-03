@@ -151,9 +151,9 @@ scheduler.Schedule<IMyTrain>(
 
 ## Management Operations
 
-`IManifestScheduler` includes methods for runtime job control: `DisableAsync`, `EnableAsync`, `TriggerAsync`, and `ScheduleDependentAsync`. Disabled jobs remain in the database but are skipped by the ManifestManager until re-enabled.
+`IManifestScheduler` includes methods for runtime job control: `DisableAsync`, `EnableAsync`, `TriggerAsync`, `CancelAsync`, `CancelGroupAsync`, and `ScheduleDependentAsync`. Disabled jobs remain in the database but are skipped by the ManifestManager until re-enabled. `CancelAsync` and `CancelGroupAsync` cancel all in-progress executions of a manifest or group using dual-layer cancellation (database flag + same-server CTS).
 
-*API Reference: [DisableAsync / EnableAsync / TriggerAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}), [ScheduleDependentAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %})*
+*API Reference: [DisableAsync / EnableAsync / TriggerAsync / CancelAsync / CancelGroupAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}), [ScheduleDependentAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %})*
 
 ## Manifest Options
 
@@ -256,6 +256,29 @@ Misfire policies only apply to `Cron` and `Interval` schedule types. Dependent m
 
 *API Reference: [AddScheduler]({{ site.baseurl }}{% link api-reference/scheduler-api/add-scheduler.md %}), [ScheduleOptions]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
 
+## Timeout Enforcement
+
+The ManifestManager actively cancels jobs that exceed their configured timeout. Each polling cycle, the `CancelTimedOutJobsStep` checks all InProgress metadata and cancels any where the elapsed time exceeds the manifest's `TimeoutSeconds` (or the global `DefaultJobTimeout`).
+
+**Per-manifest timeout**: Set via `Timeout()` on `ScheduleOptions`:
+
+```csharp
+await scheduler.ScheduleAsync<IMyTrain, MyInput>(
+    "my-job", new MyInput(), Every.Minutes(5),
+    options => options.Timeout(TimeSpan.FromMinutes(10)));
+```
+
+**Global default**: Set via `DefaultJobTimeout()` on the scheduler builder (default: 20 minutes):
+
+```csharp
+.AddScheduler(scheduler => scheduler
+    .DefaultJobTimeout(TimeSpan.FromMinutes(30)))
+```
+
+Timed-out jobs are cancelled using the same dual-layer mechanism as manual cancellation: `CancellationRequested = true` in the database (cross-server) plus `ICancellationRegistry.TryCancel()` for same-server instant cancel. The job transitions to `TrainState.Cancelled` — it is **not retried** and does **not create a dead letter**. This is distinct from dead-lettering, which handles jobs that have failed repeatedly.
+
+*See also: [Cancellation Tokens]({{ site.baseurl }}{% link usage-guide/cancellation-tokens.md %})*
+
 ## Configuration Options
 
 Key options to know:
@@ -263,6 +286,7 @@ Key options to know:
 - **`ManifestManagerPollingInterval`** / **`JobDispatcherPollingInterval`** (default: 5 seconds each) — how often the ManifestManager and JobDispatcher poll independently. Use `PollingInterval` to set both to the same value
 - **`MaxActiveJobs`** (default: 100) — global concurrent job cap; set to `null` for unlimited. Per-group limits can be set from code via `.Group(group => group.MaxActiveJobs(...))` or from the dashboard (see [Per-Group Dispatch Controls](#per-group-dispatch-controls))
 - **`DefaultMaxRetries`** (default: 3) — retry attempts before dead-lettering
+- **`DefaultJobTimeout`** (default: 20 minutes) — jobs exceeding this duration are actively cancelled (see [Timeout Enforcement](#timeout-enforcement))
 - **`DefaultMisfirePolicy`** (default: `FireOnceNow`) — how missed runs are handled
 - **`DefaultMisfireThreshold`** (default: 60 seconds) — grace period for misfire detection
 

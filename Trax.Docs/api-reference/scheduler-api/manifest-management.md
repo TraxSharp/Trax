@@ -55,6 +55,38 @@ Task TriggerAsync(string externalId, CancellationToken ct = default)
 
 **Throws**: `InvalidOperationException` when no manifest with the specified `ExternalId` exists.
 
+## CancelAsync
+
+Cancels all currently running executions of a scheduled job. Sets `CancellationRequested = true` on all InProgress metadata for the manifest and attempts same-server instant cancellation via the `ICancellationRegistry`. Cancelled trains transition to `TrainState.Cancelled` and are **not retried**.
+
+```csharp
+Task<int> CancelAsync(string externalId, CancellationToken ct = default)
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `externalId` | `string` | Yes | The `ExternalId` of the manifest whose executions should be cancelled |
+| `ct` | `CancellationToken` | No | Cancellation token |
+
+**Returns**: The number of metadata records that had cancellation requested. Returns `0` if no in-progress executions exist.
+
+**Throws**: `InvalidOperationException` when no manifest with the specified `ExternalId` exists.
+
+## CancelGroupAsync
+
+Cancels all currently running executions for all manifests in a manifest group.
+
+```csharp
+Task<int> CancelGroupAsync(long groupId, CancellationToken ct = default)
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `groupId` | `long` | Yes | The ID of the manifest group whose executions should be cancelled |
+| `ct` | `CancellationToken` | No | Cancellation token |
+
+**Returns**: The number of metadata records that had cancellation requested. Returns `0` if no in-progress executions exist in the group.
+
 ## Example
 
 ```csharp
@@ -80,6 +112,20 @@ public class SchedulerController(IManifestScheduler scheduler) : ControllerBase
         await scheduler.TriggerAsync(externalId);
         return Ok();
     }
+
+    [HttpPost("jobs/{externalId}/cancel")]
+    public async Task<IActionResult> Cancel(string externalId)
+    {
+        var count = await scheduler.CancelAsync(externalId);
+        return Ok(new { cancelled = count });
+    }
+
+    [HttpPost("groups/{groupId}/cancel")]
+    public async Task<IActionResult> CancelGroup(long groupId)
+    {
+        var count = await scheduler.CancelGroupAsync(groupId);
+        return Ok(new { cancelled = count });
+    }
 }
 ```
 
@@ -87,4 +133,6 @@ public class SchedulerController(IManifestScheduler scheduler) : ControllerBase
 
 - `DisableAsync` sets `IsEnabled = false` on the manifest. The ManifestManager skips disabled manifests during polling.
 - `TriggerAsync` creates a new execution independent of the regular schedule — the job's normal schedule continues unaffected. The work queue entry inherits the manifest's stored priority (no `DependentPriorityBoost` is applied for manual triggers).
-- All three methods require the manifest to already exist. Use [ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}) to create manifests first.
+- `CancelAsync` uses dual-layer cancellation: a database flag (`CancellationRequested = true`) for cross-server support, plus `ICancellationRegistry.TryCancel()` for same-server instant cancellation. Cancelled trains are **not retried** and **do not create dead letters**.
+- `CancelGroupAsync` applies the same dual-layer cancellation to all in-progress executions across all manifests in the group.
+- All methods (except `CancelGroupAsync`) require the manifest to already exist. Use [ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}) to create manifests first.
