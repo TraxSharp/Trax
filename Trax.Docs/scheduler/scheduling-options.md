@@ -200,6 +200,29 @@ See [Dormant Dependents](dependent-trains.md#dormant-dependents) for full detail
 
 See [Dependent Trains](dependent-trains.md) for details on chaining trains, and [Delayed / One-Off Jobs](delayed-jobs.md) for one-off scheduling.
 
+## Exclusion Windows
+
+Exclusion windows skip execution during specific periods — weekends, holidays, maintenance windows, or daily time ranges. Add exclusions via the `.Exclude()` method on `ScheduleOptions`:
+
+```csharp
+scheduler.Schedule<IReportTrain>(
+    "daily-report",
+    new ReportInput(),
+    Cron.Daily(hour: 3),
+    o => o
+        .Exclude(Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday))
+        .Exclude(Exclude.Dates(new DateOnly(2026, 12, 25)))
+        .Exclude(Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00"))));
+```
+
+Multiple exclusions can be combined — if ANY matches, the manifest is skipped. Excluded periods are "intentionally skipped", not misfires. When the excluded period ends, normal scheduling resumes and the misfire policy determines catch-up behavior.
+
+Four built-in exclusion types: `DaysOfWeek`, `Dates`, `DateRange`, `TimeWindow` (supports midnight crossover).
+
+See [Exclusion Windows](exclusions.md) for full details, examples, and misfire interaction.
+
+*API Reference: [ScheduleOptions — Exclude()]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}#scheduleoptions)*
+
 ## Misfire Policies
 
 A **misfire** occurs when a scheduled job was supposed to fire but couldn't — the scheduler was down, or the job was blocked by an active execution or dead letter. When the scheduler recovers, the misfire policy determines what happens.

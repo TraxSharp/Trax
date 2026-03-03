@@ -90,6 +90,7 @@ The `ScheduleOptions` fluent builder consolidates all optional scheduling parame
 | `.Timeout(TimeSpan)` | Job execution timeout. `null` uses global default. |
 | `.OnMisfire(MisfirePolicy)` | Misfire policy for missed runs. `FireOnceNow` (default) fires immediately; `DoNothing` skips and waits for the next natural occurrence. Only applies to Cron and Interval types. |
 | `.MisfireThreshold(TimeSpan)` | Grace period before the misfire policy takes effect. Overrides the global `DefaultMisfireThreshold`. |
+| `.Exclude(Exclusion)` | Adds an exclusion window. The manifest is skipped when any exclusion matches the current time. Multiple can be combined. Use `Exclude.DaysOfWeek(...)`, `Exclude.Dates(...)`, `Exclude.DateRange(...)`, or `Exclude.TimeWindow(...)` factories. See [Exclusion Windows]({{ site.baseurl }}{% link scheduler/exclusions.md %}). |
 
 ### Group-level methods
 

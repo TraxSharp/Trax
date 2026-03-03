@@ -22,14 +22,14 @@ All three run background work in .NET. They solve different problems.
 |---|---|---|---|
 | Cron expressions | 5-field (minute granularity) | 6-7 field (second granularity) | 5-field via `Cron.*` helpers |
 | Simple intervals | `Every.Minutes(5)` | `SimpleTrigger` with repeat count | `TimeSpan` delay |
-| Calendar exclusions | No | Yes — holidays, weekends, custom calendars | No |
-| Daily time windows | No | Yes — "9am-5pm Mon-Fri every hour" | No |
+| Calendar exclusions | Yes — `Exclude.DaysOfWeek()`, `Exclude.Dates()`, `Exclude.DateRange()` | Yes — holidays, weekends, custom calendars | No |
+| Daily time windows | Yes — `Exclude.TimeWindow()` (supports midnight crossover) | Yes — "9am-5pm Mon-Fri every hour" | No |
 | DST-aware intervals | No | Yes — `PreserveHourOfDayAcrossDaylightSavings` | No |
 | Fire-and-forget | `TriggerAsync(externalId)` | `scheduler.TriggerJob(key)` | `BackgroundJob.Enqueue(() => ...)` |
 | Delayed one-off | `ScheduleOnceAsync(input, delay)` or `TriggerAsync(id, delay)` | Trigger with future start time | `BackgroundJob.Schedule(delay)` |
 | Misfire policies | Implicit (run if overdue) | 6+ explicit policies per trigger type | N/A (queue-based) |
 
-Quartz.NET has the richest time-based scheduling. If you need "every 30 seconds between 9am and 5pm on weekdays, excluding holidays," Quartz is the only option. Trax covers the common cases — cron and intervals — but doesn't attempt calendar-aware scheduling.
+Quartz.NET has the richest time-based scheduling with second-granularity cron and DST-aware triggers. Trax now supports calendar exclusions (days of week, specific dates, date ranges, and daily time windows) alongside cron and interval schedules. For advanced scenarios like "every 30 seconds between 9am and 5pm," Quartz's sub-minute cron is still required.
 
 ### Job Composition
 
@@ -124,7 +124,7 @@ Hangfire wins on ceremony. You can go from zero to a running background job in f
 
 **You need a simple background job processor.** If the job is "send this email in 5 minutes" or "resize this image asynchronously," Hangfire does it in one line. Trax now supports delayed one-off jobs via `ScheduleOnceAsync`, but the train/step/manifest model still adds ceremony compared to Hangfire's lambda-based approach for simple fire-and-forget work with no internal structure.
 
-**You need precise time-based scheduling.** If the requirement is "every 15 seconds," "only on business days excluding holidays," or "between 9am and 5pm with DST handling," Quartz.NET has scheduling primitives that Trax doesn't. Trax covers cron and intervals — the common cases — but not calendar-aware or sub-minute cron scheduling.
+**You need sub-minute or DST-aware scheduling.** Trax now supports calendar exclusions (weekends, holidays, date ranges, time windows), but if you need second-granularity cron ("every 15 seconds") or DST-aware interval handling, Quartz.NET has scheduling primitives that Trax doesn't.
 
 **You're not on PostgreSQL.** Trax's distributed coordination relies on PostgreSQL advisory locks and `FOR UPDATE SKIP LOCKED`. There is no SQL Server, MySQL, or Redis backend. If your infrastructure is on a different database, Quartz.NET or Hangfire will work; Trax won't.
 
