@@ -3,12 +3,12 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Trax.Dashboard.Components.Shared;
 using Trax.Dashboard.Models;
-using Trax.Dashboard.Services.TrainDiscovery;
 using Trax.Dashboard.Utilities;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
+using Trax.Mediator.Services.TrainDiscovery;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages;

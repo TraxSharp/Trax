@@ -4,12 +4,12 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
 using Radzen;
-using Trax.Dashboard.Services.TrainDiscovery;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Utils;
+using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Dashboard.Components.Dialogs;
 

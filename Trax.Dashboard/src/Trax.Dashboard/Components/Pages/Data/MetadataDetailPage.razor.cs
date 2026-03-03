@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
-using Trax.Dashboard.Services.TrainDiscovery;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Log;
@@ -11,6 +10,7 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Utils;
+using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.CancellationRegistry;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 

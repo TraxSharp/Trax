@@ -9,7 +9,6 @@ using Trax.Dashboard.Configuration;
 using Trax.Dashboard.Services.DashboardSettings;
 using Trax.Dashboard.Services.LocalStorage;
 using Trax.Dashboard.Services.ThemeState;
-using Trax.Dashboard.Services.TrainDiscovery;
 
 namespace Trax.Dashboard.Extensions;
 
@@ -57,10 +56,6 @@ public static class DashboardServiceExtensions
 
         services.AddSingleton(options);
 
-        // Capture IServiceCollection so TrainDiscoveryService can scan descriptors at runtime
-        services.AddSingleton<IServiceCollection>(services);
-
-        services.AddScoped<ITrainDiscoveryService, TrainDiscoveryService>();
         services.AddScoped<ILocalStorageService, LocalStorageService>();
         services.AddScoped<IThemeStateService, ThemeStateService>();
         services.AddScoped<IDashboardSettingsService, DashboardSettingsService>();

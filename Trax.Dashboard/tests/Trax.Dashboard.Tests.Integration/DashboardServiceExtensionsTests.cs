@@ -2,7 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Dashboard.Configuration;
 using Trax.Dashboard.Extensions;
-using Trax.Dashboard.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Dashboard.Tests.Integration;
 
@@ -47,35 +47,17 @@ public class DashboardServiceExtensionsTests
     }
 
     [Test]
-    public void AddTraxDashboard_RegistersIServiceCollection()
+    public void AddTraxDashboard_DoesNotRegisterDiscoveryService()
     {
-        // Arrange
+        // ITrainDiscoveryService and IServiceCollection are now registered by
+        // Mediator's AddServiceTrainBus(), not by AddTraxDashboard().
         var services = new ServiceCollection();
 
-        // Act
         services.AddTraxDashboard();
         using var provider = services.BuildServiceProvider();
 
-        // Assert — TrainDiscoveryService depends on IServiceCollection being resolvable
-        var serviceCollection = provider.GetService<IServiceCollection>();
-        serviceCollection.Should().NotBeNull();
-        serviceCollection.Should().BeSameAs(services);
-    }
-
-    [Test]
-    public void AddTraxDashboard_RegistersTrainDiscoveryService()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-
-        // Act
-        services.AddTraxDashboard();
-        using var provider = services.BuildServiceProvider();
-
-        // Assert
-        using var scope = provider.CreateScope();
-        var discoveryService = scope.ServiceProvider.GetService<ITrainDiscoveryService>();
-        discoveryService.Should().NotBeNull();
-        discoveryService.Should().BeOfType<TrainDiscoveryService>();
+        // Dashboard alone should NOT provide these — they come from Mediator
+        provider.GetService<IServiceCollection>().Should().BeNull();
+        provider.GetService<ITrainDiscoveryService>().Should().BeNull();
     }
 }

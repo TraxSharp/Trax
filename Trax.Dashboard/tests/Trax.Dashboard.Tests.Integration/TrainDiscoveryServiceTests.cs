@@ -1,8 +1,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Dashboard.Services.TrainDiscovery;
 using Trax.Dashboard.Tests.Integration.Fakes;
 using Trax.Effect.Extensions;
+using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Dashboard.Tests.Integration;
 

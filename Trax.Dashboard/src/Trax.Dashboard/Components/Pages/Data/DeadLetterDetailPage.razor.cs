@@ -2,7 +2,6 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
-using Trax.Dashboard.Services.TrainDiscovery;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -10,6 +9,7 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Utils;
+using Trax.Mediator.Services.TrainDiscovery;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;

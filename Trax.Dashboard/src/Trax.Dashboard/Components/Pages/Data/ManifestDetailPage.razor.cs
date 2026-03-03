@@ -5,7 +5,7 @@ using Trax.Dashboard.Components.Shared;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
-using Trax.Scheduler.Services.ManifestScheduler;
+using Trax.Scheduler.Services.TraxScheduler;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
@@ -19,7 +19,7 @@ public partial class ManifestDetailPage
     private NavigationManager Navigation { get; set; } = default!;
 
     [Inject]
-    private IManifestScheduler ManifestScheduler { get; set; } = default!;
+    private ITraxScheduler TraxScheduler { get; set; } = default!;
 
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
@@ -86,7 +86,7 @@ public partial class ManifestDetailPage
 
         try
         {
-            await ManifestScheduler.TriggerAsync(_manifest.ExternalId);
+            await TraxScheduler.TriggerAsync(_manifest.ExternalId);
 
             NotificationService.Notify(
                 NotificationSeverity.Success,

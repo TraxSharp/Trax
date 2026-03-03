@@ -12,7 +12,7 @@ using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
 using Trax.Scheduler.Services.CancellationRegistry;
-using Trax.Scheduler.Services.ManifestScheduler;
+using Trax.Scheduler.Services.TraxScheduler;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
@@ -29,7 +29,7 @@ public partial class ManifestGroupDetailPage
     private NotificationService NotificationService { get; set; } = default!;
 
     [Inject]
-    private IManifestScheduler ManifestScheduler { get; set; } = default!;
+    private ITraxScheduler TraxScheduler { get; set; } = default!;
 
     [Inject]
     private IServiceProvider ServiceProvider { get; set; } = default!;
@@ -378,7 +378,7 @@ public partial class ManifestGroupDetailPage
 
         try
         {
-            var count = await ManifestScheduler.TriggerGroupAsync(_group.Id);
+            var count = await TraxScheduler.TriggerGroupAsync(_group.Id);
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
