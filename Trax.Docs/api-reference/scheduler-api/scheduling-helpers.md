@@ -40,7 +40,7 @@ Every.Days(1)       // Every day
 
 ## Cron
 
-Static factory class for creating **cron-based** schedules with readable methods. For complex expressions, use `Cron.Expression()`.
+Static factory class for creating **cron-based** schedules with readable methods. Supports both standard 5-field (minute granularity) and 6-field (second granularity) cron formats. For complex expressions, use `Cron.Expression()`.
 
 ```csharp
 public static class Cron
@@ -48,16 +48,21 @@ public static class Cron
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
+| `Secondly` | `static Schedule Secondly()` | Every second (`* * * * * *`) |
 | `Minutely` | `static Schedule Minutely()` | Every minute (`* * * * *`) |
-| `Hourly` | `static Schedule Hourly(int minute = 0)` | Every hour at the specified minute |
-| `Daily` | `static Schedule Daily(int hour = 0, int minute = 0)` | Every day at the specified time |
-| `Weekly` | `static Schedule Weekly(DayOfWeek day, int hour = 0, int minute = 0)` | Every week on the specified day/time |
-| `Monthly` | `static Schedule Monthly(int day = 1, int hour = 0, int minute = 0)` | Every month on the specified day/time |
-| `Expression` | `static Schedule Expression(string cronExpression)` | From a raw 5-field cron string |
+| `Minutely` | `static Schedule Minutely(int second)` | Every minute at the specified second |
+| `Hourly` | `static Schedule Hourly(int minute = 0, int second = 0)` | Every hour at the specified minute/second |
+| `Daily` | `static Schedule Daily(int hour = 0, int minute = 0, int second = 0)` | Every day at the specified time |
+| `Weekly` | `static Schedule Weekly(DayOfWeek day, int hour = 0, int minute = 0, int second = 0)` | Every week on the specified day/time |
+| `Monthly` | `static Schedule Monthly(int day = 1, int hour = 0, int minute = 0, int second = 0)` | Every month on the specified day/time |
+| `Expression` | `static Schedule Expression(string cronExpression)` | From a raw 5-field or 6-field cron string |
+
+When a `second` parameter is 0 (the default), the method produces a standard 5-field expression. When `second` is non-zero, it produces a 6-field expression with seconds.
 
 ### Examples
 
 ```csharp
+// 5-field (minute granularity)
 Cron.Minutely()                              // Every minute
 Cron.Hourly(minute: 30)                      // Every hour at :30
 Cron.Daily(hour: 3)                          // Daily at 3:00 AM
@@ -65,11 +70,20 @@ Cron.Daily(hour: 14, minute: 30)             // Daily at 2:30 PM
 Cron.Weekly(DayOfWeek.Monday, hour: 9)       // Every Monday at 9:00 AM
 Cron.Monthly(day: 15, hour: 0)               // 15th of each month at midnight
 Cron.Expression("0 */6 * * *")              // Every 6 hours (custom cron)
+
+// 6-field (second granularity)
+Cron.Secondly()                              // Every second
+Cron.Minutely(second: 30)                   // Every minute at :30 seconds
+Cron.Hourly(minute: 15, second: 45)         // Every hour at 15:45
+Cron.Daily(hour: 3, minute: 0, second: 30)  // Daily at 3:00:30 AM
+Cron.Expression("*/15 * * * * *")           // Every 15 seconds (custom 6-field)
 ```
 
 ### Cron Expression Format
 
-Standard 5-field format: `minute hour day-of-month month day-of-week`
+Trax supports both standard 5-field and 6-field (with seconds) cron formats. The format is auto-detected by counting fields.
+
+#### 5-field (minute granularity): `minute hour day-of-month month day-of-week`
 
 | Field | Range | Special Characters |
 |-------|-------|--------------------|
@@ -78,6 +92,19 @@ Standard 5-field format: `minute hour day-of-month month day-of-week`
 | Day of month | 1-31 | `*` `,` `-` `/` |
 | Month | 1-12 | `*` `,` `-` `/` |
 | Day of week | 0-6 (0 = Sunday) | `*` `,` `-` `/` |
+
+#### 6-field (second granularity): `second minute hour day-of-month month day-of-week`
+
+| Field | Range | Special Characters |
+|-------|-------|--------------------|
+| Second | 0-59 | `*` `,` `-` `/` |
+| Minute | 0-59 | `*` `,` `-` `/` |
+| Hour | 0-23 | `*` `,` `-` `/` |
+| Day of month | 1-31 | `*` `,` `-` `/` |
+| Month | 1-12 | `*` `,` `-` `/` |
+| Day of week | 0-6 (0 = Sunday) | `*` `,` `-` `/` |
+
+> **Note:** 7-field cron (with year) is not supported. The effective resolution of seconds-granularity cron is limited by the `ManifestManagerPollingInterval` (default: 5 seconds).
 
 ---
 
@@ -95,7 +122,7 @@ public record Schedule
 |----------|------|-------------|
 | `Type` | `ScheduleType` | `Cron` or `Interval` |
 | `Interval` | `TimeSpan?` | The interval between executions (only for `ScheduleType.Interval`) |
-| `CronExpression` | `string?` | The cron expression (only for `ScheduleType.Cron`) |
+| `CronExpression` | `string?` | The cron expression, 5-field or 6-field (only for `ScheduleType.Cron`) |
 
 ### Factory Methods
 
@@ -110,9 +137,9 @@ public record Schedule
 public string ToCronExpression()
 ```
 
-Converts the schedule to a 5-field cron expression. For cron-type schedules, returns the expression as-is. For interval-type schedules, converts to the closest valid cron expression.
+Converts the schedule to a cron expression (5-field or 6-field). For cron-type schedules, returns the expression as-is. For interval-type schedules, converts to the closest valid cron expression. Sub-minute intervals produce 6-field (seconds) cron; minute-or-above intervals produce 5-field cron.
 
-**Approximation**: Cron cannot express all intervals. Intervals that don't divide evenly into 60 minutes (e.g., 45 minutes) are approximated to the nearest valid cron divisor of 60 (`1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30`).
+**Approximation**: Cron cannot express all intervals. Intervals that don't divide evenly into 60 minutes or 60 seconds are approximated to the nearest valid cron divisor of 60 (`1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30`).
 
 ### ScheduleType Enum
 

@@ -192,7 +192,7 @@ See [Dormant Dependents](dependent-trains.md#dormant-dependents) for full detail
 | Type | Use Case | API |
 |------|----------|-----|
 | `Interval` | Simple recurring | `Every.Minutes(5)` or `Schedule.FromInterval(TimeSpan)` |
-| `Cron` | Traditional scheduling | `Cron.Daily()` or `Schedule.FromCron("0 3 * * *")` |
+| `Cron` | Traditional scheduling (minute or second granularity) | `Cron.Daily()`, `Cron.Expression("*/15 * * * * *")`, or `Schedule.FromCron("0 3 * * *")` |
 | `Dependent` | Runs after another manifest succeeds | `.ThenInclude()` / `.ThenIncludeMany()` / `.Include()` / `.IncludeMany()` or `ScheduleDependentAsync` |
 | `DormantDependent` | Declared dependent, activated at runtime by parent | `.Include()` / `.IncludeMany()` with `.Dormant()` option, activated via `IDormantDependentContext` |
 | `Once` | Fire-once delayed job, auto-disables on success | `ScheduleOnceAsync` or `.ScheduleOnce()` at startup |
@@ -256,7 +256,9 @@ If the scheduler comes back at 13:00:30 instead:
 - Most recent boundary: **13:00**
 - Time since boundary: 30 seconds ≤ 60-second threshold → **fire**
 
-For cron-based schedules, the scheduler estimates the cron frequency using a heuristic and applies the same boundary math. Precision will improve when the cron parser is upgraded to support full expression evaluation.
+For cron-based schedules, the scheduler uses precise next-occurrence calculation (via the Cronos library) to find the most recent cron boundary before now and checks if the current time is within the misfire threshold of that boundary. Both 5-field and 6-field (seconds) cron expressions are supported.
+
+> **Seconds-granularity cron:** When using 6-field cron expressions with second-level precision, ensure the `ManifestManagerPollingInterval` is set appropriately. The default 5-second polling interval means the scheduler checks for due manifests every 5 seconds. For "every 10 seconds" cron (`*/10 * * * * *`), the default polling is adequate. For "every second" cron (`* * * * * *`), reduce the polling interval accordingly.
 
 ### Configuration
 
