@@ -27,7 +27,9 @@ public class TrainQueries
                 r.InputTypeName,
                 r.OutputTypeName,
                 r.Lifetime.ToString(),
-                GetInputSchema(r.InputType)
+                GetInputSchema(r.InputType),
+                r.RequiredPolicies,
+                r.RequiredRoles
             ))
             .ToList();
     }

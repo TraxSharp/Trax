@@ -9,5 +9,7 @@ public record TrainInfo(
     string InputTypeName,
     string OutputTypeName,
     string Lifetime,
-    IReadOnlyList<InputPropertySchema> InputSchema
+    IReadOnlyList<InputPropertySchema> InputSchema,
+    IReadOnlyList<string> RequiredPolicies,
+    IReadOnlyList<string> RequiredRoles
 );

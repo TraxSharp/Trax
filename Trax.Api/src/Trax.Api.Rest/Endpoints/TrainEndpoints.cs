@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Trax.Api.DTOs;
+using Trax.Api.Exceptions;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 
@@ -32,7 +33,9 @@ public static class TrainEndpoints
                 r.InputTypeName,
                 r.OutputTypeName,
                 r.Lifetime.ToString(),
-                GetInputSchema(r.InputType)
+                GetInputSchema(r.InputType),
+                r.RequiredPolicies,
+                r.RequiredRoles
             ))
             .ToList();
 
@@ -45,15 +48,22 @@ public static class TrainEndpoints
         CancellationToken ct
     )
     {
-        var inputJson = request.Input.GetRawText();
-        var result = await executionService.QueueAsync(
-            request.TrainName,
-            inputJson,
-            request.Priority ?? 0,
-            ct
-        );
+        try
+        {
+            var inputJson = request.Input.GetRawText();
+            var result = await executionService.QueueAsync(
+                request.TrainName,
+                inputJson,
+                request.Priority ?? 0,
+                ct
+            );
 
-        return Results.Ok(new QueueTrainResponse(result.WorkQueueId, result.ExternalId));
+            return Results.Ok(new QueueTrainResponse(result.WorkQueueId, result.ExternalId));
+        }
+        catch (TrainAuthorizationException ex)
+        {
+            return Results.Json(new { error = ex.Message }, statusCode: 403);
+        }
     }
 
     private static async Task<IResult> RunTrain(
@@ -62,10 +72,17 @@ public static class TrainEndpoints
         CancellationToken ct
     )
     {
-        var inputJson = request.Input.GetRawText();
-        var result = await executionService.RunAsync(request.TrainName, inputJson, ct);
+        try
+        {
+            var inputJson = request.Input.GetRawText();
+            var result = await executionService.RunAsync(request.TrainName, inputJson, ct);
 
-        return Results.Ok(new RunTrainResponse(result.MetadataId));
+            return Results.Ok(new RunTrainResponse(result.MetadataId));
+        }
+        catch (TrainAuthorizationException ex)
+        {
+            return Results.Json(new { error = ex.Message }, statusCode: 403);
+        }
     }
 
     private static List<InputPropertySchema> GetInputSchema(Type inputType)
