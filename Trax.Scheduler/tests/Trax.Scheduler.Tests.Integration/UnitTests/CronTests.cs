@@ -91,4 +91,82 @@ public class CronTests
         schedule.Type.Should().Be(ScheduleType.Cron);
         schedule.CronExpression.Should().Be(expression);
     }
+
+    // ── 6-field (seconds granularity) ────────────────────────────────
+
+    [Test]
+    public void Secondly_Returns6FieldCron()
+    {
+        var schedule = Cron.Secondly();
+
+        schedule.Type.Should().Be(ScheduleType.Cron);
+        schedule.CronExpression.Should().Be("* * * * * *");
+    }
+
+    [Test]
+    public void Minutely_WithSecond_Returns6FieldCron()
+    {
+        var schedule = Cron.Minutely(30);
+
+        schedule.CronExpression.Should().Be("30 * * * * *");
+    }
+
+    [Test]
+    public void Hourly_WithSecond_Returns6FieldCron()
+    {
+        var schedule = Cron.Hourly(minute: 15, second: 30);
+
+        schedule.CronExpression.Should().Be("30 15 * * * *");
+    }
+
+    [Test]
+    public void Hourly_WithZeroSecond_Returns5FieldCron()
+    {
+        var schedule = Cron.Hourly(minute: 15, second: 0);
+
+        schedule.CronExpression.Should().Be("15 * * * *");
+    }
+
+    [Test]
+    public void Daily_WithSecond_Returns6FieldCron()
+    {
+        var schedule = Cron.Daily(hour: 3, minute: 15, second: 45);
+
+        schedule.CronExpression.Should().Be("45 15 3 * * *");
+    }
+
+    [Test]
+    public void Daily_WithZeroSecond_Returns5FieldCron()
+    {
+        var schedule = Cron.Daily(hour: 3, minute: 15, second: 0);
+
+        schedule.CronExpression.Should().Be("15 3 * * *");
+    }
+
+    [Test]
+    public void Weekly_WithSecond_Returns6FieldCron()
+    {
+        var schedule = Cron.Weekly(DayOfWeek.Monday, hour: 9, minute: 30, second: 15);
+
+        schedule.CronExpression.Should().Be("15 30 9 * * 1");
+    }
+
+    [Test]
+    public void Monthly_WithSecond_Returns6FieldCron()
+    {
+        var schedule = Cron.Monthly(day: 15, hour: 6, minute: 0, second: 10);
+
+        schedule.CronExpression.Should().Be("10 0 6 15 * *");
+    }
+
+    [Test]
+    public void Expression_Passthrough6FieldCron()
+    {
+        var expression = "*/15 * * * * *";
+
+        var schedule = Cron.Expression(expression);
+
+        schedule.Type.Should().Be(ScheduleType.Cron);
+        schedule.CronExpression.Should().Be(expression);
+    }
 }

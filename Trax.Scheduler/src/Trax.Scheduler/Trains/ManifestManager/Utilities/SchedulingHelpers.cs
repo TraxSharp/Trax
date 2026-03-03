@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Scheduling;
 
 /// <summary>
 /// Helper utilities for scheduling logic in DetermineJobsToQueueStep.
@@ -178,7 +179,7 @@ internal static class SchedulingHelpers
 
     /// <summary>
     /// Evaluates a cron-based schedule with misfire policy support.
-    /// Uses the estimated cron frequency as a pseudo-interval for boundary math.
+    /// Uses Cronos for precise next-occurrence calculation.
     /// </summary>
     private static bool EvaluateCronSchedule(
         Manifest manifest,
@@ -191,14 +192,24 @@ internal static class SchedulingHelpers
         if (manifest.LastSuccessfulRun is null)
             return true;
 
-        var estimatedFrequency = EstimateCronFrequency(manifest.CronExpression!);
-        if (estimatedFrequency <= 0)
+        var parsed = CronParser.TryParse(manifest.CronExpression!);
+        if (parsed is null)
+        {
+            logger.LogWarning(
+                "Manifest {ManifestId}: could not parse cron expression '{Expression}'",
+                manifest.Id,
+                manifest.CronExpression
+            );
+            return false;
+        }
+
+        // Find the next occurrence after the last successful run
+        var nextDue = parsed.GetNextOccurrence(manifest.LastSuccessfulRun.Value, TimeZoneInfo.Utc);
+        if (nextDue is null)
             return false;
 
-        var elapsed = (now - manifest.LastSuccessfulRun.Value).TotalSeconds;
-
         // Not yet due
-        if (elapsed < estimatedFrequency)
+        if (nextDue.Value > now)
             return false;
 
         // Resolve effective misfire policy and threshold
@@ -206,7 +217,7 @@ internal static class SchedulingHelpers
         var thresholdSeconds =
             manifest.MisfireThresholdSeconds ?? (int)config.DefaultMisfireThreshold.TotalSeconds;
 
-        var overdueSeconds = elapsed - estimatedFrequency;
+        var overdueSeconds = (now - nextDue.Value).TotalSeconds;
 
         // Within threshold: fire normally
         if (overdueSeconds <= thresholdSeconds)
@@ -216,26 +227,80 @@ internal static class SchedulingHelpers
         if (policy == MisfirePolicy.FireOnceNow)
             return true;
 
-        // DoNothing: use the estimated frequency as a pseudo-interval
-        return EvaluateBoundary(
-            manifest.LastSuccessfulRun.Value,
-            estimatedFrequency,
+        // DoNothing: find the most recent cron occurrence before now and check threshold
+        return EvaluateCronBoundary(
+            parsed,
+            manifest,
             now,
             thresholdSeconds,
-            manifest.Id,
             overdueSeconds,
-            "cron",
             logger
         );
     }
 
     /// <summary>
+    /// For DoNothing misfire policy on cron schedules: finds the most recent cron occurrence
+    /// before now and checks if we're within threshold of it.
+    /// </summary>
+    private static bool EvaluateCronBoundary(
+        Cronos.CronExpression parsed,
+        Manifest manifest,
+        DateTime now,
+        int thresholdSeconds,
+        double overdueSeconds,
+        ILogger logger
+    )
+    {
+        // Walk forward from last successful run to find the most recent occurrence <= now
+        var candidate = manifest.LastSuccessfulRun!.Value;
+        DateTime? mostRecent = null;
+        const int maxIterations = 100_000;
+
+        for (var i = 0; i < maxIterations; i++)
+        {
+            var next = parsed.GetNextOccurrence(candidate, TimeZoneInfo.Utc);
+            if (next is null || next.Value > now)
+                break;
+
+            mostRecent = next.Value;
+            candidate = next.Value;
+        }
+
+        if (mostRecent is null)
+            return false;
+
+        var sinceBoundary = (now - mostRecent.Value).TotalSeconds;
+
+        if (sinceBoundary <= thresholdSeconds)
+        {
+            logger.LogDebug(
+                "Manifest {ManifestId}: DoNothing cron policy — within threshold of most recent boundary, firing",
+                manifest.Id
+            );
+            return true;
+        }
+
+        var nextOccurrence = parsed.GetNextOccurrence(now, TimeZoneInfo.Utc);
+        var nextIn = nextOccurrence.HasValue ? (nextOccurrence.Value - now).TotalSeconds : 0;
+
+        logger.LogInformation(
+            "Manifest {ManifestId}: DoNothing cron misfire policy — skipping overdue run "
+                + "(overdue {Overdue:F0}s, threshold {Threshold}s, next boundary in {NextIn:F0}s)",
+            manifest.Id,
+            overdueSeconds,
+            thresholdSeconds,
+            nextIn
+        );
+        return false;
+    }
+
+    /// <summary>
     /// Evaluates whether the current time falls within the misfire threshold of the most
-    /// recent schedule boundary. Used by DoNothing policy for both interval and cron types.
+    /// recent schedule boundary. Used by DoNothing policy for interval-based schedules.
     /// </summary>
     /// <remarks>
-    /// After a long outage, this finds the most recent boundary (interval tick or estimated
-    /// cron occurrence) before now and checks if we're within threshold of it. If yes, fires.
+    /// After a long outage, this finds the most recent boundary (interval tick)
+    /// before now and checks if we're within threshold of it. If yes, fires.
     /// If no, waits for the next boundary.
     ///
     /// Example: interval=5min, threshold=60s, LastSuccessfulRun=10:00, now=13:02
@@ -285,41 +350,8 @@ internal static class SchedulingHelpers
     }
 
     /// <summary>
-    /// Estimates the frequency of a cron expression in seconds using a simplified heuristic.
-    /// </summary>
-    /// <remarks>
-    /// This is used for misfire boundary calculations when a full cron library is not available.
-    /// Precision will improve when the cron parser is upgraded to support 6-7 field expressions.
-    /// </remarks>
-    internal static int EstimateCronFrequency(string cronExpression)
-    {
-        var parts = cronExpression.Split(' ');
-        if (parts.Length < 5)
-            return 0;
-
-        var minute = parts[0];
-        var hour = parts[1];
-        var dayOfMonth = parts[2];
-
-        // If minute is *, job runs every minute
-        if (minute == "*")
-            return 60;
-
-        // If hour is * and minute is specific, it runs hourly
-        if (hour == "*" && minute != "*")
-            return 3600;
-
-        // If dayOfMonth is * and hour is specific, it runs daily
-        if (dayOfMonth == "*" && hour != "*")
-            return 86400;
-
-        // Default: daily safety fallback
-        return 86400;
-    }
-
-    /// <summary>
     /// Determines if a cron-based schedule is due to run at the current time.
-    /// Preserved for backward compatibility with tests.
+    /// Supports both 5-field and 6-field (with seconds) cron expressions.
     /// </summary>
     public static bool IsTimeForCron(
         DateTime? lastSuccessfulRun,
@@ -331,11 +363,11 @@ internal static class SchedulingHelpers
         if (lastSuccessfulRun is null)
             return true;
 
-        var estimatedFrequency = EstimateCronFrequency(cronExpression);
-        if (estimatedFrequency <= 0)
+        var nextDue = CronParser.GetNextOccurrence(cronExpression, lastSuccessfulRun.Value);
+        if (nextDue is null)
             return false;
 
-        return (now - lastSuccessfulRun.Value).TotalSeconds >= estimatedFrequency;
+        return nextDue.Value <= now;
     }
 
     /// <summary>

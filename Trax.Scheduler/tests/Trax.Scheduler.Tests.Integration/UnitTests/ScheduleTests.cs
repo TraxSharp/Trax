@@ -144,4 +144,69 @@ public class ScheduleTests
     }
 
     #endregion
+
+    #region ToCronExpression — Sub-minute (6-field)
+
+    [Test]
+    public void ToCronExpression_30Seconds_Returns6FieldCron()
+    {
+        var schedule = Schedule.FromInterval(TimeSpan.FromSeconds(30));
+
+        var cron = schedule.ToCronExpression();
+
+        cron.Should().Be("*/30 * * * * *");
+    }
+
+    [Test]
+    public void ToCronExpression_15Seconds_Returns6FieldCron()
+    {
+        var schedule = Schedule.FromInterval(TimeSpan.FromSeconds(15));
+
+        var cron = schedule.ToCronExpression();
+
+        cron.Should().Be("*/15 * * * * *");
+    }
+
+    [Test]
+    public void ToCronExpression_1Second_Returns6FieldEverySecond()
+    {
+        var schedule = Schedule.FromInterval(TimeSpan.FromSeconds(1));
+
+        var cron = schedule.ToCronExpression();
+
+        cron.Should().Be("* * * * * *");
+    }
+
+    [Test]
+    public void ToCronExpression_6FieldCronPassthrough()
+    {
+        var schedule = Schedule.FromCron("30 0 3 * * *");
+
+        var cron = schedule.ToCronExpression();
+
+        cron.Should().Be("30 0 3 * * *");
+    }
+
+    [Test]
+    public void ToCronExpression_10Seconds_Returns6FieldCron()
+    {
+        var schedule = Schedule.FromInterval(TimeSpan.FromSeconds(10));
+
+        var cron = schedule.ToCronExpression();
+
+        cron.Should().Be("*/10 * * * * *");
+    }
+
+    [Test]
+    public void ToCronExpression_7Seconds_ApproximatesToClosestDivisor()
+    {
+        // 7 doesn't divide 60 evenly, should approximate to 6
+        var schedule = Schedule.FromInterval(TimeSpan.FromSeconds(7));
+
+        var cron = schedule.ToCronExpression();
+
+        cron.Should().Be("*/6 * * * * *");
+    }
+
+    #endregion
 }

@@ -31,7 +31,7 @@ public record Schedule
     /// </summary>
     /// <remarks>
     /// Only used when <see cref="Type"/> is <see cref="ScheduleType.Cron"/>.
-    /// Uses standard 5-field cron format (minute hour day-of-month month day-of-week).
+    /// Supports both 5-field (minute granularity) and 6-field (second granularity) cron formats.
     /// </remarks>
     public string? CronExpression { get; init; }
 
@@ -51,11 +51,12 @@ public record Schedule
     /// <summary>
     /// Creates a schedule from a cron expression.
     /// </summary>
-    /// <param name="expression">A standard 5-field cron expression</param>
+    /// <param name="expression">A 5-field or 6-field cron expression</param>
     /// <returns>A new Schedule configured for cron-based execution</returns>
     /// <example>
     /// <code>
-    /// var schedule = Schedule.FromCron("0 3 * * *"); // Daily at 3am
+    /// var schedule = Schedule.FromCron("0 3 * * *");       // Daily at 3am (5-field)
+    /// var schedule = Schedule.FromCron("*/15 * * * * *");  // Every 15 seconds (6-field)
     /// </code>
     /// </example>
     public static Schedule FromCron(string expression) =>
@@ -64,12 +65,14 @@ public record Schedule
     /// <summary>
     /// Converts the schedule to a cron expression.
     /// </summary>
-    /// <returns>A 5-field cron expression representing this schedule</returns>
+    /// <returns>A cron expression (5-field or 6-field) representing this schedule</returns>
     /// <remarks>
-    /// For cron-type schedules, returns the existing expression.
+    /// For cron-type schedules, returns the existing expression as-is.
     /// For interval-type schedules, converts to the closest valid cron expression.
+    /// Sub-minute intervals produce 6-field (seconds) cron; minute-or-above intervals
+    /// produce 5-field cron.
     /// Note that cron has limited expressiveness—intervals that don't divide evenly
-    /// into an hour (e.g., 45 minutes) will be approximated to the nearest valid interval.
+    /// into a minute or hour will be approximated to the nearest valid interval.
     /// </remarks>
     public string ToCronExpression()
     {
@@ -78,6 +81,19 @@ public record Schedule
 
         if (Interval is null)
             return "* * * * *"; // Default to every minute
+
+        var totalSeconds = (int)Math.Max(1, Math.Round(Interval.Value.TotalSeconds));
+
+        // Sub-minute intervals: produce 6-field cron with seconds
+        if (totalSeconds < 60)
+        {
+            return totalSeconds switch
+            {
+                1 => "* * * * * *",
+                <= 30 when 60 % totalSeconds == 0 => $"*/{totalSeconds} * * * * *",
+                _ => $"*/{ClosestDivisorOf60(totalSeconds)} * * * * *",
+            };
+        }
 
         var totalMinutes = (int)Math.Max(1, Math.Round(Interval.Value.TotalMinutes));
 
@@ -95,7 +111,7 @@ public record Schedule
 
     /// <summary>
     /// Finds the closest divisor of 60 to the given value.
-    /// Valid cron minute intervals must divide evenly into 60.
+    /// Valid cron minute/second intervals must divide evenly into 60.
     /// </summary>
     private static int ClosestDivisorOf60(int value)
     {
