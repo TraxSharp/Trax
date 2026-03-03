@@ -26,6 +26,7 @@ public class PersistentManifest : Effect.Models.Manifest.Manifest
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
 
             entity.Property(e => e.Properties).HasColumnType("jsonb");
+            entity.Property(e => e.Exclusions).HasColumnType("jsonb");
 
             entity
                 .HasOne(x => x.DependsOnManifest)

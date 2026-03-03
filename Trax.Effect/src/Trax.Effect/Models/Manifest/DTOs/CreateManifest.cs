@@ -76,5 +76,10 @@ public class CreateManifest
     /// </summary>
     public DateTime? ScheduledAt { get; set; }
 
+    /// <summary>
+    /// JSON-serialized exclusion windows. Null means no exclusions.
+    /// </summary>
+    public string? Exclusions { get; set; }
+
     #endregion
 }

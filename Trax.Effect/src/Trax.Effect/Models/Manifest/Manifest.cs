@@ -185,6 +185,17 @@ public class Manifest : IModel
     [Column("scheduled_at")]
     public DateTime? ScheduledAt { get; set; }
 
+    /// <summary>
+    /// Gets or sets the JSON-serialized exclusion windows for this manifest.
+    /// </summary>
+    /// <remarks>
+    /// Stored as a JSONB column containing an array of <see cref="Exclusion"/> objects.
+    /// When any exclusion matches the current time, the scheduling logic treats the period
+    /// as "intentionally skipped" (not a misfire). Null or empty means no exclusions.
+    /// </remarks>
+    [Column("exclusions")]
+    public string? Exclusions { get; set; }
+
     #endregion
 
     #endregion
@@ -227,6 +238,34 @@ public class Manifest : IModel
 
     #region Functions
 
+    /// <summary>
+    /// Deserializes the exclusions JSON into a list of <see cref="Exclusion"/> objects.
+    /// </summary>
+    public List<Exclusion> GetExclusions()
+    {
+        if (string.IsNullOrEmpty(Exclusions))
+            return [];
+
+        return JsonSerializer.Deserialize<List<Exclusion>>(
+                Exclusions,
+                TraxJsonSerializationOptions.ManifestProperties
+            ) ?? [];
+    }
+
+    /// <summary>
+    /// Serializes the given exclusions and stores them as JSON.
+    /// </summary>
+    public void SetExclusions(List<Exclusion> exclusions)
+    {
+        Exclusions =
+            exclusions.Count == 0
+                ? null
+                : JsonSerializer.Serialize(
+                    exclusions,
+                    TraxJsonSerializationOptions.ManifestProperties
+                );
+    }
+
     public static Manifest Create(CreateManifest manifest)
     {
         if (manifest.Name.FullName is null)
@@ -248,6 +287,7 @@ public class Manifest : IModel
             MisfirePolicy = manifest.MisfirePolicy,
             MisfireThresholdSeconds = manifest.MisfireThresholdSeconds,
             ScheduledAt = manifest.ScheduledAt,
+            Exclusions = manifest.Exclusions,
         };
 
         if (manifest.Properties != null)
