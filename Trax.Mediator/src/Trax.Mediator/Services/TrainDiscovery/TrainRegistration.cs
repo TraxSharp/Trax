@@ -17,4 +17,7 @@ public class TrainRegistration
     public required string ImplementationTypeName { get; init; }
     public required string InputTypeName { get; init; }
     public required string OutputTypeName { get; init; }
+
+    public required IReadOnlyList<string> RequiredPolicies { get; init; }
+    public required IReadOnlyList<string> RequiredRoles { get; init; }
 }
