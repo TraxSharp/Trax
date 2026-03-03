@@ -253,6 +253,21 @@ builder.Services.AddTraxEffects(options =>
                 Every.Seconds(30),
                 o => o.OnMisfire(MisfirePolicy.DoNothing).MisfireThreshold(TimeSpan.FromSeconds(10))
             );
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // 8. DELAYED / ONE-OFF JOBS
+            //    ScheduleOnce() — creates a manifest that fires once after a delay,
+            //    then auto-disables. Useful for "send reminder in 30 minutes"
+            //    scenarios. The manifest shows as "Once at {time}" in the dashboard.
+            //
+            //    Try it: after startup, watch the dashboard — the job will fire
+            //    after 1 minute and then show as disabled.
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            scheduler.ScheduleOnce<IHelloWorldTrain>(
+                ManifestNames.DelayedGreeting,
+                new HelloWorldInput { Name = "Delayed One-Off Job" },
+                TimeSpan.FromMinutes(1)
+            );
         })
 );
 

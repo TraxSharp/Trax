@@ -31,6 +31,9 @@ public static class ManifestNames
     public const string MisfireFireOnce = "misfire-fire-once";
     public const string MisfireDoNothing = "misfire-do-nothing";
 
+    // ── Delayed / One-Off Jobs ───────────────────────────────────────
+    public const string DelayedGreeting = "delayed-greeting";
+
     // ── Table Names ──────────────────────────────────────────────────────
     public const string CustomerTable = "Customer";
     public const string TransactionTable = "Transaction";
