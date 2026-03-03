@@ -89,6 +89,23 @@
     </RadzenRow>
 </RadzenCard>
 
+@* ── Exclusion Windows ── *@
+@if (_exclusions.Count > 0)
+{
+    <RadzenCard class="rz-mb-4">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Exclusion Windows</RadzenText>
+        <RadzenStack Gap="0.5rem">
+            @foreach (var exclusion in _exclusions)
+            {
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                    <RadzenBadge Text="@exclusion.Type.ToString()" BadgeStyle="BadgeStyle.Warning" />
+                    <RadzenText TextStyle="TextStyle.Body2">@FormatExclusion(exclusion)</RadzenText>
+                </RadzenStack>
+            }
+        </RadzenStack>
+    </RadzenCard>
+}
+
 @* ── Summary Cards ── *@
 <RadzenRow Gap="1rem" class="rz-mb-4">
     <RadzenColumn Size="6" SizeMD="3">

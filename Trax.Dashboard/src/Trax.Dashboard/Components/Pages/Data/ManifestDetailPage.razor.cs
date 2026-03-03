@@ -31,6 +31,7 @@ public partial class ManifestDetailPage
 
     private Manifest? _manifest;
     private List<Metadata> _metadataItems = [];
+    private List<Exclusion> _exclusions = [];
     private bool _triggering;
     private string? _triggerError;
 
@@ -45,12 +46,34 @@ public partial class ManifestDetailPage
 
         if (_manifest is not null)
         {
+            _exclusions = _manifest.GetExclusions();
+
             _metadataItems = await context
                 .Metadatas.AsNoTracking()
                 .Where(m => m.ManifestId == ManifestId)
                 .OrderByDescending(m => m.StartTime)
                 .ToListAsync(cancellationToken);
         }
+    }
+
+    private static string FormatExclusion(Exclusion exclusion)
+    {
+        return exclusion.Type switch
+        {
+            ExclusionType.DaysOfWeek when exclusion.DaysOfWeek is not null => string.Join(
+                ", ",
+                exclusion.DaysOfWeek
+            ),
+            ExclusionType.Dates when exclusion.Dates is not null => string.Join(
+                ", ",
+                exclusion.Dates.Select(d => d.ToString("yyyy-MM-dd"))
+            ),
+            ExclusionType.DateRange =>
+                $"{exclusion.StartDate?.ToString("yyyy-MM-dd")} to {exclusion.EndDate?.ToString("yyyy-MM-dd")}",
+            ExclusionType.TimeWindow =>
+                $"{exclusion.StartTime?.ToString("HH:mm")} to {exclusion.EndTime?.ToString("HH:mm")} daily",
+            _ => "Unknown",
+        };
     }
 
     private async Task TriggerManifest()
