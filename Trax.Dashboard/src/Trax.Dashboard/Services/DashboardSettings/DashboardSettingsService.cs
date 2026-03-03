@@ -29,6 +29,8 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
     public bool ShowRecentFailures { get; private set; } = DefaultComponentVisibility;
     public bool ShowActiveManifests { get; private set; } = DefaultComponentVisibility;
     public bool ShowServerHealth { get; private set; } = DefaultComponentVisibility;
+    public bool ShowRealTimeMetrics { get; private set; } = DefaultComponentVisibility;
+    public bool ShowThroughputChart { get; private set; } = DefaultComponentVisibility;
 
     public async Task InitializeAsync()
     {
@@ -52,6 +54,8 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
         ShowRecentFailures = await LoadVisibilityAsync(StorageKeys.ShowRecentFailures);
         ShowActiveManifests = await LoadVisibilityAsync(StorageKeys.ShowActiveManifests);
         ShowServerHealth = await LoadVisibilityAsync(StorageKeys.ShowServerHealth);
+        ShowRealTimeMetrics = await LoadVisibilityAsync(StorageKeys.ShowRealTimeMetrics);
+        ShowThroughputChart = await LoadVisibilityAsync(StorageKeys.ShowThroughputChart);
 
         _isInitialized = true;
     }
@@ -96,6 +100,12 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
                 break;
             case StorageKeys.ShowServerHealth:
                 ShowServerHealth = visible;
+                break;
+            case StorageKeys.ShowRealTimeMetrics:
+                ShowRealTimeMetrics = visible;
+                break;
+            case StorageKeys.ShowThroughputChart:
+                ShowThroughputChart = visible;
                 break;
         }
 

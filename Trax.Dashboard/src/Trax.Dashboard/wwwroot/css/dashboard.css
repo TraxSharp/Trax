@@ -181,3 +181,197 @@
 .cs-dag-arrowhead {
     fill: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.3));
 }
+
+/* ── State Timeline ── */
+
+.cs-timeline {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    padding: 1rem 0;
+    overflow-x: auto;
+}
+
+.cs-timeline-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    min-width: 120px;
+    flex: 1;
+}
+
+.cs-timeline-connector {
+    position: absolute;
+    top: 16px;
+    left: calc(50% + 16px);
+    right: calc(-50% + 16px);
+    height: 2px;
+    background-color: var(--rz-base-300, rgba(255, 255, 255, 0.15));
+    z-index: 0;
+}
+
+.cs-timeline-step:last-child .cs-timeline-connector {
+    display: none;
+}
+
+.cs-timeline-connector--reached {
+    background-color: var(--rz-primary, #2E7D32);
+}
+
+.cs-timeline-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    z-index: 1;
+    border: 2px solid var(--rz-base-300, rgba(255, 255, 255, 0.15));
+    background-color: var(--rz-base-background-color, #121212);
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.3));
+    transition: all 0.2s ease;
+}
+
+.cs-timeline-circle--pending {
+    border-color: var(--rz-info, #1565C0);
+    color: var(--rz-info, #1565C0);
+}
+
+.cs-timeline-circle--in-progress {
+    border-color: var(--rz-info, #1565C0);
+    background-color: var(--rz-info, #1565C0);
+    color: #fff;
+    animation: cs-pulse 1.5s ease-in-out infinite;
+}
+
+.cs-timeline-circle--completed {
+    border-color: var(--rz-success, #2E7D32);
+    background-color: var(--rz-success, #2E7D32);
+    color: #fff;
+}
+
+.cs-timeline-circle--failed {
+    border-color: var(--rz-danger, #C62828);
+    background-color: var(--rz-danger, #C62828);
+    color: #fff;
+}
+
+.cs-timeline-circle--cancelled {
+    border-color: var(--rz-warning, #F9A825);
+    background-color: var(--rz-warning, #F9A825);
+    color: #fff;
+}
+
+.cs-timeline-circle--future {
+    border-color: var(--rz-base-300, rgba(255, 255, 255, 0.15));
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.3));
+}
+
+@keyframes cs-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(21, 101, 192, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(21, 101, 192, 0); }
+}
+
+.cs-timeline-label {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+    color: var(--rz-text-color, #fff);
+}
+
+.cs-timeline-label--future {
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.3));
+}
+
+.cs-timeline-time {
+    font-size: 0.65rem;
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.5));
+    text-align: center;
+    font-family: monospace, var(--rz-body-font-family, sans-serif);
+}
+
+.cs-timeline-duration {
+    position: absolute;
+    top: -0.25rem;
+    left: calc(50% + 20px);
+    right: calc(-50% + 20px);
+    text-align: center;
+    font-size: 0.6rem;
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.4));
+    font-family: monospace, var(--rz-body-font-family, sans-serif);
+    white-space: nowrap;
+}
+
+/* ── Exception Viewer ── */
+
+.cs-exception-viewer {
+    border-left: 4px solid var(--rz-danger, #C62828);
+    margin-bottom: 1rem;
+}
+
+.cs-exception-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.cs-exception-header:hover {
+    opacity: 0.85;
+}
+
+.cs-exception-toggle {
+    font-size: 1.25rem;
+    color: var(--rz-text-disabled-color);
+    transition: transform 0.2s ease;
+}
+
+.cs-exception-toggle--open {
+    transform: rotate(90deg);
+}
+
+.cs-stacktrace {
+    font-size: 0.75rem;
+    line-height: 1.6;
+    max-height: 400px;
+    overflow: auto;
+    margin: 0;
+    padding: 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background-color: var(--rz-base-background-color, #121212);
+    border: 1px solid var(--rz-base-200, rgba(255, 255, 255, 0.1));
+    border-radius: var(--rz-border-radius, 4px);
+    font-family: monospace, var(--rz-body-font-family, sans-serif);
+}
+
+.cs-stacktrace-at {
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.35));
+}
+
+.cs-stacktrace-method {
+    color: var(--rz-primary-lighter, #4CAF50);
+}
+
+.cs-stacktrace-file {
+    color: var(--rz-info, #1565C0);
+}
+
+.cs-stacktrace-line {
+    color: var(--rz-warning, #F9A825);
+    font-weight: 600;
+}
+
+.cs-stacktrace-exception {
+    color: var(--rz-danger, #C62828);
+    font-weight: 600;
+}
+
+.cs-stacktrace-inner {
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.4));
+    font-style: italic;
+}

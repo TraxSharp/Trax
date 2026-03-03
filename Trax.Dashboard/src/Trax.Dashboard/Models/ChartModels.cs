@@ -25,3 +25,10 @@ public class TrainDuration
     public string Name { get; init; } = "";
     public double AvgMs { get; init; }
 }
+
+public class ThroughputMetric
+{
+    public string Minute { get; init; } = "";
+    public int Completed { get; init; }
+    public int Failed { get; init; }
+}

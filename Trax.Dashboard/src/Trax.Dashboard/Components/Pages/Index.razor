@@ -70,6 +70,40 @@
     </RadzenRow>
 }
 
+@* ── Real-Time Metrics ── *@
+@if (DashboardSettings.ShowRealTimeMetrics)
+{
+    <RadzenRow Gap="1rem" class="rz-mb-4">
+        <RadzenColumn Size="12" SizeMD="4" SizeLG="4">
+            <RadzenCard>
+                <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
+                    <RadzenIcon Icon="inbox" Style="font-size: 2rem; color: var(--rz-info);" />
+                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_queueDepth</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Queue Depth</RadzenText>
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="4" SizeLG="4">
+            <RadzenCard>
+                <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
+                    <RadzenIcon Icon="speed" Style="font-size: 2rem; color: var(--rz-success);" />
+                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_completedPerMinute</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Completed / min</RadzenText>
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="4" SizeLG="4">
+            <RadzenCard>
+                <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
+                    <RadzenIcon Icon="trending_down" Style="font-size: 2rem; color: var(--rz-danger);" />
+                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_failedPerMinute</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Failed / min</RadzenText>
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+}
+
 @* ── Summary Cards ── *@
 @if (DashboardSettings.ShowSummaryCards)
 {
@@ -272,6 +306,51 @@
                 </RadzenCard>
             </RadzenColumn>
         }
+    </RadzenRow>
+}
+
+@* ── Throughput Chart (per-minute, last 60 min) ── *@
+@if (DashboardSettings.ShowThroughputChart)
+{
+    <RadzenRow Gap="1rem" class="rz-mb-4">
+        <RadzenColumn Size="12">
+            <RadzenCard>
+                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Throughput (Last 60 min)</RadzenText>
+                @if (_throughputData.Any(t => t.Completed > 0 || t.Failed > 0))
+                {
+                    <RadzenChart Style="height: 250px;">
+                        <RadzenColumnSeries Data="@_throughputData"
+                                            CategoryProperty="Minute"
+                                            ValueProperty="Completed"
+                                            Title="Completed"
+                                            Fill="#2E7D32">
+                            <RadzenSeriesDataLabels Visible="false" />
+                        </RadzenColumnSeries>
+                        <RadzenColumnSeries Data="@_throughputData"
+                                            CategoryProperty="Minute"
+                                            ValueProperty="Failed"
+                                            Title="Failed"
+                                            Fill="#C62828">
+                            <RadzenSeriesDataLabels Visible="false" />
+                        </RadzenColumnSeries>
+                        <RadzenColumnOptions Margin="1" />
+                        <RadzenCategoryAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenCategoryAxis>
+                        <RadzenValueAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenValueAxis>
+                        <RadzenLegend Position="LegendPosition.Bottom" />
+                    </RadzenChart>
+                }
+                else
+                {
+                    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="height: 250px;">
+                        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color);">No throughput data in the last 60 minutes</RadzenText>
+                    </RadzenStack>
+                }
+            </RadzenCard>
+        </RadzenColumn>
     </RadzenRow>
 }
 

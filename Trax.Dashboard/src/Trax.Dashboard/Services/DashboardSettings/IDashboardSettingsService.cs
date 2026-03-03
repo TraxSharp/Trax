@@ -20,5 +20,7 @@ public interface IDashboardSettingsService
     bool ShowRecentFailures { get; }
     bool ShowActiveManifests { get; }
     bool ShowServerHealth { get; }
+    bool ShowRealTimeMetrics { get; }
+    bool ShowThroughputChart { get; }
     Task SetComponentVisibilityAsync(string key, bool visible);
 }

@@ -1,0 +1,119 @@
+@* State transition timeline — infers transitions from Metadata timestamps *@
+
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">State Timeline</RadzenText>
+    <div class="cs-timeline">
+        @foreach (var (step, index) in _steps.Select((s, i) => (s, i)))
+        {
+            <div class="cs-timeline-step">
+                @if (index < _steps.Count - 1)
+                {
+                    <div class="cs-timeline-connector @(step.Reached && _steps[index + 1].Reached ? "cs-timeline-connector--reached" : "")"></div>
+                    @if (step.Duration is not null)
+                    {
+                        <div class="cs-timeline-duration">@step.Duration</div>
+                    }
+                }
+                <div class="cs-timeline-circle @step.CircleClass">
+                    <RadzenIcon Icon="@step.Icon" Style="font-size: 16px;" />
+                </div>
+                <span class="cs-timeline-label @(step.Reached ? "" : "cs-timeline-label--future")">@step.Label</span>
+                @if (step.Timestamp is not null)
+                {
+                    <span class="cs-timeline-time">@step.Timestamp.Value.ToString("HH:mm:ss")</span>
+                }
+            </div>
+        }
+    </div>
+</RadzenCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public Metadata Metadata { get; set; } = default!;
+
+    private List<TimelineStep> _steps = [];
+
+    protected override void OnParametersSet()
+    {
+        _steps = BuildSteps();
+    }
+
+    private List<TimelineStep> BuildSteps()
+    {
+        var steps = new List<TimelineStep>();
+        var state = Metadata.TrainState;
+
+        // Step 1: Pending
+        var pendingTime = Metadata.ScheduledTime ?? Metadata.StartTime;
+        steps.Add(new TimelineStep
+        {
+            Label = "Pending",
+            Icon = "schedule",
+            Timestamp = pendingTime,
+            Reached = true,
+            CircleClass = "cs-timeline-circle--pending",
+            Duration = state != TrainState.Pending && Metadata.StartTime != default
+                ? FormatDurationBetween(pendingTime, Metadata.StartTime)
+                : null,
+        });
+
+        // Step 2: In Progress
+        var inProgressReached = state is TrainState.InProgress or TrainState.Completed
+            or TrainState.Failed or TrainState.Cancelled;
+        steps.Add(new TimelineStep
+        {
+            Label = "In Progress",
+            Icon = "play_arrow",
+            Timestamp = inProgressReached ? Metadata.StartTime : null,
+            Reached = inProgressReached,
+            CircleClass = inProgressReached
+                ? (state == TrainState.InProgress ? "cs-timeline-circle--in-progress" : "cs-timeline-circle--completed")
+                : "cs-timeline-circle--future",
+            Duration = inProgressReached && state != TrainState.InProgress && Metadata.EndTime.HasValue
+                ? FormatDurationBetween(Metadata.StartTime, Metadata.EndTime.Value)
+                : null,
+        });
+
+        // Step 3: Terminal state
+        var terminalReached = state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled;
+        var (terminalLabel, terminalIcon, terminalClass) = state switch
+        {
+            TrainState.Failed => ("Failed", "error", "cs-timeline-circle--failed"),
+            TrainState.Cancelled => ("Cancelled", "cancel", "cs-timeline-circle--cancelled"),
+            _ => ("Completed", "check_circle", "cs-timeline-circle--completed"),
+        };
+
+        steps.Add(new TimelineStep
+        {
+            Label = terminalLabel,
+            Icon = terminalIcon,
+            Timestamp = terminalReached ? Metadata.EndTime : null,
+            Reached = terminalReached,
+            CircleClass = terminalReached ? terminalClass : "cs-timeline-circle--future",
+        });
+
+        return steps;
+    }
+
+    private static string FormatDurationBetween(DateTime start, DateTime end)
+    {
+        var duration = end - start;
+        if (duration.TotalMilliseconds < 1000)
+            return $"{duration.TotalMilliseconds:F0}ms";
+        if (duration.TotalSeconds < 60)
+            return $"{duration.TotalSeconds:F1}s";
+        if (duration.TotalMinutes < 60)
+            return $"{duration.TotalMinutes:F1}m";
+        return $"{duration.TotalHours:F1}h";
+    }
+
+    private class TimelineStep
+    {
+        public string Label { get; init; } = "";
+        public string Icon { get; init; } = "";
+        public DateTime? Timestamp { get; init; }
+        public bool Reached { get; init; }
+        public string CircleClass { get; init; } = "";
+        public string? Duration { get; init; }
+    }
+}

@@ -72,6 +72,9 @@
     </RadzenAlert>
 }
 
+@* ── State Timeline ── *@
+<StateTimeline Metadata="@_metadata" />
+
 @* ── Metadata Details ── *@
 <RadzenCard class="rz-mb-4">
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Details</RadzenText>
@@ -135,27 +138,10 @@
 @* ── Failure Details (only if failed) ── *@
 @if (_metadata.TrainState == TrainState.Failed)
 {
-    <RadzenCard class="rz-mb-4" Style="border-left: 4px solid var(--rz-danger);">
-        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2" Style="color: var(--rz-danger);">Failure Details</RadzenText>
-        <RadzenRow Gap="1rem">
-            <RadzenColumn Size="12" SizeMD="6">
-                <RadzenStack Gap="0.75rem">
-                    <FieldDisplay Label="Failure Step" Value="@(_metadata.FailureStep ?? "—")" />
-                    <FieldDisplay Label="Exception" Value="@(_metadata.FailureException ?? "—")" />
-                    <FieldDisplay Label="Reason" Value="@(_metadata.FailureReason ?? "—")" />
-                </RadzenStack>
-            </RadzenColumn>
-            <RadzenColumn Size="12" SizeMD="6">
-                @if (!string.IsNullOrWhiteSpace(_metadata.StackTrace))
-                {
-                    <RadzenStack Gap="0">
-                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color); margin: 0;">Stack Trace</RadzenText>
-                        <pre style="font-size: 0.75rem; max-height: 200px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_metadata.StackTrace</pre>
-                    </RadzenStack>
-                }
-            </RadzenColumn>
-        </RadzenRow>
-    </RadzenCard>
+    <ExceptionViewer FailureStep="@_metadata.FailureStep"
+                     FailureException="@_metadata.FailureException"
+                     FailureReason="@_metadata.FailureReason"
+                     StackTrace="@_metadata.StackTrace" />
 }
 
 @* ── Input / Output ── *@

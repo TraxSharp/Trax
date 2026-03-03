@@ -32,6 +32,12 @@ public partial class Index
     private int _activeManifests;
     private int _registeredTrains;
 
+    // Real-time metrics
+    private int _queueDepth;
+    private double _completedPerMinute;
+    private double _failedPerMinute;
+    private List<ThroughputMetric> _throughputData = [];
+
     // Chart data
     private List<ExecutionTimePoint> _executionsOverTime = [];
     private List<StateCount> _stateCounts = [];
@@ -257,6 +263,91 @@ public partial class Index
             .OrderBy(m => m.Name)
             .Take(20)
             .ToListAsync(cancellationToken);
+
+        // Real-time metrics — queue depth
+        _queueDepth = await context
+            .WorkQueues.AsNoTracking()
+            .CountAsync(w => w.Status == WorkQueueStatus.Queued, cancellationToken);
+
+        // Throughput (5-minute rolling window)
+        var fiveMinAgo = now.AddMinutes(-5);
+        var throughputQuery = context.Metadatas.AsNoTracking().Where(m => m.EndTime >= fiveMinAgo);
+
+        if (hideAdmin)
+            throughputQuery = throughputQuery.ExcludeAdmin(adminNames);
+
+        var recentTerminal = await throughputQuery
+            .GroupBy(m => m.TrainState)
+            .Select(g => new { State = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var completedLast5 =
+            recentTerminal.FirstOrDefault(x => x.State == TrainState.Completed)?.Count ?? 0;
+        var failedLast5 =
+            recentTerminal.FirstOrDefault(x => x.State == TrainState.Failed)?.Count ?? 0;
+        _completedPerMinute = Math.Round(completedLast5 / 5.0, 1);
+        _failedPerMinute = Math.Round(failedLast5 / 5.0, 1);
+
+        // Per-minute throughput chart (last 60 minutes)
+        var last60m = now.AddMinutes(-60);
+        var minuteQuery = context
+            .Metadatas.AsNoTracking()
+            .Where(m =>
+                m.EndTime >= last60m
+                && (m.TrainState == TrainState.Completed || m.TrainState == TrainState.Failed)
+            );
+
+        if (hideAdmin)
+            minuteQuery = minuteQuery.ExcludeAdmin(adminNames);
+
+        var minuteStats = await minuteQuery
+            .GroupBy(m => new
+            {
+                m.EndTime!.Value.Date,
+                m.EndTime!.Value.Hour,
+                m.EndTime!.Value.Minute,
+                m.TrainState,
+            })
+            .Select(g => new
+            {
+                g.Key.Date,
+                g.Key.Hour,
+                g.Key.Minute,
+                g.Key.TrainState,
+                Count = g.Count(),
+            })
+            .ToListAsync(cancellationToken);
+
+        _throughputData = Enumerable
+            .Range(0, 60)
+            .Select(i =>
+            {
+                var minuteStart = now.AddMinutes(-59 + i);
+                var targetDate = minuteStart.Date;
+                var targetHour = minuteStart.Hour;
+                var targetMinute = minuteStart.Minute;
+                return new ThroughputMetric
+                {
+                    Minute = i % 10 == 0 ? minuteStart.ToString("HH:mm") : " ",
+                    Completed = minuteStats
+                        .Where(x =>
+                            x.Date == targetDate
+                            && x.Hour == targetHour
+                            && x.Minute == targetMinute
+                            && x.TrainState == TrainState.Completed
+                        )
+                        .Sum(x => x.Count),
+                    Failed = minuteStats
+                        .Where(x =>
+                            x.Date == targetDate
+                            && x.Hour == targetHour
+                            && x.Minute == targetMinute
+                            && x.TrainState == TrainState.Failed
+                        )
+                        .Sum(x => x.Count),
+                };
+            })
+            .ToList();
     }
 
     private void CollectServerHealthMetrics()

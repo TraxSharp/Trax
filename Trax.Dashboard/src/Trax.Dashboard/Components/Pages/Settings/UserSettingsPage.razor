@@ -94,6 +94,20 @@
                 </RadzenText>
                 <RadzenSwitch @bind-Value="_showActiveManifests" />
             </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Real-Time Metrics" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Queue depth, completed per minute, and failed per minute cards (5-minute rolling window).
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showRealTimeMetrics" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Throughput Chart" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Per-minute throughput chart showing completed and failed jobs over the last 60 minutes.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showThroughputChart" />
+            </RadzenStack>
         </RadzenStack>
     </RadzenFieldset>
 

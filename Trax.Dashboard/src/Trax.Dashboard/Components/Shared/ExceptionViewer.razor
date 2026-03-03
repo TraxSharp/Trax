@@ -1,0 +1,148 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+<RadzenCard class="rz-mb-4 cs-exception-viewer">
+    <RadzenStack Gap="0.75rem">
+        @* ── Header: Exception type + failure step ── *@
+        <div class="cs-exception-header" @onclick="ToggleStackTrace">
+            <RadzenIcon Icon="@(_expanded ? "expand_more" : "chevron_right")"
+                        class="@($"cs-exception-toggle {(_expanded ? "cs-exception-toggle--open" : "")}")" />
+            <RadzenText TextStyle="TextStyle.H6" Style="color: var(--rz-danger); margin: 0;">
+                Failure Details
+            </RadzenText>
+        </div>
+
+        @* ── Summary fields ── *@
+        <RadzenRow Gap="1rem">
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenStack Gap="0.75rem">
+                    <FieldDisplay Label="Failure Step" Value="@(FailureStep ?? "—")" />
+                    <FieldDisplay Label="Exception" Value="@(FailureException ?? "—")" />
+                </RadzenStack>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="6">
+                <FieldDisplay Label="Reason" Value="@(FailureReason ?? "—")" />
+            </RadzenColumn>
+        </RadzenRow>
+
+        @* ── Stack Trace (collapsible) ── *@
+        @if (!string.IsNullOrWhiteSpace(StackTrace))
+        {
+            @if (_expanded)
+            {
+                <RadzenStack Gap="0.25rem">
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color); margin: 0;">
+                            Stack Trace
+                        </RadzenText>
+                        <RadzenButton Text="@_copyText"
+                                      Icon="content_copy"
+                                      ButtonStyle="ButtonStyle.Light"
+                                      Size="ButtonSize.ExtraSmall"
+                                      Variant="Variant.Text"
+                                      Click="@CopyStackTrace" />
+                    </RadzenStack>
+                    <pre class="cs-stacktrace">@((MarkupString)FormatStackTrace(StackTrace))</pre>
+                </RadzenStack>
+            }
+            else
+            {
+                <RadzenText TextStyle="TextStyle.Caption"
+                            Style="color: var(--rz-text-disabled-color); cursor: pointer;"
+                            @onclick="ToggleStackTrace">
+                    Click to expand stack trace (@_lineCount lines)
+                </RadzenText>
+            }
+        }
+    </RadzenStack>
+</RadzenCard>
+
+@code {
+    [Parameter]
+    public string? FailureStep { get; set; }
+
+    [Parameter]
+    public string? FailureException { get; set; }
+
+    [Parameter]
+    public string? FailureReason { get; set; }
+
+    [Parameter]
+    public string? StackTrace { get; set; }
+
+    private bool _expanded;
+    private string _copyText = "Copy";
+    private int _lineCount;
+
+    protected override void OnParametersSet()
+    {
+        _lineCount = string.IsNullOrWhiteSpace(StackTrace)
+            ? 0
+            : StackTrace.Split('\n').Length;
+
+        // Auto-expand short stack traces
+        _expanded = _lineCount is > 0 and <= 5;
+    }
+
+    private void ToggleStackTrace() => _expanded = !_expanded;
+
+    private async Task CopyStackTrace()
+    {
+        if (string.IsNullOrWhiteSpace(StackTrace))
+            return;
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("traxDashboard.copyToClipboard", StackTrace);
+            _copyText = "Copied!";
+            StateHasChanged();
+            await Task.Delay(2000);
+            _copyText = "Copy";
+        }
+        catch
+        {
+            // SSR or clipboard API unavailable — silently ignore
+        }
+    }
+
+    private static string FormatStackTrace(string stackTrace)
+    {
+        var lines = stackTrace.Split('\n');
+        var formatted = new System.Text.StringBuilder();
+
+        foreach (var rawLine in lines)
+        {
+            var line = System.Net.WebUtility.HtmlEncode(rawLine.TrimEnd());
+
+            if (line.TrimStart().StartsWith("at "))
+            {
+                // "   at Namespace.Class.Method(...) in /path/file.cs:line 42"
+                line = System.Text.RegularExpressions.Regex.Replace(
+                    line,
+                    @"^(\s*)(at )([\w\.&lt;&gt;`\[\],\+]+\(.*?\))",
+                    "$1<span class=\"cs-stacktrace-at\">$2</span><span class=\"cs-stacktrace-method\">$3</span>"
+                );
+
+                line = System.Text.RegularExpressions.Regex.Replace(
+                    line,
+                    @"( in )(.*?)(:line )(\d+)",
+                    "<span class=\"cs-stacktrace-at\"> in </span><span class=\"cs-stacktrace-file\">$2</span><span class=\"cs-stacktrace-at\">:line </span><span class=\"cs-stacktrace-line\">$4</span>"
+                );
+            }
+            else if (line.Contains("---") && line.Contains("End of"))
+            {
+                line = $"<span class=\"cs-stacktrace-inner\">{line}</span>";
+            }
+            else if (line.TrimStart().Length > 0
+                     && !line.TrimStart().StartsWith("at ")
+                     && (line.Contains("Exception") || line.Contains("Error")))
+            {
+                line = $"<span class=\"cs-stacktrace-exception\">{line}</span>";
+            }
+
+            formatted.AppendLine(line);
+        }
+
+        return formatted.ToString().TrimEnd();
+    }
+}

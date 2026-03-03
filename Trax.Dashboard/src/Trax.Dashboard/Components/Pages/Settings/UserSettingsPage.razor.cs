@@ -25,6 +25,8 @@ public partial class UserSettingsPage
     private bool _showAvgDuration;
     private bool _showRecentFailures;
     private bool _showActiveManifests;
+    private bool _showRealTimeMetrics;
+    private bool _showThroughputChart;
 
     // Saved-state snapshots for dirty tracking
     private int _savedPollingIntervalSeconds;
@@ -37,6 +39,8 @@ public partial class UserSettingsPage
     private bool _savedShowAvgDuration;
     private bool _savedShowRecentFailures;
     private bool _savedShowActiveManifests;
+    private bool _savedShowRealTimeMetrics;
+    private bool _savedShowThroughputChart;
 
     private bool IsDataRefreshDirty => _pollingIntervalSeconds != _savedPollingIntervalSeconds;
 
@@ -50,7 +54,9 @@ public partial class UserSettingsPage
         || _showTopFailures != _savedShowTopFailures
         || _showAvgDuration != _savedShowAvgDuration
         || _showRecentFailures != _savedShowRecentFailures
-        || _showActiveManifests != _savedShowActiveManifests;
+        || _showActiveManifests != _savedShowActiveManifests
+        || _showRealTimeMetrics != _savedShowRealTimeMetrics
+        || _showThroughputChart != _savedShowThroughputChart;
 
     protected override async Task OnInitializedAsync()
     {
@@ -66,6 +72,8 @@ public partial class UserSettingsPage
         _showAvgDuration = DashboardSettings.ShowAvgDuration;
         _showRecentFailures = DashboardSettings.ShowRecentFailures;
         _showActiveManifests = DashboardSettings.ShowActiveManifests;
+        _showRealTimeMetrics = DashboardSettings.ShowRealTimeMetrics;
+        _showThroughputChart = DashboardSettings.ShowThroughputChart;
 
         SnapshotSavedState();
     }
@@ -107,6 +115,14 @@ public partial class UserSettingsPage
             StorageKeys.ShowActiveManifests,
             _showActiveManifests
         );
+        await DashboardSettings.SetComponentVisibilityAsync(
+            StorageKeys.ShowRealTimeMetrics,
+            _showRealTimeMetrics
+        );
+        await DashboardSettings.SetComponentVisibilityAsync(
+            StorageKeys.ShowThroughputChart,
+            _showThroughputChart
+        );
 
         SnapshotSavedState();
 
@@ -136,6 +152,8 @@ public partial class UserSettingsPage
         _showAvgDuration = DashboardSettingsService.DefaultComponentVisibility;
         _showRecentFailures = DashboardSettingsService.DefaultComponentVisibility;
         _showActiveManifests = DashboardSettingsService.DefaultComponentVisibility;
+        _showRealTimeMetrics = DashboardSettingsService.DefaultComponentVisibility;
+        _showThroughputChart = DashboardSettingsService.DefaultComponentVisibility;
 
         await DashboardSettings.SetComponentVisibilityAsync(
             StorageKeys.ShowServerHealth,
@@ -169,6 +187,14 @@ public partial class UserSettingsPage
             StorageKeys.ShowActiveManifests,
             _showActiveManifests
         );
+        await DashboardSettings.SetComponentVisibilityAsync(
+            StorageKeys.ShowRealTimeMetrics,
+            _showRealTimeMetrics
+        );
+        await DashboardSettings.SetComponentVisibilityAsync(
+            StorageKeys.ShowThroughputChart,
+            _showThroughputChart
+        );
 
         SnapshotSavedState();
 
@@ -195,5 +221,7 @@ public partial class UserSettingsPage
         _savedShowAvgDuration = _showAvgDuration;
         _savedShowRecentFailures = _showRecentFailures;
         _savedShowActiveManifests = _showActiveManifests;
+        _savedShowRealTimeMetrics = _showRealTimeMetrics;
+        _savedShowThroughputChart = _showThroughputChart;
     }
 }

@@ -16,4 +16,6 @@ public static class StorageKeys
     public const string ShowRecentFailures = "trax-show-recent-failures";
     public const string ShowActiveManifests = "trax-show-active-manifests";
     public const string ShowServerHealth = "trax-show-server-health";
+    public const string ShowRealTimeMetrics = "trax-show-real-time-metrics";
+    public const string ShowThroughputChart = "trax-show-throughput-chart";
 }
