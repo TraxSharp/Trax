@@ -1,7 +1,9 @@
 using LanguageExt;
+using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.CancellationRegistry;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 
 namespace Trax.Scheduler.Services.ManifestScheduler;
@@ -184,4 +186,33 @@ public interface IManifestScheduler
     /// parent completion and may lack standalone inputs.
     /// </remarks>
     Task<int> TriggerGroupAsync(long groupId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Cancels all currently running executions of a scheduled job.
+    /// </summary>
+    /// <param name="externalId">The external ID of the manifest whose executions should be cancelled.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The number of metadata records that had cancellation requested.</returns>
+    /// <remarks>
+    /// Sets <c>CancellationRequested = true</c> on all InProgress metadata for the manifest
+    /// (cross-server, picked up at next step boundary via CancellationCheckProvider) and also
+    /// attempts same-server instant cancellation via <see cref="ICancellationRegistry"/>.
+    /// Cancelled trains transition to <see cref="TrainState.Cancelled"/> and are not retried.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no manifest with the specified ExternalId exists.
+    /// </exception>
+    Task<int> CancelAsync(string externalId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Cancels all currently running executions for all manifests in a manifest group.
+    /// </summary>
+    /// <param name="groupId">The ID of the manifest group whose executions should be cancelled.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The number of metadata records that had cancellation requested.</returns>
+    /// <remarks>
+    /// Sets <c>CancellationRequested = true</c> on all InProgress metadata for manifests in
+    /// the group and attempts same-server instant cancellation via <see cref="ICancellationRegistry"/>.
+    /// </remarks>
+    Task<int> CancelGroupAsync(long groupId, CancellationToken ct = default);
 }

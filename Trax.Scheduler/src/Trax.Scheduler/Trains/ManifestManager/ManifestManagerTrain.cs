@@ -12,6 +12,7 @@ public class ManifestManagerTrain : ServiceTrain<Unit, Unit>, IManifestManagerTr
     protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
         Activate(input)
             .Chain<LoadManifestsStep>()
+            .Chain<CancelTimedOutJobsStep>()
             .Chain<ReapFailedJobsStep>()
             .Chain<DetermineJobsToQueueStep>()
             .Chain<CreateWorkQueueEntriesStep>()
