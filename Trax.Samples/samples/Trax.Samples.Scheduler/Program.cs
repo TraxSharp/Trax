@@ -3,6 +3,7 @@ using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Effect.Models.Manifest;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Progress.Extensions;
@@ -267,6 +268,30 @@ builder.Services.AddTraxEffects(options =>
                 ManifestNames.DelayedGreeting,
                 new HelloWorldInput { Name = "Delayed One-Off Job" },
                 TimeSpan.FromMinutes(1)
+            );
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // 9. EXCLUSION WINDOWS
+            //    Exclude() adds exclusion windows to skip execution during specific
+            //    periods. Multiple exclusions can be combined — if ANY exclusion
+            //    matches, the manifest is skipped. Built-in types:
+            //    - DaysOfWeek   — exclude specific days (e.g., weekends)
+            //    - Dates        — exclude specific dates (e.g., holidays)
+            //    - DateRange    — exclude a contiguous date range
+            //    - TimeWindow   — exclude a daily time window (e.g., maintenance)
+            //
+            //    Excluded periods are "intentionally skipped", not misfires.
+            //    When the excluded period ends, normal scheduling resumes.
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            scheduler.Schedule<IHelloWorldTrain>(
+                ManifestNames.WeekdayOnly,
+                new HelloWorldInput { Name = "Weekday Report" },
+                Every.Seconds(30),
+                o =>
+                    o.Exclude(Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday))
+                        .Exclude(
+                            Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00"))
+                        )
             );
         })
 );

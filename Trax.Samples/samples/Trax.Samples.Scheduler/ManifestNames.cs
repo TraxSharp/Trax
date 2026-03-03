@@ -34,6 +34,9 @@ public static class ManifestNames
     // ── Delayed / One-Off Jobs ───────────────────────────────────────
     public const string DelayedGreeting = "delayed-greeting";
 
+    // ── Exclusion Windows ─────────────────────────────────────────────
+    public const string WeekdayOnly = "weekday-only";
+
     // ── Table Names ──────────────────────────────────────────────────────
     public const string CustomerTable = "Customer";
     public const string TransactionTable = "Transaction";
