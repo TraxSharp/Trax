@@ -1,0 +1,18 @@
+using LanguageExt;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Samples.GameServer.Trains.Players.CleanupInactivePlayers.Steps;
+
+namespace Trax.Samples.GameServer.Trains.Players.CleanupInactivePlayers;
+
+/// <summary>
+/// Hourly maintenance train that archives players inactive for more than N days.
+/// Runs on the scheduler — never executed directly by the API.
+/// </summary>
+public class CleanupInactivePlayersTrain
+    : ServiceTrain<CleanupInactivePlayersInput, Unit>,
+        ICleanupInactivePlayersTrain
+{
+    protected override async Task<Either<Exception, Unit>> RunInternal(
+        CleanupInactivePlayersInput input
+    ) => Activate(input).Chain<IdentifyInactiveStep>().Chain<ArchivePlayersStep>().Resolve();
+}

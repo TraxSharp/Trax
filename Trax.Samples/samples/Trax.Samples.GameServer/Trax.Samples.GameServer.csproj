@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Effect" Version="*" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="*" />
+    <PackageReference Include="Trax.Mediator" Version="*" />
+    <PackageReference Include="Trax.Scheduler" Version="*" />
+  </ItemGroup>
+</Project>
