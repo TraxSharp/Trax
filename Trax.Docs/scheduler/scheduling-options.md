@@ -151,9 +151,11 @@ scheduler.Schedule<IMyTrain>(
 
 ## Management Operations
 
-`IManifestScheduler` includes methods for runtime job control: `DisableAsync`, `EnableAsync`, `TriggerAsync`, `CancelAsync`, `CancelGroupAsync`, and `ScheduleDependentAsync`. Disabled jobs remain in the database but are skipped by the ManifestManager until re-enabled. `CancelAsync` and `CancelGroupAsync` cancel all in-progress executions of a manifest or group using dual-layer cancellation (database flag + same-server CTS).
+`IManifestScheduler` includes methods for runtime job control: `DisableAsync`, `EnableAsync`, `TriggerAsync`, `CancelAsync`, `CancelGroupAsync`, `ScheduleDependentAsync`, and `ScheduleOnceAsync`. Disabled jobs remain in the database but are skipped by the ManifestManager until re-enabled. `CancelAsync` and `CancelGroupAsync` cancel all in-progress executions of a manifest or group using dual-layer cancellation (database flag + same-server CTS).
 
-*API Reference: [DisableAsync / EnableAsync / TriggerAsync / CancelAsync / CancelGroupAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}), [ScheduleDependentAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %})*
+`TriggerAsync` accepts an optional `TimeSpan delay` parameter to schedule a delayed execution of an existing manifest. `ScheduleOnceAsync` creates a new one-off manifest with `ScheduleType.Once` that fires after a delay and auto-disables on success. See [Delayed / One-Off Jobs](delayed-jobs.md) for usage patterns.
+
+*API Reference: [DisableAsync / EnableAsync / TriggerAsync / CancelAsync / CancelGroupAsync / ScheduleOnceAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}), [ScheduleDependentAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %})*
 
 ## Manifest Options
 
@@ -193,9 +195,10 @@ See [Dormant Dependents](dependent-trains.md#dormant-dependents) for full detail
 | `Cron` | Traditional scheduling | `Cron.Daily()` or `Schedule.FromCron("0 3 * * *")` |
 | `Dependent` | Runs after another manifest succeeds | `.ThenInclude()` / `.ThenIncludeMany()` / `.Include()` / `.IncludeMany()` or `ScheduleDependentAsync` |
 | `DormantDependent` | Declared dependent, activated at runtime by parent | `.Include()` / `.IncludeMany()` with `.Dormant()` option, activated via `IDormantDependentContext` |
+| `Once` | Fire-once delayed job, auto-disables on success | `ScheduleOnceAsync` or `.ScheduleOnce()` at startup |
 | `None` | Manual trigger only | Use `scheduler.TriggerAsync(externalId)` |
 
-See [Dependent Trains](dependent-trains.md) for details on chaining trains.
+See [Dependent Trains](dependent-trains.md) for details on chaining trains, and [Delayed / One-Off Jobs](delayed-jobs.md) for one-off scheduling.
 
 ## Misfire Policies
 

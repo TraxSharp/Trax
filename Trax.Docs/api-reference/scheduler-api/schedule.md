@@ -157,3 +157,4 @@ public class MyService(IManifestScheduler scheduler)
 - The `externalId` is the primary key for upsert logic. Changing it creates a new manifest rather than updating the existing one.
 - If the train type is not registered in the `TrainRegistry` (via `AddServiceTrainBus`), an `InvalidOperationException` is thrown.
 - The group is determined by `.Group(...)` on `ScheduleOptions`. When not specified, it defaults to the `externalId`. Groups are auto-created (upserted by name) during scheduling. Orphaned groups are cleaned up on startup.
+- For **one-off jobs** that should run once and auto-disable, use [ScheduleOnceAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}#scheduleonceasync) instead of `ScheduleAsync`. It creates a manifest with `ScheduleType.Once` — no `Schedule` object needed. See [Delayed / One-Off Jobs]({{ site.baseurl }}{% link scheduler/delayed-jobs.md %}) for details.

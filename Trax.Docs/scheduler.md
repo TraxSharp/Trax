@@ -68,6 +68,22 @@ Like a lost shipment in a postal system, when a job fails more times than `MaxRe
 
 Operators can retry (which creates a new execution) or acknowledge (mark as handled without retry).
 
+### Delayed / One-Off Jobs
+
+Not all work is recurring. `TriggerAsync(externalId, delay)` queues a delayed execution of an existing manifest. `ScheduleOnceAsync` creates a new manifest with `ScheduleType.Once` that fires after a delay and auto-disables on success. See [Delayed / One-Off Jobs](scheduler/delayed-jobs.md).
+
+```csharp
+// Delayed trigger of an existing manifest
+await scheduler.TriggerAsync("sync-customers", TimeSpan.FromMinutes(30));
+
+// One-off job — runs once after 24 hours, then auto-disables
+await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput>(
+    new SendReminderInput { UserId = userId },
+    TimeSpan.FromHours(24));
+```
+
+*API Reference: [TriggerAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}#triggerasync), [ScheduleOnceAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}#scheduleonceasync)*
+
 ### Dependent Manifests
 
 A manifest can depend on another manifest — one train's arrival triggers another's departure. Instead of running on a timer, it fires when its parent's `LastSuccessfulRun` advances past the dependent's own. This is how you build ETL chains, post-processing steps, or any train that should only run after another succeeds. See [Dependent Trains](scheduler/dependent-trains.md).
@@ -144,7 +160,7 @@ When `groupId` is not specified, it defaults to the manifest's `externalId`. See
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-The **SchedulerStartupService** is an `IHostedService` that runs once on startup. It seeds any manifests configured via `.Schedule()`, `.ScheduleMany()`, `.ThenInclude()`, `.ThenIncludeMany()`, `.Include()`, or `.IncludeMany()`, recovers stuck jobs, and cleans up orphaned manifest groups. It completes before the polling services start.
+The **SchedulerStartupService** is an `IHostedService` that runs once on startup. It seeds any manifests configured via `.Schedule()`, `.ScheduleMany()`, `.ScheduleOnce()`, `.ThenInclude()`, `.ThenIncludeMany()`, `.Include()`, or `.IncludeMany()`, recovers stuck jobs, and cleans up orphaned manifest groups. It completes before the polling services start.
 
 The **ManifestManagerPollingService** and **JobDispatcherPollingService** are independent `BackgroundService` instances, each with their own configurable polling interval (default: 5 seconds). They communicate via the work queue — ManifestManager writes entries, JobDispatcher reads them. Running independently means JobDispatcher may not see ManifestManager's freshly-queued entries until its next tick, but no work is lost. Both services are safe to run across multiple server instances — see [Multi-Server Concurrency](scheduler/concurrency.md).
 
@@ -163,7 +179,7 @@ For complete method signatures, all parameters, and detailed usage examples for 
 - [Schedule / ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}) — single recurring train
 - [ScheduleMany / ScheduleManyAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule-many.md %}) — batch scheduling with pruning
 - [Dependent Scheduling]({{ site.baseurl }}{% link api-reference/scheduler-api/dependent-scheduling.md %}) — ThenInclude, ThenIncludeMany, Include, IncludeMany, ScheduleDependentAsync
-- [Manifest Management]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}) — DisableAsync, EnableAsync, TriggerAsync
+- [Manifest Management]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}) — DisableAsync, EnableAsync, TriggerAsync, ScheduleOnceAsync
 - [Scheduling Helpers]({{ site.baseurl }}{% link api-reference/scheduler-api/scheduling-helpers.md %}) — Every, Cron, Schedule record, ManifestOptions
 
 ## Sample Project

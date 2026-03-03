@@ -42,18 +42,62 @@ Task EnableAsync(string externalId, CancellationToken ct = default)
 
 ## TriggerAsync
 
-Triggers immediate execution of a scheduled job, independent of its normal schedule.
+Triggers execution of a scheduled job, independent of its normal schedule. The overload with `delay` creates a work queue entry with a future `ScheduledAt` — the JobDispatcher skips it until that time arrives.
 
 ```csharp
 Task TriggerAsync(string externalId, CancellationToken ct = default)
 ```
 
+```csharp
+Task TriggerAsync(string externalId, TimeSpan delay, CancellationToken ct = default)
+```
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `externalId` | `string` | Yes | The `ExternalId` of the manifest to trigger |
+| `delay` | `TimeSpan` | No | How far in the future to schedule the execution. When omitted, the job is queued for immediate dispatch. |
 | `ct` | `CancellationToken` | No | Cancellation token |
 
 **Throws**: `InvalidOperationException` when no manifest with the specified `ExternalId` exists.
+
+## ScheduleOnceAsync
+
+Creates a one-off manifest with `ScheduleType.Once` that fires after the specified delay and auto-disables on success. Unlike `TriggerAsync`, this does not require a pre-existing manifest.
+
+```csharp
+Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+    TInput input,
+    TimeSpan delay,
+    Action<ScheduleOptions>? options = null,
+    CancellationToken ct = default
+)
+    where TTrain : IServiceTrain<TInput, Unit>
+    where TInput : IManifestProperties
+```
+
+```csharp
+Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+    string externalId,
+    TInput input,
+    TimeSpan delay,
+    Action<ScheduleOptions>? options = null,
+    CancellationToken ct = default
+)
+    where TTrain : IServiceTrain<TInput, Unit>
+    where TInput : IManifestProperties
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `externalId` | `string` | No | A unique identifier for this one-off job. When omitted, auto-generated as `once-{guid}`. |
+| `input` | `TInput` | Yes | The input data passed to the train on execution. |
+| `delay` | `TimeSpan` | Yes | How far in the future to schedule the execution. `ScheduledAt` is set to `DateTime.UtcNow + delay`. |
+| `options` | `Action<ScheduleOptions>?` | No | Optional callback to configure manifest options (MaxRetries, Timeout, Priority, Group). |
+| `ct` | `CancellationToken` | No | Cancellation token |
+
+**Returns**: `Task<Manifest>` — the created manifest record.
+
+**Auto-disable**: When the job completes successfully, `IsEnabled` is set to `false` on the manifest. The manifest remains in the database for audit purposes but is skipped by the ManifestManager on subsequent cycles. If the job fails, normal retry logic applies until it succeeds (and auto-disables) or exceeds `MaxRetries` (and is dead-lettered).
 
 ## CancelAsync
 
@@ -113,6 +157,13 @@ public class SchedulerController(IManifestScheduler scheduler) : ControllerBase
         return Ok();
     }
 
+    [HttpPost("jobs/{externalId}/trigger-delayed")]
+    public async Task<IActionResult> TriggerDelayed(string externalId, [FromQuery] int delayMinutes)
+    {
+        await scheduler.TriggerAsync(externalId, TimeSpan.FromMinutes(delayMinutes));
+        return Ok();
+    }
+
     [HttpPost("jobs/{externalId}/cancel")]
     public async Task<IActionResult> Cancel(string externalId)
     {
@@ -126,13 +177,24 @@ public class SchedulerController(IManifestScheduler scheduler) : ControllerBase
         var count = await scheduler.CancelGroupAsync(groupId);
         return Ok(new { cancelled = count });
     }
+
+    [HttpPost("jobs/schedule-once")]
+    public async Task<IActionResult> ScheduleOnce([FromBody] ScheduleOnceRequest request)
+    {
+        var manifest = await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput>(
+            request.ExternalId,
+            new SendReminderInput { UserId = request.UserId },
+            TimeSpan.FromMinutes(request.DelayMinutes));
+        return Ok(new { manifestId = manifest.Id, externalId = manifest.ExternalId });
+    }
 }
 ```
 
 ## Remarks
 
 - `DisableAsync` sets `IsEnabled = false` on the manifest. The ManifestManager skips disabled manifests during polling.
-- `TriggerAsync` creates a new execution independent of the regular schedule — the job's normal schedule continues unaffected. The work queue entry inherits the manifest's stored priority (no `DependentPriorityBoost` is applied for manual triggers).
+- `TriggerAsync` creates a new execution independent of the regular schedule — the job's normal schedule continues unaffected. The work queue entry inherits the manifest's stored priority (no `DependentPriorityBoost` is applied for manual triggers). The `delay` overload sets `ScheduledAt` on the work queue entry; the JobDispatcher skips entries with a future `ScheduledAt`.
+- `ScheduleOnceAsync` creates a manifest with `ScheduleType.Once`. The manifest auto-disables (`IsEnabled = false`) after its first successful execution. If no `externalId` is provided, one is generated as `once-{guid}`. Uses upsert semantics — safe to call with the same `externalId` without creating duplicates.
 - `CancelAsync` uses dual-layer cancellation: a database flag (`CancellationRequested = true`) for cross-server support, plus `ICancellationRegistry.TryCancel()` for same-server instant cancellation. Cancelled trains are **not retried** and **do not create dead letters**.
 - `CancelGroupAsync` applies the same dual-layer cancellation to all in-progress executions across all manifests in the group.
-- All methods (except `CancelGroupAsync`) require the manifest to already exist. Use [ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}) to create manifests first.
+- All methods (except `CancelGroupAsync` and `ScheduleOnceAsync`) require the manifest to already exist. Use [ScheduleAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/schedule.md %}) to create manifests first.

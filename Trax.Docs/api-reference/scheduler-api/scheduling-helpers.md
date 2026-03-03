@@ -123,6 +123,7 @@ Converts the schedule to a 5-field cron expression. For cron-type schedules, ret
 | `Interval` | Runs at a fixed time interval |
 | `OnDemand` | Batch operations triggered programmatically |
 | `Dependent` | Runs after a parent manifest completes successfully |
+| `Once` | Fires once at `ScheduledAt`, then auto-disables on success. Created by [ScheduleOnceAsync]({{ site.baseurl }}{% link api-reference/scheduler-api/manifest-management.md %}#scheduleonceasync). See [Delayed / One-Off Jobs]({{ site.baseurl }}{% link scheduler/delayed-jobs.md %}). |
 
 ### MisfirePolicy Enum
 
