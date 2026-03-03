@@ -181,7 +181,7 @@ public class SchedulerConfiguration
     /// WorkQueue, DeadLetter, and Metadata records. This ensures that removing a schedule
     /// definition from code also removes it from the database on the next startup.
     /// Disable this if you create manifests dynamically at runtime via
-    /// <see cref="Services.ManifestScheduler.IManifestScheduler"/>.
+    /// <see cref="Services.TraxScheduler.ITraxScheduler"/>.
     /// </remarks>
     public bool PruneOrphanedManifests { get; set; } = true;
 }

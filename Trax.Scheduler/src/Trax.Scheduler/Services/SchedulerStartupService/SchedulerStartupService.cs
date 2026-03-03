@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Services.ManifestScheduler;
+using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Scheduler.Services.SchedulerStartupService;
 
@@ -84,7 +84,7 @@ internal class SchedulerStartupService(
                 configuration.PendingManifests.Count
             );
 
-            var scheduler = scope.ServiceProvider.GetRequiredService<IManifestScheduler>();
+            var scheduler = scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
 
             foreach (var pending in configuration.PendingManifests)
             {

@@ -5,9 +5,9 @@ using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Services.JobDispatcherPollingService;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
-using Trax.Scheduler.Services.ManifestScheduler;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.SchedulerStartupService;
+using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Utilities;
 
@@ -77,8 +77,8 @@ public partial class SchedulerConfigurationBuilder
             CancellationRegistry
         >();
 
-        // Register IManifestScheduler
-        _parentBuilder.ServiceCollection.AddScoped<IManifestScheduler, ManifestScheduler>();
+        // Register ITraxScheduler
+        _parentBuilder.ServiceCollection.AddScoped<ITraxScheduler, TraxScheduler>();
 
         // Register IDormantDependentContext with forwarding so both concrete type
         // (for ExecuteScheduledTrainStep.Initialize) and interface (for user steps)

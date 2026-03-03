@@ -9,7 +9,7 @@ namespace Trax.Scheduler.Configuration;
 /// <remarks>
 /// ManifestOptions provides fine-grained control over individual job behavior.
 /// Default values are applied when scheduling a job, and can be overridden
-/// via the configure action in <see cref="Services.ManifestScheduler.IManifestScheduler.ScheduleAsync"/>.
+/// via the configure action in <see cref="Services.TraxScheduler.ITraxScheduler.ScheduleAsync"/>.
 /// </remarks>
 /// <example>
 /// <code>

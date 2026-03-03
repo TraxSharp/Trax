@@ -1,5 +1,5 @@
 using Trax.Effect.Models.Manifest;
-using Trax.Scheduler.Services.ManifestScheduler;
+using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Scheduler.Configuration;
 
@@ -22,11 +22,11 @@ internal class PendingManifest
     /// <remarks>
     /// This closure captures the TTrain and TInput generic types at configuration time,
     /// avoiding the need for reflection when the manifest is actually created during startup.
-    /// The closure is invoked with an <see cref="IManifestScheduler"/> instance to perform
+    /// The closure is invoked with an <see cref="ITraxScheduler"/> instance to perform
     /// the actual scheduling operation.
     /// </remarks>
     public required Func<
-        IManifestScheduler,
+        ITraxScheduler,
         CancellationToken,
         Task<Manifest>
     > ScheduleFunc { get; init; }

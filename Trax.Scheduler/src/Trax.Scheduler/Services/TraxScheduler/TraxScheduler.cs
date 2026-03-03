@@ -14,17 +14,17 @@ using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 
-namespace Trax.Scheduler.Services.ManifestScheduler;
+namespace Trax.Scheduler.Services.TraxScheduler;
 
 /// <summary>
-/// Implementation of <see cref="IManifestScheduler"/> that provides type-safe manifest scheduling.
+/// Implementation of <see cref="ITraxScheduler"/> that provides type-safe manifest scheduling.
 /// </summary>
-public class ManifestScheduler(
+public class TraxScheduler(
     IDataContextProviderFactory dataContextFactory,
     ITrainRegistry trainRegistry,
     ICancellationRegistry cancellationRegistry,
-    ILogger<ManifestScheduler> logger
-) : IManifestScheduler
+    ILogger<TraxScheduler> logger
+) : ITraxScheduler
 {
     /// <inheritdoc />
     public async Task<Manifest> ScheduleAsync<TTrain, TInput>(

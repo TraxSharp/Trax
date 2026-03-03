@@ -6,12 +6,12 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 
-namespace Trax.Scheduler.Services.ManifestScheduler;
+namespace Trax.Scheduler.Services.TraxScheduler;
 
 /// <summary>
 /// Provides a type-safe API for scheduling trains as recurring jobs.
 /// </summary>
-public interface IManifestScheduler
+public interface ITraxScheduler
 {
     /// <summary>
     /// Schedules a single train to run on a recurring basis.

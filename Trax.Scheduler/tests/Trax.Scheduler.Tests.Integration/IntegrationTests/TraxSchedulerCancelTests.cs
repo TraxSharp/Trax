@@ -8,21 +8,21 @@ using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Scheduler.Services.CancellationRegistry;
-using Trax.Scheduler.Services.ManifestScheduler;
+using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Tests.Integration.Examples.Trains;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 [TestFixture]
-public class ManifestSchedulerCancelTests : TestSetup
+public class TraxSchedulerCancelTests : TestSetup
 {
-    private IManifestScheduler _scheduler = null!;
+    private ITraxScheduler _scheduler = null!;
     private ICancellationRegistry _registry = null!;
 
     public override async Task TestSetUp()
     {
         await base.TestSetUp();
-        _scheduler = Scope.ServiceProvider.GetRequiredService<IManifestScheduler>();
+        _scheduler = Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
         _registry = Scope.ServiceProvider.GetRequiredService<ICancellationRegistry>();
     }
 

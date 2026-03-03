@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Scheduler.Services.ManifestScheduler;
+using Trax.Scheduler.Services.TraxScheduler;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 
 namespace Trax.Scheduler.Configuration;
@@ -35,7 +35,7 @@ public partial class SchedulerConfigurationBuilder
                 ExternalId = externalId,
                 ExpectedExternalIds = [externalId],
                 ScheduleFunc = (scheduler, ct) =>
-                    ((ManifestScheduler)scheduler).ScheduleAsyncUntyped(
+                    ((TraxScheduler)scheduler).ScheduleAsyncUntyped(
                         trainType,
                         inputType,
                         externalId,
@@ -84,7 +84,7 @@ public partial class SchedulerConfigurationBuilder
                 ExternalId = externalId,
                 ExpectedExternalIds = [externalId],
                 ScheduleFunc = (scheduler, ct) =>
-                    ((ManifestScheduler)scheduler).ScheduleDependentAsyncUntyped(
+                    ((TraxScheduler)scheduler).ScheduleDependentAsyncUntyped(
                         trainType,
                         inputType,
                         externalId,
@@ -132,7 +132,7 @@ public partial class SchedulerConfigurationBuilder
                 ExternalId = externalId,
                 ExpectedExternalIds = [externalId],
                 ScheduleFunc = (scheduler, ct) =>
-                    ((ManifestScheduler)scheduler).ScheduleDependentAsyncUntyped(
+                    ((TraxScheduler)scheduler).ScheduleDependentAsyncUntyped(
                         trainType,
                         inputType,
                         externalId,
@@ -176,7 +176,7 @@ public partial class SchedulerConfigurationBuilder
                 ExternalId = externalId,
                 ExpectedExternalIds = [externalId],
                 ScheduleFunc = (scheduler, ct) =>
-                    ((ManifestScheduler)scheduler).ScheduleOnceAsyncUntyped(
+                    ((TraxScheduler)scheduler).ScheduleOnceAsyncUntyped(
                         trainType,
                         inputType,
                         externalId,
@@ -226,7 +226,7 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = itemList.Select(i => i.Id).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await ((ManifestScheduler)scheduler).ScheduleManyAsyncUntyped(
+                    var results = await ((TraxScheduler)scheduler).ScheduleManyAsyncUntyped(
                         trainType,
                         inputType,
                         itemList,
@@ -319,7 +319,7 @@ public partial class SchedulerConfigurationBuilder
                 ScheduleFunc = async (scheduler, ct) =>
                 {
                     var results = await (
-                        (ManifestScheduler)scheduler
+                        (TraxScheduler)scheduler
                     ).ScheduleManyDependentAsyncUntyped(
                         trainType,
                         inputType,
@@ -400,7 +400,7 @@ public partial class SchedulerConfigurationBuilder
                 ScheduleFunc = async (scheduler, ct) =>
                 {
                     var results = await (
-                        (ManifestScheduler)scheduler
+                        (TraxScheduler)scheduler
                     ).ScheduleManyDependentAsyncUntyped(
                         trainType,
                         inputType,
