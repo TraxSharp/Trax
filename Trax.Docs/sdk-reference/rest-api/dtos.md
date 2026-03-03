@@ -49,7 +49,9 @@ public record TrainInfo(
     string InputTypeName,
     string OutputTypeName,
     string Lifetime,
-    IReadOnlyList<InputPropertySchema> InputSchema
+    IReadOnlyList<InputPropertySchema> InputSchema,
+    IReadOnlyList<string> RequiredPolicies,
+    IReadOnlyList<string> RequiredRoles
 );
 ```
 
@@ -61,6 +63,8 @@ public record TrainInfo(
 | `OutputTypeName` | `string` | Fully qualified name of the train's output type (`"Unit"` for void trains) |
 | `Lifetime` | `string` | DI service lifetime — `"Scoped"`, `"Transient"`, or `"Singleton"` |
 | `InputSchema` | `InputPropertySchema[]` | Public properties of the input type, generated via reflection |
+| `RequiredPolicies` | `string[]` | Authorization policy names from `[TraxAuthorize]` attributes. Empty array if no per-train auth. |
+| `RequiredRoles` | `string[]` | Role names from `[TraxAuthorize(Roles = "...")]` attributes. Empty array if no roles required. |
 
 ### InputPropertySchema
 

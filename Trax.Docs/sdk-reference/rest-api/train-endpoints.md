@@ -23,14 +23,14 @@ Returns all trains registered via `AddServiceTrainBus`, including their input ty
 ```json
 [
   {
-    "serviceTypeName": "Trax.Samples.Api.Rest.Trains.Greet.IGreetTrain",
-    "implementationTypeName": "Trax.Samples.Api.Rest.Trains.Greet.GreetTrain",
-    "inputTypeName": "Trax.Samples.Api.Rest.Trains.Greet.GreetInput",
+    "serviceTypeName": "Trax.Samples.GameServer.Trains.Players.LookupPlayer.ILookupPlayerTrain",
+    "implementationTypeName": "Trax.Samples.GameServer.Trains.Players.LookupPlayer.LookupPlayerTrain",
+    "inputTypeName": "Trax.Samples.GameServer.Trains.Players.LookupPlayer.LookupPlayerInput",
     "outputTypeName": "Unit",
     "lifetime": "Scoped",
     "inputSchema": [
       {
-        "name": "Name",
+        "name": "PlayerId",
         "typeName": "String",
         "isNullable": true
       }
@@ -39,7 +39,7 @@ Returns all trains registered via `AddServiceTrainBus`, including their input ty
 ]
 ```
 
-Each `TrainInfo` includes an `inputSchema` array describing the public properties of the train's input type. This is generated via reflection — property names, type names, and nullability are reported.
+Each `TrainInfo` includes an `inputSchema` array describing the public properties of the train's input type, plus `requiredPolicies` and `requiredRoles` arrays from any `[TraxAuthorize]` attributes on the train class. All generated via reflection.
 
 ### curl
 
@@ -63,8 +63,8 @@ Creates a `WorkQueue` entry in the database. The scheduler picks it up on its ne
 
 ```json
 {
-  "trainName": "Trax.Samples.Api.Rest.Trains.Greet.IGreetTrain",
-  "input": { "name": "Alice" },
+  "trainName": "Trax.Samples.GameServer.Trains.Players.LookupPlayer.ILookupPlayerTrain",
+  "input": { "playerId": "player-42" },
   "priority": 10
 }
 ```
@@ -91,8 +91,8 @@ Creates a `WorkQueue` entry in the database. The scheduler picks it up on its ne
 curl -X POST http://localhost:5000/trax/api/trains/queue \
   -H "Content-Type: application/json" \
   -d '{
-    "trainName": "Trax.Samples.Api.Rest.Trains.Greet.IGreetTrain",
-    "input": { "name": "Alice" },
+    "trainName": "Trax.Samples.GameServer.Trains.Players.LookupPlayer.ILookupPlayerTrain",
+    "input": { "playerId": "player-42" },
     "priority": 10
   }'
 ```
@@ -114,8 +114,8 @@ The train's assemblies must be registered on the API machine — this endpoint c
 
 ```json
 {
-  "trainName": "Trax.Samples.Api.Rest.Trains.Greet.IGreetTrain",
-  "input": { "name": "Bob" }
+  "trainName": "Trax.Samples.GameServer.Trains.Players.LookupPlayer.ILookupPlayerTrain",
+  "input": { "playerId": "player-99" }
 }
 ```
 
@@ -139,8 +139,8 @@ The train's assemblies must be registered on the API machine — this endpoint c
 curl -X POST http://localhost:5000/trax/api/trains/run \
   -H "Content-Type: application/json" \
   -d '{
-    "trainName": "Trax.Samples.Api.Rest.Trains.Greet.IGreetTrain",
-    "input": { "name": "Bob" }
+    "trainName": "Trax.Samples.GameServer.Trains.Players.LookupPlayer.ILookupPlayerTrain",
+    "input": { "playerId": "player-99" }
   }'
 ```
 
@@ -149,3 +149,4 @@ curl -X POST http://localhost:5000/trax/api/trains/run \
 - The `trainName` must match the fully qualified name of the train's **service interface** (e.g. `IGreetTrain`), not the implementation class. This is the same name returned by `GET /trains` in the `serviceTypeName` field.
 - The `input` JSON is passed as a raw `JsonElement` and deserialized server-side using the input type discovered from `ITrainDiscoveryService`. If the train name doesn't match any registered train, you'll get an error response.
 - **Queue vs. Run**: Queue writes to the database and returns immediately — the scheduler handles execution. Run blocks and executes in the API process. Choose based on whether you need the result inline or want to offload work.
+- **Authorization**: If a train is decorated with `[TraxAuthorize]`, the queue and run endpoints check the current user against the requirements before executing. On failure, both return `403 Forbidden` with a JSON body `{ "error": "Authorization failed for train '...': ..." }`. See [Authorization]({{ site.baseurl }}{% link authorization.md %}).

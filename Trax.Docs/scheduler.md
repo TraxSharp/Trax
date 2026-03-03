@@ -186,4 +186,4 @@ The same scheduler operations are also available through the [REST API]({{ site.
 
 ## Sample Project
 
-A working example with the built-in PostgreSQL task server, bulk scheduling, metadata cleanup, and the dashboard is in [`samples/Trax.Samples.Scheduler`](https://github.com/Theauxm/Trax.Core/tree/main/samples/Trax.Samples.Scheduler).
+A working example with the built-in PostgreSQL task server, bulk scheduling, metadata cleanup, and the dashboard is in [`samples/Trax.Samples.GameServer.Scheduler`](https://github.com/Theauxm/Trax.Core/tree/main/samples/Trax.Samples.GameServer.Scheduler). The scheduler runs alongside a separate API process (`Trax.Samples.GameServer.Rest` or `Trax.Samples.GameServer.GraphQL`) that queues work for it.

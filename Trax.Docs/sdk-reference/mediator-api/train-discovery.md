@@ -44,6 +44,9 @@ public class TrainRegistration
     public required string ImplementationTypeName { get; init; }
     public required string InputTypeName { get; init; }
     public required string OutputTypeName { get; init; }
+
+    public required IReadOnlyList<string> RequiredPolicies { get; init; }
+    public required IReadOnlyList<string> RequiredRoles { get; init; }
 }
 ```
 
@@ -60,6 +63,8 @@ public class TrainRegistration
 | `ImplementationTypeName` | `string` | Friendly display name for `ImplementationType` |
 | `InputTypeName` | `string` | Friendly display name for `InputType` |
 | `OutputTypeName` | `string` | Friendly display name for `OutputType` |
+| `RequiredPolicies` | `IReadOnlyList<string>` | Authorization policy names from `[TraxAuthorize]` attributes on the implementation class. Empty if no auth required. |
+| `RequiredRoles` | `IReadOnlyList<string>` | Role names from `[TraxAuthorize(Roles = "...")]` attributes. Empty if no roles required. |
 
 ## How Discovery Works
 
@@ -68,7 +73,8 @@ public class TrainRegistration
 3. Skips concrete-type registrations that come from the dual-registration pattern (`AddScopedTraxRoute` registers both `TImplementation` and `TService`).
 4. Extracts `InputType` and `OutputType` from the generic arguments.
 5. **Deduplicates by `InputType`**: when multiple registrations share the same input type (interface + concrete from dual-registration), prefers the interface as `ServiceType` and the concrete class as `ImplementationType`.
-6. Caches the result — the list is computed once and reused for the lifetime of the service.
+6. Reads `[TraxAuthorize]` attributes from the implementation type and extracts policy and role requirements into `RequiredPolicies` and `RequiredRoles`.
+7. Caches the result — the list is computed once and reused for the lifetime of the service.
 
 ## Example
 

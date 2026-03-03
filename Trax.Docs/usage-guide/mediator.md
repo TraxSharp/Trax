@@ -148,6 +148,6 @@ public async Task<IActionResult> Run(string trainName, [FromBody] JsonElement in
 }
 ```
 
-Both methods look up the train by its fully qualified service type name (e.g., `Trax.Samples.Api.Rest.Trains.Greet.IGreetTrain`), deserialize the JSON to the correct input type, and handle the execution. If the train name doesn't match any registered train, an `InvalidOperationException` is thrown.
+Both methods look up the train by its fully qualified service type name (e.g., `Trax.Samples.GameServer.Trains.Players.LookupPlayer.ILookupPlayerTrain`), deserialize the JSON to the correct input type, and handle the execution. If the train name doesn't match any registered train, an `InvalidOperationException` is thrown.
 
 *SDK Reference: [TrainExecution]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-execution.md %})*

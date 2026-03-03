@@ -160,18 +160,31 @@ app.UseAuthentication();
 app.UseAuthorization();
 ```
 
+### Per-Train Authorization
+
+Since all trains share the same endpoints, endpoint-level auth can only answer "can this user access the API?" For finer control, decorate individual train classes with `[TraxAuthorize]`:
+
+```csharp
+[TraxAuthorize("Admin")]
+public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrain { ... }
+```
+
+When the API receives a request to run or queue this train, it checks the current user against the policy before executing. Trains without the attribute have no per-train restriction. See the [Authorization]({{ site.baseurl }}{% link authorization.md %}) guide for details.
+
 ## Named GraphQL Schema
 
 The GraphQL API registers on a **named HotChocolate schema** (`"trax"`) rather than the default unnamed schema. This means it won't conflict with your own `AddGraphQLServer()` calls — both can coexist in the same application at different paths.
 
 ## Sample Projects
 
-Working examples are in `Trax.Samples`:
+Working examples are in `Trax.Samples`, themed as a game server:
 
-- **`samples/Trax.Samples.Api.Rest`** — Standalone REST API with a sample train, scheduled job, and health check
-- **`samples/Trax.Samples.Api.GraphQL`** — Standalone GraphQL API with Banana Cake Pop IDE
+- **`samples/Trax.Samples.GameServer`** — Shared class library with all train definitions and API key authentication
+- **`samples/Trax.Samples.GameServer.Rest`** — REST API host with fake API key auth, per-train authorization, and no scheduler
+- **`samples/Trax.Samples.GameServer.GraphQL`** — GraphQL API host with Banana Cake Pop IDE, same auth setup
+- **`samples/Trax.Samples.GameServer.Scheduler`** — Scheduler host with dashboard, all scheduling patterns demonstrated
 
-Both samples include a `GreetTrain` for testing, a 1-minute scheduled job for query data, and `appsettings.json` pointing to the local PostgreSQL instance.
+The API and Scheduler run as separate processes against the same database. The API handles lightweight trains directly (`RunAsync`) and queues heavy work for the scheduler (`QueueAsync`).
 
 ## SDK Reference
 
@@ -179,5 +192,6 @@ For complete endpoint documentation, request/response schemas, and method signat
 
 - [REST API]({{ site.baseurl }}{% link sdk-reference/rest-api.md %}) — endpoint mappings, request/response DTOs, curl examples
 - [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api.md %}) — queries, mutations, HotChocolate setup
+- [Authorization]({{ site.baseurl }}{% link authorization.md %}) — per-train authorization with `[TraxAuthorize]`
 - [TrainDiscovery]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-discovery.md %}) — how train discovery works
 - [TrainExecution]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-execution.md %}) — queue and run services

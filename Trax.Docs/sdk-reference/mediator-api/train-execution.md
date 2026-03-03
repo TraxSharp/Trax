@@ -66,15 +66,17 @@ Task<QueueTrainResult> QueueAsync(
 **Throws**:
 - `InvalidOperationException` — if no train is registered with the given name. The message includes a hint to use `ITrainDiscoveryService.DiscoverTrains()` to list available trains.
 - `InvalidOperationException` — if JSON deserialization returns null.
+- `TrainAuthorizationException` — if the train has `[TraxAuthorize]` requirements that the current user does not satisfy. Only applies when `ITrainAuthorizationService` is registered (i.e., the API layer is in use).
 
 ### What it does
 
 1. Looks up the train by `trainName` via `ITrainDiscoveryService`.
-2. Deserializes `inputJson` to the train's `InputType`.
-3. Re-serializes the input using manifest serialization options (normalizes the JSON).
-4. Creates a `WorkQueue` entry with the train name, serialized input, input type name, and priority.
-5. Persists the entry via the data context.
-6. Returns the entry's ID and external ID.
+2. If an `ITrainAuthorizationService` is registered, checks the user against the train's authorization requirements. Throws on failure.
+3. Deserializes `inputJson` to the train's `InputType`.
+4. Re-serializes the input using manifest serialization options (normalizes the JSON).
+5. Creates a `WorkQueue` entry with the train name, serialized input, input type name, and priority.
+6. Persists the entry via the data context.
+7. Returns the entry's ID and external ID.
 
 ## RunAsync
 
@@ -104,15 +106,17 @@ Task<RunTrainResult> RunAsync(
 - `InvalidOperationException` — if no train is registered with the given name.
 - `InvalidOperationException` — if JSON deserialization returns null.
 - `TrainException` — if the train itself fails during execution (propagated from `ITrainBus`).
+- `TrainAuthorizationException` — if the train has `[TraxAuthorize]` requirements that the current user does not satisfy. Only applies when `ITrainAuthorizationService` is registered.
 
 ### What it does
 
 1. Looks up the train by `trainName` via `ITrainDiscoveryService`.
-2. Deserializes `inputJson` to the train's `InputType`.
-3. Creates a `Metadata` record with a generated external ID.
-4. Persists the metadata via the data context.
-5. Calls `ITrainBus.RunAsync(input, ct, metadata)` — blocks until completion.
-6. Returns the metadata ID.
+2. If an `ITrainAuthorizationService` is registered, checks the user against the train's authorization requirements. Throws on failure.
+3. Deserializes `inputJson` to the train's `InputType`.
+4. Creates a `Metadata` record with a generated external ID.
+5. Persists the metadata via the data context.
+6. Calls `ITrainBus.RunAsync(input, ct, metadata)` — blocks until completion.
+7. Returns the metadata ID.
 
 ## Examples
 
