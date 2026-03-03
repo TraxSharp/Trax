@@ -173,6 +173,18 @@ public class Manifest : IModel
     [Column("misfire_threshold_seconds")]
     public int? MisfireThresholdSeconds { get; set; }
 
+    /// <summary>
+    /// Gets or sets the earliest time this manifest should be executed.
+    /// </summary>
+    /// <remarks>
+    /// Used with <see cref="ScheduleType.Once"/> to define when the one-off job should fire.
+    /// The ManifestManager will queue a work queue entry when <c>ScheduledAt &lt;= now</c>
+    /// and <see cref="LastSuccessfulRun"/> is null. After successful execution, the manifest
+    /// is automatically disabled.
+    /// </remarks>
+    [Column("scheduled_at")]
+    public DateTime? ScheduledAt { get; set; }
+
     #endregion
 
     #endregion
@@ -235,6 +247,7 @@ public class Manifest : IModel
             Priority = manifest.Priority,
             MisfirePolicy = manifest.MisfirePolicy,
             MisfireThresholdSeconds = manifest.MisfireThresholdSeconds,
+            ScheduledAt = manifest.ScheduledAt,
         };
 
         if (manifest.Properties != null)

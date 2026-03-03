@@ -80,4 +80,14 @@ public enum ScheduleType
     /// which dependents fire and with what input.
     /// </remarks>
     DormantDependent = 5,
+
+    /// <summary>
+    /// The manifest fires exactly once at a scheduled time, then auto-disables.
+    /// </summary>
+    /// <remarks>
+    /// Use this for delayed one-off jobs (e.g., "send reminder in 30 minutes").
+    /// The <see cref="Manifest.Manifest.ScheduledAt"/> property must be set.
+    /// After successful execution, the manifest is automatically disabled by the scheduler.
+    /// </remarks>
+    Once = 6,
 }

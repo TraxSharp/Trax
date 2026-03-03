@@ -66,6 +66,17 @@ public class WorkQueue : IModel
     public DateTime? DispatchedAt { get; set; }
 
     /// <summary>
+    /// The earliest time this work queue entry should be dispatched.
+    /// </summary>
+    /// <remarks>
+    /// When set, the JobDispatcher will skip this entry until <c>ScheduledAt &lt;= now</c>.
+    /// Used by <c>TriggerAsync(externalId, delay)</c> to create delayed triggers without
+    /// affecting the manifest's normal schedule. Null means dispatch immediately.
+    /// </remarks>
+    [Column("scheduled_at")]
+    public DateTime? ScheduledAt { get; set; }
+
+    /// <summary>
     /// Dispatch priority for this entry. Higher values (up to 31) are dispatched first.
     /// </summary>
     [Column("priority")]
@@ -114,6 +125,7 @@ public class WorkQueue : IModel
             InputTypeName = dto.InputTypeName,
             ManifestId = dto.ManifestId,
             Priority = Math.Clamp(dto.Priority, MinPriority, MaxPriority),
+            ScheduledAt = dto.ScheduledAt,
             Status = WorkQueueStatus.Queued,
             CreatedAt = DateTime.UtcNow,
         };

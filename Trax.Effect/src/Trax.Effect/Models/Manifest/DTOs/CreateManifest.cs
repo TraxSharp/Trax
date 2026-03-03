@@ -70,5 +70,11 @@ public class CreateManifest
     /// </summary>
     public int? MisfireThresholdSeconds { get; set; }
 
+    /// <summary>
+    /// The earliest time this manifest should be executed.
+    /// Used with <see cref="ScheduleType.Once"/> for delayed one-off jobs.
+    /// </summary>
+    public DateTime? ScheduledAt { get; set; }
+
     #endregion
 }
