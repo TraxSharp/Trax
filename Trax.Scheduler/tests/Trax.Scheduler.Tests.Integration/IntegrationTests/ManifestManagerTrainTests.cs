@@ -988,6 +988,92 @@ public class ManifestManagerTrainTests : TestSetup
 
     #endregion
 
+    #region Once Schedule Tests
+
+    [Test]
+    public async Task Run_WhenOnceManifestIsDue_EnqueuesJob()
+    {
+        // Arrange - Create a Once manifest with ScheduledAt in the past that has never run
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Once,
+            scheduledAt: DateTime.UtcNow.AddMinutes(-5),
+            inputValue: "OnceJob_Due"
+        );
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - A work queue entry should be created
+        DataContext.Reset();
+        var workQueueEntries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == manifest.Id)
+            .ToListAsync();
+
+        workQueueEntries
+            .Should()
+            .HaveCount(1, "Once manifest with past ScheduledAt should be queued");
+        workQueueEntries[0].Status.Should().Be(WorkQueueStatus.Queued);
+        workQueueEntries[0].TrainName.Should().Be(typeof(SchedulerTestTrain).FullName);
+    }
+
+    [Test]
+    public async Task Run_WhenOnceManifestNotYetDue_DoesNotEnqueueJob()
+    {
+        // Arrange - Create a Once manifest with ScheduledAt in the future
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Once,
+            scheduledAt: DateTime.UtcNow.AddHours(1),
+            inputValue: "OnceJob_Future"
+        );
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - No work queue entry should be created
+        DataContext.Reset();
+        var workQueueEntries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == manifest.Id)
+            .ToListAsync();
+
+        workQueueEntries
+            .Should()
+            .BeEmpty("Once manifest with future ScheduledAt should not be queued yet");
+    }
+
+    [Test]
+    public async Task Run_WhenOnceManifestAlreadyRan_DoesNotEnqueueJob()
+    {
+        // Arrange - Create a Once manifest with ScheduledAt in the past
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Once,
+            scheduledAt: DateTime.UtcNow.AddMinutes(-30),
+            inputValue: "OnceJob_AlreadyRan"
+        );
+
+        // Set LastSuccessfulRun to simulate that it already ran
+        var loaded = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        loaded.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-25);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - No work queue entry should be created
+        DataContext.Reset();
+        var workQueueEntries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == manifest.Id)
+            .ToListAsync();
+
+        workQueueEntries
+            .Should()
+            .BeEmpty(
+                "Once manifest that has already run (LastSuccessfulRun set) should not be re-queued"
+            );
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private async Task<Manifest> CreateAndSaveManifest(
@@ -996,7 +1082,8 @@ public class ManifestManagerTrainTests : TestSetup
         string? cronExpression = null,
         int maxRetries = 3,
         bool isEnabled = true,
-        string inputValue = "TestValue"
+        string inputValue = "TestValue",
+        DateTime? scheduledAt = null
     )
     {
         var group = await TestSetup.CreateAndSaveManifestGroup(
@@ -1014,6 +1101,7 @@ public class ManifestManagerTrainTests : TestSetup
                 CronExpression = cronExpression,
                 MaxRetries = maxRetries,
                 Properties = new SchedulerTestInput { Value = inputValue },
+                ScheduledAt = scheduledAt,
             }
         );
 

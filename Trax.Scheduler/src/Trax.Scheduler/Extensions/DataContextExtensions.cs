@@ -264,6 +264,108 @@ public static class DataContextExtensions
     }
 
     /// <summary>
+    /// Creates or updates a one-off manifest that fires once at the specified time, then auto-disables.
+    /// </summary>
+    public static Task<Manifest> UpsertOnceManifestAsync<TTrain, TInput>(
+        this IDataContext context,
+        string externalId,
+        TInput input,
+        DateTime scheduledAt,
+        ManifestOptions options,
+        string groupId,
+        int groupPriority,
+        int? groupMaxActiveJobs = null,
+        bool groupIsEnabled = true,
+        CancellationToken ct = default
+    )
+        where TTrain : IServiceTrain<TInput, Unit>
+        where TInput : IManifestProperties =>
+        context.UpsertOnceManifestAsync(
+            typeof(TTrain),
+            externalId,
+            input,
+            scheduledAt,
+            options,
+            groupId,
+            groupPriority,
+            groupMaxActiveJobs,
+            groupIsEnabled,
+            ct
+        );
+
+    /// <summary>
+    /// Non-generic overload that accepts train type as a <see cref="Type"/> parameter.
+    /// </summary>
+    internal static async Task<Manifest> UpsertOnceManifestAsync(
+        this IDataContext context,
+        Type trainType,
+        string externalId,
+        IManifestProperties input,
+        DateTime scheduledAt,
+        ManifestOptions options,
+        string groupId,
+        int groupPriority,
+        int? groupMaxActiveJobs = null,
+        bool groupIsEnabled = true,
+        CancellationToken ct = default
+    )
+    {
+        var manifestGroupId = await context.EnsureManifestGroupAsync(
+            groupId,
+            groupPriority,
+            groupMaxActiveJobs,
+            groupIsEnabled,
+            ct
+        );
+
+        var existing = await context.Manifests.FirstOrDefaultAsync(
+            m => m.ExternalId == externalId,
+            ct
+        );
+
+        if (existing != null)
+        {
+            existing.Name = trainType.FullName!;
+            existing.SetProperties(input);
+            existing.IsEnabled = options.IsEnabled;
+            existing.MaxRetries = options.MaxRetries;
+            existing.TimeoutSeconds = options.Timeout.HasValue
+                ? (int)options.Timeout.Value.TotalSeconds
+                : null;
+            existing.ManifestGroupId = manifestGroupId;
+            existing.Priority = options.Priority;
+            existing.ScheduleType = ScheduleType.Once;
+            existing.ScheduledAt = scheduledAt;
+            existing.CronExpression = null;
+            existing.IntervalSeconds = null;
+            ApplyMisfireOptions(existing, options);
+
+            return existing;
+        }
+
+        var manifest = new Manifest
+        {
+            ExternalId = externalId,
+            Name = trainType.FullName!,
+            IsEnabled = options.IsEnabled,
+            MaxRetries = options.MaxRetries,
+            TimeoutSeconds = options.Timeout.HasValue
+                ? (int)options.Timeout.Value.TotalSeconds
+                : null,
+            ManifestGroupId = manifestGroupId,
+            Priority = options.Priority,
+            ScheduleType = ScheduleType.Once,
+            ScheduledAt = scheduledAt,
+        };
+        manifest.SetProperties(input);
+        ApplyMisfireOptions(manifest, options);
+
+        context.Manifests.Add(manifest);
+
+        return manifest;
+    }
+
+    /// <summary>
     /// Applies schedule configuration to a manifest.
     /// </summary>
     private static void ApplySchedule(Manifest manifest, Schedule schedule)

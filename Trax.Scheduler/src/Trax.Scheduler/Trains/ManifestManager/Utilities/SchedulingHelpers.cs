@@ -30,6 +30,7 @@ internal static class SchedulingHelpers
         {
             ScheduleType.Cron => ShouldRunByCron(manifest, now, config, logger),
             ScheduleType.Interval => ShouldRunByInterval(manifest, now, config, logger),
+            ScheduleType.Once => ShouldRunOnce(manifest, now, logger),
             ScheduleType.OnDemand => false, // OnDemand manifests are never auto-scheduled, only via BulkEnqueueAsync
             ScheduleType.Dependent => false, // Dependent manifests are evaluated separately in DetermineJobsToQueueStep
             _ => false,
@@ -91,6 +92,33 @@ internal static class SchedulingHelpers
         }
 
         return EvaluateIntervalSchedule(manifest, now, config, logger);
+    }
+
+    /// <summary>
+    /// Checks if a one-off manifest is due to run: ScheduledAt &lt;= now and never successfully run.
+    /// </summary>
+    private static bool ShouldRunOnce(Manifest manifest, DateTime now, ILogger logger)
+    {
+        // Already ran successfully — should have been auto-disabled, but guard anyway
+        if (manifest.LastSuccessfulRun is not null)
+        {
+            logger.LogTrace(
+                "Manifest {ManifestId} has ScheduleType=Once but already has LastSuccessfulRun, skipping",
+                manifest.Id
+            );
+            return false;
+        }
+
+        if (manifest.ScheduledAt is null)
+        {
+            logger.LogWarning(
+                "Manifest {ManifestId} has ScheduleType=Once but no scheduled_at defined",
+                manifest.Id
+            );
+            return false;
+        }
+
+        return manifest.ScheduledAt.Value <= now;
     }
 
     /// <summary>

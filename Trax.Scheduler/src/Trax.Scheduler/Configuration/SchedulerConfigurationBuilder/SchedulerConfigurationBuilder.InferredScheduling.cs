@@ -149,6 +149,51 @@ public partial class SchedulerConfigurationBuilder
         return this;
     }
 
+    // ── One-off methods (TTrain only) ──────────────────────────────────
+
+    /// <summary>
+    /// Schedules a train to fire once after the specified delay, then auto-disable.
+    /// The input type is inferred from <typeparamref name="TTrain"/>'s
+    /// <c>IServiceTrain&lt;TInput, Unit&gt;</c> interface.
+    /// </summary>
+    public SchedulerConfigurationBuilder ScheduleOnce<TTrain>(
+        string externalId,
+        IManifestProperties input,
+        TimeSpan delay,
+        Action<ScheduleOptions>? options = null
+    )
+        where TTrain : class
+    {
+        var (trainType, inputType) = ResolveAndValidate<TTrain>(input);
+
+        var resolved = new ScheduleOptions();
+        options?.Invoke(resolved);
+        _externalIdToGroupId[externalId] = resolved._groupId ?? externalId;
+
+        _configuration.PendingManifests.Add(
+            new PendingManifest
+            {
+                ExternalId = externalId,
+                ExpectedExternalIds = [externalId],
+                ScheduleFunc = (scheduler, ct) =>
+                    ((ManifestScheduler)scheduler).ScheduleOnceAsyncUntyped(
+                        trainType,
+                        inputType,
+                        externalId,
+                        input,
+                        delay,
+                        options,
+                        ct
+                    ),
+            }
+        );
+
+        _rootScheduledExternalId = null;
+        _lastScheduledExternalId = null;
+
+        return this;
+    }
+
     // ── Batch methods (TTrain only, using ManifestItem) ───────────────
 
     /// <summary>

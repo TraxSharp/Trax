@@ -408,6 +408,76 @@ public class JobDispatcherTrainTests : TestSetup
 
     #endregion
 
+    #region ScheduledAt Filter Tests
+
+    [Test]
+    public async Task Run_WithFutureScheduledAt_DoesNotDispatch()
+    {
+        // Arrange - Create a work queue entry with ScheduledAt in the future
+        var manifest = await CreateAndSaveManifest(inputValue: "FutureScheduled");
+        var entry = await CreateAndSaveWorkQueueEntry(
+            manifest,
+            scheduledAt: DateTime.UtcNow.AddHours(1)
+        );
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Entry should remain Queued (not dispatched)
+        DataContext.Reset();
+        var updatedEntry = await DataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+
+        updatedEntry.Status.Should().Be(WorkQueueStatus.Queued);
+        updatedEntry
+            .DispatchedAt.Should()
+            .BeNull("entry with future ScheduledAt should not be dispatched");
+    }
+
+    [Test]
+    public async Task Run_WithPastScheduledAt_Dispatches()
+    {
+        // Arrange - Create a work queue entry with ScheduledAt in the past
+        var manifest = await CreateAndSaveManifest(inputValue: "PastScheduled");
+        var entry = await CreateAndSaveWorkQueueEntry(
+            manifest,
+            scheduledAt: DateTime.UtcNow.AddMinutes(-5)
+        );
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Entry should be dispatched
+        DataContext.Reset();
+        var updatedEntry = await DataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+
+        updatedEntry.Status.Should().Be(WorkQueueStatus.Dispatched);
+        updatedEntry
+            .DispatchedAt.Should()
+            .NotBeNull("entry with past ScheduledAt should be dispatched");
+    }
+
+    [Test]
+    public async Task Run_WithNullScheduledAt_Dispatches()
+    {
+        // Arrange - Create a work queue entry with null ScheduledAt (backwards compat)
+        var manifest = await CreateAndSaveManifest(inputValue: "NullScheduled");
+        var entry = await CreateAndSaveWorkQueueEntry(manifest, scheduledAt: null);
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Entry should be dispatched (null means dispatch immediately)
+        DataContext.Reset();
+        var updatedEntry = await DataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+
+        updatedEntry.Status.Should().Be(WorkQueueStatus.Dispatched);
+        updatedEntry
+            .DispatchedAt.Should()
+            .NotBeNull("entry with null ScheduledAt should be dispatched immediately");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")
@@ -439,7 +509,8 @@ public class JobDispatcherTrainTests : TestSetup
     private async Task<WorkQueue> CreateAndSaveWorkQueueEntry(
         Manifest manifest,
         string? inputValue = null,
-        int priority = 0
+        int priority = 0,
+        DateTime? scheduledAt = null
     )
     {
         var input = inputValue ?? manifest.Properties;
@@ -451,6 +522,7 @@ public class JobDispatcherTrainTests : TestSetup
                 InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
                 ManifestId = manifest.Id,
                 Priority = priority,
+                ScheduledAt = scheduledAt,
             }
         );
 

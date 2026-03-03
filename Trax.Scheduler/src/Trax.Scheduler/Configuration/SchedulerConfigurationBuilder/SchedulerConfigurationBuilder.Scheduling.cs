@@ -74,6 +74,51 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
+    /// Schedules a train to fire once after the specified delay, then auto-disable.
+    /// </summary>
+    /// <typeparam name="TTrain">The train interface type</typeparam>
+    /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <param name="externalId">A unique identifier for this one-off job</param>
+    /// <param name="input">The input data that will be passed to the train on execution</param>
+    /// <param name="delay">The delay before the job should execute</param>
+    /// <param name="options">Optional callback to configure manifest options via <see cref="ScheduleOptions"/></param>
+    /// <returns>The builder for method chaining</returns>
+    public SchedulerConfigurationBuilder ScheduleOnce<TTrain, TInput>(
+        string externalId,
+        TInput input,
+        TimeSpan delay,
+        Action<ScheduleOptions>? options = null
+    )
+        where TTrain : IServiceTrain<TInput, Unit>
+        where TInput : IManifestProperties
+    {
+        var resolved = new ScheduleOptions();
+        options?.Invoke(resolved);
+        _externalIdToGroupId[externalId] = resolved._groupId ?? externalId;
+
+        _configuration.PendingManifests.Add(
+            new PendingManifest
+            {
+                ExternalId = externalId,
+                ExpectedExternalIds = [externalId],
+                ScheduleFunc = (scheduler, ct) =>
+                    scheduler.ScheduleOnceAsync<TTrain, TInput>(
+                        externalId,
+                        input,
+                        delay,
+                        options,
+                        ct: ct
+                    ),
+            }
+        );
+
+        _rootScheduledExternalId = null;
+        _lastScheduledExternalId = null;
+
+        return this;
+    }
+
+    /// <summary>
     /// Schedules a dependent train that runs after the previously scheduled manifest succeeds.
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>

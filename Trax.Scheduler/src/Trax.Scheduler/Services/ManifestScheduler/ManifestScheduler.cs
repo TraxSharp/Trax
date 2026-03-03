@@ -347,6 +347,94 @@ public class ManifestScheduler(
     }
 
     /// <inheritdoc />
+    public async Task TriggerAsync(
+        string externalId,
+        TimeSpan delay,
+        CancellationToken ct = default
+    )
+    {
+        await using var context = CreateContext();
+
+        var manifest = await GetManifestByExternalIdAsync(context, externalId, ct);
+
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = manifest.Name,
+                Input = manifest.Properties,
+                InputTypeName = manifest.PropertyTypeName,
+                ManifestId = manifest.Id,
+                Priority = manifest.Priority,
+                ScheduledAt = DateTime.UtcNow + delay,
+            }
+        );
+        context.WorkQueues.Add(entry);
+        await context.SaveChanges(ct);
+
+        logger.LogInformation(
+            "Queued delayed manifest {ExternalId} for execution at {ScheduledAt} (WorkQueueId: {WorkQueueId})",
+            externalId,
+            entry.ScheduledAt,
+            entry.Id
+        );
+    }
+
+    /// <inheritdoc />
+    public Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+        TInput input,
+        TimeSpan delay,
+        Action<ScheduleOptions>? options = null,
+        CancellationToken ct = default
+    )
+        where TTrain : IServiceTrain<TInput, Unit>
+        where TInput : IManifestProperties
+    {
+        var externalId = $"once-{Guid.NewGuid():N}";
+        return ScheduleOnceAsync<TTrain, TInput>(externalId, input, delay, options, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+        string externalId,
+        TInput input,
+        TimeSpan delay,
+        Action<ScheduleOptions>? options = null,
+        CancellationToken ct = default
+    )
+        where TTrain : IServiceTrain<TInput, Unit>
+        where TInput : IManifestProperties
+    {
+        trainRegistry.ValidateTrainRegistration<TInput>();
+
+        var resolved = ResolveOptions(options);
+
+        await using var context = CreateContext();
+
+        var manifest = await context.UpsertOnceManifestAsync<TTrain, TInput>(
+            externalId,
+            input,
+            DateTime.UtcNow + delay,
+            resolved.ManifestOptions,
+            groupId: resolved.GroupId ?? externalId,
+            groupPriority: resolved.GroupPriority,
+            groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
+            groupIsEnabled: resolved.GroupEnabled,
+            ct: ct
+        );
+
+        await context.SaveChanges(ct);
+
+        logger.LogInformation(
+            "Scheduled one-off train {Train} with ExternalId {ExternalId}, fires at {ScheduledAt}",
+            typeof(TTrain).Name,
+            externalId,
+            manifest.ScheduledAt
+        );
+
+        return manifest;
+    }
+
+    /// <inheritdoc />
     public async Task<int> TriggerGroupAsync(long groupId, CancellationToken ct = default)
     {
         await using var context = CreateContext();
@@ -493,6 +581,47 @@ public class ManifestScheduler(
             "Scheduled train {Train} with ExternalId {ExternalId}",
             trainType.Name,
             externalId
+        );
+
+        return manifest;
+    }
+
+    internal async Task<Manifest> ScheduleOnceAsyncUntyped(
+        Type trainType,
+        Type inputType,
+        string externalId,
+        IManifestProperties input,
+        TimeSpan delay,
+        Action<ScheduleOptions>? options = null,
+        CancellationToken ct = default
+    )
+    {
+        trainRegistry.ValidateTrainRegistration(inputType);
+
+        var resolved = ResolveOptions(options);
+
+        await using var context = CreateContext();
+
+        var manifest = await context.UpsertOnceManifestAsync(
+            trainType,
+            externalId,
+            input,
+            DateTime.UtcNow + delay,
+            resolved.ManifestOptions,
+            groupId: resolved.GroupId ?? externalId,
+            groupPriority: resolved.GroupPriority,
+            groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
+            groupIsEnabled: resolved.GroupEnabled,
+            ct: ct
+        );
+
+        await context.SaveChanges(ct);
+
+        logger.LogInformation(
+            "Scheduled one-off train {Train} with ExternalId {ExternalId}, fires at {ScheduledAt}",
+            trainType.Name,
+            externalId,
+            manifest.ScheduledAt
         );
 
         return manifest;

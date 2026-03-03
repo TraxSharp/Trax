@@ -175,6 +175,65 @@ public interface IManifestScheduler
     Task TriggerAsync(string externalId, CancellationToken ct = default);
 
     /// <summary>
+    /// Triggers a delayed execution of a scheduled job. The job will be dispatched
+    /// after the specified delay, independent of its normal schedule.
+    /// </summary>
+    /// <param name="externalId">The external ID of the manifest to trigger.</param>
+    /// <param name="delay">The delay before the job should be dispatched.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <remarks>
+    /// Creates a WorkQueue entry with <c>ScheduledAt = DateTime.UtcNow + delay</c>.
+    /// The JobDispatcher will skip the entry until <c>ScheduledAt &lt;= now</c>.
+    /// The manifest's normal schedule continues unaffected.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no manifest with the specified ExternalId exists.
+    /// </exception>
+    Task TriggerAsync(string externalId, TimeSpan delay, CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates a one-off manifest that fires once after the specified delay, then auto-disables.
+    /// An external ID is auto-generated.
+    /// </summary>
+    /// <typeparam name="TTrain">The train interface type.</typeparam>
+    /// <typeparam name="TInput">The input type for the train.</typeparam>
+    /// <param name="input">The input data for the train execution.</param>
+    /// <param name="delay">The delay before the job should execute.</param>
+    /// <param name="options">Optional callback to configure manifest options.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The created manifest. Use <c>ExternalId</c> to reference it later.</returns>
+    Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+        TInput input,
+        TimeSpan delay,
+        Action<ScheduleOptions>? options = null,
+        CancellationToken ct = default
+    )
+        where TTrain : IServiceTrain<TInput, Unit>
+        where TInput : IManifestProperties;
+
+    /// <summary>
+    /// Creates a one-off manifest with an explicit external ID that fires once after the
+    /// specified delay, then auto-disables.
+    /// </summary>
+    /// <typeparam name="TTrain">The train interface type.</typeparam>
+    /// <typeparam name="TInput">The input type for the train.</typeparam>
+    /// <param name="externalId">A unique identifier for this one-off job.</param>
+    /// <param name="input">The input data for the train execution.</param>
+    /// <param name="delay">The delay before the job should execute.</param>
+    /// <param name="options">Optional callback to configure manifest options.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The created or updated manifest.</returns>
+    Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+        string externalId,
+        TInput input,
+        TimeSpan delay,
+        Action<ScheduleOptions>? options = null,
+        CancellationToken ct = default
+    )
+        where TTrain : IServiceTrain<TInput, Unit>
+        where TInput : IManifestProperties;
+
+    /// <summary>
     /// Triggers immediate execution of all eligible manifests in a manifest group.
     /// </summary>
     /// <param name="groupId">The ID of the manifest group to trigger.</param>

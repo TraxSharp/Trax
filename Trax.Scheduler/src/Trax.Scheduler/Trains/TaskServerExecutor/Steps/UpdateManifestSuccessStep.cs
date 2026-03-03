@@ -1,6 +1,7 @@
 using LanguageExt;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectStep;
 
@@ -26,6 +27,15 @@ internal class UpdateManifestSuccessStep(
         }
 
         input.Manifest.LastSuccessfulRun = DateTime.UtcNow;
+
+        if (input.Manifest.ScheduleType == ScheduleType.Once)
+        {
+            input.Manifest.IsEnabled = false;
+            logger.LogInformation(
+                "Auto-disabled Once manifest {ManifestId} after successful execution",
+                input.Manifest.Id
+            );
+        }
 
         logger.LogDebug(
             "Updated LastSuccessfulRun for Manifest {ManifestId} to {Timestamp}",
