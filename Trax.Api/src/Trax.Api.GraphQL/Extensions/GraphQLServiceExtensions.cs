@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Api.GraphQL.TypeModules;
 
 namespace Trax.Api.GraphQL.Extensions;
 
@@ -17,12 +18,14 @@ public static class GraphQLServiceExtensions
     public static IServiceCollection AddTraxGraphQL(this IServiceCollection services)
     {
         services.AddTraxApi();
+        services.AddSingleton<TrainTypeModule>();
         services
             .AddGraphQLServer(SchemaName)
             .AddQueryType<TrainQueries>()
             .AddMutationType()
             .AddTypeExtension<TrainMutations>()
-            .AddTypeExtension<SchedulerMutations>();
+            .AddTypeExtension<SchedulerMutations>()
+            .AddTypeModule<TrainTypeModule>();
 
         return services;
     }
