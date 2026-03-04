@@ -8,9 +8,93 @@ nav_order: 3
 
 # Mutations
 
-Mutations are split across two type extensions: `TrainMutations` for queuing and running trains, and `SchedulerMutations` for managing scheduled manifests and groups.
+Mutations are split across two type extensions: `TrainMutations` for queuing and running trains, and `SchedulerMutations` for managing scheduled manifests and groups. Additionally, Trax auto-generates **typed mutations** for each registered train.
 
-## Train Mutations
+## Typed Train Mutations (Auto-Generated)
+
+Trax automatically discovers all registered trains and generates a pair of strongly-typed mutations for each one: `run{TrainName}` and `queue{TrainName}`. These provide full GraphQL schema validation on the input, so errors are caught at the schema level rather than at runtime.
+
+### Naming Convention
+
+The mutation names are derived from the train's service interface name:
+1. Strip the `I` prefix
+2. Strip the `Train` suffix
+3. Prepend `run` or `queue`
+
+For example, `IBanPlayerTrain` produces `runBanPlayer` and `queueBanPlayer`.
+
+### Example
+
+Given a train registered as `IBanPlayerTrain` with input type:
+
+```csharp
+public record BanPlayerInput : IManifestProperties
+{
+    public required string PlayerId { get; init; }
+    public required string Reason { get; init; }
+}
+```
+
+The schema exposes:
+
+```graphql
+input BanPlayerInput {
+  playerId: String!
+  reason: String!
+}
+
+mutation {
+  runBanPlayer(input: { playerId: "player-42", reason: "cheating" }) {
+    metadataId
+  }
+}
+
+mutation {
+  queueBanPlayer(
+    input: { playerId: "player-42", reason: "cheating" }
+    priority: 10
+  ) {
+    workQueueId
+    externalId
+  }
+}
+```
+
+### run{TrainName}
+
+Runs the train synchronously via `ITrainBus`. The call blocks until the train completes.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `input` | `{TrainName}Input!` | Yes | Strongly-typed input matching the train's input record |
+
+**Returns**: `RunTrainResponse`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `metadataId` | `Long!` | Metadata ID of the completed execution |
+
+### queue{TrainName}
+
+Queues the train for asynchronous execution via the WorkQueue.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `input` | `{TrainName}Input!` | Yes | — | Strongly-typed input matching the train's input record |
+| `priority` | `Int` | No | `0` | Dispatch priority (0-31, higher runs first) |
+
+**Returns**: `QueueTrainResponse`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `workQueueId` | `Long!` | Database ID of the created WorkQueue entry |
+| `externalId` | `String!` | External ID assigned to the WorkQueue entry |
+
+---
+
+## Generic Train Mutations
+
+The generic `queueTrain` and `runTrain` mutations accept any train by name and untyped JSON input. These are available as a fallback when you need to invoke trains dynamically (e.g. from a generic admin UI).
 
 ### queueTrain
 

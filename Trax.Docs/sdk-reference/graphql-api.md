@@ -30,7 +30,7 @@ Navigate to the endpoint URL in a browser to open [Banana Cake Pop](https://chil
 |------|-------------|
 | [AddTraxGraphQL]({{ site.baseurl }}{% link sdk-reference/graphql-api/add-trax-graphql.md %}) | Registration and endpoint mapping |
 | [Queries]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}) | `health`, `trains`, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution` |
-| [Mutations]({{ site.baseurl }}{% link sdk-reference/graphql-api/mutations.md %}) | `queueTrain`, `runTrain`, `triggerManifest`, `disableManifest`, `cancelManifest`, and more |
+| [Mutations]({{ site.baseurl }}{% link sdk-reference/graphql-api/mutations.md %}) | Auto-generated typed mutations per train (`runBanPlayer`, `queueBanPlayer`, etc.), generic `queueTrain`/`runTrain`, scheduler mutations (`triggerManifest`, `disableManifest`, `cancelManifest`, and more) |
 
 ## Package
 

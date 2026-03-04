@@ -49,7 +49,8 @@ public static WebApplication UseTraxGraphQL(
 - **Named GraphQL server** via `AddGraphQLServer("trax")` — uses a named schema so it coexists with your own HotChocolate schemas in the same application
 - **Query type**: `TrainQueries` — registered as the root query type (includes `health` query)
 - **Mutation type**: empty root created via `AddMutationType()`, extended by:
-  - `TrainMutations` — `queueTrain`, `runTrain`
+  - `TrainTypeModule` — auto-generates typed `run{TrainName}` and `queue{TrainName}` mutations for every registered train, with strongly-typed input objects derived from each train's input record
+  - `TrainMutations` — generic `queueTrain`, `runTrain` (accepts any train by name with untyped JSON input)
   - `SchedulerMutations` — `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
 
 ## Prerequisites
