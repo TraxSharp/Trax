@@ -40,10 +40,10 @@ feat(effect): redesign metadata API
 The EffectMetadata structure has changed. Use the new 
 EffectMetadataV2 constructor instead.
 
-BREAKING CHANGE: EffectMetadata is no longer compatible with 5.x
+BREAKING CHANGE: EffectMetadata is no longer compatible with 1.x
 ```
 
-This triggers a major version bump (5.1.0 → 6.0.0).
+This triggers a major version bump (1.1.0 → 2.0.0).
 
 ## How It Works
 

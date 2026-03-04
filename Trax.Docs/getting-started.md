@@ -8,13 +8,13 @@ nav_order: 2
 
 ## Prerequisites
 
-Trax.Core 5.x targets `net10.0` exclusively. Make sure your project's target framework is set accordingly:
+Trax targets `net10.0` exclusively. Make sure your project's target framework is set accordingly:
 
 ```xml
 <TargetFramework>net10.0</TargetFramework>
 ```
 
-If you're upgrading from 4.x, see [Migration (4.x → 5.x)](migration.md).
+If you're migrating from ChainSharp, see [Migration (ChainSharp → Trax)](migration.md).
 
 For a complete starter project with timetables, persistence, and the control room already configured, see the [Project Template](templates.md).
 
@@ -25,8 +25,8 @@ For a complete starter project with timetables, persistence, and the control roo
 For a typical setup with database persistence and the dispatch station:
 
 ```xml
-<PackageReference Include="Trax.Core" Version="5.*" />
-<PackageReference Include="Trax.Effect" Version="5.*" />
+<PackageReference Include="Trax.Core" Version="1.*" />
+<PackageReference Include="Trax.Effect" Version="1.*" />
 ```
 
 Or via the .NET CLI:

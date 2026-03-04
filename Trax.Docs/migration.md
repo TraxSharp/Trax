@@ -1,14 +1,14 @@
 ---
 layout: default
-title: Migration (4.x → 5.x)
+title: Migration (ChainSharp → Trax)
 nav_order: 11
 ---
 
-# Migration from 4.x to 5.x
+# Migration from ChainSharp to Trax
 
 ## Target Framework
 
-Trax.Core 5.x targets `net10.0` exclusively. If your project is on `net8.0` or `net9.0`, you'll need to update your target framework before upgrading. Version 4.x is the last release supporting `net8.0`.
+Trax targets `net10.0` exclusively. If your project is on `net8.0` or `net9.0`, you'll need to update your target framework before upgrading. ChainSharp 4.x is the last release supporting `net8.0`.
 
 ```xml
 <!-- Before -->
@@ -18,13 +18,13 @@ Trax.Core 5.x targets `net10.0` exclusively. If your project is on `net8.0` or `
 <TargetFramework>net10.0</TargetFramework>
 ```
 
-This affects your entire solution—every project that references a Trax.Core 5.x package must target `net10.0`.
+This affects your entire solution—every project that references a Trax package must target `net10.0`.
 
 ## Package Renames
 
 Several packages were reorganized to reflect the layered architecture. The old package names no longer exist on NuGet:
 
-| Old Package (4.x) | New Package (5.x) |
+| Old Package (ChainSharp) | New Package (Trax) |
 |---|---|
 | `Trax.Effect.Json` | `Trax.Effect.Provider.Json` |
 | `Trax.Effect.Mediator` | `Trax.Mediator` |
@@ -34,7 +34,7 @@ Several packages were reorganized to reflect the layered architecture. The old p
 
 The `using` statements follow the new package names. Find-and-replace works for most of these:
 
-| Old Namespace (4.x) | New Namespace (5.x) |
+| Old Namespace (ChainSharp) | New Namespace (Trax) |
 |---|---|
 | `Trax.Effect.Json` | `Trax.Effect.Provider.Json` |
 | `Trax.Effect.Mediator` | `Trax.Mediator` |
@@ -42,9 +42,9 @@ The `using` statements follow the new package names. Find-and-replace works for 
 
 ## Dependency Updates
 
-Trax.Core 5.x aligns all dependencies with .NET 10. If your project pins any of these packages directly, update them:
+Trax aligns all dependencies with .NET 10. If your project pins any of these packages directly, update them:
 
-| Package | 4.x Version | 5.x Version |
+| Package | ChainSharp Version | Trax Version |
 |---|---|---|
 | `Microsoft.EntityFrameworkCore` | 8.0.x | 10.0.3+ |
 | `Microsoft.EntityFrameworkCore.Relational` | 8.0.x | 10.0.3+ |
@@ -54,13 +54,13 @@ Trax.Core 5.x aligns all dependencies with .NET 10. If your project pins any of 
 | `EFCore.NamingConventions` | 8.0.x | 10.0.1+ |
 | `Microsoft.Extensions.*` | 8.0.x | 10.0.3+ |
 
-These are transitive dependencies—Trax.Core's NuGet packages pull in the correct versions automatically. You only need to act if your project has explicit `<PackageReference>` entries for any of these.
+These are transitive dependencies—Trax's NuGet packages pull in the correct versions automatically. You only need to act if your project has explicit `<PackageReference>` entries for any of these.
 
 ## Npgsql Enum Mapping (Breaking Change)
 
 Npgsql 9.0+ changed how PostgreSQL enum types are registered with Entity Framework Core. If you have custom code that configures `NpgsqlDataSourceBuilder` or `UseNpgsql`, you need to add `MapEnum` calls inside the `UseNpgsql` options callback.
 
-**Before (4.x / Npgsql 8.x):**
+**Before (ChainSharp / Npgsql 8.x):**
 
 Registering enums only on the `NpgsqlDataSourceBuilder` was sufficient:
 
@@ -73,7 +73,7 @@ services.AddDbContext<MyContext>(options =>
     options.UseNpgsql(dataSource));  // No MapEnum needed here
 ```
 
-**After (5.x / Npgsql 10.x):**
+**After (Trax / Npgsql 10.x):**
 
 You must also register enums in the `UseNpgsql` options callback:
 
@@ -104,9 +104,9 @@ Trax.Core handles this internally for its own enum types (`TrainState`, `LogLeve
 
 If you hit unresolved types after the rename, check the [Namespace Reference](scheduler/setup.md#namespace-reference) for the full namespace of scheduler-related types—some live in unexpected packages.
 
-## ManifestGroup Migration (5.12+)
+## ManifestGroup Migration (1.5+)
 
-Version 5.12 promotes ManifestGroup from a denormalized string field (`group_id`) to a first-class database entity with per-group dispatch controls.
+Version 1.5 promotes ManifestGroup from a denormalized string field (`group_id`) to a first-class database entity with per-group dispatch controls.
 
 ### Database Migration
 

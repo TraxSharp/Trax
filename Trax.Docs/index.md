@@ -75,7 +75,7 @@ See [IDE Extensions](ide-extensions.md) for details.
 
 ## Quick Start
 
-Trax.Core 5.x requires `net10.0`. See [Getting Started](getting-started.md) for installation and your first train.
+Trax requires `net10.0`. See [Getting Started](getting-started.md) for installation and your first train.
 
 ## Available NuGet Packages
 

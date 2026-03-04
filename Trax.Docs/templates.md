@@ -82,17 +82,17 @@ public class HelloWorldTrain : ServiceTrain<HelloWorldInput, Unit>, IHelloWorldT
 
 ### Package References
 
-The generated csproj references all Trax.Core packages at `5.*`, so you'll automatically pick up patch and minor updates:
+The generated csproj references all Trax packages at `1.*`, so you'll automatically pick up patch and minor updates:
 
 ```xml
-<PackageReference Include="Trax.Effect" Version="5.*" />
-<PackageReference Include="Trax.Effect.Data.Postgres" Version="5.*" />
-<PackageReference Include="Trax.Mediator" Version="5.*" />
-<PackageReference Include="Trax.Scheduler" Version="5.*" />
-<PackageReference Include="Trax.Scheduler.Hangfire" Version="5.*" />
-<PackageReference Include="Trax.Effect.Provider.Json" Version="5.*" />
-<PackageReference Include="Trax.Effect.Provider.Parameter" Version="5.*" />
-<PackageReference Include="Trax.Dashboard" Version="5.*" />
+<PackageReference Include="Trax.Effect" Version="1.*" />
+<PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
+<PackageReference Include="Trax.Mediator" Version="1.*" />
+<PackageReference Include="Trax.Scheduler" Version="1.*" />
+<PackageReference Include="Trax.Scheduler.Hangfire" Version="1.*" />
+<PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
+<PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
+<PackageReference Include="Trax.Dashboard" Version="1.*" />
 ```
 
 ## Running

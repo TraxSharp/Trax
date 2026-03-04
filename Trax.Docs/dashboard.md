@@ -21,7 +21,7 @@ dotnet add package Trax.Dashboard
 Or in your `.csproj`:
 
 ```xml
-<PackageReference Include="Trax.Dashboard" Version="5.*" />
+<PackageReference Include="Trax.Dashboard" Version="1.*" />
 ```
 
 ### Configuration
