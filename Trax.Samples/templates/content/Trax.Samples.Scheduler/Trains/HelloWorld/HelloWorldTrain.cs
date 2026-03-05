@@ -1,12 +1,11 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.Server.Trains.HelloWorld.Steps;
+using Trax.Samples.Scheduler.Trains.HelloWorld.Steps;
 
-namespace Trax.Samples.Server.Trains.HelloWorld;
+namespace Trax.Samples.Scheduler.Trains.HelloWorld;
 
 /// <summary>
-/// A simple "Hello World" train that demonstrates scheduled execution.
-/// This train takes a name as input and logs a greeting message.
+/// A simple scheduled train that logs a greeting on each interval.
 /// </summary>
 public class HelloWorldTrain : ServiceTrain<HelloWorldInput, Unit>, IHelloWorldTrain
 {

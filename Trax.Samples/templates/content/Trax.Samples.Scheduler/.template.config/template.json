@@ -1,11 +1,11 @@
 {
   "$schema": "http://json.schemastore.org/template",
-  "author": "Trax.Core",
-  "classifications": ["Web", "Trax.Core", "Hangfire", "Scheduler"],
-  "identity": "Trax.Samples.Server.CSharp",
-  "name": "Trax.Core Server with Hangfire",
-  "shortName": "trax-server",
-  "sourceName": "Trax.Samples.Server",
+  "author": "Trax",
+  "classifications": ["Web", "Trax", "Scheduler", "Dashboard"],
+  "identity": "Trax.Samples.Scheduler.CSharp",
+  "name": "Trax Scheduler with Dashboard",
+  "shortName": "trax-scheduler",
+  "sourceName": "Trax.Samples.Scheduler",
   "preferNameDirectory": true,
   "tags": {
     "language": "C#",
@@ -17,7 +17,7 @@
       "datatype": "string",
       "defaultValue": "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123",
       "replaces": "HOST_CONNECTION_STRING",
-      "description": "The PostgreSQL connection string for Trax.Core"
+      "description": "The PostgreSQL connection string for Trax"
     }
   }
 }

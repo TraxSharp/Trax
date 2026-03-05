@@ -1,7 +1,6 @@
 <Solution>
   <Folder Name="/samples/">
     <Project Path="samples/Trax.Samples.GameServer/Trax.Samples.GameServer.csproj" />
-    <Project Path="samples/Trax.Samples.GameServer.Rest/Trax.Samples.GameServer.Rest.csproj" />
     <Project Path="samples/Trax.Samples.GameServer.GraphQL/Trax.Samples.GameServer.GraphQL.csproj" />
     <Project Path="samples/Trax.Samples.GameServer.Scheduler/Trax.Samples.GameServer.Scheduler.csproj" />
     <Project Path="samples/Trax.Samples.Flowthru.Spaceflights/Trax.Samples.Flowthru.Spaceflights.csproj" />

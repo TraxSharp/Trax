@@ -1,13 +1,8 @@
 using LanguageExt;
-using Microsoft.Extensions.Logging;
-using Trax.Core.Step;
+using Trax.Core.Models;
 
-namespace Trax.Samples.Server.Trains.HelloWorld.Steps;
+namespace Trax.Samples.Api.Trains.HelloWorld.Steps;
 
-/// <summary>
-/// A step that logs a greeting message.
-/// Demonstrates how steps can use dependency injection for logging and other services.
-/// </summary>
 public class LogGreetingStep(ILogger<LogGreetingStep> logger) : Step<HelloWorldInput, Unit>
 {
     public override async Task<Unit> Run(HelloWorldInput input)
@@ -15,7 +10,7 @@ public class LogGreetingStep(ILogger<LogGreetingStep> logger) : Step<HelloWorldI
         var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC");
 
         logger.LogInformation(
-            "Hello, {Name}! This scheduled job ran at {Timestamp}",
+            "Hello, {Name}! This train ran at {Timestamp}",
             input.Name,
             timestamp
         );

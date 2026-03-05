@@ -1,11 +1,7 @@
 using Trax.Effect.Models.Manifest;
 
-namespace Trax.Samples.Server.Trains.HelloWorld;
+namespace Trax.Samples.Scheduler.Trains.HelloWorld;
 
-/// <summary>
-/// Input for the HelloWorld train.
-/// Implements IManifestProperties to enable serialization for scheduled jobs.
-/// </summary>
 public record HelloWorldInput : IManifestProperties
 {
     /// <summary>

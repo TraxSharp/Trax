@@ -3,7 +3,7 @@
 //
 // A game server API powered by HotChocolate GraphQL. Handles lightweight
 // operations directly and hands off heavy work to the scheduler via the
-// queueTrain mutation. This process does NOT run a scheduler — start the
+// execute { queue*() } mutations. This process does NOT run a scheduler — start the
 // Scheduler project alongside this one.
 //
 // Authentication: fake API key via X-Api-Key header (for demonstration only)
@@ -27,17 +27,22 @@
 //        -H "Content-Type: application/json" \
 //        -d '{"query":"{ trains { serviceTypeName inputTypeName requiredPolicies requiredRoles inputSchema { name typeName } } }"}'
 //
-//   # Run a lightweight train directly
+//   # Query a train directly (typed query from [TraxQuery])
 //   curl -H "X-Api-Key: player-key-do-not-use-in-production" \
 //        -X POST http://localhost:5002/trax/graphql \
 //        -H "Content-Type: application/json" \
-//        -d '{"query":"mutation { runTrain(trainName: \"Trax.Samples.GameServer.Trains.Players.LookupPlayer.ILookupPlayerTrain\", input: {playerId: \"player-42\"}) { metadataId } }"}'
+//        -d '{"query":"{ discover { lookupPlayer(input: {playerId: \"player-42\"}) { playerId rank wins losses rating } } }"}'
 //
-//   # Queue a heavy train for the scheduler
+//   # Queue a heavy train for the scheduler (typed mutation from [TraxMutation])
 //   curl -H "X-Api-Key: player-key-do-not-use-in-production" \
 //        -X POST http://localhost:5002/trax/graphql \
 //        -H "Content-Type: application/json" \
-//        -d '{"query":"mutation { queueTrain(trainName: \"Trax.Samples.GameServer.Trains.Matches.ProcessMatchResult.IProcessMatchResultTrain\", input: {region: \"na\", matchId: \"match-999\", winnerId: \"player-1\", loserId: \"player-2\", winnerScore: 100, loserScore: 30}, priority: 10) { workQueueId externalId } }"}'
+//        -d '{"query":"mutation { dispatch { queueProcessMatchResult(input: {region: \"na\", matchId: \"match-999\", winnerId: \"player-1\", loserId: \"player-2\", winnerScore: 100, loserScore: 30}, priority: 10) { workQueueId externalId } } }"}'
+//
+//   # Subscribe to real-time train lifecycle events (use Banana Cake Pop IDE):
+//   #   subscription { onTrainStarted { metadataId trainName trainState timestamp } }
+//   #   subscription { onTrainCompleted { metadataId trainName trainState timestamp } }
+//   #   subscription { onTrainFailed { metadataId trainName failureStep failureReason } }
 //
 //   # Health check (no auth required)
 //   curl http://localhost:5002/trax/health

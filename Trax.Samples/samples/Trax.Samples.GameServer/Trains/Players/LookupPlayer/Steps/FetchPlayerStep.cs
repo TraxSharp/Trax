@@ -1,12 +1,12 @@
-using LanguageExt;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Step;
 
 namespace Trax.Samples.GameServer.Trains.Players.LookupPlayer.Steps;
 
-public class FetchPlayerStep(ILogger<FetchPlayerStep> logger) : Step<LookupPlayerInput, Unit>
+public class FetchPlayerStep(ILogger<FetchPlayerStep> logger)
+    : Step<LookupPlayerInput, LookupPlayerOutput>
 {
-    public override async Task<Unit> Run(LookupPlayerInput input)
+    public override async Task<LookupPlayerOutput> Run(LookupPlayerInput input)
     {
         logger.LogInformation(
             "Looking up player {PlayerId} — fetching profile from database",
@@ -15,11 +15,24 @@ public class FetchPlayerStep(ILogger<FetchPlayerStep> logger) : Step<LookupPlaye
 
         await Task.Delay(50);
 
+        var output = new LookupPlayerOutput
+        {
+            PlayerId = input.PlayerId,
+            Rank = 42,
+            Wins = 128,
+            Losses = 64,
+            Rating = 1847,
+        };
+
         logger.LogInformation(
-            "Player {PlayerId} found: rank=#42, wins=128, losses=64, rating=1847",
-            input.PlayerId
+            "Player {PlayerId} found: rank=#{Rank}, wins={Wins}, losses={Losses}, rating={Rating}",
+            output.PlayerId,
+            output.Rank,
+            output.Wins,
+            output.Losses,
+            output.Rating
         );
 
-        return Unit.Default;
+        return output;
     }
 }

@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Trax",
+  "classifications": ["Web", "Trax", "GraphQL", "API"],
+  "identity": "Trax.Samples.Api.CSharp",
+  "name": "Trax GraphQL API",
+  "shortName": "trax-api",
+  "sourceName": "Trax.Samples.Api",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "ConnectionString": {
+      "type": "parameter",
+      "datatype": "string",
+      "defaultValue": "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123",
+      "replaces": "HOST_CONNECTION_STRING",
+      "description": "The PostgreSQL connection string for Trax"
+    }
+  }
+}
