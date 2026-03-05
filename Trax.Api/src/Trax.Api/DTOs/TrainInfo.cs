@@ -11,5 +11,9 @@ public record TrainInfo(
     string Lifetime,
     IReadOnlyList<InputPropertySchema> InputSchema,
     IReadOnlyList<string> RequiredPolicies,
-    IReadOnlyList<string> RequiredRoles
+    IReadOnlyList<string> RequiredRoles,
+    bool IsQuery,
+    bool IsMutation,
+    string? GraphQLName,
+    bool IsBroadcastEnabled
 );

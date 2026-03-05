@@ -7,7 +7,10 @@ using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Api.GraphQL.Queries;
 
-public class TrainQueries
+/// <summary>
+/// Predefined operational queries: health, trains, manifests, manifest groups, and execution history.
+/// </summary>
+public class OperationsQueries
 {
     public async Task<HealthStatus> GetHealth(
         [Service] ITraxHealthService healthService,
@@ -29,7 +32,11 @@ public class TrainQueries
                 r.Lifetime.ToString(),
                 GetInputSchema(r.InputType),
                 r.RequiredPolicies,
-                r.RequiredRoles
+                r.RequiredRoles,
+                r.IsQuery,
+                r.IsMutation,
+                r.GraphQLName,
+                r.IsBroadcastEnabled
             ))
             .ToList();
     }

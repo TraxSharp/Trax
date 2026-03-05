@@ -1,11 +1,12 @@
-using HotChocolate.Types;
 using Trax.Api.DTOs;
 using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Api.GraphQL.Mutations;
 
-[ExtendObjectType(OperationTypeNames.Mutation)]
-public class SchedulerMutations
+/// <summary>
+/// Scheduler management mutations: trigger, disable, enable, and cancel manifests and groups.
+/// </summary>
+public class OperationsMutations
 {
     public async Task<OperationResponse> TriggerManifest(
         string externalId,

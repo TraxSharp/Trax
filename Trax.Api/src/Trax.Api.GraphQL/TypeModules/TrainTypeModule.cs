@@ -1,16 +1,27 @@
-using System.Text.Json;
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
 using HotChocolate.Types.Descriptors;
 using Trax.Api.DTOs;
-using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 
 namespace Trax.Api.GraphQL.TypeModules;
 
-public class TrainTypeModule(ITrainDiscoveryService discoveryService) : TypeModule
+/// <summary>
+/// A HotChocolate TypeModule that dynamically generates GraphQL queries and mutations
+/// from discovered train registrations. Each train marked with [TraxMutation]/[TraxQuery] attributes
+/// gets corresponding query/mutation fields wired to the TrainExecutionService.
+/// </summary>
+public partial class TrainTypeModule(ITrainDiscoveryService discoveryService) : TypeModule
 {
+    /// <summary>
+    /// Discovers all registered trains and generates the GraphQL schema types:
+    /// - InputObjectType for each unique input type
+    /// - ObjectType for each unique typed output
+    /// - Per-train response types for mutations with typed output (e.g. RunCreatePlayerResponse)
+    /// - ObjectTypeExtension on "DispatchMutations" / "DiscoverQueries" to add fields
+    /// </summary>
     public override ValueTask<IReadOnlyCollection<ITypeSystemMember>> CreateTypesAsync(
         IDescriptorContext context,
         CancellationToken cancellationToken
@@ -20,17 +31,24 @@ public class TrainTypeModule(ITrainDiscoveryService discoveryService) : TypeModu
         var types = new List<ITypeSystemMember>();
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var usedInputTypes = new HashSet<Type>();
-        var trainFields = new List<(TrainRegistration Registration, string TrainName)>();
+        var usedOutputTypes = new HashSet<Type>();
+        var mutationFields = new List<(TrainRegistration Registration, string TrainName)>();
+        var queryFields = new List<(TrainRegistration Registration, string TrainName)>();
 
         foreach (var reg in registrations)
         {
-            var trainName = DeriveTrainName(reg.ServiceTypeName);
+            if (!reg.IsQuery && !reg.IsMutation)
+                continue;
+
+            // Derive a unique GraphQL name — fall back to fully-qualified name on collision
+            var trainName = reg.GraphQLName ?? DeriveTrainName(reg.ServiceTypeName);
             if (!usedNames.Add(trainName))
             {
                 trainName = DeriveTrainName(reg.ServiceType.FullName ?? reg.ServiceTypeName);
                 usedNames.Add(trainName);
             }
 
+            // Register HotChocolate InputObjectType / ObjectType once per CLR type
             if (usedInputTypes.Add(reg.InputType))
             {
                 var inputObjectType = (ITypeSystemMember)
@@ -40,20 +58,56 @@ public class TrainTypeModule(ITrainDiscoveryService discoveryService) : TypeModu
                 types.Add(inputObjectType);
             }
 
-            trainFields.Add((reg, trainName));
+            if (HasTypedOutput(reg) && usedOutputTypes.Add(reg.OutputType))
+            {
+                var outputObjectType = (ITypeSystemMember)
+                    Activator.CreateInstance(typeof(ObjectType<>).MakeGenericType(reg.OutputType))!;
+                types.Add(outputObjectType);
+            }
+
+            if (reg.IsQuery)
+            {
+                queryFields.Add((reg, trainName));
+            }
+            else
+            {
+                // Eagerly create a response wrapper type for Run mutations with typed output
+                // (e.g. "RunCreatePlayerResponse" with metadataId + output fields)
+                if (HasTypedOutput(reg) && reg.GraphQLOperations.HasFlag(GraphQLOperation.Run))
+                    types.Add(BuildRunResponseType(trainName, reg.OutputType));
+
+                mutationFields.Add((reg, trainName));
+            }
         }
 
-        if (trainFields.Count > 0)
+        // Extend the root mutation type with run*/queue* fields for each mutation train
+        if (mutationFields.Count > 0)
         {
             types.Add(
                 new ObjectTypeExtension(d =>
                 {
-                    d.Name(OperationTypeNames.Mutation);
-                    foreach (var (reg, name) in trainFields)
+                    d.Name("DispatchMutations");
+                    foreach (var (reg, name) in mutationFields)
                     {
-                        AddRunField(d, reg, name);
-                        AddQueueField(d, reg, name);
+                        if (reg.GraphQLOperations.HasFlag(GraphQLOperation.Run))
+                            AddRunField(d, reg, name);
+
+                        if (reg.GraphQLOperations.HasFlag(GraphQLOperation.Queue))
+                            AddQueueField(d, reg, name);
                     }
+                })
+            );
+        }
+
+        // Extend the root query type with fields for each query train
+        if (queryFields.Count > 0)
+        {
+            types.Add(
+                new ObjectTypeExtension(d =>
+                {
+                    d.Name("DiscoverQueries");
+                    foreach (var (reg, name) in queryFields)
+                        AddQueryField(d, reg, name);
                 })
             );
         }
@@ -61,87 +115,43 @@ public class TrainTypeModule(ITrainDiscoveryService discoveryService) : TypeModu
         return new ValueTask<IReadOnlyCollection<ITypeSystemMember>>(types);
     }
 
-    private static void AddRunField(
-        IObjectTypeDescriptor descriptor,
-        TrainRegistration registration,
-        string trainName
-    )
+    /// <summary>
+    /// Builds a response wrapper ObjectType for Run mutations that have typed output.
+    /// The generated type has two fields: metadataId (Long!) and output (OutputType!).
+    /// </summary>
+    private static ObjectType BuildRunResponseType(string trainName, Type outputType)
     {
-        var inputType = registration.InputType;
-        var serviceTypeName = registration.ServiceTypeName;
+        var responseTypeName = $"Run{trainName}Response";
 
-        descriptor
-            .Field($"run{trainName}")
-            .Argument(
-                "input",
-                a =>
-                    a.Type(
-                        typeof(NonNullType<>).MakeGenericType(
-                            typeof(InputObjectType<>).MakeGenericType(inputType)
-                        )
+        return new ObjectType(d =>
+        {
+            d.Name(responseTypeName);
+            d.Field("metadataId")
+                .Type<NonNullType<LongType>>()
+                .Resolve(ctx => ((RunTrainResult)ctx.Parent<object>()).MetadataId);
+            d.Field("output")
+                .Type(
+                    typeof(NonNullType<>).MakeGenericType(
+                        typeof(ObjectType<>).MakeGenericType(outputType)
                     )
-            )
-            .Type<NonNullType<ObjectType<RunTrainResponse>>>()
-            .Resolve(async ctx =>
-            {
-                var input = ctx.ArgumentValue<object>("input");
-                var inputJson = JsonSerializer.Serialize(
-                    input,
-                    inputType,
-                    TraxEffectConfiguration.StaticSystemJsonSerializerOptions
-                );
-
-                var executionService = ctx.Service<ITrainExecutionService>();
-                var ct = ctx.RequestAborted;
-                var result = await executionService.RunAsync(serviceTypeName, inputJson, ct);
-                return new RunTrainResponse(result.MetadataId);
-            });
+                )
+                .Resolve(ctx => ((RunTrainResult)ctx.Parent<object>()).Output);
+        });
     }
 
-    private static void AddQueueField(
-        IObjectTypeDescriptor descriptor,
-        TrainRegistration registration,
-        string trainName
-    )
-    {
-        var inputType = registration.InputType;
-        var serviceTypeName = registration.ServiceTypeName;
+    /// <summary>
+    /// Returns true if the train produces a meaningful output type
+    /// (not Unit and not bare object).
+    /// </summary>
+    private static bool HasTypedOutput(TrainRegistration registration) =>
+        registration.OutputType != typeof(LanguageExt.Unit)
+        && registration.OutputType != typeof(object);
 
-        descriptor
-            .Field($"queue{trainName}")
-            .Argument(
-                "input",
-                a =>
-                    a.Type(
-                        typeof(NonNullType<>).MakeGenericType(
-                            typeof(InputObjectType<>).MakeGenericType(inputType)
-                        )
-                    )
-            )
-            .Argument("priority", a => a.Type<IntType>())
-            .Type<NonNullType<ObjectType<QueueTrainResponse>>>()
-            .Resolve(async ctx =>
-            {
-                var input = ctx.ArgumentValue<object>("input");
-                var inputJson = JsonSerializer.Serialize(
-                    input,
-                    inputType,
-                    TraxEffectConfiguration.StaticSystemJsonSerializerOptions
-                );
-
-                var priority = ctx.ArgumentValue<int?>("priority") ?? 0;
-                var executionService = ctx.Service<ITrainExecutionService>();
-                var ct = ctx.RequestAborted;
-                var result = await executionService.QueueAsync(
-                    serviceTypeName,
-                    inputJson,
-                    priority,
-                    ct
-                );
-                return new QueueTrainResponse(result.WorkQueueId, result.ExternalId);
-            });
-    }
-
+    /// <summary>
+    /// Derives a PascalCase GraphQL name from a train's type name.
+    /// Strips the leading "I" (interface convention) and trailing "Train" suffix.
+    /// e.g. "ICreatePlayerTrain" → "CreatePlayer"
+    /// </summary>
     private static string DeriveTrainName(string serviceTypeName)
     {
         var name = serviceTypeName;

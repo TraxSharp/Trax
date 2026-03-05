@@ -1,7 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Trax.Api/Trax.Api.csproj" />
-    <Project Path="src/Trax.Api.Rest/Trax.Api.Rest.csproj" />
     <Project Path="src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
   </Folder>
   <Folder Name="/tests/">

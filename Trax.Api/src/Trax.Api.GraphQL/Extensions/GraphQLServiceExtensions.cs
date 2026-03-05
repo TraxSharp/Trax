@@ -1,9 +1,13 @@
+using HotChocolate.Types;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Extensions;
+using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Effect.Services.TrainLifecycleHookFactory;
 
 namespace Trax.Api.GraphQL.Extensions;
 
@@ -14,18 +18,29 @@ public static class GraphQLServiceExtensions
     /// <summary>
     /// Registers the Trax GraphQL schema on a named HotChocolate server ("trax").
     /// This avoids conflicts with a consumer's own default GraphQL schema.
+    /// Only trains annotated with <c>[TraxQuery]</c> or <c>[TraxMutation]</c> get typed operations generated.
     /// </summary>
     public static IServiceCollection AddTraxGraphQL(this IServiceCollection services)
     {
         services.AddTraxApi();
         services.AddSingleton<TrainTypeModule>();
+        services.AddTransient<GraphQLSubscriptionHook>();
+        services
+            .AddSingleton<GraphQLSubscriptionHookFactory>()
+            .AddSingleton<ITrainLifecycleHookFactory>(sp =>
+                sp.GetRequiredService<GraphQLSubscriptionHookFactory>()
+            );
         services
             .AddGraphQLServer(SchemaName)
-            .AddQueryType<TrainQueries>()
-            .AddMutationType()
-            .AddTypeExtension<TrainMutations>()
-            .AddTypeExtension<SchedulerMutations>()
-            .AddTypeModule<TrainTypeModule>();
+            .AddQueryType<RootQuery>()
+            .AddMutationType<RootMutation>()
+            .AddSubscriptionType<LifecycleSubscriptions>()
+            .AddType<ObjectType<DispatchMutations>>()
+            .AddType<ObjectType<OperationsMutations>>()
+            .AddType<ObjectType<DiscoverQueries>>()
+            .AddType<ObjectType<OperationsQueries>>()
+            .AddTypeModule<TrainTypeModule>()
+            .AddInMemorySubscriptions();
 
         return services;
     }
@@ -48,6 +63,7 @@ public static class GraphQLServiceExtensions
         Action<IEndpointConventionBuilder>? configure = null
     )
     {
+        app.UseWebSockets();
         var endpoint = app.MapGraphQL(routePrefix, SchemaName);
         configure?.Invoke(endpoint);
         return app;
