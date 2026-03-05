@@ -14,10 +14,10 @@ Trax.Core includes a Roslyn analyzer that validates your train's route at compil
 Consider this train:
 
 ```csharp
-Activate(input)                          // input: ExecuteManifestRequest
-    .Chain<LoadMetadataStep>()           // TIn=ExecuteManifestRequest -> TOut=Metadata
+Activate(input)                          // input: RunJobRequest
+    .Chain<LoadMetadataStep>()           // TIn=RunJobRequest -> TOut=Metadata
     .Chain<ValidateMetadataStateStep>()  // TIn=Metadata -> TOut=Unit
-    .Chain<ExecuteScheduledTrainStep>()
+    .Chain<RunScheduledTrainStep>()
     .Chain<UpdateManifestSuccessStep>()
     .Resolve();
 ```

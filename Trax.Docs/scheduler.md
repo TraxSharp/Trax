@@ -146,8 +146,8 @@ When `groupId` is not specified, it defaults to the manifest's `externalId`. See
                                   │ dispatched to
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  TaskServerExecutorTrain                       │
-│            (runs on PostgresWorkerService workers)                │
+│                  JobRunnerTrain                                │
+│            (runs on LocalWorkerService workers)                   │
 │                                                                  │
 │  LoadMetadata → ValidateState → ExecuteTrain →                │
 │                                      UpdateManifest              │
@@ -166,9 +166,9 @@ The **ManifestManagerPollingService** and **JobDispatcherPollingService** are in
 
 The **ManifestManagerTrain** loads enabled manifests, dead-letters any that have exceeded their retry limit, determines which are due for execution (including [dependent manifests](scheduler/dependent-trains.md) whose parent has a newer `LastSuccessfulRun`), and writes them to the work queue. It doesn't enqueue anything directly—it just records intent. In multi-server deployments, a PostgreSQL advisory lock ensures only one server runs the ManifestManager per cycle.
 
-The **JobDispatcherTrain** reads from the work queue, enforces both global and per-group `MaxActiveJobs` limits, creates `Metadata` records, and enqueues to the background task server. This is the single gateway to execution. Everything goes through the work queue first—manifest schedules, `TriggerAsync` calls, dashboard re-runs—so capacity enforcement happens in one place. Each entry is dispatched within its own transaction using `FOR UPDATE SKIP LOCKED`, allowing multiple servers to dispatch concurrently without duplicate execution.
+The **JobDispatcherTrain** reads from the work queue, enforces both global and per-group `MaxActiveJobs` limits, creates `Metadata` records, and enqueues to the job submitter. This is the single gateway to execution. Everything goes through the work queue first—manifest schedules, `TriggerAsync` calls, dashboard re-runs—so capacity enforcement happens in one place. Each entry is dispatched within its own transaction using `FOR UPDATE SKIP LOCKED`, allowing multiple servers to dispatch concurrently without duplicate execution.
 
-The **TaskServerExecutorTrain** runs on the task server's worker threads for each enqueued job. It loads the Metadata and Manifest, validates the job is still pending, executes the target train via `ITrainBus`, and updates `LastSuccessfulRun` on success. See [Task Server](scheduler/task-server.md) for details on the built-in PostgreSQL implementation.
+The **JobRunnerTrain** runs on the local worker threads for each enqueued job. It loads the Metadata and Manifest, validates the job is still pending, executes the target train via `ITrainBus`, and updates `LastSuccessfulRun` on success. See [Job Submission](scheduler/job-submission.md) for details on the built-in PostgreSQL implementation.
 
 See [Administrative Trains](scheduler/admin-trains.md) for detailed documentation on each internal train.
 
@@ -186,7 +186,7 @@ The same scheduler operations are also available through the [GraphQL API]({{ si
 
 ## Sample Project
 
-A working example with the built-in PostgreSQL task server, bulk scheduling, metadata cleanup, and the dashboard is in [`samples/Trax.Samples.GameServer.Scheduler`](https://github.com/Theauxm/Trax.Core/tree/main/samples/Trax.Samples.GameServer.Scheduler). The scheduler runs alongside a separate API process (`Trax.Samples.GameServer.GraphQL`) that queues work for it.
+A working example with the built-in PostgreSQL local workers, bulk scheduling, metadata cleanup, and the dashboard is in [`samples/Trax.Samples.GameServer.Scheduler`](https://github.com/Theauxm/Trax.Core/tree/main/samples/Trax.Samples.GameServer.Scheduler). The scheduler runs alongside a separate API process (`Trax.Samples.GameServer.GraphQL`) that queues work for it.
 
 ## Next Layer
 

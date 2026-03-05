@@ -121,7 +121,7 @@ The `ScheduleOptions` fluent builder consolidates all optional scheduling parame
 ```csharp
 services.AddTrax.CoreEffects(options => options
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer()
+        .UseLocalWorkers()
         .Schedule<ISyncTrain>(
             "sync-daily",
             new SyncInput { Source = "production" },

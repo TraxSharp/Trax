@@ -17,7 +17,7 @@ This page documents the concurrency model, the guarantees it provides, and the i
 |---------|----------|-------------|-----------|
 | **ManifestManagerPollingService** | Advisory lock (single-leader) | One server per cycle | No duplicate WorkQueue entries |
 | **JobDispatcherPollingService** | `FOR UPDATE SKIP LOCKED` (per-entry) | All servers dispatch concurrently | No duplicate Metadata or double-dispatch |
-| **PostgresWorkerService** | `FOR UPDATE SKIP LOCKED` (per-job) | All servers execute concurrently | No duplicate job execution |
+| **LocalWorkerService** | `FOR UPDATE SKIP LOCKED` (per-job) | All servers execute concurrently | No duplicate job execution |
 | **MetadataCleanupPollingService** | None (idempotent) | All servers run concurrently | Deleting already-deleted rows is a no-op |
 
 ## ManifestManager: Advisory Lock
@@ -90,7 +90,7 @@ Manual WorkQueue entries (from the dashboard or `TriggerAsync`) have `manifest_i
 
 ### The Problem
 
-The JobDispatcher loads `Queued` WorkQueue entries and dispatches them — creating Metadata records, updating entry status to `Dispatched`, and enqueuing to the background task server. If two servers load the same entries simultaneously, both would create Metadata records for the same entry and dispatch the train twice.
+The JobDispatcher loads `Queued` WorkQueue entries and dispatches them — creating Metadata records, updating entry status to `Dispatched`, and enqueuing to the job submitter. If two servers load the same entries simultaneously, both would create Metadata records for the same entry and dispatch the train twice.
 
 ### The Solution
 
@@ -115,31 +115,31 @@ SELECT ... WHERE id=1 FOR UPDATE      SELECT ... WHERE id=1 FOR UPDATE
   Create Metadata                     SELECT ... WHERE id=2 FOR UPDATE
   Update status → Dispatched            SKIP LOCKED → row returned ✓
 COMMIT                                  Create Metadata
-Enqueue to task server                  Update status → Dispatched
+Enqueue to job submitter                  Update status → Dispatched
                                       COMMIT
-BEGIN TRANSACTION                     Enqueue to task server
+BEGIN TRANSACTION                     Enqueue to job submitter
 SELECT ... WHERE id=2 FOR UPDATE
   SKIP LOCKED → skipped (already      BEGIN TRANSACTION
   dispatched, status ≠ 'queued') ✗    SELECT ... WHERE id=3 FOR UPDATE
 SELECT ... WHERE id=3 FOR UPDATE        SKIP LOCKED → row returned ✓
   SKIP LOCKED → skipped (locked) ✗      ...
                                       COMMIT
-                                      Enqueue to task server
+                                      Enqueue to job submitter
 ```
 
 ### Why Not an Advisory Lock?
 
 Unlike the ManifestManager, the JobDispatcher benefits from **parallel dispatch** across servers. Each server can claim and dispatch different entries simultaneously, increasing throughput. An advisory lock would serialize all dispatch activity to a single server — wasteful when the work queue has many entries.
 
-The `FOR UPDATE SKIP LOCKED` pattern allows fine-grained, per-entry parallelism: multiple servers work through the queue concurrently, each atomically claiming the next available entry. This is the same pattern used by the [PostgresWorkerService](task-server.md#worker-lifecycle) for job execution.
+The `FOR UPDATE SKIP LOCKED` pattern allows fine-grained, per-entry parallelism: multiple servers work through the queue concurrently, each atomically claiming the next available entry. This is the same pattern used by the [LocalWorkerService](job-submission.md#worker-lifecycle) for job execution.
 
 ### Per-Entry DI Scope
 
-Each entry is dispatched within its own DI scope, following the same pattern as the PostgresWorkerService. This provides:
+Each entry is dispatched within its own DI scope, following the same pattern as the LocalWorkerService. This provides:
 
 1. **Clean change tracker**: each entry gets a fresh `IDataContext` with no stale tracked entities from previous iterations.
 2. **Transaction isolation**: if one entry fails, its transaction is rolled back without affecting others.
-3. **Commit-then-enqueue**: the claim transaction (Metadata creation + WorkQueue status update) is committed before calling `EnqueueAsync` on the background task server. This ensures the Metadata record is visible to the task server when it begins execution — necessary because the `InMemoryTaskServer` executes trains synchronously within `EnqueueAsync`. If the enqueue fails after commit, the WorkQueue entry is already `Dispatched` with a valid Metadata record; the next dispatch cycle won't re-process it, but the Metadata's `Pending` state can be detected for recovery.
+3. **Commit-then-enqueue**: the claim transaction (Metadata creation + WorkQueue status update) is committed before calling `EnqueueAsync` on the job submitter. This ensures the Metadata record is visible to the job submitter when it begins execution — necessary because the `InMemoryJobSubmitter` executes trains synchronously within `EnqueueAsync`. If the enqueue fails after commit, the WorkQueue entry is already `Dispatched` with a valid Metadata record; the next dispatch cycle won't re-process it, but the Metadata's `Pending` state can be detected for recovery.
 
 ### Capacity Limit Approximation
 
@@ -149,11 +149,11 @@ This is a deliberate tradeoff. `MaxActiveJobs` is a soft limit to prevent overwh
 
 In practice, the overshoot is bounded by the number of servers multiplied by the number of entries dispatched per cycle. For most deployments, this is negligible.
 
-## PostgresWorkerService: Already Safe
+## LocalWorkerService: Already Safe
 
-The PostgresWorkerService has used `FOR UPDATE SKIP LOCKED` since its introduction. Multiple worker threads (across one or many servers) atomically claim jobs from the `background_job` table. Each claim is a separate transaction: lock the row, set `fetched_at`, commit. Other workers skip locked rows and move to the next available job.
+The LocalWorkerService has used `FOR UPDATE SKIP LOCKED` since its introduction. Multiple worker threads (across one or many servers) atomically claim jobs from the `background_job` table. Each claim is a separate transaction: lock the row, set `fetched_at`, commit. Other workers skip locked rows and move to the next available job.
 
-See [Task Server — Worker Lifecycle](task-server.md#worker-lifecycle) for the full dequeue SQL and crash recovery details.
+See [Job Submission — Worker Lifecycle](job-submission.md#worker-lifecycle) for the full dequeue SQL and crash recovery details.
 
 ## MetadataCleanupPollingService: Idempotent
 

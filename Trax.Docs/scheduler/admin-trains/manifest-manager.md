@@ -115,6 +115,6 @@ See [Multi-Server Concurrency](../concurrency.md) for the full cross-service con
 
 ## What Changed
 
-Previously, this train had an `EnqueueJobsStep` as its final step. That step would directly create Metadata records and enqueue to the background task server (Hangfire). `MaxActiveJobs` was enforced there, meaning the ManifestManager was both the scheduler and the dispatcher.
+Previously, this train had an `EnqueueJobsStep` as its final step. That step would directly create Metadata records and enqueue to the job submitter (Hangfire). `MaxActiveJobs` was enforced there, meaning the ManifestManager was both the scheduler and the dispatcher.
 
 Now those responsibilities are split. The ManifestManager writes intent to the work queue. The [JobDispatcher](job-dispatcher.md) reads from it and handles the actual dispatch. This means `TriggerAsync`, dashboard re-runs, and scheduled manifests all converge on the same dispatch path.

@@ -228,9 +228,9 @@ private async Task RunManifestManager(CancellationToken cancellationToken)
 }
 ```
 
-### PostgresWorkerService Shutdown Grace Period
+### LocalWorkerService Shutdown Grace Period
 
-The PostgresWorkerService implements a **shutdown grace period** using an unlinked CancellationTokenSource. When the host signals shutdown, in-flight trains get `ShutdownTimeout` (default: 30 seconds) to finish before being cancelled:
+The LocalWorkerService implements a **shutdown grace period** using an unlinked CancellationTokenSource. When the host signals shutdown, in-flight trains get `ShutdownTimeout` (default: 30 seconds) to finish before being cancelled:
 
 ```
 Host signals shutdown (stoppingToken fires)
@@ -251,13 +251,13 @@ This ensures trains performing critical operations (database transactions, exter
 Configure the grace period:
 
 ```csharp
-.UsePostgresTaskServer(options =>
+.UseLocalWorkers(options =>
 {
     options.ShutdownTimeout = TimeSpan.FromSeconds(60); // default: 30 seconds
 })
 ```
 
-*See also: [Task Server]({{ site.baseurl }}{% link scheduler/task-server.md %})*
+*See also: [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %})*
 
 ## ServiceTrain Token Propagation
 
@@ -275,7 +275,7 @@ Trax.Core supports two complementary cancellation paths: **same-server** (instan
 
 ### Same-Server: ICancellationRegistry
 
-When the scheduler is configured, `PostgresWorkerService` registers each in-flight train's `CancellationTokenSource` with `ICancellationRegistry`. Calling `TryCancel(metadataId)` fires the CTS immediately, interrupting the train mid-step:
+When the scheduler is configured, `LocalWorkerService` registers each in-flight train's `CancellationTokenSource` with `ICancellationRegistry`. Calling `TryCancel(metadataId)` fires the CTS immediately, interrupting the train mid-step:
 
 ```
 Dashboard "Cancel" button
@@ -346,12 +346,12 @@ await scheduler.ScheduleAsync<IMyTrain, MyInput>(
     .DefaultJobTimeout(TimeSpan.FromMinutes(30)))
 ```
 
-## IBackgroundTaskServer
+## IJobSubmitter
 
-Custom task server implementations can accept a `CancellationToken` via default interface methods:
+Custom job submitter implementations can accept a `CancellationToken` via default interface methods:
 
 ```csharp
-public interface IBackgroundTaskServer
+public interface IJobSubmitter
 {
     Task<string> EnqueueAsync(long metadataId);
     Task<string> EnqueueAsync(long metadataId, object input);
@@ -364,7 +364,7 @@ public interface IBackgroundTaskServer
 }
 ```
 
-The built-in `PostgresTaskServer` and `InMemoryTaskServer` both implement the CT overloads — `PostgresTaskServer` passes the token to `SaveChangesAsync`, and `InMemoryTaskServer` passes it to `train.Run()`.
+The built-in `PostgresJobSubmitter` and `InMemoryJobSubmitter` both implement the CT overloads — `PostgresJobSubmitter` passes the token to `SaveChangesAsync`, and `InMemoryJobSubmitter` passes it to `train.Run()`.
 
 ## Testing with Cancellation Tokens
 
@@ -442,8 +442,8 @@ public async Task Train_CancelDuringStep_PropagatesCancellation()
 | **TrainBus** | `RunAsync<TOut>(input, ct)` | Forwarded to `train.Run(input, ct)` |
 | **ServiceTrain** | Inherited from `Train` | Passed to `SaveChangesAsync`, `BeginTransaction` |
 | **Background Services** | `stoppingToken` from `ExecuteAsync` | Passed to `train.Run(input, stoppingToken)` |
-| **PostgresWorkerService** | `shutdownCts.Token` (grace period) | Passed to `train.Run(input, shutdownCts.Token)` |
-| **Task Server** | `EnqueueAsync(id, ct)` | Passed to `SaveChangesAsync` / `train.Run()` |
+| **LocalWorkerService** | `shutdownCts.Token` (grace period) | Passed to `train.Run(input, shutdownCts.Token)` |
+| **Job Submitter** | `EnqueueAsync(id, ct)` | Passed to `SaveChangesAsync` / `train.Run()` |
 | **Dashboard** | Component disposal token | Passed to event handler async calls |
 | **CancellationCheckProvider** | DB `cancel_requested` flag | Throws `OperationCanceledException` before step |
 | **ICancellationRegistry** | `CancellationTokenSource` lookup | `TryCancel()` fires CTS for same-server instant cancel |

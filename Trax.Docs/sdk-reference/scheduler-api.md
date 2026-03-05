@@ -22,8 +22,8 @@ Both share the same concepts: external IDs for upsert semantics, `Schedule` obje
 | Method | Description |
 |--------|-------------|
 | [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}) | Adds the scheduler subsystem and configures global options (polling, retries, timeouts) |
-| [UsePostgresTaskServer]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-postgres-task-server.md %}) | Built-in PostgreSQL task server (recommended) |
-| [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire as the task server backend (deprecated) |
+| [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) | Built-in PostgreSQL local workers (recommended) |
+| [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire as the execution backend (deprecated) |
 
 ### Scheduling Methods
 

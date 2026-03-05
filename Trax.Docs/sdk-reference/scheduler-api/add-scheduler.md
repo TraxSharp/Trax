@@ -8,7 +8,7 @@ nav_order: 1
 
 # AddScheduler
 
-Adds the Trax.Core scheduler subsystem. Registers `ITraxScheduler`, the background polling service, and all scheduler infrastructure. Provides a `SchedulerConfigurationBuilder` lambda for configuring global options, task servers, and startup schedules.
+Adds the Trax.Core scheduler subsystem. Registers `ITraxScheduler`, the background polling service, and all scheduler infrastructure. Provides a `SchedulerConfigurationBuilder` lambda for configuring global options, execution backends, and startup schedules.
 
 ## Signature
 
@@ -23,7 +23,7 @@ public static Trax.CoreEffectConfigurationBuilder AddScheduler(
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `configure` | `Action<SchedulerConfigurationBuilder>` | Yes | Lambda that receives the scheduler builder for configuring options, task servers, and schedules |
+| `configure` | `Action<SchedulerConfigurationBuilder>` | Yes | Lambda that receives the scheduler builder for configuring options, execution backends, and schedules |
 
 ## Returns
 
@@ -36,7 +36,7 @@ services.AddTrax.CoreEffects(options => options
     .AddPostgresEffect(connectionString)
     .AddServiceTrainBus(assemblies: typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer()
+        .UseLocalWorkers()
         .ManifestManagerPollingInterval(TimeSpan.FromSeconds(5))
         .JobDispatcherPollingInterval(TimeSpan.FromSeconds(5))
         .MaxActiveJobs(50)
@@ -65,13 +65,14 @@ services.AddTrax.CoreEffects(options => options
 
 These methods are available on the `SchedulerConfigurationBuilder` passed to the `configure` lambda:
 
-### Task Server
+### Execution Backend
 
 | Method | Description |
 |--------|-------------|
-| [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire with PostgreSQL as the task server |
-| `UseInMemoryTaskServer()` | Uses a synchronous in-memory task server (for testing) |
-| `UseTaskServer(Action<IServiceCollection>)` | Registers a custom task server implementation |
+| [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) | Built-in PostgreSQL local workers (recommended) |
+| [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire with PostgreSQL as the execution backend (deprecated) |
+| `UseInMemoryWorkers()` | Uses a synchronous in-memory job submitter (for testing) |
+| `UseCustomSubmitter(Action<IServiceCollection>)` | Registers a custom job submitter implementation |
 
 ### Global Options
 
@@ -79,7 +80,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 |--------|-----------|---------|-------------|
 | `PollingInterval(TimeSpan)` | interval | 5 seconds | Shorthand — sets both `ManifestManagerPollingInterval` and `JobDispatcherPollingInterval` to the same value |
 | `ManifestManagerPollingInterval(TimeSpan)` | interval | 5 seconds | How often the ManifestManager evaluates manifests and writes to the work queue |
-| `JobDispatcherPollingInterval(TimeSpan)` | interval | 5 seconds | How often the JobDispatcher reads from the work queue and dispatches to the task server |
+| `JobDispatcherPollingInterval(TimeSpan)` | interval | 5 seconds | How often the JobDispatcher reads from the work queue and dispatches to the job submitter |
 | `MaxActiveJobs(int?)` | maxJobs | 100 | Max concurrent active jobs (Pending + InProgress) globally. `null` = unlimited. Per-group limits can also be set from the dashboard on each ManifestGroup |
 | `ExcludeFromMaxActiveJobs<TRoute>()` | — | — | Excludes a train type from the MaxActiveJobs count |
 | `DefaultMaxRetries(int)` | maxRetries | 3 | Retry attempts before dead-lettering |
@@ -105,7 +106,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 ## Remarks
 
 - `AddScheduler` requires a data provider (`AddPostgresEffect` or `AddInMemoryEffect`) and `AddServiceTrainBus` to be configured first.
-- Internal scheduler trains (`ManifestManager`, `JobDispatcher`, `TaskServerExecutor`, `MetadataCleanup`) are automatically excluded from `MaxActiveJobs`.
+- Internal scheduler trains (`ManifestManager`, `JobDispatcher`, `JobRunner`, `MetadataCleanup`) are automatically excluded from `MaxActiveJobs`.
 - Manifests declared via `Schedule`/`ScheduleMany` are not created immediately — they are seeded on application startup by the `SchedulerStartupService`.
 - Manifests declared via `Schedule`/`ThenInclude`/`Include` get a ManifestGroup based on their `groupId` parameter (defaults to externalId). Per-group dispatch controls (MaxActiveJobs, Priority, IsEnabled) are configured from the dashboard.
 - At build time, the scheduler validates that ManifestGroup dependencies form a DAG (no circular dependencies). If a cycle is detected, `AddScheduler` throws `InvalidOperationException` with the groups involved. See [Dependent Trains — Cycle Detection]({{ site.baseurl }}{% link scheduler/dependent-trains.md %}#cycle-detection).

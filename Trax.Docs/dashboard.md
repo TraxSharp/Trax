@@ -193,7 +193,7 @@ The **User Settings** page (`/trax/settings/user`) lets each user customize thei
 | Setting | Default | Description |
 |---------|---------|-------------|
 | **Polling Interval** | 5 seconds | How often dashboard pages re-query for fresh data. Range: 1–300 seconds. |
-| **Hide Administration Trains** | `true` | Exclude scheduler internals (ManifestManager, TaskServerExecutor, MetadataCleanup) from statistics and charts. |
+| **Hide Administration Trains** | `true` | Exclude scheduler internals (ManifestManager, JobRunner, MetadataCleanup) from statistics and charts. |
 | **Dashboard Components** | All visible | Toggle visibility of individual home page sections (summary cards, charts, tables, real-time metrics, throughput chart). |
 
 ## Integration with Existing Blazor Apps

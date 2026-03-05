@@ -26,7 +26,7 @@ The group is set via the `ScheduleOptions` fluent builder using `.Group(...)`. W
 ```csharp
 services.AddTrax.CoreEffects(options => options
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer()
+        .UseLocalWorkers()
         // Single manifest — explicit group shared with other related jobs
         .Schedule<IExtractTrain>(
             "extract-users",

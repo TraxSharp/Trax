@@ -43,7 +43,7 @@ await context.SaveChanges(ct);
 
 The **Trax.Core Dashboard** at `/trax/data/dead-letters` provides a real-time view of all dead letters with status badges and links to detail pages. The dead letter detail page surfaces the full failure context — stack traces, inputs, and execution history — so operators can make informed retry/acknowledge decisions without writing queries.
 
-The Hangfire Dashboard at `/hangfire` shows enqueued TaskServerExecutor jobs, failures, and worker health. The ManifestManager polling itself runs as a .NET `BackgroundService` outside of Hangfire, so it won't appear in the dashboard. Configure authorization for production.
+The Hangfire Dashboard at `/hangfire` shows enqueued JobRunner jobs, failures, and worker health. The ManifestManager polling itself runs as a .NET `BackgroundService` outside of Hangfire, so it won't appear in the dashboard. Configure authorization for production.
 
 For train-level details, query the `Metadata` table:
 
@@ -108,11 +108,11 @@ Cancelled trains are treated as terminal — they are eligible for cleanup but a
 
 ## Testing
 
-For integration tests, use the in-memory task server instead of Hangfire:
+For integration tests, use the in-memory workers instead of Hangfire:
 
 ```csharp
 services.AddTrax.CoreEffects(options => options
-    .AddScheduler(scheduler => scheduler.UseInMemoryTaskServer())
+    .AddScheduler(scheduler => scheduler.UseInMemoryWorkers())
 );
 ```
 

@@ -65,7 +65,7 @@ app.Run();
 │                             │    │                             │
 │  GraphQL endpoint           │    │  ManifestManagerPolling     │
 │  ITrainBus (direct runs)    │    │  JobDispatcherPolling       │
-│  ITraxScheduler (DB writes) │    │  TaskServerExecutor         │
+│  ITraxScheduler (DB writes) │    │  JobRunner                  │
 │  ITrainDiscoveryService     │    │                             │
 │  ITrainExecutionService     │    │                             │
 └──────────────┬──────────────┘    └──────────────┬──────────────┘

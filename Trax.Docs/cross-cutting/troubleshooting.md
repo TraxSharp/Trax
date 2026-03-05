@@ -68,13 +68,13 @@ If you're using `ShortCircuit`, remember that throwing an exception means "conti
 
 ## Scheduled jobs don't execute (no errors)
 
-The most common cause: `TaskServerExecutorTrain.Assembly` isn't registered with the `TrainBus`. The ManifestManager enqueues jobs to Hangfire, but Hangfire can't resolve the executor train.
+The most common cause: `JobRunnerTrain.Assembly` isn't registered with the `TrainBus`. The ManifestManager enqueues jobs, but the job submitter can't resolve the job runner train.
 
 **Fix:**
 ```csharp
 .AddServiceTrainBus(
     typeof(Program).Assembly,
-    typeof(TaskServerExecutorTrain).Assembly  // Don't forget this
+    typeof(JobRunnerTrain).Assembly  // Don't forget this
 )
 ```
 

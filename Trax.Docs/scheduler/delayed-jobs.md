@@ -54,7 +54,7 @@ For one-off jobs that should be scheduled when the application starts — such a
 ```csharp
 services.AddTraxEffects(options => options
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer()
+        .UseLocalWorkers()
         .ScheduleOnce<IPostDeployTrain>(
             "post-deploy-v2.5",
             new PostDeployInput { Version = "2.5" },

@@ -32,7 +32,7 @@ Chain a dependent train after a `Schedule` call:
 ```csharp
 services.AddTrax.CoreEffects(options => options
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer()
+        .UseLocalWorkers()
         .Schedule<IExtractTrain>(
             "extract-data",
             new ExtractInput { Source = "api" },

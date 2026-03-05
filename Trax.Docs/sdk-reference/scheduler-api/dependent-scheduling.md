@@ -180,7 +180,7 @@ Uses the legacy three-type-parameter API with `map` and `dependsOn` functions. S
 ```csharp
 services.AddTrax.CoreEffects(options => options
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer()
+        .UseLocalWorkers()
         // A: Extract runs every 5 minutes
         .Schedule<IExtractTrain>(
             "etl-extract",
@@ -319,7 +319,7 @@ The manifest is created with `ScheduleType.DormantDependent` instead of `Schedul
 
 A scoped service for activating dormant dependent manifests at runtime. Injected into train steps that need to selectively fire dependent trains with runtime-determined input.
 
-The context is automatically initialized by the `TaskServerExecutor` before the user's train runs. Only dormant dependents declared as children of the currently executing parent manifest can be activated.
+The context is automatically initialized by the `JobRunner` before the user's train runs. Only dormant dependents declared as children of the currently executing parent manifest can be activated.
 
 ### ActivateAsync
 

@@ -15,7 +15,7 @@ nav_order: 1
 dotnet add package Trax.Scheduler
 ```
 
-The scheduler includes a built-in PostgreSQL task server — no additional packages needed.
+The scheduler includes built-in local workers backed by PostgreSQL — no additional packages needed.
 
 ### Configuration
 
@@ -23,7 +23,7 @@ Jobs can be scheduled directly in startup configuration. The scheduler creates o
 
 ```csharp
 using Trax.Scheduler.Services.Scheduling;
-using Trax.Scheduler.Trains.TaskServerExecutor;
+using Trax.Scheduler.Trains.JobRunner;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,14 +32,14 @@ var connectionString = builder.Configuration.GetConnectionString("Database");
 builder.Services.AddTrax.CoreEffects(options => options
     .AddServiceTrainBus(
         typeof(Program).Assembly,
-        typeof(TaskServerExecutorTrain).Assembly  // Required — see note below
+        typeof(JobRunnerTrain).Assembly  // Required — see note below
     )
     .AddPostgresEffect(connectionString)
     .AddScheduler(scheduler => scheduler
         .PollingInterval(TimeSpan.FromSeconds(5))
         .MaxActiveJobs(100)
         .DefaultMaxRetries(3)
-        .UsePostgresTaskServer()
+        .UseLocalWorkers()
 
         // Schedule jobs directly in configuration
         .Schedule<IHelloWorldTrain, HelloWorldInput>(
@@ -59,20 +59,20 @@ var app = builder.Build();
 app.Run();
 ```
 
-*SDK Reference: [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}), [UsePostgresTaskServer]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-postgres-task-server.md %}), [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %})*
+*SDK Reference: [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}), [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}), [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %})*
 
 `AddScheduler` registers three hosted services — `SchedulerStartupService` (seeds manifests and recovers stuck jobs on startup), `ManifestManagerPollingService` (evaluates manifests on a timer), and `JobDispatcherPollingService` (dispatches work queue entries on a timer). No extra startup call needed.
 
-`UsePostgresTaskServer()` starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed — it reuses the `IDataContext` from `AddPostgresEffect()`. See [Task Server]({{ site.baseurl }}{% link scheduler/task-server.md %}) for architecture details.
+`UseLocalWorkers()` starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed — it reuses the `IDataContext` from `AddPostgresEffect()`. See [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %}) for architecture details.
 
-> **`TaskServerExecutorTrain.Assembly` is required.** The `TrainBus` discovers trains by scanning assemblies. `TaskServerExecutorTrain` is the internal train that the task server invokes when a job fires—if its assembly isn't registered, scheduled jobs will silently fail to execute with no error message. Always include it alongside your own assemblies.
+> **`JobRunnerTrain.Assembly` is required.** The `TrainBus` discovers trains by scanning assemblies. `JobRunnerTrain` is the internal train that the job submitter invokes when a job fires—if its assembly isn't registered, scheduled jobs will silently fail to execute with no error message. Always include it alongside your own assemblies.
 
-### Task Server Options
+### Local Worker Options
 
-You can customize the task server's worker count, polling interval, and timeouts:
+You can customize the local workers' worker count, polling interval, and timeouts:
 
 ```csharp
-.UsePostgresTaskServer(options =>
+.UseLocalWorkers(options =>
 {
     options.WorkerCount = 4;                                // default: processor count
     options.PollingInterval = TimeSpan.FromSeconds(2);      // default: 1 second
@@ -81,9 +81,9 @@ You can customize the task server's worker count, polling interval, and timeouts
 })
 ```
 
-See [UsePostgresTaskServer]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-postgres-task-server.md %}) for full parameter documentation.
+See [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) for full parameter documentation.
 
-> **Migrating from Hangfire?** See the [migration guide]({{ site.baseurl }}{% link scheduler/task-server.md %}#migrating-from-hangfire).
+> **Migrating from Hangfire?** See the [migration guide]({{ site.baseurl }}{% link scheduler/job-submission.md %}#migrating-from-hangfire).
 
 ## Creating Scheduled Trains
 
@@ -146,7 +146,7 @@ public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, SyncResult>, 
 
 ```csharp
 .AddScheduler(scheduler => scheduler
-    .UsePostgresTaskServer()
+    .UseLocalWorkers()
     .Schedule<ISyncCustomersTrain, SyncCustomersInput>(
         "sync-customers-us-east",
         new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
@@ -189,8 +189,8 @@ The scheduler spans multiple packages. This table lists every public type you're
 | Type | Namespace | Package |
 |------|-----------|---------|
 | `IManifestProperties` | `Trax.Effect.Models.Manifest` | `Trax.Effect` |
-| `TaskServerExecutorTrain` | `Trax.Scheduler.Trains.TaskServerExecutor` | `Trax.Scheduler` |
-| `PostgresTaskServerOptions` | `Trax.Scheduler.Configuration` | `Trax.Scheduler` |
+| `JobRunnerTrain` | `Trax.Scheduler.Trains.JobRunner` | `Trax.Scheduler` |
+| `LocalWorkerOptions` | `Trax.Scheduler.Configuration` | `Trax.Scheduler` |
 | `Cron` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
 | `Every` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
 | `Schedule` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |

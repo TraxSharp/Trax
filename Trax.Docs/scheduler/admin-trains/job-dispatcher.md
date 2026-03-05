@@ -8,7 +8,7 @@ nav_order: 2
 
 # JobDispatcherTrain
 
-The JobDispatcher is the single gateway between the work queue and the background task server. It reads `Queued` entries, enforces both global and per-group `MaxActiveJobs` limits, creates Metadata records, and enqueues to Hangfire (or whatever `IBackgroundTaskServer` implementation is configured).
+The JobDispatcher is the single gateway between the work queue and the job submitter. It reads `Queued` entries, enforces both global and per-group `MaxActiveJobs` limits, creates Metadata records, and enqueues to the configured `IJobSubmitter` implementation.
 
 ## Chain
 
@@ -50,9 +50,9 @@ For each successfully claimed entry, the dispatcher:
 
 3. **Updates the work queue entry**: sets `Status = Dispatched`, records the `MetadataId` and `DispatchedAt` timestamp.
 
-4. **Commits the transaction**: the Metadata creation and WorkQueue status update are committed as a single atomic unit. This makes the Metadata visible to the task server before enqueue.
+4. **Commits the transaction**: the Metadata creation and WorkQueue status update are committed as a single atomic unit. This makes the Metadata visible to the job submitter before enqueue.
 
-5. **Enqueues to the background task server**: calls `IBackgroundTaskServer.EnqueueAsync` with the metadata ID and deserialized input. This happens after commit because the `InMemoryTaskServer` executes the train synchronously and needs to read the committed Metadata.
+5. **Enqueues to the job submitter**: calls `IJobSubmitter.EnqueueAsync` with the metadata ID and deserialized input. This happens after commit because the `InMemoryJobSubmitter` executes the train synchronously and needs to read the committed Metadata.
 
 Each entry is processed in its own DI scope with a fresh `IDataContext`. If any individual entry fails (type resolution, serialization, database error), its transaction is rolled back, the error is logged, and the loop continues to the next entry. One bad entry doesn't affect the rest of the queue.
 

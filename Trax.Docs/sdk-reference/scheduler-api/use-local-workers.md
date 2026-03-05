@@ -1,20 +1,20 @@
 ---
 layout: default
-title: UsePostgresTaskServer
+title: UseLocalWorkers
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 2
 ---
 
-# UsePostgresTaskServer
+# UseLocalWorkers
 
-Configures the built-in PostgreSQL task server as the background execution backend for the Trax.Core scheduler.
+Configures the built-in PostgreSQL local workers as the background execution backend for the Trax.Core scheduler.
 
 ## Signature
 
 ```csharp
-public SchedulerConfigurationBuilder UsePostgresTaskServer(
-    Action<PostgresTaskServerOptions>? configure = null
+public SchedulerConfigurationBuilder UseLocalWorkers(
+    Action<LocalWorkerOptions>? configure = null
 )
 ```
 
@@ -22,13 +22,13 @@ public SchedulerConfigurationBuilder UsePostgresTaskServer(
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `configure` | `Action<PostgresTaskServerOptions>?` | No | Optional callback to customize worker count, polling interval, and timeouts |
+| `configure` | `Action<LocalWorkerOptions>?` | No | Optional callback to customize worker count, polling interval, and timeouts |
 
 ## Returns
 
 `SchedulerConfigurationBuilder` — for continued fluent chaining.
 
-## PostgresTaskServerOptions
+## LocalWorkerOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -46,7 +46,7 @@ services.AddTrax.CoreEffects(options => options
     .AddPostgresEffect(connectionString)
     .AddServiceTrainBus(assemblies: typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer()
+        .UseLocalWorkers()
         .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
@@ -59,7 +59,7 @@ services.AddTrax.CoreEffects(options => options
     .AddPostgresEffect(connectionString)
     .AddServiceTrainBus(assemblies: typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer(options =>
+        .UseLocalWorkers(options =>
         {
             options.WorkerCount = 4;
             options.PollingInterval = TimeSpan.FromSeconds(2);
@@ -73,7 +73,7 @@ services.AddTrax.CoreEffects(options => options
 
 ## Remarks
 
-- No connection string parameter is needed. `UsePostgresTaskServer()` uses the same `IDataContext` registered by `AddPostgresEffect()`.
+- No connection string parameter is needed. `UseLocalWorkers()` uses the same `IDataContext` registered by `AddPostgresEffect()`.
 - No additional NuGet packages required — this is included in `Trax.Scheduler`.
 - Jobs are queued to the `trax.background_job` table and dequeued atomically using PostgreSQL's `FOR UPDATE SKIP LOCKED`.
 - Workers delete job rows after execution (both success and failure). Trax.Core's Metadata and DeadLetter tables handle the audit trail.
@@ -81,13 +81,13 @@ services.AddTrax.CoreEffects(options => options
 
 ## Registered Services
 
-`UsePostgresTaskServer()` registers:
+`UseLocalWorkers()` registers:
 
 | Service | Lifetime | Description |
 |---------|----------|-------------|
-| `PostgresTaskServerOptions` | Singleton | Configuration options |
-| `IBackgroundTaskServer` → `PostgresTaskServer` | Scoped | Enqueue implementation (INSERT into background_job) |
-| `PostgresWorkerService` | Hosted Service | Background worker that polls and executes jobs |
+| `LocalWorkerOptions` | Singleton | Configuration options |
+| `IJobSubmitter` → `PostgresJobSubmitter` | Scoped | Enqueue implementation (INSERT into background_job) |
+| `LocalWorkerService` | Hosted Service | Background worker that polls and executes jobs |
 
 ## Package
 
@@ -97,5 +97,5 @@ dotnet add package Trax.Scheduler
 
 ## See Also
 
-- [Task Server Architecture]({{ site.baseurl }}{% link scheduler/task-server.md %}) — detailed architecture, crash recovery, comparison with Hangfire
+- [Job Submission Architecture]({{ site.baseurl }}{% link scheduler/job-submission.md %}) — detailed architecture, crash recovery, comparison with Hangfire
 - [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) (deprecated)

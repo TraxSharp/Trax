@@ -44,7 +44,7 @@ If you create manifests dynamically at runtime via `ITraxScheduler` (outside of 
 ```csharp
 services.AddTrax.CoreEffects(options => options
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer()
+        .UseLocalWorkers()
         .PruneOrphanedManifests(false)  // Disable orphan cleanup
         .Schedule<IMyTrain>(
             "my-job",
@@ -92,7 +92,7 @@ scheduler
 // After: all schedules removed
 services.AddTrax.CoreEffects(options => options
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer())
+        .UseLocalWorkers())
 );
 
 // On next startup:

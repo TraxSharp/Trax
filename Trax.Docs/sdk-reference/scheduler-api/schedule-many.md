@@ -160,7 +160,7 @@ var tables = new[] { "customers", "orders", "products" };
 
 services.AddTrax.CoreEffects(options => options
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer()
+        .UseLocalWorkers()
         .ScheduleMany<ISyncTableTrain>(
             "sync",
             tables.Select(table => new ManifestItem(

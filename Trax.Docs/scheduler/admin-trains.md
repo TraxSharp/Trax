@@ -14,7 +14,7 @@ The scheduler runs four internal trains to manage the job lifecycle. They're reg
 AdminTrains.Types:
   - ManifestManagerTrain
   - JobDispatcherTrain
-  - TaskServerExecutorTrain
+  - JobRunnerTrain
   - MetadataCleanupTrain
 ```
 
@@ -26,7 +26,7 @@ The scheduler runs three hosted services:
 
 2. **ManifestManagerPollingService** (`BackgroundService`) — polls on `ManifestManagerPollingInterval` (default: 5 seconds). Each cycle runs the ManifestManager train, which evaluates which manifests are due and writes to the work queue.
 
-3. **JobDispatcherPollingService** (`BackgroundService`) — polls on `JobDispatcherPollingInterval` (default: 5 seconds). Each cycle runs the JobDispatcher train, which reads from the work queue, enforces capacity, and dispatches to the background task server.
+3. **JobDispatcherPollingService** (`BackgroundService`) — polls on `JobDispatcherPollingInterval` (default: 5 seconds). Each cycle runs the JobDispatcher train, which reads from the work queue, enforces capacity, and dispatches to the job submitter.
 
 The ManifestManager and JobDispatcher run independently on their own timers. They communicate through the work queue table — ManifestManager writes entries, JobDispatcher reads them. This means JobDispatcher may not see ManifestManager's freshly-queued entries until its next tick, but no work is lost. Independent intervals allow you to tune each service separately (e.g., fast manifest evaluation with slower dispatch, or vice versa).
 
@@ -34,7 +34,7 @@ In multi-server deployments, each service uses a different concurrency strategy:
 
 ## The Work Queue
 
-All job execution flows through the `work_queue` table. This is the key design decision: nothing goes directly to the background task server anymore. The ManifestManager doesn't enqueue jobs. `TriggerAsync` doesn't enqueue jobs. Dashboard re-runs don't enqueue jobs. They all write a `WorkQueue` entry with status `Queued`, and the JobDispatcher picks them up.
+All job execution flows through the `work_queue` table. This is the key design decision: nothing goes directly to the job submitter anymore. The ManifestManager doesn't enqueue jobs. `TriggerAsync` doesn't enqueue jobs. Dashboard re-runs don't enqueue jobs. They all write a `WorkQueue` entry with status `Queued`, and the JobDispatcher picks them up.
 
 This gives you a single enforcement point for `MaxActiveJobs`. Before the work queue existed, capacity limits had to be checked in every code path that could trigger a job. Now there's one gateway, and it's the JobDispatcher.
 

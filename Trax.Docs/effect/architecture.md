@@ -243,7 +243,7 @@ Key tables:
 | **LOG** | Application log entries linked to a metadata record |
 | **WORK_QUEUE** | Transient queue between scheduling and dispatch |
 | **DEAD_LETTER** | Failed jobs that exceeded retry limits |
-| **BACKGROUND_JOB** | PostgreSQL task server queue with visibility timeout |
+| **BACKGROUND_JOB** | PostgreSQL job submission queue with visibility timeout |
 | **STEP_METADATA** | In-memory step tracking (not persisted to database) |
 
 ### Implementation Variants

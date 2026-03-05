@@ -8,9 +8,9 @@ nav_order: 2
 
 # UseHangfire (Deprecated)
 
-> **Deprecated**: Use [`UsePostgresTaskServer()`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-postgres-task-server.md %}) instead. The Hangfire package will be removed in a future version.
+> **Deprecated**: Use [`UseLocalWorkers()`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) instead. The Hangfire package will be removed in a future version.
 
-Configures [Hangfire](https://www.hangfire.io/) as the background task server for the Trax.Core scheduler, using PostgreSQL for job storage.
+Configures [Hangfire](https://www.hangfire.io/) as the execution backend for the Trax.Core scheduler, using PostgreSQL for job storage.
 
 ## Signature
 

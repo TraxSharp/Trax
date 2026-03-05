@@ -1,19 +1,19 @@
 ---
 layout: default
-title: Task Server
+title: Job Submission
 parent: Scheduling
 nav_order: 2
 ---
 
-# Task Server
+# Job Submission
 
-The task server is the execution backend for the scheduler. When the JobDispatcher creates a Metadata record and calls `IBackgroundTaskServer.EnqueueAsync()`, the task server is responsible for picking up that job and running the train.
+The job submitter is the execution backend for the scheduler. When the JobDispatcher creates a Metadata record and calls `IJobSubmitter.EnqueueAsync()`, the job submitter is responsible for picking up that job and running the train.
 
-## Built-in PostgreSQL Task Server
+## Built-in Local Workers (PostgreSQL)
 
-The recommended task server uses Trax.Core's own `trax.background_job` table for job queuing. No external dependencies — it shares the same PostgreSQL database already used by Trax.Core's data layer.
+The recommended backend uses Trax.Core's own `trax.background_job` table for job queuing. No external dependencies — it shares the same PostgreSQL database already used by Trax.Core's data layer.
 
-The JobDispatcher commits the Metadata creation and WorkQueue status update in a `FOR UPDATE SKIP LOCKED` transaction before calling `EnqueueAsync`. The BackgroundJob insertion then happens as a separate operation. This ordering ensures the Metadata record is visible to the task server when it begins execution — necessary because the `InMemoryTaskServer` executes synchronously within the `EnqueueAsync` call.
+The JobDispatcher commits the Metadata creation and WorkQueue status update in a `FOR UPDATE SKIP LOCKED` transaction before calling `EnqueueAsync`. The BackgroundJob insertion then happens as a separate operation. This ordering ensures the Metadata record is visible to the job submitter when it begins execution — necessary because the `InMemoryJobSubmitter` executes synchronously within the `EnqueueAsync` call.
 
 ### How It Works
 
@@ -25,7 +25,7 @@ The JobDispatcher commits the Metadata creation and WorkQueue status update in a
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                     PostgresTaskServer                           │
+│                     PostgresJobSubmitter                          │
 │  INSERT INTO trax.background_job (metadata_id, ...)       │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
@@ -42,7 +42,7 @@ The JobDispatcher commits the Metadata creation and WorkQueue status update in a
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                   PostgresWorkerService                          │
+│                   LocalWorkerService                               │
 │  N concurrent workers polling the table                          │
 │                                                                  │
 │  Worker 0 ──► SELECT ... FOR UPDATE SKIP LOCKED ──► Execute     │
@@ -58,23 +58,23 @@ The JobDispatcher commits the Metadata creation and WorkQueue status update in a
 builder.Services.AddTrax.CoreEffects(options => options
     .AddServiceTrainBus(
         typeof(Program).Assembly,
-        typeof(TaskServerExecutorTrain).Assembly
+        typeof(JobRunnerTrain).Assembly
     )
     .AddPostgresEffect(connectionString)
     .AddScheduler(scheduler => scheduler
-        .UsePostgresTaskServer()                   // ← built-in, no extra packages
+        .UseLocalWorkers()                   // ← built-in, no extra packages
         .Schedule<IMyTrain, MyInput>(
             "my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```
 
-No connection string parameter needed — `UsePostgresTaskServer()` uses the same `IDataContext` already registered by `AddPostgresEffect()`.
+No connection string parameter needed — `UseLocalWorkers()` uses the same `IDataContext` already registered by `AddPostgresEffect()`.
 
 ### Configuration
 
 ```csharp
-.UsePostgresTaskServer(options =>
+.UseLocalWorkers(options =>
 {
     options.WorkerCount = 4;                                   // default: Environment.ProcessorCount
     options.PollingInterval = TimeSpan.FromSeconds(2);         // default: 1 second
@@ -114,7 +114,7 @@ On claim, the worker sets `fetched_at = NOW()` and commits the transaction.
 
 **Phase 2 — Execute** (in a fresh DI scope)
 
-The worker resolves `ITaskServerExecutorTrain` from a new DI scope and calls `Run(new ExecuteManifestRequest(metadataId, input))`. This is the same train that Hangfire invoked — it loads the Metadata, validates the job state, executes the target train, and updates the Manifest's `LastSuccessfulRun` on success.
+The worker resolves `IJobRunnerTrain` from a new DI scope and calls `Run(new RunJobRequest(metadataId, input))`. This is the same train that Hangfire previously invoked — it loads the Metadata, validates the job state, executes the target train, and updates the Manifest's `LastSuccessfulRun` on success.
 
 **Phase 3 — Cleanup** (always runs, success or failure)
 
@@ -137,7 +137,7 @@ This is the same pattern Hangfire uses with its `InvisibilityTimeout` — a well
 
 ### Comparison with Hangfire
 
-| Feature | Hangfire | PostgresTaskServer |
+| Feature | Hangfire | PostgresJobSubmitter |
 |---------|----------|-------------------|
 | **Dependencies** | 3 NuGet packages (Hangfire.Core, Hangfire.AspNetCore, Hangfire.PostgreSql) | None (uses existing EF Core) |
 | **Database tables** | 10+ tables in `hangfire` schema | 1 table in `trax` schema |
@@ -149,11 +149,11 @@ This is the same pattern Hangfire uses with its `InvisibilityTimeout` — a well
 | **Migration** | Hangfire manages its own schema | DbUp migration alongside other Trax.Core tables |
 | **Crash recovery** | InvisibilityTimeout | VisibilityTimeout (same pattern) |
 
-## Hangfire Task Server (Deprecated)
+## Hangfire (Deprecated)
 
-> **Deprecated**: Use `UsePostgresTaskServer()` instead. The `Trax.Scheduler.Hangfire` package will be removed in a future version.
+> **Deprecated**: Use `UseLocalWorkers()` instead. The `Trax.Scheduler.Hangfire` package will be removed in a future version.
 
-The Hangfire task server wraps Hangfire's `IBackgroundJobClient.Enqueue()` to dispatch jobs. It brings 3 NuGet packages and creates its own database tables, but Trax.Core only uses a tiny fraction of Hangfire's capabilities:
+The Hangfire backend wraps Hangfire's `IBackgroundJobClient.Enqueue()` to dispatch jobs. It brings 3 NuGet packages and creates its own database tables, but Trax.Core only uses a tiny fraction of Hangfire's capabilities:
 
 - One API call (`Enqueue`)
 - Retries disabled
@@ -162,22 +162,22 @@ The Hangfire task server wraps Hangfire's `IBackgroundJobClient.Enqueue()` to di
 
 If you're using Hangfire and need to migrate, see [Migrating from Hangfire](#migrating-from-hangfire).
 
-## InMemory Task Server
+## InMemory Workers
 
 For testing and local development:
 
 ```csharp
-.AddScheduler(scheduler => scheduler.UseInMemoryTaskServer())
+.AddScheduler(scheduler => scheduler.UseInMemoryWorkers())
 ```
 
 Executes jobs immediately and synchronously — no background workers, no database tables. The `EnqueueAsync` call blocks until the train completes.
 
-## Custom Task Server
+## Custom Job Submitter
 
-Implement `IBackgroundTaskServer` and register it via `UseTaskServer()`:
+Implement `IJobSubmitter` and register it via `UseCustomSubmitter()`:
 
 ```csharp
-public class MyTaskServer : IBackgroundTaskServer
+public class MyJobSubmitter : IJobSubmitter
 {
     public Task<string> EnqueueAsync(int metadataId) { /* ... */ }
     public Task<string> EnqueueAsync(int metadataId, object input) { /* ... */ }
@@ -185,9 +185,9 @@ public class MyTaskServer : IBackgroundTaskServer
 
 // Registration
 .AddScheduler(scheduler => scheduler
-    .UseTaskServer(services =>
+    .UseCustomSubmitter(services =>
     {
-        services.AddScoped<IBackgroundTaskServer, MyTaskServer>();
+        services.AddScoped<IJobSubmitter, MyJobSubmitter>();
     })
 )
 ```
@@ -201,7 +201,7 @@ public class MyTaskServer : IBackgroundTaskServer
       .AddPostgresEffect(connectionString)
       .AddScheduler(scheduler => scheduler
 -         .UseHangfire(connectionString)
-+         .UsePostgresTaskServer()
++         .UseLocalWorkers()
           .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
       )
   );

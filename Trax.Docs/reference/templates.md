@@ -118,7 +118,7 @@ MyCompany.Scheduler/
 **Program.cs** configures:
 
 - **Trax Effects** — train bus, PostgreSQL persistence, JSON and parameter providers, step progress tracking
-- **Scheduler** — PostgreSQL task server with a HelloWorld job running every 20 seconds
+- **Scheduler** — PostgreSQL local workers with a HelloWorld job running every 20 seconds
 - **Dashboard** — Trax Blazor Dashboard at `/trax`
 
 **Packages:**
@@ -203,7 +203,7 @@ Register the schedule in `Program.cs`:
 
 ```csharp
 scheduler
-    .UsePostgresTaskServer()
+    .UseLocalWorkers()
     .Schedule<ISyncCustomersTrain>(
         "sync-customers",
         new SyncCustomersInput { Region = "us-east" },
