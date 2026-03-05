@@ -8,7 +8,7 @@ has_children: true
 
 # GraphQL API
 
-Trax exposes a GraphQL endpoint powered by [HotChocolate](https://chillicream.com/docs/hotchocolate). It provides queries for inspecting trains, manifests, manifest groups, and executions, plus mutations for queuing/running trains and managing the scheduler.
+Trax exposes a GraphQL endpoint powered by [HotChocolate](https://chillicream.com/docs/hotchocolate). It provides queries for inspecting trains, manifests, manifest groups, and executions, mutations for queuing/running trains and managing the scheduler, and real-time subscriptions for train lifecycle events via WebSocket.
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -29,8 +29,11 @@ Navigate to the endpoint URL in a browser to open [Banana Cake Pop](https://chil
 | Page | Description |
 |------|-------------|
 | [AddTraxGraphQL]({{ site.baseurl }}{% link sdk-reference/graphql-api/add-trax-graphql.md %}) | Registration and endpoint mapping |
+| [TraxQuery & TraxMutation Attributes]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) | Opt trains into the typed GraphQL schema with `[TraxQuery]` or `[TraxMutation]` |
 | [Queries]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}) | `health`, `trains`, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution` |
-| [Mutations]({{ site.baseurl }}{% link sdk-reference/graphql-api/mutations.md %}) | Auto-generated typed mutations per train (`runBanPlayer`, `queueBanPlayer`, etc.), generic `queueTrain`/`runTrain`, scheduler mutations (`triggerManifest`, `disableManifest`, `cancelManifest`, and more) |
+| [Mutations]({{ site.baseurl }}{% link sdk-reference/graphql-api/mutations.md %}) | Grouped into `execute` (auto-generated train mutations) and `manage` (scheduler control mutations) |
+| [Subscriptions]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) | Real-time WebSocket events for train lifecycle transitions (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`) |
+| [TraxBroadcast Attribute]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-subscription-attribute.md %}) | Opt trains into subscription events with `[TraxBroadcast]` |
 
 ## Package
 

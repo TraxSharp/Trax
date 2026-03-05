@@ -101,6 +101,7 @@ Task<RunTrainResult> RunAsync(
 | Property | Type | Description |
 |----------|------|-------------|
 | `MetadataId` | `long` | Database ID of the metadata record for this execution |
+| `Output` | `object?` | The train's typed output. `null` for `Unit` trains; the actual output object for trains with a typed `TOut` parameter. |
 
 **Throws**:
 - `InvalidOperationException` — if no train is registered with the given name.
@@ -115,8 +116,8 @@ Task<RunTrainResult> RunAsync(
 3. Deserializes `inputJson` to the train's `InputType`.
 4. Creates a `Metadata` record with a generated external ID.
 5. Persists the metadata via the data context.
-6. Calls `ITrainBus.RunAsync(input, ct, metadata)` — blocks until completion.
-7. Returns the metadata ID.
+6. Calls the typed `ITrainBus.RunAsync<TOut>(input, ct, metadata)` via reflection, using the train's `OutputType` from its registration.
+7. Returns the metadata ID and the train's output (or `null` for `Unit` trains).
 
 ## Examples
 

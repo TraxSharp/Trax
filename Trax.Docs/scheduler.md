@@ -9,7 +9,7 @@ has_children: true
 
 Trax.Scheduler adds timetable management to trains. Define a manifest — like a shipping manifest listing what train to dispatch, when, and how many retries — and the scheduler handles execution, retries, and dead-lettering.
 
-This isn't a traditional cron scheduler. It supports cron expressions, but its design goal is controlled bulk job orchestration—database replication with thousands of table slices, for example—where you need visibility into every execution attempt.
+This isn't a traditional cron scheduler. It supports cron expressions, but its design goal is controlled bulk job orchestration, for example—where you need visibility into every execution attempt.
 
 ## When to Use the Scheduler
 
@@ -182,8 +182,12 @@ For complete method signatures, all parameters, and detailed usage examples for 
 - [Manifest Management]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}) — DisableAsync, EnableAsync, TriggerAsync, ScheduleOnceAsync
 - [Scheduling Helpers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) — Every, Cron, Schedule record, ManifestOptions
 
-The same scheduler operations are also available through the [REST API]({{ site.baseurl }}{% link sdk-reference/rest-api/scheduler-endpoints.md %}) and [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api/mutations.md %}) for remote access.
+The same scheduler operations are also available through the [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api/mutations.md %}) for remote access.
 
 ## Sample Project
 
-A working example with the built-in PostgreSQL task server, bulk scheduling, metadata cleanup, and the dashboard is in [`samples/Trax.Samples.GameServer.Scheduler`](https://github.com/Theauxm/Trax.Core/tree/main/samples/Trax.Samples.GameServer.Scheduler). The scheduler runs alongside a separate API process (`Trax.Samples.GameServer.Rest` or `Trax.Samples.GameServer.GraphQL`) that queues work for it.
+A working example with the built-in PostgreSQL task server, bulk scheduling, metadata cleanup, and the dashboard is in [`samples/Trax.Samples.GameServer.Scheduler`](https://github.com/Theauxm/Trax.Core/tree/main/samples/Trax.Samples.GameServer.Scheduler). The scheduler runs alongside a separate API process (`Trax.Samples.GameServer.GraphQL`) that queues work for it.
+
+## Next Layer
+
+When you need a programmatic interface for external consumers — queuing jobs, running trains on demand, and querying state over HTTP — add [Trax.Api](api.md).

@@ -1,14 +1,14 @@
 ---
 layout: default
 title: Authorization
-nav_order: 8
+nav_order: 9
 ---
 
 # Authorization
 
 Trax supports two levels of authorization for the API layer:
 
-- **Endpoint-level** — gate all Trax endpoints behind a single policy using the `configure` callback on `UseTraxRestApi` / `UseTraxGraphQL`. This is standard ASP.NET Core endpoint authorization.
+- **Endpoint-level** — gate all Trax endpoints behind a single policy using the `configure` callback on `UseTraxGraphQL`. This is standard ASP.NET Core endpoint authorization.
 - **Per-train** — restrict individual trains using the `[TraxAuthorize]` attribute on the train class. When a request comes in to run or queue a train, Trax checks the attribute against the current HTTP user before executing anything.
 
 Endpoint-level auth answers "can this user access the Trax API at all?" Per-train auth answers "can this user execute *this particular* train?"
@@ -82,11 +82,11 @@ Trax evaluates these policies at runtime using ASP.NET Core's `IAuthorizationSer
    - **Policy**: calls `IAuthorizationService.AuthorizeAsync(user, policyName)`
    - **Roles**: calls `user.IsInRole(roleName)` for each role in the list
 4. If any check fails, a `TrainAuthorizationException` is thrown before the train executes.
-5. REST endpoints catch the exception and return **403 Forbidden**. GraphQL surfaces it as a standard error in the `errors` array.
+5. GraphQL surfaces it as a standard error in the `errors` array.
 
 ## Train Discovery Shows Auth Requirements
 
-The `GET /trax/api/trains` endpoint and the GraphQL `trains` query both include authorization metadata in the response. Consumers can use this to build UIs that show which trains are available and what access they require.
+The GraphQL `trains` query includes authorization metadata in the response. Consumers can use this to build UIs that show which trains are available and what access they require.
 
 ```json
 {
@@ -109,11 +109,12 @@ Per-train auth and endpoint-level auth are complementary. A typical setup might 
 
 ```csharp
 // All Trax endpoints require authentication
-app.UseTraxRestApi(configure: group => group
+app.UseTraxGraphQL(configure: endpoint => endpoint
     .RequireAuthorization());
 
 // Individual trains require specific policies
 [TraxAuthorize("Admin")]
+[TraxMutation(Operations = GraphQLOperation.Run)]
 public class AdminOnlyTrain : ServiceTrain<AdminInput, Unit>, IAdminOnlyTrain { ... }
 ```
 
@@ -141,7 +142,7 @@ public class CustomTrainAuthorizationService : ITrainAuthorizationService
     }
 }
 
-// Register before AddTraxRestApi/AddTraxGraphQL (which call AddTraxApi internally)
+// Register before AddTraxGraphQL (which calls AddTraxApi internally)
 builder.Services.AddScoped<ITrainAuthorizationService, CustomTrainAuthorizationService>();
 ```
 
@@ -149,8 +150,7 @@ The interface is defined in `Trax.Mediator`, so your implementation doesn't need
 
 ## SDK Reference
 
-- [TraxAuthorizeAttribute]({{ site.baseurl }}{% link sdk-reference/rest-api/dtos.md %}) — attribute definition
 - [TrainRegistration]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-discovery.md %}) — discovered auth metadata
 - [TrainExecution]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-execution.md %}) — where the auth check happens
-- [REST API]({{ site.baseurl }}{% link sdk-reference/rest-api.md %}) — endpoint-level auth via `configure` callback
 - [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api.md %}) — endpoint-level auth via `configure` callback
+- [TraxQuery & TraxMutation Attributes]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) — opt trains into the GraphQL schema

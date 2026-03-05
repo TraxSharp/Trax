@@ -23,6 +23,6 @@ This decouples callers from specific train implementations and enables train com
 | Page | Description |
 |------|-------------|
 | [TrainBus]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %}) | `ITrainBus` interface — `RunAsync`, `InitializeTrain` |
-| [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/mediator-api/add-effect-train-bus.md %}) | Registration and assembly scanning configuration |
+| [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/mediator-api/add-service-train-bus.md %}) | Registration and assembly scanning configuration |
 | [TrainDiscovery]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-discovery.md %}) | `ITrainDiscoveryService` — discover registered trains and their input/output types |
 | [TrainExecution]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-execution.md %}) | `ITrainExecutionService` — queue or run trains programmatically with JSON input |

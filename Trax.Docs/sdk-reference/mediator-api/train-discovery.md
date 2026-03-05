@@ -47,6 +47,14 @@ public class TrainRegistration
 
     public required IReadOnlyList<string> RequiredPolicies { get; init; }
     public required IReadOnlyList<string> RequiredRoles { get; init; }
+
+    public required bool IsQuery { get; init; }
+    public required bool IsMutation { get; init; }
+    public required bool IsBroadcastEnabled { get; init; }
+    public string? GraphQLName { get; init; }
+    public string? GraphQLDescription { get; init; }
+    public string? GraphQLDeprecationReason { get; init; }
+    public required GraphQLOperation GraphQLOperations { get; init; }
 }
 ```
 
@@ -65,6 +73,13 @@ public class TrainRegistration
 | `OutputTypeName` | `string` | Friendly display name for `OutputType` |
 | `RequiredPolicies` | `IReadOnlyList<string>` | Authorization policy names from `[TraxAuthorize]` attributes on the implementation class. Empty if no auth required. |
 | `RequiredRoles` | `IReadOnlyList<string>` | Role names from `[TraxAuthorize(Roles = "...")]` attributes. Empty if no roles required. |
+| `IsQuery` | `bool` | Whether the train has a `[TraxQuery]` attribute and will be exposed as a typed GraphQL query. |
+| `IsMutation` | `bool` | Whether the train has a `[TraxMutation]` attribute and will be exposed as typed GraphQL mutation(s). |
+| `IsBroadcastEnabled` | `bool` | Whether the train has a `[TraxBroadcast]` attribute and will broadcast lifecycle events to subscribers. |
+| `GraphQLName` | `string?` | Custom name override from `[TraxQuery(Name = "...")]` or `[TraxMutation(Name = "...")]`. Null means auto-derived. |
+| `GraphQLDescription` | `string?` | Description for the generated GraphQL fields. |
+| `GraphQLDeprecationReason` | `string?` | If non-null, the generated fields are marked as deprecated. |
+| `GraphQLOperations` | `GraphQLOperation` | Which mutation operations (Run, Queue, or both) to generate. Only applies when `IsMutation` is true. Defaults to `Run`. |
 
 ## How Discovery Works
 
@@ -74,6 +89,8 @@ public class TrainRegistration
 4. Extracts `InputType` and `OutputType` from the generic arguments.
 5. **Deduplicates by `InputType`**: when multiple registrations share the same input type (interface + concrete from dual-registration), prefers the interface as `ServiceType` and the concrete class as `ImplementationType`.
 6. Reads `[TraxAuthorize]` attributes from the implementation type and extracts policy and role requirements into `RequiredPolicies` and `RequiredRoles`.
+6b. Reads `[TraxQuery]` and `[TraxMutation]` attributes from the implementation type and populates `IsQuery`, `IsMutation`, `GraphQLName`, `GraphQLDescription`, `GraphQLDeprecationReason`, and `GraphQLOperations`.
+6c. Reads the `[TraxBroadcast]` attribute and populates `IsBroadcastEnabled`.
 7. Caches the result — the list is computed once and reused for the lifetime of the service.
 
 ## Example

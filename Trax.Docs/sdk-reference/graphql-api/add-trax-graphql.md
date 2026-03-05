@@ -42,16 +42,22 @@ public static WebApplication UseTraxGraphQL(
 
 **Returns**: `WebApplication` for continued chaining.
 
+`UseTraxGraphQL` calls `app.UseWebSockets()` internally to enable the WebSocket transport required for [GraphQL subscriptions]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}).
+
 ## What It Registers
 
 `AddTraxGraphQL` calls `AddTraxApi()` internally (shared API services), then configures HotChocolate:
 
 - **Named GraphQL server** via `AddGraphQLServer("trax")` — uses a named schema so it coexists with your own HotChocolate schemas in the same application
-- **Query type**: `TrainQueries` — registered as the root query type (includes `health` query)
-- **Mutation type**: empty root created via `AddMutationType()`, extended by:
-  - `TrainTypeModule` — auto-generates typed `run{TrainName}` and `queue{TrainName}` mutations for every registered train, with strongly-typed input objects derived from each train's input record
-  - `TrainMutations` — generic `queueTrain`, `runTrain` (accepts any train by name with untyped JSON input)
-  - `SchedulerMutations` — `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
+- **Query type**: `RootQuery` with two grouped sub-types:
+  - **`discover`** (`DiscoverQueries`) — auto-generated typed query fields for trains annotated with [`[TraxQuery]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %})
+  - **`operations`** (`OperationsQueries`) — predefined operational queries: `health` status, registered `trains` discovery, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution`
+- **Mutation type**: `RootMutation` with two grouped sub-types:
+  - **`dispatch`** (`DispatchMutations`) — auto-generated typed `run{TrainName}` and `queue{TrainName}` mutations for trains annotated with [`[TraxMutation]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}), with strongly-typed input objects derived from each train's input record
+  - **`operations`** (`OperationsMutations`) — `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
+- **Subscription type**: `LifecycleSubscriptions` — real-time [lifecycle events]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) via WebSocket (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`)
+- **In-memory subscription transport** — HotChocolate's built-in pub/sub for delivering events to WebSocket clients
+- **Lifecycle hook**: `GraphQLSubscriptionHook` — automatically registered to publish train state transitions to the subscription transport
 
 ## Prerequisites
 

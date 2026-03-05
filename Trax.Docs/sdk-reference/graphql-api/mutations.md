@@ -8,15 +8,27 @@ nav_order: 3
 
 # Mutations
 
-Mutations are split across two type extensions: `TrainMutations` for queuing and running trains, and `SchedulerMutations` for managing scheduled manifests and groups. Additionally, Trax auto-generates **typed mutations** for each registered train.
+Mutations are organized into two groups under the root `Mutation` type:
 
-## Typed Train Mutations (Auto-Generated)
+```graphql
+type Mutation {
+  dispatch: DispatchMutations!
+  operations: OperationsMutations!
+}
+```
 
-Trax automatically discovers all registered trains and generates a pair of strongly-typed mutations for each one: `run{TrainName}` and `queue{TrainName}`. These provide full GraphQL schema validation on the input, so errors are caught at the schema level rather than at runtime.
+- **`dispatch`** — auto-generated typed mutations for trains annotated with [`[TraxMutation]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %})
+- **`operations`** — scheduler management operations (trigger, disable, enable, cancel manifests and groups)
+
+## Dispatch Mutations (Auto-Generated)
+
+Trax auto-generates strongly-typed mutations for trains that opt in with `[TraxMutation]`. Only trains with this attribute appear under `dispatch`. Trains annotated with `[TraxQuery]` appear under `query { discover { ... } }` instead — see [Queries]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}).
+
+Each whitelisted train gets a `run{TrainName}` mutation, a `queue{TrainName}` mutation, or both, depending on the `Operations` property on the attribute. These provide full GraphQL schema validation on the input, so errors are caught at the schema level rather than at runtime.
 
 ### Naming Convention
 
-The mutation names are derived from the train's service interface name:
+The mutation names are derived from the train's service interface name (or overridden via `[TraxMutation(Name = "...")]`):
 1. Strip the `I` prefix
 2. Strip the `Train` suffix
 3. Prepend `run` or `queue`
@@ -25,7 +37,7 @@ For example, `IBanPlayerTrain` produces `runBanPlayer` and `queueBanPlayer`.
 
 ### Example
 
-Given a train registered as `IBanPlayerTrain` with input type:
+Given a train annotated with `[TraxMutation]`:
 
 ```csharp
 public record BanPlayerInput : IManifestProperties
@@ -44,18 +56,22 @@ input BanPlayerInput {
 }
 
 mutation {
-  runBanPlayer(input: { playerId: "player-42", reason: "cheating" }) {
-    metadataId
+  dispatch {
+    runBanPlayer(input: { playerId: "player-42", reason: "cheating" }) {
+      metadataId
+    }
   }
 }
 
 mutation {
-  queueBanPlayer(
-    input: { playerId: "player-42", reason: "cheating" }
-    priority: 10
-  ) {
-    workQueueId
-    externalId
+  dispatch {
+    queueBanPlayer(
+      input: { playerId: "player-42", reason: "cheating" }
+      priority: 10
+    ) {
+      workQueueId
+      externalId
+    }
   }
 }
 ```
@@ -68,11 +84,58 @@ Runs the train synchronously via `ITrainBus`. The call blocks until the train co
 |-----------|------|----------|-------------|
 | `input` | `{TrainName}Input!` | Yes | Strongly-typed input matching the train's input record |
 
-**Returns**: `RunTrainResponse`
+**Returns**: depends on the train's output type.
+
+#### Trains with `Unit` output (no typed output)
+
+Returns `RunTrainResponse`:
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `metadataId` | `Long!` | Metadata ID of the completed execution |
+
+#### Trains with typed output
+
+When a train's `ServiceTrain<TIn, TOut>` has a non-`Unit` output type, the mutation returns a per-train response type `Run{TrainName}Response` with the typed output included:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `metadataId` | `Long!` | Metadata ID of the completed execution |
+| `output` | `{OutputType}!` | The train's typed output, exposed as a GraphQL object type |
+
+For example, a train `ServiceTrain<LookupPlayerInput, LookupPlayerOutput>` annotated with `[TraxMutation]` produces:
+
+```graphql
+type RunLookupPlayerResponse {
+  metadataId: Long!
+  output: LookupPlayerOutput!
+}
+
+type LookupPlayerOutput {
+  playerId: String!
+  rank: Int!
+  wins: Int!
+  losses: Int!
+  rating: Int!
+}
+
+mutation {
+  dispatch {
+    runLookupPlayer(input: { playerId: "player-42" }) {
+      metadataId
+      output {
+        playerId
+        rank
+        wins
+        losses
+        rating
+      }
+    }
+  }
+}
+```
+
+The output type is automatically registered as a GraphQL `ObjectType` and deduplicated — if multiple trains share the same output type, only one GraphQL type is generated.
 
 ### queue{TrainName}
 
@@ -92,71 +155,7 @@ Queues the train for asynchronous execution via the WorkQueue.
 
 ---
 
-## Generic Train Mutations
-
-The generic `queueTrain` and `runTrain` mutations accept any train by name and untyped JSON input. These are available as a fallback when you need to invoke trains dynamically (e.g. from a generic admin UI).
-
-### queueTrain
-
-Queues a train for asynchronous execution via the WorkQueue. The scheduler picks it up and dispatches it on its next polling cycle.
-
-```graphql
-mutation {
-  queueTrain(
-    trainName: "MyApp.Trains.IProcessOrderTrain"
-    input: { orderId: 42, customerId: "abc-123" }
-    priority: 10
-  ) {
-    workQueueId
-    externalId
-  }
-}
-```
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `trainName` | `String!` | Yes | — | Fully qualified service type name of the train (use the `trains` query to list available names) |
-| `input` | `JSON!` | Yes | — | JSON object matching the train's input type |
-| `priority` | `Int` | No | `0` | Dispatch priority (0-31, higher runs first) |
-
-**Returns**: `QueueTrainResponse`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `workQueueId` | `Long!` | Database ID of the created WorkQueue entry |
-| `externalId` | `String!` | External ID assigned to the WorkQueue entry |
-
----
-
-### runTrain
-
-Runs a train synchronously via `ITrainBus` on the current machine. The call blocks until the train completes.
-
-```graphql
-mutation {
-  runTrain(
-    trainName: "MyApp.Trains.IProcessOrderTrain"
-    input: { orderId: 42, customerId: "abc-123" }
-  ) {
-    metadataId
-  }
-}
-```
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `trainName` | `String!` | Yes | Fully qualified service type name of the train |
-| `input` | `JSON!` | Yes | JSON object matching the train's input type |
-
-**Returns**: `RunTrainResponse`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `metadataId` | `Long!` | Metadata ID of the completed execution |
-
----
-
-## Scheduler Mutations
+## Operations Mutations
 
 ### triggerManifest
 
@@ -164,9 +163,11 @@ Triggers an immediate execution of a manifest, bypassing its normal schedule.
 
 ```graphql
 mutation {
-  triggerManifest(externalId: "order-processing-daily") {
-    success
-    message
+  operations {
+    triggerManifest(externalId: "order-processing-daily") {
+      success
+      message
+    }
   }
 }
 ```
@@ -185,12 +186,14 @@ Triggers a manifest execution after a specified delay.
 
 ```graphql
 mutation {
-  triggerManifestDelayed(
-    externalId: "order-processing-daily"
-    delay: "00:05:00"
-  ) {
-    success
-    message
+  operations {
+    triggerManifestDelayed(
+      externalId: "order-processing-daily"
+      delay: "00:05:00"
+    ) {
+      success
+      message
+    }
   }
 }
 ```
@@ -210,9 +213,11 @@ Disables a manifest. Disabled manifests are skipped during scheduling cycles.
 
 ```graphql
 mutation {
-  disableManifest(externalId: "order-processing-daily") {
-    success
-    message
+  operations {
+    disableManifest(externalId: "order-processing-daily") {
+      success
+      message
+    }
   }
 }
 ```
@@ -231,9 +236,11 @@ Re-enables a previously disabled manifest.
 
 ```graphql
 mutation {
-  enableManifest(externalId: "order-processing-daily") {
-    success
-    message
+  operations {
+    enableManifest(externalId: "order-processing-daily") {
+      success
+      message
+    }
   }
 }
 ```
@@ -252,10 +259,12 @@ Requests cancellation of all running executions for a manifest. Sets `Cancellati
 
 ```graphql
 mutation {
-  cancelManifest(externalId: "order-processing-daily") {
-    success
-    count
-    message
+  operations {
+    cancelManifest(externalId: "order-processing-daily") {
+      success
+      count
+      message
+    }
   }
 }
 ```
@@ -274,10 +283,12 @@ Triggers immediate execution of all enabled manifests in a group.
 
 ```graphql
 mutation {
-  triggerGroup(groupId: 1) {
-    success
-    count
-    message
+  operations {
+    triggerGroup(groupId: 1) {
+      success
+      count
+      message
+    }
   }
 }
 ```
@@ -296,10 +307,12 @@ Requests cancellation of all running executions across all manifests in a group.
 
 ```graphql
 mutation {
-  cancelGroup(groupId: 1) {
-    success
-    count
-    message
+  operations {
+    cancelGroup(groupId: 1) {
+      success
+      count
+      message
+    }
   }
 }
 ```
@@ -314,7 +327,7 @@ mutation {
 
 ## OperationResponse
 
-Shared response type for scheduler mutations.
+Shared response type for operations mutations.
 
 | Field | Type | Description |
 |-------|------|-------------|

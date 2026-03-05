@@ -6,7 +6,7 @@ nav_order: 7
 
 # API
 
-Trax.Api adds a programmatic interface to the scheduling and train execution system. It ships as three NuGet packages — a core library, a REST transport, and a GraphQL transport — so you can pick one or both without pulling in dependencies you don't need.
+Trax.Api adds a programmatic interface to the scheduling and train execution system. It ships as two NuGet packages — a core library and a GraphQL transport powered by HotChocolate.
 
 The API is designed to run on a **separate machine** from the scheduler. The two share a database: the API writes work queue entries and manifest updates, the scheduler polls them and dispatches trains. This means the API server doesn't run polling services or background workers — it's a thin HTTP layer over the shared state.
 
@@ -17,14 +17,12 @@ The API is designed to run on a **separate machine** from the scheduler. The two
 | **Queue** (delegated) | Creates a `WorkQueue` entry in the database. The scheduler picks it up on its next poll cycle and dispatches it on the scheduler machine. | Heavy trains, recurring work, anything that should run on dedicated scheduler infrastructure. |
 | **Run** (direct) | Calls `ITrainBus.RunAsync` on the API machine. The train executes in-process, blocking until completion. | Lightweight on-demand trains where you need the result immediately. Requires the train's assemblies to be registered on the API machine. |
 
-Both modes accept JSON input — each train doesn't get its own endpoint. You pass the train name and a JSON object, and the API resolves the correct input type via `ITrainDiscoveryService`.
+Trains opt into the GraphQL schema with the [`[TraxQuery]` or `[TraxMutation]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) attributes. Only annotated trains get typed fields generated.
 
 ## Quick Setup
 
-### REST
-
 ```bash
-dotnet add package Trax.Api.Rest
+dotnet add package Trax.Api.GraphQL
 ```
 
 ```csharp
@@ -37,58 +35,27 @@ builder.Services.AddTraxEffects(options =>
         .AddJsonEffect()
 );
 
-builder.Services.AddTraxRestApi();
+builder.Services.AddTraxGraphQL();
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
 
-app.UseTraxRestApi();              // maps at /trax/api by default
+app.UseTraxGraphQL();  // maps at /trax/graphql — opens Banana Cake Pop IDE in browser
 app.MapHealthChecks("/trax/health");
 
 app.Run();
 ```
 
-*SDK Reference: [AddTraxRestApi]({{ site.baseurl }}{% link sdk-reference/rest-api/add-trax-rest-api.md %})*
-
-### GraphQL
-
-```bash
-dotnet add package Trax.Api.GraphQL
-```
-
-```csharp
-builder.Services.AddTraxGraphQL();
-
-var app = builder.Build();
-
-app.UseTraxGraphQL();  // maps at /trax/graphql — opens Banana Cake Pop IDE in browser
-```
-
 *SDK Reference: [AddTraxGraphQL]({{ site.baseurl }}{% link sdk-reference/graphql-api/add-trax-graphql.md %})*
-
-### Using Both
-
-```csharp
-builder.Services.AddTraxRestApi();
-builder.Services.AddTraxGraphQL();
-builder.Services.AddHealthChecks().AddTraxHealthCheck();
-
-var app = builder.Build();
-
-app.UseTraxRestApi();
-app.UseTraxGraphQL();
-app.MapHealthChecks("/trax/health");
-```
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
 | `Trax.Api` | Core library — DTOs, health check, shared service registration |
-| `Trax.Api.Rest` | ASP.NET Core minimal API endpoint mappings |
-| `Trax.Api.GraphQL` | HotChocolate schema (queries + mutations) |
+| `Trax.Api.GraphQL` | HotChocolate schema (queries, mutations, subscriptions) |
 
-`Trax.Api.Rest` and `Trax.Api.GraphQL` both depend on `Trax.Api` — you don't need to reference it directly.
+`Trax.Api.GraphQL` depends on `Trax.Api` — you don't need to reference it directly.
 
 ## Architecture
 
@@ -96,7 +63,7 @@ app.MapHealthChecks("/trax/health");
 ┌─────────────────────────────┐    ┌─────────────────────────────┐
 │         API Server          │    │      Scheduler Server       │
 │                             │    │                             │
-│  REST / GraphQL endpoints   │    │  ManifestManagerPolling     │
+│  GraphQL endpoint           │    │  ManifestManagerPolling     │
 │  ITrainBus (direct runs)    │    │  JobDispatcherPolling       │
 │  ITraxScheduler (DB writes) │    │  TaskServerExecutor         │
 │  ITrainDiscoveryService     │    │                             │
@@ -138,20 +105,14 @@ app.MapHealthChecks("/trax/health");
 
 ## Authentication & Middleware
 
-Trax doesn't include built-in auth — you add it with standard ASP.NET Core middleware. Both `UseTraxRestApi` and `UseTraxGraphQL` accept a `configure` callback for applying endpoint conventions like authorization, rate limiting, or CORS to all Trax endpoints:
+Trax doesn't include built-in auth — you add it with standard ASP.NET Core middleware. `UseTraxGraphQL` accepts a `configure` callback for applying endpoint conventions like authorization, rate limiting, or CORS:
 
 ```csharp
-// Require auth on all Trax REST endpoints
-app.UseTraxRestApi(configure: group => group
-    .RequireAuthorization("AdminPolicy")
-    .RequireRateLimiting("fixed"));
-
-// Require auth on the GraphQL endpoint
 app.UseTraxGraphQL(configure: endpoint => endpoint
     .RequireAuthorization("AdminPolicy"));
 ```
 
-The REST callback receives a `RouteGroupBuilder`, the GraphQL callback receives an `IEndpointConventionBuilder`. Both support `.RequireAuthorization()`, `.RequireRateLimiting()`, `.RequireCors()`, `.AddEndpointFilter<T>()`, and any other endpoint convention.
+The callback receives an `IEndpointConventionBuilder` and supports `.RequireAuthorization()`, `.RequireRateLimiting()`, `.RequireCors()`, `.AddEndpointFilter<T>()`, and any other endpoint convention.
 
 For global auth that applies to everything (including non-Trax routes), use middleware instead:
 
@@ -162,14 +123,15 @@ app.UseAuthorization();
 
 ### Per-Train Authorization
 
-Since all trains share the same endpoints, endpoint-level auth can only answer "can this user access the API?" For finer control, decorate individual train classes with `[TraxAuthorize]`:
+Endpoint-level auth answers "can this user access the API?" For finer control, decorate individual train classes with `[TraxAuthorize]`:
 
 ```csharp
 [TraxAuthorize("Admin")]
+[TraxMutation(Operations = GraphQLOperation.Run)]
 public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrain { ... }
 ```
 
-When the API receives a request to run or queue this train, it checks the current user against the policy before executing. Trains without the attribute have no per-train restriction. See the [Authorization]({{ site.baseurl }}{% link authorization.md %}) guide for details.
+When the API receives a request to run or queue this train, it checks the current user against the policy before executing. Trains without `[TraxAuthorize]` have no per-train restriction. See the [Authorization]({{ site.baseurl }}{% link authorization.md %}) guide for details.
 
 ## Named GraphQL Schema
 
@@ -180,8 +142,7 @@ The GraphQL API registers on a **named HotChocolate schema** (`"trax"`) rather t
 Working examples are in `Trax.Samples`, themed as a game server:
 
 - **`samples/Trax.Samples.GameServer`** — Shared class library with all train definitions and API key authentication
-- **`samples/Trax.Samples.GameServer.Rest`** — REST API host with fake API key auth, per-train authorization, and no scheduler
-- **`samples/Trax.Samples.GameServer.GraphQL`** — GraphQL API host with Banana Cake Pop IDE, same auth setup
+- **`samples/Trax.Samples.GameServer.GraphQL`** — GraphQL API host with Banana Cake Pop IDE, per-train authorization
 - **`samples/Trax.Samples.GameServer.Scheduler`** — Scheduler host with dashboard, all scheduling patterns demonstrated
 
 The API and Scheduler run as separate processes against the same database. The API handles lightweight trains directly (`RunAsync`) and queues heavy work for the scheduler (`QueueAsync`).
@@ -190,8 +151,11 @@ The API and Scheduler run as separate processes against the same database. The A
 
 For complete endpoint documentation, request/response schemas, and method signatures:
 
-- [REST API]({{ site.baseurl }}{% link sdk-reference/rest-api.md %}) — endpoint mappings, request/response DTOs, curl examples
-- [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api.md %}) — queries, mutations, HotChocolate setup
+- [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api.md %}) — queries, mutations, subscriptions, HotChocolate setup
 - [Authorization]({{ site.baseurl }}{% link authorization.md %}) — per-train authorization with `[TraxAuthorize]`
 - [TrainDiscovery]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-discovery.md %}) — how train discovery works
 - [TrainExecution]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-execution.md %}) — queue and run services
+
+## Next Layer
+
+When you need a monitoring UI for inspecting trains, browsing execution history, and managing manifests from a browser, add [Trax.Dashboard](dashboard.md).

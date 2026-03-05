@@ -6,85 +6,116 @@ nav_order: 2
 
 # Getting Started
 
-## Prerequisites
-
-Trax targets `net10.0` exclusively. Make sure your project's target framework is set accordingly:
+Trax requires `net10.0`:
 
 ```xml
 <TargetFramework>net10.0</TargetFramework>
 ```
 
-If you're migrating from ChainSharp, see [Migration (ChainSharp → Trax)](migration.md).
+If you're migrating from ChainSharp, see [Migration Guide]({{ site.baseurl }}{% link reference/migration.md %}).
 
-For a complete starter project with timetables, persistence, and the control room already configured, see the [Project Template](templates.md).
+Pick the track that matches what you need:
 
-## Installation
+---
 
-### Install NuGet Packages
+## Track 1: Core Only
 
-For a typical setup with database persistence and the dispatch station:
+Type-safe pipelines with no infrastructure. No database, no DI container, no ASP.NET required.
 
-```xml
-<PackageReference Include="Trax.Core" Version="1.*" />
-<PackageReference Include="Trax.Effect" Version="1.*" />
+```bash
+dotnet add package Trax.Core
 ```
 
-Or via the .NET CLI:
+### Define Steps
+
+```csharp
+public class ValidateEmailStep : Step<CreateUserRequest, Unit>
+{
+    public override async Task<Unit> Run(CreateUserRequest input)
+    {
+        if (!IsValidEmail(input.Email))
+            throw new ValidationException("Invalid email format");
+        return Unit.Default;
+    }
+
+    private static bool IsValidEmail(string email)
+        => new EmailAddressAttribute().IsValid(email);
+}
+
+public class FormatNameStep : Step<CreateUserRequest, FullName>
+{
+    public override Task<FullName> Run(CreateUserRequest input)
+        => Task.FromResult(new FullName($"{input.FirstName} {input.LastName}"));
+}
+```
+
+### Define a Train
+
+```csharp
+public class CreateUserTrain : Train<CreateUserRequest, FullName>
+{
+    protected override async Task<Either<Exception, FullName>> RunInternal(CreateUserRequest input)
+        => Activate(input)
+            .Chain<ValidateEmailStep>()
+            .Chain<FormatNameStep>()
+            .Resolve();
+}
+```
+
+### Run It
+
+```csharp
+var train = new CreateUserTrain();
+var result = await train.RunEither(new CreateUserRequest
+{
+    Email = "test@example.com",
+    FirstName = "Test",
+    LastName = "User"
+});
+
+result.Match(
+    Left: ex => Console.WriteLine($"Failed: {ex.Message}"),
+    Right: name => Console.WriteLine($"Created: {name}")
+);
+```
+
+**Next:** [Core docs]({{ site.baseurl }}{% link core.md %}) for Memory, the Analyzer, chain methods, and IDE extensions.
+
+---
+
+## Track 2: Core + Effect
+
+Add execution logging, DI, and persistent metadata. Every train run becomes a queryable record.
 
 ```bash
 dotnet add package Trax.Core
 dotnet add package Trax.Effect
+dotnet add package Trax.Effect.Data.Postgres  # or Trax.Effect.Data.InMemory
 ```
-
-## Basic Configuration
 
 ### Program.cs Setup
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-// Add Trax.Core services
-builder.Services.AddTrax.CoreEffects(o => o.AddServiceTrainBus(typeof(Program).Assembly));
+builder.Services.AddTraxEffects(options => options
+    .AddPostgresEffect(builder.Configuration.GetConnectionString("TraxDatabase")!)
+    .SaveTrainParameters()
+);
 
-// Add your application services
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
 var app = builder.Build();
-
 app.Run();
 ```
 
-*SDK Reference: [AddTrax.CoreEffects]({{ site.baseurl }}{% link sdk-reference/configuration.md %}), [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-train-bus.md %})*
+### Use ServiceTrain
 
-## Creating Your First Train
-
-### 1. Define Input and Output Models
+Switch from `Train` to `ServiceTrain` to get metadata tracking:
 
 ```csharp
-// Cargo type - unique per train
-public record CreateUserRequest
-{
-    public required string Email { get; init; }
-    public required string FirstName { get; init; }
-    public required string LastName { get; init; }
-    public string? PhoneNumber { get; init; }
-}
-
-// Delivery type
-public record User
-{
-    public int Id { get; init; }
-    public string Email { get; init; }
-    public string FullName { get; init; }
-    public DateTime CreatedAt { get; init; }
-}
-```
-
-### 2. Implement the Train
-
-```csharp
-public interface ICreateUserTrain : IServiceTrain<CreateUserRequest, User> { }
+public interface ICreateUserTrain : IServiceTrain<CreateUserRequest, User>;
 
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
@@ -97,90 +128,50 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 }
 ```
 
-*SDK Reference: [Activate]({{ site.baseurl }}{% link sdk-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link sdk-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %})*
+The `RunInternal` code is identical to Core — `ServiceTrain` adds the execution logging and DI around it.
 
-### 3. Implement the Stops
+**Next:** [Effect docs]({{ site.baseurl }}{% link effect.md %}) for metadata, effect providers, and the ServiceTrain lifecycle.
 
-```csharp
-public class ValidateEmailStep(IUserRepository UserRepository) : Step<CreateUserRequest, Unit>
-{
-    public override async Task<Unit> Run(CreateUserRequest input)
-    {
-        // Check if email already exists
-        var existingUser = await UserRepository.GetByEmailAsync(input.Email);
-        if (existingUser != null)
-            throw new ValidationException($"User with email {input.Email} already exists");
-        
-        // Validate email format
-        if (!IsValidEmail(input.Email))
-            throw new ValidationException("Invalid email format");
-            
-        return Unit.Default;
-    }
-    
-    private static bool IsValidEmail(string email)
-        => new EmailAddressAttribute().IsValid(email);
-}
+---
 
-public class CreateUserInDatabaseStep(IUserRepository UserRepository) : Step<CreateUserRequest, User>
-{
-    public override async Task<User> Run(CreateUserRequest input)
-    {
-        var user = new User
-        {
-            Email = input.Email,
-            FullName = $"{input.FirstName} {input.LastName}",
-            CreatedAt = DateTime.UtcNow
-        };
-        
-        return await UserRepository.CreateAsync(user);
-    }
-}
+## Track 3: Full Stack
 
-public class SendWelcomeEmailStep(IEmailService EmailService) : Step<User, Unit>
-{
-    public override async Task<Unit> Run(User input)
-    {
-        await EmailService.SendWelcomeEmailAsync(input.Email, input.FullName);
-        return Unit.Default;
-    }
-}
+Add the mediator, scheduler, and dashboard for a complete platform.
+
+```bash
+dotnet new install Trax.Samples.Templates
+dotnet new trax-server -n MyApp
 ```
 
-### 4. Use the Train
+This scaffolds a project with:
+- PostgreSQL persistence
+- `TrainBus` for decoupled dispatch
+- Scheduler with cron-based manifests
+- Dashboard at `/trax`
+- A sample HelloWorld train
+
+Or configure manually:
 
 ```csharp
-[ApiController]
-[Route("api/[controller]")]
-public class UsersController(ITrainBus trainBus) : ControllerBase
-{
-    [HttpPost]
-    public async Task<ActionResult<User>> CreateUser(CreateUserRequest request)
-    {
-        try
-        {
-            var user = await trainBus.RunAsync<User>(request);
-            return Created($"/api/users/{user.Id}", user);
-        }
-        catch (ValidationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, "An error occurred while creating the user");
-        }
-    }
-}
+builder.Services.AddTraxEffects(options => options
+    .AddPostgresEffect(connectionString)
+    .SaveTrainParameters()
+    .AddStepLogger(serializeStepData: true)
+    .AddStepProgress()
+    .AddServiceTrainBus(typeof(Program).Assembly)
+);
+
+builder.Services.AddTraxDashboard();
+
+var app = builder.Build();
+
+app.UseTraxDashboard();
+app.Run();
 ```
 
-*SDK Reference: [TrainBus.RunAsync]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %})*
-
-## Next Steps
-
-- [Core Concepts](concepts.md) - Understand trains, stops, cargo, and the railway
-- [Usage Guide](usage-guide.md) - Patterns and examples for building trains
-- [Mediator](usage-guide/mediator.md) - The dispatch station — route cargo to the right train
-- [Scheduling](scheduler.md) - Timetables, manifests, retries, and dead letters
-- [Architecture](architecture.md) - How the system is built internally
-- [Dashboard](dashboard.md) - The operations control room (optional)
+**Next:**
+- [Mediator]({{ site.baseurl }}{% link mediator.md %}) — decoupled dispatch with TrainBus
+- [Scheduling]({{ site.baseurl }}{% link scheduler.md %}) — cron jobs, retries, dead letters
+- [Dashboard]({{ site.baseurl }}{% link dashboard.md %}) — monitoring UI
+- [API]({{ site.baseurl }}{% link api.md %}) — GraphQL interface
+- [Project Template]({{ site.baseurl }}{% link reference/templates.md %}) — full template reference

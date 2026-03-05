@@ -82,6 +82,6 @@ builder.Services.AddTrax.CoreEffects(options => options
 );
 ```
 
-*SDK Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-train-bus.md %})*
+*SDK Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})*
 
 If you forget this, scheduled jobs will silently fail—Hangfire will invoke the TaskServerExecutor, but the TrainBus won't find it. No error, just nothing happens.

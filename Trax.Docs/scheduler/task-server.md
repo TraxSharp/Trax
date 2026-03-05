@@ -88,7 +88,7 @@ No connection string parameter needed — `UsePostgresTaskServer()` uses the sam
 | `WorkerCount` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs |
 | `PollingInterval` | 1 second | How often idle workers poll for new jobs |
 | `VisibilityTimeout` | 30 minutes | How long a claimed job stays invisible before crash recovery reclaims it |
-| `ShutdownTimeout` | 30 seconds | Grace period for in-flight jobs during application shutdown. When the host signals shutdown, in-flight trains receive the cancellation token after this delay — giving them time to finish cleanly. See [Cancellation Tokens]({{ site.baseurl }}{% link usage-guide/cancellation-tokens.md %}#background-services-and-shutdown). |
+| `ShutdownTimeout` | 30 seconds | Grace period for in-flight jobs during application shutdown. When the host signals shutdown, in-flight trains receive the cancellation token after this delay — giving them time to finish cleanly. See [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %}#background-services-and-shutdown). |
 
 ### Worker Lifecycle
 

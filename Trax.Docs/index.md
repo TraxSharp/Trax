@@ -4,12 +4,9 @@ title: Home
 nav_order: 1
 ---
 
-# Trax.Core
+# Trax
 
-[![Build Status](https://github.com/Theauxm/Trax.Core/trains/Release%20NuGet%20Package/badge.svg?branch=main)](https://github.com/Theauxm/Trax.Core/actions)
-[![Test Status](https://github.com/Theauxm/Trax.Core/trains/Trax.Core:%20Run%20CI%2FCD%20Test%20Suite/badge.svg?branch=main)](https://github.com/Theauxm/Trax.Core/actions)
-
-Trax.Core is a .NET library for building trains — sequences of typed stops that carry data along a route with automatic derailment handling.
+Composable pipelines for .NET — build business logic as a typed chain of steps where errors short-circuit automatically. Start with zero infrastructure, then add execution logging, scheduling, and a monitoring dashboard as you need them.
 
 ## The Problem
 
@@ -36,12 +33,12 @@ public async Task<OrderReceipt> ProcessOrder(OrderRequest request)
 
 The actual business logic gets buried under null checks and error handling.
 
-## With Trax.Core
+## The Fix
 
-The same flow, without the noise:
+Trax replaces that with a **train** — a typed pipeline of steps where each step's output feeds the next. If any step fails, the rest are skipped automatically:
 
 ```csharp
-public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderReceipt>
+public class ProcessOrderTrain : Train<OrderRequest, OrderReceipt>
 {
     protected override async Task<Either<Exception, OrderReceipt>> RunInternal(OrderRequest input)
         => Activate(input)
@@ -52,30 +49,44 @@ public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderReceipt>
 }
 ```
 
-The train departs with its cargo (`Activate`), visits each stop (`.Chain<T>`), and arrives at its destination (`Resolve`). If `CheckInventoryStep` throws, the train derails — `ChargePaymentStep` and `CreateShipmentStep` are never reached. Each stop is a separate class with its own dependencies, testable in isolation.
-
 ```
-Main Track:     Input → [Stop 1] → [Stop 2] → [Stop 3] → Output
-                            ↓
-Derailed:              Exception → [Skip]  → [Skip]  → Exception
+Main Track:     Input -> [Stop 1] -> [Stop 2] -> [Stop 3] -> Output
+                            |
+Derailed:              Exception -> [Skip]  -> [Skip]  -> Exception
 ```
 
-Remove a stop or reorder the route incorrectly, and the built-in [Analyzer](analyzer.md) tells you at compile time — before the train ever leaves the station.
+A compile-time [Analyzer]({{ site.baseurl }}{% link core/analyzer.md %}) catches broken chains before you ever run the code. [IDE extensions]({{ site.baseurl }}{% link core/ide-extensions.md %}) show cargo types inline at each stop.
 
-For more on how this works, see [Core Concepts](concepts.md).
+## Use Only What You Need
 
-## IDE Extensions
+Each package is a standalone layer that builds on the one below it. **Stop at whatever layer solves your problem.**
 
-Inlay hint extensions for VSCode and Rider/ReSharper. They show `TIn → TOut` cargo types inline for each `.Chain<TStep>()` stop.
+```
+dotnet add package Trax.Core            # Just pipelines — no DI, no database
+dotnet add package Trax.Effect          # + execution logging, DI, pluggable storage
+dotnet add package Trax.Mediator        # + decoupled dispatch (callers don't know which train runs)
+dotnet add package Trax.Scheduler       # + cron schedules, retries, dead-letter queues
+dotnet add package Trax.Dashboard       # + Blazor monitoring UI that mounts into your app
+```
 
-- **VSCode** — Install from the [VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=Trax.Core.trax-hints)
-- **Rider / ReSharper** — Search for **Trax.Core Chain Hints** in JetBrains Marketplace
+| Layer | What it adds | Good for |
+|-------|-------------|----------|
+| [**Core**]({{ site.baseurl }}{% link core.md %}) | Trains, steps, Memory, error propagation, analyzer | Validation pipelines, CLI tools, data transforms |
+| [**Effect**]({{ site.baseurl }}{% link effect.md %}) | ServiceTrain, execution metadata, DI, effect providers | Web APIs, services needing audit trails |
+| [**Mediator**]({{ site.baseurl }}{% link mediator.md %}) | TrainBus dispatch by input type | Larger apps, nested trains, decoupled callers |
+| [**Scheduler**]({{ site.baseurl }}{% link scheduler.md %}) | Cron/interval scheduling, retries, dead letters | Recurring jobs, ETL, background processing |
+| [**Dashboard**]({{ site.baseurl }}{% link dashboard.md %}) | Blazor Server monitoring UI | Operational visibility without custom admin pages |
 
-See [IDE Extensions](ide-extensions.md) for details.
+Or scaffold a complete project:
+
+```bash
+dotnet new install Trax.Samples.Templates
+dotnet new trax-server -n MyApp
+```
 
 ## Quick Start
 
-Trax requires `net10.0`. See [Getting Started](getting-started.md) for installation and your first train.
+See [Getting Started]({{ site.baseurl }}{% link getting-started.md %}) for a walkthrough at each level — from Core-only to full stack.
 
 ## Available NuGet Packages
 
@@ -93,14 +104,13 @@ Trax requires `net10.0`. See [Getting Started](getting-started.md) for installat
 | [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/) | Timetable management — manifests, retries, dead letters | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Scheduler) |
 | [Trax.Scheduler.Hangfire](https://www.nuget.org/packages/Trax.Scheduler.Hangfire/) | Hangfire integration for the timetable | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Scheduler.Hangfire) |
 | [Trax.Api](https://www.nuget.org/packages/Trax.Api/) | API core — train catalog, health checks, shared DTOs | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Api) |
-| [Trax.Api.Rest](https://www.nuget.org/packages/Trax.Api.Rest/) | REST API endpoints via ASP.NET Core minimal APIs | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Api.Rest) |
 | [Trax.Api.GraphQL](https://www.nuget.org/packages/Trax.Api.GraphQL/) | GraphQL API via HotChocolate | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Api.GraphQL) |
 | [Trax.Samples.Templates](https://www.nuget.org/packages/Trax.Samples.Templates/) | `dotnet new` project template for Trax servers | ![NuGet Version](https://img.shields.io/nuget/v/Trax.Samples.Templates) |
 
 ## License
 
-Trax.Core is licensed under the MIT License.
+Trax is licensed under the MIT License.
 
 ## Acknowledgements
 
-Without the help and guidance of Mark Keaton and Douglas Seely this project would not have been possible.
+Without the help and guidance of Mark Keaton, Spencer Elkington, and Douglas Seely this project would not have been possible.

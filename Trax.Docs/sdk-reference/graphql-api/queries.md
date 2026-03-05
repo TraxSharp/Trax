@@ -8,28 +8,108 @@ nav_order: 2
 
 # Queries
 
-All queries are defined on `TrainQueries`, the root query type. They provide read access to system health, registered trains, scheduled manifests, manifest groups, and train executions.
+Queries are organized into two groups under the root `Query` type:
 
-## health
+```graphql
+type Query {
+  discover: DiscoverQueries!
+  operations: OperationsQueries!
+}
+```
+
+- **`discover`** — auto-generated typed query fields for trains annotated with [`[TraxQuery]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %})
+- **`operations`** — predefined operational queries: health status, registered trains, manifests, manifest groups, and execution history
+
+## Discover Queries (Auto-Generated)
+
+Trax auto-generates strongly-typed query fields for trains that opt in with `[TraxQuery]`. Only trains with this attribute appear under `discover`.
+
+Each whitelisted query train gets a single field named after the train (no prefix). The field accepts a strongly-typed `input` argument and returns the train's output type directly.
+
+### Naming Convention
+
+The query field names are derived from the train's service interface name (or overridden via `[TraxQuery(Name = "...")]`):
+
+1. Strip the `I` prefix
+2. Strip the `Train` suffix
+3. Use the result as the field name (lowercase first letter)
+
+For example, `ILookupPlayerTrain` produces `lookupPlayer`.
+
+### Example
+
+Given a train annotated with `[TraxQuery]`:
+
+```csharp
+public record LookupPlayerInput
+{
+    public required string PlayerId { get; init; }
+}
+
+public record LookupPlayerOutput
+{
+    public required string PlayerId { get; init; }
+    public required int Rank { get; init; }
+}
+```
+
+The schema exposes:
+
+```graphql
+query {
+  discover {
+    lookupPlayer(input: { playerId: "player-42" }) {
+      playerId
+      rank
+    }
+  }
+}
+```
+
+### Query trains with typed output
+
+When a query train has a non-`Unit` output type, the output type is returned directly (not wrapped in a response type):
+
+```graphql
+type DiscoverQueries {
+  lookupPlayer(input: LookupPlayerInput!): LookupPlayerOutput!
+}
+```
+
+### Query trains with `Unit` output
+
+When a query train has `Unit` output, it returns `RunTrainResponse`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `metadataId` | `Long!` | Metadata ID of the completed execution |
+
+---
+
+## Operations Queries
+
+### health
 
 Returns the current health status of the Trax scheduler system. This is the same data reported by the ASP.NET `IHealthCheck` at `/trax/health`, exposed as a structured GraphQL type.
 
 ```graphql
 query {
-  health {
-    status
-    description
-    queueDepth
-    inProgress
-    failedLastHour
-    deadLetters
+  operations {
+    health {
+      status
+      description
+      queueDepth
+      inProgress
+      failedLastHour
+      deadLetters
+    }
   }
 }
 ```
 
 **Returns**: `HealthStatus!`
 
-### HealthStatus fields
+#### HealthStatus fields
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -44,22 +124,24 @@ Status is `Degraded` when `deadLetters > 0` or `failedLastHour > 10`.
 
 ---
 
-## trains
+### trains
 
 Returns every train registered in the DI container, including a runtime-generated input schema describing each property on the input type.
 
 ```graphql
 query {
-  trains {
-    serviceTypeName
-    implementationTypeName
-    inputTypeName
-    outputTypeName
-    lifetime
-    inputSchema {
-      name
-      typeName
-      isNullable
+  operations {
+    trains {
+      serviceTypeName
+      implementationTypeName
+      inputTypeName
+      outputTypeName
+      lifetime
+      inputSchema {
+        name
+        typeName
+        isNullable
+      }
     }
   }
 }
@@ -67,7 +149,7 @@ query {
 
 **Returns**: `[TrainInfo!]!`
 
-### TrainInfo fields
+#### TrainInfo fields
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -78,7 +160,7 @@ query {
 | `lifetime` | `String!` | DI lifetime (`Singleton`, `Scoped`, `Transient`) |
 | `inputSchema` | `[InputPropertySchema!]!` | Public readable properties on the input type |
 
-### InputPropertySchema fields
+#### InputPropertySchema fields
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -88,31 +170,33 @@ query {
 
 ---
 
-## manifests
+### manifests
 
 Returns a paginated list of scheduler manifests, ordered by ID descending (newest first).
 
 ```graphql
 query {
-  manifests(skip: 0, take: 10) {
-    items {
-      id
-      externalId
-      name
-      isEnabled
-      scheduleType
-      cronExpression
-      intervalSeconds
-      maxRetries
-      timeoutSeconds
-      lastSuccessfulRun
-      manifestGroupId
-      dependsOnManifestId
-      priority
+  operations {
+    manifests(skip: 0, take: 10) {
+      items {
+        id
+        externalId
+        name
+        isEnabled
+        scheduleType
+        cronExpression
+        intervalSeconds
+        maxRetries
+        timeoutSeconds
+        lastSuccessfulRun
+        manifestGroupId
+        dependsOnManifestId
+        priority
+      }
+      totalCount
+      skip
+      take
     }
-    totalCount
-    skip
-    take
   }
 }
 ```
@@ -124,7 +208,7 @@ query {
 
 **Returns**: `PagedResult<ManifestSummary>`
 
-### ManifestSummary fields
+#### ManifestSummary fields
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -144,20 +228,22 @@ query {
 
 ---
 
-## manifest
+### manifest
 
 Returns a single manifest by database ID.
 
 ```graphql
 query {
-  manifest(id: 42) {
-    id
-    externalId
-    name
-    isEnabled
-    scheduleType
-    cronExpression
-    priority
+  operations {
+    manifest(id: 42) {
+      id
+      externalId
+      name
+      isEnabled
+      scheduleType
+      cronExpression
+      priority
+    }
   }
 }
 ```
@@ -170,25 +256,27 @@ query {
 
 ---
 
-## manifestGroups
+### manifestGroups
 
 Returns a paginated list of manifest groups, ordered by ID descending.
 
 ```graphql
 query {
-  manifestGroups(skip: 0, take: 10) {
-    items {
-      id
-      name
-      maxActiveJobs
-      priority
-      isEnabled
-      createdAt
-      updatedAt
+  operations {
+    manifestGroups(skip: 0, take: 10) {
+      items {
+        id
+        name
+        maxActiveJobs
+        priority
+        isEnabled
+        createdAt
+        updatedAt
+      }
+      totalCount
+      skip
+      take
     }
-    totalCount
-    skip
-    take
   }
 }
 ```
@@ -200,7 +288,7 @@ query {
 
 **Returns**: `PagedResult<ManifestGroupSummary>`
 
-### ManifestGroupSummary fields
+#### ManifestGroupSummary fields
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -214,28 +302,30 @@ query {
 
 ---
 
-## executions
+### executions
 
 Returns a paginated list of train executions (metadata records), ordered by start time descending.
 
 ```graphql
 query {
-  executions(skip: 0, take: 10) {
-    items {
-      id
-      externalId
-      name
-      trainState
-      startTime
-      endTime
-      failureStep
-      failureReason
-      manifestId
-      cancellationRequested
+  operations {
+    executions(skip: 0, take: 10) {
+      items {
+        id
+        externalId
+        name
+        trainState
+        startTime
+        endTime
+        failureStep
+        failureReason
+        manifestId
+        cancellationRequested
+      }
+      totalCount
+      skip
+      take
     }
-    totalCount
-    skip
-    take
   }
 }
 ```
@@ -247,7 +337,7 @@ query {
 
 **Returns**: `PagedResult<ExecutionSummary>`
 
-### ExecutionSummary fields
+#### ExecutionSummary fields
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -264,21 +354,23 @@ query {
 
 ---
 
-## execution
+### execution
 
 Returns a single execution by metadata ID.
 
 ```graphql
 query {
-  execution(id: 100) {
-    id
-    externalId
-    name
-    trainState
-    startTime
-    endTime
-    failureStep
-    failureReason
+  operations {
+    execution(id: 100) {
+      id
+      externalId
+      name
+      trainState
+      startTime
+      endTime
+      failureStep
+      failureReason
+    }
   }
 }
 ```

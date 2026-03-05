@@ -1,62 +1,50 @@
 ---
 layout: default
 title: SDK Reference
-nav_order: 13
+nav_order: 12
 has_children: true
 ---
 
 # SDK Reference
 
-Complete reference documentation for every user-facing method in Trax.Core. Each page documents the method signature, all parameters, return type, and usage examples.
+Complete reference documentation for every user-facing method in Trax. Each page documents the method signature, all parameters, return type, and usage examples.
 
-For conceptual explanations and tutorials, see [Core Concepts]({{ site.baseurl }}{% link concepts.md %}) and [Usage Guide]({{ site.baseurl }}{% link usage-guide.md %}).
+For conceptual explanations and tutorials, see [Core]({{ site.baseurl }}{% link core.md %}), [Effect]({{ site.baseurl }}{% link effect.md %}), and [Mediator]({{ site.baseurl }}{% link mediator.md %}).
 
 ## Categories
 
-### [Train Methods]({{ site.baseurl }}{% link sdk-reference/train-methods.md %})
+### [Train Methods]({{ site.baseurl }}{% link sdk-reference/train-methods.md %}) (Core)
 
 Methods available inside `RunInternal` on `Train<TInput, TReturn>` — the core building blocks for composing steps into a pipeline.
 
 Includes: `Activate`, `Chain`, `ShortCircuit`, `Extract`, `AddServices`, `Resolve`, `Run` / `RunEither`.
 
-### [Configuration]({{ site.baseurl }}{% link sdk-reference/configuration.md %})
+### [Configuration]({{ site.baseurl }}{% link sdk-reference/configuration.md %}) (Effect)
 
-The `AddTrax.CoreEffects` entry point and every extension method on `Trax.CoreEffectConfigurationBuilder` — data providers, effect providers, and orchestration setup.
+The `AddTraxEffects` entry point and every extension method on `TraxEffectConfigurationBuilder` — data providers, effect providers, and orchestration setup.
 
 Includes: `AddPostgresEffect`, `AddInMemoryEffect`, `AddJsonEffect`, `SaveTrainParameters`, `AddStepLogger`, `AddServiceTrainBus`, `AddEffect`, `AddStepEffect`, `SetEffectLogLevel`.
 
-### [Scheduler API]({{ site.baseurl }}{% link sdk-reference/scheduler-api.md %})
-
-Scheduler configuration (`AddScheduler` + `SchedulerConfigurationBuilder`) and the runtime `ITraxScheduler` interface for scheduling, managing, and monitoring recurring trains.
-
-Includes: `AddScheduler`, `UseHangfire`, `Schedule`, `ScheduleMany`, dependent scheduling, manifest management, scheduling helpers (`Every`, `Cron`, `ManifestOptions`).
-
-### [Mediator API]({{ site.baseurl }}{% link sdk-reference/mediator-api.md %})
+### [Mediator API]({{ site.baseurl }}{% link sdk-reference/mediator-api.md %}) (Mediator)
 
 The `ITrainBus` interface for dynamically dispatching trains by input type, plus shared train discovery and execution services.
 
 Includes: `RunAsync`, `InitializeTrain`, `AddServiceTrainBus`, `ITrainDiscoveryService`, `ITrainExecutionService`.
 
-### [Dashboard API]({{ site.baseurl }}{% link sdk-reference/dashboard-api.md %})
+### [Scheduler API]({{ site.baseurl }}{% link sdk-reference/scheduler-api.md %}) (Scheduler)
 
-Setup and configuration for the Trax.Core Blazor dashboard.
+Scheduler configuration (`AddScheduler` + `SchedulerConfigurationBuilder`) and the runtime `ITraxScheduler` interface for scheduling, managing, and monitoring recurring trains.
 
-Includes: `AddTrax.CoreDashboard`, `UseTrax.CoreDashboard`, `DashboardOptions`.
+Includes: `AddScheduler`, `UseHangfire`, `Schedule`, `ScheduleMany`, dependent scheduling, manifest management, scheduling helpers (`Every`, `Cron`, `ManifestOptions`).
 
-### [REST API]({{ site.baseurl }}{% link sdk-reference/rest-api.md %})
+### [Dashboard API]({{ site.baseurl }}{% link sdk-reference/dashboard-api.md %}) (Dashboard)
 
-REST endpoint mappings for Trax using ASP.NET Core minimal APIs. Exposes train discovery, execution, scheduler operations, and read-only queries over HTTP.
+Setup and configuration for the Trax Blazor dashboard.
 
-Includes: `AddTraxRestApi`, `UseTraxRestApi`, train endpoints, scheduler endpoints, query endpoints, health check, DTOs.
+Includes: `AddTraxDashboard`, `UseTraxDashboard`, `DashboardOptions`.
 
-### [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api.md %})
+### [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api.md %}) (API)
 
-GraphQL schema for Trax using HotChocolate. Same operations as the REST API, exposed as queries and mutations.
+GraphQL schema for Trax using HotChocolate. Exposes train discovery, execution (via `[TraxQuery]`/`[TraxMutation]` whitelist), scheduler operations, and read-only queries.
 
-Includes: `AddTraxGraphQL`, `UseTraxGraphQL`, queries, mutations.
-
-### [DI Registration]({{ site.baseurl }}{% link sdk-reference/di-registration.md %})
-
-Helper methods for registering trains and steps with `[Inject]` property injection support.
-
-Includes: `AddScopedTrax.CoreRoute`, `AddTransientTrax.CoreRoute`, `AddSingletonTrax.CoreRoute`, and step equivalents.
+Includes: `AddTraxGraphQL`, `UseTraxGraphQL`, `[TraxQuery]`/`[TraxMutation]` attributes, queries, mutations.
