@@ -124,16 +124,20 @@ Inlay hint extensions show `TIn → TOut` types inline for each `.Chain<TStep>()
 - **VSCode** — [Trax.Core Chain Hints](https://marketplace.visualstudio.com/items?itemName=Trax.Core.trax-hints) on the Marketplace
 - **Rider / ReSharper** — Search for **Trax.Core Chain Hints** in JetBrains Marketplace
 
-## Going Further
+## Part of Trax
 
-Trax.Core is the locomotive. To add journey logging, station services, scheduling, and a control room, see the other packages in the Trax ecosystem:
+Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
 
-| Package | What it adds |
-|---------|-------------|
-| [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/) | `ServiceTrain` — a full commercial service with journey logging, station services, and DI |
-| [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/) | `TrainBus` — a dispatch station that routes cargo to the right train |
-| [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/) | Timetables, retries, and dead-letter handling for recurring trains |
-| [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/) | Operations control room — monitor every train on the network |
+```
+Trax.Core          ← you are here
+└→ Trax.Effect         + execution logging, DI, pluggable storage
+   └→ Trax.Mediator       + decoupled dispatch via TrainBus
+      └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues
+         └→ Trax.Api             + GraphQL API for remote access
+            └→ Trax.Dashboard       + Blazor monitoring UI
+```
+
+**Next layer:** When you need execution logging, DI, or persistent metadata, add [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/).
 
 Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
 
