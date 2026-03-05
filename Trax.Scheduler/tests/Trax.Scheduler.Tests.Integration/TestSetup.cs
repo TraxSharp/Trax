@@ -15,7 +15,7 @@ using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Scheduler.Extensions;
-using Trax.Scheduler.Trains.TaskServerExecutor;
+using Trax.Scheduler.Trains.JobRunner;
 
 namespace Trax.Scheduler.Tests.Integration;
 
@@ -28,7 +28,7 @@ public abstract class TestSetup
 
     public ITrainBus TrainBus { get; private set; } = null!;
 
-    public ITaskServerExecutorTrain TaskServerExecutor { get; private set; } = null!;
+    public IJobRunnerTrain JobRunner { get; private set; } = null!;
 
     public IDataContext DataContext { get; private set; } = null!;
 
@@ -55,7 +55,7 @@ public abstract class TestSetup
                         assemblies:
                         [
                             typeof(AssemblyMarker).Assembly,
-                            typeof(TaskServerExecutorTrain).Assembly,
+                            typeof(JobRunnerTrain).Assembly,
                         ]
                     )
                     .SetEffectLogLevel(LogLevel.Information)
@@ -64,9 +64,7 @@ public abstract class TestSetup
                     .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
                     .AddJsonEffect()
                     .AddStepLogger(serializeStepData: true)
-                    .AddScheduler(scheduler =>
-                        scheduler.UseInMemoryTaskServer().AddMetadataCleanup()
-                    )
+                    .AddScheduler(scheduler => scheduler.UseInMemoryWorkers().AddMetadataCleanup())
             )
             // Register IDataContext as scoped, created from the factory
             .AddScoped<IDataContext>(sp =>
@@ -88,7 +86,7 @@ public abstract class TestSetup
     {
         Scope = ServiceProvider.CreateScope();
         TrainBus = Scope.ServiceProvider.GetRequiredService<ITrainBus>();
-        TaskServerExecutor = Scope.ServiceProvider.GetRequiredService<ITaskServerExecutorTrain>();
+        JobRunner = Scope.ServiceProvider.GetRequiredService<IJobRunnerTrain>();
         DataContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
 
         await CleanupDatabase(DataContext);
@@ -148,8 +146,8 @@ public abstract class TestSetup
     [TearDown]
     public async Task TestTearDown()
     {
-        if (TaskServerExecutor is IDisposable taskServerDisposable)
-            taskServerDisposable.Dispose();
+        if (JobRunner is IDisposable jobRunnerDisposable)
+            jobRunnerDisposable.Dispose();
 
         if (DataContext is IDisposable disposable)
             disposable.Dispose();

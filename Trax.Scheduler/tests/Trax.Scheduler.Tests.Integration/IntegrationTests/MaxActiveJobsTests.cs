@@ -25,7 +25,7 @@ using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Tests.Integration.Examples.Trains;
 using Trax.Scheduler.Trains.JobDispatcher;
-using Trax.Scheduler.Trains.TaskServerExecutor;
+using Trax.Scheduler.Trains.JobRunner;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -73,7 +73,7 @@ public class MaxActiveJobsTests
                         assemblies:
                         [
                             typeof(AssemblyMarker).Assembly,
-                            typeof(TaskServerExecutorTrain).Assembly,
+                            typeof(JobRunnerTrain).Assembly,
                         ]
                     )
                     .SetEffectLogLevel(LogLevel.Information)
@@ -83,7 +83,7 @@ public class MaxActiveJobsTests
                     .AddJsonEffect()
                     .AddStepLogger(serializeStepData: true)
                     .AddScheduler(scheduler =>
-                        scheduler.UseInMemoryTaskServer().MaxActiveJobs(MaxActiveJobsLimit)
+                        scheduler.UseInMemoryWorkers().MaxActiveJobs(MaxActiveJobsLimit)
                     )
             )
             .AddScoped<IDataContext>(sp =>
@@ -736,7 +736,7 @@ public class MaxActiveJobsTests
                         assemblies:
                         [
                             typeof(AssemblyMarker).Assembly,
-                            typeof(TaskServerExecutorTrain).Assembly,
+                            typeof(JobRunnerTrain).Assembly,
                         ]
                     )
                     .SetEffectLogLevel(LogLevel.Information)
@@ -745,9 +745,7 @@ public class MaxActiveJobsTests
                     .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
                     .AddJsonEffect()
                     .AddStepLogger(serializeStepData: true)
-                    .AddScheduler(scheduler =>
-                        scheduler.UseInMemoryTaskServer().MaxActiveJobs(null)
-                    )
+                    .AddScheduler(scheduler => scheduler.UseInMemoryWorkers().MaxActiveJobs(null))
             )
             .AddScoped<IDataContext>(sp =>
             {

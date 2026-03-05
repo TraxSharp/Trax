@@ -21,7 +21,7 @@ public class SchedulerConfigurationBuilderSettingsTests
                 .AddServiceTrainBus(assemblies: [typeof(AssemblyMarker).Assembly])
                 .AddScheduler(scheduler =>
                 {
-                    scheduler.UseInMemoryTaskServer();
+                    scheduler.UseInMemoryWorkers();
                     configure(scheduler);
                 })
         );

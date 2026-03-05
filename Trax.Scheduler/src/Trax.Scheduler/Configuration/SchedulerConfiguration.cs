@@ -32,7 +32,7 @@ public class SchedulerConfiguration
     /// </summary>
     /// <remarks>
     /// When disabled, the JobDispatcher will not run during polling cycles, meaning
-    /// no queued work will be dispatched to the background task server. Work queue
+    /// no queued work will be dispatched to the job submitter. Work queue
     /// entries will continue to accumulate if the ManifestManager is still enabled.
     /// Takes effect on the next polling cycle.
     /// </remarks>
@@ -54,7 +54,7 @@ public class SchedulerConfiguration
     /// <remarks>
     /// Enforced by the JobDispatcher at dispatch time. Metadata whose train name appears in
     /// <see cref="ExcludedTrainTypeNames"/> is excluded from the count. By default, internal
-    /// scheduler trains (JobDispatcher, TaskServerExecutor, ManifestManager, MetadataCleanup)
+    /// scheduler trains (JobDispatcher, JobRunner, ManifestManager, MetadataCleanup)
     /// are excluded. When the total number of active jobs reaches this limit, the JobDispatcher
     /// will not dispatch new work queue entries until existing jobs complete.
     /// Work queue entries remain in Queued status as a buffer.

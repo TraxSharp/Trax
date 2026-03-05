@@ -4,73 +4,73 @@ using Trax.Scheduler.Configuration;
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 /// <summary>
-/// Tests for <see cref="PostgresTaskServerOptions"/> default values and configuration behavior.
+/// Tests for <see cref="LocalWorkerOptions"/> default values and configuration behavior.
 /// </summary>
 [TestFixture]
-public class PostgresTaskServerOptionsTests
+public class LocalWorkerOptionsTests
 {
     [Test]
     public void DefaultWorkerCount_EqualsProcessorCount()
     {
-        var options = new PostgresTaskServerOptions();
+        var options = new LocalWorkerOptions();
         options.WorkerCount.Should().Be(Environment.ProcessorCount);
     }
 
     [Test]
     public void DefaultPollingInterval_IsOneSecond()
     {
-        var options = new PostgresTaskServerOptions();
+        var options = new LocalWorkerOptions();
         options.PollingInterval.Should().Be(TimeSpan.FromSeconds(1));
     }
 
     [Test]
     public void DefaultVisibilityTimeout_IsThirtyMinutes()
     {
-        var options = new PostgresTaskServerOptions();
+        var options = new LocalWorkerOptions();
         options.VisibilityTimeout.Should().Be(TimeSpan.FromMinutes(30));
     }
 
     [Test]
     public void DefaultShutdownTimeout_IsThirtySeconds()
     {
-        var options = new PostgresTaskServerOptions();
+        var options = new LocalWorkerOptions();
         options.ShutdownTimeout.Should().Be(TimeSpan.FromSeconds(30));
     }
 
     [Test]
     public void WorkerCount_CanBeCustomized()
     {
-        var options = new PostgresTaskServerOptions { WorkerCount = 8 };
+        var options = new LocalWorkerOptions { WorkerCount = 8 };
         options.WorkerCount.Should().Be(8);
     }
 
     [Test]
     public void PollingInterval_CanBeCustomized()
     {
-        var options = new PostgresTaskServerOptions { PollingInterval = TimeSpan.FromSeconds(5) };
+        var options = new LocalWorkerOptions { PollingInterval = TimeSpan.FromSeconds(5) };
         options.PollingInterval.Should().Be(TimeSpan.FromSeconds(5));
     }
 
     [Test]
     public void VisibilityTimeout_CanBeCustomized()
     {
-        var options = new PostgresTaskServerOptions { VisibilityTimeout = TimeSpan.FromHours(1) };
+        var options = new LocalWorkerOptions { VisibilityTimeout = TimeSpan.FromHours(1) };
         options.VisibilityTimeout.Should().Be(TimeSpan.FromHours(1));
     }
 
     [Test]
     public void ShutdownTimeout_CanBeCustomized()
     {
-        var options = new PostgresTaskServerOptions { ShutdownTimeout = TimeSpan.FromMinutes(2) };
+        var options = new LocalWorkerOptions { ShutdownTimeout = TimeSpan.FromMinutes(2) };
         options.ShutdownTimeout.Should().Be(TimeSpan.FromMinutes(2));
     }
 
     [Test]
-    public void UsePostgresTaskServer_AppliesConfigureAction()
+    public void UseLocalWorkers_AppliesConfigureAction()
     {
         // Verify that the configure action pattern works correctly
-        var options = new PostgresTaskServerOptions();
-        Action<PostgresTaskServerOptions> configure = opts =>
+        var options = new LocalWorkerOptions();
+        Action<LocalWorkerOptions> configure = opts =>
         {
             opts.WorkerCount = 4;
             opts.PollingInterval = TimeSpan.FromSeconds(2);

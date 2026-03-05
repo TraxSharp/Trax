@@ -3,19 +3,19 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Models.BackgroundJob.DTOs;
 using Trax.Effect.Utils;
-using Trax.Scheduler.Trains.TaskServerExecutor;
+using Trax.Scheduler.Trains.JobRunner;
 
-namespace Trax.Scheduler.Services.BackgroundTaskServer;
+namespace Trax.Scheduler.Services.JobSubmitter;
 
 /// <summary>
-/// Built-in PostgreSQL implementation of <see cref="IBackgroundTaskServer"/>.
+/// Built-in PostgreSQL implementation of <see cref="IJobSubmitter"/>.
 /// </summary>
 /// <remarks>
 /// Enqueues jobs by inserting into the <c>trax.background_job</c> table.
-/// Jobs are picked up by <see cref="PostgresWorkerService.PostgresWorkerService"/>
+/// Jobs are picked up by <see cref="LocalWorkerService.LocalWorkerService"/>
 /// which polls the table using <c>FOR UPDATE SKIP LOCKED</c> for atomic dequeue.
 /// </remarks>
-public class PostgresTaskServer(IDataContext dataContext) : IBackgroundTaskServer
+public class PostgresJobSubmitter(IDataContext dataContext) : IJobSubmitter
 {
     /// <inheritdoc />
     public Task<string> EnqueueAsync(long metadataId) =>

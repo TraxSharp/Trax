@@ -12,7 +12,7 @@ namespace Trax.Scheduler.Services.DormantDependentContext;
 /// with runtime-determined input. Only dormant dependents declared as children of
 /// the currently executing parent manifest can be activated.
 ///
-/// The context is automatically initialized by the TaskServerExecutor before the
+/// The context is automatically initialized by the JobRunner before the
 /// user's train runs. If called outside of a scheduled execution (no manifest
 /// context), all calls will throw <see cref="InvalidOperationException"/>.
 ///

@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Services.EffectStep;
 
-namespace Trax.Scheduler.Trains.TaskServerExecutor.Steps;
+namespace Trax.Scheduler.Trains.JobRunner.Steps;
 
 /// <summary>
 /// Updates the Manifest's LastSuccessfulRun timestamp after successful train execution.

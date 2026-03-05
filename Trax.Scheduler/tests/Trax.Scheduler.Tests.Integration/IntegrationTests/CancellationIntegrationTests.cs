@@ -241,7 +241,7 @@ public class CancellationIntegrationTests : TestSetup
         using var cts = new CancellationTokenSource();
         var metadata = await CreateTestMetadata();
 
-        // Simulate the PostgresWorkerService lifecycle
+        // Simulate the LocalWorkerService lifecycle
         registry.Register(metadata.Id, cts);
         // ... train executes ...
         registry.Unregister(metadata.Id);

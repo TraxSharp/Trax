@@ -9,12 +9,12 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.EffectStep;
 using Trax.Effect.Utils;
-using Trax.Scheduler.Services.BackgroundTaskServer;
+using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
 
 /// <summary>
-/// Creates Metadata records and enqueues each entry to the background task server.
+/// Creates Metadata records and enqueues each entry to the job submitter.
 /// </summary>
 /// <remarks>
 /// Each entry is dispatched within its own DI scope and database transaction,
@@ -67,15 +67,14 @@ internal class DispatchJobsStep(IServiceProvider serviceProvider, ILogger<Dispat
 
     /// <summary>
     /// Atomically claims a work queue entry using FOR UPDATE SKIP LOCKED,
-    /// creates its Metadata record, and enqueues to the background task server.
+    /// creates its Metadata record, and enqueues to the job submitter.
     /// </summary>
     /// <returns>True if the entry was successfully dispatched; false if it was already claimed.</returns>
     private async Task<bool> TryClaimAndDispatchAsync(WorkQueue entry)
     {
         using var scope = serviceProvider.CreateScope();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        var backgroundTaskServer =
-            scope.ServiceProvider.GetRequiredService<IBackgroundTaskServer>();
+        var jobSubmitter = scope.ServiceProvider.GetRequiredService<IJobSubmitter>();
 
         using var transaction = await dataContext.BeginTransaction(CancellationToken);
 
@@ -134,24 +133,21 @@ internal class DispatchJobsStep(IServiceProvider serviceProvider, ILogger<Dispat
         await dataContext.SaveChanges(CancellationToken);
 
         // Commit the claim transaction before enqueuing. The Metadata and WorkQueue
-        // updates must be visible to the task server — InMemoryTaskServer executes
-        // synchronously and needs to read the Metadata, while PostgresTaskServer and
-        // HangfireTaskServer both need the committed state to be visible.
+        // updates must be visible to the job submitter — InMemoryJobSubmitter executes
+        // synchronously and needs to read the Metadata, while PostgresJobSubmitter and
+        // other submitters need the committed state to be visible.
         await dataContext.CommitTransaction();
 
-        // Enqueue to background task server (outside the transaction)
+        // Enqueue to job submitter (outside the transaction)
         string backgroundTaskId;
         if (deserializedInput != null)
-            backgroundTaskId = await backgroundTaskServer.EnqueueAsync(
+            backgroundTaskId = await jobSubmitter.EnqueueAsync(
                 metadata.Id,
                 deserializedInput,
                 CancellationToken
             );
         else
-            backgroundTaskId = await backgroundTaskServer.EnqueueAsync(
-                metadata.Id,
-                CancellationToken
-            );
+            backgroundTaskId = await jobSubmitter.EnqueueAsync(metadata.Id, CancellationToken);
 
         logger.LogDebug(
             "Dispatched work queue entry {WorkQueueId} as background task {BackgroundTaskId} (Metadata: {MetadataId})",

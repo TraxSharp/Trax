@@ -5,7 +5,7 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectStep;
 
-namespace Trax.Scheduler.Trains.TaskServerExecutor.Steps;
+namespace Trax.Scheduler.Trains.JobRunner.Steps;
 
 /// <summary>
 /// Loads the Metadata record from the database and uses the provided input.
@@ -16,9 +16,9 @@ namespace Trax.Scheduler.Trains.TaskServerExecutor.Steps;
 /// LastSuccessfulRun via SaveChanges.
 /// </remarks>
 internal class LoadMetadataStep(IDataContext dataContext, ILogger<LoadMetadataStep> logger)
-    : EffectStep<ExecuteManifestRequest, (Metadata, ResolvedTrainInput)>
+    : EffectStep<RunJobRequest, (Metadata, ResolvedTrainInput)>
 {
-    public override async Task<(Metadata, ResolvedTrainInput)> Run(ExecuteManifestRequest input)
+    public override async Task<(Metadata, ResolvedTrainInput)> Run(RunJobRequest input)
     {
         logger.LogDebug(
             "Loading metadata for job execution (MetadataId: {MetadataId})",

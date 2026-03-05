@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
-using Trax.Scheduler.Services.BackgroundTaskServer;
+using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Scheduler.Configuration;
 
@@ -177,24 +177,24 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
-    /// Uses the in-memory task server for testing and development.
+    /// Uses the in-memory job submitter for testing and development.
     /// </summary>
     /// <remarks>
-    /// The in-memory task server executes jobs immediately and synchronously.
+    /// The in-memory submitter executes jobs immediately and synchronously.
     /// Useful for unit/integration testing without external infrastructure.
     /// </remarks>
     /// <returns>The builder for method chaining</returns>
-    public SchedulerConfigurationBuilder UseInMemoryTaskServer()
+    public SchedulerConfigurationBuilder UseInMemoryWorkers()
     {
         _taskServerRegistration = services =>
         {
-            services.AddScoped<IBackgroundTaskServer, InMemoryTaskServer>();
+            services.AddScoped<IJobSubmitter, InMemoryJobSubmitter>();
         };
         return this;
     }
 
     /// <summary>
-    /// Uses the built-in PostgreSQL task server for background job execution.
+    /// Uses the built-in local worker pool for background job execution.
     /// </summary>
     /// <remarks>
     /// Jobs are persisted to the <c>trax.background_job</c> table and executed by
@@ -203,31 +203,31 @@ public partial class SchedulerConfigurationBuilder
     /// </remarks>
     /// <param name="configure">Optional configuration for worker count, polling interval, and timeouts</param>
     /// <returns>The builder for method chaining</returns>
-    public SchedulerConfigurationBuilder UsePostgresTaskServer(
-        Action<PostgresTaskServerOptions>? configure = null
+    public SchedulerConfigurationBuilder UseLocalWorkers(
+        Action<LocalWorkerOptions>? configure = null
     )
     {
         _taskServerRegistration = services =>
         {
-            var options = new PostgresTaskServerOptions();
+            var options = new LocalWorkerOptions();
             configure?.Invoke(options);
             services.AddSingleton(options);
-            services.AddScoped<IBackgroundTaskServer, PostgresTaskServer>();
-            services.AddHostedService<Scheduler.Services.PostgresWorkerService.PostgresWorkerService>();
+            services.AddScoped<IJobSubmitter, PostgresJobSubmitter>();
+            services.AddHostedService<Scheduler.Services.LocalWorkerService.LocalWorkerService>();
         };
         return this;
     }
 
     /// <summary>
-    /// Registers a custom background task server registration action.
+    /// Registers a custom job submitter registration action.
     /// </summary>
     /// <remarks>
-    /// This is used by task server implementations (Hangfire, Quartz, etc.) to register
-    /// their services. Most users should use the specific extension methods like UsePostgresTaskServer().
+    /// This is used by custom job submitter implementations to register their services.
+    /// Most users should use the specific extension methods like UseLocalWorkers().
     /// </remarks>
-    /// <param name="registration">The action to register task server services</param>
+    /// <param name="registration">The action to register job submitter services</param>
     /// <returns>The builder for method chaining</returns>
-    public SchedulerConfigurationBuilder UseTaskServer(Action<IServiceCollection> registration)
+    public SchedulerConfigurationBuilder UseCustomSubmitter(Action<IServiceCollection> registration)
     {
         _taskServerRegistration = registration;
         return this;

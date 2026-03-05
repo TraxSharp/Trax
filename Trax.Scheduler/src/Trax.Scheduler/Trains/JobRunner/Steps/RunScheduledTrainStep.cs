@@ -5,15 +5,15 @@ using Trax.Effect.Services.EffectStep;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Scheduler.Services.DormantDependentContext;
 
-namespace Trax.Scheduler.Trains.TaskServerExecutor.Steps;
+namespace Trax.Scheduler.Trains.JobRunner.Steps;
 
 /// <summary>
 /// Executes the target train using the TrainBus with the resolved input.
 /// </summary>
-internal class ExecuteScheduledTrainStep(
+internal class RunScheduledTrainStep(
     ITrainBus trainBus,
     DormantDependentContext dormantDependentContext,
-    ILogger<ExecuteScheduledTrainStep> logger
+    ILogger<RunScheduledTrainStep> logger
 ) : EffectStep<(Metadata, ResolvedTrainInput), Unit>
 {
     public override async Task<Unit> Run((Metadata, ResolvedTrainInput) input)

@@ -7,12 +7,12 @@ using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Scheduler.Tests.Integration.Examples.Trains;
-using Trax.Scheduler.Trains.TaskServerExecutor;
+using Trax.Scheduler.Trains.JobRunner;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 [TestFixture]
-public class TaskServerExecutorTests : TestSetup
+public class JobRunnerTrainTests : TestSetup
 {
     #region Run - Null Metadata Tests
 
@@ -23,8 +23,7 @@ public class TaskServerExecutorTests : TestSetup
         var nonExistentMetadataId = 999999;
 
         // Act
-        var act = async () =>
-            await TaskServerExecutor.Run(new ExecuteManifestRequest(nonExistentMetadataId));
+        var act = async () => await JobRunner.Run(new RunJobRequest(nonExistentMetadataId));
 
         // Assert
         await act.Should().ThrowAsync<TrainException>().WithMessage("*not found*");
@@ -43,8 +42,7 @@ public class TaskServerExecutorTests : TestSetup
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
-        var act = async () =>
-            await TaskServerExecutor.Run(new ExecuteManifestRequest(metadata.Id, input));
+        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
 
         // Assert
         await act.Should()
@@ -61,8 +59,7 @@ public class TaskServerExecutorTests : TestSetup
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
-        var act = async () =>
-            await TaskServerExecutor.Run(new ExecuteManifestRequest(metadata.Id, input));
+        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
 
         // Assert
         await act.Should()
@@ -79,8 +76,7 @@ public class TaskServerExecutorTests : TestSetup
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
-        var act = async () =>
-            await TaskServerExecutor.Run(new ExecuteManifestRequest(metadata.Id, input));
+        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
 
         // Assert
         await act.Should()
@@ -112,8 +108,7 @@ public class TaskServerExecutorTests : TestSetup
         DataContext.Reset();
 
         // Act - Should succeed (UpdateManifestSuccessStep gracefully handles null manifest)
-        var act = async () =>
-            await TaskServerExecutor.Run(new ExecuteManifestRequest(metadata.Id, input));
+        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
         await act.Should().NotThrowAsync();
     }
 
@@ -130,7 +125,7 @@ public class TaskServerExecutorTests : TestSetup
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
-        await TaskServerExecutor.Run(new ExecuteManifestRequest(metadata.Id, input));
+        await JobRunner.Run(new RunJobRequest(metadata.Id, input));
 
         // Assert - Verify execution happened (LastSuccessfulRun updated)
         DataContext.Reset();
@@ -155,7 +150,7 @@ public class TaskServerExecutorTests : TestSetup
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
-        await TaskServerExecutor.Run(new ExecuteManifestRequest(metadata.Id, input));
+        await JobRunner.Run(new RunJobRequest(metadata.Id, input));
         var afterExecution = DateTime.UtcNow;
 
         // Assert
@@ -180,7 +175,7 @@ public class TaskServerExecutorTests : TestSetup
         var input = manifest.GetProperties<SchedulerTestInput>();
 
         // Act
-        await TaskServerExecutor.Run(new ExecuteManifestRequest(metadata.Id, input));
+        await JobRunner.Run(new RunJobRequest(metadata.Id, input));
 
         // Assert
         DataContext.Reset();

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -9,9 +8,9 @@ using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
-using Trax.Scheduler.Trains.TaskServerExecutor;
+using Trax.Scheduler.Trains.JobRunner;
 
-namespace Trax.Scheduler.Services.PostgresWorkerService;
+namespace Trax.Scheduler.Services.LocalWorkerService;
 
 /// <summary>
 /// Background service that runs concurrent worker tasks to dequeue and execute background jobs
@@ -21,23 +20,23 @@ namespace Trax.Scheduler.Services.PostgresWorkerService;
 /// Workers use PostgreSQL's <c>FOR UPDATE SKIP LOCKED</c> for atomic, lock-free dequeue
 /// across multiple workers and processes. Each worker:
 /// 1. Claims a job by setting <c>fetched_at</c> within a transaction
-/// 2. Executes the train via <see cref="ITaskServerExecutorTrain"/>
+/// 2. Executes the train via <see cref="IJobRunnerTrain"/>
 /// 3. Deletes the job row on completion (success or failure)
 ///
 /// Crash recovery: if a worker dies mid-execution, the <c>fetched_at</c> timestamp becomes
-/// stale and the job is re-eligible for claim after <see cref="PostgresTaskServerOptions.VisibilityTimeout"/>.
+/// stale and the job is re-eligible for claim after <see cref="LocalWorkerOptions.VisibilityTimeout"/>.
 /// </remarks>
-internal class PostgresWorkerService(
+internal class LocalWorkerService(
     IServiceProvider serviceProvider,
-    PostgresTaskServerOptions options,
+    LocalWorkerOptions options,
     ICancellationRegistry cancellationRegistry,
-    ILogger<PostgresWorkerService> logger
+    ILogger<LocalWorkerService> logger
 ) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation(
-            "PostgresWorkerService starting with {WorkerCount} workers, polling every {PollingInterval}",
+            "LocalWorkerService starting with {WorkerCount} workers, polling every {PollingInterval}",
             options.WorkerCount,
             options.PollingInterval
         );
@@ -49,7 +48,7 @@ internal class PostgresWorkerService(
 
         await Task.WhenAll(workers);
 
-        logger.LogInformation("PostgresWorkerService stopping");
+        logger.LogInformation("LocalWorkerService stopping");
     }
 
     private async Task RunWorkerAsync(int workerId, CancellationToken stoppingToken)
@@ -151,12 +150,12 @@ internal class PostgresWorkerService(
                 );
             }
 
-            var train = executeScope.ServiceProvider.GetRequiredService<ITaskServerExecutorTrain>();
+            var train = executeScope.ServiceProvider.GetRequiredService<IJobRunnerTrain>();
 
             var request =
                 deserializedInput != null
-                    ? new ExecuteManifestRequest(metadataId, deserializedInput)
-                    : new ExecuteManifestRequest(metadataId);
+                    ? new RunJobRequest(metadataId, deserializedInput)
+                    : new RunJobRequest(metadataId);
 
             // Use shutdown timeout for in-flight jobs: when the host requests shutdown,
             // give the train a grace period before forcefully cancelling.

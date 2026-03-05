@@ -1,7 +1,7 @@
 using Trax.Scheduler.Trains.JobDispatcher;
+using Trax.Scheduler.Trains.JobRunner;
 using Trax.Scheduler.Trains.ManifestManager;
 using Trax.Scheduler.Trains.MetadataCleanup;
-using Trax.Scheduler.Trains.TaskServerExecutor;
 
 namespace Trax.Scheduler.Configuration;
 
@@ -18,8 +18,8 @@ public static class AdminTrains
     [
         typeof(IManifestManagerTrain),
         typeof(ManifestManagerTrain),
-        typeof(ITaskServerExecutorTrain),
-        typeof(TaskServerExecutorTrain),
+        typeof(IJobRunnerTrain),
+        typeof(JobRunnerTrain),
         typeof(IMetadataCleanupTrain),
         typeof(MetadataCleanupTrain),
         typeof(IJobDispatcherTrain),

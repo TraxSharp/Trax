@@ -1,13 +1,13 @@
-using Trax.Scheduler.Trains.TaskServerExecutor;
+using Trax.Scheduler.Trains.JobRunner;
 
-namespace Trax.Scheduler.Services.BackgroundTaskServer;
+namespace Trax.Scheduler.Services.JobSubmitter;
 
 /// <summary>
-/// In-memory implementation of <see cref="IBackgroundTaskServer"/> for testing purposes.
+/// In-memory implementation of <see cref="IJobSubmitter"/> for testing purposes.
 /// </summary>
 /// <remarks>
 /// This implementation executes jobs immediately and synchronously (awaitable) without
-/// any external infrastructure like Hangfire or Quartz. It's useful for:
+/// any external infrastructure. It's useful for:
 /// - Unit and integration testing
 /// - Local development without background job infrastructure
 /// - Simple scenarios where background processing isn't needed
@@ -18,12 +18,11 @@ namespace Trax.Scheduler.Services.BackgroundTaskServer;
 /// Example usage:
 /// ```csharp
 /// services.AddTraxEffects(options => options
-///     .AddScheduler(scheduler => scheduler.UseInMemoryTaskServer())
+///     .AddScheduler(scheduler => scheduler.UseInMemoryWorkers())
 /// );
 /// ```
 /// </remarks>
-public class InMemoryTaskServer(ITaskServerExecutorTrain taskServerExecutorTrain)
-    : IBackgroundTaskServer
+public class InMemoryJobSubmitter(IJobRunnerTrain jobRunnerTrain) : IJobSubmitter
 {
     private int _jobCounter;
 
@@ -44,10 +43,7 @@ public class InMemoryTaskServer(ITaskServerExecutorTrain taskServerExecutorTrain
     {
         var jobId = $"inmemory-{Interlocked.Increment(ref _jobCounter)}";
 
-        await taskServerExecutorTrain.Run(
-            new ExecuteManifestRequest(metadataId),
-            cancellationToken
-        );
+        await jobRunnerTrain.Run(new RunJobRequest(metadataId), cancellationToken);
 
         return jobId;
     }
@@ -61,10 +57,7 @@ public class InMemoryTaskServer(ITaskServerExecutorTrain taskServerExecutorTrain
     {
         var jobId = $"inmemory-{Interlocked.Increment(ref _jobCounter)}";
 
-        await taskServerExecutorTrain.Run(
-            new ExecuteManifestRequest(metadataId, input),
-            cancellationToken
-        );
+        await jobRunnerTrain.Run(new RunJobRequest(metadataId, input), cancellationToken);
 
         return jobId;
     }

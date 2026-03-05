@@ -10,7 +10,7 @@ public class AdminTrainsTests
     public void Types_ContainsExpectedCount()
     {
         // Admin trains should include ManifestManagerTrain, JobDispatcherTrain,
-        // TaskServerExecutorTrain, MetadataCleanupTrain and their interfaces
+        // JobRunnerTrain, MetadataCleanupTrain and their interfaces
         AdminTrains.Types.Should().NotBeEmpty();
         AdminTrains.Types.Count.Should().BeGreaterThanOrEqualTo(4);
     }

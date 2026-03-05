@@ -4,7 +4,7 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.EffectStep;
-using Trax.Scheduler.Services.BackgroundTaskServer;
+using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Scheduler.Trains.ManifestManager.Steps;
 
@@ -13,14 +13,14 @@ namespace Trax.Scheduler.Trains.ManifestManager.Steps;
 /// </summary>
 /// <remarks>
 /// This step creates Metadata records for each manifest due to run and enqueues them
-/// to the background task server for execution. Each Metadata creation is persisted
+/// to the job submitter for execution. Each Metadata creation is persisted
 /// immediately to ensure durability before the background task is enqueued.
 ///
 /// The step returns a PollResult summarizing what was enqueued.
 /// </remarks>
 internal class EnqueueJobsStep(
     IDataContext dataContext,
-    IBackgroundTaskServer backgroundTaskServer,
+    IJobSubmitter jobSubmitter,
     ILogger<EnqueueJobsStep> logger
 ) : EffectStep<List<Manifest>, Unit>
 {
@@ -62,8 +62,8 @@ internal class EnqueueJobsStep(
                     manifest.Name
                 );
 
-                // Enqueue the job to the background task server
-                var backgroundTaskId = await backgroundTaskServer.EnqueueAsync(
+                // Enqueue the job to the job submitter
+                var backgroundTaskId = await jobSubmitter.EnqueueAsync(
                     metadata.Id,
                     CancellationToken
                 );

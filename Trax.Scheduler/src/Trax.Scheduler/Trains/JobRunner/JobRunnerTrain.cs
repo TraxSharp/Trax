@@ -1,11 +1,11 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Scheduler.Trains.TaskServerExecutor.Steps;
+using Trax.Scheduler.Trains.JobRunner.Steps;
 
-namespace Trax.Scheduler.Trains.TaskServerExecutor;
+namespace Trax.Scheduler.Trains.JobRunner;
 
 /// <summary>
-/// Executes train jobs that have been scheduled via the manifest system.
+/// Runs scheduled train jobs that have been dispatched by the JobDispatcher.
 /// </summary>
 /// <remarks>
 /// This train:
@@ -14,17 +14,13 @@ namespace Trax.Scheduler.Trains.TaskServerExecutor;
 /// 3. Executes the scheduled train via TrainBus
 /// 4. Updates the manifest's LastSuccessfulRun timestamp
 /// </remarks>
-public class TaskServerExecutorTrain
-    : ServiceTrain<ExecuteManifestRequest, Unit>,
-        ITaskServerExecutorTrain
+public class JobRunnerTrain : ServiceTrain<RunJobRequest, Unit>, IJobRunnerTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(
-        ExecuteManifestRequest input
-    ) =>
+    protected override async Task<Either<Exception, Unit>> RunInternal(RunJobRequest input) =>
         Activate(input)
             .Chain<LoadMetadataStep>()
             .Chain<ValidateMetadataStateStep>()
-            .Chain<ExecuteScheduledTrainStep>()
+            .Chain<RunScheduledTrainStep>()
             .Chain<UpdateManifestSuccessStep>()
             .Chain<SaveDatabaseChangesStep>()
             .Resolve();

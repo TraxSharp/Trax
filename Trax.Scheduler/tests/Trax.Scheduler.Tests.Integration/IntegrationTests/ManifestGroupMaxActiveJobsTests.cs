@@ -27,7 +27,7 @@ using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Tests.Integration.Examples.Trains;
 using Trax.Scheduler.Trains.JobDispatcher;
-using Trax.Scheduler.Trains.TaskServerExecutor;
+using Trax.Scheduler.Trains.JobRunner;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -69,7 +69,7 @@ public class ManifestGroupMaxActiveJobsTests
                         assemblies:
                         [
                             typeof(AssemblyMarker).Assembly,
-                            typeof(TaskServerExecutorTrain).Assembly,
+                            typeof(JobRunnerTrain).Assembly,
                         ]
                     )
                     .SetEffectLogLevel(LogLevel.Information)
@@ -79,7 +79,7 @@ public class ManifestGroupMaxActiveJobsTests
                     .AddJsonEffect()
                     .AddStepLogger(serializeStepData: true)
                     .AddScheduler(scheduler =>
-                        scheduler.UseInMemoryTaskServer().MaxActiveJobs(GlobalMaxActiveJobs)
+                        scheduler.UseInMemoryWorkers().MaxActiveJobs(GlobalMaxActiveJobs)
                     )
             )
             .AddScoped<IDataContext>(sp =>

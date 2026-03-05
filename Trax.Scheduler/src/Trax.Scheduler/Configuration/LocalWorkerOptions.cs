@@ -1,9 +1,9 @@
 namespace Trax.Scheduler.Configuration;
 
 /// <summary>
-/// Configuration options for the built-in PostgreSQL background task server.
+/// Configuration options for the local worker pool that dequeues and executes background jobs.
 /// </summary>
-public class PostgresTaskServerOptions
+public class LocalWorkerOptions
 {
     /// <summary>
     /// Number of concurrent worker tasks polling for and executing background jobs.

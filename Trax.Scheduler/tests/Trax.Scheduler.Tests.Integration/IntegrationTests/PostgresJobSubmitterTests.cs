@@ -7,17 +7,17 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Models.BackgroundJob.DTOs;
 using Trax.Effect.Utils;
-using Trax.Scheduler.Services.BackgroundTaskServer;
+using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Tests.Integration.Examples.Trains;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 /// <summary>
-/// Integration tests for <see cref="PostgresTaskServer"/>, the built-in PostgreSQL
-/// implementation of <see cref="IBackgroundTaskServer"/>.
+/// Integration tests for <see cref="PostgresJobSubmitter"/>, the built-in PostgreSQL
+/// implementation of <see cref="IJobSubmitter"/>.
 /// </summary>
 /// <remarks>
-/// PostgresTaskServer enqueues jobs by inserting rows into the <c>trax.background_job</c>
+/// PostgresJobSubmitter enqueues jobs by inserting rows into the <c>trax.background_job</c>
 /// table. These tests verify:
 /// - EnqueueAsync(metadataId) creates a BackgroundJob with correct MetadataId
 /// - EnqueueAsync(metadataId, input) serializes input and stores the type name
@@ -25,7 +25,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 /// - Multiple enqueues create separate rows
 /// </remarks>
 [TestFixture]
-public class PostgresTaskServerTests : TestSetup
+public class PostgresJobSubmitterTests : TestSetup
 {
     #region EnqueueAsync(metadataId) Tests
 
@@ -33,10 +33,10 @@ public class PostgresTaskServerTests : TestSetup
     public async Task EnqueueAsync_WithMetadataIdOnly_CreatesBackgroundJob()
     {
         // Arrange
-        var taskServer = new PostgresTaskServer(DataContext);
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
 
         // Act
-        var jobId = await taskServer.EnqueueAsync(metadataId: 42);
+        var jobId = await jobSubmitter.EnqueueAsync(metadataId: 42);
 
         // Assert
         jobId.Should().NotBeNullOrEmpty();
@@ -58,10 +58,10 @@ public class PostgresTaskServerTests : TestSetup
     public async Task EnqueueAsync_WithMetadataIdOnly_ReturnsStringId()
     {
         // Arrange
-        var taskServer = new PostgresTaskServer(DataContext);
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
 
         // Act
-        var jobId = await taskServer.EnqueueAsync(metadataId: 1);
+        var jobId = await jobSubmitter.EnqueueAsync(metadataId: 1);
 
         // Assert
         int.TryParse(jobId, out var parsed)
@@ -74,12 +74,12 @@ public class PostgresTaskServerTests : TestSetup
     public async Task EnqueueAsync_CalledMultipleTimes_CreatesDistinctJobs()
     {
         // Arrange
-        var taskServer = new PostgresTaskServer(DataContext);
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
 
         // Act
-        var jobId1 = await taskServer.EnqueueAsync(metadataId: 10);
-        var jobId2 = await taskServer.EnqueueAsync(metadataId: 20);
-        var jobId3 = await taskServer.EnqueueAsync(metadataId: 30);
+        var jobId1 = await jobSubmitter.EnqueueAsync(metadataId: 10);
+        var jobId2 = await jobSubmitter.EnqueueAsync(metadataId: 20);
+        var jobId3 = await jobSubmitter.EnqueueAsync(metadataId: 30);
 
         // Assert
         jobId1.Should().NotBe(jobId2);
@@ -104,11 +104,11 @@ public class PostgresTaskServerTests : TestSetup
     public async Task EnqueueAsync_WithInput_SerializesInputToJson()
     {
         // Arrange
-        var taskServer = new PostgresTaskServer(DataContext);
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
         var input = new SchedulerTestInput { Value = "hello-world" };
 
         // Act
-        var jobId = await taskServer.EnqueueAsync(metadataId: 50, input: input);
+        var jobId = await jobSubmitter.EnqueueAsync(metadataId: 50, input: input);
 
         // Assert
         DataContext.Reset();
@@ -127,11 +127,11 @@ public class PostgresTaskServerTests : TestSetup
     public async Task EnqueueAsync_WithInput_StoresFullTypeName()
     {
         // Arrange
-        var taskServer = new PostgresTaskServer(DataContext);
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
         var input = new SchedulerTestInput { Value = "type-test" };
 
         // Act
-        var jobId = await taskServer.EnqueueAsync(metadataId: 51, input: input);
+        var jobId = await jobSubmitter.EnqueueAsync(metadataId: 51, input: input);
 
         // Assert
         DataContext.Reset();
@@ -147,11 +147,11 @@ public class PostgresTaskServerTests : TestSetup
     public async Task EnqueueAsync_WithInput_InputCanBeDeserialized()
     {
         // Arrange
-        var taskServer = new PostgresTaskServer(DataContext);
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
         var input = new SchedulerTestInput { Value = "round-trip-test" };
 
         // Act
-        var jobId = await taskServer.EnqueueAsync(metadataId: 52, input: input);
+        var jobId = await jobSubmitter.EnqueueAsync(metadataId: 52, input: input);
 
         // Assert
         DataContext.Reset();
@@ -175,11 +175,11 @@ public class PostgresTaskServerTests : TestSetup
     public async Task EnqueueAsync_WithComplexInput_SerializesCorrectly()
     {
         // Arrange
-        var taskServer = new PostgresTaskServer(DataContext);
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
         var input = new SchedulerTestInput { Value = "complex with special chars: <>&\"'" };
 
         // Act
-        var jobId = await taskServer.EnqueueAsync(metadataId: 53, input: input);
+        var jobId = await jobSubmitter.EnqueueAsync(metadataId: 53, input: input);
 
         // Assert
         DataContext.Reset();
@@ -207,10 +207,10 @@ public class PostgresTaskServerTests : TestSetup
     public async Task EnqueueAsync_CreatedJob_HasNullFetchedAt()
     {
         // Arrange
-        var taskServer = new PostgresTaskServer(DataContext);
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
 
         // Act
-        var jobId = await taskServer.EnqueueAsync(metadataId: 60);
+        var jobId = await jobSubmitter.EnqueueAsync(metadataId: 60);
 
         // Assert - Newly enqueued jobs should be available for dequeue (FetchedAt == null)
         DataContext.Reset();
@@ -226,11 +226,11 @@ public class PostgresTaskServerTests : TestSetup
     public async Task EnqueueAsync_CreatedJob_HasRecentCreatedAt()
     {
         // Arrange
-        var taskServer = new PostgresTaskServer(DataContext);
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
         var beforeEnqueue = DateTime.UtcNow;
 
         // Act
-        var jobId = await taskServer.EnqueueAsync(metadataId: 61);
+        var jobId = await jobSubmitter.EnqueueAsync(metadataId: 61);
 
         // Assert
         DataContext.Reset();

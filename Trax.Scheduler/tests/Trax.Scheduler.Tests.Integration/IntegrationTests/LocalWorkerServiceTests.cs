@@ -15,19 +15,19 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Services.BackgroundTaskServer;
 using Trax.Scheduler.Services.CancellationRegistry;
-using Trax.Scheduler.Services.PostgresWorkerService;
+using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.LocalWorkerService;
 using Trax.Scheduler.Tests.Integration.Examples.Trains;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 /// <summary>
-/// Integration tests for <see cref="PostgresWorkerService"/>, the background worker
+/// Integration tests for <see cref="LocalWorkerService"/>, the background worker
 /// that dequeues and executes jobs from the <c>trax.background_job</c> table.
 /// </summary>
 /// <remarks>
-/// The PostgresWorkerService uses PostgreSQL's <c>FOR UPDATE SKIP LOCKED</c> for atomic,
+/// The LocalWorkerService uses PostgreSQL's <c>FOR UPDATE SKIP LOCKED</c> for atomic,
 /// lock-free dequeue across concurrent workers. These tests verify:
 /// - Workers claim and execute jobs correctly
 /// - Job rows are deleted after execution (both success and failure)
@@ -35,12 +35,12 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 /// - Concurrent workers don't process the same job
 /// - Graceful shutdown behavior
 ///
-/// Since PostgresWorkerService is a BackgroundService that starts automatically,
+/// Since LocalWorkerService is a BackgroundService that starts automatically,
 /// tests directly instantiate it with controlled options (single worker, fast polling)
 /// for deterministic behavior.
 /// </remarks>
 [TestFixture]
-public class PostgresWorkerServiceTests : TestSetup
+public class LocalWorkerServiceTests : TestSetup
 {
     #region Job Claim and Execute Tests
 
@@ -58,7 +58,7 @@ public class PostgresWorkerServiceTests : TestSetup
 
         // Act - Start a single worker and wait for it to process the job
         using var cts = new CancellationTokenSource();
-        var options = new PostgresTaskServerOptions
+        var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
             PollingInterval = TimeSpan.FromMilliseconds(100),
@@ -66,11 +66,11 @@ public class PostgresWorkerServiceTests : TestSetup
             ShutdownTimeout = TimeSpan.FromSeconds(5),
         };
 
-        var workerService = new PostgresWorkerService(
+        var workerService = new LocalWorkerService(
             Scope.ServiceProvider,
             options,
             new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<PostgresWorkerService>>()
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
         );
 
         // Start the worker and give it time to process
@@ -122,17 +122,17 @@ public class PostgresWorkerServiceTests : TestSetup
 
         // Act - Start worker
         using var cts = new CancellationTokenSource();
-        var options = new PostgresTaskServerOptions
+        var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
             PollingInterval = TimeSpan.FromMilliseconds(100),
         };
 
-        var workerService = new PostgresWorkerService(
+        var workerService = new LocalWorkerService(
             Scope.ServiceProvider,
             options,
             new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<PostgresWorkerService>>()
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
         );
 
         var workerTask = workerService.StartAsync(cts.Token);
@@ -152,7 +152,7 @@ public class PostgresWorkerServiceTests : TestSetup
         );
 
         updatedMetadata.Should().NotBeNull();
-        // The TaskServerExecutorTrain should have run the train
+        // The JobRunnerTrain should have run the train
         updatedMetadata!.TrainState.Should().NotBe(TrainState.Pending);
     }
 
@@ -173,17 +173,17 @@ public class PostgresWorkerServiceTests : TestSetup
 
         // Act
         using var cts = new CancellationTokenSource();
-        var options = new PostgresTaskServerOptions
+        var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
             PollingInterval = TimeSpan.FromMilliseconds(100),
         };
 
-        var workerService = new PostgresWorkerService(
+        var workerService = new LocalWorkerService(
             Scope.ServiceProvider,
             options,
             new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<PostgresWorkerService>>()
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
         );
 
         var workerTask = workerService.StartAsync(cts.Token);
@@ -218,17 +218,17 @@ public class PostgresWorkerServiceTests : TestSetup
 
         // Act
         using var cts = new CancellationTokenSource();
-        var options = new PostgresTaskServerOptions
+        var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
             PollingInterval = TimeSpan.FromMilliseconds(100),
         };
 
-        var workerService = new PostgresWorkerService(
+        var workerService = new LocalWorkerService(
             Scope.ServiceProvider,
             options,
             new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<PostgresWorkerService>>()
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
         );
 
         var workerTask = workerService.StartAsync(cts.Token);
@@ -258,17 +258,17 @@ public class PostgresWorkerServiceTests : TestSetup
 
         // Act - Start worker with short polling interval
         using var cts = new CancellationTokenSource();
-        var options = new PostgresTaskServerOptions
+        var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
             PollingInterval = TimeSpan.FromMilliseconds(100),
         };
 
-        var workerService = new PostgresWorkerService(
+        var workerService = new LocalWorkerService(
             Scope.ServiceProvider,
             options,
             new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<PostgresWorkerService>>()
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
         );
 
         var workerTask = workerService.StartAsync(cts.Token);
@@ -308,18 +308,18 @@ public class PostgresWorkerServiceTests : TestSetup
 
         // Act - Start worker with a very short visibility timeout (1 second)
         using var cts = new CancellationTokenSource();
-        var options = new PostgresTaskServerOptions
+        var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
             PollingInterval = TimeSpan.FromMilliseconds(100),
             VisibilityTimeout = TimeSpan.FromSeconds(1),
         };
 
-        var workerService = new PostgresWorkerService(
+        var workerService = new LocalWorkerService(
             Scope.ServiceProvider,
             options,
             new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<PostgresWorkerService>>()
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
         );
 
         var workerTask = workerService.StartAsync(cts.Token);
@@ -354,18 +354,18 @@ public class PostgresWorkerServiceTests : TestSetup
 
         // Act - Start worker with default visibility timeout (30m)
         using var cts = new CancellationTokenSource();
-        var options = new PostgresTaskServerOptions
+        var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
             PollingInterval = TimeSpan.FromMilliseconds(100),
             VisibilityTimeout = TimeSpan.FromMinutes(30),
         };
 
-        var workerService = new PostgresWorkerService(
+        var workerService = new LocalWorkerService(
             Scope.ServiceProvider,
             options,
             new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<PostgresWorkerService>>()
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
         );
 
         var workerTask = workerService.StartAsync(cts.Token);
@@ -408,17 +408,17 @@ public class PostgresWorkerServiceTests : TestSetup
 
         // Act - Start multiple workers
         using var cts = new CancellationTokenSource();
-        var options = new PostgresTaskServerOptions
+        var options = new LocalWorkerOptions
         {
             WorkerCount = 3,
             PollingInterval = TimeSpan.FromMilliseconds(100),
         };
 
-        var workerService = new PostgresWorkerService(
+        var workerService = new LocalWorkerService(
             Scope.ServiceProvider,
             options,
             new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<PostgresWorkerService>>()
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
         );
 
         var workerTask = workerService.StartAsync(cts.Token);
@@ -471,17 +471,17 @@ public class PostgresWorkerServiceTests : TestSetup
 
         // Act
         using var cts = new CancellationTokenSource();
-        var options = new PostgresTaskServerOptions
+        var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
             PollingInterval = TimeSpan.FromMilliseconds(100),
         };
 
-        var workerService = new PostgresWorkerService(
+        var workerService = new LocalWorkerService(
             Scope.ServiceProvider,
             options,
             new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<PostgresWorkerService>>()
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
         );
 
         var workerTask = workerService.StartAsync(cts.Token);

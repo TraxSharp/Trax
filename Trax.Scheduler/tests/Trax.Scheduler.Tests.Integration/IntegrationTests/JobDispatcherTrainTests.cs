@@ -24,7 +24,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 /// 1. LoadQueuedJobsStep - Loads all WorkQueue entries with Status == Queued, ordered by group priority, entry priority, then CreatedAt
 /// 2. LoadDispatchCapacityStep - Loads global and per-group active counts and limits
 /// 3. ApplyCapacityLimitsStep - Filters entries respecting global and per-group capacity limits
-/// 4. DispatchJobsStep - For each entry: creates Metadata, updates status to Dispatched, enqueues to BackgroundTaskServer
+/// 4. DispatchJobsStep - For each entry: creates Metadata, updates status to Dispatched, enqueues to JobSubmitter
 /// </remarks>
 [TestFixture]
 public class JobDispatcherTrainTests : TestSetup
@@ -218,7 +218,7 @@ public class JobDispatcherTrainTests : TestSetup
     }
 
     [Test]
-    public async Task Run_ExecutesTrainViaInMemoryTaskServer()
+    public async Task Run_ExecutesTrainViaInMemoryJobSubmitter()
     {
         // Arrange
         var manifest = await CreateAndSaveManifest();
@@ -227,7 +227,7 @@ public class JobDispatcherTrainTests : TestSetup
         // Act
         await _train.Run(Unit.Default);
 
-        // Assert - InMemoryTaskServer executes immediately, which updates LastSuccessfulRun
+        // Assert - InMemoryJobSubmitter executes immediately, which updates LastSuccessfulRun
         DataContext.Reset();
         var updatedManifest = await DataContext.Manifests.FirstOrDefaultAsync(m =>
             m.Id == manifest.Id

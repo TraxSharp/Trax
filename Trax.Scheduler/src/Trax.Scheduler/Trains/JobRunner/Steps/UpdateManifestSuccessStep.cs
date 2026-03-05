@@ -5,7 +5,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectStep;
 
-namespace Trax.Scheduler.Trains.TaskServerExecutor.Steps;
+namespace Trax.Scheduler.Trains.JobRunner.Steps;
 
 /// <summary>
 /// Updates the Manifest's LastSuccessfulRun timestamp after successful train execution.

@@ -81,7 +81,7 @@ public partial class SchedulerConfigurationBuilder
         _parentBuilder.ServiceCollection.AddScoped<ITraxScheduler, TraxScheduler>();
 
         // Register IDormantDependentContext with forwarding so both concrete type
-        // (for ExecuteScheduledTrainStep.Initialize) and interface (for user steps)
+        // (for RunScheduledTrainStep.Initialize) and interface (for user steps)
         // resolve to the same scoped instance
         _parentBuilder.ServiceCollection.AddScoped<DormantDependentContext>();
         _parentBuilder.ServiceCollection.AddScoped<IDormantDependentContext>(sp =>
@@ -94,7 +94,7 @@ public partial class SchedulerConfigurationBuilder
             JobDispatcherTrain
         >();
 
-        // Register task server if configured
+        // Register job submitter if configured
         _taskServerRegistration?.Invoke(_parentBuilder.ServiceCollection);
 
         // Registration order matters: .NET starts IHostedService instances sequentially in registration order.
