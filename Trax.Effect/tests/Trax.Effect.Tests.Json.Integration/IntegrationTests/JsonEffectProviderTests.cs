@@ -32,11 +32,12 @@ public class JsonEffectProviderTests : TestSetup
         train.Metadata.FailureStep.Should().BeNullOrEmpty();
         train.Metadata.TrainState.Should().Be(TrainState.Completed);
         arrayProvider.Loggers.Should().NotBeNullOrEmpty();
-        arrayProvider.Loggers.Should().HaveCount(5);
+        arrayProvider.Loggers.Should().HaveCount(6);
 
         // Verify that we have the expected logger types:
         // 1. Two train loggers (ILogger<ServiceTrain<Unit, Unit>>) - may have empty logs
         // 2. One JsonEffectProvider logger (ILogger<JsonEffectProvider>) - should have JSON logs
+        // 3. One LifecycleHookRunner logger (ILogger<LifecycleHookRunner>) - may have empty logs
         var jsonProviderLoggers = arrayProvider
             .Loggers.Where(logger =>
                 logger.Logs.Any(log =>

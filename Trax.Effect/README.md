@@ -140,14 +140,20 @@ builder.Services.AddTransientTraxRoute<IProcessOrderTrain, ProcessOrderTrain>();
 
 Or use `AddServiceTrainBus` (from [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/)) to auto-register all trains in an assembly.
 
-## Related Packages
+## Part of Trax
 
-| Package | Purpose |
-|---------|---------|
-| [Trax.Core](https://www.nuget.org/packages/Trax.Core/) | The locomotive — `Train`, steps, railway programming |
-| [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/) | Dispatch station — route cargo to the right train via `TrainBus` |
-| [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/) | Timetables — recurring trains with retries and dead-lettering |
-| [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/) | Control room — monitor every journey on the network |
+Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
+
+```
+Trax.Core              pipelines, steps, railway error propagation
+└→ Trax.Effect         ← you are here
+   └→ Trax.Mediator       + decoupled dispatch via TrainBus
+      └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues
+         └→ Trax.Api             + GraphQL API for remote access
+            └→ Trax.Dashboard       + Blazor monitoring UI
+```
+
+**Next layer:** When you need decoupled dispatch (callers don't know which train handles a request), add [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/).
 
 Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
 

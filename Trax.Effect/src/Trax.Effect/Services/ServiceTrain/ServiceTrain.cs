@@ -11,6 +11,7 @@ using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.EffectRunner;
+using Trax.Effect.Services.LifecycleHookRunner;
 using Trax.Effect.Services.StepEffectRunner;
 
 namespace Trax.Effect.Services.ServiceTrain;
@@ -48,6 +49,10 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     [JsonIgnore]
     public IStepEffectRunner? StepEffectRunner { get; set; }
 
+    [Inject]
+    [JsonIgnore]
+    public ILifecycleHookRunner? LifecycleHookRunner { get; set; }
+
     /// <summary>
     /// Logger specific to this train type, used for recording diagnostic information.
     /// </summary>
@@ -81,6 +86,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         EffectRunner.AssertLoaded();
         StepEffectRunner.AssertLoaded();
+        LifecycleHookRunner.AssertLoaded();
         ServiceProvider.AssertLoaded();
 
         if (Metadata == null)
@@ -88,6 +94,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         Metadata.AssertLoaded();
         await EffectRunner.SaveChanges(CancellationToken);
+
+        await LifecycleHookRunner.OnStarted(Metadata, CancellationToken);
 
         try
         {
@@ -105,6 +113,12 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                 );
                 await this.FinishServiceTrain(result);
                 await EffectRunner.SaveChanges(CancellationToken);
+
+                if (exception is OperationCanceledException)
+                    await LifecycleHookRunner.OnCancelled(Metadata, CancellationToken);
+                else
+                    await LifecycleHookRunner.OnFailed(Metadata, exception, CancellationToken);
+
                 exception.Rethrow();
             }
 
@@ -115,6 +129,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             await EffectRunner.Update(Metadata);
             await this.FinishServiceTrain(result);
             await EffectRunner.SaveChanges(CancellationToken);
+
+            await LifecycleHookRunner.OnCompleted(Metadata, CancellationToken);
 
             return output;
         }
@@ -128,6 +144,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
             await this.FinishServiceTrain(e);
             await EffectRunner.SaveChanges(CancellationToken);
+
+            if (e is OperationCanceledException)
+                await LifecycleHookRunner.OnCancelled(Metadata, CancellationToken);
+            else
+                await LifecycleHookRunner.OnFailed(Metadata, e, CancellationToken);
 
             throw;
         }
@@ -178,6 +199,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         EffectRunner?.Dispose();
         StepEffectRunner?.Dispose();
+        LifecycleHookRunner?.Dispose();
         Metadata?.Dispose();
 
         Logger = null;

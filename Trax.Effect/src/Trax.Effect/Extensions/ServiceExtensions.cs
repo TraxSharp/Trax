@@ -6,8 +6,10 @@ using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.EffectRunner;
+using Trax.Effect.Services.LifecycleHookRunner;
 using Trax.Effect.Services.StepEffectProviderFactory;
 using Trax.Effect.Services.StepEffectRunner;
+using Trax.Effect.Services.TrainLifecycleHookFactory;
 
 namespace Trax.Effect.Extensions;
 
@@ -29,7 +31,8 @@ public static class ServiceExtensions
             .AddSingleton<IEffectRegistry>(registry)
             .AddSingleton<ITraxEffectConfiguration>(configuration)
             .AddTransient<IEffectRunner, EffectRunner>()
-            .AddTransient<IStepEffectRunner, StepEffectRunner>();
+            .AddTransient<IStepEffectRunner, StepEffectRunner>()
+            .AddTransient<ILifecycleHookRunner, LifecycleHookRunner>();
     }
 
     private static TraxEffectConfiguration BuildConfiguration(
@@ -230,6 +233,66 @@ public static class ServiceExtensions
             typeof(TStepEffectProviderFactory),
             toggleable: toggleable
         );
+
+        return builder;
+    }
+
+    #endregion
+
+    #region LifecycleHook
+
+    public static TraxEffectConfigurationBuilder AddLifecycleHook<
+        TILifecycleHookFactory,
+        TLifecycleHookFactory
+    >(
+        this TraxEffectConfigurationBuilder builder,
+        TLifecycleHookFactory factory,
+        bool toggleable = true
+    )
+        where TILifecycleHookFactory : class, ITrainLifecycleHookFactory
+        where TLifecycleHookFactory : class, TILifecycleHookFactory
+    {
+        builder
+            .ServiceCollection.AddSingleton<TLifecycleHookFactory>(factory)
+            .AddSingleton<ITrainLifecycleHookFactory>(sp =>
+                sp.GetRequiredService<TLifecycleHookFactory>()
+            )
+            .AddSingleton<TILifecycleHookFactory>(sp =>
+                sp.GetRequiredService<TLifecycleHookFactory>()
+            );
+
+        builder.EffectRegistry?.Register(typeof(TLifecycleHookFactory), toggleable: toggleable);
+
+        return builder;
+    }
+
+    public static TraxEffectConfigurationBuilder AddLifecycleHook<TLifecycleHookFactory>(
+        this TraxEffectConfigurationBuilder builder,
+        bool toggleable = true
+    )
+        where TLifecycleHookFactory : class, ITrainLifecycleHookFactory
+    {
+        builder
+            .ServiceCollection.AddSingleton<TLifecycleHookFactory>()
+            .AddSingleton<ITrainLifecycleHookFactory>(sp =>
+                sp.GetRequiredService<TLifecycleHookFactory>()
+            );
+
+        builder.EffectRegistry?.Register(typeof(TLifecycleHookFactory), toggleable: toggleable);
+
+        return builder;
+    }
+
+    public static TraxEffectConfigurationBuilder AddLifecycleHook<TLifecycleHookFactory>(
+        this TraxEffectConfigurationBuilder builder,
+        TLifecycleHookFactory factory,
+        bool toggleable = true
+    )
+        where TLifecycleHookFactory : class, ITrainLifecycleHookFactory
+    {
+        builder.ServiceCollection.AddSingleton<ITrainLifecycleHookFactory>(factory);
+
+        builder.EffectRegistry?.Register(typeof(TLifecycleHookFactory), toggleable: toggleable);
 
         return builder;
     }
