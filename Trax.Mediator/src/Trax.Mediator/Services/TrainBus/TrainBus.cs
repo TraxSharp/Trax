@@ -328,7 +328,76 @@ public class TrainBus(IServiceProvider serviceProvider, ITrainRegistry registryS
 
     public async Task RunAsync(object trainInput, Metadata? metadata = null)
     {
-        await RunAsync<Unit>(trainInput, metadata);
+        var trainService = InitializeTrain(trainInput);
+        var trainType = trainService.GetType();
+
+        if (metadata != null)
+        {
+            if (metadata.TrainState != TrainState.Pending)
+                throw new TrainException(
+                    $"TrainBus will not run a passed Metadata with state ({metadata.TrainState}), Must be Pending"
+                );
+
+            var method = RunWithMetadataMethodCache.GetOrAdd(
+                trainType,
+                type =>
+                {
+                    var m = type.GetMethods()
+                        .Where(x => x.Name == "Run")
+                        .Where(x => x.GetParameters().Length == 2)
+                        .FirstOrDefault(x =>
+                            x.GetParameters()[1].ParameterType == typeof(Metadata)
+                        );
+
+                    if (m == null)
+                        throw new TrainException(
+                            $"Failed to find Run(input, metadata) method for train type ({type.Name})"
+                        );
+
+                    return m;
+                }
+            );
+
+            var task =
+                (Task?)method.Invoke(trainService, [trainInput, metadata])
+                ?? throw new TrainException(
+                    $"Failed to invoke Run(input, metadata) method for train type ({trainType.Name})"
+                );
+
+            await task;
+            return;
+        }
+
+        var runMethod = RunMethodCache.GetOrAdd(
+            trainType,
+            type =>
+            {
+                var m = type.GetMethods()
+                    .Where(x => x.Name == "Run")
+                    .Where(x =>
+                    {
+                        var parameters = x.GetParameters();
+                        return parameters.Length == 2
+                            && parameters[1].ParameterType == typeof(CancellationToken);
+                    })
+                    .FirstOrDefault(x => x.Module.Name.Contains("Effect"));
+
+                if (m == null)
+                    throw new TrainException(
+                        $"Failed to find Run method for train type ({type.Name})"
+                    );
+
+                return m;
+            }
+        );
+
+        var taskRun =
+            (Task?)runMethod.Invoke(trainService, [trainInput, CancellationToken.None])
+            ?? throw new TrainException(
+                $"Failed to invoke Run method for train type ({trainService.GetType().Name})"
+            );
+
+        await taskRun;
     }
 
     public async Task RunAsync(
@@ -337,6 +406,74 @@ public class TrainBus(IServiceProvider serviceProvider, ITrainRegistry registryS
         Metadata? metadata = null
     )
     {
-        await RunAsync<Unit>(trainInput, cancellationToken, metadata);
+        var trainService = InitializeTrain(trainInput);
+        var trainType = trainService.GetType();
+
+        if (metadata != null)
+        {
+            if (metadata.TrainState != TrainState.Pending)
+                throw new TrainException(
+                    $"TrainBus will not run a passed Metadata with state ({metadata.TrainState}), Must be Pending"
+                );
+
+            var method = RunWithMetadataCtMethodCache.GetOrAdd(
+                trainType,
+                type =>
+                {
+                    var m = type.GetMethods()
+                        .Where(x => x.Name == "Run")
+                        .Where(x => x.GetParameters().Length == 3)
+                        .FirstOrDefault(x =>
+                            x.GetParameters()[1].ParameterType == typeof(Metadata)
+                            && x.GetParameters()[2].ParameterType == typeof(CancellationToken)
+                        );
+
+                    if (m == null)
+                        throw new TrainException(
+                            $"Failed to find Run(input, metadata, ct) method for train type ({type.Name})"
+                        );
+
+                    return m;
+                }
+            );
+
+            var task =
+                (Task?)method.Invoke(trainService, [trainInput, metadata, cancellationToken])
+                ?? throw new TrainException(
+                    $"Failed to invoke Run(input, metadata, ct) method for train type ({trainType.Name})"
+                );
+
+            await task;
+            return;
+        }
+
+        var runMethod = RunWithCtMethodCache.GetOrAdd(
+            trainType,
+            type =>
+            {
+                var m = type.GetMethods()
+                    .Where(x => x.Name == "Run")
+                    .Where(x => x.GetParameters().Length == 2)
+                    .FirstOrDefault(x =>
+                        x.GetParameters()[1].ParameterType == typeof(CancellationToken)
+                        && x.Module.Name.Contains("Effect")
+                    );
+
+                if (m == null)
+                    throw new TrainException(
+                        $"Failed to find Run(input, ct) method for train type ({type.Name})"
+                    );
+
+                return m;
+            }
+        );
+
+        var taskRun =
+            (Task?)runMethod.Invoke(trainService, [trainInput, cancellationToken])
+            ?? throw new TrainException(
+                $"Failed to invoke Run(input, ct) method for train type ({trainType.Name})"
+            );
+
+        await taskRun;
     }
 }
