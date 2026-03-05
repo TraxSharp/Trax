@@ -38,13 +38,13 @@ public partial class SchedulerConfigurationBuilder
     /// );
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder Schedule<TTrain, TInput>(
+    public SchedulerConfigurationBuilder Schedule<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         Schedule schedule,
         Action<ScheduleOptions>? options = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         var resolved = new ScheduleOptions();
@@ -57,7 +57,7 @@ public partial class SchedulerConfigurationBuilder
                 ExternalId = externalId,
                 ExpectedExternalIds = [externalId],
                 ScheduleFunc = (scheduler, ct) =>
-                    scheduler.ScheduleAsync<TTrain, TInput>(
+                    scheduler.ScheduleAsync<TTrain, TInput, TOutput>(
                         externalId,
                         input,
                         schedule,
@@ -83,13 +83,13 @@ public partial class SchedulerConfigurationBuilder
     /// <param name="delay">The delay before the job should execute</param>
     /// <param name="options">Optional callback to configure manifest options via <see cref="ScheduleOptions"/></param>
     /// <returns>The builder for method chaining</returns>
-    public SchedulerConfigurationBuilder ScheduleOnce<TTrain, TInput>(
+    public SchedulerConfigurationBuilder ScheduleOnce<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         TimeSpan delay,
         Action<ScheduleOptions>? options = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         var resolved = new ScheduleOptions();
@@ -102,7 +102,7 @@ public partial class SchedulerConfigurationBuilder
                 ExternalId = externalId,
                 ExpectedExternalIds = [externalId],
                 ScheduleFunc = (scheduler, ct) =>
-                    scheduler.ScheduleOnceAsync<TTrain, TInput>(
+                    scheduler.ScheduleOnceAsync<TTrain, TInput, TOutput>(
                         externalId,
                         input,
                         delay,
@@ -133,12 +133,12 @@ public partial class SchedulerConfigurationBuilder
     /// The dependent manifest will be queued when the parent's LastSuccessfulRun is newer than its own.
     /// Supports chaining: <c>.Schedule(...).Include(...).ThenInclude(...)</c> for branched dependency chains.
     /// </remarks>
-    public SchedulerConfigurationBuilder ThenInclude<TTrain, TInput>(
+    public SchedulerConfigurationBuilder ThenInclude<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         Action<ScheduleOptions>? options = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         var parentExternalId =
@@ -159,7 +159,7 @@ public partial class SchedulerConfigurationBuilder
                 ExternalId = externalId,
                 ExpectedExternalIds = [externalId],
                 ScheduleFunc = (scheduler, ct) =>
-                    scheduler.ScheduleDependentAsync<TTrain, TInput>(
+                    scheduler.ScheduleDependentAsync<TTrain, TInput, TOutput>(
                         externalId,
                         input,
                         parentExternalId,
@@ -196,12 +196,12 @@ public partial class SchedulerConfigurationBuilder
     /// </code>
     /// Result: A → B, A → C → D
     /// </remarks>
-    public SchedulerConfigurationBuilder Include<TTrain, TInput>(
+    public SchedulerConfigurationBuilder Include<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         Action<ScheduleOptions>? options = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         var parentExternalId =
@@ -222,7 +222,7 @@ public partial class SchedulerConfigurationBuilder
                 ExternalId = externalId,
                 ExpectedExternalIds = [externalId],
                 ScheduleFunc = (scheduler, ct) =>
-                    scheduler.ScheduleDependentAsync<TTrain, TInput>(
+                    scheduler.ScheduleDependentAsync<TTrain, TInput, TOutput>(
                         externalId,
                         input,
                         parentExternalId,

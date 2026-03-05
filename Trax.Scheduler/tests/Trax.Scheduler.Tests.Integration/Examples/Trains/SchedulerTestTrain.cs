@@ -6,7 +6,6 @@ namespace Trax.Scheduler.Tests.Integration.Examples.Trains;
 
 /// <summary>
 /// A simple test train for scheduler integration tests.
-/// Returns Unit since TaskServerExecutor uses the non-generic RunAsync which expects Unit output.
 /// </summary>
 public class SchedulerTestTrain : ServiceTrain<SchedulerTestInput, Unit>, ISchedulerTestTrain
 {
@@ -51,3 +50,30 @@ public record FailingSchedulerTestInput : IManifestProperties
 /// Interface for the failing scheduler test train.
 /// </summary>
 public interface IFailingSchedulerTestTrain : IServiceTrain<FailingSchedulerTestInput, Unit> { }
+
+/// <summary>
+/// A test train with a typed (non-Unit) output, used to verify the scheduler
+/// supports trains that return values other than Unit.
+/// </summary>
+public class TypedOutputSchedulerTestTrain
+    : ServiceTrain<TypedOutputSchedulerTestInput, string>,
+        ITypedOutputSchedulerTestTrain
+{
+    protected override async Task<Either<Exception, string>> RunInternal(
+        TypedOutputSchedulerTestInput input
+    ) => Activate(input, $"processed-{input.Value}").Resolve();
+}
+
+/// <summary>
+/// Input for the typed output scheduler test train.
+/// </summary>
+public record TypedOutputSchedulerTestInput : IManifestProperties
+{
+    public string Value { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Interface for the typed output scheduler test train.
+/// </summary>
+public interface ITypedOutputSchedulerTestTrain
+    : IServiceTrain<TypedOutputSchedulerTestInput, string> { }

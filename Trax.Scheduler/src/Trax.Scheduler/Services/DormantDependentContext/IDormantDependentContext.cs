@@ -57,12 +57,12 @@ public interface IDormantDependentContext
     /// <item>The target manifest does not depend on the current parent manifest</item>
     /// </list>
     /// </exception>
-    Task ActivateAsync<TTrain, TInput>(
+    Task ActivateAsync<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties;
 
     /// <summary>
@@ -80,10 +80,10 @@ public interface IDormantDependentContext
     /// fails (wrong parent, not dormant, etc.), the entire batch is rolled back.
     /// Concurrency-skipped entries (already queued/active) do not cause a rollback.
     /// </remarks>
-    Task ActivateManyAsync<TTrain, TInput>(
+    Task ActivateManyAsync<TTrain, TInput, TOutput>(
         IEnumerable<(string ExternalId, TInput Input)> activations,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties;
 }

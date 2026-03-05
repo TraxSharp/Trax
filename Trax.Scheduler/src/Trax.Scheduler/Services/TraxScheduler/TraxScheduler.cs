@@ -27,14 +27,14 @@ public class TraxScheduler(
 ) : ITraxScheduler
 {
     /// <inheritdoc />
-    public async Task<Manifest> ScheduleAsync<TTrain, TInput>(
+    public async Task<Manifest> ScheduleAsync<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         Schedule schedule,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         trainRegistry.ValidateTrainRegistration<TInput>();
@@ -43,7 +43,7 @@ public class TraxScheduler(
 
         await using var context = CreateContext();
 
-        var manifest = await context.UpsertManifestAsync<TTrain, TInput>(
+        var manifest = await context.UpsertManifestAsync<TTrain, TInput, TOutput>(
             externalId,
             input,
             schedule,
@@ -67,7 +67,7 @@ public class TraxScheduler(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TSource>(
+    public async Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Schedule schedule,
@@ -75,7 +75,7 @@ public class TraxScheduler(
         Action<TSource, ManifestOptions>? configureEach = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         trainRegistry.ValidateTrainRegistration<TInput>();
@@ -105,7 +105,7 @@ public class TraxScheduler(
                 var itemOptions = CreateItemOptions(resolved.ManifestOptions);
                 configureEach?.Invoke(source, itemOptions);
 
-                var manifest = await context.UpsertManifestAsync<TTrain, TInput>(
+                var manifest = await context.UpsertManifestAsync<TTrain, TInput, TOutput>(
                     externalId,
                     input,
                     schedule,
@@ -149,14 +149,14 @@ public class TraxScheduler(
     }
 
     /// <inheritdoc />
-    public async Task<Manifest> ScheduleDependentAsync<TTrain, TInput>(
+    public async Task<Manifest> ScheduleDependentAsync<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         string dependsOnExternalId,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         trainRegistry.ValidateTrainRegistration<TInput>();
@@ -175,7 +175,7 @@ public class TraxScheduler(
                     + "Ensure the parent manifest is scheduled before its dependents."
             );
 
-        var manifest = await context.UpsertDependentManifestAsync<TTrain, TInput>(
+        var manifest = await context.UpsertDependentManifestAsync<TTrain, TInput, TOutput>(
             externalId,
             input,
             parentManifest.Id,
@@ -200,7 +200,12 @@ public class TraxScheduler(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TSource>(
+    public async Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<
+        TTrain,
+        TInput,
+        TOutput,
+        TSource
+    >(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Func<TSource, string> dependsOn,
@@ -208,7 +213,7 @@ public class TraxScheduler(
         Action<TSource, ManifestOptions>? configureEach = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         trainRegistry.ValidateTrainRegistration<TInput>();
@@ -252,7 +257,7 @@ public class TraxScheduler(
                 var itemOptions = CreateItemOptions(resolved.ManifestOptions);
                 configureEach?.Invoke(source, itemOptions);
 
-                var manifest = await context.UpsertDependentManifestAsync<TTrain, TInput>(
+                var manifest = await context.UpsertDependentManifestAsync<TTrain, TInput, TOutput>(
                     externalId,
                     input,
                     parentManifest.Id,
@@ -380,28 +385,28 @@ public class TraxScheduler(
     }
 
     /// <inheritdoc />
-    public Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+    public Task<Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(
         TInput input,
         TimeSpan delay,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         var externalId = $"once-{Guid.NewGuid():N}";
-        return ScheduleOnceAsync<TTrain, TInput>(externalId, input, delay, options, ct);
+        return ScheduleOnceAsync<TTrain, TInput, TOutput>(externalId, input, delay, options, ct);
     }
 
     /// <inheritdoc />
-    public async Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+    public async Task<Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         TimeSpan delay,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         trainRegistry.ValidateTrainRegistration<TInput>();
@@ -410,7 +415,7 @@ public class TraxScheduler(
 
         await using var context = CreateContext();
 
-        var manifest = await context.UpsertOnceManifestAsync<TTrain, TInput>(
+        var manifest = await context.UpsertOnceManifestAsync<TTrain, TInput, TOutput>(
             externalId,
             input,
             DateTime.UtcNow + delay,

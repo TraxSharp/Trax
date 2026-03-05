@@ -36,14 +36,14 @@ public interface ITraxScheduler
     /// <exception cref="InvalidOperationException">
     /// Thrown when the train is not registered in the TrainRegistry.
     /// </exception>
-    Task<Manifest> ScheduleAsync<TTrain, TInput>(
+    Task<Manifest> ScheduleAsync<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         Schedule schedule,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties;
 
     /// <summary>
@@ -80,7 +80,7 @@ public interface ITraxScheduler
     /// <exception cref="InvalidOperationException">
     /// Thrown when the train is not registered in the TrainRegistry.
     /// </exception>
-    Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TSource>(
+    Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Schedule schedule,
@@ -88,7 +88,7 @@ public interface ITraxScheduler
         Action<TSource, ManifestOptions>? configureEach = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties;
 
     /// <summary>
@@ -102,14 +102,14 @@ public interface ITraxScheduler
     /// <param name="options">Optional callback to configure manifest and group options via <see cref="ScheduleOptions"/>.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The created or updated manifest.</returns>
-    Task<Manifest> ScheduleDependentAsync<TTrain, TInput>(
+    Task<Manifest> ScheduleDependentAsync<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         string dependsOnExternalId,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties;
 
     /// <summary>
@@ -125,7 +125,7 @@ public interface ITraxScheduler
     /// <param name="configureEach">Optional action to configure per-item manifest options.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A read-only list of the created or updated manifests.</returns>
-    Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TSource>(
+    Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Func<TSource, string> dependsOn,
@@ -133,7 +133,7 @@ public interface ITraxScheduler
         Action<TSource, ManifestOptions>? configureEach = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties;
 
     /// <summary>
@@ -202,13 +202,13 @@ public interface ITraxScheduler
     /// <param name="options">Optional callback to configure manifest options.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The created manifest. Use <c>ExternalId</c> to reference it later.</returns>
-    Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+    Task<Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(
         TInput input,
         TimeSpan delay,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties;
 
     /// <summary>
@@ -223,14 +223,14 @@ public interface ITraxScheduler
     /// <param name="options">Optional callback to configure manifest options.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The created or updated manifest.</returns>
-    Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+    Task<Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         TimeSpan delay,
         Action<ScheduleOptions>? options = null,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties;
 
     /// <summary>

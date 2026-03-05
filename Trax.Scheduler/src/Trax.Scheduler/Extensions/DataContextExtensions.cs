@@ -60,7 +60,7 @@ public static class DataContextExtensions
     /// <summary>
     /// Creates or updates a manifest with the specified configuration.
     /// </summary>
-    public static Task<Manifest> UpsertManifestAsync<TTrain, TInput>(
+    public static Task<Manifest> UpsertManifestAsync<TTrain, TInput, TOutput>(
         this IDataContext context,
         string externalId,
         TInput input,
@@ -72,7 +72,7 @@ public static class DataContextExtensions
         bool groupIsEnabled = true,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties =>
         context.UpsertManifestAsync(
             typeof(TTrain),
@@ -162,7 +162,7 @@ public static class DataContextExtensions
     /// <summary>
     /// Creates or updates a dependent manifest that triggers after a parent manifest succeeds.
     /// </summary>
-    public static Task<Manifest> UpsertDependentManifestAsync<TTrain, TInput>(
+    public static Task<Manifest> UpsertDependentManifestAsync<TTrain, TInput, TOutput>(
         this IDataContext context,
         string externalId,
         TInput input,
@@ -174,7 +174,7 @@ public static class DataContextExtensions
         bool groupIsEnabled = true,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties =>
         context.UpsertDependentManifestAsync(
             typeof(TTrain),
@@ -270,7 +270,7 @@ public static class DataContextExtensions
     /// <summary>
     /// Creates or updates a one-off manifest that fires once at the specified time, then auto-disables.
     /// </summary>
-    public static Task<Manifest> UpsertOnceManifestAsync<TTrain, TInput>(
+    public static Task<Manifest> UpsertOnceManifestAsync<TTrain, TInput, TOutput>(
         this IDataContext context,
         string externalId,
         TInput input,
@@ -282,7 +282,7 @@ public static class DataContextExtensions
         bool groupIsEnabled = true,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties =>
         context.UpsertOnceManifestAsync(
             typeof(TTrain),

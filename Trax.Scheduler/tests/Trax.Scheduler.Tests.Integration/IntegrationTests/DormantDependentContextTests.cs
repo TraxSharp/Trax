@@ -1,4 +1,5 @@
 using FluentAssertions;
+using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
@@ -43,7 +44,7 @@ public class DormantDependentContextTests : TestSetup
         var runtimeInput = new SchedulerTestInput { Value = "RuntimeValue" };
 
         // Act
-        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
+        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
             dormant.ExternalId,
             runtimeInput
         );
@@ -73,7 +74,7 @@ public class DormantDependentContextTests : TestSetup
         var expectedPriority = groupPriority + _schedulerConfig.DependentPriorityBoost;
 
         // Act
-        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
+        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
             dormant.ExternalId,
             new SchedulerTestInput { Value = "PriorityTest" }
         );
@@ -107,7 +108,9 @@ public class DormantDependentContextTests : TestSetup
         };
 
         // Act
-        await _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput>(activations);
+        await _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+            activations
+        );
 
         // Assert
         DataContext.Reset();
@@ -135,7 +138,9 @@ public class DormantDependentContextTests : TestSetup
         var activations = Enumerable.Empty<(string ExternalId, SchedulerTestInput Input)>();
 
         // Act
-        await _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput>(activations);
+        await _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+            activations
+        );
 
         // Assert
         DataContext.Reset();
@@ -152,7 +157,7 @@ public class DormantDependentContextTests : TestSetup
     {
         // Act & Assert — context not initialized, should throw
         var act = () =>
-            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
+            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
                 "any-id",
                 new SchedulerTestInput { Value = "test" }
             );
@@ -171,7 +176,7 @@ public class DormantDependentContextTests : TestSetup
 
         // Act & Assert
         var act = () =>
-            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
+            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
                 "nonexistent-id",
                 new SchedulerTestInput { Value = "test" }
             );
@@ -211,7 +216,7 @@ public class DormantDependentContextTests : TestSetup
 
         // Act & Assert
         var act = () =>
-            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
+            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
                 dependent.ExternalId,
                 new SchedulerTestInput { Value = "test" }
             );
@@ -245,7 +250,7 @@ public class DormantDependentContextTests : TestSetup
 
         // Act & Assert
         var act = () =>
-            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
+            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
                 dormant.ExternalId,
                 new SchedulerTestInput { Value = "test" }
             );
@@ -281,7 +286,7 @@ public class DormantDependentContextTests : TestSetup
         DataContext.Reset();
 
         // Act — should not throw, just skip
-        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
+        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
             dormant.ExternalId,
             new SchedulerTestInput { Value = "ShouldBeSkipped" }
         );
@@ -319,7 +324,7 @@ public class DormantDependentContextTests : TestSetup
         DataContext.Reset();
 
         // Act — should not throw, just skip
-        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput>(
+        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
             dormant.ExternalId,
             new SchedulerTestInput { Value = "ShouldBeSkipped" }
         );
@@ -372,7 +377,7 @@ public class DormantDependentContextTests : TestSetup
 
         // Act & Assert — the second activation should fail validation
         var act = () =>
-            _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput>(activations);
+            _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(activations);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
 

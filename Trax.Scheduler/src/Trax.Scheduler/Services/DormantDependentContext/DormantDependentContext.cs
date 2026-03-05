@@ -41,12 +41,12 @@ internal class DormantDependentContext(
     }
 
     /// <inheritdoc />
-    public async Task ActivateAsync<TTrain, TInput>(
+    public async Task ActivateAsync<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         EnsureInitialized();
@@ -57,11 +57,11 @@ internal class DormantDependentContext(
     }
 
     /// <inheritdoc />
-    public async Task ActivateManyAsync<TTrain, TInput>(
+    public async Task ActivateManyAsync<TTrain, TInput, TOutput>(
         IEnumerable<(string ExternalId, TInput Input)> activations,
         CancellationToken ct = default
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         EnsureInitialized();

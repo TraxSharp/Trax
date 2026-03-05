@@ -40,14 +40,14 @@ public partial class SchedulerConfigurationBuilder
     /// );
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TSource>(
+    public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TOutput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Schedule schedule,
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         // Materialize the sources to avoid multiple enumeration
@@ -70,14 +70,12 @@ public partial class SchedulerConfigurationBuilder
                 ExpectedExternalIds = sourceList.Select(s => map(s).ExternalId).ToList(),
                 ScheduleFunc = async (scheduler, ct) =>
                 {
-                    var results = await scheduler.ScheduleManyAsync<TTrain, TInput, TSource>(
-                        sourceList,
-                        map,
-                        schedule,
-                        options,
-                        configureEach,
-                        ct: ct
-                    );
+                    var results = await scheduler.ScheduleManyAsync<
+                        TTrain,
+                        TInput,
+                        TOutput,
+                        TSource
+                    >(sourceList, map, schedule, options, configureEach, ct: ct);
                     return results.FirstOrDefault()!;
                 },
             }
@@ -118,7 +116,7 @@ public partial class SchedulerConfigurationBuilder
     /// // groupId: "sync-table", prunePrefix: "sync-table-"
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TSource>(
+    public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TOutput, TSource>(
         string name,
         IEnumerable<TSource> sources,
         Func<TSource, (string Suffix, TInput Input)> map,
@@ -126,9 +124,9 @@ public partial class SchedulerConfigurationBuilder
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties =>
-        ScheduleMany<TTrain, TInput, TSource>(
+        ScheduleMany<TTrain, TInput, TOutput, TSource>(
             sources,
             source =>
             {
@@ -174,14 +172,14 @@ public partial class SchedulerConfigurationBuilder
     ///         options => options.Group("load", group => group.MaxActiveJobs(3)))
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder ThenIncludeMany<TTrain, TInput, TSource>(
+    public SchedulerConfigurationBuilder ThenIncludeMany<TTrain, TInput, TOutput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Func<TSource, string> dependsOn,
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         var sourceList = sources.ToList();
@@ -208,6 +206,7 @@ public partial class SchedulerConfigurationBuilder
                     var results = await scheduler.ScheduleManyDependentAsync<
                         TTrain,
                         TInput,
+                        TOutput,
                         TSource
                     >(sourceList, map, dependsOn, options, configureEach, ct: ct);
                     return results.FirstOrDefault()!;
@@ -247,7 +246,7 @@ public partial class SchedulerConfigurationBuilder
     ///         dependsOn: i => $"transform-{i}")
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder ThenIncludeMany<TTrain, TInput, TSource>(
+    public SchedulerConfigurationBuilder ThenIncludeMany<TTrain, TInput, TOutput, TSource>(
         string name,
         IEnumerable<TSource> sources,
         Func<TSource, (string Suffix, TInput Input)> map,
@@ -255,9 +254,9 @@ public partial class SchedulerConfigurationBuilder
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties =>
-        ThenIncludeMany<TTrain, TInput, TSource>(
+        ThenIncludeMany<TTrain, TInput, TOutput, TSource>(
             sources,
             source =>
             {
@@ -298,13 +297,13 @@ public partial class SchedulerConfigurationBuilder
     /// // All 10 child manifests depend on "root" (A)
     /// </code>
     /// </remarks>
-    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TSource>(
+    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TOutput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         var rootExternalId =
@@ -337,6 +336,7 @@ public partial class SchedulerConfigurationBuilder
                     var results = await scheduler.ScheduleManyDependentAsync<
                         TTrain,
                         TInput,
+                        TOutput,
                         TSource
                     >(sourceList, map, _ => rootExternalId, options, configureEach, ct: ct);
                     return results.FirstOrDefault()!;
@@ -377,16 +377,16 @@ public partial class SchedulerConfigurationBuilder
     /// // groupId: "load", prunePrefix: "load-"
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TSource>(
+    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TOutput, TSource>(
         string name,
         IEnumerable<TSource> sources,
         Func<TSource, (string Suffix, TInput Input)> map,
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties =>
-        IncludeMany<TTrain, TInput, TSource>(
+        IncludeMany<TTrain, TInput, TOutput, TSource>(
             sources,
             source =>
             {
@@ -433,14 +433,14 @@ public partial class SchedulerConfigurationBuilder
     ///         options => options.Group("transform", group => group.MaxActiveJobs(5)))
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TSource>(
+    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TOutput, TSource>(
         IEnumerable<TSource> sources,
         Func<TSource, (string ExternalId, TInput Input)> map,
         Func<TSource, string> dependsOn,
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
         var sourceList = sources.ToList();
@@ -467,6 +467,7 @@ public partial class SchedulerConfigurationBuilder
                     var results = await scheduler.ScheduleManyDependentAsync<
                         TTrain,
                         TInput,
+                        TOutput,
                         TSource
                     >(sourceList, map, dependsOn, options, configureEach, ct: ct);
                     return results.FirstOrDefault()!;
@@ -505,7 +506,7 @@ public partial class SchedulerConfigurationBuilder
     ///         dependsOn: i => $"extract-{i}")
     /// </code>
     /// </example>
-    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TSource>(
+    public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TOutput, TSource>(
         string name,
         IEnumerable<TSource> sources,
         Func<TSource, (string Suffix, TInput Input)> map,
@@ -513,9 +514,9 @@ public partial class SchedulerConfigurationBuilder
         Action<ScheduleOptions>? options = null,
         Action<TSource, ManifestOptions>? configureEach = null
     )
-        where TTrain : IServiceTrain<TInput, Unit>
+        where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties =>
-        IncludeMany<TTrain, TInput, TSource>(
+        IncludeMany<TTrain, TInput, TOutput, TSource>(
             sources,
             source =>
             {

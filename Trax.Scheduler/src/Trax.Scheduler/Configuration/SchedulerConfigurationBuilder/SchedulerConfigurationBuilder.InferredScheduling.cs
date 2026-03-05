@@ -1,4 +1,3 @@
-using LanguageExt;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -13,7 +12,7 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Schedules a train to run on a recurring basis.
     /// The input type is inferred from <typeparamref name="TTrain"/>'s
-    /// <c>IServiceTrain&lt;TInput, Unit&gt;</c> interface.
+    /// <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.
     /// </summary>
     public SchedulerConfigurationBuilder Schedule<TTrain>(
         string externalId,
@@ -154,7 +153,7 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Schedules a train to fire once after the specified delay, then auto-disable.
     /// The input type is inferred from <typeparamref name="TTrain"/>'s
-    /// <c>IServiceTrain&lt;TInput, Unit&gt;</c> interface.
+    /// <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.
     /// </summary>
     public SchedulerConfigurationBuilder ScheduleOnce<TTrain>(
         string externalId,
@@ -454,7 +453,7 @@ public partial class SchedulerConfigurationBuilder
         if (input.GetType() != inputType)
             throw new InvalidOperationException(
                 $"Input type mismatch: {trainType.Name} expects input of type "
-                    + $"'{inputType.Name}' (from IServiceTrain<{inputType.Name}, Unit>), "
+                    + $"'{inputType.Name}' (from IServiceTrain<{inputType.Name}, TOutput>), "
                     + $"but received '{input.GetType().Name}'."
             );
 
@@ -480,7 +479,7 @@ public partial class SchedulerConfigurationBuilder
             if (item.Input.GetType() != expectedInputType)
                 throw new InvalidOperationException(
                     $"Input type mismatch: {trainType.Name} expects input of type "
-                        + $"'{expectedInputType.Name}' (from IServiceTrain<{expectedInputType.Name}, Unit>), "
+                        + $"'{expectedInputType.Name}' (from IServiceTrain<{expectedInputType.Name}, TOutput>), "
                         + $"but item '{item.Id}' has input of type '{item.Input.GetType().Name}'."
                 );
         }
@@ -491,14 +490,12 @@ public partial class SchedulerConfigurationBuilder
         var effectInterface = trainType
             .GetInterfaces()
             .FirstOrDefault(i =>
-                i.IsGenericType
-                && i.GetGenericTypeDefinition() == typeof(IServiceTrain<,>)
-                && i.GetGenericArguments()[1] == typeof(Unit)
+                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IServiceTrain<,>)
             );
 
         if (effectInterface is null)
             throw new InvalidOperationException(
-                $"Type '{trainType.Name}' must implement IServiceTrain<TInput, Unit> "
+                $"Type '{trainType.Name}' must implement IServiceTrain<TInput, TOutput> "
                     + $"to be used with Schedule<{trainType.Name}>(). Found interfaces: "
                     + $"[{string.Join(", ", trainType.GetInterfaces().Select(i => i.Name))}]"
             );
