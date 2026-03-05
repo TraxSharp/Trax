@@ -117,14 +117,20 @@ public class TrainListEndpoint(ITrainRegistry registry)
 
 At startup, `AddServiceTrainBus` scans the provided assemblies for types implementing `IServiceTrain<TIn, TOut>`. It builds a dictionary from cargo type (input) to train type and registers each train in the DI container. When you call `RunAsync<TOut>(input)`, the dispatch station looks up `input.GetType()`, resolves the matching train from DI, and sends it on its way.
 
-## Related Packages
+## Part of Trax
 
-| Package | Purpose |
-|---------|---------|
-| [Trax.Core](https://www.nuget.org/packages/Trax.Core/) | The locomotive — `Train`, steps, railway programming |
-| [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/) | `ServiceTrain` with journey logging and station services |
-| [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/) | Timetables — recurring trains built on top of the dispatch station |
-| [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/) | Control room — monitor every journey on the network |
+Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
+
+```
+Trax.Core              pipelines, steps, railway error propagation
+└→ Trax.Effect         + execution logging, DI, pluggable storage
+   └→ Trax.Mediator    ← you are here
+      └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues
+         └→ Trax.Api             + GraphQL API for remote access
+            └→ Trax.Dashboard       + Blazor monitoring UI
+```
+
+**Next layer:** When you need recurring background jobs with retries and dead-lettering, add [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/).
 
 Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
 

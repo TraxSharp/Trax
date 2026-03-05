@@ -1,4 +1,7 @@
+using System.Collections.Concurrent;
+using System.Reflection;
 using System.Text.Json;
+using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -54,6 +57,8 @@ public class TrainExecutionService(
         return new QueueTrainResult(entry.Id, entry.ExternalId);
     }
 
+    private static readonly ConcurrentDictionary<Type, MethodInfo> RunAsyncMethodCache = new();
+
     public async Task<RunTrainResult> RunAsync(
         string trainName,
         string inputJson,
@@ -77,9 +82,31 @@ public class TrainExecutionService(
         await dataContext.Track(metadata);
         await dataContext.SaveChanges(ct);
 
-        await trainBus.RunAsync(input, ct, metadata);
+        var outputType = registration.OutputType;
 
-        return new RunTrainResult(metadata.Id);
+        // Use the typed RunAsync<TOut> overload to capture the train's output.
+        // For Unit trains, output is discarded (null). For typed trains, the
+        // actual output object is returned so GraphQL can expose it.
+        var genericMethod = RunAsyncMethodCache.GetOrAdd(
+            outputType,
+            type =>
+                typeof(ITrainBus)
+                    .GetMethods()
+                    .First(m =>
+                        m.Name == "RunAsync"
+                        && m.IsGenericMethod
+                        && m.GetParameters().Length == 3
+                        && m.GetParameters()[1].ParameterType == typeof(CancellationToken)
+                    )
+                    .MakeGenericMethod(type)
+        );
+
+        var task = (Task)genericMethod.Invoke(trainBus, [input, ct, metadata])!;
+        await task;
+
+        object? output = outputType == typeof(Unit) ? null : ((dynamic)task).Result;
+
+        return new RunTrainResult(metadata.Id, output);
     }
 
     private async Task AuthorizeAsync(TrainRegistration registration, CancellationToken ct)

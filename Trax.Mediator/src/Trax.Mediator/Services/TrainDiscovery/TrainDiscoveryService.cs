@@ -48,6 +48,8 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 ?? descriptor.ServiceType;
 
             var (policies, roles) = GetAuthorizationRequirements(implementationType);
+            var graphql = GetGraphQLMetadata(implementationType);
+            var broadcastEnabled = HasBroadcastAttribute(implementationType);
 
             registrations.Add(
                 new TrainRegistration
@@ -63,6 +65,13 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     OutputTypeName = GetFriendlyTypeName(outputType),
                     RequiredPolicies = policies,
                     RequiredRoles = roles,
+                    IsQuery = graphql.IsQuery,
+                    IsMutation = graphql.IsMutation,
+                    IsBroadcastEnabled = broadcastEnabled,
+                    GraphQLName = graphql.Name,
+                    GraphQLDescription = graphql.Description,
+                    GraphQLDeprecationReason = graphql.DeprecationReason,
+                    GraphQLOperations = graphql.Operations,
                 }
             );
         }
@@ -79,6 +88,8 @@ public class TrainDiscoveryService : ITrainDiscoveryService
 
                 var implType = concreteReg?.ImplementationType ?? preferred.ImplementationType;
                 var (policies, roles) = GetAuthorizationRequirements(implType);
+                var graphql = GetGraphQLMetadata(implType);
+                var broadcastEnabled = HasBroadcastAttribute(implType);
 
                 return new TrainRegistration
                 {
@@ -94,6 +105,13 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     OutputTypeName = preferred.OutputTypeName,
                     RequiredPolicies = policies,
                     RequiredRoles = roles,
+                    IsQuery = graphql.IsQuery,
+                    IsMutation = graphql.IsMutation,
+                    IsBroadcastEnabled = broadcastEnabled,
+                    GraphQLName = graphql.Name,
+                    GraphQLDescription = graphql.Description,
+                    GraphQLDeprecationReason = graphql.DeprecationReason,
+                    GraphQLOperations = graphql.Operations,
                 };
             })
             .ToList()
@@ -138,6 +156,47 @@ public class TrainDiscoveryService : ITrainDiscoveryService
 
         return (policies.AsReadOnly(), roles.AsReadOnly());
     }
+
+    private static (
+        bool IsQuery,
+        bool IsMutation,
+        string? Name,
+        string? Description,
+        string? DeprecationReason,
+        GraphQLOperation Operations
+    ) GetGraphQLMetadata(Type implementationType)
+    {
+        var queryAttr = implementationType.GetCustomAttribute<TraxQueryAttribute>();
+        if (queryAttr is not null)
+        {
+            return (
+                true,
+                false,
+                queryAttr.Name,
+                queryAttr.Description,
+                queryAttr.DeprecationReason,
+                GraphQLOperation.Run
+            );
+        }
+
+        var mutationAttr = implementationType.GetCustomAttribute<TraxMutationAttribute>();
+        if (mutationAttr is not null)
+        {
+            return (
+                false,
+                true,
+                mutationAttr.Name,
+                mutationAttr.Description,
+                mutationAttr.DeprecationReason,
+                mutationAttr.Operations
+            );
+        }
+
+        return (false, false, null, null, null, GraphQLOperation.Run);
+    }
+
+    private static bool HasBroadcastAttribute(Type implementationType) =>
+        implementationType.GetCustomAttribute<TraxBroadcastAttribute>() is not null;
 
     private static string GetFriendlyTypeName(Type type)
     {

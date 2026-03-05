@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Attributes;
 
 namespace Trax.Mediator.Services.TrainDiscovery;
 
@@ -20,4 +21,44 @@ public class TrainRegistration
 
     public required IReadOnlyList<string> RequiredPolicies { get; init; }
     public required IReadOnlyList<string> RequiredRoles { get; init; }
+
+    /// <summary>
+    /// Whether this train is exposed as a typed GraphQL query field under <c>discover</c>.
+    /// True when the implementation class has a <see cref="TraxQueryAttribute"/>.
+    /// </summary>
+    public required bool IsQuery { get; init; }
+
+    /// <summary>
+    /// Whether this train is exposed as typed GraphQL mutation field(s) under <c>dispatch</c>.
+    /// True when the implementation class has a <see cref="TraxMutationAttribute"/>.
+    /// </summary>
+    public required bool IsMutation { get; init; }
+
+    /// <summary>
+    /// Whether this train's lifecycle events are broadcast to GraphQL subscribers.
+    /// True when the implementation class has a <see cref="TraxBroadcastAttribute"/>.
+    /// </summary>
+    public required bool IsBroadcastEnabled { get; init; }
+
+    /// <summary>
+    /// GraphQL field name override from <see cref="TraxQueryAttribute.Name"/> or
+    /// <see cref="TraxMutationAttribute.Name"/>.
+    /// Null means the TypeModule derives the name automatically.
+    /// </summary>
+    public string? GraphQLName { get; init; }
+
+    /// <summary>
+    /// Description for the generated GraphQL fields.
+    /// </summary>
+    public string? GraphQLDescription { get; init; }
+
+    /// <summary>
+    /// If non-null, the generated fields are marked as deprecated.
+    /// </summary>
+    public string? GraphQLDeprecationReason { get; init; }
+
+    /// <summary>
+    /// Which operations (Run, Queue, or both) to generate. Only applies when <see cref="IsMutation"/> is true.
+    /// </summary>
+    public required GraphQLOperation GraphQLOperations { get; init; }
 }
