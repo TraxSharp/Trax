@@ -77,14 +77,18 @@ Trax.Dashboard is a Razor Class Library built on Blazor Server with [Radzen](htt
 
 The dashboard handles its own static assets and routing — you don't need to configure Radzen separately.
 
-## Related Packages
+## Part of Trax
 
-| Package | Purpose |
-|---------|---------|
-| [Trax.Core](https://www.nuget.org/packages/Trax.Core/) | The locomotive — `Train`, steps, railway programming |
-| [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/) | `ServiceTrain` with journey logging and station services |
-| [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/) | Dispatch station — route cargo to the right train via `TrainBus` |
-| [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/) | Timetables — recurring trains with retries and dead-lettering |
+Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
+
+```
+Trax.Core              pipelines, steps, railway error propagation
+└→ Trax.Effect         + execution logging, DI, pluggable storage
+   └→ Trax.Mediator       + decoupled dispatch via TrainBus
+      └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues
+         └→ Trax.Api             + GraphQL API for remote access
+            └→ Trax.Dashboard  ← you are here
+```
 
 Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
 
