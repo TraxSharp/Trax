@@ -31,7 +31,7 @@ The `name` parameter automatically derives:
 - **`prunePrefix`** = `"{name}-"`
 - **`externalId`** = `"{name}-{item.Id}"` for each item
 
-Each `ManifestItem` contains the item's ID and input. The input type is inferred from `TTrain`'s `IServiceTrain<TInput, Unit>` interface and validated at configuration time.
+Each `ManifestItem` contains the item's ID and input. The input type is inferred from `TTrain`'s `IServiceTrain<TInput, TOutput>` interface and validated at configuration time. The output type is not constrained — scheduled trains can return any output type, and the output is discarded for background jobs.
 
 ### Startup: Unnamed with ManifestItem
 
@@ -64,11 +64,11 @@ public sealed record ManifestItem(
 
 ### Startup: Explicit Type Parameters (Legacy)
 
-The three-type-parameter forms are still available for backward compatibility:
+The four-type-parameter forms are still available for backward compatibility:
 
 ```csharp
 // Name-based
-public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TSource>(
+public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TOutput, TSource>(
     string name,
     IEnumerable<TSource> sources,
     Func<TSource, (string Suffix, TInput Input)> map,
@@ -76,25 +76,25 @@ public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TSource>(
     Action<ScheduleOptions>? options = null,
     Action<TSource, ManifestOptions>? configureEach = null
 )
-    where TTrain : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 
 // Explicit
-public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TSource>(
+public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TOutput, TSource>(
     IEnumerable<TSource> sources,
     Func<TSource, (string ExternalId, TInput Input)> map,
     Schedule schedule,
     Action<ScheduleOptions>? options = null,
     Action<TSource, ManifestOptions>? configureEach = null
 )
-    where TTrain : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 ```
 
 ### Runtime (ITraxScheduler)
 
 ```csharp
-Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TSource>(
+Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource>(
     IEnumerable<TSource> sources,
     Func<TSource, (string ExternalId, TInput Input)> map,
     Schedule schedule,
@@ -102,7 +102,7 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TSource>(
     Action<TSource, ManifestOptions>? configureEach = null,
     CancellationToken ct = default
 )
-    where TTrain : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 ```
 
@@ -112,14 +112,15 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TSource>(
 
 | Type Parameter | Constraint | Description |
 |---------------|------------|-------------|
-| `TTrain` | `class` | The train interface type. Must implement `IServiceTrain<TInput, Unit>`. The input type is inferred at configuration time. |
+| `TTrain` | `class` | The train interface type. Can implement `IServiceTrain<TInput, TOutput>` with any output type. The input type is inferred at configuration time. The output is discarded for background jobs. |
 
 ### Legacy / Runtime API
 
 | Type Parameter | Constraint | Description |
 |---------------|------------|-------------|
-| `TTrain` | `IServiceTrain<TInput, Unit>` | The train interface type. All items in the batch execute the same train. |
+| `TTrain` | `IServiceTrain<TInput, TOutput>` | The train interface type. All items in the batch execute the same train. Can have any output type — the output is discarded for background jobs. |
 | `TInput` | `IManifestProperties` | The input type for the train. Each item in the batch can have different input data. |
+| `TOutput` | — | The output type of the train. Not constrained — any output type is accepted. The output is discarded when jobs complete. |
 | `TSource` | — | The type of elements in the source collection. Can be any type — it is transformed into `(ExternalId, Input)` pairs by the `map` function. |
 
 ## Parameters
@@ -229,7 +230,7 @@ scheduler.ScheduleMany<ISyncTableTrain>(
 The three-type-parameter form is still available and supports per-item configuration via `configureEach`:
 
 ```csharp
-scheduler.ScheduleMany<ISyncTableTrain, SyncTableInput, string>(
+scheduler.ScheduleMany<ISyncTableTrain, SyncTableInput, Unit, string>(
     tables,
     table => ($"sync-{table}", new SyncTableInput { TableName = table }),
     Every.Minutes(5),
@@ -251,7 +252,7 @@ public class TenantSyncService(ITraxScheduler scheduler)
 {
     public async Task SyncTenants(IEnumerable<Tenant> tenants)
     {
-        var manifests = await scheduler.ScheduleManyAsync<ISyncTenantTrain, SyncTenantInput, Tenant>(
+        var manifests = await scheduler.ScheduleManyAsync<ISyncTenantTrain, SyncTenantInput, Unit, Tenant>(
             sources: tenants,
             map: tenant => (
                 ExternalId: $"tenant-sync-{tenant.Id}",

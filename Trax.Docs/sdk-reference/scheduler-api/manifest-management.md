@@ -65,25 +65,25 @@ Task TriggerAsync(string externalId, TimeSpan delay, CancellationToken ct = defa
 Creates a one-off manifest with `ScheduleType.Once` that fires after the specified delay and auto-disables on success. Unlike `TriggerAsync`, this does not require a pre-existing manifest.
 
 ```csharp
-Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+Task<Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(
     TInput input,
     TimeSpan delay,
     Action<ScheduleOptions>? options = null,
     CancellationToken ct = default
 )
-    where TTrain : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 ```
 
 ```csharp
-Task<Manifest> ScheduleOnceAsync<TTrain, TInput>(
+Task<Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(
     string externalId,
     TInput input,
     TimeSpan delay,
     Action<ScheduleOptions>? options = null,
     CancellationToken ct = default
 )
-    where TTrain : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 ```
 
@@ -181,7 +181,7 @@ public class SchedulerController(ITraxScheduler scheduler) : ControllerBase
     [HttpPost("jobs/schedule-once")]
     public async Task<IActionResult> ScheduleOnce([FromBody] ScheduleOnceRequest request)
     {
-        var manifest = await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput>(
+        var manifest = await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput, Unit>(
             request.ExternalId,
             new SendReminderInput { UserId = request.UserId },
             TimeSpan.FromMinutes(request.DelayMinutes));

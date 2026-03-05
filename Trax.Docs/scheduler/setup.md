@@ -123,6 +123,23 @@ public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, Unit>, ISyncC
 }
 ```
 
+Scheduled trains can return any output type — the output is discarded for background jobs. Using `Unit` is common for fire-and-forget work, but any `TOutput` is valid:
+
+```csharp
+// A train that returns a result type — the output is discarded by the scheduler
+public interface ISyncCustomersTrain : IServiceTrain<SyncCustomersInput, SyncResult> { }
+
+public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, SyncResult>, ISyncCustomersTrain
+{
+    protected override async Task<Either<Exception, SyncResult>> RunInternal(SyncCustomersInput input)
+        => Activate(input)
+            .Chain<FetchCustomersStep>()
+            .Chain<TransformDataStep>()
+            .Chain<WriteToDestinationStep>()
+            .Resolve();
+}
+```
+
 ### 3. Schedule It
 
 **Option A: Startup Configuration (recommended for static jobs)**

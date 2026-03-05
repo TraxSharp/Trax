@@ -28,34 +28,34 @@ public SchedulerConfigurationBuilder Schedule<TTrain>(
     where TTrain : class
 ```
 
-The method resolves `TInput` by reflecting on `TTrain`'s `IServiceTrain<TInput, Unit>` interface. If the provided `input` doesn't match the expected type, an `InvalidOperationException` is thrown at configuration time.
+The method resolves `TInput` by reflecting on `TTrain`'s `IServiceTrain<TInput, TOutput>` interface. If the provided `input` doesn't match the expected type, an `InvalidOperationException` is thrown at configuration time. The output type is not constrained — scheduled trains can return any output type, and the output is discarded for background jobs.
 
 ### Startup (SchedulerConfigurationBuilder) — Explicit Type Parameters
 
-The legacy two-type-parameter form is still available for backward compatibility:
+The legacy three-type-parameter form is still available for backward compatibility:
 
 ```csharp
-public SchedulerConfigurationBuilder Schedule<TTrain, TInput>(
+public SchedulerConfigurationBuilder Schedule<TTrain, TInput, TOutput>(
     string externalId,
     TInput input,
     Schedule schedule,
     Action<ScheduleOptions>? options = null
 )
-    where TTrain : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 ```
 
 ### Runtime (ITraxScheduler)
 
 ```csharp
-Task<Manifest> ScheduleAsync<TTrain, TInput>(
+Task<Manifest> ScheduleAsync<TTrain, TInput, TOutput>(
     string externalId,
     TInput input,
     Schedule schedule,
     Action<ScheduleOptions>? options = null,
     CancellationToken ct = default
 )
-    where TTrain : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 ```
 
@@ -63,8 +63,9 @@ Task<Manifest> ScheduleAsync<TTrain, TInput>(
 
 | Type Parameter | Constraint | Description |
 |---------------|------------|-------------|
-| `TTrain` | `class` (inferred) / `IServiceTrain<TInput, Unit>` (explicit) | The train interface type. Must implement `IServiceTrain<TInput, Unit>`. The scheduler resolves the concrete implementation via `TrainBus` using the input type. |
-| `TInput` | `IManifestProperties` | **Inferred at startup** from `TTrain`'s interface. The input type for the train. Must implement `IManifestProperties` (a marker interface) to enable serialization for scheduled job storage. Only required explicitly in the legacy two-type-param form and the runtime API. |
+| `TTrain` | `class` (inferred) / `IServiceTrain<TInput, TOutput>` (explicit) | The train interface type. Can implement `IServiceTrain<TInput, TOutput>` with any output type. The scheduler resolves the concrete implementation via `TrainBus` using the input type. The output is discarded for background jobs. |
+| `TInput` | `IManifestProperties` | **Inferred at startup** from `TTrain`'s interface. The input type for the train. Must implement `IManifestProperties` (a marker interface) to enable serialization for scheduled job storage. Only required explicitly in the explicit three-type-param form and the runtime API. |
+| `TOutput` | — | The output type of the train. Not constrained — any output type is accepted. The output is discarded when the job completes. Only required explicitly in the explicit three-type-param form and the runtime API. |
 
 ## Parameters
 
@@ -133,7 +134,7 @@ services.AddTrax.CoreEffects(options => options
 );
 ```
 
-Only the train interface type is specified. The input type (`SyncInput`) is inferred from `ISyncTrain : IServiceTrain<SyncInput, Unit>` and validated at configuration time.
+Only the train interface type is specified. The input type (`SyncInput`) is inferred from `ISyncTrain : IServiceTrain<SyncInput, TOutput>` and validated at configuration time. The output type is not constrained — it can be `Unit` or any other type, and the output is discarded for background jobs.
 
 ### Runtime Scheduling
 

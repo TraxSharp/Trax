@@ -41,7 +41,7 @@ public SchedulerConfigurationBuilder Include<TTrain>(
     where TTrain : class
 ```
 
-Both infer the input type from `TTrain`'s `IServiceTrain<TInput, Unit>` interface and validate the provided `input` at configuration time.
+Both infer the input type from `TTrain`'s `IServiceTrain<TInput, TOutput>` interface and validate the provided `input` at configuration time. The output type is not constrained — scheduled trains can return any output type, and the output is discarded for background jobs.
 
 ### Startup: IncludeMany with ManifestItem (Recommended)
 
@@ -89,41 +89,41 @@ Every `ManifestItem.DependsOn` **must** be set — `ThenIncludeMany` throws `Inv
 
 ### Startup: Explicit Type Parameters (Legacy)
 
-The two-type-parameter single forms and three-type-parameter batch forms are still available for backward compatibility:
+The three-type-parameter single forms and four-type-parameter batch forms are still available for backward compatibility:
 
 ```csharp
 // Single
-public SchedulerConfigurationBuilder ThenInclude<TTrain, TInput>(...)
-    where TTrain : IServiceTrain<TInput, Unit>
+public SchedulerConfigurationBuilder ThenInclude<TTrain, TInput, TOutput>(...)
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 
-public SchedulerConfigurationBuilder Include<TTrain, TInput>(...)
-    where TTrain : IServiceTrain<TInput, Unit>
+public SchedulerConfigurationBuilder Include<TTrain, TInput, TOutput>(...)
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 
 // Batch (with map + dependsOn functions)
-public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TSource>(...)
-public SchedulerConfigurationBuilder ThenIncludeMany<TTrain, TInput, TSource>(...)
+public SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TOutput, TSource>(...)
+public SchedulerConfigurationBuilder ThenIncludeMany<TTrain, TInput, TOutput, TSource>(...)
 ```
 
 ### Runtime: ScheduleDependentAsync (Single)
 
 ```csharp
-Task<Manifest> ScheduleDependentAsync<TTrain, TInput>(
+Task<Manifest> ScheduleDependentAsync<TTrain, TInput, TOutput>(
     string externalId,
     TInput input,
     string dependsOnExternalId,
     Action<ScheduleOptions>? options = null,
     CancellationToken ct = default
 )
-    where TTrain : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 ```
 
 ### Runtime: ScheduleManyDependentAsync (Batch)
 
 ```csharp
-Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TSource>(
+Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(
     IEnumerable<TSource> sources,
     Func<TSource, (string ExternalId, TInput Input)> map,
     Func<TSource, string> dependsOn,
@@ -131,7 +131,7 @@ Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TSource
     Action<TSource, ManifestOptions>? configureEach = null,
     CancellationToken ct = default
 )
-    where TTrain : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 ```
 
@@ -324,12 +324,12 @@ The context is automatically initialized by the `TaskServerExecutor` before the 
 ### ActivateAsync
 
 ```csharp
-Task ActivateAsync<TTrain, TInput>(
+Task ActivateAsync<TTrain, TInput, TOutput>(
     string externalId,
     TInput input,
     CancellationToken ct = default
 )
-    where TTrain : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 ```
 
@@ -347,11 +347,11 @@ Task ActivateAsync<TTrain, TInput>(
 ### ActivateManyAsync
 
 ```csharp
-Task ActivateManyAsync<TTrain, TInput>(
+Task ActivateManyAsync<TTrain, TInput, TOutput>(
     IEnumerable<(string ExternalId, TInput Input)> activations,
     CancellationToken ct = default
 )
-    where TTrain : IServiceTrain<TInput, Unit>
+    where TTrain : IServiceTrain<TInput, TOutput>
     where TInput : IManifestProperties
 ```
 
@@ -371,14 +371,14 @@ public class SelectiveDispatchStep(IDormantDependentContext dormants)
     public override async Task<Unit> Run(DispatchInput input)
     {
         // Single activation
-        await dormants.ActivateAsync<IChildTrain, ChildInput>(
+        await dormants.ActivateAsync<IChildTrain, ChildInput, Unit>(
             "child-1",
             new ChildInput { Data = input.RuntimeData });
 
         // Batch activation
         var activations = input.Items
             .Select(item => ($"child-{item.Id}", new ChildInput { Data = item.Data }));
-        await dormants.ActivateManyAsync<IChildTrain, ChildInput>(activations);
+        await dormants.ActivateManyAsync<IChildTrain, ChildInput, Unit>(activations);
 
         return Unit.Default;
     }
