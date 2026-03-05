@@ -173,14 +173,20 @@ scheduler.AddMetadataCleanup(cleanup =>
 });
 ```
 
-## Related Packages
+## Part of Trax
 
-| Package | Purpose |
-|---------|---------|
-| [Trax.Core](https://www.nuget.org/packages/Trax.Core/) | The locomotive — `Train`, steps, railway programming |
-| [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/) | `ServiceTrain` with journey logging and station services |
-| [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/) | Dispatch station — route cargo to the right train via `TrainBus` |
-| [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/) | Control room — monitor every train on the network |
+Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
+
+```
+Trax.Core              pipelines, steps, railway error propagation
+└→ Trax.Effect         + execution logging, DI, pluggable storage
+   └→ Trax.Mediator       + decoupled dispatch via TrainBus
+      └→ Trax.Scheduler   ← you are here
+         └→ Trax.Api             + GraphQL API for remote access
+            └→ Trax.Dashboard       + Blazor monitoring UI
+```
+
+**Next layer:** When you need a programmatic interface for external consumers — queuing jobs, running trains on demand, and querying state over HTTP — add [Trax.Api.GraphQL](https://www.nuget.org/packages/Trax.Api.GraphQL/).
 
 Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
 
