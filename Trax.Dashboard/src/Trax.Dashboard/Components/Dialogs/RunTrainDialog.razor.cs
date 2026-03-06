@@ -9,7 +9,7 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Mediator.Services.TrainDiscovery;
-using Trax.Scheduler.Services.BackgroundTaskServer;
+using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
@@ -19,7 +19,7 @@ public partial class RunTrainDialog
     private IDataContextProviderFactory DataContextFactory { get; set; } = default!;
 
     [Inject]
-    private IBackgroundTaskServer BackgroundTaskServer { get; set; } = default!;
+    private IJobSubmitter JobSubmitter { get; set; } = default!;
 
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
@@ -101,7 +101,7 @@ public partial class RunTrainDialog
             await dataContext.Track(metadata);
             await dataContext.SaveChanges(CancellationToken.None);
 
-            await BackgroundTaskServer.EnqueueAsync(metadata.Id, input);
+            await JobSubmitter.EnqueueAsync(metadata.Id, input);
 
             DialogService.Close();
             Navigation.NavigateTo($"trax/data/metadata/{metadata.Id}");

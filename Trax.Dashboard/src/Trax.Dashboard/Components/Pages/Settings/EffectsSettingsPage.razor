@@ -9,13 +9,13 @@
 @if (!_effectsAvailable)
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
-        Effect Registry is not available. Ensure <code>.AddTraxEffects()</code> is configured in your service registration.
+        Effect Registry is not available. Ensure <code>.AddTrax(trax => trax.AddEffects(...))</code> is configured in your service registration.
     </RadzenAlert>
 }
 else if (_effects.Count == 0)
 {
     <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false">
-        No effects are registered. Ensure effects are added via <code>.AddTraxEffects()</code> configuration.
+        No effects are registered. Ensure effects are added via <code>.AddTrax(trax => trax.AddEffects(...))</code> configuration.
     </RadzenAlert>
 }
 else

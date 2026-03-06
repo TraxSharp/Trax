@@ -24,7 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Dashboard/Trax.Dashboard.csproj" />
-    <PackageReference Include="Trax.Effect" Version="*" />
-    <PackageReference Include="Trax.Mediator" Version="*" />
+    <PackageReference Include="Trax.Effect" Version="1.*" />
+    <PackageReference Include="Trax.Mediator" Version="1.*" />
   </ItemGroup>
 </Project>

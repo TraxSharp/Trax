@@ -67,14 +67,14 @@
                     <RadzenNumeric @bind-Value="_schedulerConfig!.MaxActiveJobs" TValue="int?" Min="1" Style="max-width: 400px;" Name="MaxActiveJobs" />
                 </RadzenStack>
 
-                @if (_taskServerOptions is not null)
+                @if (_localWorkerOptions is not null)
                 {
                     <RadzenStack Gap="0.25rem">
                         <RadzenLabel Text="Worker Count" Component="WorkerCount" />
                         <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                             Number of concurrent worker tasks polling for and executing background jobs. Defaults to the number of processor cores (@Environment.ProcessorCount). Requires an application restart to take effect.
                         </RadzenText>
-                        <RadzenNumeric @bind-Value="_taskServerOptions.WorkerCount" TValue="int" Min="1" Style="max-width: 400px;" Name="WorkerCount" />
+                        <RadzenNumeric @bind-Value="_localWorkerOptions.WorkerCount" TValue="int" Min="1" Style="max-width: 400px;" Name="WorkerCount" />
                     </RadzenStack>
                 }
             </RadzenStack>
@@ -134,6 +134,17 @@
                     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="max-width: 400px;">
                         <RadzenNumeric @bind-Value="_defaultJobTimeout.Value" TValue="double" Min="1" Style="width: 60%" Name="DefaultJobTimeout" />
                         <RadzenDropDown @bind-Value="_defaultJobTimeout.Unit" Data="TimeUnits" Style="width: 40%" />
+                    </RadzenStack>
+                </RadzenStack>
+
+                <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Stale Pending Timeout" Component="StalePendingTimeout" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        Duration after which a Pending job that was never picked up by a worker is automatically failed. Catches dispatch failures and unreachable remote workers.
+                    </RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="max-width: 400px;">
+                        <RadzenNumeric @bind-Value="_stalePendingTimeout.Value" TValue="double" Min="1" Style="width: 60%" Name="StalePendingTimeout" />
+                        <RadzenDropDown @bind-Value="_stalePendingTimeout.Unit" Data="TimeUnits" Style="width: 40%" />
                     </RadzenStack>
                 </RadzenStack>
 

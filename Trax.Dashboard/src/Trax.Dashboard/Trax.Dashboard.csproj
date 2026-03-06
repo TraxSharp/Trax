@@ -9,10 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" Version="*" />
-    <PackageReference Include="Trax.Effect.Data" Version="*" />
-    <PackageReference Include="Trax.Mediator" Version="*" />
-    <PackageReference Include="Trax.Scheduler" Version="*" />
+    <PackageReference Include="Trax.Effect" Version="1.*" />
+    <PackageReference Include="Trax.Effect.Data" Version="1.*" />
+    <PackageReference Include="Trax.Mediator" Version="1.*" />
+    <PackageReference Include="Trax.Scheduler" Version="1.*" />
   </ItemGroup>
 
   <ItemGroup>

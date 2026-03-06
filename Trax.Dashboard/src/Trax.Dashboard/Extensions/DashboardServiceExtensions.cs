@@ -9,6 +9,7 @@ using Trax.Dashboard.Configuration;
 using Trax.Dashboard.Services.DashboardSettings;
 using Trax.Dashboard.Services.LocalStorage;
 using Trax.Dashboard.Services.ThemeState;
+using Trax.Effect.Configuration.TraxBuilder;
 
 namespace Trax.Dashboard.Extensions;
 
@@ -51,6 +52,12 @@ public static class DashboardServiceExtensions
         Action<DashboardOptions>? configure = null
     )
     {
+        if (!services.Any(sd => sd.ServiceType == typeof(TraxMarker)))
+            throw new InvalidOperationException(
+                "AddTraxDashboard() requires AddTrax() to be called first. "
+                    + "Call services.AddTrax(trax => ...) before services.AddTraxDashboard()."
+            );
+
         var options = new DashboardOptions();
         configure?.Invoke(options);
 

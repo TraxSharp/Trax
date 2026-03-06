@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Dashboard.Configuration;
 using Trax.Dashboard.Extensions;
+using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Dashboard.Tests.Integration;
@@ -14,6 +15,7 @@ public class DashboardServiceExtensionsTests
     {
         // Arrange
         var services = new ServiceCollection();
+        services.AddSingleton<TraxMarker>();
 
         // Act
         services.AddTraxDashboard();
@@ -31,6 +33,7 @@ public class DashboardServiceExtensionsTests
     {
         // Arrange
         var services = new ServiceCollection();
+        services.AddSingleton<TraxMarker>();
 
         // Act
         services.AddTraxDashboard(o =>
@@ -50,8 +53,9 @@ public class DashboardServiceExtensionsTests
     public void AddTraxDashboard_DoesNotRegisterDiscoveryService()
     {
         // ITrainDiscoveryService and IServiceCollection are now registered by
-        // Mediator's AddServiceTrainBus(), not by AddTraxDashboard().
+        // Mediator's AddMediator(), not by AddTraxDashboard().
         var services = new ServiceCollection();
+        services.AddSingleton<TraxMarker>();
 
         services.AddTraxDashboard();
         using var provider = services.BuildServiceProvider();

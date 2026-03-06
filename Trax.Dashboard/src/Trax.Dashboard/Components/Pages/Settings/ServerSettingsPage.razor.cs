@@ -16,13 +16,14 @@ public partial class ServerSettingsPage
 
     // ── Scheduler state ──
     private SchedulerConfiguration? _schedulerConfig;
-    private PostgresTaskServerOptions? _taskServerOptions;
+    private LocalWorkerOptions? _localWorkerOptions;
     private bool _schedulerAvailable;
 
     private TimeSpanField _pollingInterval = new();
     private TimeSpanField _defaultRetryDelay = new();
     private TimeSpanField _maxRetryDelay = new();
     private TimeSpanField _defaultJobTimeout = new();
+    private TimeSpanField _stalePendingTimeout = new();
     private TimeSpanField _deadLetterRetentionPeriod = new();
     private TimeSpanField _cleanupInterval = new();
     private TimeSpanField _cleanupRetentionPeriod = new();
@@ -40,6 +41,7 @@ public partial class ServerSettingsPage
     private double _savedRetryBackoffMultiplier;
     private TimeSpan _savedMaxRetryDelay;
     private TimeSpan _savedDefaultJobTimeout;
+    private TimeSpan _savedStalePendingTimeout;
     private bool _savedRecoverStuckJobsOnStartup;
     private TimeSpan _savedDeadLetterRetentionPeriod;
     private bool _savedAutoPurgeDeadLetters;
@@ -77,8 +79,8 @@ public partial class ServerSettingsPage
             _pollingInterval.ToTimeSpan() != _savedPollingInterval
             || _schedulerConfig!.MaxActiveJobs != _savedMaxActiveJobs
             || (
-                _taskServerOptions is not null
-                && _taskServerOptions.WorkerCount != _savedWorkerCount
+                _localWorkerOptions is not null
+                && _localWorkerOptions.WorkerCount != _savedWorkerCount
             )
         );
 
@@ -95,6 +97,7 @@ public partial class ServerSettingsPage
         _schedulerAvailable
         && (
             _defaultJobTimeout.ToTimeSpan() != _savedDefaultJobTimeout
+            || _stalePendingTimeout.ToTimeSpan() != _savedStalePendingTimeout
             || _schedulerConfig!.RecoverStuckJobsOnStartup != _savedRecoverStuckJobsOnStartup
         );
 
@@ -123,7 +126,7 @@ public partial class ServerSettingsPage
     {
         // Scheduler
         _schedulerConfig = ServiceProvider.GetService<SchedulerConfiguration>();
-        _taskServerOptions = ServiceProvider.GetService<PostgresTaskServerOptions>();
+        _localWorkerOptions = ServiceProvider.GetService<LocalWorkerOptions>();
         _schedulerAvailable = _schedulerConfig is not null;
 
         if (_schedulerAvailable)
@@ -154,6 +157,7 @@ public partial class ServerSettingsPage
         _defaultRetryDelay = TimeSpanField.FromTimeSpan(_schedulerConfig.DefaultRetryDelay);
         _maxRetryDelay = TimeSpanField.FromTimeSpan(_schedulerConfig.MaxRetryDelay);
         _defaultJobTimeout = TimeSpanField.FromTimeSpan(_schedulerConfig.DefaultJobTimeout);
+        _stalePendingTimeout = TimeSpanField.FromTimeSpan(_schedulerConfig.StalePendingTimeout);
         _deadLetterRetentionPeriod = TimeSpanField.FromTimeSpan(
             _schedulerConfig.DeadLetterRetentionPeriod
         );
@@ -179,6 +183,7 @@ public partial class ServerSettingsPage
         _schedulerConfig.DefaultRetryDelay = _defaultRetryDelay.ToTimeSpan();
         _schedulerConfig.MaxRetryDelay = _maxRetryDelay.ToTimeSpan();
         _schedulerConfig.DefaultJobTimeout = _defaultJobTimeout.ToTimeSpan();
+        _schedulerConfig.StalePendingTimeout = _stalePendingTimeout.ToTimeSpan();
         _schedulerConfig.DeadLetterRetentionPeriod = _deadLetterRetentionPeriod.ToTimeSpan();
 
         if (_schedulerConfig.MetadataCleanup is not null)
@@ -205,12 +210,13 @@ public partial class ServerSettingsPage
         _schedulerConfig.RetryBackoffMultiplier = 2.0;
         _schedulerConfig.MaxRetryDelay = TimeSpan.FromHours(1);
         _schedulerConfig.DefaultJobTimeout = TimeSpan.FromMinutes(20);
+        _schedulerConfig.StalePendingTimeout = TimeSpan.FromMinutes(20);
         _schedulerConfig.RecoverStuckJobsOnStartup = true;
         _schedulerConfig.DeadLetterRetentionPeriod = TimeSpan.FromDays(30);
         _schedulerConfig.AutoPurgeDeadLetters = true;
 
-        if (_taskServerOptions is not null)
-            _taskServerOptions.WorkerCount = Environment.ProcessorCount;
+        if (_localWorkerOptions is not null)
+            _localWorkerOptions.WorkerCount = Environment.ProcessorCount;
 
         if (_schedulerConfig.MetadataCleanup is not null)
         {
@@ -233,12 +239,13 @@ public partial class ServerSettingsPage
         _savedRetryBackoffMultiplier = _schedulerConfig.RetryBackoffMultiplier;
         _savedMaxRetryDelay = _schedulerConfig.MaxRetryDelay;
         _savedDefaultJobTimeout = _schedulerConfig.DefaultJobTimeout;
+        _savedStalePendingTimeout = _schedulerConfig.StalePendingTimeout;
         _savedRecoverStuckJobsOnStartup = _schedulerConfig.RecoverStuckJobsOnStartup;
         _savedDeadLetterRetentionPeriod = _schedulerConfig.DeadLetterRetentionPeriod;
         _savedAutoPurgeDeadLetters = _schedulerConfig.AutoPurgeDeadLetters;
 
-        if (_taskServerOptions is not null)
-            _savedWorkerCount = _taskServerOptions.WorkerCount;
+        if (_localWorkerOptions is not null)
+            _savedWorkerCount = _localWorkerOptions.WorkerCount;
 
         if (_schedulerConfig.MetadataCleanup is not null)
         {

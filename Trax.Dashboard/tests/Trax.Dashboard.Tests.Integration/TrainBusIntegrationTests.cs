@@ -17,8 +17,8 @@ public class TrainBusIntegrationTests
         // Arrange — register trains via assembly scanning (as in a real app)
         var services = new ServiceCollection();
 
-        services.AddTraxEffects(o =>
-            o.AddServiceTrainBus(assemblies: [typeof(FakeTrainA).Assembly])
+        services.AddTrax(trax =>
+            trax.AddEffects(_ => { }).AddMediator(assemblies: [typeof(FakeTrainA).Assembly])
         );
 
         services.AddTraxDashboard();

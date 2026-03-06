@@ -27,7 +27,7 @@
         <RadzenStack Gap="0.25rem">
             <RadzenLabel Text="Hide Administration Trains" Component="HideAdminTrains" />
             <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                Exclude scheduler internals (ManifestManager, TaskServerExecutor, MetadataCleanup) from dashboard statistics and charts.
+                Exclude scheduler internals (ManifestManager, JobRunner, MetadataCleanup) from dashboard statistics and charts.
             </RadzenText>
             <RadzenSwitch @bind-Value="_hideAdminTrains" Name="HideAdminTrains" />
         </RadzenStack>
