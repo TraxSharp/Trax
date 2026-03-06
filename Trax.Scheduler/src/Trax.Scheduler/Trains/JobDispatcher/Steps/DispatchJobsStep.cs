@@ -138,25 +138,78 @@ internal class DispatchJobsStep(IServiceProvider serviceProvider, ILogger<Dispat
         // other submitters need the committed state to be visible.
         await dataContext.CommitTransaction();
 
-        // Enqueue to job submitter (outside the transaction)
-        string backgroundTaskId;
-        if (deserializedInput != null)
-            backgroundTaskId = await jobSubmitter.EnqueueAsync(
-                metadata.Id,
-                deserializedInput,
-                CancellationToken
-            );
-        else
-            backgroundTaskId = await jobSubmitter.EnqueueAsync(metadata.Id, CancellationToken);
+        // Enqueue to job submitter (outside the transaction).
+        // If this fails, the Metadata is already committed — mark it as Failed
+        // immediately so it doesn't stay orphaned in Pending state forever.
+        try
+        {
+            string backgroundTaskId;
+            if (deserializedInput != null)
+                backgroundTaskId = await jobSubmitter.EnqueueAsync(
+                    metadata.Id,
+                    deserializedInput,
+                    CancellationToken
+                );
+            else
+                backgroundTaskId = await jobSubmitter.EnqueueAsync(metadata.Id, CancellationToken);
 
-        logger.LogDebug(
-            "Dispatched work queue entry {WorkQueueId} as background task {BackgroundTaskId} (Metadata: {MetadataId})",
-            entry.Id,
-            backgroundTaskId,
-            metadata.Id
-        );
+            logger.LogDebug(
+                "Dispatched work queue entry {WorkQueueId} as background task {BackgroundTaskId} (Metadata: {MetadataId})",
+                entry.Id,
+                backgroundTaskId,
+                metadata.Id
+            );
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Failed to enqueue work queue entry {WorkQueueId} (Metadata: {MetadataId}). Marking metadata as failed",
+                entry.Id,
+                metadata.Id
+            );
+
+            await FailOrphanedMetadataAsync(metadata.Id, ex);
+            return false;
+        }
 
         return true;
+    }
+
+    /// <summary>
+    /// Marks an orphaned Metadata record as Failed after an enqueue failure.
+    /// Uses a fresh scope since the original transaction was already committed.
+    /// </summary>
+    private async Task FailOrphanedMetadataAsync(long metadataId, Exception exception)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
+
+            var metadata = await dataContext.Metadatas.FirstOrDefaultAsync(
+                m => m.Id == metadataId,
+                CancellationToken
+            );
+
+            if (metadata is null || metadata.TrainState != TrainState.Pending)
+                return;
+
+            metadata.TrainState = TrainState.Failed;
+            metadata.EndTime = DateTime.UtcNow;
+            metadata.AddException(exception);
+
+            await dataContext.SaveChanges(CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Failed to mark orphaned Metadata {MetadataId} as failed. "
+                    + "The ReapStalePendingMetadataStep will recover it on the next ManifestManager cycle",
+                metadataId
+            );
+        }
     }
 
     private static Type ResolveType(string typeName)

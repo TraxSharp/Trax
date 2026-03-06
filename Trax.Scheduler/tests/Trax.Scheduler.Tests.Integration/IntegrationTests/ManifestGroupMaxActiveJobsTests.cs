@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
@@ -63,21 +64,17 @@ public class ManifestGroupMaxActiveJobsTests
             .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
             .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
             .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
-            .AddTraxEffects(options =>
-                options
-                    .AddServiceTrainBus(
-                        assemblies:
-                        [
-                            typeof(AssemblyMarker).Assembly,
-                            typeof(JobRunnerTrain).Assembly,
-                        ]
+            .AddTrax(trax =>
+                trax.AddEffects(effects =>
+                        effects
+                            .SetEffectLogLevel(LogLevel.Information)
+                            .SaveTrainParameters()
+                            .UsePostgres(connectionString)
+                            .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
+                            .AddJson()
+                            .AddStepLogger(serializeStepData: true)
                     )
-                    .SetEffectLogLevel(LogLevel.Information)
-                    .SaveTrainParameters()
-                    .AddPostgresEffect(connectionString)
-                    .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
-                    .AddJsonEffect()
-                    .AddStepLogger(serializeStepData: true)
+                    .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
                     .AddScheduler(scheduler =>
                         scheduler.UseInMemoryWorkers().MaxActiveJobs(GlobalMaxActiveJobs)
                     )

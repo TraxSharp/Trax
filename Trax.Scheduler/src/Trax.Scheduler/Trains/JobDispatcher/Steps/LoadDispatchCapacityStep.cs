@@ -4,7 +4,9 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.EffectStep;
+using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Extensions;
 
 namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
 
@@ -15,7 +17,8 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
 internal class LoadDispatchCapacityStep(
     IDataContext dataContext,
     SchedulerConfiguration config,
-    ILogger<LoadDispatchCapacityStep> logger
+    ILogger<LoadDispatchCapacityStep> logger,
+    ITrainDiscoveryService? discoveryService = null
 ) : EffectStep<List<WorkQueue>, DispatchContext>
 {
     private static readonly DispatchContext Empty = new([], 0, [], []);
@@ -25,7 +28,9 @@ internal class LoadDispatchCapacityStep(
         if (entries.Count == 0)
             return Empty;
 
-        var excluded = config.ExcludedTrainTypeNames;
+        var excluded = TrainNameExpander
+            .ExpandTrainNames(config.ExcludedTrainTypeNames, discoveryService)
+            .ToList();
 
         // Single query: left-join Metadatas → Manifests, grouped by ManifestGroupId.
         // Rows without a manifest group under null. This gives both the global active

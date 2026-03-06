@@ -13,6 +13,7 @@ public class ManifestManagerTrain : ServiceTrain<Unit, Unit>, IManifestManagerTr
         Activate(input)
             .Chain<LoadManifestsStep>()
             .Chain<CancelTimedOutJobsStep>()
+            .Chain<ReapStalePendingMetadataStep>()
             .Chain<ReapFailedJobsStep>()
             .Chain<DetermineJobsToQueueStep>()
             .Chain<CreateWorkQueueEntriesStep>()

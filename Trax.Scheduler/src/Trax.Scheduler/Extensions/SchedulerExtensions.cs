@@ -1,4 +1,4 @@
-using Trax.Effect.Configuration.TraxEffectBuilder;
+using Trax.Mediator.Configuration;
 using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Extensions;
@@ -9,37 +9,40 @@ namespace Trax.Scheduler.Extensions;
 public static class SchedulerExtensions
 {
     /// <summary>
-    /// Adds the Trax.Core scheduler as part of the effects configuration.
+    /// Adds the Trax scheduler to the configuration.
     /// </summary>
-    /// <param name="builder">The Trax.Core effect configuration builder</param>
+    /// <param name="builder">The builder after mediator has been configured</param>
     /// <param name="configure">Action to configure the scheduler</param>
-    /// <returns>The effect configuration builder for continued chaining</returns>
+    /// <returns>A <see cref="TraxBuilderWithMediator"/> for continued chaining</returns>
     /// <remarks>
-    /// Configure the scheduler within the Trax.Core effects setup:
+    /// <see cref="Services.JobSubmitter.PostgresJobSubmitter"/> is registered automatically
+    /// as the default <see cref="Services.JobSubmitter.IJobSubmitter"/>. Call
+    /// <c>UseLocalWorkers()</c> to also start worker threads that execute jobs in-process.
+    /// Omit <c>UseLocalWorkers()</c> to run as a scheduler-only process that writes jobs
+    /// for a separate worker process to consume.
     ///
     /// <code>
-    /// services.AddTraxEffects(options => options
-    ///     .AddEffectTrainBus(assemblies)
-    ///     .AddPostgresEffect(connectionString)
-    ///     .AddScheduler(scheduler => scheduler
-    ///         .PollingInterval(TimeSpan.FromSeconds(30))
-    ///         .MaxActiveJobs(100)
-    ///         .DefaultMaxRetries(5)
-    ///         .UseHangfire(
-    ///             config => config.UsePostgreSqlStorage(...),
-    ///             server => server.WorkerCount = 4
-    ///         )
+    /// services.AddTrax(trax => trax
+    ///     .AddEffects(effects => effects
+    ///         .UsePostgres(connectionString)
     ///     )
+    ///     .AddMediator(typeof(Program).Assembly)
+    ///     .AddScheduler(scheduler =>
+    ///     {
+    ///         scheduler.UseLocalWorkers();
+    ///         scheduler.Schedule&lt;IMyTrain&gt;("my-job", new MyInput(), Every.Minutes(5));
+    ///     })
     /// );
     /// </code>
     /// </remarks>
-    public static TraxEffectConfigurationBuilder AddScheduler(
-        this TraxEffectConfigurationBuilder builder,
+    public static TraxBuilderWithMediator AddScheduler(
+        this TraxBuilderWithMediator builder,
         Action<SchedulerConfigurationBuilder> configure
     )
     {
         var schedulerBuilder = new SchedulerConfigurationBuilder(builder);
         configure(schedulerBuilder);
-        return schedulerBuilder.Build();
+        schedulerBuilder.Build();
+        return builder;
     }
 }

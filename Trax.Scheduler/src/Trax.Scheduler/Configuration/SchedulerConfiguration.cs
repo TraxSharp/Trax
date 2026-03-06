@@ -122,6 +122,18 @@ public class SchedulerConfiguration
     public TimeSpan DefaultJobTimeout { get; set; } = TimeSpan.FromMinutes(20);
 
     /// <summary>
+    /// Timeout after which a Pending job that was never picked up is automatically failed.
+    /// </summary>
+    /// <remarks>
+    /// Acts as a safety net for dispatch failures — if a job remains in Pending state
+    /// longer than this duration, the ManifestManager's ReapStalePendingMetadataStep
+    /// will mark it as Failed. This catches cases where the job submitter failed to
+    /// deliver the job (e.g. remote worker unreachable, Lambda timeout) and the
+    /// immediate failure handling in DispatchJobsStep also failed.
+    /// </remarks>
+    public TimeSpan StalePendingTimeout { get; set; } = TimeSpan.FromMinutes(20);
+
+    /// <summary>
     /// The default misfire policy applied to manifests that do not specify one.
     /// </summary>
     /// <remarks>

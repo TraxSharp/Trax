@@ -1,9 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Extensions;
+using Trax.Mediator.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Services.JobDispatcherPollingService;
+using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.SchedulerStartupService;
@@ -19,20 +20,20 @@ namespace Trax.Scheduler.Configuration;
 /// <remarks>
 /// This builder allows configuring the scheduler as part of the Trax.Core effects setup:
 /// <code>
-/// services.AddTraxEffects(options => options
-///     .AddServiceTrainBus(assemblies)
-///     .AddPostgresEffect(connectionString)
+/// services.AddTrax(trax => trax
+///     .AddEffects(effects => effects.UsePostgres(connectionString))
+///     .AddMediator(assemblies)
 ///     .AddScheduler(scheduler => scheduler
 ///         .PollingInterval(TimeSpan.FromSeconds(30))
 ///         .MaxActiveJobs(100)
-///         .UseHangfire(config => config.UsePostgreSqlStorage(...))
+///         .UseLocalWorkers()
 ///     )
 /// );
 /// </code>
 /// </remarks>
 public partial class SchedulerConfigurationBuilder
 {
-    private readonly TraxEffectConfigurationBuilder _parentBuilder;
+    private readonly TraxBuilderWithMediator _parentBuilder;
     private readonly SchedulerConfiguration _configuration = new();
     private Action<IServiceCollection>? _taskServerRegistration;
     private string? _rootScheduledExternalId;
@@ -45,8 +46,8 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Creates a new scheduler configuration builder.
     /// </summary>
-    /// <param name="parentBuilder">The parent Trax.Core effect configuration builder</param>
-    public SchedulerConfigurationBuilder(TraxEffectConfigurationBuilder parentBuilder)
+    /// <param name="parentBuilder">The builder after mediator has been configured</param>
+    public SchedulerConfigurationBuilder(TraxBuilderWithMediator parentBuilder)
     {
         _parentBuilder = parentBuilder;
     }
@@ -60,7 +61,7 @@ public partial class SchedulerConfigurationBuilder
     /// Builds the scheduler configuration and registers all services.
     /// </summary>
     /// <returns>The parent builder for continued chaining</returns>
-    internal TraxEffectConfigurationBuilder Build()
+    internal TraxBuilderWithMediator Build()
     {
         ValidateNoCyclicGroupDependencies();
 
@@ -94,7 +95,11 @@ public partial class SchedulerConfigurationBuilder
             JobDispatcherTrain
         >();
 
-        // Register job submitter if configured
+        // PostgresJobSubmitter is the default submitter since Postgres is required for scheduling.
+        // UseRemoteWorkers() and UseInMemoryWorkers() override this via last-registration-wins.
+        _parentBuilder.ServiceCollection.AddScoped<IJobSubmitter, PostgresJobSubmitter>();
+
+        // Register additional job submitter services if configured (may override the default above)
         _taskServerRegistration?.Invoke(_parentBuilder.ServiceCollection);
 
         // Registration order matters: .NET starts IHostedService instances sequentially in registration order.

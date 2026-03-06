@@ -26,9 +26,9 @@ public partial class SchedulerConfigurationBuilder
     /// </remarks>
     /// <example>
     /// <code>
-    /// builder.Services.AddTraxEffects(options => options
+    /// builder.Services.AddTrax(trax => trax
     ///     .AddScheduler(scheduler => scheduler
-    ///         .UseHangfire(/* ... */)
+    ///         .UseLocalWorkers()
     ///         .ScheduleMany&lt;ISyncTableTrain, SyncTableInput, string&gt;(
     ///             new[] { "users", "orders", "products" },
     ///             table => ($"sync-{table}", new SyncTableInput { TableName = table }),

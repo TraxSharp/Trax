@@ -4,7 +4,9 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.EffectStep;
+using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Extensions;
 
 namespace Trax.Scheduler.Trains.MetadataCleanup.Steps;
 
@@ -21,13 +23,16 @@ namespace Trax.Scheduler.Trains.MetadataCleanup.Steps;
 internal class DeleteExpiredMetadataStep(
     IDataContext dataContext,
     SchedulerConfiguration configuration,
-    ILogger<DeleteExpiredMetadataStep> logger
+    ILogger<DeleteExpiredMetadataStep> logger,
+    ITrainDiscoveryService? discoveryService = null
 ) : EffectStep<MetadataCleanupRequest, Unit>
 {
     public override async Task<Unit> Run(MetadataCleanupRequest input)
     {
         var cleanupConfig = configuration.MetadataCleanup!;
-        var whitelist = cleanupConfig.TrainTypeWhitelist;
+        var whitelist = TrainNameExpander
+            .ExpandTrainNames(cleanupConfig.TrainTypeWhitelist, discoveryService)
+            .ToList();
         var cutoffTime = DateTime.UtcNow - cleanupConfig.RetentionPeriod;
 
         logger.LogDebug(

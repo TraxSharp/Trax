@@ -24,9 +24,9 @@ public partial class SchedulerConfigurationBuilder
     /// </remarks>
     /// <example>
     /// <code>
-    /// builder.Services.AddTraxEffects(options => options
+    /// builder.Services.AddTrax(trax => trax
     ///     .AddScheduler(scheduler => scheduler
-    ///         .UseHangfire(/* ... */)
+    ///         .UseLocalWorkers()
     ///         .Schedule&lt;IHelloWorldTrain, HelloWorldInput&gt;(
     ///             "hello-world",
     ///             new HelloWorldInput { Name = "Scheduler" },

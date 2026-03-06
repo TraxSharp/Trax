@@ -1,6 +1,7 @@
 using FluentAssertions;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Mediator.Extensions;
@@ -25,9 +26,9 @@ public class SchedulerTypedOutputTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTraxEffects(options =>
-            options
-                .AddServiceTrainBus(assemblies: [typeof(AssemblyMarker).Assembly])
+        services.AddTrax(trax =>
+            trax.AddEffects(_ => { })
+                .AddMediator(typeof(AssemblyMarker).Assembly)
                 .AddScheduler(scheduler =>
                 {
                     scheduler.UseInMemoryWorkers();

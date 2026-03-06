@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Trax.Scheduler</AssemblyName>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,12 +14,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Cronos" Version="0.8.4" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Scheduler.Hangfire" />
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests" />
     <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
   </ItemGroup>
 </Project>

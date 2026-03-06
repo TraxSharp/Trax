@@ -34,7 +34,7 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Sets the interval at which JobDispatcherPollingService reads the work queue and dispatches jobs.
     /// </summary>
-    /// <param name="interval">The polling interval (default: 5 seconds)</param>
+    /// <param name="interval">The polling interval (default: 2 seconds)</param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder JobDispatcherPollingInterval(TimeSpan interval)
     {
@@ -135,11 +135,22 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Sets the timeout after which a running job is considered stuck.
     /// </summary>
-    /// <param name="timeout">The job timeout (default: 1 hour)</param>
+    /// <param name="timeout">The job timeout (default: 20 minutes)</param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder DefaultJobTimeout(TimeSpan timeout)
     {
         _configuration.DefaultJobTimeout = timeout;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the timeout after which a Pending job that was never picked up is automatically failed.
+    /// </summary>
+    /// <param name="timeout">The stale pending timeout (default: 20 minutes)</param>
+    /// <returns>The builder for method chaining</returns>
+    public SchedulerConfigurationBuilder StalePendingTimeout(TimeSpan timeout)
+    {
+        _configuration.StalePendingTimeout = timeout;
         return this;
     }
 
@@ -180,6 +191,7 @@ public partial class SchedulerConfigurationBuilder
     /// Uses the in-memory job submitter for testing and development.
     /// </summary>
     /// <remarks>
+    /// Overrides the default <see cref="PostgresJobSubmitter"/>.
     /// The in-memory submitter executes jobs immediately and synchronously.
     /// Useful for unit/integration testing without external infrastructure.
     /// </remarks>
@@ -194,12 +206,16 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
-    /// Uses the built-in local worker pool for background job execution.
+    /// Enables local worker threads that poll the <c>trax.background_job</c> table and execute trains in-process.
     /// </summary>
     /// <remarks>
-    /// Jobs are persisted to the <c>trax.background_job</c> table and executed by
-    /// concurrent worker tasks using PostgreSQL's <c>FOR UPDATE SKIP LOCKED</c> for atomic dequeue.
-    /// Requires <c>AddPostgresEffect(connectionString)</c> to have been called first.
+    /// The scheduler registers <see cref="PostgresJobSubmitter"/> as the default <see cref="IJobSubmitter"/>
+    /// automatically. Calling <c>UseLocalWorkers()</c> adds worker threads that dequeue and run those jobs.
+    /// If you want scheduling without local execution (e.g., a hub that writes jobs for a separate
+    /// worker process to consume), simply omit this call.
+    ///
+    /// Workers use PostgreSQL's <c>FOR UPDATE SKIP LOCKED</c> for atomic dequeue.
+    /// Requires <c>UsePostgres(connectionString)</c> to have been called in <c>AddEffects()</c>.
     /// </remarks>
     /// <param name="configure">Optional configuration for worker count, polling interval, and timeouts</param>
     /// <returns>The builder for method chaining</returns>
@@ -212,26 +228,69 @@ public partial class SchedulerConfigurationBuilder
             var options = new LocalWorkerOptions();
             configure?.Invoke(options);
             services.AddSingleton(options);
-            services.AddScoped<IJobSubmitter, PostgresJobSubmitter>();
             services.AddHostedService<Scheduler.Services.LocalWorkerService.LocalWorkerService>();
         };
         return this;
     }
 
     /// <summary>
-    /// Registers a custom job submitter registration action.
+    /// Dispatches jobs to a remote HTTP endpoint for execution.
     /// </summary>
     /// <remarks>
-    /// This is used by custom job submitter implementations to register their services.
-    /// Most users should use the specific extension methods like UseLocalWorkers().
+    /// Overrides the default <see cref="PostgresJobSubmitter"/>.
+    /// Jobs are POSTed as JSON to the configured <see cref="RemoteWorkerOptions.BaseUrl"/>.
+    /// The remote endpoint runs <see cref="Trains.JobRunner.JobRunnerTrain"/> to execute the train.
+    /// No local workers are started — execution happens entirely on the remote side.
+    ///
+    /// Trax does not bake in any authentication. Use <see cref="RemoteWorkerOptions.ConfigureHttpClient"/>
+    /// to add authorization headers or any custom HTTP configuration.
+    ///
+    /// Set up the remote side with <c>AddTraxJobRunner()</c> and <c>UseTraxJobRunner()</c>.
     /// </remarks>
-    /// <param name="registration">The action to register job submitter services</param>
+    /// <param name="configure">Action to configure the remote endpoint URL and HTTP client</param>
     /// <returns>The builder for method chaining</returns>
-    public SchedulerConfigurationBuilder UseCustomSubmitter(Action<IServiceCollection> registration)
+    public SchedulerConfigurationBuilder UseRemoteWorkers(Action<RemoteWorkerOptions> configure)
+    {
+        _taskServerRegistration = services =>
+        {
+            var options = new RemoteWorkerOptions();
+            configure(options);
+            services.AddSingleton(options);
+
+            services.AddHttpClient<
+                Services.JobSubmitter.IJobSubmitter,
+                Services.JobSubmitter.HttpJobSubmitter
+            >(client =>
+            {
+                client.BaseAddress = new Uri(options.BaseUrl);
+                client.Timeout = options.Timeout;
+                options.ConfigureHttpClient?.Invoke(client);
+            });
+        };
+        return this;
+    }
+
+    /// <summary>
+    /// Overrides the default <see cref="PostgresJobSubmitter"/> with a custom job submitter.
+    /// </summary>
+    /// <remarks>
+    /// Use this as an escape hatch when the built-in submitters don't fit your use case.
+    /// Most users should use <see cref="UseLocalWorkers"/>, <see cref="UseRemoteWorkers"/>,
+    /// or <see cref="UseInMemoryWorkers"/> instead.
+    /// </remarks>
+    /// <param name="registration">The action to register your custom <see cref="IJobSubmitter"/></param>
+    /// <returns>The builder for method chaining</returns>
+    public SchedulerConfigurationBuilder OverrideSubmitter(Action<IServiceCollection> registration)
     {
         _taskServerRegistration = registration;
         return this;
     }
+
+    /// <inheritdoc cref="OverrideSubmitter"/>
+    [Obsolete("Use OverrideSubmitter() instead.")]
+    public SchedulerConfigurationBuilder UseCustomSubmitter(
+        Action<IServiceCollection> registration
+    ) => OverrideSubmitter(registration);
 
     /// <summary>
     /// Sets whether to automatically prune orphaned manifests on startup.

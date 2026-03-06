@@ -17,7 +17,7 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 ///
 /// Example usage:
 /// ```csharp
-/// services.AddTraxEffects(options => options
+/// services.AddTrax(trax => trax
 ///     .AddScheduler(scheduler => scheduler.UseInMemoryWorkers())
 /// );
 /// ```
