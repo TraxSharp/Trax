@@ -10,6 +10,8 @@ using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.SchedulerStartupService;
 using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.JobDispatcher;
+using Trax.Scheduler.Trains.ManifestManager;
+using Trax.Scheduler.Trains.MetadataCleanup;
 using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Configuration;
@@ -89,10 +91,18 @@ public partial class SchedulerConfigurationBuilder
             sp.GetRequiredService<DormantDependentContext>()
         );
 
-        // Register JobDispatcher train (must use AddScopedTraxRoute for property injection)
+        // Register internal scheduler trains (AddScopedTraxRoute for property injection)
+        _parentBuilder.ServiceCollection.AddScopedTraxRoute<
+            IManifestManagerTrain,
+            ManifestManagerTrain
+        >();
         _parentBuilder.ServiceCollection.AddScopedTraxRoute<
             IJobDispatcherTrain,
             JobDispatcherTrain
+        >();
+        _parentBuilder.ServiceCollection.AddScopedTraxRoute<
+            IMetadataCleanupTrain,
+            MetadataCleanupTrain
         >();
 
         // PostgresJobSubmitter is the default submitter since Postgres is required for scheduling.

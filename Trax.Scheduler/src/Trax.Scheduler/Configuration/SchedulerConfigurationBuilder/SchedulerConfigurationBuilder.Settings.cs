@@ -196,7 +196,7 @@ public partial class SchedulerConfigurationBuilder
     /// Useful for unit/integration testing without external infrastructure.
     /// </remarks>
     /// <returns>The builder for method chaining</returns>
-    public SchedulerConfigurationBuilder UseInMemoryWorkers()
+    internal SchedulerConfigurationBuilder UseInMemoryWorkers()
     {
         _taskServerRegistration = services =>
         {

@@ -112,12 +112,14 @@ internal class DispatchJobsStep(IServiceProvider serviceProvider, ILogger<Dispat
             );
         }
 
-        // Create a new Metadata record for this execution
+        // Create a new Metadata record for this execution.
+        // Propagate the WorkQueue's ExternalId so clients can correlate the queue
+        // mutation response with subscription events (both use the same externalId).
         var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
             new CreateMetadata
             {
                 Name = claimed.TrainName,
-                ExternalId = Guid.NewGuid().ToString("N"),
+                ExternalId = claimed.ExternalId,
                 Input = null,
                 ManifestId = claimed.ManifestId,
             }
