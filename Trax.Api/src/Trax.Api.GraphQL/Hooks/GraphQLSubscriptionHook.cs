@@ -80,6 +80,18 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         );
     }
 
+    public async Task OnStateChanged(Metadata metadata, CancellationToken ct)
+    {
+        if (!_enabledTrains.Contains(metadata.Name))
+            return;
+
+        await _eventSender.SendAsync(
+            nameof(LifecycleSubscriptions.OnTrainStateChanged),
+            MapEvent(metadata),
+            ct
+        );
+    }
+
     private static TrainLifecycleEvent MapEvent(Metadata metadata) =>
         new(
             MetadataId: metadata.Id,

@@ -8,6 +8,7 @@ using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
 
 namespace Trax.Api.GraphQL.Extensions;
@@ -48,6 +49,14 @@ public static class GraphQLServiceExtensions
             .AddType<ObjectType<OperationsQueries>>()
             .AddTypeModule<TrainTypeModule>()
             .AddInMemorySubscriptions();
+
+        // If a broadcaster receiver is registered (via UseBroadcaster()),
+        // wire up the GraphQL handler so remote lifecycle events are forwarded
+        // to HotChocolate subscriptions.
+        if (services.Any(sd => sd.ServiceType == typeof(ITrainEventReceiver)))
+        {
+            services.AddTransient<ITrainEventHandler, GraphQLTrainEventHandler>();
+        }
 
         return services;
     }

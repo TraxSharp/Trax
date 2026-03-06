@@ -20,4 +20,7 @@ public class LifecycleSubscriptions
 
     [Subscribe]
     public TrainLifecycleEvent OnTrainCancelled([EventMessage] TrainLifecycleEvent e) => e;
+
+    [Subscribe]
+    public TrainLifecycleEvent OnTrainStateChanged([EventMessage] TrainLifecycleEvent e) => e;
 }

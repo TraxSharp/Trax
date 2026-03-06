@@ -132,6 +132,35 @@ public class GraphQLSubscriptionHookTests
 
     #endregion
 
+    #region Attribute Gating — OnStateChanged
+
+    [Test]
+    public async Task OnStateChanged_EnabledTrain_PublishesEvent()
+    {
+        var sender = new RecordingTopicEventSender();
+        var hook = CreateHook(sender, enabledTrainName: "Enabled.Train");
+        var metadata = CreateMetadata("Enabled.Train");
+
+        await hook.OnStateChanged(metadata, CancellationToken.None);
+
+        sender.Events.Should().ContainSingle();
+        sender.Events[0].Topic.Should().Be(nameof(LifecycleSubscriptions.OnTrainStateChanged));
+    }
+
+    [Test]
+    public async Task OnStateChanged_DisabledTrain_SkipsPublishing()
+    {
+        var sender = new RecordingTopicEventSender();
+        var hook = CreateHook(sender, enabledTrainName: "Enabled.Train");
+        var metadata = CreateMetadata("Other.Train");
+
+        await hook.OnStateChanged(metadata, CancellationToken.None);
+
+        sender.Events.Should().BeEmpty();
+    }
+
+    #endregion
+
     #region Event Payload Mapping
 
     [Test]
@@ -308,6 +337,25 @@ public class GraphQLSubscriptionHookTests
 
         sender.Events.Should().ContainSingle();
         sender.Events[0].Topic.Should().Be(nameof(LifecycleSubscriptions.OnTrainCancelled));
+    }
+
+    [Test]
+    public async Task OnStateChanged_MetadataNameMatchesServiceType_PublishesEvent()
+    {
+        var sender = new RecordingTopicEventSender();
+        var registration = CreateRegistrationWithDistinctTypes(
+            serviceTypeName: "Namespace.IMyTrain",
+            implementationTypeName: "Namespace.MyTrain",
+            subscriptionEnabled: true
+        );
+        var discovery = new StubDiscoveryService([registration]);
+        var hook = new GraphQLSubscriptionHook(sender, discovery);
+
+        var metadata = CreateMetadata("Namespace.IMyTrain");
+        await hook.OnStateChanged(metadata, CancellationToken.None);
+
+        sender.Events.Should().ContainSingle();
+        sender.Events[0].Topic.Should().Be(nameof(LifecycleSubscriptions.OnTrainStateChanged));
     }
 
     #endregion
