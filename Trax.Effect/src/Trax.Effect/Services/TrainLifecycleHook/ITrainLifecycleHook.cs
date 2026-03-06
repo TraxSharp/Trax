@@ -14,4 +14,10 @@ public interface ITrainLifecycleHook
     Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct) =>
         Task.CompletedTask;
     Task OnCancelled(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
+    /// Called on every state transition (Started, Completed, Failed, Cancelled).
+    /// Useful for unified event streams where callers don't want separate subscriptions per state.
+    /// </summary>
+    Task OnStateChanged(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
 }

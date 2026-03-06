@@ -47,6 +47,8 @@ public class LifecycleHookRunner : ILifecycleHookRunner
                 );
             }
         }
+
+        await OnStateChanged(metadata, ct);
     }
 
     public async Task OnCompleted(Metadata metadata, CancellationToken ct)
@@ -67,6 +69,8 @@ public class LifecycleHookRunner : ILifecycleHookRunner
                 );
             }
         }
+
+        await OnStateChanged(metadata, ct);
     }
 
     public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
@@ -87,6 +91,8 @@ public class LifecycleHookRunner : ILifecycleHookRunner
                 );
             }
         }
+
+        await OnStateChanged(metadata, ct);
     }
 
     public async Task OnCancelled(Metadata metadata, CancellationToken ct)
@@ -102,6 +108,28 @@ public class LifecycleHookRunner : ILifecycleHookRunner
                 _logger?.LogError(
                     ex,
                     "Lifecycle hook ({HookType}) threw on OnCancelled for train ({TrainName}).",
+                    hook.GetType().Name,
+                    metadata.Name
+                );
+            }
+        }
+
+        await OnStateChanged(metadata, ct);
+    }
+
+    public async Task OnStateChanged(Metadata metadata, CancellationToken ct)
+    {
+        foreach (var hook in _hooks)
+        {
+            try
+            {
+                await hook.OnStateChanged(metadata, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(
+                    ex,
+                    "Lifecycle hook ({HookType}) threw on OnStateChanged for train ({TrainName}).",
                     hook.GetType().Name,
                     metadata.Name
                 );

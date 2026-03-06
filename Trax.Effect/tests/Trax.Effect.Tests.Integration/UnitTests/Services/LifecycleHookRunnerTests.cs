@@ -281,6 +281,106 @@ public class LifecycleHookRunnerTests
 
     #endregion
 
+    #region OnStateChanged — Automatic Invocation
+
+    [Test]
+    public async Task OnStarted_AlsoCallsOnStateChanged()
+    {
+        var hook = new RecordingHook();
+        var factory = new DirectHookFactory(hook);
+
+        using var runner = new LifecycleHookRunner([factory], _registry);
+        var metadata = CreateTestMetadata();
+
+        await runner.OnStarted(metadata, CancellationToken.None);
+
+        hook.StateChangedCount.Should().Be(1);
+    }
+
+    [Test]
+    public async Task OnCompleted_AlsoCallsOnStateChanged()
+    {
+        var hook = new RecordingHook();
+        var factory = new DirectHookFactory(hook);
+
+        using var runner = new LifecycleHookRunner([factory], _registry);
+        var metadata = CreateTestMetadata();
+
+        await runner.OnCompleted(metadata, CancellationToken.None);
+
+        hook.StateChangedCount.Should().Be(1);
+    }
+
+    [Test]
+    public async Task OnFailed_AlsoCallsOnStateChanged()
+    {
+        var hook = new RecordingHook();
+        var factory = new DirectHookFactory(hook);
+
+        using var runner = new LifecycleHookRunner([factory], _registry);
+        var metadata = CreateTestMetadata();
+
+        await runner.OnFailed(metadata, new Exception("fail"), CancellationToken.None);
+
+        hook.StateChangedCount.Should().Be(1);
+    }
+
+    [Test]
+    public async Task OnCancelled_AlsoCallsOnStateChanged()
+    {
+        var hook = new RecordingHook();
+        var factory = new DirectHookFactory(hook);
+
+        using var runner = new LifecycleHookRunner([factory], _registry);
+        var metadata = CreateTestMetadata();
+
+        await runner.OnCancelled(metadata, CancellationToken.None);
+
+        hook.StateChangedCount.Should().Be(1);
+    }
+
+    [Test]
+    public async Task OnStateChanged_NoHooks_DoesNotThrow()
+    {
+        using var runner = new LifecycleHookRunner([], _registry);
+
+        var act = () => runner.OnStateChanged(CreateTestMetadata(), CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task OnStateChanged_HookThrows_DoesNotPropagate()
+    {
+        var throwingFactory = new ThrowingHookFactory();
+        _registry.Register(typeof(ThrowingHookFactory), enabled: true);
+
+        using var runner = new LifecycleHookRunner([throwingFactory], _registry);
+
+        var act = () => runner.OnStateChanged(CreateTestMetadata(), CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task AllEvents_EachCallsOnStateChangedOnce()
+    {
+        var hook = new RecordingHook();
+        var factory = new DirectHookFactory(hook);
+
+        using var runner = new LifecycleHookRunner([factory], _registry);
+        var metadata = CreateTestMetadata();
+
+        await runner.OnStarted(metadata, CancellationToken.None);
+        await runner.OnCompleted(metadata, CancellationToken.None);
+        await runner.OnFailed(metadata, new Exception(), CancellationToken.None);
+        await runner.OnCancelled(metadata, CancellationToken.None);
+
+        hook.StateChangedCount.Should().Be(4);
+    }
+
+    #endregion
+
     #region Dispose
 
     [Test]
@@ -416,6 +516,7 @@ public class LifecycleHookRunnerTests
         public bool CompletedCalled { get; private set; }
         public bool FailedCalled { get; private set; }
         public bool CancelledCalled { get; private set; }
+        public int StateChangedCount { get; private set; }
         public Metadata? LastMetadata { get; private set; }
         public Exception? LastException { get; private set; }
         public CancellationToken LastCancellationToken { get; private set; }
@@ -448,6 +549,14 @@ public class LifecycleHookRunnerTests
         public Task OnCancelled(Metadata metadata, CancellationToken ct)
         {
             CancelledCalled = true;
+            LastMetadata = metadata;
+            LastCancellationToken = ct;
+            return Task.CompletedTask;
+        }
+
+        public Task OnStateChanged(Metadata metadata, CancellationToken ct)
+        {
+            StateChangedCount++;
             LastMetadata = metadata;
             LastCancellationToken = ct;
             return Task.CompletedTask;

@@ -12,4 +12,5 @@ public interface ILifecycleHookRunner : IDisposable
     Task OnCompleted(Metadata metadata, CancellationToken ct);
     Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct);
     Task OnCancelled(Metadata metadata, CancellationToken ct);
+    Task OnStateChanged(Metadata metadata, CancellationToken ct);
 }

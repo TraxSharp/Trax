@@ -327,7 +327,7 @@ public class Metadata : IModel, IDisposable
         var newTrain = new Metadata
         {
             Name = metadata.Name,
-            ExternalId = Guid.NewGuid().ToString("N"),
+            ExternalId = metadata.ExternalId,
             TrainState = TrainState.Pending,
             Executor = Assembly.GetEntryAssembly()?.GetAssemblyProject(),
             StartTime = DateTime.UtcNow,
