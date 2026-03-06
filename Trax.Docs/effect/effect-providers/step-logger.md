@@ -17,8 +17,10 @@ dotnet add package Trax.Effect.StepProvider.Logging
 ```
 
 ```csharp
-services.AddTraxEffects(options =>
-    options.AddStepLogger(serializeStepData: true)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .AddStepLogger(serializeStepData: true)
+    )
 );
 ```
 

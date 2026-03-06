@@ -24,7 +24,7 @@ Every manifest belongs to a **ManifestGroup**. A ManifestGroup is a first-class 
 The group is set via the `ScheduleOptions` fluent builder using `.Group(...)`. When you don't specify a group, it defaults to the manifest's `externalId`—so every manifest always has a group, even if it's a group of one. ManifestGroups are upserted by name during scheduling: if a group with that name already exists it's reused, otherwise a new one is created automatically. Orphaned groups (groups with no remaining manifests) are cleaned up on startup.
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
+services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers()
         // Single manifest — explicit group shared with other related jobs
@@ -75,7 +75,7 @@ var tableConfigs = new[]
 
 foreach (var config in tableConfigs)
 {
-    await scheduler.ScheduleAsync<ISyncTableTrain, SyncTableInput>(
+    await scheduler.ScheduleAsync<ISyncTableTrain, SyncTableInput, Unit>(
         $"sync-{config.Name}",
         new SyncTableInput { TableName = config.Name },
         Schedule.FromInterval(config.Interval),
@@ -162,7 +162,7 @@ scheduler.Schedule<IMyTrain>(
 Configure per-job settings via the `ScheduleOptions` fluent builder:
 
 ```csharp
-await scheduler.ScheduleAsync<IMyTrain, MyInput>(
+await scheduler.ScheduleAsync<IMyTrain, MyInput, Unit>(
     "my-job",
     new MyInput { ... },
     Every.Hours(1),
@@ -291,7 +291,7 @@ The ManifestManager actively cancels jobs that exceed their configured timeout. 
 **Per-manifest timeout**: Set via `Timeout()` on `ScheduleOptions`:
 
 ```csharp
-await scheduler.ScheduleAsync<IMyTrain, MyInput>(
+await scheduler.ScheduleAsync<IMyTrain, MyInput, Unit>(
     "my-job", new MyInput(), Every.Minutes(5),
     options => options.Timeout(TimeSpan.FromMinutes(10)));
 ```
@@ -312,7 +312,7 @@ Timed-out jobs are cancelled using the same dual-layer mechanism as manual cance
 Key options to know:
 
 - **`ManifestManagerPollingInterval`** / **`JobDispatcherPollingInterval`** (default: 5 seconds each) — how often the ManifestManager and JobDispatcher poll independently. Use `PollingInterval` to set both to the same value
-- **`MaxActiveJobs`** (default: 100) — global concurrent job cap; set to `null` for unlimited. Per-group limits can be set from code via `.Group(group => group.MaxActiveJobs(...))` or from the dashboard (see [Per-Group Dispatch Controls](#per-group-dispatch-controls))
+- **`MaxActiveJobs`** (default: 10) — global concurrent job cap; set to `null` for unlimited. Per-group limits can be set from code via `.Group(group => group.MaxActiveJobs(...))` or from the dashboard (see [Per-Group Dispatch Controls](#per-group-dispatch-controls))
 - **`DefaultMaxRetries`** (default: 3) — retry attempts before dead-lettering
 - **`DefaultJobTimeout`** (default: 20 minutes) — jobs exceeding this duration are actively cancelled (see [Timeout Enforcement](#timeout-enforcement))
 - **`DefaultMisfirePolicy`** (default: `FireOnceNow`) — how missed runs are handled

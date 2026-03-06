@@ -299,9 +299,11 @@ CancellationCheckProvider.BeforeStepExecution()
 Enable both paths with a single call:
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddStepProgress()  // Adds CancellationCheckProvider + StepProgressProvider
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddStepProgress()  // Adds CancellationCheckProvider + StepProgressProvider
+    )
 );
 ```
 
@@ -337,7 +339,7 @@ Configure timeouts per-manifest or globally:
 
 ```csharp
 // Per-manifest timeout
-await scheduler.ScheduleAsync<IMyTrain, MyInput>(
+await scheduler.ScheduleAsync<IMyTrain, MyInput, Unit>(
     "my-job", new MyInput(), Every.Minutes(5),
     options => options.Timeout(TimeSpan.FromMinutes(10)));
 

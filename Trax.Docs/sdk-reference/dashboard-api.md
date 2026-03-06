@@ -15,14 +15,20 @@ Effect providers that implement `IConfigurableEffectProviderFactory<TConfigurati
 ```csharp
 // In Program.cs
 var builder = WebApplication.CreateBuilder(args);
-builder.AddTrax.CoreDashboard();
+
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(typeof(Program).Assembly)
+);
+
+builder.AddTraxDashboard();  // Requires AddTrax() first — throws InvalidOperationException otherwise
 
 var app = builder.Build();
-app.UseTrax.CoreDashboard();
+app.UseTraxDashboard();
 ```
 
 | Page | Description |
 |------|-------------|
-| [AddTrax.CoreDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/add-trax-dashboard.md %}) | Registers dashboard services (Blazor, Radzen, train discovery) |
-| [UseTrax.CoreDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/use-trax-dashboard.md %}) | Maps the dashboard Blazor components at a route prefix |
+| [AddTraxDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/add-trax-dashboard.md %}) | Registers dashboard services (Blazor, Radzen, train discovery) |
+| [UseTraxDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/use-trax-dashboard.md %}) | Maps the dashboard Blazor components at a route prefix |
 | [DashboardOptions]({{ site.baseurl }}{% link sdk-reference/dashboard-api/dashboard-options.md %}) | Configuration options for route prefix, title, and environment |

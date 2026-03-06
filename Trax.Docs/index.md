@@ -77,6 +77,8 @@ dotnet add package Trax.Dashboard       # + Blazor monitoring UI that mounts int
 | [**Scheduler**]({{ site.baseurl }}{% link scheduler.md %}) | Cron/interval scheduling, retries, dead letters | Recurring jobs, ETL, background processing |
 | [**Dashboard**]({{ site.baseurl }}{% link dashboard.md %}) | Blazor Server monitoring UI | Operational visibility without custom admin pages |
 
+Once you have the layers you need, see [Samples & Deployment]({{ site.baseurl }}{% link samples.md %}) for how to structure your project and choose a deployment topology.
+
 Or scaffold a complete project:
 
 ```bash

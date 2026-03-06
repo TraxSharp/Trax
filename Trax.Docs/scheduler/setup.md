@@ -22,22 +22,24 @@ The scheduler includes built-in local workers backed by PostgreSQL — no additi
 Jobs can be scheduled directly in startup configuration. The scheduler creates or updates manifests when the app starts:
 
 ```csharp
-using Trax.Scheduler.Services.Scheduling;
+using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.JobRunner;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("Database");
 
-builder.Services.AddTrax.CoreEffects(options => options
-    .AddServiceTrainBus(
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(
         typeof(Program).Assembly,
         typeof(JobRunnerTrain).Assembly  // Required — see note below
     )
-    .AddPostgresEffect(connectionString)
     .AddScheduler(scheduler => scheduler
         .PollingInterval(TimeSpan.FromSeconds(5))
-        .MaxActiveJobs(100)
+        .MaxActiveJobs(10)
         .DefaultMaxRetries(3)
         .UseLocalWorkers()
 
@@ -63,7 +65,7 @@ app.Run();
 
 `AddScheduler` registers three hosted services — `SchedulerStartupService` (seeds manifests and recovers stuck jobs on startup), `ManifestManagerPollingService` (evaluates manifests on a timer), and `JobDispatcherPollingService` (dispatches work queue entries on a timer). No extra startup call needed.
 
-`UseLocalWorkers()` starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed — it reuses the `IDataContext` from `AddPostgresEffect()`. See [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %}) for architecture details.
+`UseLocalWorkers()` starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed — it reuses the `IDataContext` from `UsePostgres()`. See [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %}) for architecture details.
 
 > **`JobRunnerTrain.Assembly` is required.** The `TrainBus` discovers trains by scanning assemblies. `JobRunnerTrain` is the internal train that the job submitter invokes when a job fires—if its assembly isn't registered, scheduled jobs will silently fail to execute with no error message. Always include it alongside your own assemblies.
 
@@ -162,7 +164,7 @@ public class JobSetupService(ITraxScheduler scheduler)
 {
     public async Task SetupJobs()
     {
-        await scheduler.ScheduleAsync<ISyncCustomersTrain, SyncCustomersInput>(
+        await scheduler.ScheduleAsync<ISyncCustomersTrain, SyncCustomersInput, Unit>(
             "sync-customers-us-east",
             new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
             Every.Hours(6),
@@ -194,6 +196,6 @@ The scheduler spans multiple packages. This table lists every public type you're
 | `Cron` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
 | `Every` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
 | `Schedule` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
-| `ITraxScheduler` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
+| `ITraxScheduler` | `Trax.Scheduler.Services.TraxScheduler` | `Trax.Scheduler` |
 | `ManifestOptions` | `Trax.Scheduler.Configuration` | `Trax.Scheduler` |
 | `IDormantDependentContext` | `Trax.Scheduler.Services.DormantDependentContext` | `Trax.Scheduler` |

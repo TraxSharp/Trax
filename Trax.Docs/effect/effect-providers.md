@@ -16,17 +16,21 @@ Effect providers are the station services that handle side effects as a train ru
 
 ```csharp
 // Production
-services.AddTraxEffects(options =>
-    options.AddPostgresEffect("Host=localhost;Database=app;Username=postgres;Password=pass")
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres("Host=localhost;Database=app;Username=postgres;Password=pass")
+    )
 );
 
 // Testing
-services.AddTraxEffects(options =>
-    options.AddInMemoryEffect()
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UseInMemory()
+    )
 );
 ```
 
-*SDK Reference: [AddPostgresEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}), [AddInMemoryEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})*
+*SDK Reference: [UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}), [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})*
 
 This persists a `Metadata` record for each train execution containing:
 - Train name and state (Pending -> InProgress -> Completed/Failed)
@@ -37,17 +41,19 @@ This persists a `Metadata` record for each train execution containing:
 
 See [Data Persistence](effect-providers/data-persistence.md) for the full breakdown of both backends, what gets persisted, and DataContext logging.
 
-## JSON Effect (`AddJsonEffect`)
+## JSON Effect (`AddJson`)
 
 **Use when:** Debugging during development. Logs train state changes to your configured logger.
 
 ```csharp
-services.AddTraxEffects(options =>
-    options.AddJsonEffect()
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .AddJson()
+    )
 );
 ```
 
-*SDK Reference: [AddJsonEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-json-effect.md %})*
+*SDK Reference: [AddJson]({{ site.baseurl }}{% link sdk-reference/configuration/add-json-effect.md %})*
 
 This doesn't persist anything — it just logs. Useful for seeing what's happening without setting up a database.
 
@@ -58,10 +64,11 @@ See [JSON Effect](effect-providers/json-effect.md) for how change detection work
 **Use when:** You need to store train inputs/outputs in the database for later querying or replay.
 
 ```csharp
-services.AddTraxEffects(options =>
-    options
-        .AddPostgresEffect(connectionString)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
         .SaveTrainParameters()  // Serializes Input/Output to Metadata
+    )
 );
 ```
 
@@ -86,8 +93,10 @@ See [Parameter Effect](effect-providers/parameter-effect.md) for details, custom
 **Use when:** You want structured logging for individual step executions inside a train.
 
 ```csharp
-services.AddTraxEffects(options =>
-    options.AddStepLogger(serializeStepData: true)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .AddStepLogger(serializeStepData: true)
+    )
 );
 ```
 
@@ -104,8 +113,10 @@ See [Step Logger](effect-providers/step-logger.md) for the full StepMetadata fie
 **Use when:** You need per-step progress visibility in the dashboard and/or the ability to cancel running trains from the dashboard (including cross-server cancellation).
 
 ```csharp
-services.AddTraxEffects(options =>
-    options.AddStepProgress()
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .AddStepProgress()
+    )
 );
 ```
 
@@ -125,8 +136,10 @@ See [Step Progress](effect-providers/step-progress.md) for the dual-path cancell
 **Use when:** You want side effects to fire on train state transitions — notifications, metrics, real-time updates — without coupling your train code to those concerns.
 
 ```csharp
-services.AddTraxEffects(options =>
-    options.AddLifecycleHook<SlackNotificationHookFactory>()
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .AddLifecycleHook<SlackNotificationHookFactory>()
+    )
 );
 ```
 
@@ -141,24 +154,26 @@ The `Trax.Api.GraphQL` package includes a built-in hook (`GraphQLSubscriptionHoo
 Providers compose. A typical production setup:
 
 ```csharp
-services.AddTraxEffects(options =>
-    options
-        .AddPostgresEffect(connectionString)   // Persist metadata
-        .SaveTrainParameters()                 // Include input/output in metadata
-        .AddStepLogger(serializeStepData: true) // Log individual step executions
-        .AddStepProgress()                     // Step progress + cancellation check
-        .AddServiceTrainBus(assemblies)        // Enable train discovery
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)             // Persist metadata
+        .SaveTrainParameters()                     // Include input/output in metadata
+        .AddStepLogger(serializeStepData: true)    // Log individual step executions
+        .AddStepProgress()                         // Step progress + cancellation check
+    )
+    .AddMediator(assemblies)                       // Enable train discovery
 );
 ```
 
 A typical development setup:
 
 ```csharp
-services.AddTraxEffects(options =>
-    options
-        .AddInMemoryEffect()                   // Fast, no database needed
-        .AddJsonEffect()                       // Log state changes
-        .AddStepLogger()                       // Log step executions
-        .AddServiceTrainBus(assemblies)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UseInMemory()                             // Fast, no database needed
+        .AddJson()                                 // Log state changes
+        .AddStepLogger()                           // Log step executions
+    )
+    .AddMediator(assemblies)
 );
 ```

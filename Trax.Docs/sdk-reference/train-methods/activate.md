@@ -13,7 +13,7 @@ Stores the train input (and optional extra objects) into Memory. Typically the *
 ## Signature
 
 ```csharp
-public Train<TInput, TReturn> Activate(TInput input, params object[] otherInputs)
+protected internal Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs)
 ```
 
 ## Parameters
@@ -25,7 +25,7 @@ public Train<TInput, TReturn> Activate(TInput input, params object[] otherInputs
 
 ## Returns
 
-`Train<TInput, TReturn>` — the train instance, for fluent chaining.
+`Monad<TInput, TReturn>` — the train instance, for fluent chaining.
 
 ## Examples
 

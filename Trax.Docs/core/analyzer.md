@@ -107,7 +107,7 @@ For development within the Trax.Core solution itself, the analyzer is propagated
 
 ```xml
 <ItemGroup Condition="'$(MSBuildProjectName)' != 'Trax.Core.Analyzers'">
-    <ProjectReference Include="$(MSBuildThisFileDirectory)src/analyzers/Trax.Core.Analyzers/Trax.Core.Analyzers.csproj"
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src/Trax.Core.Analyzers/Trax.Core.Analyzers.csproj"
                       ReferenceOutputAssembly="false"
                       OutputItemType="Analyzer" />
 </ItemGroup>

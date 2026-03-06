@@ -33,7 +33,7 @@ A metadata row is deleted when all three conditions are true:
 
 1. Its `Name` matches a train in the `TrainTypeWhitelist`
 2. Its `StartTime` is older than `RetentionPeriod`
-3. Its `TrainState` is `Completed` or `Failed`
+3. Its `TrainState` is `Completed`, `Failed`, or `Cancelled`
 
 `Pending` and `InProgress` metadata is never deleted, regardless of age. Only terminal states are eligible.
 
@@ -57,7 +57,7 @@ This ordering prevents FK constraint violations. Each `ExecuteDeleteAsync` is it
 
 ### Safety Boundary
 
-Only metadata in a **terminal state** (`Completed` or `Failed`) is eligible for deletion. `Pending` and `InProgress` metadata is never deleted regardless of age, so cleanup cannot interfere with in-flight executions.
+Only metadata in a **terminal state** (`Completed`, `Failed`, or `Cancelled`) is eligible for deletion. `Pending` and `InProgress` metadata is never deleted regardless of age, so cleanup cannot interfere with in-flight executions.
 
 See [Multi-Server Concurrency](../concurrency.md) for the full cross-service concurrency model.
 
@@ -73,7 +73,7 @@ Enable cleanup with `.AddMetadataCleanup()`:
 
 *SDK Reference: [AddMetadataCleanup]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-metadata-cleanup.md %})*
 
-With no arguments, this cleans up `ManifestManagerTrain`, `JobDispatcherTrain`, and `MetadataCleanupTrain` metadata older than 1 hour, checking every minute.
+With no arguments, this cleans up `ManifestManagerTrain` and `MetadataCleanupTrain` metadata older than 30 minutes, checking every minute.
 
 ### Custom Configuration
 
@@ -94,5 +94,5 @@ With no arguments, this cleans up `ManifestManagerTrain`, `JobDispatcherTrain`, 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `CleanupInterval` | 1 minute | How often the cleanup service runs |
-| `RetentionPeriod` | 1 hour | Age threshold for deletion eligibility |
-| `TrainTypeWhitelist` | ManifestManager, JobDispatcher, MetadataCleanup | Train names whose metadata can be deleted |
+| `RetentionPeriod` | 30 minutes | Age threshold for deletion eligibility |
+| `TrainTypeWhitelist` | ManifestManager, MetadataCleanup | Train names whose metadata can be deleted |

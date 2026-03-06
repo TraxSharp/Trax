@@ -13,8 +13,8 @@ Serializes train input and output parameters to JSON and stores them in the `Met
 ## Signature
 
 ```csharp
-public static Trax.CoreEffectConfigurationBuilder SaveTrainParameters(
-    this Trax.CoreEffectConfigurationBuilder builder,
+public static TraxEffectBuilder SaveTrainParameters(
+    this TraxEffectBuilder effectBuilder,
     JsonSerializerOptions? jsonSerializerOptions = null,
     Action<ParameterEffectConfiguration>? configure = null
 )
@@ -24,7 +24,7 @@ public static Trax.CoreEffectConfigurationBuilder SaveTrainParameters(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `jsonSerializerOptions` | `JsonSerializerOptions?` | No | `Trax.CoreJsonSerializationOptions.Default` | Custom System.Text.Json options for parameter serialization |
+| `jsonSerializerOptions` | `JsonSerializerOptions?` | No | `TraxJsonSerializationOptions.Default` | Custom System.Text.Json options for parameter serialization |
 | `configure` | `Action<ParameterEffectConfiguration>?` | No | `null` | Optional callback to configure which parameters are serialized |
 
 ### ParameterEffectConfiguration
@@ -38,40 +38,46 @@ The configuration is registered as a singleton and can also be modified at runti
 
 ## Returns
 
-`Trax.CoreEffectConfigurationBuilder` — for continued fluent chaining.
+`TraxEffectBuilder` — for continued fluent chaining.
 
 ## Examples
 
 Basic usage (saves both inputs and outputs):
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .SaveTrainParameters()
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .SaveTrainParameters()
+    )
 );
 ```
 
 Save only inputs (skip output serialization):
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .SaveTrainParameters(configure: cfg =>
-    {
-        cfg.SaveInputs = true;
-        cfg.SaveOutputs = false;
-    })
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .SaveTrainParameters(configure: cfg =>
+        {
+            cfg.SaveInputs = true;
+            cfg.SaveOutputs = false;
+        })
+    )
 );
 ```
 
 Custom JSON options with configuration:
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .SaveTrainParameters(
-        jsonSerializerOptions: new JsonSerializerOptions { WriteIndented = false },
-        configure: cfg => cfg.SaveOutputs = false
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .SaveTrainParameters(
+            jsonSerializerOptions: new JsonSerializerOptions { WriteIndented = false },
+            configure: cfg => cfg.SaveOutputs = false
+        )
     )
 );
 ```

@@ -164,9 +164,11 @@ Hangfire wins on ceremony. You can go from zero to a running background job in f
 Trax can use Hangfire as its execution backend via the [Trax.Scheduler.Hangfire](https://www.nuget.org/packages/Trax.Scheduler.Hangfire/) package. In this configuration, Trax handles manifest management, dependency resolution, and capacity control while Hangfire handles the actual job queuing and worker management. This gives you Hangfire's mature processing infrastructure with Trax's orchestration layer on top.
 
 ```csharp
-services.AddTraxEffects(options => options
-    .AddServiceTrainBus(assemblies)
-    .AddPostgresEffect(connectionString)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(assemblies)
     .AddScheduler(scheduler => scheduler
         .UseHangfire()
         .Schedule<ISyncTrain, SyncInput>("sync", new SyncInput(), Every.Hours(1))));

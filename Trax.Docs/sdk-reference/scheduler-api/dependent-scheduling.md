@@ -178,7 +178,7 @@ Uses the legacy three-type-parameter API with `map` and `dependsOn` functions. S
 ### Chained Dependencies (A &rarr; B &rarr; C)
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
+services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers()
         // A: Extract runs every 5 minutes
@@ -290,11 +290,11 @@ All 10 `load-*` manifests depend on `extract-all`. When `ManifestItem.DependsOn`
 
 ```csharp
 // Create parent
-await scheduler.ScheduleAsync<IFetchDataTrain, FetchInput>(
+await scheduler.ScheduleAsync<IFetchDataTrain, FetchInput, Unit>(
     "fetch-data", new FetchInput(), Cron.Hourly());
 
 // Create dependent
-await scheduler.ScheduleDependentAsync<IProcessDataTrain, ProcessInput>(
+await scheduler.ScheduleDependentAsync<IProcessDataTrain, ProcessInput, Unit>(
     externalId: "process-data",
     input: new ProcessInput(),
     dependsOnExternalId: "fetch-data");

@@ -10,7 +10,7 @@ nav_order: 3
 
 `ITrainDiscoveryService` scans the DI container for all registered `IServiceTrain<TIn, TOut>` implementations and returns structured metadata about each one. It lives in `Trax.Mediator` and is used by both the Dashboard (train listing) and the API layer (input schema generation, train lookup by name).
 
-Registered automatically by `AddServiceTrainBus()` as a singleton.
+Registered automatically by `AddMediator()` as a singleton.
 
 ## ITrainDiscoveryService
 

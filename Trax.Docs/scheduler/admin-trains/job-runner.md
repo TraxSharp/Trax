@@ -20,7 +20,7 @@ LoadMetadata → ValidateMetadataState → RunScheduledTrain →
 ## Input
 
 ```csharp
-public record RunJobRequest(int MetadataId, object? Input);
+public record RunJobRequest(long MetadataId, object? Input = null);
 ```
 
 The `MetadataId` points to the `Metadata` row created by the [JobDispatcher](job-dispatcher.md). The `Input` is the deserialized train input passed through from the work queue.
@@ -74,14 +74,17 @@ See [Multi-Server Concurrency](../concurrency.md) for the full cross-service con
 The `JobRunnerTrain` lives in the `Trax.Scheduler` assembly. The `TrainBus` discovers trains by scanning assemblies, so this assembly must be registered:
 
 ```csharp
-builder.Services.AddTrax.CoreEffects(options => options
-    .AddServiceTrainBus(
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(
         typeof(Program).Assembly,
         typeof(JobRunnerTrain).Assembly  // required
     )
 );
 ```
 
-*SDK Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})*
+*SDK Reference: [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})*
 
 If you forget this, scheduled jobs will silently fail—the job submitter will invoke the JobRunner, but the TrainBus won't find it. No error, just nothing happens.

@@ -119,7 +119,7 @@ The `ScheduleOptions` fluent builder consolidates all optional scheduling parame
 ### Startup Configuration (Recommended — Inferred Input Type)
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
+services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers()
         .Schedule<ISyncTrain>(
@@ -143,7 +143,7 @@ public class MyService(ITraxScheduler scheduler)
 {
     public async Task SetupSchedule()
     {
-        var manifest = await scheduler.ScheduleAsync<ISyncTrain, SyncInput>(
+        var manifest = await scheduler.ScheduleAsync<ISyncTrain, SyncInput, Unit>(
             "sync-on-demand",
             new SyncInput { Source = "staging" },
             Every.Hours(1),
@@ -157,6 +157,6 @@ public class MyService(ITraxScheduler scheduler)
 - At startup, manifests are not created immediately — they are captured and seeded when the application starts via `SchedulerStartupService`.
 - At runtime, `ScheduleAsync` creates/updates the manifest in the database immediately.
 - The `externalId` is the primary key for upsert logic. Changing it creates a new manifest rather than updating the existing one.
-- If the train type is not registered in the `TrainRegistry` (via `AddServiceTrainBus`), an `InvalidOperationException` is thrown.
+- If the train type is not registered in the `TrainRegistry` (via `AddMediator`), an `InvalidOperationException` is thrown.
 - The group is determined by `.Group(...)` on `ScheduleOptions`. When not specified, it defaults to the `externalId`. Groups are auto-created (upserted by name) during scheduling. Orphaned groups are cleaned up on startup.
 - For **one-off jobs** that should run once and auto-disable, use [ScheduleOnceAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}#scheduleonceasync) instead of `ScheduleAsync`. It creates a manifest with `ScheduleType.Once` — no `Schedule` object needed. See [Delayed / One-Off Jobs]({{ site.baseurl }}{% link scheduler/delayed-jobs.md %}) for details.

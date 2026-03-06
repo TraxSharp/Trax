@@ -14,28 +14,28 @@ Registers custom effect provider factories. `AddEffect` registers train-level ef
 
 ```csharp
 // Type only, auto-created via DI
-public static Trax.CoreEffectConfigurationBuilder AddEffect<TEffectProviderFactory>(
-    this Trax.CoreEffectConfigurationBuilder builder,
+public static TraxEffectBuilder AddEffect<TEffectProviderFactory>(
+    this TraxEffectBuilder builder,
     bool toggleable = true
 ) where TEffectProviderFactory : class, IEffectProviderFactory
 
 // Pre-created instance
-public static Trax.CoreEffectConfigurationBuilder AddEffect<TEffectProviderFactory>(
-    this Trax.CoreEffectConfigurationBuilder builder,
+public static TraxEffectBuilder AddEffect<TEffectProviderFactory>(
+    this TraxEffectBuilder builder,
     TEffectProviderFactory factory,
     bool toggleable = true
 ) where TEffectProviderFactory : class, IEffectProviderFactory
 
 // Interface + implementation, auto-created
-public static Trax.CoreEffectConfigurationBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(
-    this Trax.CoreEffectConfigurationBuilder builder,
+public static TraxEffectBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(
+    this TraxEffectBuilder builder,
     bool toggleable = true
 ) where TIEffectProviderFactory : class, IEffectProviderFactory
   where TEffectProviderFactory : class, TIEffectProviderFactory
 
 // Interface + implementation, pre-created instance
-public static Trax.CoreEffectConfigurationBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(
-    this Trax.CoreEffectConfigurationBuilder builder,
+public static TraxEffectBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(
+    this TraxEffectBuilder builder,
     TEffectProviderFactory factory,
     bool toggleable = true
 ) where TIEffectProviderFactory : class, IEffectProviderFactory
@@ -46,21 +46,21 @@ public static Trax.CoreEffectConfigurationBuilder AddEffect<TIEffectProviderFact
 
 ```csharp
 // Type only, auto-created
-public static Trax.CoreEffectConfigurationBuilder AddStepEffect<TStepEffectProviderFactory>(
-    this Trax.CoreEffectConfigurationBuilder builder,
+public static TraxEffectBuilder AddStepEffect<TStepEffectProviderFactory>(
+    this TraxEffectBuilder builder,
     bool toggleable = true
 ) where TStepEffectProviderFactory : class, IStepEffectProviderFactory
 
 // Pre-created instance
-public static Trax.CoreEffectConfigurationBuilder AddStepEffect<TStepEffectProviderFactory>(
-    this Trax.CoreEffectConfigurationBuilder builder,
+public static TraxEffectBuilder AddStepEffect<TStepEffectProviderFactory>(
+    this TraxEffectBuilder builder,
     TStepEffectProviderFactory factory,
     bool toggleable = true
 ) where TStepEffectProviderFactory : class, IStepEffectProviderFactory
 
 // Interface + implementation, pre-created instance
-public static Trax.CoreEffectConfigurationBuilder AddStepEffect<TIStepEffectProviderFactory, TStepEffectProviderFactory>(
-    this Trax.CoreEffectConfigurationBuilder builder,
+public static TraxEffectBuilder AddStepEffect<TIStepEffectProviderFactory, TStepEffectProviderFactory>(
+    this TraxEffectBuilder builder,
     TStepEffectProviderFactory factory,
     bool toggleable = true
 ) where TIStepEffectProviderFactory : class, IStepEffectProviderFactory
@@ -76,14 +76,16 @@ public static Trax.CoreEffectConfigurationBuilder AddStepEffect<TIStepEffectProv
 
 ## Returns
 
-`Trax.CoreEffectConfigurationBuilder` — for continued fluent chaining.
+`TraxEffectBuilder` — for continued fluent chaining.
 
 ## Example
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddEffect<MyCustomEffectProviderFactory>()
-    .AddStepEffect<MyCustomStepEffectProviderFactory>(toggleable: false)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .AddEffect<MyCustomEffectProviderFactory>()
+        .AddStepEffect<MyCustomStepEffectProviderFactory>(toggleable: false)
+    )
 );
 ```
 
@@ -109,12 +111,14 @@ public class MyEffectProviderFactory(MyEffectConfiguration config)
 Register the configuration alongside the factory:
 
 ```csharp
-services.AddTrax.CoreEffects(options =>
-{
-    var config = new MyEffectConfiguration { EnableDetailedLogging = true };
-    options.ServiceCollection.AddSingleton(config);
-    options.AddEffect<MyEffectProviderFactory>();
-});
+services.AddTrax(trax => trax
+    .AddEffects(effects =>
+    {
+        var config = new MyEffectConfiguration { EnableDetailedLogging = true };
+        effects.ServiceCollection.AddSingleton(config);
+        effects.AddEffect<MyEffectProviderFactory>();
+    })
+);
 ```
 
 Configurable factories appear with a settings button on the dashboard's [Effects page]({{ site.baseurl }}{% link dashboard.md %}#effects-page), where their configuration properties can be modified at runtime.

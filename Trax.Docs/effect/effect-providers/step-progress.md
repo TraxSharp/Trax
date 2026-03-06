@@ -17,8 +17,10 @@ dotnet add package Trax.Effect.StepProvider.Progress
 ```
 
 ```csharp
-services.AddTraxEffects(options =>
-    options.AddStepProgress()
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .AddStepProgress()
+    )
 );
 ```
 

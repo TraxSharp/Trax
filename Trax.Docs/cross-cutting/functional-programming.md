@@ -80,12 +80,13 @@ This gives you two things:
 2. **Modularity** — Each station service is an independent plugin. Adding Postgres persistence doesn't change your train code. Removing the JSON logger doesn't either.
 
 ```csharp
-services.AddTrax.CoreEffects(options =>
-    options
-        .AddPostgresEffect(connectionString)   // Database persistence
-        .AddJsonEffect()                       // Debug logging
-        .SaveTrainParameters()              // Input/output serialization
-        .AddStepLogger()                       // Per-step logging
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)             // Database persistence
+        .AddJson()                                 // Debug logging
+        .SaveTrainParameters()                     // Input/output serialization
+        .AddStepLogger()                           // Per-step logging
+    )
 );
 ```
 

@@ -13,8 +13,8 @@ Sets the minimum log level for Trax.Core effect logging.
 ## Signature
 
 ```csharp
-public static Trax.CoreEffectConfigurationBuilder SetEffectLogLevel(
-    this Trax.CoreEffectConfigurationBuilder builder,
+public static TraxEffectBuilder SetEffectLogLevel(
+    this TraxEffectBuilder builder,
     LogLevel logLevel
 )
 ```
@@ -27,18 +27,20 @@ public static Trax.CoreEffectConfigurationBuilder SetEffectLogLevel(
 
 ## Returns
 
-`Trax.CoreEffectConfigurationBuilder` — for continued fluent chaining.
+`TraxEffectBuilder` — for continued fluent chaining.
 
 ## Example
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .SetEffectLogLevel(LogLevel.Warning)
-    .AddPostgresEffect(connectionString)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .SetEffectLogLevel(LogLevel.Warning)
+        .UsePostgres(connectionString)
+    )
 );
 ```
 
 ## Remarks
 
 - The default log level is `LogLevel.Debug`.
-- This controls the log level for the Trax.Core effect system's own logging, not for the data context logging (which is controlled by [AddEffectDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %})).
+- This controls the log level for the Trax.Core effect system's own logging, not for the data context logging (which is controlled by [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %})).

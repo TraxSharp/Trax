@@ -12,18 +12,51 @@ nav_order: 4
 The `TrainBus` couldn't find a train that accepts your input type.
 
 **Causes:**
-- The assembly containing your train wasn't registered with `AddServiceTrainBus`
+- The assembly containing your train wasn't registered with `AddMediator`
 - Your train doesn't implement `IServiceTrain<TIn, TOut>`
 - Your train class is `abstract`
 
 **Fix:**
 ```csharp
-services.AddTrax.CoreEffects(o =>
-    o.AddServiceTrainBus(typeof(YourTrain).Assembly)  // Ensure correct assembly
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(typeof(YourTrain).Assembly)  // Ensure correct assembly
 );
 ```
 
-*SDK Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})*
+*SDK Reference: [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})*
+
+## "AddTrax() must be called before AddTraxDashboard()" / "...before AddTraxGraphQL()"
+
+`AddTraxDashboard()` and `AddTraxGraphQL()` require `AddTrax()` to be called first. They check for a `TraxMarker` singleton in the DI container at registration time.
+
+**Cause:** `AddTrax()` was not called, or it was called after `AddTraxDashboard()` / `AddTraxGraphQL()`.
+
+**Fix:** Call `AddTrax()` before `AddTraxDashboard()` or `AddTraxGraphQL()`:
+```csharp
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(typeof(Program).Assembly)
+);
+
+builder.Services.AddTraxDashboard();   // After AddTrax()
+builder.Services.AddTraxGraphQL();     // After AddTrax()
+```
+
+## Compile error: "TraxBuilder does not contain a definition for AddMediator"
+
+The step builder pattern enforces configuration ordering at compile time. `AddMediator()` is only available on `TraxBuilderWithEffects` (returned by `AddEffects()`), and `AddScheduler()` is only available on `TraxBuilderWithMediator` (returned by `AddMediator()`).
+
+**Cause:** Calling methods out of order, e.g. `AddMediator()` before `AddEffects()`.
+
+**Fix:** Follow the required order: `AddEffects()` -> `AddMediator()` -> `AddScheduler()`:
+```csharp
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))  // Step 1
+    .AddMediator(typeof(Program).Assembly)                         // Step 2
+    .AddScheduler(scheduler => scheduler.UseLocalWorkers())        // Step 3
+);
+```
 
 ## "Unable to resolve service for type 'IStep'"
 
@@ -72,7 +105,7 @@ The most common cause: `JobRunnerTrain.Assembly` isn't registered with the `Trai
 
 **Fix:**
 ```csharp
-.AddServiceTrainBus(
+.AddMediator(
     typeof(Program).Assembly,
     typeof(JobRunnerTrain).Assembly  // Don't forget this
 )

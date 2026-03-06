@@ -30,7 +30,7 @@ The same guards that apply to scheduled manifests apply here too: if the depende
 Chain a dependent train after a `Schedule` call:
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
+services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers()
         .Schedule<IExtractTrain>(

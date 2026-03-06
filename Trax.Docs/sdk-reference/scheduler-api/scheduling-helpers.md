@@ -150,6 +150,7 @@ Converts the schedule to a cron expression (5-field or 6-field). For cron-type s
 | `Interval` | Runs at a fixed time interval |
 | `OnDemand` | Batch operations triggered programmatically |
 | `Dependent` | Runs after a parent manifest completes successfully |
+| `DormantDependent` | A dependent that must be explicitly activated at runtime via `IDormantDependentContext`. Never auto-fires. |
 | `Once` | Fires once at `ScheduledAt`, then auto-disables on success. Created by [ScheduleOnceAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}#scheduleonceasync). See [Delayed / One-Off Jobs]({{ site.baseurl }}{% link scheduler/delayed-jobs.md %}). |
 
 ### MisfirePolicy Enum
@@ -200,7 +201,7 @@ public class ManifestOptions
 
 ```csharp
 // Priority can be set via the configure callback...
-await scheduler.ScheduleAsync<IMyTrain, MyInput>(
+await scheduler.ScheduleAsync<IMyTrain, MyInput, Unit>(
     "my-job",
     new MyInput(),
     Every.Minutes(5),
@@ -213,7 +214,7 @@ await scheduler.ScheduleAsync<IMyTrain, MyInput>(
     });
 
 // ...or directly via the priority parameter (simpler for most cases)
-await scheduler.ScheduleAsync<IMyTrain, MyInput>(
+await scheduler.ScheduleAsync<IMyTrain, MyInput, Unit>(
     "my-job",
     new MyInput(),
     Every.Minutes(5),

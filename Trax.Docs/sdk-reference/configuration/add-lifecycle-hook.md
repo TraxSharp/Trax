@@ -13,23 +13,23 @@ Registers a lifecycle hook that fires on train state transitions. Use lifecycle 
 ## Signatures
 
 ```csharp
-public static TraxEffectConfigurationBuilder AddLifecycleHook<TFactory>(
-    this TraxEffectConfigurationBuilder builder,
+public static TraxEffectBuilder AddLifecycleHook<TFactory>(
+    this TraxEffectBuilder builder,
     bool toggleable = true
 ) where TFactory : class, ITrainLifecycleHookFactory
 ```
 
 ```csharp
-public static TraxEffectConfigurationBuilder AddLifecycleHook<TFactory>(
-    this TraxEffectConfigurationBuilder builder,
+public static TraxEffectBuilder AddLifecycleHook<TFactory>(
+    this TraxEffectBuilder builder,
     TFactory factory,
     bool toggleable = true
 ) where TFactory : class, ITrainLifecycleHookFactory
 ```
 
 ```csharp
-public static TraxEffectConfigurationBuilder AddLifecycleHook<TIFactory, TFactory>(
-    this TraxEffectConfigurationBuilder builder,
+public static TraxEffectBuilder AddLifecycleHook<TIFactory, TFactory>(
+    this TraxEffectBuilder builder,
     TFactory factory,
     bool toggleable = true
 ) where TIFactory : class, ITrainLifecycleHookFactory
@@ -38,7 +38,7 @@ public static TraxEffectConfigurationBuilder AddLifecycleHook<TIFactory, TFactor
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `builder` | `TraxEffectConfigurationBuilder` | Yes | — | The effect configuration builder |
+| `builder` | `TraxEffectBuilder` | Yes | — | The effect configuration builder |
 | `factory` | `TFactory` | No | — | An existing factory instance (when not using DI to create it) |
 | `toggleable` | `bool` | No | `true` | Whether the hook can be enabled/disabled at runtime via `IEffectRegistry` |
 
@@ -97,10 +97,12 @@ public class SlackNotificationHookFactory(IServiceProvider sp) : ITrainLifecycle
 Registration:
 
 ```csharp
-builder.Services.AddTraxEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddServiceTrainBus(ServiceLifetime.Scoped, typeof(Program).Assembly)
-    .AddLifecycleHook<SlackNotificationHookFactory>()
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddLifecycleHook<SlackNotificationHookFactory>()
+    )
+    .AddMediator(ServiceLifetime.Scoped, typeof(Program).Assembly)
 );
 ```
 

@@ -17,19 +17,13 @@ These are called by **consumers** of the train, not inside `RunInternal`.
 ### Run (throws on failure)
 
 ```csharp
-public async Task<TReturn> Run(TInput input)
-public async Task<TReturn> Run(TInput input, IServiceProvider serviceProvider)
-public async Task<TReturn> Run(TInput input, CancellationToken cancellationToken)
-public async Task<TReturn> Run(TInput input, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+public virtual async Task<TReturn> Run(TInput input, CancellationToken cancellationToken = default)
 ```
 
 ### RunEither (returns Either)
 
 ```csharp
 public Task<Either<Exception, TReturn>> RunEither(TInput input)
-public Task<Either<Exception, TReturn>> RunEither(TInput input, IServiceProvider serviceProvider)
-public Task<Either<Exception, TReturn>> RunEither(TInput input, CancellationToken cancellationToken)
-public Task<Either<Exception, TReturn>> RunEither(TInput input, IServiceProvider serviceProvider, CancellationToken cancellationToken)
 ```
 
 ## Parameters
@@ -37,8 +31,9 @@ public Task<Either<Exception, TReturn>> RunEither(TInput input, IServiceProvider
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `input` | `TInput` | Yes | The input data for the train |
-| `serviceProvider` | `IServiceProvider` | No | A service provider for DI within the train. When provided, it's stored in Memory under `typeof(IServiceProvider)`. |
 | `cancellationToken` | `CancellationToken` | No | Token to monitor for cancellation requests. When provided, it is stored on the `Train.CancellationToken` property and propagated to every step before execution. Defaults to `CancellationToken.None` when omitted. |
+
+> **Note:** `RunEither` does not accept a `CancellationToken` parameter. Set the token via `Run` or by assigning `Train.CancellationToken` directly before calling `RunEither`.
 
 ## Returns
 
@@ -72,13 +67,6 @@ result.Match(
 );
 ```
 
-### With ServiceProvider
-
-```csharp
-var result = await train.Run(input, serviceProvider);
-// Steps can now resolve IServiceProvider from Memory
-```
-
 ### With CancellationToken
 
 ```csharp
@@ -90,15 +78,12 @@ public async Task<IActionResult> ProcessOrder(
     var result = await train.Run(input, cancellationToken);
     return Ok(result);
 }
-
-// With both ServiceProvider and CancellationToken
-var result = await train.Run(input, serviceProvider, cancellationToken);
 ```
 
 ## Behavior
 
 1. If a `CancellationToken` is provided, stores it on the `Train.CancellationToken` property.
-2. Initializes `Memory` with `Unit.Default` (and optionally `IServiceProvider`).
+2. Initializes `Memory` with `Unit.Default`.
 3. Calls `RunInternal(input)` — the user-implemented method.
 4. **`Run`**: Unwraps the `Either` result. If `Left`, rethrows the exception. If `Right`, returns the value.
 5. **`RunEither`**: Returns the `Either` directly without unwrapping.
@@ -109,5 +94,4 @@ During step execution, the train's `CancellationToken` is automatically propagat
 
 - `RunEither` is useful when you want functional-style error handling without try/catch. It pairs naturally with LanguageExt's `Match`, `Map`, `Bind`, etc.
 - In most applications, trains are executed through `ITrainBus.RunAsync` (which calls `Run` internally) rather than calling `Run` directly. See [TrainBus]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %}).
-- The `serviceProvider` overload enables steps to resolve additional services beyond what was placed in Memory via `AddServices`.
-- The `cancellationToken` overloads store the token before calling `RunInternal`. All steps in the chain then receive the token automatically. See [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %}) for details on how cancellation propagates through the pipeline.
+- The `cancellationToken` parameter stores the token before calling `RunInternal`. All steps in the chain then receive the token automatically. See [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %}) for details on how cancellation propagates through the pipeline.

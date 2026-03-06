@@ -98,9 +98,11 @@ dotnet add package Trax.Effect.Data.Postgres  # or Trax.Effect.Data.InMemory
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddTraxEffects(options => options
-    .AddPostgresEffect(builder.Configuration.GetConnectionString("TraxDatabase")!)
-    .SaveTrainParameters()
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(builder.Configuration.GetConnectionString("TraxDatabase")!)
+        .SaveTrainParameters()
+    )
 );
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -140,7 +142,7 @@ Add the mediator, scheduler, and dashboard for a complete platform.
 
 ```bash
 dotnet new install Trax.Samples.Templates
-dotnet new trax-server -n MyApp
+dotnet new trax-scheduler -n MyApp
 ```
 
 This scaffolds a project with:
@@ -153,12 +155,14 @@ This scaffolds a project with:
 Or configure manually:
 
 ```csharp
-builder.Services.AddTraxEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .SaveTrainParameters()
-    .AddStepLogger(serializeStepData: true)
-    .AddStepProgress()
-    .AddServiceTrainBus(typeof(Program).Assembly)
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .SaveTrainParameters()
+        .AddStepLogger(serializeStepData: true)
+        .AddStepProgress()
+    )
+    .AddMediator(typeof(Program).Assembly)
 );
 
 builder.Services.AddTraxDashboard();
@@ -175,3 +179,4 @@ app.Run();
 - [Dashboard]({{ site.baseurl }}{% link dashboard.md %}) — monitoring UI
 - [API]({{ site.baseurl }}{% link api.md %}) — GraphQL interface
 - [Project Template]({{ site.baseurl }}{% link reference/templates.md %}) — full template reference
+- [Samples & Deployment]({{ site.baseurl }}{% link samples.md %}) — the trains library pattern and deployment topologies

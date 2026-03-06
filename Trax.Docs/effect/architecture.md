@@ -48,34 +48,50 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 {
     // Internal framework properties (injected automatically)
     [Inject] public IEffectRunner? EffectRunner { get; set; }
+    [Inject] public IStepEffectRunner? StepEffectRunner { get; set; }
+    [Inject] public ILifecycleHookRunner? LifecycleHookRunner { get; set; }
     [Inject] public ILogger<ServiceTrain<TIn, TOut>>? Logger { get; set; }
     [Inject] public IServiceProvider? ServiceProvider { get; set; }
 
-    public Metadata Metadata { get; private set; }
-    protected string TrainName => GetType().Name;
-    protected int? ParentId { get; set; }
+    public Metadata? Metadata { get; internal set; }
+    internal string TrainName => GetType().FullName ?? GetType().Name;
+    internal long? ParentId { get; set; }
 
-    public sealed override async Task<Either<Exception, TOut>> Run(TIn input)
+    public override async Task<TOut> Run(TIn input, CancellationToken cancellationToken = default)
     {
-        // 1. Initialize metadata and start tracking
-        Metadata = await InitializeTrain(input);
+        // 1. Initialize metadata, save initial state
+        this.InitializeServiceTrain();
+        await EffectRunner.SaveChanges(CancellationToken);
+
+        // 2. Fire lifecycle hooks
+        await LifecycleHookRunner.OnStarted();
+        Metadata.SetInputObject(input);
 
         try
         {
-            // 2. Execute the actual train logic
+            // 3. Execute the actual train logic
             var result = await RunInternal(input);
 
-            // 3. Finalize metadata and save effects
-            await FinishTrain(result);
-            await EffectRunner.SaveChanges(CancellationToken.None);
+            // 4. Handle success or failure from Either result
+            result.Match(
+                Right: output => Metadata.SetOutputObject(output),
+                Left: _ => { }
+            );
+            await EffectRunner.Update(Metadata);
 
-            return result;
+            // 5. Finalize and save effects
+            this.FinishServiceTrain(result);
+            await EffectRunner.SaveChanges(CancellationToken);
+            await LifecycleHookRunner.OnCompleted();
+
+            return result.Match<TOut>(Right: x => x, Left: ex => throw ex);
         }
         catch (Exception ex)
         {
-            // 4. Handle failures and save error state
-            await FinishTrain(Either<Exception, TOut>.Left(ex));
-            await EffectRunner.SaveChanges(CancellationToken.None);
+            // 6. Handle failures and save error state
+            this.FinishServiceTrain(Either<Exception, TOut>.Left(ex));
+            await EffectRunner.SaveChanges(CancellationToken);
+            await LifecycleHookRunner.OnFailed();
             throw;
         }
     }
@@ -91,11 +107,16 @@ public class EffectRunner : IEffectRunner
 {
     private List<IEffectProvider> ActiveEffectProviders { get; init; }
 
-    public EffectRunner(IEnumerable<IEffectProviderFactory> effectProviderFactories)
+    public EffectRunner(
+        IEnumerable<IEffectProviderFactory> effectProviderFactories,
+        IEffectRegistry effectRegistry,
+        ILogger<EffectRunner>? logger = null)
     {
         ActiveEffectProviders = [];
         ActiveEffectProviders.AddRange(
-            effectProviderFactories.RunAll(factory => factory.Create())
+            effectProviderFactories
+                .Where(factory => effectRegistry.IsEnabled(factory.GetType()))
+                .RunAll(factory => factory.Create())
         );
     }
 
@@ -201,8 +222,12 @@ public class DataContext<TDbContext> : DbContext, IDataContext
     where TDbContext : DbContext
 {
     public DbSet<Metadata> Metadatas { get; set; }
-    public DbSet<ManifestGroup> ManifestGroups { get; set; }
     public DbSet<Log> Logs { get; set; }
+    public DbSet<Manifest> Manifests { get; set; }
+    public DbSet<DeadLetter> DeadLetters { get; set; }
+    public DbSet<WorkQueue> WorkQueues { get; set; }
+    public DbSet<ManifestGroup> ManifestGroups { get; set; }
+    public DbSet<BackgroundJob> BackgroundJobs { get; set; }
 
     // IEffectProvider implementation
     public async Task SaveChanges(CancellationToken cancellationToken)
@@ -213,6 +238,11 @@ public class DataContext<TDbContext> : DbContext, IDataContext
     public async Task Track(IModel model)
     {
         Add(model);
+    }
+
+    public async Task Update(IModel model)
+    {
+        base.Update(model);
     }
 
     // Transaction support

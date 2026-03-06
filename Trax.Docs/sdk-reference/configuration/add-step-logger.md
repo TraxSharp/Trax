@@ -13,8 +13,8 @@ Adds per-step execution logging as a step-level effect. Records individual step 
 ## Signature
 
 ```csharp
-public static Trax.CoreEffectConfigurationBuilder AddStepLogger(
-    this Trax.CoreEffectConfigurationBuilder configurationBuilder,
+public static TraxEffectBuilder AddStepLogger(
+    this TraxEffectBuilder effectBuilder,
     bool serializeStepData = false
 )
 ```
@@ -27,14 +27,16 @@ public static Trax.CoreEffectConfigurationBuilder AddStepLogger(
 
 ## Returns
 
-`Trax.CoreEffectConfigurationBuilder` — for continued fluent chaining.
+`TraxEffectBuilder` — for continued fluent chaining.
 
 ## Example
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddStepLogger(serializeStepData: true)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddStepLogger(serializeStepData: true)
+    )
 );
 ```
 

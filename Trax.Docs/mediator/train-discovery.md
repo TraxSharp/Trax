@@ -22,11 +22,10 @@ public class TrainRegistry : ITrainRegistry
         var trainType = typeof(IServiceTrain<,>);
         var allTrainTypes = ScanAssembliesForTrains(assemblies, trainType);
 
-        // Create mapping: InputType -> TrainType
-        InputTypeToTrain = allTrainTypes.ToDictionary(
-            trainType => ExtractInputType(trainType),
-            trainType => trainType
-        );
+        // Create mapping: InputType -> TrainType (duplicates are silently skipped)
+        InputTypeToTrain = [];
+        foreach (var train in allTrainTypes)
+            InputTypeToTrain.TryAdd(ExtractInputType(train), train);
     }
 }
 ```
@@ -48,12 +47,8 @@ public class TrainBus : ITrainBus
         // 3. Inject internal train properties (framework-level only)
         _serviceProvider.InjectProperties(train);
 
-        // 4. Set up parent-child relationship if needed
-        if (parentMetadata != null)
-            SetParentId(train, parentMetadata.Id);
-
-        // 5. Execute train using reflection
-        return await InvokeTrainRun<TOut>(train, trainInput);
+        // 4. Execute train using reflection, passing metadata for parent-child linking
+        return await InvokeTrainRun<TOut>(train, trainInput, parentMetadata);
     }
 }
 ```
@@ -62,7 +57,7 @@ public class TrainBus : ITrainBus
 
 ### Input Type Uniqueness
 
-Each input type maps to exactly one train. This is enforced at startup by the `TrainRegistry`'s `ToDictionary` call — duplicate input types cause an exception. See [SDK Reference: AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/mediator-api/add-service-train-bus.md %}) for the full uniqueness rules and code examples.
+Each input type maps to exactly one train. When duplicate input types are found, the first registration wins — subsequent duplicates are silently skipped via `TryAdd`. See [SDK Reference: AddMediator]({{ site.baseurl }}{% link sdk-reference/mediator-api/add-service-train-bus.md %}) for the full uniqueness rules and code examples.
 
 ### Train Discovery Rules
 

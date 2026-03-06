@@ -34,9 +34,11 @@ public static SchedulerConfigurationBuilder UseHangfire(
 ## Example
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddServiceTrainBus(assemblies: typeof(Program).Assembly)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
         .UseHangfire(connectionString)
         .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))

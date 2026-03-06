@@ -19,12 +19,14 @@ dotnet add package Trax.Effect.Provider.Json
 ```
 
 ```csharp
-services.AddTraxEffects(options =>
-    options.AddJsonEffect()
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .AddJson()
+    )
 );
 ```
 
-*SDK Reference: [AddJsonEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-json-effect.md %})*
+*SDK Reference: [AddJson]({{ site.baseurl }}{% link sdk-reference/configuration/add-json-effect.md %})*
 
 No configuration required. The provider uses the JSON serialization options from `ITraxEffectConfiguration` and logs at the level configured there.
 
@@ -40,6 +42,6 @@ This gives you a log of what changed during train execution without needing a da
 
 - **Development** — See train state changes in your console output without setting up Postgres.
 - **Debugging** — When a train produces unexpected results, the JSON logs show exactly what each model looked like at `SaveChanges` time.
-- **Lightweight setups** — Pair it with `AddInMemoryEffect()` for a no-infrastructure development environment.
+- **Lightweight setups** — Pair it with `UseInMemory()` for a no-infrastructure development environment.
 
 In production, you'll typically replace this with (or supplement it by) the [Data Persistence](data-persistence.md) provider.

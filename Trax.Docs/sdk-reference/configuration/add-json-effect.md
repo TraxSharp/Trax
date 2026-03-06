@@ -1,20 +1,20 @@
 ---
 layout: default
-title: AddJsonEffect
+title: AddJson
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 4
 ---
 
-# AddJsonEffect
+# AddJson
 
 Adds JSON change detection for tracking model mutations during train execution. Serializes model state before and after each step to detect changes.
 
 ## Signature
 
 ```csharp
-public static Trax.CoreEffectConfigurationBuilder AddJsonEffect(
-    this Trax.CoreEffectConfigurationBuilder configurationBuilder
+public static TraxEffectBuilder AddJson(
+    this TraxEffectBuilder effectBuilder
 )
 ```
 
@@ -24,14 +24,16 @@ None.
 
 ## Returns
 
-`Trax.CoreEffectConfigurationBuilder` — for continued fluent chaining.
+`TraxEffectBuilder` — for continued fluent chaining.
 
 ## Example
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddJsonEffect()
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddJson()
+    )
 );
 ```
 

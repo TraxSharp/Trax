@@ -8,16 +8,18 @@ nav_order: 4
 
 # ShortCircuit
 
-Executes a step that can **return early** from the train. If the step succeeds and returns a value of type `TReturn`, that value is captured as the short-circuit result — when [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %}) is called, it returns this value instead of looking in Memory, bypassing all remaining steps.
+Executes a step that can **return early** from the train. If the step succeeds and returns a value of type `TReturn`, that value is captured as the short-circuit result — when [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %}) is called, it returns this value instead of looking in Memory.
 
 If the step **fails** (returns Left), the failure is **ignored** — no exception is set, the train continues normally.
+
+> **Important:** Subsequent `Chain` calls after a successful `ShortCircuit` still execute. The short-circuit value only affects `Resolve()` — it returns the captured value instead of doing a Memory lookup. If you need to skip remaining steps entirely, combine `ShortCircuit` with a conditional pattern or use the railway error path.
 
 ## ShortCircuit\<TStep\>()
 
 Creates and executes a step with short-circuit behavior.
 
 ```csharp
-public Train<TInput, TReturn> ShortCircuit<TStep>() where TStep : class
+public Monad<TInput, TReturn> ShortCircuit<TStep>() where TStep : class
 ```
 
 | Type Parameter | Constraint | Description |
@@ -29,7 +31,7 @@ public Train<TInput, TReturn> ShortCircuit<TStep>() where TStep : class
 Executes a pre-created step with short-circuit behavior.
 
 ```csharp
-public Train<TInput, TReturn> ShortCircuit<TStep>(TStep stepInstance) where TStep : class
+public Monad<TInput, TReturn> ShortCircuit<TStep>(TStep stepInstance) where TStep : class
 ```
 
 | Parameter | Type | Description |
@@ -42,9 +44,9 @@ public Train<TInput, TReturn> ShortCircuit<TStep>(TStep stepInstance) where TSte
 protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderInput input)
 {
     return Activate(input)
-        .ShortCircuit<CheckCache>()       // If cache has result, return it immediately
-        .Chain<ValidateOrder>()           // Only runs if cache miss
-        .Chain<ProcessPayment>()          // Only runs if cache miss
+        .ShortCircuit<CheckCache>()       // If cache has result, capture it for Resolve
+        .Chain<ValidateOrder>()           // Still executes even on cache hit
+        .Chain<ProcessPayment>()          // Still executes even on cache hit
         .Resolve();                       // Returns cached result OR processed result
 }
 ```

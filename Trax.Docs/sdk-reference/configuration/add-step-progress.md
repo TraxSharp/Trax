@@ -13,8 +13,8 @@ Adds step-level progress tracking and cross-server cancellation checking as step
 ## Signature
 
 ```csharp
-public static Trax.CoreEffectConfigurationBuilder AddStepProgress(
-    this Trax.CoreEffectConfigurationBuilder configurationBuilder
+public static TraxEffectBuilder AddStepProgress(
+    this TraxEffectBuilder effectBuilder
 )
 ```
 
@@ -24,14 +24,16 @@ None.
 
 ## Returns
 
-`Trax.CoreEffectConfigurationBuilder` — for continued fluent chaining.
+`TraxEffectBuilder` — for continued fluent chaining.
 
 ## Example
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddStepProgress()
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddStepProgress()
+    )
 );
 ```
 
@@ -42,7 +44,7 @@ services.AddTrax.CoreEffects(options => options
 - `CancellationCheckProvider` queries the database before each step to check `Metadata.CancellationRequested`. If `true`, it throws `OperationCanceledException`, which `FinishTrain` maps to `TrainState.Cancelled`.
 - `StepProgressProvider` sets `Metadata.CurrentlyRunningStep` and `Metadata.StepStartedAt` before each step, and clears them after.
 - Both providers are registered as toggleable step effects visible on the dashboard Effects page.
-- Requires a database effect (`AddPostgresEffect` or `AddInMemoryEffect`) to be registered.
+- Requires a database effect (`UsePostgres` or `UseInMemory`) to be registered.
 
 ## Package
 

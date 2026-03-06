@@ -1,7 +1,7 @@
 ---
 layout: default
 title: SDK Reference
-nav_order: 12
+nav_order: 13
 has_children: true
 ---
 
@@ -21,15 +21,15 @@ Includes: `Activate`, `Chain`, `ShortCircuit`, `Extract`, `AddServices`, `Resolv
 
 ### [Configuration]({{ site.baseurl }}{% link sdk-reference/configuration.md %}) (Effect)
 
-The `AddTraxEffects` entry point and every extension method on `TraxEffectConfigurationBuilder` — data providers, effect providers, and orchestration setup.
+The `AddTrax` entry point and every extension method on the step builder types (`TraxBuilder`, `TraxBuilderWithEffects`, `TraxBuilderWithMediator`) and `TraxEffectBuilder` -- data providers, effect providers, and orchestration setup. The step builder pattern enforces configuration ordering at compile time: Effects -> Mediator -> Scheduler.
 
-Includes: `AddPostgresEffect`, `AddInMemoryEffect`, `AddJsonEffect`, `SaveTrainParameters`, `AddStepLogger`, `AddServiceTrainBus`, `AddEffect`, `AddStepEffect`, `SetEffectLogLevel`.
+Includes: `UsePostgres`, `UseInMemory`, `AddJson`, `SaveTrainParameters`, `AddStepLogger`, `AddMediator`, `AddEffect`, `AddStepEffect`, `SetEffectLogLevel`.
 
 ### [Mediator API]({{ site.baseurl }}{% link sdk-reference/mediator-api.md %}) (Mediator)
 
 The `ITrainBus` interface for dynamically dispatching trains by input type, plus shared train discovery and execution services.
 
-Includes: `RunAsync`, `InitializeTrain`, `AddServiceTrainBus`, `ITrainDiscoveryService`, `ITrainExecutionService`.
+Includes: `RunAsync`, `InitializeTrain`, `AddMediator`, `ITrainDiscoveryService`, `ITrainExecutionService`.
 
 ### [Scheduler API]({{ site.baseurl }}{% link sdk-reference/scheduler-api.md %}) (Scheduler)
 

@@ -344,7 +344,7 @@ query {
 | `id` | `Long!` | Metadata ID |
 | `externalId` | `String!` | External identifier |
 | `name` | `String!` | Train type name |
-| `trainState` | `TrainState!` | Current state (`Activated`, `Completed`, `Faulted`, `Cancelled`) |
+| `trainState` | `TrainState!` | Current state (`Pending`, `InProgress`, `Completed`, `Failed`, `Cancelled`) |
 | `startTime` | `DateTime!` | When execution began |
 | `endTime` | `DateTime` | When execution finished (null if still running) |
 | `failureStep` | `String` | Name of the step that failed (null if no failure) |

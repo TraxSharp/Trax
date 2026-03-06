@@ -31,17 +31,24 @@ Two lines in `Program.cs`:
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddTrax.CoreEffects(o => o.AddServiceTrainBus(typeof(Program).Assembly));
-builder.Services.AddTrax.CoreDashboard();
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(Program).Assembly)
+);
+builder.Services.AddTraxDashboard();
 
 var app = builder.Build();
 
-app.UseTrax.CoreDashboard("/trax");
+app.UseTraxDashboard("/trax");
 
 app.Run();
 ```
 
-*SDK Reference: [AddTrax.CoreDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/add-trax-dashboard.md %}), [UseTrax.CoreDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/use-trax-dashboard.md %})*
+`AddTraxDashboard()` requires `AddTrax()` to be called first. If it is missing, `AddTraxDashboard()` throws `InvalidOperationException` with a clear message directing you to add `AddTrax()`.
+
+*SDK Reference: [AddTraxDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/add-trax-dashboard.md %}), [UseTraxDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/use-trax-dashboard.md %})*
 
 Navigate to `/trax/trains` and you'll see every `IServiceTrain` registered in your application.
 
@@ -157,29 +164,29 @@ Per-group `MaxActiveJobs` prevents starvation — when a high-priority group hit
 
 ## How Discovery Works
 
-Train discovery is handled by `ITrainDiscoveryService` in `Trax.Mediator`. When you call `AddServiceTrainBus()`, it registers the discovery service, captures the `IServiceCollection`, and makes it available to both the dashboard and the [REST/GraphQL API]({{ site.baseurl }}{% link api.md %}).
+Train discovery is handled by `ITrainDiscoveryService` in `Trax.Mediator`. When you call `AddMediator()`, it registers the discovery service, captures the `IServiceCollection`, and makes it available to both the dashboard and the [REST/GraphQL API]({{ site.baseurl }}{% link api.md %}).
 
 At request time, the discovery service scans the registered `ServiceDescriptor` entries for anything that implements `IServiceTrain<,>`, extracts the generic type arguments, and deduplicates by input type (preferring interface registrations over concrete types).
 
-If you register trains with `AddServiceTrainBus` (which calls `AddScopedTrax.CoreRoute` under the hood), they show up automatically. Trains registered manually via `AddScoped<IMyTrain, MyTrain>()` will also appear as long as their interface extends `IServiceTrain<TIn, TOut>`.
+If you register trains with `AddMediator` (which calls `AddScopedTraxRoute` under the hood), they show up automatically. Trains registered manually via `AddScoped<IMyTrain, MyTrain>()` will also appear as long as their interface extends `IServiceTrain<TIn, TOut>`.
 
 *SDK Reference: [TrainDiscovery]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-discovery.md %})*
 
 ## Options
 
 ```csharp
-builder.Services.AddTrax.CoreDashboard(options =>
+builder.Services.AddTraxDashboard(options =>
 {
-    options.Title = "My App";  // Header text (default: "Trax.Core")
+    options.Title = "My App";  // Header text (default: "Trax")
 });
 ```
 
-*SDK Reference: [AddTrax.CoreDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/add-trax-dashboard.md %}), [DashboardOptions]({{ site.baseurl }}{% link sdk-reference/dashboard-api/dashboard-options.md %})*
+*SDK Reference: [AddTraxDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/add-trax-dashboard.md %}), [DashboardOptions]({{ site.baseurl }}{% link sdk-reference/dashboard-api/dashboard-options.md %})*
 
-The route prefix is set in `UseTrax.CoreDashboard`:
+The route prefix is set in `UseTraxDashboard`:
 
 ```csharp
-app.UseTrax.CoreDashboard("/admin/trax");
+app.UseTraxDashboard("/admin/trax");
 ```
 
 ## Layout
@@ -198,7 +205,7 @@ The **User Settings** page (`/trax/settings/user`) lets each user customize thei
 
 ## Integration with Existing Blazor Apps
 
-If your application already uses Blazor Server, the dashboard's `AddTrax.CoreDashboard()` call is safe to use alongside your existing `AddRazorComponents()`. The dashboard pages use their own layout, so they won't interfere with your app's UI.
+If your application already uses Blazor Server, the dashboard's `AddTraxDashboard()` call is safe to use alongside your existing `AddRazorComponents()`. The dashboard pages use their own layout, so they won't interfere with your app's UI.
 
 If your application is a minimal API or MVC app that doesn't use Blazor, the dashboard adds the necessary Blazor Server infrastructure automatically.
 
@@ -206,12 +213,12 @@ If your application is a minimal API or MVC app that doesn't use Blazor, the das
 
 ### "Page doesn't load" or blank screen
 
-`UseTrax.CoreDashboard()` needs to be called after `builder.Build()` and before `app.Run()`. If it's missing or misordered, the Blazor endpoints won't be mapped.
+`UseTraxDashboard()` needs to be called after `builder.Build()` and before `app.Run()`. If it's missing or misordered, the Blazor endpoints won't be mapped.
 
 ```csharp
 var app = builder.Build();
 
-app.UseTrax.CoreDashboard("/trax");  // After Build(), before Run()
+app.UseTraxDashboard("/trax");  // After Build(), before Run()
 
 app.Run();
 ```
@@ -221,25 +228,30 @@ app.Run();
 The dashboard discovers trains by scanning `ServiceDescriptor` entries in your DI container. If the grid is empty:
 
 **Causes:**
-- The assembly containing your trains wasn't passed to `AddServiceTrainBus`
-- `AddTrax.CoreDashboard()` was called before the trains were registered, so the captured `IServiceCollection` snapshot doesn't include them yet
+- The assembly containing your trains wasn't passed to `AddMediator`
+- `AddTraxDashboard()` was called before the trains were registered, so the captured `IServiceCollection` snapshot doesn't include them yet
 
-**Fix:** Make sure `AddTrax.CoreDashboard()` is called after `AddTrax.CoreEffects`:
+**Fix:** Make sure `AddTrax()` is called before `AddTraxDashboard()`, and that `AddTraxDashboard()` is called after the trains are registered:
 
 ```csharp
-builder.Services.AddTrax.CoreEffects(o =>
-    o.AddServiceTrainBus(typeof(Program).Assembly)
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(Program).Assembly)
 );
-builder.Services.AddTrax.CoreDashboard();  // After trains are registered
+builder.Services.AddTraxDashboard();  // After AddTrax() and trains are registered
 ```
+
+If `AddTrax()` is missing entirely, `AddTraxDashboard()` throws `InvalidOperationException`.
 
 ### Blazor static assets returning 404
 
-If styles are missing or `_content/` paths return 404, ensure `UseStaticFiles()` is in your middleware pipeline. `UseTrax.CoreDashboard()` calls it internally, but if something earlier in the pipeline is short-circuiting requests, the static file middleware might not run.
+If styles are missing or `_content/` paths return 404, ensure `UseStaticFiles()` is in your middleware pipeline. `UseTraxDashboard()` calls it internally, but if something earlier in the pipeline is short-circuiting requests, the static file middleware might not run.
 
 ### Duplicate train entries in the grid
 
-`AddScopedTrax.CoreRoute<IMyTrain, MyTrain>()` registers two DI descriptors—one for the concrete type and one for the interface. The discovery service attempts to deduplicate these, but in some cases both registrations appear in the grid. The entries will have the same input/output types; one will show the interface name and the other the concrete class name.
+`AddScopedTraxRoute<IMyTrain, MyTrain>()` registers two DI descriptors—one for the concrete type and one for the interface. The discovery service attempts to deduplicate these, but in some cases both registrations appear in the grid. The entries will have the same input/output types; one will show the interface name and the other the concrete class name.
 
 This is cosmetic and doesn't affect train execution. If it bothers you, it's a known limitation of how the discovery service groups factory-based descriptors.
 

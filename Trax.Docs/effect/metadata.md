@@ -12,25 +12,29 @@ Every train journey produces a log — the metadata record. It captures everythi
 ```csharp
 public class Metadata : IModel, IDisposable
 {
-    public int Id { get; }                          // Unique identifier
-    public string Name { get; set; }                // Train name
-    public string ExternalId { get; set; }          // GUID for external references
-    public string? Executor { get; }                // Assembly that ran the train
-    public TrainState TrainState { get; set; } // Pending/InProgress/Completed/Failed
-    public DateTime StartTime { get; set; }         // When the train started
-    public DateTime? EndTime { get; set; }          // When the train finished
-    public string? Input { get; set; }              // Serialized input (jsonb)
-    public string? Output { get; set; }             // Serialized output (jsonb)
-    public string? FailureStep { get; }             // Which step failed
-    public string? FailureException { get; }        // Exception type
-    public string? FailureReason { get; }           // Error message
-    public string? StackTrace { get; set; }         // Stack trace if failed
-    public int? ParentId { get; set; }              // For nested trains
-    public int? ManifestId { get; set; }            // For scheduled trains
+    public long Id { get; private set; }              // Unique identifier
+    public string Name { get; set; }                  // Train name
+    public string ExternalId { get; set; }            // GUID for external references
+    public string? Executor { get; private set; }     // Assembly that ran the train
+    public TrainState TrainState { get; set; }   // Pending/InProgress/Completed/Failed/Cancelled
+    public DateTime StartTime { get; set; }           // When the train started
+    public DateTime? EndTime { get; set; }            // When the train finished
+    public string? Input { get; set; }                // Serialized input (jsonb)
+    public string? Output { get; set; }               // Serialized output (jsonb)
+    public string? FailureStep { get; }               // Which step failed
+    public string? FailureException { get; }          // Exception type
+    public string? FailureReason { get; }             // Error message
+    public string? StackTrace { get; set; }           // Stack trace if failed
+    public long? ParentId { get; set; }               // For nested trains
+    public long? ManifestId { get; set; }             // For scheduled trains
+    public DateTime? ScheduledTime { get; set; }      // Scheduled execution time
+    public bool CancellationRequested { get; set; }   // Cross-server cancellation flag
+    public DateTime? StepStartedAt { get; set; }      // Current step start timestamp
+    public string? CurrentlyRunningStep { get; set; } // Name of the currently running step
 }
 ```
 
-The `TrainState` tracks the journey: `Pending` (boarding) -> `InProgress` (in transit) -> `Completed` (arrived) or `Failed` (derailed). If a train derails, the journey log captures the exception, stack trace, and which stop it happened at.
+The `TrainState` tracks the journey: `Pending` (boarding) -> `InProgress` (in transit) -> `Completed` (arrived), `Failed` (derailed), or `Cancelled`. If a train derails, the journey log captures the exception, stack trace, and which stop it happened at.
 
 ## Nested Trains
 

@@ -13,11 +13,13 @@ Adds the Trax.Core scheduler subsystem. Registers `ITraxScheduler`, the backgrou
 ## Signature
 
 ```csharp
-public static Trax.CoreEffectConfigurationBuilder AddScheduler(
-    this Trax.CoreEffectConfigurationBuilder builder,
+public static TraxBuilderWithMediator AddScheduler(
+    this TraxBuilderWithMediator builder,
     Action<SchedulerConfigurationBuilder> configure
 )
 ```
+
+`AddScheduler` is called on `TraxBuilderWithMediator` (the return type of `AddMediator()`), which enforces at compile time that effects and the mediator are configured before the scheduler.
 
 ## Parameters
 
@@ -27,14 +29,16 @@ public static Trax.CoreEffectConfigurationBuilder AddScheduler(
 
 ## Returns
 
-`Trax.CoreEffectConfigurationBuilder` — the parent builder, for continued fluent chaining.
+`TraxBuilderWithMediator` — for continued fluent chaining (e.g., adding another `AddScheduler()` call is not typical, but the type allows further configuration).
 
 ## Example
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddServiceTrainBus(assemblies: typeof(Program).Assembly)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers()
         .ManifestManagerPollingInterval(TimeSpan.FromSeconds(5))
@@ -72,7 +76,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) | Built-in PostgreSQL local workers (recommended) |
 | [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire with PostgreSQL as the execution backend (deprecated) |
 | `UseInMemoryWorkers()` | Uses a synchronous in-memory job submitter (for testing) |
-| `UseCustomSubmitter(Action<IServiceCollection>)` | Registers a custom job submitter implementation |
+| `OverrideSubmitter(Action<IServiceCollection>)` | Registers a custom job submitter implementation |
 
 ### Global Options
 
@@ -80,14 +84,14 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 |--------|-----------|---------|-------------|
 | `PollingInterval(TimeSpan)` | interval | 5 seconds | Shorthand — sets both `ManifestManagerPollingInterval` and `JobDispatcherPollingInterval` to the same value |
 | `ManifestManagerPollingInterval(TimeSpan)` | interval | 5 seconds | How often the ManifestManager evaluates manifests and writes to the work queue |
-| `JobDispatcherPollingInterval(TimeSpan)` | interval | 5 seconds | How often the JobDispatcher reads from the work queue and dispatches to the job submitter |
-| `MaxActiveJobs(int?)` | maxJobs | 100 | Max concurrent active jobs (Pending + InProgress) globally. `null` = unlimited. Per-group limits can also be set from the dashboard on each ManifestGroup |
+| `JobDispatcherPollingInterval(TimeSpan)` | interval | 2 seconds | How often the JobDispatcher reads from the work queue and dispatches to the job submitter |
+| `MaxActiveJobs(int?)` | maxJobs | 10 | Max concurrent active jobs (Pending + InProgress) globally. `null` = unlimited. Per-group limits can also be set from the dashboard on each ManifestGroup |
 | `ExcludeFromMaxActiveJobs<TRoute>()` | — | — | Excludes a train type from the MaxActiveJobs count |
 | `DefaultMaxRetries(int)` | maxRetries | 3 | Retry attempts before dead-lettering |
 | `DefaultRetryDelay(TimeSpan)` | delay | 5 minutes | Base delay between retries |
 | `RetryBackoffMultiplier(double)` | multiplier | 2.0 | Exponential backoff multiplier. Set to 1.0 for constant delay |
 | `MaxRetryDelay(TimeSpan)` | maxDelay | 1 hour | Caps retry delay to prevent unbounded growth |
-| `DefaultJobTimeout(TimeSpan)` | timeout | 1 hour | Timeout after which a running job is considered stuck |
+| `DefaultJobTimeout(TimeSpan)` | timeout | 20 minutes | Timeout after which a running job is considered stuck |
 | `DefaultMisfirePolicy(MisfirePolicy)` | policy | `FireOnceNow` | Default [misfire policy]({{ site.baseurl }}{% link scheduler/scheduling-options.md %}#misfire-policies) for manifests that don't specify one |
 | `DefaultMisfireThreshold(TimeSpan)` | threshold | 60 seconds | Grace period before misfire policies take effect. If a manifest is overdue by less than this, it fires normally |
 | `RecoverStuckJobsOnStartup(bool)` | recover | `true` | Whether to auto-recover stuck jobs on startup |
@@ -105,7 +109,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 
 ## Remarks
 
-- `AddScheduler` requires a data provider (`AddPostgresEffect` or `AddInMemoryEffect`) and `AddServiceTrainBus` to be configured first.
+- `AddScheduler` requires `AddEffects()` and `AddMediator()` to be called first. This is enforced at compile time -- `AddScheduler` is only available on `TraxBuilderWithMediator`, which is the return type of `AddMediator()`.
 - Internal scheduler trains (`ManifestManager`, `JobDispatcher`, `JobRunner`, `MetadataCleanup`) are automatically excluded from `MaxActiveJobs`.
 - Manifests declared via `Schedule`/`ScheduleMany` are not created immediately — they are seeded on application startup by the `SchedulerStartupService`.
 - Manifests declared via `Schedule`/`ThenInclude`/`Include` get a ManifestGroup based on their `groupId` parameter (defaults to externalId). Per-group dispatch controls (MaxActiveJobs, Priority, IsEnabled) are configured from the dashboard.

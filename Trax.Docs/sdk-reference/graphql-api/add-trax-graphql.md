@@ -61,7 +61,16 @@ public static WebApplication UseTraxGraphQL(
 
 ## Prerequisites
 
-`AddTraxGraphQL` depends on services registered by `AddServiceTrainBus()` (provides `ITrainDiscoveryService` and `ITrainExecutionService`) and a configured data context (provides `IDataContextProviderFactory`). These are normally set up through `AddTraxEffects`.
+`AddTraxGraphQL` depends on services registered by `AddMediator()` (provides `ITrainDiscoveryService` and `ITrainExecutionService`) and a configured data context (provides `IDataContextProviderFactory`). These are normally set up through `AddTrax`.
+
+`AddTraxGraphQL` performs a runtime check that `AddTrax()` was called first. If the `TraxMarker` singleton is not found in the DI container, `AddTraxGraphQL` throws `InvalidOperationException`:
+
+```
+InvalidOperationException: AddTrax() must be called before AddTraxGraphQL().
+Call services.AddTrax(...) in your service configuration before calling AddTraxGraphQL().
+```
+
+This ensures the required Trax services are available before the GraphQL schema is built.
 
 ## Example
 
@@ -69,9 +78,11 @@ public static WebApplication UseTraxGraphQL(
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services
-    .AddTraxEffects(options => options
-        .AddPostgresEffect(builder.Configuration.GetConnectionString("TraxDatabase")!)
-        .AddServiceTrainBus(ServiceLifetime.Scoped, typeof(Program).Assembly)
+    .AddTrax(trax => trax
+        .AddEffects(effects => effects
+            .UsePostgres(builder.Configuration.GetConnectionString("TraxDatabase")!)
+        )
+        .AddMediator(ServiceLifetime.Scoped, typeof(Program).Assembly)
     )
     .AddTraxGraphQL();
 

@@ -158,7 +158,7 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource
 ```csharp
 var tables = new[] { "customers", "orders", "products" };
 
-services.AddTrax.CoreEffects(options => options
+services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers()
         .ScheduleMany<ISyncTableTrain>(

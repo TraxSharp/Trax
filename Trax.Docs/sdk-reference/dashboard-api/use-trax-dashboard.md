@@ -1,19 +1,19 @@
 ---
 layout: default
-title: UseTrax.CoreDashboard
+title: UseTraxDashboard
 parent: Dashboard API
 grand_parent: SDK Reference
 nav_order: 2
 ---
 
-# UseTrax.CoreDashboard
+# UseTraxDashboard
 
 Maps the Trax.Core Dashboard Blazor components at the configured route prefix. Call this after `app.Build()` during application startup.
 
 ## Signature
 
 ```csharp
-public static WebApplication UseTrax.CoreDashboard(
+public static WebApplication UseTraxDashboard(
     this WebApplication app,
     string routePrefix = "/trax",
     string? title = null
@@ -36,7 +36,7 @@ public static WebApplication UseTrax.CoreDashboard(
 ```csharp
 var app = builder.Build();
 
-app.UseTrax.CoreDashboard(
+app.UseTraxDashboard(
     routePrefix: "/admin/trains",
     title: "Order Processing Dashboard");
 
@@ -56,4 +56,4 @@ The dashboard will be accessible at `https://yourapp/admin/trains`.
 
 - Must be called **after** `builder.Build()` and **before** `app.Run()`.
 - The `routePrefix` is normalized: `"trax"`, `"/trax"`, and `"/trax/"` all resolve to `"/trax"`.
-- The dashboard requires a data provider ([AddPostgresEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}) or [AddInMemoryEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})) to be configured for metadata and manifest pages to function.
+- The dashboard requires a data provider ([UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}) or [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})) to be configured for metadata and manifest pages to function.

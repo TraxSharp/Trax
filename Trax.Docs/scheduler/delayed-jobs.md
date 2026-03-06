@@ -52,7 +52,7 @@ When no `externalId` is provided, one is auto-generated in the format `once-{gui
 For one-off jobs that should be scheduled when the application starts — such as a post-deployment migration or a delayed initialization task — use the builder:
 
 ```csharp
-services.AddTraxEffects(options => options
+services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers()
         .ScheduleOnce<IPostDeployTrain>(

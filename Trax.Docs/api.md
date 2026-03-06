@@ -28,11 +28,12 @@ dotnet add package Trax.Api.GraphQL
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddTraxEffects(options =>
-    options
-        .AddServiceTrainBus(assemblies: [typeof(Program).Assembly])
-        .AddPostgresEffect(connectionString)
-        .AddJsonEffect()
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddJson()
+    )
+    .AddMediator(typeof(Program).Assembly)
 );
 
 builder.Services.AddTraxGraphQL();
@@ -83,7 +84,7 @@ app.Run();
                └──────────────────────┘
 ```
 
-The API server doesn't need `AddScheduler()` — it only needs `AddServiceTrainBus()` (for train discovery and direct execution) and a data provider (for DB access). The scheduler configuration (`AddScheduler`) runs on the scheduler machine only.
+The API server doesn't need `AddScheduler()` — it only needs `AddMediator()` (for train discovery and direct execution) and a data provider (for DB access). The scheduler configuration (`AddScheduler`) runs on the scheduler machine only.
 
 However, if you want the API to also schedule manifests at startup (like the scheduler does), you can add `AddScheduler()` on the API machine as well. The polling services can be disabled with configuration if you only want startup seeding.
 
@@ -139,13 +140,12 @@ The GraphQL API registers on a **named HotChocolate schema** (`"trax"`) rather t
 
 ## Sample Projects
 
-Working examples are in `Trax.Samples`, themed as a game server:
+The API is demonstrated in two samples, each using a different deployment topology:
 
-- **`samples/Trax.Samples.GameServer`** — Shared class library with all train definitions and API key authentication
-- **`samples/Trax.Samples.GameServer.GraphQL`** — GraphQL API host with Banana Cake Pop IDE, per-train authorization
-- **`samples/Trax.Samples.GameServer.Scheduler`** — Scheduler host with dashboard, all scheduling patterns demonstrated
+- **LocalWorkers (GameServer)** — API and scheduler as separate processes. The GraphQL API handles lightweight trains directly and queues heavy work for the scheduler. See `samples/LocalWorkers/Trax.Samples.GameServer.Api`.
+- **DistributedWorkers (EnergyHub)** — API, scheduler, and dashboard in a single hub process. The hub schedules and serves GraphQL but offloads execution to separate worker processes. See `samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub`.
 
-The API and Scheduler run as separate processes against the same database. The API handles lightweight trains directly (`RunAsync`) and queues heavy work for the scheduler (`QueueAsync`).
+Both follow the [trains library pattern]({{ site.baseurl }}{% link samples.md %}) — trains live in a shared library, executables are thin wrappers that pick which capabilities to enable.
 
 ## SDK Reference
 

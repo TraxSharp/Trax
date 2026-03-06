@@ -42,7 +42,7 @@ Orphan manifest cleanup is **enabled by default**. No additional configuration i
 If you create manifests dynamically at runtime via `ITraxScheduler` (outside of the startup configuration), disable orphan pruning to prevent those manifests from being deleted on restart:
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
+services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers()
         .PruneOrphanedManifests(false)  // Disable orphan cleanup
@@ -90,7 +90,7 @@ scheduler
     .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5));
 
 // After: all schedules removed
-services.AddTrax.CoreEffects(options => options
+services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers())
 );

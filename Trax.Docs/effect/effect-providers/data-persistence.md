@@ -19,12 +19,14 @@ dotnet add package Trax.Effect.Data.Postgres
 ```
 
 ```csharp
-services.AddTraxEffects(options =>
-    options.AddPostgresEffect("Host=localhost;Database=app;Username=postgres;Password=pass")
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres("Host=localhost;Database=app;Username=postgres;Password=pass")
+    )
 );
 ```
 
-*SDK Reference: [AddPostgresEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %})*
+*SDK Reference: [UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %})*
 
 On first startup, the Postgres provider runs automatic migrations to create the `trax` schema and its tables (`metadata`, `logs`, `manifests`, `dead_letters`). Subsequent startups apply any pending migrations.
 
@@ -56,12 +58,14 @@ dotnet add package Trax.Effect.Data.InMemory
 ```
 
 ```csharp
-services.AddTraxEffects(options =>
-    options.AddInMemoryEffect()
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UseInMemory()
+    )
 );
 ```
 
-*SDK Reference: [AddInMemoryEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})*
+*SDK Reference: [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})*
 
 Uses Entity Framework Core's in-memory provider. No connection string, no migrations, no external dependencies. Data is lost when the process exits.
 
@@ -69,10 +73,11 @@ Use this for unit tests and integration tests where you want metadata tracking w
 
 ```csharp
 var services = new ServiceCollection();
-services.AddTraxEffects(options =>
-    options
-        .AddInMemoryEffect()
-        .AddServiceTrainBus(typeof(MyTrain).Assembly)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UseInMemory()
+    )
+    .AddMediator(typeof(MyTrain).Assembly)
 );
 
 var provider = services.BuildServiceProvider();
@@ -88,17 +93,18 @@ Assert.Equal(TrainState.Completed, metadata.TrainState);
 Logs the SQL queries that EF Core generates. Useful when debugging persistence issues or inspecting what the data provider is doing:
 
 ```csharp
-services.AddTraxEffects(options =>
-    options
-        .AddPostgresEffect(connectionString)
-        .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Information)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddDataContextLogging(minimumLogLevel: LogLevel.Information)
+    )
 );
 ```
 
 Log levels can also be changed at runtime via the Dashboard's Server Settings page. The optional `blacklist` parameter filters out noisy namespaces:
 
 ```csharp
-.AddEffectDataContextLogging(
+.AddDataContextLogging(
     minimumLogLevel: LogLevel.Debug,
     blacklist: ["Microsoft.EntityFrameworkCore.Infrastructure.*"]
 )
@@ -106,4 +112,4 @@ Log levels can also be changed at runtime via the Dashboard's Server Settings pa
 
 Blacklist entries support exact matches and wildcard patterns.
 
-*SDK Reference: [AddEffectDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %})*
+*SDK Reference: [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %})*

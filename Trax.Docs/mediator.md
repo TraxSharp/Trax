@@ -54,9 +54,11 @@ The `TrainBus` looks at the input type (`CreateUserRequest`), finds the train re
 Register trains during startup by pointing the bus at your assemblies:
 
 ```csharp
-builder.Services.AddTraxEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddServiceTrainBus(typeof(Program).Assembly)
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(Program).Assembly)
 );
 ```
 
@@ -77,7 +79,7 @@ This creates a tree of journey logs you can query to trace execution across trai
 
 ## Direct Injection
 
-You don't have to use the bus. `AddServiceTrainBus` also registers each train by its interface, so you can inject them directly when you know exactly which train you need:
+You don't have to use the bus. `AddMediator` also registers each train by its interface, so you can inject them directly when you know exactly which train you need:
 
 ```csharp
 public class UpdateUserMutation(IUpdateUserTrain updateUserTrain)

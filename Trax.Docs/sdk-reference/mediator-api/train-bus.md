@@ -108,7 +108,7 @@ public class ProcessOrderStep(ITrainBus trainBus) : EffectStep<OrderInput, Order
 
 ## Remarks
 
-- Trains are discovered by input type at registration time (via [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})). Each input type maps to exactly one train.
+- Trains are discovered by input type at registration time (via [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})). Each input type maps to exactly one train.
 - The `metadata` parameter enables parent-child train chains — useful for tracking nested train executions in the dashboard.
 - `RunAsync` calls the train's `Run` method internally, which means exceptions are thrown (not returned as `Either`). Use try/catch for error handling.
 - The `cancellationToken` overloads forward the token to `train.Run(input, cancellationToken)`, which propagates it to all steps. See [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %}) for details.

@@ -1,24 +1,26 @@
 ---
 layout: default
-title: AddServiceTrainBus
+title: AddMediator
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 7
 ---
 
-# AddServiceTrainBus
+# AddMediator
 
 Registers the `ITrainBus` and `ITrainRegistry` services, and discovers all `IServiceTrain<,>` implementations via assembly scanning. This enables dynamic train dispatch by input type.
 
 ## Signature
 
 ```csharp
-public static Trax.CoreEffectConfigurationBuilder AddServiceTrainBus(
-    this Trax.CoreEffectConfigurationBuilder configurationBuilder,
+public static TraxBuilderWithMediator AddMediator(
+    this TraxBuilderWithEffects traxBuilder,
     ServiceLifetime effectTrainServiceLifetime = ServiceLifetime.Transient,
     params Assembly[] assemblies
 )
 ```
+
+`AddMediator` is called on `TraxBuilderWithEffects` (the return type of `AddEffects()`), which enforces at compile time that effects are configured before the mediator. It returns `TraxBuilderWithMediator`, which exposes `AddScheduler()` as the next valid step.
 
 ## Parameters
 
@@ -29,14 +31,16 @@ public static Trax.CoreEffectConfigurationBuilder AddServiceTrainBus(
 
 ## Returns
 
-`Trax.CoreEffectConfigurationBuilder` — for continued fluent chaining.
+`TraxBuilderWithMediator` — enables `AddScheduler()` as the next step in the fluent chain.
 
 ## Example
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddServiceTrainBus(
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(
         effectTrainServiceLifetime: ServiceLifetime.Scoped,
         assemblies: typeof(Program).Assembly)
 );

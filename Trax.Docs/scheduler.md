@@ -22,7 +22,7 @@ A hosted service with a timer works fine for simple recurring tasks. The Schedul
 A `Manifest` is the scheduling equivalent of a shipping manifest — it describes what train to run, when to dispatch it, how to handle failures, and what cargo (input) to load. The `ITraxScheduler` handles the boilerplate—no need to worry about assembly-qualified names or JSON serialization:
 
 ```csharp
-await scheduler.ScheduleAsync<ISyncCustomersTrain, SyncCustomersInput>(
+await scheduler.ScheduleAsync<ISyncCustomersTrain, SyncCustomersInput, Unit>(
     "sync-customers-us-east",
     new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
     Every.Hours(6),
@@ -186,7 +186,7 @@ The same scheduler operations are also available through the [GraphQL API]({{ si
 
 ## Sample Project
 
-A working example with the built-in PostgreSQL local workers, bulk scheduling, metadata cleanup, and the dashboard is in [`samples/Trax.Samples.GameServer.Scheduler`](https://github.com/Theauxm/Trax.Core/tree/main/samples/Trax.Samples.GameServer.Scheduler). The scheduler runs alongside a separate API process (`Trax.Samples.GameServer.GraphQL`) that queues work for it.
+A working example with the built-in PostgreSQL local workers, bulk scheduling, metadata cleanup, and the dashboard is in [`samples/Trax.Samples.GameServer.Scheduler`](https://github.com/Theauxm/Trax.Core/tree/main/samples/Trax.Samples.GameServer.Scheduler). The scheduler runs alongside a separate API process (`Trax.Samples.GameServer.Api`) that queues work for it.
 
 ## Next Layer
 

@@ -15,7 +15,7 @@ Executes a step, wiring its input from Memory and storing its output back into M
 Creates and executes a step. Input is auto-extracted from Memory. The step's `TIn`/`TOut` types are resolved via reflection from its `IStep<TIn, TOut>` implementation.
 
 ```csharp
-public Train<TInput, TReturn> Chain<TStep>() where TStep : class
+public Monad<TInput, TReturn> Chain<TStep>() where TStep : class
 ```
 
 | Type Parameter | Constraint | Description |
@@ -36,7 +36,7 @@ return Activate(input)
 Executes a pre-created step instance. Input is auto-extracted from Memory.
 
 ```csharp
-public Train<TInput, TReturn> Chain<TStep>(TStep stepInstance) where TStep : class
+public Monad<TInput, TReturn> Chain<TStep>(TStep stepInstance) where TStep : class
 ```
 
 | Parameter | Type | Description |

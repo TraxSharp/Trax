@@ -80,7 +80,10 @@ public async Task CreateUserTrain_CreatesUser()
     var services = new ServiceCollection();
     services.AddSingleton<IUserRepository, FakeUserRepository>();
     services.AddSingleton<IEmailService, FakeEmailService>();
-    services.AddTrax.CoreEffects(o => o.AddServiceTrainBus(typeof(CreateUserTrain).Assembly));
+    services.AddTrax(trax => trax
+        .AddEffects(effects => effects.UseInMemory())
+        .AddMediator(typeof(CreateUserTrain).Assembly)
+    );
 
     var provider = services.BuildServiceProvider();
     var bus = provider.GetRequiredService<ITrainBus>();
@@ -99,7 +102,7 @@ public async Task CreateUserTrain_CreatesUser()
 }
 ```
 
-*SDK Reference: [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %}), [TrainBus.RunAsync]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %})*
+*SDK Reference: [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %}), [TrainBus.RunAsync]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %})*
 
 ## Integration Testing with InMemory Provider
 
@@ -112,10 +115,11 @@ public async Task Train_PersistsMetadata()
     // Arrange
     var services = new ServiceCollection();
     services.AddSingleton<IUserRepository, FakeUserRepository>();
-    services.AddTrax.CoreEffects(options =>
-        options
-            .AddInMemoryEffect()
-            .AddServiceTrainBus(typeof(CreateUserTrain).Assembly)
+    services.AddTrax(trax => trax
+        .AddEffects(effects => effects
+            .UseInMemory()
+        )
+        .AddMediator(typeof(CreateUserTrain).Assembly)
     );
 
     var provider = services.BuildServiceProvider();
@@ -132,7 +136,7 @@ public async Task Train_PersistsMetadata()
 }
 ```
 
-*SDK Reference: [AddInMemoryEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %}), [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})*
+*SDK Reference: [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %}), [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})*
 
 ## Testing Cancellation
 

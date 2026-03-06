@@ -80,7 +80,9 @@ This skips the Memory lookup — you're providing the result directly. If an exc
 
 ## ShortCircuit
 
-`.ShortCircuit<TStep>()` lets a step take the express route — ending the train early with a valid result. If the step returns a value of the train's return type, that becomes the final result and remaining steps are skipped. If the step throws, the train continues normally.
+`.ShortCircuit<TStep>()` lets a step take the express route — capturing a result for early return. If the step returns a value of the train's return type, that value is stored as the short-circuit result and `Resolve()` will return it instead of doing a Memory lookup. If the step throws, the train continues normally.
+
+> **Note:** Subsequent `Chain` calls after a successful `ShortCircuit` still execute — the short-circuit value only affects `Resolve()`. If you need to truly skip remaining steps, combine `ShortCircuit` with a conditional pattern or the railway error path.
 
 ```csharp
 public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderResult>
@@ -88,9 +90,9 @@ public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderResult>
     protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderRequest input)
         => Activate(input)
             .Chain<ValidateOrderStep>()
-            .ShortCircuit<CheckCacheStep>()  // If cached, return early
-            .Chain<CalculatePricingStep>()   // Skipped if cache hit
-            .Chain<ProcessPaymentStep>()     // Skipped if cache hit
+            .ShortCircuit<CheckCacheStep>()  // If cached, capture result for Resolve
+            .Chain<CalculatePricingStep>()   // Still executes (short-circuit only affects Resolve)
+            .Chain<ProcessPaymentStep>()     // Still executes (short-circuit only affects Resolve)
             .Chain<SaveOrderStep>()
             .Resolve();
 }

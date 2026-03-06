@@ -42,9 +42,11 @@ public SchedulerConfigurationBuilder UseLocalWorkers(
 ### Basic Usage (Defaults)
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddServiceTrainBus(assemblies: typeof(Program).Assembly)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers()
         .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
@@ -55,9 +57,11 @@ services.AddTrax.CoreEffects(options => options
 ### Custom Configuration
 
 ```csharp
-services.AddTrax.CoreEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddServiceTrainBus(assemblies: typeof(Program).Assembly)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers(options =>
         {
@@ -73,7 +77,7 @@ services.AddTrax.CoreEffects(options => options
 
 ## Remarks
 
-- No connection string parameter is needed. `UseLocalWorkers()` uses the same `IDataContext` registered by `AddPostgresEffect()`.
+- No connection string parameter is needed. `UseLocalWorkers()` uses the same `IDataContext` registered by `UsePostgres()`.
 - No additional NuGet packages required — this is included in `Trax.Scheduler`.
 - Jobs are queued to the `trax.background_job` table and dequeued atomically using PostgreSQL's `FOR UPDATE SKIP LOCKED`.
 - Workers delete job rows after execution (both success and failure). Trax.Core's Metadata and DeadLetter tables handle the audit trail.

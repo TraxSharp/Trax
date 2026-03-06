@@ -15,15 +15,15 @@ Extension methods for registering Trax.Core steps with `[Inject]` property injec
 ### Generic Overloads
 
 ```csharp
-public static IServiceCollection AddScopedTrax.CoreStep<TService, TImplementation>(
+public static IServiceCollection AddScopedTraxStep<TService, TImplementation>(
     this IServiceCollection services
 ) where TService : class where TImplementation : class, TService
 
-public static IServiceCollection AddTransientTrax.CoreStep<TService, TImplementation>(
+public static IServiceCollection AddTransientTraxStep<TService, TImplementation>(
     this IServiceCollection services
 ) where TService : class where TImplementation : class, TService
 
-public static IServiceCollection AddSingletonTrax.CoreStep<TService, TImplementation>(
+public static IServiceCollection AddSingletonTraxStep<TService, TImplementation>(
     this IServiceCollection services
 ) where TService : class where TImplementation : class, TService
 ```
@@ -31,15 +31,15 @@ public static IServiceCollection AddSingletonTrax.CoreStep<TService, TImplementa
 ### Non-Generic Overloads
 
 ```csharp
-public static IServiceCollection AddScopedTrax.CoreStep(
+public static IServiceCollection AddScopedTraxStep(
     this IServiceCollection services, Type serviceInterface, Type serviceImplementation
 )
 
-public static IServiceCollection AddTransientTrax.CoreStep(
+public static IServiceCollection AddTransientTraxStep(
     this IServiceCollection services, Type serviceInterface, Type serviceImplementation
 )
 
-public static IServiceCollection AddSingletonTrax.CoreStep(
+public static IServiceCollection AddSingletonTraxStep(
     this IServiceCollection services, Type serviceInterface, Type serviceImplementation
 )
 ```
@@ -47,11 +47,11 @@ public static IServiceCollection AddSingletonTrax.CoreStep(
 ## Example
 
 ```csharp
-services.AddScopedTrax.CoreStep<IValidateOrderStep, ValidateOrderStep>();
-services.AddTransientTrax.CoreStep<IProcessPaymentStep, ProcessPaymentStep>();
+services.AddScopedTraxStep<IValidateOrderStep, ValidateOrderStep>();
+services.AddTransientTraxStep<IProcessPaymentStep, ProcessPaymentStep>();
 ```
 
 ## Remarks
 
-- These methods delegate directly to the train registration equivalents. They exist for semantic clarity — `AddTrax.CoreStep` communicates intent better than `AddTrax.CoreRoute` when registering steps.
+- These methods delegate directly to the train registration equivalents. They exist for semantic clarity — `AddTraxStep` communicates intent better than `AddTraxRoute` when registering steps.
 - Steps typically don't need manual DI registration unless they use `[Inject]` properties. Most steps are created by the train's `Chain<TStep>()` method using Memory-based constructor injection.

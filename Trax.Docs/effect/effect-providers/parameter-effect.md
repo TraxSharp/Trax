@@ -17,10 +17,11 @@ dotnet add package Trax.Effect.Provider.Parameter
 ```
 
 ```csharp
-services.AddTraxEffects(options =>
-    options
-        .AddPostgresEffect(connectionString)
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
         .SaveTrainParameters()
+    )
 );
 ```
 
@@ -77,7 +78,7 @@ On disposal, the provider clears the input/output object references from metadat
 
 ## Requires a Data Provider
 
-This effect populates fields on `Metadata`, but it doesn't persist the metadata itself. You need either `AddPostgresEffect` or `AddInMemoryEffect` registered alongside it. Without a data provider, the serialized parameters are written to a `Metadata` object that's never saved anywhere.
+This effect populates fields on `Metadata`, but it doesn't persist the metadata itself. You need either `UsePostgres` or `UseInMemory` registered alongside it. Without a data provider, the serialized parameters are written to a `Metadata` object that's never saved anywhere.
 
 ## When to Use It
 

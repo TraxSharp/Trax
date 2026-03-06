@@ -15,15 +15,15 @@ Extension methods for registering Trax.Core trains with the .NET DI container. T
 ### Generic Overloads
 
 ```csharp
-public static IServiceCollection AddScopedTrax.CoreRoute<TService, TImplementation>(
+public static IServiceCollection AddScopedTraxRoute<TService, TImplementation>(
     this IServiceCollection services
 ) where TService : class where TImplementation : class, TService
 
-public static IServiceCollection AddTransientTrax.CoreRoute<TService, TImplementation>(
+public static IServiceCollection AddTransientTraxRoute<TService, TImplementation>(
     this IServiceCollection services
 ) where TService : class where TImplementation : class, TService
 
-public static IServiceCollection AddSingletonTrax.CoreRoute<TService, TImplementation>(
+public static IServiceCollection AddSingletonTraxRoute<TService, TImplementation>(
     this IServiceCollection services
 ) where TService : class where TImplementation : class, TService
 ```
@@ -31,19 +31,19 @@ public static IServiceCollection AddSingletonTrax.CoreRoute<TService, TImplement
 ### Non-Generic Overloads
 
 ```csharp
-public static IServiceCollection AddScopedTrax.CoreRoute(
+public static IServiceCollection AddScopedTraxRoute(
     this IServiceCollection services,
     Type serviceInterface,
     Type serviceImplementation
 )
 
-public static IServiceCollection AddTransientTrax.CoreRoute(
+public static IServiceCollection AddTransientTraxRoute(
     this IServiceCollection services,
     Type serviceInterface,
     Type serviceImplementation
 )
 
-public static IServiceCollection AddSingletonTrax.CoreRoute(
+public static IServiceCollection AddSingletonTraxRoute(
     this IServiceCollection services,
     Type serviceInterface,
     Type serviceImplementation
@@ -64,8 +64,8 @@ public static IServiceCollection AddSingletonTrax.CoreRoute(
 ## Example
 
 ```csharp
-services.AddTransientTrax.CoreRoute<ICreateOrderTrain, CreateOrderTrain>();
-services.AddScopedTrax.CoreRoute<IProcessPaymentTrain, ProcessPaymentTrain>();
+services.AddTransientTraxRoute<ICreateOrderTrain, CreateOrderTrain>();
+services.AddScopedTraxRoute<IProcessPaymentTrain, ProcessPaymentTrain>();
 ```
 
 ## What It Does
@@ -86,10 +86,10 @@ Use these methods when your train class (or its base class) uses `[Inject]` prop
 [Inject] public IStepEffectRunner? StepEffectRunner { get; set; }
 ```
 
-Without `AddTrax.CoreRoute`, these properties would remain `null` after DI resolution.
+Without `AddTraxRoute`, these properties would remain `null` after DI resolution.
 
 ## Remarks
 
-- If your trains are discovered via [AddServiceTrainBus]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %}), you don't need to register them manually — the bus handles registration automatically.
+- If your trains are discovered via [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %}), you don't need to register them manually — the bus handles registration automatically.
 - These methods are primarily useful for trains registered outside of assembly scanning, or when you need explicit control over the DI lifetime.
 - The non-generic overloads accept `Type` parameters for dynamic/reflection-based registration scenarios.

@@ -55,12 +55,14 @@ The JobDispatcher commits the Metadata creation and WorkQueue status update in a
 ### Setup
 
 ```csharp
-builder.Services.AddTrax.CoreEffects(options => options
-    .AddServiceTrainBus(
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(
         typeof(Program).Assembly,
         typeof(JobRunnerTrain).Assembly
     )
-    .AddPostgresEffect(connectionString)
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers()                   // ← built-in, no extra packages
         .Schedule<IMyTrain, MyInput>(
@@ -69,7 +71,7 @@ builder.Services.AddTrax.CoreEffects(options => options
 );
 ```
 
-No connection string parameter needed — `UseLocalWorkers()` uses the same `IDataContext` already registered by `AddPostgresEffect()`.
+No connection string parameter needed — `UseLocalWorkers()` uses the same `IDataContext` already registered by `UsePostgres()`.
 
 ### Configuration
 
@@ -172,20 +174,54 @@ For testing and local development:
 
 Executes jobs immediately and synchronously — no background workers, no database tables. The `EnqueueAsync` call blocks until the train completes.
 
+## Remote Execution
+
+The default setup runs everything on one process. For production deployments, you can separate scheduling from execution — offloading train execution to dedicated worker servers, AWS Lambda, or other compute.
+
+Trax supports two remote execution models:
+
+**Push-based (HTTP)** — the scheduler POSTs to a remote endpoint:
+
+```csharp
+// Scheduler side:
+.AddScheduler(scheduler => scheduler
+    .UseRemoteWorkers(remote =>
+    {
+        remote.BaseUrl = "https://my-workers.example.com/trax/execute";
+    })
+)
+
+// Remote side:
+builder.Services.AddTraxJobRunner();
+app.UseTraxJobRunner("/trax/execute");
+```
+
+Best for serverless compute (Lambda, Cloud Run) where the remote process only runs when invoked.
+
+**Poll-based (standalone worker)** — a separate process polls the `background_job` table:
+
+```csharp
+builder.Services.AddTraxWorker(opts => opts.WorkerCount = 4);
+```
+
+Best for dedicated worker servers that run continuously and scale independently.
+
+Both models connect to the same Postgres database. See [Remote Execution]({{ site.baseurl }}{% link scheduler/remote-execution.md %}) for full architecture details, deployment diagrams, and guidance on which model to choose.
+
 ## Custom Job Submitter
 
-Implement `IJobSubmitter` and register it via `UseCustomSubmitter()`:
+Implement `IJobSubmitter` and register it via `OverrideSubmitter()`:
 
 ```csharp
 public class MyJobSubmitter : IJobSubmitter
 {
-    public Task<string> EnqueueAsync(int metadataId) { /* ... */ }
-    public Task<string> EnqueueAsync(int metadataId, object input) { /* ... */ }
+    public Task<string> EnqueueAsync(long metadataId) { /* ... */ }
+    public Task<string> EnqueueAsync(long metadataId, object input) { /* ... */ }
 }
 
 // Registration
 .AddScheduler(scheduler => scheduler
-    .UseCustomSubmitter(services =>
+    .OverrideSubmitter(services =>
     {
         services.AddScoped<IJobSubmitter, MyJobSubmitter>();
     })
@@ -197,8 +233,10 @@ public class MyJobSubmitter : IJobSubmitter
 ### 1. Update Configuration
 
 ```diff
-  builder.Services.AddTrax.CoreEffects(options => options
-      .AddPostgresEffect(connectionString)
+  builder.Services.AddTrax(trax => trax
+      .AddEffects(effects => effects
+          .UsePostgres(connectionString)
+      )
       .AddScheduler(scheduler => scheduler
 -         .UseHangfire(connectionString)
 +         .UseLocalWorkers()

@@ -60,10 +60,12 @@ This gives you atomicity (no half-written records) and modularity (add/remove pr
 ## Setup
 
 ```csharp
-builder.Services.AddTraxEffects(options => options
-    .AddPostgresEffect(connectionString)    // Persist metadata
-    .SaveTrainParameters()                  // Include input/output in metadata
-    .AddStepLogger(serializeStepData: true) // Log individual step executions
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)          // Persist metadata
+        .SaveTrainParameters()                  // Include input/output in metadata
+        .AddStepLogger(serializeStepData: true) // Log individual step executions
+    )
 );
 ```
 
