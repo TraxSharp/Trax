@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Effect" Version="1.*" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
+    <PackageReference Include="Trax.Mediator" Version="1.*" />
+    <PackageReference Include="Trax.Scheduler" Version="1.*" />
+
+    <!--
+            Flowthru — data pipeline framework by @Spelkington
+            https://github.com/chaoticgoodcomputing/flowthru
+        -->
+    <PackageReference Include="Flowthru" Version="0.1.15" />
+
+    <!--
+            KedroSpaceflights — Catalog, Pipeline factories, Schemas
+            Vendored from https://github.com/chaoticgoodcomputing/flowthru/tree/main/examples/starter/KedroSpaceflights
+        -->
+    <ProjectReference Include="../../../lib/KedroSpaceflights/KedroSpaceflights.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Data/**/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

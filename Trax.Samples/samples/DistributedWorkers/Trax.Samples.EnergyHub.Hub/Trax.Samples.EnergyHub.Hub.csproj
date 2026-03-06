@@ -4,17 +4,20 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" Version="1.*" />
-    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
+    <ProjectReference Include="..\Trax.Samples.EnergyHub\Trax.Samples.EnergyHub.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
     <PackageReference Include="Trax.Effect.StepProvider.Progress" Version="1.*" />
-    <PackageReference Include="Trax.Mediator" Version="1.*" />
-    <PackageReference Include="Trax.Scheduler" Version="1.*" />
     <PackageReference Include="Trax.Dashboard" Version="1.*" />
+    <PackageReference Include="Trax.Api" Version="1.*" />
+    <PackageReference Include="Trax.Api.GraphQL" Version="1.*" />
   </ItemGroup>
 </Project>

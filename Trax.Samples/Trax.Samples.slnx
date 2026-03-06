@@ -1,9 +1,17 @@
 <Solution>
-  <Folder Name="/samples/">
-    <Project Path="samples/Trax.Samples.GameServer/Trax.Samples.GameServer.csproj" />
-    <Project Path="samples/Trax.Samples.GameServer.GraphQL/Trax.Samples.GameServer.GraphQL.csproj" />
-    <Project Path="samples/Trax.Samples.GameServer.Scheduler/Trax.Samples.GameServer.Scheduler.csproj" />
-    <Project Path="samples/Trax.Samples.Flowthru.Spaceflights/Trax.Samples.Flowthru.Spaceflights.csproj" />
+  <Folder Name="/samples/LocalWorkers/">
+    <Project Path="samples/LocalWorkers/Trax.Samples.GameServer/Trax.Samples.GameServer.csproj" />
+    <Project Path="samples/LocalWorkers/Trax.Samples.GameServer.Api/Trax.Samples.GameServer.Api.csproj" />
+    <Project Path="samples/LocalWorkers/Trax.Samples.GameServer.Scheduler/Trax.Samples.GameServer.Scheduler.csproj" />
+  </Folder>
+  <Folder Name="/samples/DistributedWorkers/">
+    <Project Path="samples/DistributedWorkers/Trax.Samples.EnergyHub/Trax.Samples.EnergyHub.csproj" />
+    <Project Path="samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub/Trax.Samples.EnergyHub.Hub.csproj" />
+    <Project Path="samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker/Trax.Samples.EnergyHub.Worker.csproj" />
+  </Folder>
+  <Folder Name="/samples/DataPipeline/">
+    <Project Path="samples/DataPipeline/Trax.Samples.Flowthru.Spaceflights/Trax.Samples.Flowthru.Spaceflights.csproj" />
+    <Project Path="samples/DataPipeline/Trax.Samples.Flowthru.Spaceflights.Scheduler/Trax.Samples.Flowthru.Spaceflights.Scheduler.csproj" />
   </Folder>
   <Folder Name="/templates/">
     <Project Path="templates/Trax.Samples.Templates.csproj" />

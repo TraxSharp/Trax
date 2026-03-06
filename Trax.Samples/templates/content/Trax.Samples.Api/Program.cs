@@ -39,12 +39,11 @@ var connectionString =
 builder.Services.AddLogging(logging => logging.AddConsole());
 
 // ── Register Trax Effect + Mediator ─────────────────────────────────────
-builder.Services.AddTraxEffects(options =>
-    options
-        .AddServiceTrainBus(assemblies: [typeof(Program).Assembly])
-        .AddPostgresEffect(connectionString)
-        .AddJsonEffect()
-        .SaveTrainParameters()
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects =>
+            effects.UsePostgres(connectionString).AddJson().SaveTrainParameters()
+        )
+        .AddMediator(typeof(Program).Assembly)
 );
 
 // ── Register GraphQL API ────────────────────────────────────────────────

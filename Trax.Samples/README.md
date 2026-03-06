@@ -22,7 +22,7 @@ dotnet new trax-server -n MyApp --ConnectionString "Host=db.example.com;Port=543
 
 The template creates an ASP.NET Core project with:
 
-- `AddTraxEffects` configured with Postgres, step logging, and step progress
+- `AddTrax` configured with `AddEffects` (Postgres, step logging, step progress), `AddMediator`, and `AddScheduler`
 - `AddTraxDashboard` for the control room
 - `AddScheduler` with a sample `HelloWorldTrain` departing every 20 seconds
 - A `Trains/` directory with an example train, cargo type, interface, and stop
