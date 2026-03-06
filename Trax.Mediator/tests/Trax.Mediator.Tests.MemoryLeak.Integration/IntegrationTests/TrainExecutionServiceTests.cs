@@ -25,11 +25,10 @@ public class TrainExecutionServiceTests
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTraxEffects(options =>
-        {
-            options.AddInMemoryEffect();
-            options.AddServiceTrainBus(assemblies: [typeof(TrainExecutionServiceTests).Assembly]);
-        });
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UseInMemory())
+                .AddMediator(assemblies: [typeof(TrainExecutionServiceTests).Assembly])
+        );
 
         _serviceProvider = services.BuildServiceProvider();
     }

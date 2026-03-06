@@ -31,21 +31,22 @@ public static class TestSetup
             builder.SetMinimumLevel(LogLevel.Debug);
         });
 
-        // Add Trax.Core Effect services with all providers
-        services.AddTraxEffects(options =>
-        {
-            // Use InMemory data context for tests (no external database dependencies)
-            options.AddInMemoryEffect();
+        // Add Trax services with all providers
+        services.AddTrax(trax =>
+            trax.AddEffects(effects =>
+                {
+                    // Use InMemory data context for tests (no external database dependencies)
+                    effects.UseInMemory();
 
-            // Add JSON effect provider for serialization testing
-            options.AddJsonEffect();
+                    // Add JSON effect provider for serialization testing
+                    effects.AddJson();
 
-            // Add parameter effect provider
-            options.SaveTrainParameters();
-
-            // Add train bus and mediator for testing train execution
-            options.AddServiceTrainBus(assemblies: [typeof(AssemblyMarker).Assembly]);
-        });
+                    // Add parameter effect provider
+                    effects.SaveTrainParameters();
+                })
+                // Add train bus and mediator for testing train execution
+                .AddMediator(assemblies: [typeof(AssemblyMarker).Assembly])
+        );
 
         return services;
     }
@@ -74,15 +75,12 @@ public static class TestSetup
             builder.SetMinimumLevel(LogLevel.Warning); // Less verbose for performance tests
         });
 
-        // Configure Trax.Core without data persistence to focus on memory testing
-        services.AddTraxEffects(options =>
-        {
-            // No data context - focus purely on memory leak testing
-            options.AddServiceTrainBus(
-                assemblies: [typeof(AssemblyMarker).Assembly],
-                serviceTrainLifetime: ServiceLifetime.Transient
-            );
-        });
+        // Configure Trax without data persistence to focus on memory testing
+        services.AddTrax(trax =>
+            trax.AddEffects(_ => { })
+                // No data context - focus purely on memory leak testing
+                .AddMediator(typeof(AssemblyMarker).Assembly)
+        );
 
         return services;
     }
@@ -111,12 +109,14 @@ public static class TestSetup
             builder.SetMinimumLevel(LogLevel.Debug);
         });
 
-        services.AddTraxEffects(options =>
-        {
-            options.AddInMemoryEffect();
-            options.AddJsonEffect();
-            options.SaveTrainParameters();
-        });
+        services.AddTrax(trax =>
+            trax.AddEffects(effects =>
+            {
+                effects.UseInMemory();
+                effects.AddJson();
+                effects.SaveTrainParameters();
+            })
+        );
 
         return services;
     }

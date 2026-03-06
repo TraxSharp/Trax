@@ -43,15 +43,17 @@ public abstract class TestSetup
             .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
             .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
             .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
-            .AddTraxEffects(options =>
-                options
-                    .AddServiceTrainBus(assemblies: [typeof(AssemblyMarker).Assembly])
-                    .SetEffectLogLevel(LogLevel.Information)
-                    .SaveTrainParameters()
-                    .AddPostgresEffect(connectionString)
-                    .AddEffectDataContextLogging(minimumLogLevel: LogLevel.Trace)
-                    .AddJsonEffect()
-                    .AddStepLogger(serializeStepData: true)
+            .AddTrax(trax =>
+                trax.AddEffects(effects =>
+                        effects
+                            .SetEffectLogLevel(LogLevel.Information)
+                            .SaveTrainParameters()
+                            .UsePostgres(connectionString)
+                            .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
+                            .AddJson()
+                            .AddStepLogger(serializeStepData: true)
+                    )
+                    .AddMediator(assemblies: [typeof(AssemblyMarker).Assembly])
             )
             .BuildServiceProvider();
     }
