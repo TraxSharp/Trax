@@ -26,7 +26,7 @@ public class TrainOverheadBenchmarks
     {
         // EffectTrain with no effect providers
         var noEffectsServices = new ServiceCollection();
-        noEffectsServices.AddTraxEffects();
+        noEffectsServices.AddTrax(trax => trax.AddEffects(_ => { }));
         noEffectsServices.AddScopedTraxRoute<IEffectAddOneTrain, EffectAddOneTrain>();
         noEffectsServices.AddScopedTraxRoute<IEffectAddThreeTrain, EffectAddThreeTrain>();
         noEffectsServices.AddScopedTraxRoute<IEffectTransformTrain, EffectTransformTrain>();
@@ -35,7 +35,7 @@ public class TrainOverheadBenchmarks
 
         // EffectTrain with InMemory effect
         var inMemoryServices = new ServiceCollection();
-        inMemoryServices.AddTraxEffects(options => options.AddInMemoryEffect());
+        inMemoryServices.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
         inMemoryServices.AddScopedTraxRoute<IEffectAddOneTrain, EffectAddOneTrain>();
         inMemoryServices.AddScopedTraxRoute<IEffectAddThreeTrain, EffectAddThreeTrain>();
         inMemoryServices.AddScopedTraxRoute<IEffectTransformTrain, EffectTransformTrain>();

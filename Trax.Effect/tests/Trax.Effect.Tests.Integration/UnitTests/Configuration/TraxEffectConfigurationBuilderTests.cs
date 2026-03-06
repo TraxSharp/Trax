@@ -1,71 +1,61 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Trax.Effect.Configuration.TraxEffectBuilder;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Effect.Extensions;
+using Trax.Effect.Services.EffectRegistry;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Configuration;
 
 [TestFixture]
-public class TraxEffectConfigurationBuilderTests
+public class TraxEffectBuilderTests
 {
     [Test]
-    public void Constructor_DefaultValues_AreCorrect()
-    {
-        // Arrange & Act
-        var builder = new TraxEffectConfigurationBuilder(new ServiceCollection());
-
-        // Assert
-        builder.DataContextLoggingEffectEnabled.Should().BeFalse();
-        builder.SerializeStepData.Should().BeFalse();
-        builder.LogLevel.Should().Be(LogLevel.Debug);
-    }
-
-    [Test]
-    public void ServiceCollection_ExposedFromConstructor()
+    public void AddTrax_WithDefaults_RegistersEffectConfiguration()
     {
         // Arrange
         var services = new ServiceCollection();
 
         // Act
-        var builder = new TraxEffectConfigurationBuilder(services);
+        services.AddTrax(_ => { });
 
         // Assert
-        builder.ServiceCollection.Should().BeSameAs(services);
+        var provider = services.BuildServiceProvider();
+        var config = provider.GetRequiredService<ITraxEffectConfiguration>();
+        config.Should().NotBeNull();
+        config.LogLevel.Should().Be(LogLevel.Debug);
+        config.SerializeStepData.Should().BeFalse();
     }
 
     [Test]
-    public void SetEffectLogLevel_UpdatesLogLevel()
+    public void AddTrax_WithEffects_RegistersEffectConfiguration()
     {
         // Arrange
-        var builder = new TraxEffectConfigurationBuilder(new ServiceCollection());
+        var services = new ServiceCollection();
 
         // Act
-        builder.LogLevel = LogLevel.Trace;
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.SetEffectLogLevel(LogLevel.Trace))
+        );
 
         // Assert
-        builder.LogLevel.Should().Be(LogLevel.Trace);
+        var provider = services.BuildServiceProvider();
+        var config = provider.GetRequiredService<ITraxEffectConfiguration>();
+        config.LogLevel.Should().Be(LogLevel.Trace);
     }
 
     [Test]
-    public void SerializeStepData_SetTrue_IsReflected()
+    public void AddTrax_RegistersEffectRegistry()
     {
         // Arrange
-        var builder = new TraxEffectConfigurationBuilder(new ServiceCollection());
+        var services = new ServiceCollection();
 
         // Act
-        builder.SerializeStepData = true;
+        services.AddTrax(_ => { });
 
         // Assert
-        builder.SerializeStepData.Should().BeTrue();
-    }
-
-    [Test]
-    public void TrainParameterJsonSerializerOptions_DefaultIsNotNull()
-    {
-        // Arrange & Act
-        var builder = new TraxEffectConfigurationBuilder(new ServiceCollection());
-
-        // Assert
-        builder.TrainParameterJsonSerializerOptions.Should().NotBeNull();
+        var provider = services.BuildServiceProvider();
+        var registry = provider.GetRequiredService<IEffectRegistry>();
+        registry.Should().NotBeNull();
     }
 }

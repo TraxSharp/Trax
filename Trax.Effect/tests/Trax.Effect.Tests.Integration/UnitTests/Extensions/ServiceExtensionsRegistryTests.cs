@@ -13,13 +13,13 @@ namespace Trax.Effect.Tests.Integration.UnitTests.Extensions;
 public class ServiceExtensionsRegistryTests
 {
     [Test]
-    public void AddTraxEffects_RegistersIEffectRegistryAsSingleton()
+    public void AddTrax_RegistersIEffectRegistryAsSingleton()
     {
         // Arrange
         var services = new ServiceCollection();
 
         // Act
-        services.AddTraxEffects();
+        services.AddTrax(trax => trax.AddEffects(_ => { }));
         using var provider = services.BuildServiceProvider();
 
         // Assert
@@ -38,8 +38,8 @@ public class ServiceExtensionsRegistryTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        // Act - AddJsonEffect calls AddEffect<JsonEffectProviderFactory>() with default toggleable=true
-        services.AddTraxEffects(options => options.AddJsonEffect());
+        // Act - AddJson calls AddEffect<JsonEffectProviderFactory>() with default toggleable=true
+        services.AddTrax(trax => trax.AddEffects(effects => effects.AddJson()));
         using var provider = services.BuildServiceProvider();
 
         // Assert
@@ -58,7 +58,7 @@ public class ServiceExtensionsRegistryTests
         services.AddLogging();
 
         // Act - AddStepLogger calls AddStepEffect<StepLoggerFactory>() with default toggleable=true
-        services.AddTraxEffects(options => options.AddStepLogger());
+        services.AddTrax(trax => trax.AddEffects(effects => effects.AddStepLogger()));
         using var provider = services.BuildServiceProvider();
 
         // Assert
@@ -70,13 +70,13 @@ public class ServiceExtensionsRegistryTests
     }
 
     [Test]
-    public void AddTraxEffects_NoEffects_RegistryIsEmpty()
+    public void AddTrax_NoEffects_RegistryIsEmpty()
     {
         // Arrange
         var services = new ServiceCollection();
 
         // Act
-        services.AddTraxEffects();
+        services.AddTrax(trax => trax.AddEffects(_ => { }));
         using var provider = services.BuildServiceProvider();
 
         // Assert
@@ -92,7 +92,7 @@ public class ServiceExtensionsRegistryTests
         services.AddLogging();
 
         // Act
-        services.AddTraxEffects(options => options.AddJsonEffect());
+        services.AddTrax(trax => trax.AddEffects(effects => effects.AddJson()));
         using var provider = services.BuildServiceProvider();
 
         // Assert
@@ -103,14 +103,14 @@ public class ServiceExtensionsRegistryTests
     }
 
     [Test]
-    public void AddTraxEffects_MultipleEffects_AllRegistered()
+    public void AddTrax_MultipleEffects_AllRegistered()
     {
         // Arrange
         var services = new ServiceCollection();
         services.AddLogging();
 
         // Act
-        services.AddTraxEffects(options => options.AddJsonEffect().AddStepLogger());
+        services.AddTrax(trax => trax.AddEffects(effects => effects.AddJson().AddStepLogger()));
         using var provider = services.BuildServiceProvider();
 
         // Assert

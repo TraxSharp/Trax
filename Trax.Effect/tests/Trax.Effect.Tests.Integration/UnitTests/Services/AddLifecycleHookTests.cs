@@ -18,7 +18,9 @@ public class AddLifecycleHookTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTraxEffects(options => options.AddLifecycleHook<StubHookFactory>());
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.AddLifecycleHook<StubHookFactory>())
+        );
         using var provider = services.BuildServiceProvider();
 
         var factories = provider.GetServices<ITrainLifecycleHookFactory>().ToList();
@@ -31,7 +33,9 @@ public class AddLifecycleHookTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTraxEffects(options => options.AddLifecycleHook<StubHookFactory>());
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.AddLifecycleHook<StubHookFactory>())
+        );
         using var provider = services.BuildServiceProvider();
 
         var factory = provider.GetService<StubHookFactory>();
@@ -44,7 +48,9 @@ public class AddLifecycleHookTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTraxEffects(options => options.AddLifecycleHook<StubHookFactory>());
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.AddLifecycleHook<StubHookFactory>())
+        );
         using var provider = services.BuildServiceProvider();
 
         var registry = provider.GetRequiredService<IEffectRegistry>();
@@ -58,8 +64,8 @@ public class AddLifecycleHookTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTraxEffects(options =>
-            options.AddLifecycleHook<StubHookFactory>(toggleable: false)
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.AddLifecycleHook<StubHookFactory>(toggleable: false))
         );
         using var provider = services.BuildServiceProvider();
 
@@ -78,7 +84,7 @@ public class AddLifecycleHookTests
         var instance = new StubHookFactory();
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTraxEffects(options => options.AddLifecycleHook(instance));
+        services.AddTrax(trax => trax.AddEffects(effects => effects.AddLifecycleHook(instance)));
         using var provider = services.BuildServiceProvider();
 
         var factories = provider.GetServices<ITrainLifecycleHookFactory>().ToList();
@@ -95,7 +101,9 @@ public class AddLifecycleHookTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTraxEffects(options => options.AddLifecycleHook<StubHookFactory>());
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.AddLifecycleHook<StubHookFactory>())
+        );
         using var provider = services.BuildServiceProvider();
 
         var runner = provider.GetService<ILifecycleHookRunner>();
@@ -108,7 +116,7 @@ public class AddLifecycleHookTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTraxEffects(_ => { });
+        services.AddTrax(trax => trax.AddEffects(_ => { }));
         using var provider = services.BuildServiceProvider();
 
         var runner = provider.GetService<ILifecycleHookRunner>();
@@ -125,8 +133,12 @@ public class AddLifecycleHookTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTraxEffects(options =>
-            options.AddLifecycleHook<StubHookFactory>().AddLifecycleHook<AnotherStubHookFactory>()
+        services.AddTrax(trax =>
+            trax.AddEffects(effects =>
+                effects
+                    .AddLifecycleHook<StubHookFactory>()
+                    .AddLifecycleHook<AnotherStubHookFactory>()
+            )
         );
         using var provider = services.BuildServiceProvider();
 

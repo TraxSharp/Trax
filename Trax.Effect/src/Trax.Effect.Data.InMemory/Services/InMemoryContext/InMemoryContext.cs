@@ -25,7 +25,7 @@ namespace Trax.Effect.Data.InMemory.Services.InMemoryContext;
 ///
 /// Example usage:
 /// ```csharp
-/// services.AddTraxEffects(options => options.AddInMemoryEffect());
+/// services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
 /// ```
 ///
 /// Note that data stored in the in-memory database is lost when the application stops,

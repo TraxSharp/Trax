@@ -23,7 +23,7 @@ public class ScalingBenchmarks
     public void Setup()
     {
         var services = new ServiceCollection();
-        services.AddTraxEffects();
+        services.AddTrax(trax => trax.AddEffects(_ => { }));
         services.AddScopedTraxRoute<IEffectAddOneX1Train, EffectAddOneX1Train>();
         services.AddScopedTraxRoute<IEffectAddOneX3Train, EffectAddOneX3Train>();
         services.AddScopedTraxRoute<IEffectAddOneX5Train, EffectAddOneX5Train>();

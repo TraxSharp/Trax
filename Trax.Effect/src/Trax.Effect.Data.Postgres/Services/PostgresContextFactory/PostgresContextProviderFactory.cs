@@ -29,8 +29,8 @@ namespace Trax.Effect.Data.Postgres.Services.PostgresContextFactory;
 ///
 /// Example usage:
 /// ```csharp
-/// services.AddTraxEffects(options =>
-///     options.AddPostgresEffect("Host=localhost;Database=trax;Username=postgres;Password=password")
+/// services.AddTrax(trax => trax
+///     .AddEffects(effects => effects.UsePostgres("Host=localhost;Database=trax;Username=postgres;Password=password"))
 /// );
 /// ```
 /// </remarks>

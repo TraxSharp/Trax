@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Services.JsonEffect;
 using Trax.Effect.Provider.Json.Services.JsonEffectFactory;
 using Trax.Effect.Services.EffectProviderFactory;
+using TraxEffectBuilder = Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder;
 
 namespace Trax.Effect.Provider.Json.Extensions;
 
@@ -41,14 +41,12 @@ public static class ServiceExtensions
     ///
     /// Example usage:
     /// ```csharp
-    /// services.AddTraxEffects(options =>
-    ///     options.AddJsonEffect()
+    /// services.AddTrax(trax => trax
+    ///     .AddEffects(effects => effects.AddJson())
     /// );
     /// ```
     /// </remarks>
-    public static TraxEffectConfigurationBuilder AddJsonEffect(
-        this TraxEffectConfigurationBuilder configurationBuilder
-    )
+    public static TraxEffectBuilder AddJson(this TraxEffectBuilder configurationBuilder)
     {
         configurationBuilder.ServiceCollection.AddTransient<
             IJsonEffectProvider,

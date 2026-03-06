@@ -15,6 +15,7 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models;
+using TraxEffectBuilder = Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder;
 
 namespace Trax.Effect.Data.Postgres.Extensions;
 
@@ -56,13 +57,13 @@ public static class ServiceExtensions
     ///
     /// Example usage:
     /// ```csharp
-    /// services.AddTraxEffects(options =>
-    ///     options.AddPostgresEffect("Host=localhost;Database=trax;Username=postgres;Password=password")
+    /// services.AddTrax(trax => trax
+    ///     .AddEffects(effects => effects.UsePostgres("Host=localhost;Database=trax;Username=postgres;Password=password"))
     /// );
     /// ```
     /// </remarks>
-    public static TraxEffectConfigurationBuilder AddPostgresEffect(
-        this TraxEffectConfigurationBuilder configurationBuilder,
+    public static TraxEffectBuilder UsePostgres(
+        this TraxEffectBuilder configurationBuilder,
         string connectionString
     )
     {

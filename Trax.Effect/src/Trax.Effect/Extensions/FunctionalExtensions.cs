@@ -21,7 +21,7 @@ public static class FunctionalExtensions
                 || value is IStepEffectRunner
             )
                 throw new InvalidOperationException(
-                    $"{valueExpr} has not been loaded. Ensure services.AddTraxEffects() is being added to your Dependency Injection Container"
+                    $"{valueExpr} has not been loaded. Ensure services.AddTrax() is being added to your Dependency Injection Container"
                 );
 
             if (value is IServiceProvider)

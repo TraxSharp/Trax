@@ -18,10 +18,12 @@ public abstract class TestSetup
     {
         ServiceCollection = new ServiceCollection();
 
-        ServiceCollection.AddTraxEffects(options =>
-            options
-                .SetEffectLogLevel(logLevel: Microsoft.Extensions.Logging.LogLevel.Debug)
-                .AddInMemoryEffect()
+        ServiceCollection.AddTrax(trax =>
+            trax.AddEffects(effects =>
+                effects
+                    .SetEffectLogLevel(logLevel: Microsoft.Extensions.Logging.LogLevel.Debug)
+                    .UseInMemory()
+            )
         );
 
         ServiceProvider = ConfigureServices(ServiceCollection);

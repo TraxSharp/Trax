@@ -2,19 +2,27 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Utils;
 
 namespace Trax.Effect.Configuration.TraxEffectBuilder;
 
-public class TraxEffectConfigurationBuilder(
-    IServiceCollection serviceCollection,
-    IEffectRegistry? effectRegistry = null
-)
+/// <summary>
+/// Builder for configuring the Trax effect system (data providers, step providers, lifecycle hooks).
+/// </summary>
+public class TraxEffectBuilder
 {
-    public IServiceCollection ServiceCollection => serviceCollection;
+    private readonly TraxBuilder.TraxBuilder _parent;
 
-    public IEffectRegistry? EffectRegistry => effectRegistry;
+    internal TraxEffectBuilder(TraxBuilder.TraxBuilder parent)
+    {
+        _parent = parent;
+    }
+
+    public IServiceCollection ServiceCollection => _parent.ServiceCollection;
+
+    public IEffectRegistry? EffectRegistry => _parent.EffectRegistry;
 
     public bool DataContextLoggingEffectEnabled { get; set; } = false;
 
@@ -28,7 +36,7 @@ public class TraxEffectConfigurationBuilder(
     public JsonSerializerSettings NewtonsoftJsonSerializerSettings { get; set; } =
         TraxJsonSerializationOptions.NewtonsoftDefault;
 
-    protected internal TraxEffectConfiguration.TraxEffectConfiguration Build()
+    internal TraxEffectConfiguration.TraxEffectConfiguration Build()
     {
         var configuration = new TraxEffectConfiguration.TraxEffectConfiguration
         {

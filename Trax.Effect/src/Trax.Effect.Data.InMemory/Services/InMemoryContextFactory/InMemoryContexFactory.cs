@@ -29,7 +29,7 @@ namespace Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 ///
 /// Example usage:
 /// ```csharp
-/// services.AddTraxEffects(options => options.AddInMemoryEffect());
+/// services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
 /// ```
 /// </remarks>
 public class InMemoryContextProviderFactory : IDataContextProviderFactory

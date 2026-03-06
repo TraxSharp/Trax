@@ -1,11 +1,11 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Parameter.Configuration;
 using Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Utils;
+using TraxEffectBuilder = Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder;
 
 namespace Trax.Effect.Provider.Parameter.Extensions;
 
@@ -45,8 +45,8 @@ public static class ServiceExtensions
     ///
     /// Example usage:
     /// ```csharp
-    /// services.AddTraxEffects(options =>
-    ///     options.SaveTrainParameters()
+    /// services.AddTrax(trax => trax
+    ///     .AddEffects(effects => effects.SaveTrainParameters())
     /// );
     /// ```
     ///
@@ -58,24 +58,24 @@ public static class ServiceExtensions
     ///     WriteIndented = true
     /// };
     ///
-    /// services.AddTraxEffects(options =>
-    ///     options.SaveTrainParameters(jsonOptions)
+    /// services.AddTrax(trax => trax
+    ///     .AddEffects(effects => effects.SaveTrainParameters(jsonOptions))
     /// );
     /// ```
     ///
     /// Or with parameter configuration to control which parameters are saved:
     /// ```csharp
-    /// services.AddTraxEffects(options =>
-    ///     options.SaveTrainParameters(configure: cfg =>
+    /// services.AddTrax(trax => trax
+    ///     .AddEffects(effects => effects.SaveTrainParameters(configure: cfg =>
     ///     {
     ///         cfg.SaveInputs = true;
     ///         cfg.SaveOutputs = false;
-    ///     })
+    ///     }))
     /// );
     /// ```
     /// </remarks>
-    public static TraxEffectConfigurationBuilder SaveTrainParameters(
-        this TraxEffectConfigurationBuilder builder,
+    public static TraxEffectBuilder SaveTrainParameters(
+        this TraxEffectBuilder builder,
         JsonSerializerOptions? jsonSerializerOptions = null,
         Action<ParameterEffectConfiguration>? configure = null
     )

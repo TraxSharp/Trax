@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
+using TraxEffectBuilder = Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder;
 
 namespace Trax.Effect.Data.Extensions;
 
@@ -48,18 +48,19 @@ public static class ServiceExtensions
     ///
     /// Example usage:
     /// ```csharp
-    /// services.AddTraxEffects(options =>
-    ///     options
-    ///         .AddPostgresEffect(connectionString)
-    ///         .AddEffectDataContextLogging(
+    /// services.AddTrax(trax => trax
+    ///     .AddEffects(effects => effects
+    ///         .UsePostgres(connectionString)
+    ///         .AddDataContextLogging(
     ///             minimumLogLevel: LogLevel.Information,
     ///             blacklist: ["Microsoft.EntityFrameworkCore.*"]
     ///         )
+    ///     )
     /// );
     /// ```
     /// </remarks>
-    public static TraxEffectConfigurationBuilder AddEffectDataContextLogging(
-        this TraxEffectConfigurationBuilder configurationBuilder,
+    public static TraxEffectBuilder AddDataContextLogging(
+        this TraxEffectBuilder configurationBuilder,
         LogLevel? minimumLogLevel = null,
         List<string>? blacklist = null
     )
@@ -67,7 +68,7 @@ public static class ServiceExtensions
         // Verify that data context logging is enabled
         if (configurationBuilder.DataContextLoggingEffectEnabled == false)
             throw new Exception(
-                "Data Context Logging effect is not enabled in Trax.Core. Ensure a Data Effect has been added to TraxEffects (before calling AddEffectDataContextLogging). e.g. .AddTraxEffects(x => x.AddPostgresEffect(connectionString).AddDataContextEffectLogging())"
+                "Data Context Logging effect is not enabled in Trax.Core. Ensure a Data Effect has been added to TraxEffects (before calling AddDataContextLogging). e.g. .AddTrax(trax => trax.AddEffects(effects => effects.UsePostgres(connectionString).AddDataContextLogging()))"
             );
 
         // Create and register the logging configuration

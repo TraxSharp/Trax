@@ -27,11 +27,13 @@ public abstract class TestSetup
             .AddLogging(x =>
                 x.AddConsole().AddProvider(arrayProvider).SetMinimumLevel(LogLevel.Debug)
             )
-            .AddTraxEffects(options =>
-                options
-                    .SetEffectLogLevel(LogLevel.Information)
-                    .AddJsonEffect()
-                    .AddStepLogger(serializeStepData: true)
+            .AddTrax(trax =>
+                trax.AddEffects(effects =>
+                    effects
+                        .SetEffectLogLevel(LogLevel.Information)
+                        .AddJson()
+                        .AddStepLogger(serializeStepData: true)
+                )
             );
 
         ServiceProvider = ConfigureServices(ServiceCollection);

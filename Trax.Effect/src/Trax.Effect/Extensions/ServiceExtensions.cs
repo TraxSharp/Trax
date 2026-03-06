@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Attributes;
+using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Services.EffectProviderFactory;
@@ -17,37 +18,66 @@ public static class ServiceExtensions
 {
     #region Configuration
 
-    public static IServiceCollection AddTraxEffects(
-        this IServiceCollection serviceCollection,
-        Action<TraxEffectConfigurationBuilder>? options = null
+    /// <summary>
+    /// Registers the Trax system with the dependency injection container.
+    /// </summary>
+    /// <remarks>
+    /// This is the root entry point for all Trax configuration. Each subsystem
+    /// (effects, mediator, scheduler) has its own scoped builder:
+    /// <code>
+    /// services.AddTrax(trax => trax
+    ///     .AddEffects(effects => effects
+    ///         .UsePostgres(connectionString)
+    ///         .AddJson()
+    ///         .SaveTrainParameters()
+    ///     )
+    ///     .AddMediator(typeof(Program).Assembly)
+    ///     .AddScheduler(scheduler => scheduler
+    ///         .UseLocalWorkers()
+    ///         .Schedule&lt;IMyTrain&gt;(...)
+    ///     )
+    /// );
+    /// </code>
+    /// </remarks>
+    public static IServiceCollection AddTrax(
+        this IServiceCollection services,
+        Action<TraxBuilder> configure
     )
     {
-        // Create the registry eagerly so AddEffect calls during configuration can register types
         var registry = new EffectRegistry();
+        var builder = new TraxBuilder(services, registry);
 
-        var configuration = BuildConfiguration(serviceCollection, options, registry);
+        configure(builder);
 
-        return serviceCollection
+        // Use effect configuration from AddEffects(), or defaults if not called
+        var effectConfig =
+            builder.EffectConfiguration
+            ?? new Trax.Effect.Configuration.TraxEffectConfiguration.TraxEffectConfiguration();
+
+        // Marker so AddTraxDashboard() / AddTraxGraphQL() can verify AddTrax() was called
+        services.AddSingleton<TraxMarker>();
+
+        return services
             .AddSingleton<IEffectRegistry>(registry)
-            .AddSingleton<ITraxEffectConfiguration>(configuration)
+            .AddSingleton<ITraxEffectConfiguration>(effectConfig)
             .AddTransient<IEffectRunner, EffectRunner>()
             .AddTransient<IStepEffectRunner, StepEffectRunner>()
             .AddTransient<ILifecycleHookRunner, LifecycleHookRunner>();
     }
 
-    private static TraxEffectConfiguration BuildConfiguration(
-        IServiceCollection serviceCollection,
-        Action<TraxEffectConfigurationBuilder>? options,
-        IEffectRegistry registry
+    /// <summary>
+    /// Configures the Trax effect system (data providers, step providers, lifecycle hooks).
+    /// </summary>
+    /// <returns>A <see cref="TraxBuilderWithEffects"/> that enables chaining <c>AddMediator()</c>.</returns>
+    public static TraxBuilderWithEffects AddEffects(
+        this TraxBuilder builder,
+        Action<TraxEffectBuilder> configure
     )
     {
-        // Create Builder to be used after Options are invoked
-        var builder = new TraxEffectConfigurationBuilder(serviceCollection, registry);
-
-        // Options able to be null since all values have defaults
-        options?.Invoke(builder);
-
-        return builder.Build();
+        var effectBuilder = new TraxEffectBuilder(builder);
+        configure(effectBuilder);
+        builder.EffectConfiguration = effectBuilder.Build();
+        return new TraxBuilderWithEffects(builder);
     }
 
     public static void InjectProperties(this IServiceProvider serviceProvider, object instance)
@@ -91,11 +121,8 @@ public static class ServiceExtensions
 
     #region Effect
 
-    public static TraxEffectConfigurationBuilder AddEffect<
-        TIEffectProviderFactory,
-        TEffectProviderFactory
-    >(
-        this TraxEffectConfigurationBuilder builder,
+    public static TraxEffectBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(
+        this TraxEffectBuilder builder,
         TEffectProviderFactory factory,
         bool toggleable = true
     )
@@ -116,8 +143,8 @@ public static class ServiceExtensions
         return builder;
     }
 
-    public static TraxEffectConfigurationBuilder AddEffect<TEffectProviderFactory>(
-        this TraxEffectConfigurationBuilder builder,
+    public static TraxEffectBuilder AddEffect<TEffectProviderFactory>(
+        this TraxEffectBuilder builder,
         bool toggleable = true
     )
         where TEffectProviderFactory : class, IEffectProviderFactory
@@ -133,10 +160,10 @@ public static class ServiceExtensions
         return builder;
     }
 
-    public static TraxEffectConfigurationBuilder AddEffect<
-        TIEffectProviderFactory,
-        TEffectProviderFactory
-    >(this TraxEffectConfigurationBuilder builder, bool toggleable = true)
+    public static TraxEffectBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(
+        this TraxEffectBuilder builder,
+        bool toggleable = true
+    )
         where TIEffectProviderFactory : class, IEffectProviderFactory
         where TEffectProviderFactory : class, TIEffectProviderFactory
     {
@@ -154,8 +181,8 @@ public static class ServiceExtensions
         return builder;
     }
 
-    public static TraxEffectConfigurationBuilder AddEffect<TEffectProviderFactory>(
-        this TraxEffectConfigurationBuilder builder,
+    public static TraxEffectBuilder AddEffect<TEffectProviderFactory>(
+        this TraxEffectBuilder builder,
         TEffectProviderFactory factory,
         bool toggleable = true
     )
@@ -172,14 +199,10 @@ public static class ServiceExtensions
 
     #region StepEffect
 
-    public static TraxEffectConfigurationBuilder AddStepEffect<
+    public static TraxEffectBuilder AddStepEffect<
         TIStepEffectProviderFactory,
         TStepEffectProviderFactory
-    >(
-        this TraxEffectConfigurationBuilder builder,
-        TStepEffectProviderFactory factory,
-        bool toggleable = true
-    )
+    >(this TraxEffectBuilder builder, TStepEffectProviderFactory factory, bool toggleable = true)
         where TIStepEffectProviderFactory : class, IStepEffectProviderFactory
         where TStepEffectProviderFactory : class, TIStepEffectProviderFactory
     {
@@ -200,8 +223,8 @@ public static class ServiceExtensions
         return builder;
     }
 
-    public static TraxEffectConfigurationBuilder AddStepEffect<TStepEffectProviderFactory>(
-        this TraxEffectConfigurationBuilder builder,
+    public static TraxEffectBuilder AddStepEffect<TStepEffectProviderFactory>(
+        this TraxEffectBuilder builder,
         bool toggleable = true
     )
         where TStepEffectProviderFactory : class, IStepEffectProviderFactory
@@ -220,8 +243,8 @@ public static class ServiceExtensions
         return builder;
     }
 
-    public static TraxEffectConfigurationBuilder AddStepEffect<TStepEffectProviderFactory>(
-        this TraxEffectConfigurationBuilder builder,
+    public static TraxEffectBuilder AddStepEffect<TStepEffectProviderFactory>(
+        this TraxEffectBuilder builder,
         TStepEffectProviderFactory factory,
         bool toggleable = true
     )
@@ -241,11 +264,8 @@ public static class ServiceExtensions
 
     #region LifecycleHook
 
-    public static TraxEffectConfigurationBuilder AddLifecycleHook<
-        TILifecycleHookFactory,
-        TLifecycleHookFactory
-    >(
-        this TraxEffectConfigurationBuilder builder,
+    public static TraxEffectBuilder AddLifecycleHook<TILifecycleHookFactory, TLifecycleHookFactory>(
+        this TraxEffectBuilder builder,
         TLifecycleHookFactory factory,
         bool toggleable = true
     )
@@ -266,8 +286,8 @@ public static class ServiceExtensions
         return builder;
     }
 
-    public static TraxEffectConfigurationBuilder AddLifecycleHook<TLifecycleHookFactory>(
-        this TraxEffectConfigurationBuilder builder,
+    public static TraxEffectBuilder AddLifecycleHook<TLifecycleHookFactory>(
+        this TraxEffectBuilder builder,
         bool toggleable = true
     )
         where TLifecycleHookFactory : class, ITrainLifecycleHookFactory
@@ -283,8 +303,8 @@ public static class ServiceExtensions
         return builder;
     }
 
-    public static TraxEffectConfigurationBuilder AddLifecycleHook<TLifecycleHookFactory>(
-        this TraxEffectConfigurationBuilder builder,
+    public static TraxEffectBuilder AddLifecycleHook<TLifecycleHookFactory>(
+        this TraxEffectBuilder builder,
         TLifecycleHookFactory factory,
         bool toggleable = true
     )
@@ -305,55 +325,40 @@ public static class ServiceExtensions
         this IServiceCollection services
     )
         where TService : class
-        where TImplementation : class, TService
-        // Nothing inherently different about the injection. Overload for posterity.
-        =>
+        where TImplementation : class, TService =>
         services.AddScopedTraxRoute<TService, TImplementation>();
 
     public static IServiceCollection AddScopedTraxStep(
         this IServiceCollection services,
         Type serviceInterface,
         Type serviceImplementation
-    )
-        // Nothing inherently different about the injection. Overload for posterity.
-        =>
-        services.AddScopedTraxRoute(serviceInterface, serviceImplementation);
+    ) => services.AddScopedTraxRoute(serviceInterface, serviceImplementation);
 
     public static IServiceCollection AddTransientTraxStep<TService, TImplementation>(
         this IServiceCollection services
     )
         where TService : class
-        where TImplementation : class, TService
-        // Nothing inherently different about the injection. Overload for posterity.
-        =>
+        where TImplementation : class, TService =>
         services.AddTransientTraxRoute<TService, TImplementation>();
 
     public static IServiceCollection AddTransientTraxStep(
         this IServiceCollection services,
         Type serviceInterface,
         Type serviceImplementation
-    )
-        // Nothing inherently different about the injection. Overload for posterity.
-        =>
-        services.AddTransientTraxRoute(serviceInterface, serviceImplementation);
+    ) => services.AddTransientTraxRoute(serviceInterface, serviceImplementation);
 
     public static IServiceCollection AddSingletonTraxStep<TService, TImplementation>(
         this IServiceCollection services
     )
         where TService : class
-        where TImplementation : class, TService
-        // Nothing inherently different about the injection. Overload for posterity.
-        =>
+        where TImplementation : class, TService =>
         services.AddSingletonTraxRoute<TService, TImplementation>();
 
     public static IServiceCollection AddSingletonTraxStep(
         this IServiceCollection services,
         Type serviceInterface,
         Type serviceImplementation
-    )
-        // Nothing inherently different about the injection. Overload for posterity.
-        =>
-        services.AddSingletonTraxRoute(serviceInterface, serviceImplementation);
+    ) => services.AddSingletonTraxRoute(serviceInterface, serviceImplementation);
 
     #endregion
 
