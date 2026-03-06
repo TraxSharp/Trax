@@ -28,7 +28,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         _enabledTrains = discoveryService
             .DiscoverTrains()
             .Where(r => r.IsBroadcastEnabled)
-            .Select(r => r.ImplementationType.FullName!)
+            .SelectMany(r => new[] { r.ImplementationType.FullName!, r.ServiceType.FullName! })
             .ToHashSet();
     }
 

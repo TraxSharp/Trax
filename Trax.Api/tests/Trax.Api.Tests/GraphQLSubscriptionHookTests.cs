@@ -191,6 +191,127 @@ public class GraphQLSubscriptionHookTests
 
     #endregion
 
+    #region Service vs Implementation Type Name Matching
+
+    [Test]
+    public async Task OnCompleted_MetadataNameMatchesServiceType_PublishesEvent()
+    {
+        // GraphQL mutations set metadata.Name = registration.ServiceType.FullName
+        // (the interface name, e.g. "IGenerateSustainabilityReportTrain")
+        var sender = new RecordingTopicEventSender();
+        var registration = CreateRegistrationWithDistinctTypes(
+            serviceTypeName: "Namespace.IMyTrain",
+            implementationTypeName: "Namespace.MyTrain",
+            subscriptionEnabled: true
+        );
+        var discovery = new StubDiscoveryService([registration]);
+        var hook = new GraphQLSubscriptionHook(sender, discovery);
+
+        var metadata = CreateMetadata("Namespace.IMyTrain");
+        await hook.OnCompleted(metadata, CancellationToken.None);
+
+        sender.Events.Should().ContainSingle();
+        sender.Events[0].Topic.Should().Be(nameof(LifecycleSubscriptions.OnTrainCompleted));
+    }
+
+    [Test]
+    public async Task OnCompleted_MetadataNameMatchesImplementationType_PublishesEvent()
+    {
+        // Direct train execution sets metadata.Name = GetType().FullName
+        // (the concrete class name, e.g. "GenerateSustainabilityReportTrain")
+        var sender = new RecordingTopicEventSender();
+        var registration = CreateRegistrationWithDistinctTypes(
+            serviceTypeName: "Namespace.IMyTrain",
+            implementationTypeName: "Namespace.MyTrain",
+            subscriptionEnabled: true
+        );
+        var discovery = new StubDiscoveryService([registration]);
+        var hook = new GraphQLSubscriptionHook(sender, discovery);
+
+        var metadata = CreateMetadata("Namespace.MyTrain");
+        await hook.OnCompleted(metadata, CancellationToken.None);
+
+        sender.Events.Should().ContainSingle();
+        sender.Events[0].Topic.Should().Be(nameof(LifecycleSubscriptions.OnTrainCompleted));
+    }
+
+    [Test]
+    public async Task OnCompleted_MetadataNameMatchesNeitherType_SkipsPublishing()
+    {
+        var sender = new RecordingTopicEventSender();
+        var registration = CreateRegistrationWithDistinctTypes(
+            serviceTypeName: "Namespace.IMyTrain",
+            implementationTypeName: "Namespace.MyTrain",
+            subscriptionEnabled: true
+        );
+        var discovery = new StubDiscoveryService([registration]);
+        var hook = new GraphQLSubscriptionHook(sender, discovery);
+
+        var metadata = CreateMetadata("Namespace.SomeOtherTrain");
+        await hook.OnCompleted(metadata, CancellationToken.None);
+
+        sender.Events.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task OnStarted_MetadataNameMatchesServiceType_PublishesEvent()
+    {
+        var sender = new RecordingTopicEventSender();
+        var registration = CreateRegistrationWithDistinctTypes(
+            serviceTypeName: "Namespace.IMyTrain",
+            implementationTypeName: "Namespace.MyTrain",
+            subscriptionEnabled: true
+        );
+        var discovery = new StubDiscoveryService([registration]);
+        var hook = new GraphQLSubscriptionHook(sender, discovery);
+
+        var metadata = CreateMetadata("Namespace.IMyTrain");
+        await hook.OnStarted(metadata, CancellationToken.None);
+
+        sender.Events.Should().ContainSingle();
+        sender.Events[0].Topic.Should().Be(nameof(LifecycleSubscriptions.OnTrainStarted));
+    }
+
+    [Test]
+    public async Task OnFailed_MetadataNameMatchesServiceType_PublishesEvent()
+    {
+        var sender = new RecordingTopicEventSender();
+        var registration = CreateRegistrationWithDistinctTypes(
+            serviceTypeName: "Namespace.IMyTrain",
+            implementationTypeName: "Namespace.MyTrain",
+            subscriptionEnabled: true
+        );
+        var discovery = new StubDiscoveryService([registration]);
+        var hook = new GraphQLSubscriptionHook(sender, discovery);
+
+        var metadata = CreateMetadata("Namespace.IMyTrain");
+        await hook.OnFailed(metadata, new Exception("fail"), CancellationToken.None);
+
+        sender.Events.Should().ContainSingle();
+        sender.Events[0].Topic.Should().Be(nameof(LifecycleSubscriptions.OnTrainFailed));
+    }
+
+    [Test]
+    public async Task OnCancelled_MetadataNameMatchesServiceType_PublishesEvent()
+    {
+        var sender = new RecordingTopicEventSender();
+        var registration = CreateRegistrationWithDistinctTypes(
+            serviceTypeName: "Namespace.IMyTrain",
+            implementationTypeName: "Namespace.MyTrain",
+            subscriptionEnabled: true
+        );
+        var discovery = new StubDiscoveryService([registration]);
+        var hook = new GraphQLSubscriptionHook(sender, discovery);
+
+        var metadata = CreateMetadata("Namespace.IMyTrain");
+        await hook.OnCancelled(metadata, CancellationToken.None);
+
+        sender.Events.Should().ContainSingle();
+        sender.Events[0].Topic.Should().Be(nameof(LifecycleSubscriptions.OnTrainCancelled));
+    }
+
+    #endregion
+
     #region No Enabled Trains
 
     [Test]
@@ -280,6 +401,32 @@ public class GraphQLSubscriptionHookTests
             Name = name,
             ExternalId = Guid.NewGuid().ToString("N"),
             TrainState = TrainState.InProgress,
+        };
+    }
+
+    private static TrainRegistration CreateRegistrationWithDistinctTypes(
+        string serviceTypeName,
+        string implementationTypeName,
+        bool subscriptionEnabled
+    )
+    {
+        return new TrainRegistration
+        {
+            ServiceType = new FakeType(serviceTypeName),
+            ImplementationType = new FakeType(implementationTypeName),
+            InputType = typeof(object),
+            OutputType = typeof(object),
+            Lifetime = ServiceLifetime.Transient,
+            ServiceTypeName = serviceTypeName,
+            ImplementationTypeName = implementationTypeName,
+            InputTypeName = "Object",
+            OutputTypeName = "Object",
+            RequiredPolicies = [],
+            RequiredRoles = [],
+            IsQuery = false,
+            IsMutation = false,
+            IsBroadcastEnabled = subscriptionEnabled,
+            GraphQLOperations = GraphQLOperation.Run,
         };
     }
 

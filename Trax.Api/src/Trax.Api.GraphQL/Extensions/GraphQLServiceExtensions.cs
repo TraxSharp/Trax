@@ -7,6 +7,7 @@ using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
 
 namespace Trax.Api.GraphQL.Extensions;
@@ -22,6 +23,12 @@ public static class GraphQLServiceExtensions
     /// </summary>
     public static IServiceCollection AddTraxGraphQL(this IServiceCollection services)
     {
+        if (!services.Any(sd => sd.ServiceType == typeof(TraxMarker)))
+            throw new InvalidOperationException(
+                "AddTraxGraphQL() requires AddTrax() to be called first. "
+                    + "Call services.AddTrax(trax => ...) before services.AddTraxGraphQL()."
+            );
+
         services.AddTraxApi();
         services.AddSingleton<TrainTypeModule>();
         services.AddTransient<GraphQLSubscriptionHook>();

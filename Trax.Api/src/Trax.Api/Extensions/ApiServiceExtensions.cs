@@ -10,7 +10,7 @@ public static class ApiServiceExtensions
     /// <summary>
     /// Registers Trax API core services including health checks and per-train authorization.
     /// Core train discovery and execution services are provided by Trax.Mediator's
-    /// <c>AddServiceTrainBus()</c>.
+    /// <c>AddMediator()</c>.
     /// </summary>
     public static IServiceCollection AddTraxApi(this IServiceCollection services)
     {
