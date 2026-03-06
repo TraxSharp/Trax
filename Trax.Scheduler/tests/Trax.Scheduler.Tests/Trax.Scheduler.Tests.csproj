@@ -23,6 +23,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Scheduler/Trax.Scheduler.csproj" />
-    <PackageReference Include="Trax.Mediator" Version="*" />
+    <PackageReference Include="Trax.Mediator" Version="1.*" />
   </ItemGroup>
 </Project>

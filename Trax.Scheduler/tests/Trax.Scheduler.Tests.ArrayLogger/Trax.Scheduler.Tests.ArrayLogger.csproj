@@ -11,6 +11,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" Version="*" />
+    <PackageReference Include="Trax.Effect" Version="1.*" />
   </ItemGroup>
 </Project>
