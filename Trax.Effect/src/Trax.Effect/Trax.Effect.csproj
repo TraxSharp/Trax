@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Core" Version="*" />
+    <PackageReference Include="Trax.Core" Version="1.*" />
   </ItemGroup>
 
   <ItemGroup>
