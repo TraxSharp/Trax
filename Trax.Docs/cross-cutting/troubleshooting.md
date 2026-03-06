@@ -101,20 +101,11 @@ If you're using `ShortCircuit`, remember that throwing an exception means "conti
 
 ## Scheduled jobs don't execute (no errors)
 
-The most common cause: `JobRunnerTrain.Assembly` isn't registered with the `TrainBus`. The ManifestManager enqueues jobs, but the job submitter can't resolve the job runner train.
-
-**Fix:**
-```csharp
-.AddMediator(
-    typeof(Program).Assembly,
-    typeof(JobRunnerTrain).Assembly  // Don't forget this
-)
-```
-
-Other causes:
+Possible causes:
 - The manifest's `IsEnabled` is `false`—check via `ITraxScheduler` or the database
 - `ManifestManagerPollingInterval` or `JobDispatcherPollingInterval` is set too high and the job hasn't been picked up yet
 - The train's input type doesn't implement `IManifestProperties`
+- Your train assembly isn't registered with `AddMediator()` — make sure to pass the assembly containing your trains
 
 ## "Ambiguous reference" between Cron types
 

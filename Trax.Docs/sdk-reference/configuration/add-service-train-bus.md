@@ -10,39 +10,93 @@ nav_order: 7
 
 Registers the `ITrainBus` and `ITrainRegistry` services, and discovers all `IServiceTrain<,>` implementations via assembly scanning. This enables dynamic train dispatch by input type.
 
-## Signature
+## Signatures
+
+There are two overloads: a **builder overload** for full control, and a **shorthand overload** for the common case.
+
+### Builder Overload
 
 ```csharp
 public static TraxBuilderWithMediator AddMediator(
-    this TraxBuilderWithEffects traxBuilder,
-    ServiceLifetime effectTrainServiceLifetime = ServiceLifetime.Transient,
+    this TraxBuilderWithEffects builder,
+    Action<TraxMediatorBuilder> configure
+)
+```
+
+Accepts a lambda that receives a `TraxMediatorBuilder` for configuring assembly scanning and train lifetime.
+
+### Shorthand Overload
+
+```csharp
+public static TraxBuilderWithMediator AddMediator(
+    this TraxBuilderWithEffects builder,
     params Assembly[] assemblies
 )
 ```
 
-`AddMediator` is called on `TraxBuilderWithEffects` (the return type of `AddEffects()`), which enforces at compile time that effects are configured before the mediator. It returns `TraxBuilderWithMediator`, which exposes `AddScheduler()` as the next valid step.
+Scans the given assemblies with the default `Transient` lifetime. Equivalent to:
 
-## Parameters
+```csharp
+.AddMediator(mediator => mediator
+    .ScanAssemblies(typeof(Program).Assembly)
+)
+```
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `effectTrainServiceLifetime` | `ServiceLifetime` | No | `Transient` | The DI lifetime for discovered train registrations |
-| `assemblies` | `params Assembly[]` | Yes | — | Assemblies to scan for `IServiceTrain<,>` implementations |
+Both overloads are called on `TraxBuilderWithEffects` (the return type of `AddEffects()`), which enforces at compile time that effects are configured before the mediator. Both return `TraxBuilderWithMediator`, which exposes `AddScheduler()` as the next valid step.
+
+## TraxMediatorBuilder
+
+The builder overload passes a `TraxMediatorBuilder` with the following methods:
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `ScanAssemblies(params Assembly[])` | `TraxMediatorBuilder` | Adds assemblies to scan for `IServiceTrain<,>` implementations |
+| `TrainLifetime(ServiceLifetime)` | `TraxMediatorBuilder` | Sets the DI lifetime for discovered train registrations (default: `Transient`) |
 
 ## Returns
 
-`TraxBuilderWithMediator` — enables `AddScheduler()` as the next step in the fluent chain.
+`TraxBuilderWithMediator` -- enables `AddScheduler()` as the next step in the fluent chain.
 
-## Example
+## Examples
+
+### Shorthand (Most Common)
 
 ```csharp
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
     )
-    .AddMediator(
-        effectTrainServiceLifetime: ServiceLifetime.Scoped,
-        assemblies: typeof(Program).Assembly)
+    .AddMediator(typeof(Program).Assembly)
+);
+```
+
+### Builder with Custom Lifetime
+
+```csharp
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(mediator => mediator
+        .ScanAssemblies(typeof(Program).Assembly)
+        .TrainLifetime(ServiceLifetime.Scoped)
+    )
+);
+```
+
+### Multiple Assemblies
+
+```csharp
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(mediator => mediator
+        .ScanAssemblies(
+            typeof(Program).Assembly,
+            typeof(SharedTrains).Assembly
+        )
+    )
 );
 ```
 
@@ -65,11 +119,11 @@ services.AddTrax(trax => trax
 Each input type must map to **exactly one** train. If two trains accept the same `TIn`, registration will throw an exception.
 
 ```csharp
-// This is fine — different input types
+// This is fine -- different input types
 public class CreateOrderTrain : ServiceTrain<CreateOrderInput, OrderResult> { }
 public class CancelOrderTrain : ServiceTrain<CancelOrderInput, OrderResult> { }
 
-// This will FAIL — both accept OrderInput
+// This will FAIL -- both accept OrderInput
 public class CreateOrderTrain : ServiceTrain<OrderInput, OrderResult> { }
 public class UpdateOrderTrain : ServiceTrain<OrderInput, OrderResult> { }
 ```
@@ -78,13 +132,13 @@ public class UpdateOrderTrain : ServiceTrain<OrderInput, OrderResult> { }
 
 | Lifetime | When to Use |
 |----------|-------------|
-| `Transient` (default) | Most trains — each execution gets a fresh instance |
+| `Transient` (default) | Most trains -- each execution gets a fresh instance |
 | `Scoped` | When the train needs to share state with other scoped services in the same request |
-| `Singleton` | Rarely appropriate — trains typically have per-execution state |
+| `Singleton` | Rarely appropriate -- trains typically have per-execution state |
 
 ## Remarks
 
-- The assembly scanning uses reflection to find `IServiceTrain<,>` implementations. Ensure the assemblies containing your trains are passed to the `assemblies` parameter.
+- The assembly scanning uses reflection to find `IServiceTrain<,>` implementations. Ensure the assemblies containing your trains are passed to `ScanAssemblies()` or the shorthand overload.
 - Trains registered here are available both through `ITrainBus.RunAsync` and through the scheduler system.
 - See [TrainBus]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %}) for the runtime dispatch API.
 

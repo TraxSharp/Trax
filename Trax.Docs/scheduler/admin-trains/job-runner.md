@@ -69,22 +69,6 @@ The train does not wrap its steps in an explicit transaction. `LoadMetadataStep`
 
 See [Multi-Server Concurrency](../concurrency.md) for the full cross-service concurrency model.
 
-## Assembly Registration
+## Registration
 
-The `JobRunnerTrain` lives in the `Trax.Scheduler` assembly. The `TrainBus` discovers trains by scanning assemblies, so this assembly must be registered:
-
-```csharp
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(
-        typeof(Program).Assembly,
-        typeof(JobRunnerTrain).Assembly  // required
-    )
-);
-```
-
-*SDK Reference: [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})*
-
-If you forget this, scheduled jobs will silently fail—the job submitter will invoke the JobRunner, but the TrainBus won't find it. No error, just nothing happens.
+All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()`, `AddTraxWorker()`, or `AddTraxJobRunner()`. You do **not** need to include the `Trax.Scheduler` assembly in `AddMediator()` — only pass your own train assemblies.

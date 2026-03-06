@@ -151,7 +151,7 @@ Queues the train for asynchronous execution via the WorkQueue.
 | Field | Type | Description |
 |-------|------|-------------|
 | `workQueueId` | `Long!` | Database ID of the created WorkQueue entry |
-| `externalId` | `String!` | External ID assigned to the WorkQueue entry |
+| `externalId` | `String!` | External ID shared by the WorkQueue entry and its resulting Metadata — use this to correlate with [subscription]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) events |
 
 ---
 

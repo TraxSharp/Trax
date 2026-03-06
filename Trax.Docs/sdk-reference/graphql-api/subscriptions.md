@@ -124,6 +124,19 @@ ServiceTrain.Run()
         → No → skip (no event published)
 ```
 
+## Cross-Process Subscriptions
+
+By default, subscriptions only fire for trains that execute in the same process as the GraphQL API. In distributed deployments where trains are queued and executed by separate worker processes, use [`UseBroadcaster()`]({{ site.baseurl }}{% link sdk-reference/configuration/use-broadcaster.md %}) to bridge the gap:
+
+```csharp
+// Both hub and worker:
+effects.UseBroadcaster(b => b.UseRabbitMq("amqp://guest:guest@localhost:5672"))
+```
+
+When a broadcaster is configured, `AddTraxGraphQL()` automatically registers a `GraphQLTrainEventHandler` that receives remote lifecycle events from the message bus and forwards them to HotChocolate's subscription transport. Like the local `GraphQLSubscriptionHook`, the remote handler also filters by `[TraxBroadcast]` — only trains with the attribute produce subscription events, regardless of which process executes them. Events from the local process are de-duplicated automatically.
+
+See [UseBroadcaster]({{ site.baseurl }}{% link sdk-reference/configuration/use-broadcaster.md %}) for full details.
+
 ## Package
 
 ```

@@ -59,10 +59,7 @@ builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
     )
-    .AddMediator(
-        typeof(Program).Assembly,
-        typeof(JobRunnerTrain).Assembly
-    )
+    .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
         .UseLocalWorkers()                   // ← built-in, no extra packages
         .Schedule<IMyTrain, MyInput>(

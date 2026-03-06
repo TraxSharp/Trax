@@ -54,7 +54,7 @@ services.AddTrax(trax => trax
         .RecoverStuckJobsOnStartup()
         .DependentPriorityBoost(16)
         .AddMetadataCleanup()
-        .Schedule<IMyRoute>(
+        .Schedule<MyTrain>(
             "my-job",
             new MyInput(),
             Every.Minutes(5),
@@ -74,8 +74,8 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | Method | Description |
 |--------|-------------|
 | [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) | Built-in PostgreSQL local workers (recommended) |
-| [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire with PostgreSQL as the execution backend (deprecated) |
-| `UseInMemoryWorkers()` | Uses a synchronous in-memory job submitter (for testing) |
+| [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) | Dispatches jobs via HTTP POST to a remote endpoint |
+| [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire as the execution backend (deprecated) |
 | `OverrideSubmitter(Action<IServiceCollection>)` | Registers a custom job submitter implementation |
 
 ### Global Options
@@ -86,7 +86,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `ManifestManagerPollingInterval(TimeSpan)` | interval | 5 seconds | How often the ManifestManager evaluates manifests and writes to the work queue |
 | `JobDispatcherPollingInterval(TimeSpan)` | interval | 2 seconds | How often the JobDispatcher reads from the work queue and dispatches to the job submitter |
 | `MaxActiveJobs(int?)` | maxJobs | 10 | Max concurrent active jobs (Pending + InProgress) globally. `null` = unlimited. Per-group limits can also be set from the dashboard on each ManifestGroup |
-| `ExcludeFromMaxActiveJobs<TRoute>()` | — | — | Excludes a train type from the MaxActiveJobs count |
+| `ExcludeFromMaxActiveJobs<TTrain>()` | — | — | Excludes a train type from the MaxActiveJobs count |
 | `DefaultMaxRetries(int)` | maxRetries | 3 | Retry attempts before dead-lettering |
 | `DefaultRetryDelay(TimeSpan)` | delay | 5 minutes | Base delay between retries |
 | `RetryBackoffMultiplier(double)` | multiplier | 2.0 | Exponential backoff multiplier. Set to 1.0 for constant delay |
@@ -95,6 +95,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `DefaultMisfirePolicy(MisfirePolicy)` | policy | `FireOnceNow` | Default [misfire policy]({{ site.baseurl }}{% link scheduler/scheduling-options.md %}#misfire-policies) for manifests that don't specify one |
 | `DefaultMisfireThreshold(TimeSpan)` | threshold | 60 seconds | Grace period before misfire policies take effect. If a manifest is overdue by less than this, it fires normally |
 | `RecoverStuckJobsOnStartup(bool)` | recover | `true` | Whether to auto-recover stuck jobs on startup |
+| `StalePendingTimeout(TimeSpan)` | timeout | 20 minutes | Timeout after which a Pending job that was never picked up is automatically failed |
 | `PruneOrphanedManifests(bool)` | prune | `true` | Whether to [delete manifests]({{ site.baseurl }}{% link scheduler/orphan-manifest-cleanup.md %}) from the database that are no longer defined in the startup configuration. Disable if you create manifests dynamically at runtime via `ITraxScheduler` |
 | `DependentPriorityBoost(int)` | boost | 16 | Priority boost added to dependent train work queue entries at dispatch time. Range: 0-31. Ensures dependent trains are dispatched before non-dependent ones by default |
 

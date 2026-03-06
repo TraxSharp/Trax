@@ -111,6 +111,7 @@ builder.Services.AddTrax(trax => trax
 | Hook | Package | Description |
 |------|---------|-------------|
 | `GraphQLSubscriptionHook` | `Trax.Api.GraphQL` | Publishes lifecycle events to GraphQL [subscriptions]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}). Automatically registered by `AddTraxGraphQL()`. |
+| `BroadcastLifecycleHook` | `Trax.Effect` | Publishes lifecycle events to a message bus for cross-process delivery. Automatically registered by [`UseBroadcaster()`]({{ site.baseurl }}{% link sdk-reference/configuration/use-broadcaster.md %}). |
 
 ## Package
 

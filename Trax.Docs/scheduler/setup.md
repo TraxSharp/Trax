@@ -23,7 +23,6 @@ Jobs can be scheduled directly in startup configuration. The scheduler creates o
 
 ```csharp
 using Trax.Scheduler.Services.TraxScheduler;
-using Trax.Scheduler.Trains.JobRunner;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,10 +32,7 @@ builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
     )
-    .AddMediator(
-        typeof(Program).Assembly,
-        typeof(JobRunnerTrain).Assembly  // Required — see note below
-    )
+    .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
         .PollingInterval(TimeSpan.FromSeconds(5))
         .MaxActiveJobs(10)
@@ -67,7 +63,7 @@ app.Run();
 
 `UseLocalWorkers()` starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed — it reuses the `IDataContext` from `UsePostgres()`. See [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %}) for architecture details.
 
-> **`JobRunnerTrain.Assembly` is required.** The `TrainBus` discovers trains by scanning assemblies. `JobRunnerTrain` is the internal train that the job submitter invokes when a job fires—if its assembly isn't registered, scheduled jobs will silently fail to execute with no error message. Always include it alongside your own assemblies.
+All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()` — you only need to pass your own train assemblies to `AddMediator()`.
 
 ### Local Worker Options
 
