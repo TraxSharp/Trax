@@ -54,10 +54,10 @@ The library references `Trax.Effect`, `Trax.Mediator`, and `Trax.Scheduler` (or 
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" Version="*" />
-    <PackageReference Include="Trax.Effect.Data.Postgres" Version="*" />
-    <PackageReference Include="Trax.Mediator" Version="*" />
-    <PackageReference Include="Trax.Scheduler" Version="*" />
+    <PackageReference Include="Trax.Effect" Version="1.*" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
+    <PackageReference Include="Trax.Mediator" Version="1.*" />
+    <PackageReference Include="Trax.Scheduler" Version="1.*" />
   </ItemGroup>
 </Project>
 ```
@@ -76,10 +76,10 @@ Each executable is a `Microsoft.NET.Sdk.Web` project with a `ProjectReference` t
     <ProjectReference Include="..\MyApp\MyApp.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Trax.Effect.Provider.Json" Version="*" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="*" />
-    <PackageReference Include="Trax.Effect.StepProvider.Progress" Version="*" />
-    <PackageReference Include="Trax.Dashboard" Version="*" />
+    <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
+    <PackageReference Include="Trax.Effect.StepProvider.Progress" Version="1.*" />
+    <PackageReference Include="Trax.Dashboard" Version="1.*" />
   </ItemGroup>
 </Project>
 ```
@@ -191,7 +191,7 @@ dotnet run --project samples/LocalWorkers/Trax.Samples.GameServer.Scheduler
 dotnet run --project samples/LocalWorkers/Trax.Samples.GameServer.Api
 ```
 
-Dashboard at `http://localhost:5001/trax`. GraphQL IDE at `http://localhost:5002/trax/graphql`.
+Dashboard at `http://localhost:5201/trax`. GraphQL IDE at `http://localhost:5200/trax/graphql`.
 
 ### DistributedWorkers (Hub + Workers)
 
@@ -203,4 +203,4 @@ dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub
 dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker
 ```
 
-Dashboard at `http://localhost:5003/trax`. GraphQL IDE at `http://localhost:5003/trax/graphql`.
+Dashboard at `http://localhost:5202/trax`. GraphQL IDE at `http://localhost:5202/trax/graphql`.

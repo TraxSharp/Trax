@@ -57,7 +57,7 @@ When you push a commit to `main`, GitHub Actions runs the release train:
 5. **Create a GitHub release** with changelog and git tag
 6. **Build and publish** NuGet packages (CI reads `.release-version` and passes it to `dotnet pack`)
 
-> **Note:** `Directory.Build.props` is **not** updated by semantic-release. It stays permanently at `99.99.99` for local development. The actual package version comes from the git tag and `.release-version` file, passed to `dotnet pack -p:Version=X.Y.Z` by CI.
+> **Note:** `Directory.Build.props` is **not** updated by semantic-release. It stays permanently at `1.99.99` for local development. The actual package version comes from the git tag and `.release-version` file, passed to `dotnet pack -p:Version=X.Y.Z` by CI.
 
 All of this happens in the `.github/trains/nuget_release.yml` train. The configuration lives in `.releaserc.json`.
 

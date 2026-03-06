@@ -88,13 +88,13 @@ MyCompany.Api/
 **Packages:**
 
 ```xml
-<PackageReference Include="Trax.Effect" Version="*" />
-<PackageReference Include="Trax.Effect.Data.Postgres" Version="*" />
-<PackageReference Include="Trax.Effect.Provider.Json" Version="*" />
-<PackageReference Include="Trax.Effect.Provider.Parameter" Version="*" />
-<PackageReference Include="Trax.Mediator" Version="*" />
-<PackageReference Include="Trax.Api" Version="*" />
-<PackageReference Include="Trax.Api.GraphQL" Version="*" />
+<PackageReference Include="Trax.Effect" Version="1.*" />
+<PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
+<PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
+<PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
+<PackageReference Include="Trax.Mediator" Version="1.*" />
+<PackageReference Include="Trax.Api" Version="1.*" />
+<PackageReference Include="Trax.Api.GraphQL" Version="1.*" />
 ```
 
 ### trax-scheduler
@@ -124,14 +124,14 @@ MyCompany.Scheduler/
 **Packages:**
 
 ```xml
-<PackageReference Include="Trax.Effect" Version="*" />
-<PackageReference Include="Trax.Effect.Data.Postgres" Version="*" />
-<PackageReference Include="Trax.Effect.Provider.Json" Version="*" />
-<PackageReference Include="Trax.Effect.Provider.Parameter" Version="*" />
-<PackageReference Include="Trax.Effect.StepProvider.Progress" Version="*" />
-<PackageReference Include="Trax.Mediator" Version="*" />
-<PackageReference Include="Trax.Scheduler" Version="*" />
-<PackageReference Include="Trax.Dashboard" Version="*" />
+<PackageReference Include="Trax.Effect" Version="1.*" />
+<PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
+<PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
+<PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
+<PackageReference Include="Trax.Effect.StepProvider.Progress" Version="1.*" />
+<PackageReference Include="Trax.Mediator" Version="1.*" />
+<PackageReference Include="Trax.Scheduler" Version="1.*" />
+<PackageReference Include="Trax.Dashboard" Version="1.*" />
 ```
 
 ## Running
@@ -140,13 +140,13 @@ MyCompany.Scheduler/
 
 1. Start PostgreSQL (the connection string in `appsettings.json` points to `localhost:5432` by default)
 2. Run the project: `dotnet run`
-3. Open `http://localhost:5002/trax/graphql` for the GraphQL IDE
+3. Open `http://localhost:5200/trax/graphql` for the GraphQL IDE
 
 ### Scheduler only
 
 1. Start PostgreSQL
 2. Run the project: `dotnet run`
-3. Open `http://localhost:5001/trax` for the Dashboard
+3. Open `http://localhost:5201/trax` for the Dashboard
 
 The HelloWorld train will start running every 20 seconds. Check the dashboard to see execution records.
 
