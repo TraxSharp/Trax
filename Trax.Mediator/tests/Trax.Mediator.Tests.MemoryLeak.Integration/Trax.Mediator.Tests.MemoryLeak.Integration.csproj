@@ -29,8 +29,8 @@
   <ItemGroup>
     <ProjectReference Include="../Trax.Mediator.Tests.ArrayLogger/Trax.Mediator.Tests.ArrayLogger.csproj" />
     <ProjectReference Include="../../src/Trax.Mediator/Trax.Mediator.csproj" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" Version="*" />
-    <PackageReference Include="Trax.Effect.Provider.Json" Version="*" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="*" />
+    <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.*" />
+    <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
   </ItemGroup>
 </Project>
