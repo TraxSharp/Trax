@@ -89,7 +89,7 @@ public partial class Monad<TInput, TReturn>
         }
 
         // Execute the step
-        object[] parameters = [stepInstance, input, null];
+        object[] parameters = [stepInstance, input, null!];
         var result = chainMethod.Invoke(this, parameters);
         var outParam = parameters[2];
 
@@ -97,10 +97,12 @@ public partial class Monad<TInput, TReturn>
         var maybeRightValue = ReflectionHelpers.GetRightFromDynamicEither(outParam);
         maybeRightValue.Iter(rightValue =>
         {
-            ShortCircuitValue = (TReturn?)rightValue;
+            FunctionalExtensions.AssertLoaded(rightValue);
+            ShortCircuitValue = (TReturn)rightValue;
             ShortCircuitValueSet = true;
         });
 
-        return (Monad<TInput, TReturn>)result!;
+        FunctionalExtensions.AssertLoaded(result);
+        return (Monad<TInput, TReturn>)result;
     }
 }

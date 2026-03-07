@@ -101,7 +101,7 @@ public class IsTupleTests : TestSetup
     public async Task TestTupleWithNullElementIsTuple()
     {
         // Arrange
-        var tupleWithNull = ((string)null, 42).GetType();
+        var tupleWithNull = ((string)null!, 42).GetType();
 
         // Act
         var result = tupleWithNull.IsTuple();

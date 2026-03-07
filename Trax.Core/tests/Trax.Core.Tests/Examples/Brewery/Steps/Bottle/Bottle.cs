@@ -6,7 +6,9 @@ using Trax.Core.Tests.Examples.Brewery.Steps.Prepare;
 
 namespace Trax.Core.Tests.Examples.Brewery.Steps.Bottle;
 
-public class Bottle(IFerment ferment) : Step<BrewingJug, List<GlassBottle>>, IBottle
+#pragma warning disable CS9113 // Parameter is unread - injected via DI for testing
+public class Bottle(IFerment _ferment) : Step<BrewingJug, List<GlassBottle>>, IBottle
+#pragma warning restore CS9113
 {
     public override async Task<List<GlassBottle>> Run(BrewingJug input)
     {

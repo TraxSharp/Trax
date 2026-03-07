@@ -56,5 +56,7 @@ public class InitializeStepTests : TestSetup
         }
     }
 
+#pragma warning disable CS9113 // Parameter is unread - intentionally invalid step for testing
     private class TestInvalidStep(int _intInput, string _stringInput) { }
+#pragma warning restore CS9113
 }

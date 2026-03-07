@@ -194,7 +194,8 @@ public partial class Monad<TInput, TReturn>
             if (serviceType.IsMoqProxy())
             {
                 var mockedType = service.GetMockedTypeFromObject();
-                Memory[mockedType] = service;
+                if (mockedType is not null)
+                    Memory[mockedType] = service;
                 continue;
             }
 

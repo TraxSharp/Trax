@@ -98,7 +98,7 @@ public class ExtractTests : TestSetup
 
     private class TestClass
     {
-        public string TestString { get; set; }
+        public string TestString { get; set; } = null!;
     }
 
     private class TestTrain : Train<int, string>

@@ -33,7 +33,7 @@ public static class MoqExtensions
     /// This method uses reflection to extract the mocked type from a Moq mock object.
     /// It's used in AddServices to register mocks by their mocked interface type.
     /// </remarks>
-    public static Type GetMockedTypeFromObject(this object mockedObject)
+    public static Type? GetMockedTypeFromObject(this object mockedObject)
     {
         if (mockedObject is null)
             throw new ArgumentNullException(nameof(mockedObject));

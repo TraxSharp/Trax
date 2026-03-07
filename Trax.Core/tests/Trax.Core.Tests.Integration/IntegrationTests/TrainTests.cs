@@ -386,9 +386,9 @@ public class TrainTests : TestSetup
 
     private class OuterProperty
     {
-        public string OuterString { get; set; }
+        public string OuterString { get; set; } = null!;
 
-        public InnerProperty InnerProperty { get; set; }
+        public InnerProperty InnerProperty { get; set; } = null!;
     }
 
     private class InnerProperty
@@ -398,9 +398,9 @@ public class TrainTests : TestSetup
 
     private class OuterField
     {
-        public string OuterString;
+        public string OuterString = null!;
 
-        public InnerField InnerProperty;
+        public InnerField InnerProperty = null!;
     }
 
     private class InnerField
@@ -499,8 +499,10 @@ public class TrainTests : TestSetup
 
     private class TestService : ITestService { }
 
+#pragma warning disable CS9113 // Parameter is unread - injected via DI for testing
     private class LoggerTest(ILogger<LoggerTest> logger, ITestService _testService)
         : Step<Unit, Unit>
+#pragma warning restore CS9113
     {
         public override async Task<Unit> Run(Unit input)
         {

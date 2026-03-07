@@ -238,9 +238,9 @@ public class TrainTests : TestSetup
 
     private class OuterProperty
     {
-        public string OuterString { get; set; }
+        public string OuterString { get; set; } = null!;
 
-        public InnerProperty InnerProperty { get; set; }
+        public InnerProperty InnerProperty { get; set; } = null!;
     }
 
     private class InnerProperty
@@ -250,9 +250,9 @@ public class TrainTests : TestSetup
 
     private class OuterField
     {
-        public string OuterString;
+        public string OuterString = null!;
 
-        public InnerField InnerProperty;
+        public InnerField InnerProperty = null!;
     }
 
     private class InnerField
