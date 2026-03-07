@@ -99,7 +99,7 @@ Different executables add different capabilities on top of the same trains. That
 
 ## Deployment Models
 
-The three sample directories show three deployment topologies, each built on the same pattern.
+The four sample directories show four deployment topologies, each built on the same pattern.
 
 ### Model 1: Standalone Scheduler
 
@@ -152,16 +152,39 @@ Workers scale horizontally — run as many as you need. The hub stays lightweigh
 
 Good for: high-throughput systems, microservices, environments where you need to scale execution independently from scheduling.
 
+### Model 4: Ephemeral Workers (Serverless)
+
+**Sample:** `EphemeralWorkers/`
+
+```
+Trax.Samples.ContentShield/            ← library (trains)
+Trax.Samples.ContentShield.Api/        ← executable (API + dashboard, HTTP dispatch)
+Trax.Samples.ContentShield.Runner/     ← executable (ephemeral runner, no scheduler)
+```
+
+No scheduled jobs — all work is triggered by GraphQL mutations. The API dispatches queued mutations directly to the Runner via HTTP using `UseRemoteWorkers()`, and also offloads synchronous `run` mutations to the Runner via `UseRemoteRun()`. The Runner simulates a serverless function (AWS Lambda, Cloud Run, Azure Functions) — it receives requests over HTTP, executes the train, and returns.
+
+The split:
+- **API:** `AddScheduler()` + `UseRemoteWorkers()` + `UseRemoteRun()` + `AddTraxGraphQL()` + `AddTraxDashboard()`
+- **Runner:** `AddTraxJobRunner()` + `UseTraxRunEndpoint()` — no scheduler, no polling, no dashboard
+
+Query trains (e.g. `LookupModerationResult`) run synchronously on the API process. Queued trains (e.g. `ReviewContent`, `SendViolationNotice`) are POSTed to the Runner via `HttpJobSubmitter`. No `background_job` table is involved — jobs go directly over HTTP.
+
+The Runner uses `UseBroadcaster(b => b.UseRabbitMq(...))` to publish lifecycle events back to RabbitMQ, so the API's GraphQL subscriptions are notified when queued trains complete.
+
+Good for: serverless/FaaS deployments, on-demand workloads with zero idle cost, event-driven architectures where all work is API-triggered.
+
 ## Comparing the Models
 
-| Capability | Standalone | Separate API | Distributed |
-|-----------|-----------|-------------|------------|
-| Processes | 1 | 2 | 2+ |
-| Scheduler | In-process | In-process (scheduler) | Hub (scheduling only) |
-| Execution | In-process | In-process (scheduler) | Workers (polling) |
-| API | None | Separate process | Hub |
-| Dashboard | In-process | In scheduler | In hub |
-| Horizontal scaling | No | No | Workers scale independently |
+| Capability | Standalone | Separate API | Distributed | Ephemeral |
+|-----------|-----------|-------------|------------|-----------|
+| Processes | 1 | 2 | 2+ | 2 |
+| Scheduler | In-process | In-process (scheduler) | Hub (scheduling only) | API (dispatch only) |
+| Execution | In-process | In-process (scheduler) | Workers (polling) | Runner (HTTP push) |
+| API | None | Separate process | Hub | In-process |
+| Dashboard | In-process | In scheduler | In hub | In API |
+| Job table | `background_job` | `background_job` | `background_job` | None (direct HTTP) |
+| Horizontal scaling | No | No | Workers scale independently | Runner auto-scales |
 
 In all three models, the trains library is identical. Only the `Program.cs` files differ.
 
@@ -204,3 +227,15 @@ dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker
 ```
 
 Dashboard at `http://localhost:5202/trax`. GraphQL IDE at `http://localhost:5202/trax/graphql`.
+
+### EphemeralWorkers (API + Serverless Runner)
+
+```bash
+# Terminal 1 — runner
+dotnet run --project samples/EphemeralWorkers/Trax.Samples.ContentShield.Runner
+
+# Terminal 2 — API
+dotnet run --project samples/EphemeralWorkers/Trax.Samples.ContentShield.Api
+```
+
+Dashboard at `http://localhost:5204/trax`. GraphQL IDE at `http://localhost:5204/trax/graphql`.

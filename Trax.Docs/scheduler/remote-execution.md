@@ -27,7 +27,9 @@ Postgres is always the source of truth. Every deployment model — local, remote
         (same process)   (HTTP push)       (separate process)
 ```
 
-The `IJobSubmitter` interface is the abstraction boundary. When the JobDispatcher dispatches a job, it calls `IJobSubmitter.EnqueueAsync()`. Different implementations control where the job actually runs:
+Two abstraction boundaries control where trains execute:
+
+**For queued trains** (`queue*` mutations, scheduled jobs): The `IJobSubmitter` interface controls where the JobDispatcher sends work.
 
 | Implementation | What it does |
 |----------------|-------------|
@@ -35,6 +37,13 @@ The `IJobSubmitter` interface is the abstraction boundary. When the JobDispatche
 | `HttpJobSubmitter` | POSTs to a remote HTTP endpoint (used by `UseRemoteWorkers`) |
 | `InMemoryJobSubmitter` | Runs inline, synchronously (used by `UseInMemoryWorkers`) |
 | Custom | Implement `IJobSubmitter` and register via `OverrideSubmitter()` |
+
+**For run trains** (`run*` mutations, queries): The `IRunExecutor` interface controls where direct execution happens.
+
+| Implementation | What it does |
+|----------------|-------------|
+| `LocalRunExecutor` | Executes in-process via `ITrainBus.RunAsync` (default) |
+| `HttpRunExecutor` | POSTs to a remote HTTP endpoint, blocks until complete (used by [`UseRemoteRun`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %})) |
 
 ## Deployment Models
 
@@ -96,6 +105,10 @@ services.AddTrax(trax => trax
             remote.BaseUrl = "https://my-workers.example.com/trax/execute";
             remote.Timeout = TimeSpan.FromSeconds(60);
         })
+        // Optional: also offload run* mutations to the remote endpoint
+        .UseRemoteRun(remote =>
+            remote.BaseUrl = "https://my-workers.example.com/trax/run"
+        )
         .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
@@ -115,7 +128,8 @@ builder.Services.AddTrax(trax => trax
 builder.Services.AddTraxJobRunner();
 
 var app = builder.Build();
-app.UseTraxJobRunner("/trax/execute");
+app.UseTraxJobRunner("/trax/execute");  // queue path
+app.UseTraxRunEndpoint("/trax/run");    // synchronous run path
 app.Run();
 ```
 
@@ -139,6 +153,8 @@ app.Run();
 - **Isolation** — trains run in a separate security boundary or VPC
 - **Heterogeneous compute** — different train types need different hardware (GPU, high memory)
 - **Scaling** — the remote endpoint can auto-scale independently of the scheduler
+
+**Sample:** See `Trax.Samples.ContentShield.Api` and `Trax.Samples.ContentShield.Runner` in the `samples/EphemeralWorkers/` directory of the Trax.Samples repository. The API serves GraphQL and dispatches queued mutations to the Runner via HTTP — no `background_job` table, no DB polling. The Runner uses `UseBroadcaster` with RabbitMQ so GraphQL subscriptions on the API are notified when queued trains complete.
 
 ### Model 3: Standalone Workers (Poll-Based)
 
@@ -301,6 +317,7 @@ Failed metadata feeds into the normal retry pipeline — if the manifest has ret
 
 - [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %}) — architecture of the job submission pipeline
 - [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) — API reference for local workers
-- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — API reference for remote workers
+- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — API reference for remote workers (queue path)
+- [UseRemoteRun]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}) — API reference for remote run execution
 - [AddTraxJobRunner]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-job-runner.md %}) — API reference for remote receiver setup
 - [AddTraxWorker]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-worker.md %}) — API reference for standalone worker setup

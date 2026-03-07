@@ -8,7 +8,7 @@ nav_order: 10
 
 # AddTraxJobRunner
 
-Registers the minimal services needed to run `JobRunnerTrain` without the full scheduler. Used on the **remote receiver side** — the process that actually executes trains dispatched by a scheduler via `UseRemoteWorkers()`.
+Registers the minimal services needed to run `JobRunnerTrain` without the full scheduler. Used on the **remote receiver side** — the process that actually executes trains dispatched by a scheduler via `UseRemoteWorkers()`. Also documents `UseTraxRunEndpoint()` for handling synchronous `run` requests from `UseRemoteRun()`.
 
 ## Signatures
 
@@ -19,9 +19,16 @@ public static IServiceCollection AddTraxJobRunner(
 ```
 
 ```csharp
-public static IEndpointRouteBuilder UseTraxJobRunner(
+public static RouteHandlerBuilder UseTraxJobRunner(
     this IEndpointRouteBuilder app,
     string route = "/trax/execute"
+)
+```
+
+```csharp
+public static RouteHandlerBuilder UseTraxRunEndpoint(
+    this IEndpointRouteBuilder app,
+    string route = "/trax/run"
 )
 ```
 
@@ -35,11 +42,17 @@ No parameters. Registers the execution pipeline services only.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `route` | `string` | `"/trax/execute"` | The route to map the POST endpoint |
+| `route` | `string` | `"/trax/execute"` | The route to map the POST endpoint for queued jobs |
+
+### UseTraxRunEndpoint
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `route` | `string` | `"/trax/run"` | The route to map the POST endpoint for synchronous run requests |
 
 ## Examples
 
-### Minimal Remote Executor
+### Minimal Remote Executor (Queue Only)
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -56,6 +69,27 @@ var app = builder.Build();
 app.UseTraxJobRunner("/trax/execute");
 app.Run();
 ```
+
+### Remote Executor (Queue + Run)
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(MyTrain).Assembly)
+);
+builder.Services.AddTraxJobRunner();
+
+var app = builder.Build();
+app.UseTraxJobRunner("/trax/execute");  // queue path
+app.UseTraxRunEndpoint("/trax/run");    // synchronous run path
+app.Run();
+```
+
+> **Note:** `UseTraxRunEndpoint()` does not require `AddTraxJobRunner()`. It uses `ITrainExecutionService` which is registered by `AddMediator()`. Only add `AddTraxJobRunner()` if you also need the queue execution path.
 
 ### With ASP.NET Authentication
 
@@ -127,6 +161,16 @@ Maps a `POST` endpoint at the specified route that:
 5. Returns `200 OK` with `{ "metadataId": 42 }` on success
 6. Returns `500` on failure
 
+### UseTraxRunEndpoint
+
+Maps a `POST` endpoint at the specified route that handles synchronous run requests from [`UseRemoteRun()`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}):
+
+1. Reads a `RemoteRunRequest` from the request body (contains train name and input JSON)
+2. Resolves `ITrainExecutionService` and calls `RunAsync(trainName, inputJson)`
+3. Serializes the train output as JSON
+4. Returns `200 OK` with a `RemoteRunResponse` containing the metadata ID, output JSON, and output type
+5. On error: returns `200 OK` with `RemoteRunResponse.IsError = true` and the error message (in-band errors to distinguish from infrastructure failures)
+
 ## Shared Requirements
 
 The remote process must:
@@ -144,5 +188,6 @@ dotnet add package Trax.Scheduler
 ## See Also
 
 - [Remote Execution]({{ site.baseurl }}{% link scheduler/remote-execution.md %}) — architecture overview and deployment models
-- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — scheduler-side configuration for HTTP dispatch
+- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — scheduler-side configuration for HTTP dispatch (queue path)
+- [UseRemoteRun]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}) — scheduler-side configuration for remote run execution
 - [AddTraxWorker]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-worker.md %}) — standalone worker (poll-based alternative)

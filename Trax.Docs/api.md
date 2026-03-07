@@ -15,7 +15,7 @@ The API is designed to run on a **separate machine** from the scheduler. The two
 | Mode | How It Works | When to Use |
 |------|-------------|-------------|
 | **Queue** (delegated) | Creates a `WorkQueue` entry in the database. The scheduler picks it up on its next poll cycle and dispatches it on the scheduler machine. | Heavy trains, recurring work, anything that should run on dedicated scheduler infrastructure. |
-| **Run** (direct) | Calls `ITrainBus.RunAsync` on the API machine. The train executes in-process, blocking until completion. | Lightweight on-demand trains where you need the result immediately. Requires the train's assemblies to be registered on the API machine. |
+| **Run** (direct) | Calls `ITrainBus.RunAsync` on the API machine (default) or offloads to a remote endpoint via [`UseRemoteRun()`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}). Either way, the call blocks until completion and returns the train output. | Lightweight on-demand trains where you need the result immediately. When using `UseRemoteRun()`, the API machine doesn't need to run the train code locally. |
 
 Trains opt into the GraphQL schema with the [`[TraxQuery]` or `[TraxMutation]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) attributes. Only annotated trains get typed fields generated.
 
@@ -140,12 +140,13 @@ The GraphQL API registers on a **named HotChocolate schema** (`"trax"`) rather t
 
 ## Sample Projects
 
-The API is demonstrated in two samples, each using a different deployment topology:
+The API is demonstrated in three samples, each using a different deployment topology:
 
 - **LocalWorkers (GameServer)** — API and scheduler as separate processes. The GraphQL API handles lightweight trains directly and queues heavy work for the scheduler. See `samples/LocalWorkers/Trax.Samples.GameServer.Api`.
 - **DistributedWorkers (EnergyHub)** — API, scheduler, and dashboard in a single hub process. The hub schedules and serves GraphQL but offloads execution to separate worker processes. See `samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub`.
+- **EphemeralWorkers (ContentShield)** — API with `UseRemoteWorkers()` dispatches queued mutations directly to an ephemeral Runner via HTTP. No scheduled jobs, no `background_job` table — purely on-demand, serverless-style execution. See `samples/EphemeralWorkers/Trax.Samples.ContentShield.Api`.
 
-Both follow the [trains library pattern]({{ site.baseurl }}{% link samples.md %}) — trains live in a shared library, executables are thin wrappers that pick which capabilities to enable.
+All follow the [trains library pattern]({{ site.baseurl }}{% link samples.md %}) — trains live in a shared library, executables are thin wrappers that pick which capabilities to enable.
 
 ## SDK Reference
 

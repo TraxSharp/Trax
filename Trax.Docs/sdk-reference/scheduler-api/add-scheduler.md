@@ -74,7 +74,8 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | Method | Description |
 |--------|-------------|
 | [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) | Built-in PostgreSQL local workers (recommended) |
-| [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) | Dispatches jobs via HTTP POST to a remote endpoint |
+| [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) | Dispatches queued jobs via HTTP POST to a remote endpoint |
+| [UseRemoteRun]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}) | Offloads synchronous `run` execution to a remote endpoint (blocks until complete) |
 | [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire as the execution backend (deprecated) |
 | `OverrideSubmitter(Action<IServiceCollection>)` | Registers a custom job submitter implementation |
 
