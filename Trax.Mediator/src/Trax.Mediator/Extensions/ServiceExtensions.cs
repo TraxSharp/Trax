@@ -8,6 +8,7 @@ using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
+using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -132,6 +133,7 @@ public static class ServiceExtensions
             .AddSingleton<ITrainRegistry>(trainRegistry)
             .AddSingleton<ITrainDiscoveryService, TrainDiscoveryService>()
             .AddScoped<ITrainBus, TrainBus>()
+            .AddScoped<IRunExecutor, LocalRunExecutor>()
             .AddScoped<ITrainExecutionService, TrainExecutionService>()
             .RegisterServiceTrains(serviceTrainLifetime, assemblies);
     }
