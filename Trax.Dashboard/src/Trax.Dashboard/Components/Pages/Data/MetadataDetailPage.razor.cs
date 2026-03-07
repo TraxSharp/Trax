@@ -113,10 +113,7 @@ public partial class MetadataDetailPage
         {
             var registration = TrainDiscovery
                 .DiscoverTrains()
-                .FirstOrDefault(r =>
-                    r.ServiceType.FullName == _metadata.Name
-                    || r.ImplementationType.FullName == _metadata.Name
-                );
+                .FirstOrDefault(r => r.ServiceType.FullName == _metadata.Name);
 
             if (registration is null)
             {

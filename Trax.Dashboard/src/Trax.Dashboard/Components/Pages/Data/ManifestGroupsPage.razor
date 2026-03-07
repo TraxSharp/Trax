@@ -107,8 +107,6 @@
 
         _items = await context.ManifestGroups
             .AsNoTracking()
-            .Include(g => g.Manifests)
-                .ThenInclude(m => m.Metadatas)
             .Select(g => new GroupSummary
             {
                 Id = g.Id,

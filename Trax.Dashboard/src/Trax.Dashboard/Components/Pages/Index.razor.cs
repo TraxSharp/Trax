@@ -23,9 +23,6 @@ public partial class Index
     [Inject]
     private IServiceProvider ServiceProvider { get; set; } = default!;
 
-    [Inject]
-    private NavigationManager Navigation { get; set; } = default!;
-
     // KPI card values
     private int _executionsToday;
     private double _successRate;
@@ -33,15 +30,17 @@ public partial class Index
     private int _unresolvedDeadLetters;
 
     // Chart data
-    private List<ExecutionTimePoint> _executionsOverTime = [];
     private List<ExecutionTimePoint> _hourlyData = [];
     private List<ExecutionTimePoint> _minuteData = [];
+
+    private List<ExecutionTimePoint> ExecutionsOverTime =>
+        _selectedTimeRange == TimeRange1H ? _minuteData : _hourlyData;
     private string _selectedTimeRange = TimeRange24H;
     private List<TrainFailureCount> _topFailures = [];
     private List<TrainDuration> _avgDurations = [];
 
-    // Tables
-    private List<Metadata> _recentFailures = [];
+    // Throughput sparkline (7d) — one series per top train + "Other"
+    private List<ThroughputSeries> _throughputSeries = [];
 
     // Server health
     private double _cpuPercent;
@@ -190,7 +189,8 @@ public partial class Index
                 var targetMinute = minuteStart.Minute;
                 return new ExecutionTimePoint
                 {
-                    Label = i % 10 == 0 ? minuteStart.ToString("HH:mm") : " ",
+                    Label =
+                        i % 5 == 0 ? minuteStart.ToString("HH:mm") : $"\u2009{minuteStart:HH:mm}",
                     Completed = minuteStats
                         .Where(x =>
                             x.Date == targetDate
@@ -218,8 +218,6 @@ public partial class Index
                 };
             })
             .ToList();
-
-        _executionsOverTime = _selectedTimeRange == TimeRange1H ? _minuteData : _hourlyData;
 
         // Top failing trains (last 7 days)
         var last7d = now.AddDays(-7);
@@ -273,29 +271,100 @@ public partial class Index
             })
             .ToList();
 
-        // Recent failures
-        var recentFailuresQuery = context
+        // Throughput sparkline (completed per 6h block over 7d, by train)
+        var throughputQuery = context
             .Metadatas.AsNoTracking()
-            .Where(m => m.TrainState == TrainState.Failed);
+            .Where(m => m.TrainState == TrainState.Completed && m.StartTime >= last7d);
 
         if (hideAdmin)
-            recentFailuresQuery = recentFailuresQuery.ExcludeAdmin(adminNames);
+            throughputQuery = throughputQuery.ExcludeAdmin(adminNames);
 
-        _recentFailures = await recentFailuresQuery
-            .OrderByDescending(m => m.StartTime)
-            .Take(20)
+        var throughputStats = await throughputQuery
+            .GroupBy(m => new
+            {
+                m.StartTime.Date,
+                Block = m.StartTime.Hour / 6,
+                m.Name,
+            })
+            .Select(g => new
+            {
+                g.Key.Date,
+                g.Key.Block,
+                g.Key.Name,
+                Count = g.Count(),
+            })
             .ToListAsync(cancellationToken);
+
+        // Identify top 3 trains by total count
+        var top3Names = throughputStats
+            .GroupBy(x => x.Name)
+            .OrderByDescending(g => g.Sum(x => x.Count))
+            .Take(3)
+            .Select(g => g.Key)
+            .ToList();
+
+        var top3Set = new HashSet<string>(top3Names);
+
+        // Build time block labels
+        var blockLabels = Enumerable
+            .Range(0, 28)
+            .Select(i =>
+            {
+                var blockStart = now.AddHours(-((27 - i) * 6));
+                return new
+                {
+                    Date = blockStart.Date,
+                    Block = blockStart.Hour / 6,
+                    Label = blockStart.Hour == 0
+                        ? blockStart.ToString("MMM dd")
+                        : $"\u2009{blockStart:MMM dd HH}",
+                };
+            })
+            .ToList();
+
+        // Build one series per top train + "Other"
+        var seriesNames = top3Names.Append("Other").ToList();
+        string[] seriesColors = ["#2E7D32", "#1565C0", "#F9A825", "#78909C"];
+
+        _throughputSeries = seriesNames
+            .Select(
+                (name, idx) =>
+                    new ThroughputSeries
+                    {
+                        Name = name == "Other" ? "Other" : ShortName(name),
+                        Color = seriesColors[idx],
+                        Points = blockLabels
+                            .Select(b => new ThroughputPoint
+                            {
+                                Label = b.Label,
+                                Count =
+                                    name == "Other"
+                                        ? throughputStats
+                                            .Where(x =>
+                                                x.Date == b.Date
+                                                && x.Block == b.Block
+                                                && !top3Set.Contains(x.Name)
+                                            )
+                                            .Sum(x => x.Count)
+                                        : throughputStats
+                                            .Where(x =>
+                                                x.Date == b.Date
+                                                && x.Block == b.Block
+                                                && x.Name == name
+                                            )
+                                            .Sum(x => x.Count),
+                            })
+                            .ToList(),
+                    }
+            )
+            .Where(s => s.Points.Any(p => p.Count > 0))
+            .ToList();
     }
 
-    private void OnTimeRangeChanged(string value)
+    private string FormatCategoryLabel(object value)
     {
-        _selectedTimeRange = value;
-        _executionsOverTime = _selectedTimeRange == TimeRange1H ? _minuteData : _hourlyData;
-    }
-
-    private void OnRecentFailureRowClick(DataGridRowMouseEventArgs<Metadata> args)
-    {
-        Navigation.NavigateTo($"trax/data/metadata/{args.Data.Id}");
+        var label = value?.ToString() ?? "";
+        return label.StartsWith('\u2009') ? "" : label;
     }
 
     private void CollectServerHealthMetrics()

@@ -80,10 +80,7 @@ public partial class DeadLetterDetailPage
 
             var registration = TrainDiscovery
                 .DiscoverTrains()
-                .FirstOrDefault(r =>
-                    r.ServiceType.FullName == manifest.Name
-                    || r.ImplementationType.FullName == manifest.Name
-                );
+                .FirstOrDefault(r => r.ServiceType.FullName == manifest.Name);
 
             if (registration is null)
             {

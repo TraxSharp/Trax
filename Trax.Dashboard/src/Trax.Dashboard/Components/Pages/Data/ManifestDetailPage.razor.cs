@@ -52,6 +52,7 @@ public partial class ManifestDetailPage
                 .Metadatas.AsNoTracking()
                 .Where(m => m.ManifestId == ManifestId)
                 .OrderByDescending(m => m.StartTime)
+                .Take(500)
                 .ToListAsync(cancellationToken);
         }
     }

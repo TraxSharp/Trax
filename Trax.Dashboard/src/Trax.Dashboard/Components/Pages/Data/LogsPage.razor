@@ -1,4 +1,5 @@
 @page "/trax/data/logs"
+@using System.Linq.Dynamic.Core
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 
@@ -7,9 +8,9 @@
     Log entries captured during train execution, including messages, exceptions, and diagnostic information.
 </RadzenText>
 
-<TraxDataGrid Data="@_items"
+<TraxDataGrid @ref="_grid"
                     TItem="Log"
-                    IsLoading="@IsLoading">
+                    ServerLoadData="@LoadPageAsync">
     <Columns>
         <RadzenDataGridColumn TItem="Log"
                               Property="Id"
@@ -40,11 +41,37 @@
 </TraxDataGrid>
 
 @code {
-    private List<Log> _items = [];
+    private TraxDataGrid<Log>? _grid;
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
+        if (_grid is not null)
+            await _grid.ReloadAsync();
+    }
+
+    private async Task<ServerDataResult<Log>> LoadPageAsync(
+        LoadDataArgs args,
+        CancellationToken cancellationToken)
+    {
         using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
-        _items = await context.Logs.AsNoTracking().ToListAsync(cancellationToken);
+        IQueryable<Log> query = context.Logs.AsNoTracking();
+
+        if (!string.IsNullOrEmpty(args.Filter))
+            query = query.Where(args.Filter);
+
+        if (!string.IsNullOrEmpty(args.OrderBy))
+            query = query.OrderBy(args.OrderBy);
+        else
+            query = query.OrderByDescending(l => l.Id);
+
+        var count = await query.CountAsync(cancellationToken);
+
+        if (args.Skip.HasValue)
+            query = query.Skip(args.Skip.Value);
+        if (args.Top.HasValue)
+            query = query.Take(args.Top.Value);
+
+        var items = await query.ToListAsync(cancellationToken);
+        return new ServerDataResult<Log>(items, count);
     }
 }

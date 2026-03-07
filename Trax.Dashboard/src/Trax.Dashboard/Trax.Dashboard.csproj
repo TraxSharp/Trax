@@ -20,9 +20,6 @@
     <PackageReference Include="Radzen.Blazor" Version="6.*" />
   </ItemGroup>
 
-  <!-- Propagate RequiresAspNetWebAssets to NuGet consumers so blazor.web.js is resolved -->
-  <ItemGroup>
-    <None Include="build/**" Pack="true" PackagePath="build/" />
-    <None Include="buildTransitive/**" Pack="true" PackagePath="buildTransitive/" />
-  </ItemGroup>
+  <!-- build/Trax.Dashboard.props and buildTransitive/Trax.Dashboard.props are automatically
+       packed by the Razor SDK to propagate RequiresAspNetWebAssets to NuGet consumers. -->
 </Project>
