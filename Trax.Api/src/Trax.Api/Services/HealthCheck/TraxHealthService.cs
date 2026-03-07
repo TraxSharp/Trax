@@ -11,23 +11,31 @@ public class TraxHealthService(IDataContextProviderFactory dataContextFactory) :
     {
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
+        var cutoff = DateTime.UtcNow.AddHours(-1);
+
+        // Single round-trip: project all four counts from a constant source row.
+        var counts = await db
+            .Metadatas.AsNoTracking()
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                InProgress = g.Count(m => m.TrainState == TrainState.InProgress),
+                FailedLastHour = g.Count(m =>
+                    m.TrainState == TrainState.Failed && m.EndTime > cutoff
+                ),
+            })
+            .FirstOrDefaultAsync(ct);
+
         var queueDepth = await db
             .WorkQueues.AsNoTracking()
             .CountAsync(w => w.Status == WorkQueueStatus.Queued, ct);
-
-        var inProgress = await db
-            .Metadatas.AsNoTracking()
-            .CountAsync(m => m.TrainState == TrainState.InProgress, ct);
-
-        var cutoff = DateTime.UtcNow.AddHours(-1);
-        var failedLastHour = await db
-            .Metadatas.AsNoTracking()
-            .CountAsync(m => m.TrainState == TrainState.Failed && m.EndTime > cutoff, ct);
 
         var deadLetters = await db
             .DeadLetters.AsNoTracking()
             .CountAsync(d => d.Status == DeadLetterStatus.AwaitingIntervention, ct);
 
+        var inProgress = counts?.InProgress ?? 0;
+        var failedLastHour = counts?.FailedLastHour ?? 0;
         var isDegraded = deadLetters > 0 || failedLastHour > 10;
 
         return new HealthStatus(

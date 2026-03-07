@@ -244,10 +244,10 @@ public class GraphQLSubscriptionHookTests
     }
 
     [Test]
-    public async Task OnCompleted_MetadataNameMatchesImplementationType_PublishesEvent()
+    public async Task OnCompleted_MetadataNameMatchesImplementationType_SkipsPublishing()
     {
-        // Direct train execution sets metadata.Name = GetType().FullName
-        // (the concrete class name, e.g. "GenerateSustainabilityReportTrain")
+        // metadata.Name should always be the canonical (interface) name.
+        // Implementation name should NOT match — this enforces the standardization.
         var sender = new RecordingTopicEventSender();
         var registration = CreateRegistrationWithDistinctTypes(
             serviceTypeName: "Namespace.IMyTrain",
@@ -260,8 +260,7 @@ public class GraphQLSubscriptionHookTests
         var metadata = CreateMetadata("Namespace.MyTrain");
         await hook.OnCompleted(metadata, CancellationToken.None);
 
-        sender.Events.Should().ContainSingle();
-        sender.Events[0].Topic.Should().Be(nameof(LifecycleSubscriptions.OnTrainCompleted));
+        sender.Events.Should().BeEmpty();
     }
 
     [Test]
@@ -480,13 +479,11 @@ public class GraphQLSubscriptionHookTests
 
     private static TrainRegistration CreateRegistration(string fullName, bool subscriptionEnabled)
     {
-        // Create a stub type that reports the given FullName
-        // Since we can't fake Type.FullName, we use a real type and the hook
-        // matches on ImplementationType.FullName. We work around this by creating
-        // a StubDiscoveryService that returns registrations with the matching FullName.
+        // Create a stub type that reports the given FullName.
+        // The hook matches on ServiceType.FullName (the canonical interface name).
         return new TrainRegistration
         {
-            ServiceType = typeof(object),
+            ServiceType = new FakeType(fullName),
             ImplementationType = new FakeType(fullName),
             InputType = typeof(object),
             OutputType = typeof(object),

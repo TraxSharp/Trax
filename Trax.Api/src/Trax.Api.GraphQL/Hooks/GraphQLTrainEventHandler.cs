@@ -32,7 +32,7 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
         _enabledTrains = discoveryService
             .DiscoverTrains()
             .Where(r => r.IsBroadcastEnabled)
-            .SelectMany(r => new[] { r.ImplementationType.FullName!, r.ServiceType.FullName! })
+            .Select(r => r.ServiceType.FullName!)
             .ToHashSet();
     }
 

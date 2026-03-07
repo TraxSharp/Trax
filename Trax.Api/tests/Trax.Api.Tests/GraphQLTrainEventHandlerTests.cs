@@ -154,8 +154,10 @@ public class GraphQLTrainEventHandlerTests
     }
 
     [Test]
-    public async Task HandleAsync_TrainNameMatchesImplementationType_ForwardsEvent()
+    public async Task HandleAsync_TrainNameMatchesImplementationType_SkipsEvent()
     {
+        // metadata.Name should always be the canonical (interface) name.
+        // Implementation name should NOT match — this enforces the standardization.
         var sender = new RecordingTopicEventSender();
         var registration = CreateRegistrationWithDistinctTypes(
             serviceTypeName: "Namespace.IMyTrain",
@@ -168,7 +170,7 @@ public class GraphQLTrainEventHandlerTests
         var message = CreateMessage("Completed", "Completed", "Namespace.MyTrain");
         await handler.HandleAsync(message, CancellationToken.None);
 
-        sender.Events.Should().ContainSingle();
+        sender.Events.Should().BeEmpty();
     }
 
     [Test]
@@ -369,9 +371,10 @@ public class GraphQLTrainEventHandlerTests
 
     private static TrainRegistration CreateRegistration(string fullName, bool broadcastEnabled)
     {
+        // The handler matches on ServiceType.FullName (the canonical interface name).
         return new TrainRegistration
         {
-            ServiceType = typeof(object),
+            ServiceType = new FakeType(fullName),
             ImplementationType = new FakeType(fullName),
             InputType = typeof(object),
             OutputType = typeof(object),
