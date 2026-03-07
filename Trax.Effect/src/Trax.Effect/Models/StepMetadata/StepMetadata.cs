@@ -15,16 +15,16 @@ public class StepMetadata : IModel
     public long Id { get; private set; }
 
     [Column("train_name")]
-    public string TrainName { get; private set; }
+    public string TrainName { get; private set; } = null!;
 
     [Column("name")]
-    public string Name { get; private set; }
+    public string Name { get; private set; } = null!;
 
     [Column("external_id")]
-    public string ExternalId { get; private set; }
+    public string ExternalId { get; private set; } = null!;
 
     [Column("train_external_id")]
-    public string TrainExternalId { get; private set; }
+    public string TrainExternalId { get; private set; } = null!;
 
     [Column("start_time_utc")]
     public DateTime? StartTimeUtc { get; set; }
@@ -33,10 +33,10 @@ public class StepMetadata : IModel
     public DateTime? EndTimeUtc { get; set; }
 
     [Column("input_type")]
-    public Type InputType { get; private set; }
+    public Type InputType { get; private set; } = null!;
 
     [Column("output_type")]
-    public Type OutputType { get; private set; }
+    public Type OutputType { get; private set; } = null!;
 
     [Column("state")]
     public EitherStatus State { get; set; }

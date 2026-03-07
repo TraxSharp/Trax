@@ -68,10 +68,19 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public IServiceProvider? ServiceProvider { get; set; }
 
     /// <summary>
-    /// Gets the name of the concrete train class that inherits from ServiceTrain.
+    /// The canonical (interface) name for this train, set during DI registration.
+    /// When null, falls back to the concrete type's FullName.
+    /// </summary>
+    [JsonIgnore]
+    public string? CanonicalName { get; set; }
+
+    /// <summary>
+    /// Gets the canonical train name. Prefers the interface name set at registration time,
+    /// falling back to the concrete type's FullName for trains resolved outside of DI.
     /// </summary>
     internal string TrainName =>
-        GetType().FullName
+        CanonicalName
+        ?? GetType().FullName
         ?? throw new TrainException($"Could not find FullName for ({GetType().Name})");
 
     /// <summary>

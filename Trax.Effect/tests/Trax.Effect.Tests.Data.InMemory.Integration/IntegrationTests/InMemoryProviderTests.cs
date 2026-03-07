@@ -62,7 +62,7 @@ public class InMemoryProviderTests : TestSetup
         await train.Run(Unit.Default);
 
         // Assert
-        train.Metadata.Name.Should().Be("TestTrain");
+        train.Metadata.Name.Should().Be(typeof(ITestTrain).FullName);
         train.Metadata.FailureException.Should().BeNullOrEmpty();
         train.Metadata.FailureReason.Should().BeNullOrEmpty();
         train.Metadata.FailureStep.Should().BeNullOrEmpty();

@@ -27,13 +27,13 @@ public class WorkQueue : IModel
     public long Id { get; private set; }
 
     [Column("external_id")]
-    public string ExternalId { get; set; }
+    public string ExternalId { get; set; } = null!;
 
     /// <summary>
     /// The fully qualified train type name to execute.
     /// </summary>
     [Column("train_name")]
-    public string TrainName { get; set; }
+    public string TrainName { get; set; } = null!;
 
     /// <summary>
     /// Serialized train input (JSON). Same format as Manifest.Properties.

@@ -70,7 +70,7 @@ public class Metadata : IModel, IDisposable
     /// to be shared across system boundaries.
     /// </remarks>
     [Column("external_id")]
-    public string ExternalId { get; set; }
+    public string ExternalId { get; set; } = null!;
 
     /// <summary>
     /// Gets or sets the name of the train.
@@ -80,7 +80,7 @@ public class Metadata : IModel, IDisposable
     /// This provides a human-readable identifier for the train type.
     /// </remarks>
     [Column("name")]
-    public string Name { get; set; }
+    public string Name { get; set; } = null!;
 
     /// <summary>
     /// Gets the name of the assembly that executed the train.
@@ -277,7 +277,7 @@ public class Metadata : IModel, IDisposable
     /// from child to parent. It is populated by the ORM when the metadata is
     /// loaded from the database.
     /// </remarks>
-    public Metadata Parent { get; private set; }
+    public Metadata Parent { get; private set; } = null!;
 
     /// <summary>
     /// Gets the collection of child train metadata records, if this train
@@ -288,7 +288,7 @@ public class Metadata : IModel, IDisposable
     /// from parent to children. It is populated by the ORM when the metadata is
     /// loaded from the database.
     /// </remarks>
-    public ICollection<Metadata> Children { get; private set; }
+    public ICollection<Metadata> Children { get; private set; } = null!;
 
     /// <summary>
     /// Gets the collection of log entries associated with this train.
@@ -298,7 +298,7 @@ public class Metadata : IModel, IDisposable
     /// that were recorded during the train execution. It is populated by
     /// the ORM when the metadata is loaded from the database.
     /// </remarks>
-    public ICollection<Log.Log> Logs { get; private set; }
+    public ICollection<Log.Log> Logs { get; private set; } = null!;
 
     #endregion
 

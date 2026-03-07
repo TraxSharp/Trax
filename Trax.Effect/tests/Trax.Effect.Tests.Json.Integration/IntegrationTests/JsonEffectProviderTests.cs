@@ -26,7 +26,7 @@ public class JsonEffectProviderTests : TestSetup
         await trainTwo.Run(Unit.Default);
 
         // Assert
-        train.Metadata.Name.Should().Be(typeof(TestTrain).FullName);
+        train.Metadata.Name.Should().Be(typeof(ITestTrain).FullName);
         train.Metadata.FailureException.Should().BeNullOrEmpty();
         train.Metadata.FailureReason.Should().BeNullOrEmpty();
         train.Metadata.FailureStep.Should().BeNullOrEmpty();

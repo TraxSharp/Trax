@@ -30,11 +30,11 @@ public class Log : ILog
 
     [Column("message")]
     [JsonPropertyName("message")]
-    public string Message { get; set; }
+    public string Message { get; set; } = null!;
 
     [Column("category")]
     [JsonPropertyName("category")]
-    public string Category { get; set; }
+    public string Category { get; set; } = null!;
 
     [Column("exception")]
     [JsonPropertyName("exception")]
@@ -48,7 +48,7 @@ public class Log : ILog
 
     #region ForeignKeys
 
-    public Metadata.Metadata Metadata { get; set; }
+    public Metadata.Metadata Metadata { get; set; } = null!;
 
     #endregion
 

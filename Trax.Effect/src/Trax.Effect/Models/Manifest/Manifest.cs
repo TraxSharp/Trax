@@ -32,10 +32,10 @@ public class Manifest : IModel
     public long Id { get; }
 
     [Column("external_id")]
-    public string ExternalId { get; set; }
+    public string ExternalId { get; set; } = null!;
 
     [Column("name")]
-    public string Name { get; set; }
+    public string Name { get; set; } = null!;
 
     [Column("property_type")]
     public string? PropertyTypeName { get; set; }

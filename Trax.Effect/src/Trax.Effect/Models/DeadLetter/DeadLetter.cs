@@ -55,7 +55,7 @@ public class DeadLetter : IModel
     /// Gets the reason why this job was moved to the dead letter queue.
     /// </summary>
     [Column("reason")]
-    public string Reason { get; private set; }
+    public string Reason { get; private set; } = null!;
 
     /// <summary>
     /// Gets the number of retry attempts made before this job was dead-lettered.

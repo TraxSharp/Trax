@@ -4,12 +4,12 @@ namespace Trax.Effect.Models.StepMetadata.DTOs;
 
 public class CreateStepMetadata
 {
-    public string Name { get; set; }
-    public string ExternalId { get; set; }
+    public string Name { get; set; } = null!;
+    public string ExternalId { get; set; } = null!;
     public DateTime? StartTimeUtc { get; set; }
     public DateTime? EndTimeUtc { get; set; }
-    public Type InputType { get; set; }
-    public Type OutputType { get; set; }
+    public Type InputType { get; set; } = null!;
+    public Type OutputType { get; set; } = null!;
 
     public EitherStatus State { get; set; }
 }

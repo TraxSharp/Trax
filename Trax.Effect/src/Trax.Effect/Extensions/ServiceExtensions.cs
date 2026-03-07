@@ -375,6 +375,10 @@ public static class ServiceExtensions
         {
             var instance = sp.GetRequiredService<TImplementation>();
             sp.InjectProperties(instance);
+            instance
+                .GetType()
+                .GetProperty("CanonicalName")
+                ?.SetValue(instance, typeof(TService).FullName);
             return instance;
         });
 
@@ -394,6 +398,10 @@ public static class ServiceExtensions
             {
                 var instance = sp.GetRequiredService(serviceImplementation);
                 sp.InjectProperties(instance);
+                instance
+                    .GetType()
+                    .GetProperty("CanonicalName")
+                    ?.SetValue(instance, serviceInterface.FullName);
                 return instance;
             }
         );
@@ -412,6 +420,10 @@ public static class ServiceExtensions
         {
             var instance = sp.GetRequiredService<TImplementation>();
             sp.InjectProperties(instance);
+            instance
+                .GetType()
+                .GetProperty("CanonicalName")
+                ?.SetValue(instance, typeof(TService).FullName);
             return instance;
         });
 
@@ -431,6 +443,10 @@ public static class ServiceExtensions
             {
                 var instance = sp.GetRequiredService(serviceImplementation);
                 sp.InjectProperties(instance);
+                instance
+                    .GetType()
+                    .GetProperty("CanonicalName")
+                    ?.SetValue(instance, serviceInterface.FullName);
                 return instance;
             }
         );
@@ -449,6 +465,10 @@ public static class ServiceExtensions
         {
             var instance = sp.GetRequiredService<TImplementation>();
             sp.InjectProperties(instance);
+            instance
+                .GetType()
+                .GetProperty("CanonicalName")
+                ?.SetValue(instance, typeof(TService).FullName);
             return instance;
         });
 
@@ -468,6 +488,10 @@ public static class ServiceExtensions
             {
                 var instance = sp.GetRequiredService(serviceImplementation);
                 sp.InjectProperties(instance);
+                instance
+                    .GetType()
+                    .GetProperty("CanonicalName")
+                    ?.SetValue(instance, serviceInterface.FullName);
                 return instance;
             }
         );
