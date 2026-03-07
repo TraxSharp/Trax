@@ -24,9 +24,9 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 [TestFixture]
 public class CrossComponentMemoryTests
 {
-    private ServiceProvider _serviceProvider;
-    private JsonSerializerOptions _jsonOptions;
-    private ITraxEffectConfiguration _configuration;
+    private ServiceProvider _serviceProvider = null!;
+    private JsonSerializerOptions _jsonOptions = null!;
+    private ITraxEffectConfiguration _configuration = null!;
 
     [SetUp]
     public void SetUp()
@@ -68,7 +68,7 @@ public class CrossComponentMemoryTests
                         new ParameterEffectConfiguration()
                     );
                     using var jsonEffect = new JsonEffectProvider(
-                        _serviceProvider.GetService<ILogger<JsonEffectProvider>>(),
+                        _serviceProvider.GetService<ILogger<JsonEffectProvider>>()!,
                         _configuration
                     );
 
@@ -250,7 +250,7 @@ public class CrossComponentMemoryTests
                             new ParameterEffectConfiguration()
                         );
                         using var jsonEffect = new JsonEffectProvider(
-                            _serviceProvider.GetService<ILogger<JsonEffectProvider>>(),
+                            _serviceProvider.GetService<ILogger<JsonEffectProvider>>()!,
                             _configuration
                         );
 
@@ -342,7 +342,7 @@ public class CrossComponentMemoryTests
                                 new ParameterEffectConfiguration()
                             );
                             using var jsonEffect = new JsonEffectProvider(
-                                null, // No logger for concurrent test to reduce complexity
+                                null!, // No logger for concurrent test to reduce complexity
                                 _configuration
                             );
 
@@ -440,6 +440,6 @@ public class TestJsonEffectProviderFactory(
 
     public Trax.Effect.Services.EffectProvider.IEffectProvider Create()
     {
-        return new JsonEffectProvider(null, configuration);
+        return new JsonEffectProvider(null!, configuration);
     }
 }

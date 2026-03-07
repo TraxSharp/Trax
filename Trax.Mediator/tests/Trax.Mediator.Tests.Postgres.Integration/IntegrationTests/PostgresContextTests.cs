@@ -58,11 +58,12 @@ public class PostgresContextTests : TestSetup
         var train = await TrainBus.RunAsync<TestTrain>(new TestTrainInput());
 
         // Assert
-        train.Metadata.Name.Should().Be(typeof(TestTrain).FullName);
-        train.Metadata.FailureException.Should().BeNullOrEmpty();
-        train.Metadata.FailureReason.Should().BeNullOrEmpty();
-        train.Metadata.FailureStep.Should().BeNullOrEmpty();
-        train.Metadata.TrainState.Should().Be(TrainState.Completed);
+        var metadata = train!.Metadata!;
+        metadata.Name.Should().Be(typeof(ITestTrain).FullName);
+        metadata.FailureException.Should().BeNullOrEmpty();
+        metadata.FailureReason.Should().BeNullOrEmpty();
+        metadata.FailureStep.Should().BeNullOrEmpty();
+        metadata.TrainState.Should().Be(TrainState.Completed);
     }
 
     [Theory]
@@ -76,11 +77,12 @@ public class PostgresContextTests : TestSetup
         );
 
         // Assert
-        train.Metadata.Name.Should().Be(typeof(TestTrain).FullName);
-        train.Metadata.FailureException.Should().BeNullOrEmpty();
-        train.Metadata.FailureReason.Should().BeNullOrEmpty();
-        train.Metadata.FailureStep.Should().BeNullOrEmpty();
-        train.Metadata.TrainState.Should().Be(TrainState.Completed);
+        var metadata = train!.Metadata!;
+        metadata.Name.Should().Be(typeof(ITestTrain).FullName);
+        metadata.FailureException.Should().BeNullOrEmpty();
+        metadata.FailureReason.Should().BeNullOrEmpty();
+        metadata.FailureStep.Should().BeNullOrEmpty();
+        metadata.TrainState.Should().Be(TrainState.Completed);
     }
 
     [Theory]
@@ -97,33 +99,35 @@ public class PostgresContextTests : TestSetup
         );
 
         // Assert
-        train.Metadata.Name.Should().Be(typeof(TestTrainWithinTrain).FullName);
-        train.Metadata.FailureException.Should().BeNullOrEmpty();
-        train.Metadata.FailureReason.Should().BeNullOrEmpty();
-        train.Metadata.FailureStep.Should().BeNullOrEmpty();
-        train.Metadata.TrainState.Should().Be(TrainState.Completed);
-        innerTrain.Metadata.Name.Should().Be(typeof(TestTrain).FullName);
-        innerTrain.Metadata.FailureException.Should().BeNullOrEmpty();
-        innerTrain.Metadata.FailureReason.Should().BeNullOrEmpty();
-        innerTrain.Metadata.FailureStep.Should().BeNullOrEmpty();
-        innerTrain.Metadata.TrainState.Should().Be(TrainState.Completed);
+        var trainMetadata = train!.Metadata!;
+        trainMetadata.Name.Should().Be(typeof(ITestTrainWithinTrain).FullName);
+        trainMetadata.FailureException.Should().BeNullOrEmpty();
+        trainMetadata.FailureReason.Should().BeNullOrEmpty();
+        trainMetadata.FailureStep.Should().BeNullOrEmpty();
+        trainMetadata.TrainState.Should().Be(TrainState.Completed);
+        var innerTrainMetadata = innerTrain!.Metadata!;
+        innerTrainMetadata.Name.Should().Be(typeof(ITestTrain).FullName);
+        innerTrainMetadata.FailureException.Should().BeNullOrEmpty();
+        innerTrainMetadata.FailureReason.Should().BeNullOrEmpty();
+        innerTrainMetadata.FailureStep.Should().BeNullOrEmpty();
+        innerTrainMetadata.TrainState.Should().Be(TrainState.Completed);
 
         using var dataContext = (IDataContext)dataContextProvider.Create();
 
         var parentTrainResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
-            x.Id == train.Metadata.Id
+            x.Id == trainMetadata.Id
         );
         var childTrainResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
-            x.Id == innerTrain.Metadata.Id
+            x.Id == innerTrainMetadata.Id
         );
         parentTrainResult.Should().NotBeNull();
-        parentTrainResult!.Id.Should().Be(train.Metadata.Id);
+        parentTrainResult!.Id.Should().Be(trainMetadata.Id);
         parentTrainResult!.TrainState.Should().Be(TrainState.Completed);
         parentTrainResult.Input.Should().NotBeNull();
         parentTrainResult.Output.Should().NotBeNull();
 
         childTrainResult.Should().NotBeNull();
-        childTrainResult!.Id.Should().Be(innerTrain.Metadata.Id);
+        childTrainResult!.Id.Should().Be(innerTrainMetadata.Id);
         childTrainResult.TrainState.Should().Be(TrainState.Completed);
         childTrainResult.Input.Should().NotBeNull();
         childTrainResult.Output.Should().NotBeNull();

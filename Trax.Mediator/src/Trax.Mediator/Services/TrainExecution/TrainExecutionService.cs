@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.WorkQueue;
@@ -29,6 +30,8 @@ public class TrainExecutionService(
         await AuthorizeAsync(registration, ct);
         var input = DeserializeInput(inputJson, registration);
 
+        registration.ServiceType.FullName.AssertLoaded();
+
         var serializedInput = JsonSerializer.Serialize(
             input,
             registration.InputType,
@@ -38,7 +41,7 @@ public class TrainExecutionService(
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
-                TrainName = registration.ServiceType.FullName!,
+                TrainName = registration.ServiceType.FullName,
                 Input = serializedInput,
                 InputTypeName = registration.InputType.FullName,
                 Priority = priority,
@@ -62,8 +65,10 @@ public class TrainExecutionService(
         await AuthorizeAsync(registration, ct);
         var input = DeserializeInput(inputJson, registration);
 
+        registration.ServiceType.FullName.AssertLoaded();
+
         return await runExecutor.ExecuteAsync(
-            registration.ServiceTypeName,
+            registration.ServiceType.FullName,
             input,
             registration.OutputType,
             ct
@@ -81,9 +86,10 @@ public class TrainExecutionService(
     {
         var trains = discoveryService.DiscoverTrains();
 
-        // Exact match on fully qualified name first, then fall back to short name
+        // Match on fully qualified name, friendly name, or short name
         var registration =
-            trains.FirstOrDefault(t => t.ServiceTypeName == trainName)
+            trains.FirstOrDefault(t => t.ServiceType.FullName == trainName)
+            ?? trains.FirstOrDefault(t => t.ServiceTypeName == trainName)
             ?? trains.FirstOrDefault(t => t.ServiceType.Name == trainName);
 
         if (registration is null)

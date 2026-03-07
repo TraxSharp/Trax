@@ -187,6 +187,66 @@ public class TrainExecutionServiceTests
 
     #endregion
 
+    #region RunAsync — Name Resolution
+
+    [Test]
+    public async Task RunAsync_WithInterfaceFullName_Succeeds()
+    {
+        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var inputJson = JsonSerializer.Serialize(
+            new TypedExecInput { Name = "test" },
+            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+        );
+
+        var result = await executionService.RunAsync(typeof(ITypedExecTrain).FullName!, inputJson);
+
+        result.MetadataId.Should().BeGreaterThan(0);
+        result.Output.Should().BeOfType<TypedExecOutput>();
+    }
+
+    [Test]
+    public async Task RunAsync_WithShortName_Succeeds()
+    {
+        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var inputJson = JsonSerializer.Serialize(
+            new TypedExecInput { Name = "test" },
+            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+        );
+
+        var result = await executionService.RunAsync(nameof(ITypedExecTrain), inputJson);
+
+        result.MetadataId.Should().BeGreaterThan(0);
+        result.Output.Should().BeOfType<TypedExecOutput>();
+    }
+
+    #endregion
+
+    #region metadata.Name — Canonical Name Regression
+
+    [Test]
+    public async Task RunAsync_MetadataName_IsInterfaceFullName()
+    {
+        // Core regression guard: metadata.Name must always be the canonical
+        // (interface) FullName, never the concrete implementation FullName.
+        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var inputJson = JsonSerializer.Serialize(
+            new TypedExecInput { Name = "canonical-test" },
+            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+        );
+
+        var result = await executionService.RunAsync(nameof(ITypedExecTrain), inputJson);
+
+        // Resolve the train directly to check its metadata
+        using var scope = _serviceProvider.CreateScope();
+        var train = scope.ServiceProvider.GetRequiredService<ITypedExecTrain>() as TypedExecTrain;
+
+        train.Should().NotBeNull();
+        train!.CanonicalName.Should().Be(typeof(ITypedExecTrain).FullName);
+        train.CanonicalName.Should().NotBe(typeof(TypedExecTrain).FullName);
+    }
+
+    #endregion
+
     #region RunAsync — Error Cases
 
     [Test]
