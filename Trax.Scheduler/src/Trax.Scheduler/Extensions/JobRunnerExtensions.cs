@@ -6,10 +6,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Extensions;
 using Trax.Effect.Utils;
+using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.RunExecutor;
 using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.JobRunner;
 
@@ -112,6 +114,79 @@ public static class JobRunnerExtensions
                     return Results.Problem(
                         detail: ex.Message,
                         statusCode: StatusCodes.Status500InternalServerError
+                    );
+                }
+            }
+        );
+    }
+
+    /// <summary>
+    /// Maps a POST endpoint that receives synchronous run requests and returns the train output.
+    /// </summary>
+    /// <param name="endpoints">The endpoint route builder</param>
+    /// <param name="route">The route to map (default: "/trax/run")</param>
+    /// <returns>The route handler builder for further configuration (e.g., <c>.RequireAuthorization()</c>)</returns>
+    /// <remarks>
+    /// Unlike <see cref="UseTraxJobRunner"/> which is fire-and-forget (queue path), this endpoint
+    /// blocks until the train completes and returns the serialized output in the response body.
+    /// The caller receives a <see cref="RemoteRunResponse"/> with the train output or error details.
+    ///
+    /// Set up the calling side with <c>UseRemoteRun()</c> on the scheduler builder.
+    /// No authentication is baked in — apply your own ASP.NET middleware as needed.
+    /// </remarks>
+    public static RouteHandlerBuilder UseTraxRunEndpoint(
+        this IEndpointRouteBuilder endpoints,
+        string route = "/trax/run"
+    )
+    {
+        return endpoints.MapPost(
+            route,
+            async (RemoteRunRequest request, IServiceProvider sp) =>
+            {
+                var logger = sp.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Trax.RunEndpoint");
+
+                try
+                {
+                    var executionService = sp.GetRequiredService<ITrainExecutionService>();
+
+                    var result = await executionService.RunAsync(
+                        request.TrainName,
+                        request.InputJson,
+                        CancellationToken.None
+                    );
+
+                    string? outputJson = null;
+                    string? outputType = null;
+
+                    if (result.Output is not null)
+                    {
+                        outputType = result.Output.GetType().FullName;
+                        outputJson = JsonSerializer.Serialize(
+                            result.Output,
+                            result.Output.GetType(),
+                            TraxJsonSerializationOptions.ManifestProperties
+                        );
+                    }
+
+                    return Results.Ok(
+                        new RemoteRunResponse(result.MetadataId, outputJson, outputType)
+                    );
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(
+                        ex,
+                        "Remote run execution failed for train {TrainName}",
+                        request.TrainName
+                    );
+
+                    return Results.Ok(
+                        new RemoteRunResponse(
+                            MetadataId: 0,
+                            IsError: true,
+                            ErrorMessage: ex.Message
+                        )
                     );
                 }
             }

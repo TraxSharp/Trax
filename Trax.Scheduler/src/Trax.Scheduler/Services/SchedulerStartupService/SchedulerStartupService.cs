@@ -88,21 +88,11 @@ internal class SchedulerStartupService(
 
             foreach (var pending in configuration.PendingManifests)
             {
-                try
-                {
-                    await pending.ScheduleFunc(scheduler, cancellationToken);
-                    logger.LogDebug("Seeded manifest: {ExternalId}", pending.ExternalId);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(
-                        ex,
-                        "Failed to seed manifest {ExternalId}: {Message}",
-                        pending.ExternalId,
-                        ex.Message
-                    );
-                    throw;
-                }
+                await SeedWithRetryAsync(
+                    async ct => await pending.ScheduleFunc(scheduler, ct),
+                    pending.ExternalId,
+                    cancellationToken
+                );
             }
 
             logger.LogInformation(
@@ -134,6 +124,62 @@ internal class SchedulerStartupService(
         // Release closures and captured batch lists that are no longer needed
         configuration.PendingManifests.Clear();
     }
+
+    internal const int DefaultMaxRetries = 5;
+    internal static readonly TimeSpan DefaultBaseDelay = TimeSpan.FromSeconds(2);
+
+    internal async Task SeedWithRetryAsync(
+        Func<CancellationToken, Task> action,
+        string externalId,
+        CancellationToken cancellationToken,
+        int maxRetries = DefaultMaxRetries,
+        TimeSpan? baseDelay = null
+    )
+    {
+        var delay = baseDelay ?? DefaultBaseDelay;
+
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            try
+            {
+                await action(cancellationToken);
+                logger.LogDebug("Seeded manifest: {ExternalId}", externalId);
+                return;
+            }
+            catch (Exception ex) when (attempt < maxRetries && IsTransient(ex))
+            {
+                var retryDelay = delay * Math.Pow(2, attempt - 1);
+                logger.LogWarning(
+                    ex,
+                    "Transient failure seeding manifest {ExternalId} (attempt {Attempt}/{MaxRetries}), retrying in {Delay}s",
+                    externalId,
+                    attempt,
+                    maxRetries,
+                    retryDelay.TotalSeconds
+                );
+                await Task.Delay(retryDelay, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(
+                    ex,
+                    "Failed to seed manifest {ExternalId}: {Message}",
+                    externalId,
+                    ex.Message
+                );
+                throw;
+            }
+        }
+    }
+
+    internal static bool IsTransient(Exception ex) =>
+        ex is TimeoutException
+        || ex.GetType().FullName?.StartsWith("Npgsql.") == true
+        || (
+            ex is InvalidOperationException
+            && ex.InnerException is not null
+            && IsTransient(ex.InnerException)
+        );
 
     private async Task PruneOrphanedManifestsAsync(
         IDataContext dataContext,

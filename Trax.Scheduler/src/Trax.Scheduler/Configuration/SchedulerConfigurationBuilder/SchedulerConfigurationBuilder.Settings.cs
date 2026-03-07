@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
+using Trax.Mediator.Services.RunExecutor;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.RunExecutor;
 
 namespace Trax.Scheduler.Configuration;
 
@@ -261,6 +263,39 @@ public partial class SchedulerConfigurationBuilder
                 Services.JobSubmitter.IJobSubmitter,
                 Services.JobSubmitter.HttpJobSubmitter
             >(client =>
+            {
+                client.BaseAddress = new Uri(options.BaseUrl);
+                client.Timeout = options.Timeout;
+                options.ConfigureHttpClient?.Invoke(client);
+            });
+        };
+        return this;
+    }
+
+    /// <summary>
+    /// Offloads synchronous run execution to a remote HTTP endpoint.
+    /// </summary>
+    /// <remarks>
+    /// Overrides the default <see cref="LocalRunExecutor"/> with <see cref="HttpRunExecutor"/>.
+    /// When a GraphQL <c>run*</c> mutation is called, the request is POSTed to the configured
+    /// <see cref="RemoteRunOptions.BaseUrl"/> and blocks until the train completes.
+    /// The remote endpoint returns the serialized train output in the response body.
+    ///
+    /// Without this, runs execute in-process via <see cref="LocalRunExecutor"/> (the default).
+    ///
+    /// Set up the remote side with <c>UseTraxRunEndpoint()</c> in the runner process.
+    /// </remarks>
+    /// <param name="configure">Action to configure the remote endpoint URL and HTTP client</param>
+    /// <returns>The builder for method chaining</returns>
+    public SchedulerConfigurationBuilder UseRemoteRun(Action<RemoteRunOptions> configure)
+    {
+        _remoteRunRegistration = services =>
+        {
+            var options = new RemoteRunOptions();
+            configure(options);
+            services.AddSingleton(options);
+
+            services.AddHttpClient<IRunExecutor, HttpRunExecutor>(client =>
             {
                 client.BaseAddress = new Uri(options.BaseUrl);
                 client.Timeout = options.Timeout;

@@ -38,6 +38,7 @@ public partial class SchedulerConfigurationBuilder
     private readonly TraxBuilderWithMediator _parentBuilder;
     private readonly SchedulerConfiguration _configuration = new();
     private Action<IServiceCollection>? _taskServerRegistration;
+    private Action<IServiceCollection>? _remoteRunRegistration;
     private string? _rootScheduledExternalId;
     private string? _lastScheduledExternalId;
 
@@ -111,6 +112,9 @@ public partial class SchedulerConfigurationBuilder
 
         // Register additional job submitter services if configured (may override the default above)
         _taskServerRegistration?.Invoke(_parentBuilder.ServiceCollection);
+
+        // Register remote run executor if configured (overrides default LocalRunExecutor)
+        _remoteRunRegistration?.Invoke(_parentBuilder.ServiceCollection);
 
         // Registration order matters: .NET starts IHostedService instances sequentially in registration order.
         // SchedulerStartupService must complete before the polling services begin.
