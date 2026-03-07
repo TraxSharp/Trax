@@ -13,7 +13,7 @@
 @if (DashboardSettings.ShowServerHealth)
 {
     <RadzenRow Gap="1rem" class="rz-mb-4">
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
+        <RadzenColumn Size="12" SizeMD="4" SizeLG="3">
             <RadzenCard>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                     <RadzenIcon Icon="speed" Style="font-size: 2rem; color: var(--rz-info);" />
@@ -22,7 +22,7 @@
                 </RadzenStack>
             </RadzenCard>
         </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
+        <RadzenColumn Size="12" SizeMD="4" SizeLG="3">
             <RadzenCard>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                     <RadzenIcon Icon="memory" Style="font-size: 2rem; color: var(--rz-warning);" />
@@ -31,7 +31,7 @@
                 </RadzenStack>
             </RadzenCard>
         </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
+        <RadzenColumn Size="12" SizeMD="4" SizeLG="3">
             <RadzenCard>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                     <RadzenIcon Icon="delete_sweep" Style="font-size: 2rem; color: var(--rz-primary);" />
@@ -40,16 +40,7 @@
                 </RadzenStack>
             </RadzenCard>
         </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
-            <RadzenCard>
-                <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
-                    <RadzenIcon Icon="hub" Style="font-size: 2rem; color: var(--rz-secondary);" />
-                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_threadCount</RadzenText>
-                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Threads</RadzenText>
-                </RadzenStack>
-            </RadzenCard>
-        </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
+        <RadzenColumn Size="12" SizeMD="4" SizeLG="3">
             <RadzenCard>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                     <RadzenIcon Icon="timer" Style="font-size: 2rem; color: var(--rz-success);" />
@@ -58,57 +49,14 @@
                 </RadzenStack>
             </RadzenCard>
         </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
-            <RadzenCard>
-                <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
-                    <RadzenIcon Icon="recycling" Style="font-size: 2rem; color: var(--rz-danger);" />
-                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_gcGen0/@_gcGen1/@_gcGen2</RadzenText>
-                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">GC (Gen 0/1/2)</RadzenText>
-                </RadzenStack>
-            </RadzenCard>
-        </RadzenColumn>
     </RadzenRow>
 }
 
-@* ── Real-Time Metrics ── *@
-@if (DashboardSettings.ShowRealTimeMetrics)
-{
-    <RadzenRow Gap="1rem" class="rz-mb-4">
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="4">
-            <RadzenCard>
-                <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
-                    <RadzenIcon Icon="inbox" Style="font-size: 2rem; color: var(--rz-info);" />
-                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_queueDepth</RadzenText>
-                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Queue Depth</RadzenText>
-                </RadzenStack>
-            </RadzenCard>
-        </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="4">
-            <RadzenCard>
-                <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
-                    <RadzenIcon Icon="speed" Style="font-size: 2rem; color: var(--rz-success);" />
-                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_completedPerMinute</RadzenText>
-                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Completed / min</RadzenText>
-                </RadzenStack>
-            </RadzenCard>
-        </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="4">
-            <RadzenCard>
-                <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
-                    <RadzenIcon Icon="trending_down" Style="font-size: 2rem; color: var(--rz-danger);" />
-                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_failedPerMinute</RadzenText>
-                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Failed / min</RadzenText>
-                </RadzenStack>
-            </RadzenCard>
-        </RadzenColumn>
-    </RadzenRow>
-}
-
-@* ── Summary Cards ── *@
+@* ── KPI Cards ── *@
 @if (DashboardSettings.ShowSummaryCards)
 {
     <RadzenRow Gap="1rem" class="rz-mb-4">
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="3">
             <RadzenCard>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                     <RadzenIcon Icon="bar_chart" Style="font-size: 2rem; color: var(--rz-primary);" />
@@ -117,7 +65,7 @@
                 </RadzenStack>
             </RadzenCard>
         </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="3">
             <RadzenCard>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                     <RadzenIcon Icon="check_circle" Style="font-size: 2rem; color: var(--rz-success);" />
@@ -126,7 +74,7 @@
                 </RadzenStack>
             </RadzenCard>
         </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="3">
             <RadzenCard>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                     <RadzenIcon Icon="sync" Style="font-size: 2rem; color: var(--rz-info);" />
@@ -135,7 +83,7 @@
                 </RadzenStack>
             </RadzenCard>
         </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="3">
             <RadzenCard>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                     <RadzenIcon Icon="error" Style="font-size: 2rem; color: var(--rz-danger);" />
@@ -144,53 +92,43 @@
                 </RadzenStack>
             </RadzenCard>
         </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
-            <RadzenCard>
-                <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
-                    <RadzenIcon Icon="schedule" Style="font-size: 2rem; color: var(--rz-warning);" />
-                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_activeManifests</RadzenText>
-                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Active Manifests</RadzenText>
-                </RadzenStack>
-            </RadzenCard>
-        </RadzenColumn>
-        <RadzenColumn Size="12" SizeMD="4" SizeLG="2">
-            <RadzenCard>
-                <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
-                    <RadzenIcon Icon="account_tree" Style="font-size: 2rem; color: var(--rz-secondary);" />
-                    <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_registeredTrains</RadzenText>
-                    <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Registered Trains</RadzenText>
-                </RadzenStack>
-            </RadzenCard>
-        </RadzenColumn>
     </RadzenRow>
 }
 
-@* ── Charts Row 1: Executions Over Time + State Breakdown ── *@
-@if (DashboardSettings.ShowExecutionsChart || DashboardSettings.ShowStatusBreakdown)
+@* ── Executions Chart (with time range toggle) ── *@
+@if (DashboardSettings.ShowExecutionsChart)
 {
     <RadzenRow Gap="1rem" class="rz-mb-4">
-        @if (DashboardSettings.ShowExecutionsChart)
-        {
-            <RadzenColumn Size="12" SizeLG="@(DashboardSettings.ShowStatusBreakdown ? 8 : 12)">
-                <RadzenCard>
-                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Executions (Last 24h)</RadzenText>
+        <RadzenColumn Size="12">
+            <RadzenCard>
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" class="rz-mb-2">
+                    <RadzenText TextStyle="TextStyle.H6">Executions</RadzenText>
+                    <RadzenSelectBar Value="@_selectedTimeRange" TValue="string" Size="ButtonSize.Small" Change="@OnTimeRangeChanged">
+                        <Items>
+                            <RadzenSelectBarItem Text="Last Hour" Value="@TimeRange1H" />
+                            <RadzenSelectBarItem Text="Last 24h" Value="@TimeRange24H" />
+                        </Items>
+                    </RadzenSelectBar>
+                </RadzenStack>
+                @if (_executionsOverTime.Any(e => e.Completed > 0 || e.Failed > 0 || e.Cancelled > 0))
+                {
                     <RadzenChart Style="height: 300px;">
                         <RadzenColumnSeries Data="@_executionsOverTime"
-                                            CategoryProperty="Hour"
+                                            CategoryProperty="Label"
                                             ValueProperty="Completed"
                                             Title="Completed"
                                             Fill="#2E7D32">
                             <RadzenSeriesDataLabels Visible="false" />
                         </RadzenColumnSeries>
                         <RadzenColumnSeries Data="@_executionsOverTime"
-                                            CategoryProperty="Hour"
+                                            CategoryProperty="Label"
                                             ValueProperty="Failed"
                                             Title="Failed"
                                             Fill="#C62828">
                             <RadzenSeriesDataLabels Visible="false" />
                         </RadzenColumnSeries>
                         <RadzenColumnSeries Data="@_executionsOverTime"
-                                            CategoryProperty="Hour"
+                                            CategoryProperty="Label"
                                             ValueProperty="Cancelled"
                                             Title="Cancelled"
                                             Fill="#F9A825">
@@ -205,148 +143,11 @@
                         </RadzenValueAxis>
                         <RadzenLegend Position="LegendPosition.Bottom" />
                     </RadzenChart>
-                </RadzenCard>
-            </RadzenColumn>
-        }
-        @if (DashboardSettings.ShowStatusBreakdown)
-        {
-            <RadzenColumn Size="12" SizeLG="@(DashboardSettings.ShowExecutionsChart ? 4 : 12)">
-                <RadzenCard>
-                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Status Breakdown (Today)</RadzenText>
-                    @if (_stateCounts.Any(s => s.Count > 0))
-                    {
-                        <RadzenChart Style="height: 300px;">
-                            <RadzenDonutSeries Data="@_stateCounts"
-                                               CategoryProperty="State"
-                                               ValueProperty="Count"
-                                               Title="State"
-                                               Fills="@(new [] { "#2E7D32", "#C62828", "#1565C0", "#F9A825", "#E65100" })">
-                                <RadzenSeriesDataLabels Visible="false" />
-                            </RadzenDonutSeries>
-                            <RadzenLegend Position="LegendPosition.Bottom" />
-                        </RadzenChart>
-                    }
-                    else
-                    {
-                        <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="height: 300px;">
-                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color);">No executions today</RadzenText>
-                        </RadzenStack>
-                    }
-                </RadzenCard>
-            </RadzenColumn>
-        }
-    </RadzenRow>
-}
-
-@* ── Charts Row 2: Top Failures + Avg Duration ── *@
-@if (DashboardSettings.ShowTopFailures || DashboardSettings.ShowAvgDuration)
-{
-    <RadzenRow Gap="1rem" class="rz-mb-4">
-        @if (DashboardSettings.ShowTopFailures)
-        {
-            <RadzenColumn Size="12" SizeLG="@(DashboardSettings.ShowAvgDuration ? 6 : 12)">
-                <RadzenCard>
-                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Top Failing Trains (7d)</RadzenText>
-                    @if (_topFailures.Count > 0)
-                    {
-                        <RadzenChart Style="height: 300px;">
-                            <RadzenBarSeries Data="@_topFailures"
-                                            CategoryProperty="Name"
-                                            ValueProperty="Count"
-                                            Title="Failures"
-                                            Fill="#C62828">
-                                <RadzenSeriesDataLabels Visible="false" />
-                            </RadzenBarSeries>
-                            <RadzenCategoryAxis>
-                                <RadzenGridLines Visible="true" />
-                            </RadzenCategoryAxis>
-                            <RadzenValueAxis>
-                                <RadzenGridLines Visible="true" />
-                            </RadzenValueAxis>
-                        </RadzenChart>
-                    }
-                    else
-                    {
-                        <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="height: 300px;">
-                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color);">No failures in the last 7 days</RadzenText>
-                        </RadzenStack>
-                    }
-                </RadzenCard>
-            </RadzenColumn>
-        }
-        @if (DashboardSettings.ShowAvgDuration)
-        {
-            <RadzenColumn Size="12" SizeLG="@(DashboardSettings.ShowTopFailures ? 6 : 12)">
-                <RadzenCard>
-                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Avg Execution Duration (7d)</RadzenText>
-                    @if (_avgDurations.Count > 0)
-                    {
-                        <RadzenChart Style="height: 300px;">
-                            <RadzenBarSeries Data="@_avgDurations"
-                                            CategoryProperty="Name"
-                                            ValueProperty="AvgMs"
-                                            Title="Avg (ms)"
-                                            Fill="#2E7D32">
-                                <RadzenSeriesDataLabels Visible="false" />
-                            </RadzenBarSeries>
-                            <RadzenCategoryAxis>
-                                <RadzenGridLines Visible="true" />
-                            </RadzenCategoryAxis>
-                            <RadzenValueAxis>
-                                <RadzenGridLines Visible="true" />
-                            </RadzenValueAxis>
-                        </RadzenChart>
-                    }
-                    else
-                    {
-                        <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="height: 300px;">
-                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color);">No completed trains in the last 7 days</RadzenText>
-                        </RadzenStack>
-                    }
-                </RadzenCard>
-            </RadzenColumn>
-        }
-    </RadzenRow>
-}
-
-@* ── Throughput Chart (per-minute, last 60 min) ── *@
-@if (DashboardSettings.ShowThroughputChart)
-{
-    <RadzenRow Gap="1rem" class="rz-mb-4">
-        <RadzenColumn Size="12">
-            <RadzenCard>
-                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Throughput (Last 60 min)</RadzenText>
-                @if (_throughputData.Any(t => t.Completed > 0 || t.Failed > 0))
-                {
-                    <RadzenChart Style="height: 250px;">
-                        <RadzenColumnSeries Data="@_throughputData"
-                                            CategoryProperty="Minute"
-                                            ValueProperty="Completed"
-                                            Title="Completed"
-                                            Fill="#2E7D32">
-                            <RadzenSeriesDataLabels Visible="false" />
-                        </RadzenColumnSeries>
-                        <RadzenColumnSeries Data="@_throughputData"
-                                            CategoryProperty="Minute"
-                                            ValueProperty="Failed"
-                                            Title="Failed"
-                                            Fill="#C62828">
-                            <RadzenSeriesDataLabels Visible="false" />
-                        </RadzenColumnSeries>
-                        <RadzenColumnOptions Margin="1" />
-                        <RadzenCategoryAxis>
-                            <RadzenGridLines Visible="true" />
-                        </RadzenCategoryAxis>
-                        <RadzenValueAxis>
-                            <RadzenGridLines Visible="true" />
-                        </RadzenValueAxis>
-                        <RadzenLegend Position="LegendPosition.Bottom" />
-                    </RadzenChart>
                 }
                 else
                 {
-                    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="height: 250px;">
-                        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color);">No throughput data in the last 60 minutes</RadzenText>
+                    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="height: 300px;">
+                        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color);">No executions in this time range</RadzenText>
                     </RadzenStack>
                 }
             </RadzenCard>
@@ -354,67 +155,100 @@
     </RadzenRow>
 }
 
-@* ── Tables Row: Recent Failures + Active Manifests ── *@
-@if (DashboardSettings.ShowRecentFailures || DashboardSettings.ShowActiveManifests)
+@* ── Failures (Top Failures chart + Recent Failures table) ── *@
+@if (DashboardSettings.ShowFailures)
 {
-    <RadzenRow Gap="1rem">
-        @if (DashboardSettings.ShowRecentFailures)
-        {
-            <RadzenColumn Size="12" SizeLG="@(DashboardSettings.ShowActiveManifests ? 6 : 12)">
-                <RadzenCard>
-                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Recent Failures</RadzenText>
-                    @if (_recentFailures.Count > 0)
-                    {
-                        <RadzenDataGrid Data="@_recentFailures"
-                                        TItem="Metadata"
-                                        AllowColumnResize="true"
-                                        class="rz-datatable-striped">
-                            <Columns>
-                                <RadzenDataGridColumn TItem="Metadata" Property="Name" Title="Train" Width="180px">
+    <RadzenRow Gap="1rem" class="rz-mb-4">
+        <RadzenColumn Size="12" SizeLG="6">
+            <RadzenCard>
+                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Top Failing Trains (7d)</RadzenText>
+                @if (_topFailures.Count > 0)
+                {
+                    <RadzenChart Style="height: 300px;">
+                        <RadzenBarSeries Data="@_topFailures"
+                                        CategoryProperty="Name"
+                                        ValueProperty="Count"
+                                        Title="Failures"
+                                        Fill="#C62828">
+                            <RadzenSeriesDataLabels Visible="false" />
+                        </RadzenBarSeries>
+                        <RadzenCategoryAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenCategoryAxis>
+                        <RadzenValueAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenValueAxis>
+                    </RadzenChart>
+                }
+                else
+                {
+                    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="height: 300px;">
+                        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color);">No failures in the last 7 days</RadzenText>
+                    </RadzenStack>
+                }
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeLG="6">
+            <RadzenCard>
+                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Recent Failures</RadzenText>
+                @if (_recentFailures.Count > 0)
+                {
+                    <RadzenDataGrid Data="@_recentFailures"
+                                    TItem="Metadata"
+                                    AllowColumnResize="true"
+                                    RowClick="@OnRecentFailureRowClick"
+                                    Style="cursor: pointer;"
+                                    class="rz-datatable-striped">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="Metadata" Property="Name" Title="Train" Width="180px">
                                 <Template Context="m">@ShortName(m.Name)</Template>
                             </RadzenDataGridColumn>
-                                <RadzenDataGridColumn TItem="Metadata" Property="FailureReason" Title="Reason" />
-                                <RadzenDataGridColumn TItem="Metadata" Property="StartTime" Title="Time" Width="150px" FormatString="{0:MM-dd HH:mm:ss}" />
-                            </Columns>
-                        </RadzenDataGrid>
-                    }
-                    else
-                    {
-                        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color); text-align: center; padding: 2rem;">No recent failures</RadzenText>
-                    }
-                </RadzenCard>
-            </RadzenColumn>
-        }
-        @if (DashboardSettings.ShowActiveManifests)
-        {
-            <RadzenColumn Size="12" SizeLG="@(DashboardSettings.ShowRecentFailures ? 6 : 12)">
-                <RadzenCard>
-                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Active Scheduled Manifests</RadzenText>
-                    @if (_activeManifestList.Count > 0)
-                    {
-                        <RadzenDataGrid Data="@_activeManifestList"
-                                        TItem="Manifest"
-                                        AllowColumnResize="true"
-                                        class="rz-datatable-striped">
-                            <Columns>
-                                <RadzenDataGridColumn TItem="Manifest" Property="Name" Title="Train" Width="200px">
-                                    <Template Context="manifest">@ShortName(manifest.Name)</Template>
-                                </RadzenDataGridColumn>
-                                <RadzenDataGridColumn TItem="Manifest" Title="Schedule" Width="140px">
-                                    <Template Context="manifest">
-                                        @FormatSchedule(manifest)
-                                    </Template>
-                                </RadzenDataGridColumn>
-                                <RadzenDataGridColumn TItem="Manifest" Property="LastSuccessfulRun" Title="Last Success" Width="150px" FormatString="{0:MM-dd HH:mm:ss}" />
-                            </Columns>
-                        </RadzenDataGrid>
-                    }
-                    else
-                    {
-                        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color); text-align: center; padding: 2rem;">No active scheduled manifests</RadzenText>
-                    }
-                </RadzenCard>
-            </RadzenColumn>
-        }
+                            <RadzenDataGridColumn TItem="Metadata" Property="FailureReason" Title="Reason" />
+                            <RadzenDataGridColumn TItem="Metadata" Property="StartTime" Title="Time" Width="150px" FormatString="{0:MM-dd HH:mm:ss}" />
+                        </Columns>
+                    </RadzenDataGrid>
+                }
+                else
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color); text-align: center; padding: 2rem;">No recent failures</RadzenText>
+                }
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+}
+
+@* ── Avg Execution Duration ── *@
+@if (DashboardSettings.ShowAvgDuration)
+{
+    <RadzenRow Gap="1rem" class="rz-mb-4">
+        <RadzenColumn Size="12">
+            <RadzenCard>
+                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Avg Execution Duration (7d)</RadzenText>
+                @if (_avgDurations.Count > 0)
+                {
+                    <RadzenChart Style="height: 300px;">
+                        <RadzenBarSeries Data="@_avgDurations"
+                                        CategoryProperty="Name"
+                                        ValueProperty="AvgMs"
+                                        Title="Avg (ms)"
+                                        Fill="#2E7D32">
+                            <RadzenSeriesDataLabels Visible="false" />
+                        </RadzenBarSeries>
+                        <RadzenCategoryAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenCategoryAxis>
+                        <RadzenValueAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenValueAxis>
+                    </RadzenChart>
+                }
+                else
+                {
+                    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="height: 300px;">
+                        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color);">No completed trains in the last 7 days</RadzenText>
+                    </RadzenStack>
+                }
+            </RadzenCard>
+        </RadzenColumn>
     </RadzenRow>
 }

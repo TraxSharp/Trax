@@ -23,14 +23,9 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
     // Dashboard component visibility (all default to true)
     public bool ShowSummaryCards { get; private set; } = DefaultComponentVisibility;
     public bool ShowExecutionsChart { get; private set; } = DefaultComponentVisibility;
-    public bool ShowStatusBreakdown { get; private set; } = DefaultComponentVisibility;
-    public bool ShowTopFailures { get; private set; } = DefaultComponentVisibility;
+    public bool ShowFailures { get; private set; } = DefaultComponentVisibility;
     public bool ShowAvgDuration { get; private set; } = DefaultComponentVisibility;
-    public bool ShowRecentFailures { get; private set; } = DefaultComponentVisibility;
-    public bool ShowActiveManifests { get; private set; } = DefaultComponentVisibility;
     public bool ShowServerHealth { get; private set; } = DefaultComponentVisibility;
-    public bool ShowRealTimeMetrics { get; private set; } = DefaultComponentVisibility;
-    public bool ShowThroughputChart { get; private set; } = DefaultComponentVisibility;
 
     public async Task InitializeAsync()
     {
@@ -48,14 +43,9 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
         // Component visibility
         ShowSummaryCards = await LoadVisibilityAsync(StorageKeys.ShowSummaryCards);
         ShowExecutionsChart = await LoadVisibilityAsync(StorageKeys.ShowExecutionsChart);
-        ShowStatusBreakdown = await LoadVisibilityAsync(StorageKeys.ShowStatusBreakdown);
-        ShowTopFailures = await LoadVisibilityAsync(StorageKeys.ShowTopFailures);
+        ShowFailures = await LoadVisibilityAsync(StorageKeys.ShowFailures);
         ShowAvgDuration = await LoadVisibilityAsync(StorageKeys.ShowAvgDuration);
-        ShowRecentFailures = await LoadVisibilityAsync(StorageKeys.ShowRecentFailures);
-        ShowActiveManifests = await LoadVisibilityAsync(StorageKeys.ShowActiveManifests);
         ShowServerHealth = await LoadVisibilityAsync(StorageKeys.ShowServerHealth);
-        ShowRealTimeMetrics = await LoadVisibilityAsync(StorageKeys.ShowRealTimeMetrics);
-        ShowThroughputChart = await LoadVisibilityAsync(StorageKeys.ShowThroughputChart);
 
         _isInitialized = true;
     }
@@ -83,29 +73,14 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
             case StorageKeys.ShowExecutionsChart:
                 ShowExecutionsChart = visible;
                 break;
-            case StorageKeys.ShowStatusBreakdown:
-                ShowStatusBreakdown = visible;
-                break;
-            case StorageKeys.ShowTopFailures:
-                ShowTopFailures = visible;
+            case StorageKeys.ShowFailures:
+                ShowFailures = visible;
                 break;
             case StorageKeys.ShowAvgDuration:
                 ShowAvgDuration = visible;
                 break;
-            case StorageKeys.ShowRecentFailures:
-                ShowRecentFailures = visible;
-                break;
-            case StorageKeys.ShowActiveManifests:
-                ShowActiveManifests = visible;
-                break;
             case StorageKeys.ShowServerHealth:
                 ShowServerHealth = visible;
-                break;
-            case StorageKeys.ShowRealTimeMetrics:
-                ShowRealTimeMetrics = visible;
-                break;
-            case StorageKeys.ShowThroughputChart:
-                ShowThroughputChart = visible;
                 break;
         }
 

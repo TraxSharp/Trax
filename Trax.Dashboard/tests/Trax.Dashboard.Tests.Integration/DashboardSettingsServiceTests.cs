@@ -26,11 +26,8 @@ public class DashboardSettingsServiceTests
         _service.HideAdminTrains.Should().BeTrue();
         _service.ShowSummaryCards.Should().BeTrue();
         _service.ShowExecutionsChart.Should().BeTrue();
-        _service.ShowStatusBreakdown.Should().BeTrue();
-        _service.ShowTopFailures.Should().BeTrue();
+        _service.ShowFailures.Should().BeTrue();
         _service.ShowAvgDuration.Should().BeTrue();
-        _service.ShowRecentFailures.Should().BeTrue();
-        _service.ShowActiveManifests.Should().BeTrue();
         _service.ShowServerHealth.Should().BeTrue();
     }
 

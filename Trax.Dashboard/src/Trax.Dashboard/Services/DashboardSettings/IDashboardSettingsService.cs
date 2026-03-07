@@ -14,13 +14,8 @@ public interface IDashboardSettingsService
     // Dashboard component visibility
     bool ShowSummaryCards { get; }
     bool ShowExecutionsChart { get; }
-    bool ShowStatusBreakdown { get; }
-    bool ShowTopFailures { get; }
+    bool ShowFailures { get; }
     bool ShowAvgDuration { get; }
-    bool ShowRecentFailures { get; }
-    bool ShowActiveManifests { get; }
     bool ShowServerHealth { get; }
-    bool ShowRealTimeMetrics { get; }
-    bool ShowThroughputChart { get; }
     Task SetComponentVisibilityAsync(string key, bool visible);
 }

@@ -41,37 +41,30 @@
             <RadzenStack Gap="0.25rem">
                 <RadzenLabel Text="Server Health" />
                 <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Process CPU, memory, threads, uptime, and GC collection stats.
+                    Process CPU, memory, GC heap, and uptime.
                 </RadzenText>
                 <RadzenSwitch @bind-Value="_showServerHealth" />
             </RadzenStack>
             <RadzenStack Gap="0.25rem">
                 <RadzenLabel Text="Summary Cards" />
                 <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Executions Today, Success Rate, Currently Running, Dead Letters, Active Manifests, Registered Trains.
+                    Executions Today, Success Rate, Currently Running, Dead Letters.
                 </RadzenText>
                 <RadzenSwitch @bind-Value="_showSummaryCards" />
             </RadzenStack>
             <RadzenStack Gap="0.25rem">
-                <RadzenLabel Text="Executions Chart (24h)" />
+                <RadzenLabel Text="Executions Chart" />
                 <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Hourly bar chart of completed vs failed executions over the last 24 hours.
+                    Bar chart of completed, failed, and cancelled executions with a time range toggle (last hour or last 24 hours).
                 </RadzenText>
                 <RadzenSwitch @bind-Value="_showExecutionsChart" />
             </RadzenStack>
             <RadzenStack Gap="0.25rem">
-                <RadzenLabel Text="Status Breakdown" />
+                <RadzenLabel Text="Failures" />
                 <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Donut chart showing today's train state distribution.
+                    Top failing trains chart (7 days) and recent failures table.
                 </RadzenText>
-                <RadzenSwitch @bind-Value="_showStatusBreakdown" />
-            </RadzenStack>
-            <RadzenStack Gap="0.25rem">
-                <RadzenLabel Text="Top Failing Trains" />
-                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Bar chart of the most-failing trains over the last 7 days.
-                </RadzenText>
-                <RadzenSwitch @bind-Value="_showTopFailures" />
+                <RadzenSwitch @bind-Value="_showFailures" />
             </RadzenStack>
             <RadzenStack Gap="0.25rem">
                 <RadzenLabel Text="Avg Execution Duration" />
@@ -79,34 +72,6 @@
                     Bar chart of average train execution times over the last 7 days.
                 </RadzenText>
                 <RadzenSwitch @bind-Value="_showAvgDuration" />
-            </RadzenStack>
-            <RadzenStack Gap="0.25rem">
-                <RadzenLabel Text="Recent Failures" />
-                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Table of the most recent failed train executions.
-                </RadzenText>
-                <RadzenSwitch @bind-Value="_showRecentFailures" />
-            </RadzenStack>
-            <RadzenStack Gap="0.25rem">
-                <RadzenLabel Text="Active Scheduled Manifests" />
-                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Table of currently enabled scheduled manifests with their schedules.
-                </RadzenText>
-                <RadzenSwitch @bind-Value="_showActiveManifests" />
-            </RadzenStack>
-            <RadzenStack Gap="0.25rem">
-                <RadzenLabel Text="Real-Time Metrics" />
-                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Queue depth, completed per minute, and failed per minute cards (5-minute rolling window).
-                </RadzenText>
-                <RadzenSwitch @bind-Value="_showRealTimeMetrics" />
-            </RadzenStack>
-            <RadzenStack Gap="0.25rem">
-                <RadzenLabel Text="Throughput Chart" />
-                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                    Per-minute throughput chart showing completed and failed jobs over the last 60 minutes.
-                </RadzenText>
-                <RadzenSwitch @bind-Value="_showThroughputChart" />
             </RadzenStack>
         </RadzenStack>
     </RadzenFieldset>

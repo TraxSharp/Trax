@@ -10,12 +10,7 @@ public static class StorageKeys
     // Dashboard component visibility
     public const string ShowSummaryCards = "trax-show-summary-cards";
     public const string ShowExecutionsChart = "trax-show-executions-chart";
-    public const string ShowStatusBreakdown = "trax-show-status-breakdown";
-    public const string ShowTopFailures = "trax-show-top-failures";
+    public const string ShowFailures = "trax-show-failures";
     public const string ShowAvgDuration = "trax-show-avg-duration";
-    public const string ShowRecentFailures = "trax-show-recent-failures";
-    public const string ShowActiveManifests = "trax-show-active-manifests";
     public const string ShowServerHealth = "trax-show-server-health";
-    public const string ShowRealTimeMetrics = "trax-show-real-time-metrics";
-    public const string ShowThroughputChart = "trax-show-throughput-chart";
 }
