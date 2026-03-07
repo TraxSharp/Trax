@@ -90,6 +90,7 @@ services.AddTrax(trax => trax
 | Service | Lifetime | Description |
 |---------|----------|-------------|
 | `LocalWorkerOptions` | Singleton | Configuration options |
+| `IJobRunnerTrain` → `JobRunnerTrain` | Scoped | The train that workers use to execute each job |
 | `IJobSubmitter` → `PostgresJobSubmitter` | Scoped | Enqueue implementation (INSERT into background_job) |
 | `LocalWorkerService` | Hosted Service | Background worker that polls and executes jobs |
 

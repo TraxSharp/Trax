@@ -104,7 +104,7 @@ services.AddTrax(trax => trax
 
 Orphan manifest cleanup and [ScheduleMany's PrunePrefix]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %}#with-pruning-automatic-stale-cleanup) are complementary:
 
-- **PrunePrefix** operates within a single `ScheduleMany` batch during seeding, removing items that were in a previous deployment but not in the current batch. It runs as part of the seeding transaction.
+- **PrunePrefix** operates within a single `ScheduleMany` batch during seeding, removing items that were in a previous deployment but not in the current batch. It runs in a separate database context after the main seeding transaction commits — a prune failure does not roll back the upserted manifests.
 - **Orphan manifest cleanup** operates globally after all seeding is complete, removing any manifest not in the configured set — including entire `Schedule` definitions that were removed.
 
 Both features compose correctly. PrunePrefix may delete some manifests during seeding, and orphan cleanup catches any remaining orphans afterward.

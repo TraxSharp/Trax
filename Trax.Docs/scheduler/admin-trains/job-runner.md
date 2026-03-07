@@ -37,7 +37,7 @@ Checks that the loaded metadata is in `TrainState.Pending`. If it's already `InP
 
 ### RunScheduledTrainStep
 
-Resolves the target train via `ITrainBus` using the deserialized input and invokes it. This is where your train's `RunInternal` method gets called. The train runs as a nested train under the JobRunner's own metadata, maintaining the parent-child relationship in the metadata tree.
+Resolves the target train via `ITrainBus` using the deserialized input and invokes it. The train name stored in the metadata record is the canonical interface name (set via `CanonicalName` during DI registration), which `ITrainBus` uses for resolution. This is where your train's `RunInternal` method gets called. The train runs as a nested train under the JobRunner's own metadata, maintaining the parent-child relationship in the metadata tree.
 
 ### UpdateManifestSuccessStep
 
@@ -71,4 +71,4 @@ See [Multi-Server Concurrency](../concurrency.md) for the full cross-service con
 
 ## Registration
 
-All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()`, `AddTraxWorker()`, or `AddTraxJobRunner()`. You do **not** need to include the `Trax.Scheduler` assembly in `AddMediator()` — only pass your own train assemblies.
+All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()`, `AddTraxWorker()`, or `AddTraxJobRunner()`. Additionally, `UseLocalWorkers()` registers `JobRunnerTrain` as a scoped train route so that local workers can resolve and execute it. You do **not** need to include the `Trax.Scheduler` assembly in `AddMediator()` — only pass your own train assemblies.

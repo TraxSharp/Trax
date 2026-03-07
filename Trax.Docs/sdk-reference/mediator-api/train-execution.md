@@ -8,7 +8,7 @@ nav_order: 4
 
 # TrainExecution
 
-`ITrainExecutionService` provides programmatic train execution by name. Instead of resolving a specific train interface, you pass the train's service type name and a JSON string — the service handles discovery, deserialization, and dispatch. Train lookup matches by friendly name first (`ServiceTypeName`), then falls back to short name (`ServiceType.Name`).
+`ITrainExecutionService` provides programmatic train execution by name. Instead of resolving a specific train interface, you pass the train's service type name and a JSON string — the service handles discovery, deserialization, and dispatch. Train lookup matches by fully-qualified canonical name first (`ServiceType.FullName`), then friendly name (`ServiceTypeName`), then short name (`ServiceType.Name`).
 
 It supports two execution paths:
 - **Queue** — creates a WorkQueue entry for asynchronous dispatch by the scheduler.
@@ -51,7 +51,7 @@ Task<QueueTrainResult> QueueAsync(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `trainName` | `string` | Yes | — | Service type name — matched by friendly name first, then short name (e.g. `"IProcessOrderTrain"`) |
+| `trainName` | `string` | Yes | — | Train name — matched by canonical name (`ServiceType.FullName`), then friendly name (`ServiceTypeName`), then short name (`ServiceType.Name`). Prefer the fully-qualified interface name (e.g. `"MyApp.Trains.IProcessOrderTrain"`). |
 | `inputJson` | `string` | Yes | — | JSON-serialized input matching the train's `InputType` |
 | `priority` | `int` | No | `0` | Dispatch priority (0-31, higher runs first) |
 | `ct` | `CancellationToken` | No | `default` | Cancellation token |
@@ -92,7 +92,7 @@ Task<RunTrainResult> RunAsync(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `trainName` | `string` | Yes | — | Service type name (matched by friendly name, then short name) |
+| `trainName` | `string` | Yes | — | Train name (matched by canonical name, then friendly name, then short name) |
 | `inputJson` | `string` | Yes | — | JSON-serialized input matching the train's `InputType` |
 | `ct` | `CancellationToken` | No | `default` | Cancellation token forwarded to `ITrainBus.RunAsync` |
 

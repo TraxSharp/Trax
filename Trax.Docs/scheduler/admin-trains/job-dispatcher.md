@@ -44,7 +44,7 @@ If the entry has already been claimed by another server (locked in another trans
 
 For each successfully claimed entry, the dispatcher:
 
-1. **Deserializes the input**: uses `InputTypeName` to resolve the CLR type, then deserializes `Input` from JSON. Type resolution searches all loaded assemblies.
+1. **Deserializes the input**: uses `InputTypeName` to resolve the CLR type, then deserializes `Input` from JSON. Type resolution searches all loaded assemblies. The `TrainName` stored in the work queue entry is the canonical interface name (e.g. `MyApp.Trains.IProcessOrderTrain`), set during scheduling or queue submission.
 
 2. **Creates a Metadata record**: a new `Metadata` row with `TrainState = Pending`, linked to the manifest (if present). Saved immediately so it gets a database-generated ID.
 

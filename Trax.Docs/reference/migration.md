@@ -130,3 +130,18 @@ The migration is idempotent — existing data is preserved and migrated automati
 ### No Breaking Changes for Most Users
 
 If you were not using `Manifest.GroupId` directly in your code, no source changes are needed beyond running the migration. The `groupId` parameter defaults are designed to be backward-compatible — each manifest gets its own group when no explicit groupId is provided.
+
+## Scaling Indexes Migration (026)
+
+Run `026_scaling_indexes.sql` against your database. This migration adds partial and composite indexes that prevent sequential scans at high row counts. All indexes use `CREATE INDEX IF NOT EXISTS` and are safe to re-run.
+
+| Index | Table | Covers |
+|-------|-------|--------|
+| `ix_metadata_train_state_start_time` | `metadata` | Stale/stuck job queries (partial: `pending`, `in_progress` only) |
+| `ix_metadata_start_time_desc` | `metadata` | Dashboard KPI aggregations, API pagination |
+| `ix_metadata_manifest_id_train_state` | `metadata` | Active job counts per manifest group (partial: `pending`, `in_progress` only) |
+| `ix_metadata_end_time_desc` | `metadata` | Health check failure counts (partial: non-null `end_time` only) |
+| `ix_background_job_unfetched` | `background_job` | Worker dequeue query (partial: unfetched only) |
+| `ix_work_queue_manifest_id_status_queued` | `work_queue` | Dormant dependent activation check (partial: `queued` only) |
+
+These indexes are recommended for any deployment with more than a few thousand metadata rows. They have no effect on correctness — only on query performance.

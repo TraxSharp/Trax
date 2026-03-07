@@ -74,6 +74,7 @@ services.AddScopedTraxRoute<IProcessPaymentTrain, ProcessPaymentTrain>();
 2. Registers `TService` with a factory that:
    - Resolves `TImplementation` from the container
    - Calls `InjectProperties()` to set all `[Inject]`-attributed properties on the instance
+   - Sets `CanonicalName` to `TService`'s `FullName` (the interface name) — this is used as the train's canonical identifier in metadata, work queue entries, and subscription matching. See [Canonical Train Naming]({{ site.baseurl }}{% link effect/architecture.md %}#canonical-train-naming).
    - Returns the fully-initialized instance
 
 ## When to Use

@@ -97,6 +97,8 @@ The API includes an ASP.NET Core `IHealthCheck` that queries the database and re
 - **Failed (last hour)** — recent failures
 - **Dead letters** — unresolved dead letter entries
 
+In-progress and failed counts are batched into a single database query (via `GroupBy`) to minimize round-trips on each health check poll.
+
 Returns `Healthy` when everything looks normal, `Degraded` when dead letters exist or recent failures exceed a threshold. The same data is available as a [GraphQL query]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}#health) for consumers that prefer structured access over the standard health endpoint.
 
 ```csharp

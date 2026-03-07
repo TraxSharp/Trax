@@ -54,7 +54,14 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     [Inject] public IServiceProvider? ServiceProvider { get; set; }
 
     public Metadata? Metadata { get; internal set; }
-    internal string TrainName => GetType().FullName ?? GetType().Name;
+
+    // The canonical (interface) name, set automatically during DI registration
+    public string? CanonicalName { get; set; }
+
+    // Prefers CanonicalName (interface name) over the concrete type's FullName
+    internal string TrainName =>
+        CanonicalName ?? GetType().FullName ?? GetType().Name;
+
     internal long? ParentId { get; set; }
 
     public override async Task<TOut> Run(TIn input, CancellationToken cancellationToken = default)
@@ -137,6 +144,16 @@ public class EffectRunner : IEffectRunner
 ```
 
 This layer adds metadata tracking, effect coordination, and handles the train lifecycle (create metadata -> run steps -> save effects).
+
+### Canonical Train Naming
+
+When a `ServiceTrain` is resolved through DI (via `AddScopedTraxRoute`, `AddMediator`, etc.), the registration factory sets `CanonicalName` to the **service interface type's `FullName`** (e.g., `MyApp.Trains.IProcessOrderTrain`). This ensures that:
+
+- **Metadata records** always store the interface name, not the concrete class name
+- **Work queue entries** reference the interface name, making train resolution stable across refactors of the implementation class
+- **Subscriptions and event handlers** match on a single canonical name instead of both service and implementation type names
+
+If a train is instantiated outside of DI (e.g., in tests), `CanonicalName` is `null` and `TrainName` falls back to `GetType().FullName`.
 
 ## Effect Providers Architecture
 

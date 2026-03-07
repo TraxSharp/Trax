@@ -59,6 +59,16 @@ public class TrainBus : ITrainBus
 
 Each input type maps to exactly one train. When duplicate input types are found, the first registration wins — subsequent duplicates are silently skipped via `TryAdd`. See [SDK Reference: AddMediator]({{ site.baseurl }}{% link sdk-reference/mediator-api/add-service-train-bus.md %}) for the full uniqueness rules and code examples.
 
+### Train Name Resolution
+
+When looking up a train by name (e.g., via `ITrainExecutionService`), the system tries three matches in order:
+
+1. **Canonical name** — `ServiceType.FullName` (the interface's fully-qualified name, e.g. `MyApp.Trains.IProcessOrderTrain`)
+2. **Friendly name** — `ServiceTypeName` (the display name from the registration)
+3. **Short name** — `ServiceType.Name` (the unqualified interface name, e.g. `IProcessOrderTrain`)
+
+The canonical name is the preferred identifier. It is stable across implementation class renames and matches what is stored in metadata and work queue entries.
+
 ### Train Discovery Rules
 
 1. **Must be concrete classes** (not abstract)

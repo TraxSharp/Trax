@@ -43,7 +43,7 @@ type TrainLifecycleEvent {
 |-------|-------------|
 | `metadataId` | The database metadata row ID for this execution |
 | `externalId` | The external identifier assigned to this execution |
-| `trainName` | The fully-qualified name of the train class |
+| `trainName` | The canonical train name (the service interface's fully-qualified name, e.g. `MyApp.Trains.IProcessOrderTrain`) |
 | `trainState` | The current state of the train (`InProgress`, `Completed`, `Failed`, `Cancelled`) |
 | `timestamp` | When the event occurred (end time if available, otherwise current UTC time) |
 | `failureStep` | The step that failed (only present on failed trains) |
@@ -112,13 +112,13 @@ For programmatic clients, use any GraphQL client that supports the `graphql-ws` 
 
 Subscriptions are powered by the [lifecycle hooks]({{ site.baseurl }}{% link sdk-reference/configuration/add-lifecycle-hook.md %}) system. The `GraphQLSubscriptionHook` is automatically registered by `AddTraxGraphQL()` and publishes lifecycle events to HotChocolate's in-memory subscription transport.
 
-At startup, the hook builds a set of train names that have `[TraxBroadcast]`. On each lifecycle event, it checks the train name against this set and only publishes if the train is opted in.
+At startup, the hook builds a set of canonical train names (using `ServiceType.FullName` — the interface name) from registrations that have `[TraxBroadcast]`. On each lifecycle event, it checks the train's metadata name against this set and only publishes if the train is opted in.
 
 ```
 ServiceTrain.Run()
   → LifecycleHookRunner.OnCompleted()
     → GraphQLSubscriptionHook.OnCompleted()
-      → Check: does this train have [TraxBroadcast]?
+      → Check: does metadata.Name match a [TraxBroadcast] train's ServiceType.FullName?
         → Yes → ITopicEventSender.SendAsync("OnTrainCompleted", event)
           → WebSocket clients receive the event
         → No → skip (no event published)
@@ -133,7 +133,7 @@ By default, subscriptions only fire for trains that execute in the same process 
 effects.UseBroadcaster(b => b.UseRabbitMq("amqp://guest:guest@localhost:5672"))
 ```
 
-When a broadcaster is configured, `AddTraxGraphQL()` automatically registers a `GraphQLTrainEventHandler` that receives remote lifecycle events from the message bus and forwards them to HotChocolate's subscription transport. Like the local `GraphQLSubscriptionHook`, the remote handler also filters by `[TraxBroadcast]` — only trains with the attribute produce subscription events, regardless of which process executes them. Events from the local process are de-duplicated automatically.
+When a broadcaster is configured, `AddTraxGraphQL()` automatically registers a `GraphQLTrainEventHandler` that receives remote lifecycle events from the message bus and forwards them to HotChocolate's subscription transport. Like the local `GraphQLSubscriptionHook`, the remote handler filters by `[TraxBroadcast]` using canonical train names (`ServiceType.FullName`) — only trains with the attribute produce subscription events, regardless of which process executes them. Events from the local process are de-duplicated automatically.
 
 See [UseBroadcaster]({{ site.baseurl }}{% link sdk-reference/configuration/use-broadcaster.md %}) for full details.
 

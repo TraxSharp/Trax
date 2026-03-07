@@ -129,6 +129,7 @@ The dashboard home page includes real-time operational metrics that update on ea
 - **Completed/min** — jobs completed per minute (5-minute rolling window)
 - **Failed/min** — jobs failed per minute (5-minute rolling window)
 - **Throughput Chart** — per-minute completed/failed chart for the last 60 minutes
+- **Throughput Sparkline** — 7-day throughput broken down by the top 3 trains (plus "Other"), with one data point per 6-hour block. Shows which trains are driving volume over the past week.
 
 These complement the existing summary cards (executions today, success rate, currently running, dead letters, active manifests, registered trains).
 
@@ -201,7 +202,7 @@ The **User Settings** page (`/trax/settings/user`) lets each user customize thei
 |---------|---------|-------------|
 | **Polling Interval** | 5 seconds | How often dashboard pages re-query for fresh data. Range: 1–300 seconds. |
 | **Hide Administration Trains** | `true` | Exclude scheduler internals (ManifestManager, JobRunner, MetadataCleanup) from statistics and charts. |
-| **Dashboard Components** | All visible | Toggle visibility of individual home page sections (summary cards, charts, tables, real-time metrics, throughput chart). |
+| **Dashboard Components** | All visible | Toggle visibility of individual home page sections (summary cards, charts, real-time metrics, throughput chart, throughput sparkline). |
 
 ## Integration with Existing Blazor Apps
 

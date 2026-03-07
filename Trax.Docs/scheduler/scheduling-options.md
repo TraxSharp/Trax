@@ -116,6 +116,8 @@ await scheduler.ScheduleManyAsync<ISyncTableTrain, SyncTableInput, (string Table
 
 When the source collection shrinks between deployments—tables removed, slices reduced—old manifests stick around in the database. The name-based overload handles this automatically (`prunePrefix: "{name}-"`). With the explicit overload, specify `prunePrefix` manually. After upserting the batch, any existing manifests whose `ExternalId` starts with the prefix but weren't in the current batch are deleted—keeping the manifest table in sync with your source data.
 
+Pruning runs in a **separate database context** after the main transaction commits. This means a prune failure (e.g., a transient database error) does not roll back successfully upserted manifests. The failure is logged as a warning and retried on the next startup or scheduling cycle.
+
 *SDK Reference: [ScheduleMany — prunePrefix]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %})*
 
 ## Per-Group Dispatch Controls

@@ -95,3 +95,18 @@ Remove any line and the train still runs — it just passes through fewer statio
 The `ServiceTrain` base class manages this lifecycle. When you use a plain `Train` (the bare locomotive), you get routing and derailment propagation but no station services. When you use `ServiceTrain` (the full commercial service), you get the complete station service network on top.
 
 See [Effect Providers](../effect/effect-providers.md) for configuring each provider, and [Core & Effects](../effect/architecture.md) for how the `EffectRunner` coordinates them internally.
+
+## Null Assertion Helpers
+
+Trax.Core provides two extension methods for asserting that values have been loaded (i.e., are not null). These replace scattered `!` operators with a single, expressive call that throws a clear `InvalidOperationException` when the value is missing.
+
+```csharp
+// Assert a single value is loaded
+EffectRunner.AssertLoaded();           // throws if EffectRunner is null
+registration.ServiceType.FullName.AssertLoaded();
+
+// Assert a property across a collection
+steps.AssertEachLoaded(s => s.Metadata);  // throws if any step's Metadata is null
+```
+
+Both methods use `[CallerArgumentExpression]` to include the source expression in the error message, making it easy to identify what failed without a debugger.

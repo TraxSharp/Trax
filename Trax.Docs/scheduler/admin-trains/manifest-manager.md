@@ -54,7 +54,7 @@ Both passes apply the same per-manifest guards before evaluating the schedule:
 ### CreateWorkQueueEntriesStep
 
 For each manifest identified as due, creates a `WorkQueue` entry with:
-- `TrainName` from the manifest's `Name`
+- `TrainName` from the manifest's `Name` (the canonical interface name, e.g. `MyApp.Trains.IProcessOrderTrain`)
 - `Input` / `InputTypeName` from the manifest's `Properties` / `PropertyTypeName`
 - `ManifestId` linking back to the source manifest
 - `Priority` set from `ManifestGroup.Priority` (the group's priority, not an individual manifest priority)

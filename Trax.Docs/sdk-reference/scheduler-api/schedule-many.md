@@ -269,7 +269,7 @@ public class TenantSyncService(ITraxScheduler scheduler)
 ## Remarks
 
 - All manifests are created/updated in a **single database transaction**. If any manifest fails to save, the entire batch is rolled back.
-- Pruning is included in the same transaction — stale manifests are deleted atomically with the new batch.
+- Pruning runs in a **separate database context** after the main transaction commits. A prune failure does not roll back the upserted manifests — the failure is logged as a warning and retried on the next cycle.
 - The `configureEach` callback receives `Action<TSource, ManifestOptions>` (not `Action<ManifestOptions>` like `Schedule`) — this lets you customize options based on the source item. It applies per-item overrides on top of the base options from `ScheduleOptions`.
 - The source collection is materialized (`.ToList()`) internally to avoid multiple enumeration.
 - The group is configured via `.Group(...)` on `ScheduleOptions`. Per-group settings (MaxActiveJobs, Priority, IsEnabled) can be set from code or adjusted at runtime from the dashboard. See [Per-Group Dispatch Controls]({{ site.baseurl }}{% link scheduler/scheduling-options.md %}#per-group-dispatch-controls).
