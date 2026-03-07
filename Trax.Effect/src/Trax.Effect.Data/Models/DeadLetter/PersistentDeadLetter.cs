@@ -12,6 +12,8 @@ public class PersistentDeadLetter : Effect.Models.DeadLetter.DeadLetter
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
 
+            entity.HasIndex(e => e.ManifestId);
+
             entity
                 .HasOne(x => x.Manifest)
                 .WithMany(m => m.DeadLetters)

@@ -14,6 +14,9 @@ public class PersistentMetadata : Effect.Models.Metadata.Metadata
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
 
+            entity.HasIndex(e => e.ManifestId);
+            entity.HasIndex(e => new { e.Name, e.TrainState });
+
             entity
                 .HasOne(x => x.Parent)
                 .WithMany(x => x.Children)

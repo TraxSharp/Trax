@@ -15,6 +15,8 @@ public class PersistentWorkQueue : Effect.Models.WorkQueue.WorkQueue
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
 
+            entity.HasIndex(e => e.ManifestId);
+
             entity.Property(e => e.Input).HasColumnType("jsonb");
 
             entity

@@ -25,6 +25,8 @@ public class PersistentManifest : Effect.Models.Manifest.Manifest
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
 
+            entity.HasIndex(e => e.ExternalId).IsUnique();
+
             entity.Property(e => e.Properties).HasColumnType("jsonb");
             entity.Property(e => e.Exclusions).HasColumnType("jsonb");
 
