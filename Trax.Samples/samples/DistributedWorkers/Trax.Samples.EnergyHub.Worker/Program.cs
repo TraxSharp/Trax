@@ -23,6 +23,7 @@
 // so multiple worker instances can run safely without duplicate execution.
 // ─────────────────────────────────────────────────────────────────────────────
 
+using Trax.Effect.Broadcaster.RabbitMQ.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -31,7 +32,6 @@ using Trax.Effect.StepProvider.Progress.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.EnergyHub;
 using Trax.Scheduler.Extensions;
-using Trax.Scheduler.Trains.ManifestManager;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,16 +39,27 @@ var connectionString =
     builder.Configuration.GetConnectionString("TraxDatabase")
     ?? throw new InvalidOperationException("Connection string 'TraxDatabase' not found.");
 
+var rabbitMqConnectionString =
+    builder.Configuration.GetConnectionString("RabbitMQ")
+    ?? throw new InvalidOperationException("Connection string 'RabbitMQ' not found.");
+
 builder.Services.AddLogging(logging => logging.AddConsole());
 
 // ── Register Trax Effect + Mediator (trains, bus, discovery, execution) ──
 // The worker must reference the same train assemblies as the scheduler so it
 // can resolve and execute any train type that gets dispatched.
+// UseBroadcaster() publishes lifecycle events to RabbitMQ so the Hub's
+// GraphQL subscriptions are notified when queued trains complete.
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
-            effects.UsePostgres(connectionString).AddJson().SaveTrainParameters().AddStepProgress()
+            effects
+                .UsePostgres(connectionString)
+                .AddJson()
+                .SaveTrainParameters()
+                .AddStepProgress()
+                .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString))
         )
-        .AddMediator(typeof(ManifestNames).Assembly, typeof(ManifestManagerTrain).Assembly)
+        .AddMediator(typeof(ManifestNames).Assembly)
 );
 
 // ── Register standalone worker ───────────────────────────────────────────

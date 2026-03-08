@@ -13,6 +13,11 @@
     <Project Path="samples/DataPipeline/Trax.Samples.Flowthru.Spaceflights/Trax.Samples.Flowthru.Spaceflights.csproj" />
     <Project Path="samples/DataPipeline/Trax.Samples.Flowthru.Spaceflights.Scheduler/Trax.Samples.Flowthru.Spaceflights.Scheduler.csproj" />
   </Folder>
+  <Folder Name="/samples/EphemeralWorkers/">
+    <Project Path="samples/EphemeralWorkers/Trax.Samples.ContentShield/Trax.Samples.ContentShield.csproj" />
+    <Project Path="samples/EphemeralWorkers/Trax.Samples.ContentShield.Api/Trax.Samples.ContentShield.Api.csproj" />
+    <Project Path="samples/EphemeralWorkers/Trax.Samples.ContentShield.Runner/Trax.Samples.ContentShield.Runner.csproj" />
+  </Folder>
   <Folder Name="/templates/">
     <Project Path="templates/Trax.Samples.Templates.csproj" />
   </Folder>

@@ -39,7 +39,6 @@ using Trax.Samples.GameServer.Trains.Rewards.DistributeDailyRewards;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Scheduling;
-using Trax.Scheduler.Trains.ManifestManager;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,7 +57,7 @@ builder.Services.AddTrax(trax =>
                 .SaveTrainParameters()
                 .AddStepProgress()
         )
-        .AddMediator(typeof(ManifestNames).Assembly, typeof(ManifestManagerTrain).Assembly)
+        .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
         {
             // ── Global Configuration ────────────────────────────────────────
@@ -75,7 +74,6 @@ builder.Services.AddTrax(trax =>
                     cleanup.AddTrainType<IDistributeDailyRewardsTrain>();
                     cleanup.AddTrainType<ICorruptedDataRepairTrain>();
                 })
-                .JobDispatcherPollingInterval(TimeSpan.FromSeconds(2))
                 .UseLocalWorkers();
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

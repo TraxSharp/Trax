@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Trax.Samples.EnergyHub\Trax.Samples.EnergyHub.csproj" />
+    <ProjectReference Include="..\Trax.Samples.ContentShield\Trax.Samples.ContentShield.csproj" />
   </ItemGroup>
 
   <ItemGroup>

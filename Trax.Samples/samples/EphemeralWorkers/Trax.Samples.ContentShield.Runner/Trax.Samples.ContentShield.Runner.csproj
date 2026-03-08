@@ -5,20 +5,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
-    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Trax.Samples.EnergyHub\Trax.Samples.EnergyHub.csproj" />
+    <ProjectReference Include="..\Trax.Samples.ContentShield\Trax.Samples.ContentShield.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
     <PackageReference Include="Trax.Effect.StepProvider.Progress" Version="1.*" />
-    <PackageReference Include="Trax.Dashboard" Version="1.*" />
-    <PackageReference Include="Trax.Api" Version="1.*" />
-    <PackageReference Include="Trax.Api.GraphQL" Version="1.*" />
+    <PackageReference Include="Trax.Scheduler" Version="1.*" />
     <PackageReference Include="Trax.Effect.Broadcaster.RabbitMQ" Version="1.*" />
   </ItemGroup>
 </Project>

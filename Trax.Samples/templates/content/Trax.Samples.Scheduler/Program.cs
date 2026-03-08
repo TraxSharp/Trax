@@ -22,7 +22,6 @@ using Trax.Mediator.Extensions;
 using Trax.Samples.Scheduler.Trains.HelloWorld;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Scheduling;
-using Trax.Scheduler.Trains.ManifestManager;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,7 +39,7 @@ builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
             effects.UsePostgres(connectionString).AddJson().SaveTrainParameters().AddStepProgress()
         )
-        .AddMediator(typeof(Program).Assembly, typeof(ManifestManagerTrain).Assembly)
+        .AddMediator(typeof(Program).Assembly)
         .AddScheduler(scheduler =>
         {
             scheduler.UseLocalWorkers();

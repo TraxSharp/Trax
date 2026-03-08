@@ -33,7 +33,6 @@ using Trax.Samples.Flowthru.Spaceflights.Trains.Reporting;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Scheduling;
-using Trax.Scheduler.Trains.ManifestManager;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,7 +80,7 @@ builder.Services.AddTrax(trax =>
                 .SaveTrainParameters()
                 .AddStepProgress()
         )
-        .AddMediator(typeof(ManifestNames).Assembly, typeof(ManifestManagerTrain).Assembly)
+        .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
         {
             scheduler
