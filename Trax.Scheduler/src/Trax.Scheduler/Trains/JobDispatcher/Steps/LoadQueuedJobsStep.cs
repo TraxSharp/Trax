@@ -16,12 +16,13 @@ internal class LoadQueuedJobsStep(IDataContext dataContext) : EffectStep<Unit, L
 {
     public override async Task<List<WorkQueue>> Run(Unit input) =>
         await dataContext
-            .WorkQueues.Include(q => q.Manifest)
-                .ThenInclude(m => m.ManifestGroup)
+            .WorkQueues.AsNoTracking()
+            .Include(q => q.Manifest)
+                .ThenInclude(m => m!.ManifestGroup)
             .Where(q => q.Status == WorkQueueStatus.Queued)
-            .Where(q => q.ManifestId == null || q.Manifest.ManifestGroup.IsEnabled)
+            .Where(q => q.ManifestId == null || q.Manifest!.ManifestGroup!.IsEnabled)
             .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
-            .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup.Priority : 0)
+            .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup!.Priority : 0)
             .ThenByDescending(q => q.Priority)
             .ThenBy(q => q.CreatedAt)
             .ToListAsync(CancellationToken);

@@ -120,13 +120,6 @@ public class TraxScheduler(
             }
 
             await context.SaveChanges(ct);
-
-            if (resolved.PrunePrefix is not null)
-            {
-                var keepIds = results.Select(m => m.ExternalId).ToHashSet();
-                await PruneStaleManifestsAsync(context, resolved.PrunePrefix, keepIds, ct);
-            }
-
             await context.CommitTransaction();
 
             logger.LogInformation(
@@ -134,6 +127,12 @@ public class TraxScheduler(
                 results.Count,
                 typeof(TTrain).Name
             );
+
+            if (resolved.PrunePrefix is not null)
+            {
+                var keepIds = results.Select(m => m.ExternalId).ToHashSet();
+                await PruneSafeAsync(resolved.PrunePrefix, keepIds, ct);
+            }
 
             return results;
         }
@@ -272,13 +271,6 @@ public class TraxScheduler(
             }
 
             await context.SaveChanges(ct);
-
-            if (resolved.PrunePrefix is not null)
-            {
-                var keepIds = results.Select(m => m.ExternalId).ToHashSet();
-                await PruneStaleManifestsAsync(context, resolved.PrunePrefix, keepIds, ct);
-            }
-
             await context.CommitTransaction();
 
             logger.LogInformation(
@@ -286,6 +278,12 @@ public class TraxScheduler(
                 results.Count,
                 typeof(TTrain).Name
             );
+
+            if (resolved.PrunePrefix is not null)
+            {
+                var keepIds = results.Select(m => m.ExternalId).ToHashSet();
+                await PruneSafeAsync(resolved.PrunePrefix, keepIds, ct);
+            }
 
             return results;
         }
@@ -737,13 +735,6 @@ public class TraxScheduler(
             }
 
             await context.SaveChanges(ct);
-
-            if (resolved.PrunePrefix is not null)
-            {
-                var keepIds = results.Select(m => m.ExternalId).ToHashSet();
-                await PruneStaleManifestsAsync(context, resolved.PrunePrefix, keepIds, ct);
-            }
-
             await context.CommitTransaction();
 
             logger.LogInformation(
@@ -751,6 +742,12 @@ public class TraxScheduler(
                 results.Count,
                 trainType.Name
             );
+
+            if (resolved.PrunePrefix is not null)
+            {
+                var keepIds = results.Select(m => m.ExternalId).ToHashSet();
+                await PruneSafeAsync(resolved.PrunePrefix, keepIds, ct);
+            }
 
             return results;
         }
@@ -833,13 +830,6 @@ public class TraxScheduler(
             }
 
             await context.SaveChanges(ct);
-
-            if (resolved.PrunePrefix is not null)
-            {
-                var keepIds = results.Select(m => m.ExternalId).ToHashSet();
-                await PruneStaleManifestsAsync(context, resolved.PrunePrefix, keepIds, ct);
-            }
-
             await context.CommitTransaction();
 
             logger.LogInformation(
@@ -847,6 +837,12 @@ public class TraxScheduler(
                 results.Count,
                 trainType.Name
             );
+
+            if (resolved.PrunePrefix is not null)
+            {
+                var keepIds = results.Select(m => m.ExternalId).ToHashSet();
+                await PruneSafeAsync(resolved.PrunePrefix, keepIds, ct);
+            }
 
             return results;
         }
@@ -902,6 +898,27 @@ public class TraxScheduler(
     ) =>
         await context.Manifests.FirstOrDefaultAsync(m => m.ExternalId == externalId, ct)
         ?? throw new InvalidOperationException($"No manifest found with ExternalId '{externalId}'");
+
+    private async Task PruneSafeAsync(
+        string prunePrefix,
+        System.Collections.Generic.HashSet<string> keepExternalIds,
+        CancellationToken ct
+    )
+    {
+        try
+        {
+            await using var pruneContext = CreateContext();
+            await PruneStaleManifestsAsync(pruneContext, prunePrefix, keepExternalIds, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Failed to prune stale manifests with prefix '{Prefix}' — will retry on next startup",
+                prunePrefix
+            );
+        }
+    }
 
     private async Task PruneStaleManifestsAsync(
         IDataContext context,

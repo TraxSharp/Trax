@@ -23,5 +23,6 @@
     <InternalsVisibleTo Include="Trax.Scheduler.Hangfire" />
     <InternalsVisibleTo Include="Trax.Scheduler.Tests" />
     <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests.Stress" />
   </ItemGroup>
 </Project>

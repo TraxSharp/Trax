@@ -1,6 +1,5 @@
 using LanguageExt;
 using Microsoft.Extensions.Logging;
-using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectStep;
@@ -10,10 +9,8 @@ namespace Trax.Scheduler.Trains.JobRunner.Steps;
 /// <summary>
 /// Updates the Manifest's LastSuccessfulRun timestamp after successful train execution.
 /// </summary>
-internal class UpdateManifestSuccessStep(
-    IDataContext dataContext,
-    ILogger<UpdateManifestSuccessStep> logger
-) : EffectStep<Metadata, Unit>
+internal class UpdateManifestSuccessStep(ILogger<UpdateManifestSuccessStep> logger)
+    : EffectStep<Metadata, Unit>
 {
     public override async Task<Unit> Run(Metadata input)
     {

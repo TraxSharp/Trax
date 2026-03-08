@@ -1,9 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
+using Trax.Effect.Extensions;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RunExecutor;
+using Trax.Scheduler.Trains.JobRunner;
 
 namespace Trax.Scheduler.Configuration;
 
@@ -230,6 +232,10 @@ public partial class SchedulerConfigurationBuilder
             var options = new LocalWorkerOptions();
             configure?.Invoke(options);
             services.AddSingleton(options);
+
+            // Register the job runner train that workers use to execute jobs
+            services.AddScopedTraxRoute<IJobRunnerTrain, JobRunnerTrain>();
+
             services.AddHostedService<Scheduler.Services.LocalWorkerService.LocalWorkerService>();
         };
         return this;
