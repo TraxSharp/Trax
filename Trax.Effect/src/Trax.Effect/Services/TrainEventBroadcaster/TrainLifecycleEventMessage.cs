@@ -15,5 +15,6 @@ public record TrainLifecycleEventMessage(
     [property: JsonPropertyName("failureStep")] string? FailureStep,
     [property: JsonPropertyName("failureReason")] string? FailureReason,
     [property: JsonPropertyName("eventType")] string EventType,
-    [property: JsonPropertyName("executor")] string? Executor
+    [property: JsonPropertyName("executor")] string? Executor,
+    [property: JsonPropertyName("output")] string? Output
 );

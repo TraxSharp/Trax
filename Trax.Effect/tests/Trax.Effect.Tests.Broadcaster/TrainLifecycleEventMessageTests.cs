@@ -19,7 +19,8 @@ public class TrainLifecycleEventMessageTests
             FailureStep: null,
             FailureReason: null,
             EventType: "Completed",
-            Executor: "TestWorker"
+            Executor: "TestWorker",
+            Output: "{\"result\":\"success\"}"
         );
 
         var json = JsonSerializer.Serialize(message);
@@ -34,6 +35,7 @@ public class TrainLifecycleEventMessageTests
         deserialized.Executor.Should().Be("TestWorker");
         deserialized.FailureStep.Should().BeNull();
         deserialized.FailureReason.Should().BeNull();
+        deserialized.Output.Should().Be("{\"result\":\"success\"}");
     }
 
     [Test]
@@ -48,7 +50,8 @@ public class TrainLifecycleEventMessageTests
             FailureStep: "StepA",
             FailureReason: "Something went wrong",
             EventType: "Failed",
-            Executor: "Worker1"
+            Executor: "Worker1",
+            Output: null
         );
 
         var json = JsonSerializer.Serialize(message);
@@ -70,7 +73,8 @@ public class TrainLifecycleEventMessageTests
             FailureStep: null,
             FailureReason: null,
             EventType: "Completed",
-            Executor: null
+            Executor: null,
+            Output: null
         );
 
         var json = JsonSerializer.Serialize(message);
@@ -91,7 +95,8 @@ public class TrainLifecycleEventMessageTests
             FailureStep: null,
             FailureReason: null,
             EventType: "Completed",
-            Executor: "Worker"
+            Executor: "Worker",
+            Output: "{\"data\":1}"
         );
 
         var json = JsonSerializer.Serialize(message);
@@ -101,6 +106,7 @@ public class TrainLifecycleEventMessageTests
         json.Should().Contain("\"trainState\":");
         json.Should().Contain("\"eventType\":");
         json.Should().Contain("\"executor\":");
+        json.Should().Contain("\"output\":");
     }
 
     [Test]
@@ -116,7 +122,8 @@ public class TrainLifecycleEventMessageTests
             null,
             null,
             "Completed",
-            "Worker"
+            "Worker",
+            null
         );
         var msg2 = new TrainLifecycleEventMessage(
             1,
@@ -127,7 +134,8 @@ public class TrainLifecycleEventMessageTests
             null,
             null,
             "Completed",
-            "Worker"
+            "Worker",
+            null
         );
         var msg3 = new TrainLifecycleEventMessage(
             2,
@@ -138,7 +146,8 @@ public class TrainLifecycleEventMessageTests
             null,
             null,
             "Completed",
-            "Worker"
+            "Worker",
+            null
         );
 
         msg1.Should().Be(msg2);

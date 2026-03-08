@@ -53,7 +53,8 @@ public class TrainEventReceiverServiceTests
             FailureStep: null,
             FailureReason: null,
             EventType: eventType,
-            Executor: executor
+            Executor: executor,
+            Output: null
         );
 
     [Test]
