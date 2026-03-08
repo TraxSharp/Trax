@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageDescription>SQS transport for Trax scheduler job dispatch and Lambda execution</PackageDescription>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Scheduler</RepositoryUrl>
+    <AssemblyName>Trax.Scheduler.Sqs</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Scheduler/Trax.Scheduler.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.SQS" Version="4.*" />
+    <PackageReference Include="Amazon.Lambda.SQSEvents" Version="2.*" />
+  </ItemGroup>
+</Project>

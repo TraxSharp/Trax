@@ -14,6 +14,7 @@ using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RunExecutor;
 using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.JobRunner;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Extensions;
 
@@ -86,7 +87,7 @@ public static class JobRunnerExtensions
                     object? deserializedInput = null;
                     if (request.Input is not null && request.InputType is not null)
                     {
-                        var type = ResolveType(request.InputType);
+                        var type = TypeResolver.ResolveType(request.InputType);
                         deserializedInput = JsonSerializer.Deserialize(
                             request.Input,
                             type,
@@ -191,21 +192,5 @@ public static class JobRunnerExtensions
                 }
             }
         );
-    }
-
-    private static Type ResolveType(string typeName)
-    {
-        var type = Type.GetType(typeName);
-        if (type is not null)
-            return type;
-
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            type = assembly.GetType(typeName);
-            if (type is not null)
-                return type;
-        }
-
-        throw new TypeLoadException($"Unable to find type: {typeName}");
     }
 }

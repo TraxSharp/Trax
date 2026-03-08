@@ -33,6 +33,7 @@
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
     <PackageReference Include="Trax.Effect.StepProvider.Logging" Version="1.*" />
     <ProjectReference Include="../../src/Trax.Scheduler/Trax.Scheduler.csproj" />
+    <ProjectReference Include="../../src/Trax.Scheduler.Sqs/Trax.Scheduler.Sqs.csproj" />
     <PackageReference Include="Trax.Effect.StepProvider.Progress" Version="1.*" />
   </ItemGroup>
 
