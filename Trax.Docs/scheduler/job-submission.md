@@ -193,7 +193,25 @@ builder.Services.AddTraxJobRunner();
 app.UseTraxJobRunner("/trax/execute");
 ```
 
-Best for serverless compute (Lambda, Cloud Run) where the remote process only runs when invoked.
+Best for serverless compute (Cloud Run, Azure Functions) where the remote process only runs when invoked.
+
+**Queue-based (SQS + Lambda)** — the scheduler sends messages to an SQS queue, Lambda consumes them:
+
+```csharp
+using Trax.Scheduler.Sqs.Extensions;
+
+// Scheduler side:
+.AddScheduler(scheduler => scheduler
+    .UseSqsWorkers(sqs =>
+    {
+        sqs.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
+    })
+)
+
+// Lambda side: use SqsJobRunnerHandler (see Trax.Scheduler.Sqs)
+```
+
+Best for AWS Lambda with durable message delivery, automatic retries, and dead-letter queues. Requires the `Trax.Scheduler.Sqs` package.
 
 **Poll-based (standalone worker)** — a separate process polls the `background_job` table:
 

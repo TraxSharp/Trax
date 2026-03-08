@@ -21,10 +21,10 @@ Postgres is always the source of truth. Every deployment model — local, remote
 │  (schedules)      (job state)      (dispatch queue)   (failed jobs)     │
 └──────────────────────────────┬───────────────────────────────────────────┘
                                │
-              ┌────────────────┼────────────────┐
-              │                │                │
-        Local Workers    Remote Workers    Standalone Workers
-        (same process)   (HTTP push)       (separate process)
+              ┌────────────────┼────────────────┬────────────────┐
+              │                │                │                │
+        Local Workers    Remote Workers    SQS Workers    Standalone Workers
+        (same process)   (HTTP push)       (SQS + Lambda)  (separate process)
 ```
 
 Two abstraction boundaries control where trains execute:
@@ -35,6 +35,7 @@ Two abstraction boundaries control where trains execute:
 |----------------|-------------|
 | `PostgresJobSubmitter` | Inserts into `background_job` table (used by `UseLocalWorkers`) |
 | `HttpJobSubmitter` | POSTs to a remote HTTP endpoint (used by `UseRemoteWorkers`) |
+| `SqsJobSubmitter` | Sends to an SQS queue for Lambda consumption (used by [`UseSqsWorkers`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}), requires `Trax.Scheduler.Sqs`) |
 | `InMemoryJobSubmitter` | Runs inline, synchronously (used by `UseInMemoryWorkers`) |
 | Custom | Implement `IJobSubmitter` and register via `OverrideSubmitter()` |
 
@@ -156,6 +157,76 @@ app.Run();
 
 **Sample:** See `Trax.Samples.ContentShield.Api` and `Trax.Samples.ContentShield.Runner` in the `samples/EphemeralWorkers/` directory of the Trax.Samples repository. The API serves GraphQL and dispatches queued mutations to the Runner via HTTP — no `background_job` table, no DB polling. The Runner uses `UseBroadcaster` with RabbitMQ so GraphQL subscriptions on the API are notified when queued trains complete.
 
+### Model 2b: SQS Workers (Queue-Based, AWS Lambda)
+
+Like Remote Workers but with a durable SQS queue between the scheduler and workers. The scheduler sends `RemoteJobRequest` messages to SQS, and Lambda functions consume them. This adds guaranteed delivery, automatic retries, dead-letter queues, and backpressure that HTTP dispatch lacks.
+
+Requires the `Trax.Scheduler.Sqs` package.
+
+**Scheduler side:**
+
+```csharp
+using Trax.Scheduler.Sqs.Extensions;
+
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(assemblies)
+    .AddScheduler(scheduler => scheduler
+        .UseSqsWorkers(sqs =>
+        {
+            sqs.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
+        })
+        // Optional: keep UseRemoteRun for synchronous mutations
+        .UseRemoteRun(remote =>
+            remote.BaseUrl = "https://my-runner.example.com/trax/run"
+        )
+        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+    )
+);
+```
+
+**Lambda consumer:**
+
+```csharp
+using Trax.Scheduler.Sqs.Lambda;
+
+public class Function
+{
+    private static readonly IServiceProvider Services = BuildServiceProvider();
+    private readonly SqsJobRunnerHandler _handler = new(Services);
+
+    public async Task FunctionHandler(SQSEvent sqsEvent, ILambdaContext context)
+    {
+        await _handler.HandleAsync(sqsEvent, context.CancellationToken);
+    }
+}
+```
+
+```
+┌──── Scheduler Process ────┐         ┌──── SQS ────┐       ┌── Lambda ──────────────┐
+│                            │         │              │       │                        │
+│  ManifestManager           │         │  trax-jobs   │       │  SqsJobRunnerHandler   │
+│  JobDispatcher             │         │  queue       │       │       │                │
+│       │                    │   SQS   │              │  SQS  │       ▼                │
+│       ▼                    │  Send   │              │ Event │  JobRunnerTrain        │
+│  SqsJobSubmitter ──────────┼────────→│              │──────→│  └─→ Your Train        │
+│                            │         │              │       │                        │
+└────────────────────────────┘         └──────────────┘       └────────────────────────┘
+                                                                       │
+                                                                       ▼
+                                                              Shared PostgreSQL
+```
+
+**When to use:**
+- **AWS Lambda** — event-driven, auto-scaling, zero idle cost with durable message delivery
+- **Guaranteed delivery** — SQS retries failed messages and dead-letters after max retries
+- **Backpressure** — SQS buffers burst traffic; Lambda drains at a controlled rate
+- **High volume** — thousands of concurrent jobs without overwhelming endpoints
+
+**Sample:** See `Trax.Samples.ContentShield.Lambda` in the `samples/EphemeralWorkers/` directory of the Trax.Samples repository.
+
 ### Model 3: Standalone Workers (Poll-Based)
 
 A separate, always-on process polls the `background_job` table and runs trains. No scheduler logic — just execution.
@@ -225,7 +296,8 @@ app.Run();
 |----------|-------------------|
 | Single-server deployment | **Local Workers** — simplest setup, no network overhead |
 | Separate worker servers (always running) | **Standalone Workers** — poll-based, no HTTP layer needed |
-| AWS Lambda / Cloud Run / Azure Functions | **Remote Workers** — push-based, matches serverless event model |
+| AWS Lambda with durability | **SQS Workers** — guaranteed delivery, retries, DLQ, auto-scaling |
+| Google Cloud Run / Azure Functions | **Remote Workers** — push-based HTTP, matches serverless event model |
 | Different hardware per train type | **Remote Workers** — route to GPU/high-memory endpoints |
 | Just getting started | **Local Workers** — scale out later when you need to |
 
@@ -317,7 +389,8 @@ Failed metadata feeds into the normal retry pipeline — if the manifest has ret
 
 - [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %}) — architecture of the job submission pipeline
 - [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) — API reference for local workers
-- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — API reference for remote workers (queue path)
+- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — API reference for remote workers (HTTP)
+- [UseSqsWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}) — API reference for SQS workers (Lambda)
 - [UseRemoteRun]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}) — API reference for remote run execution
 - [AddTraxJobRunner]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-job-runner.md %}) — API reference for remote receiver setup
 - [AddTraxWorker]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-worker.md %}) — API reference for standalone worker setup
