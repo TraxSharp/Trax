@@ -246,6 +246,34 @@ public class GraphQLTrainEventHandlerTests
         evt!.TrainState.Should().Be(TrainState.Pending);
     }
 
+    [Test]
+    public async Task HandleAsync_MapsOutputCorrectly()
+    {
+        var sender = new RecordingTopicEventSender();
+        var handler = CreateHandler(sender, enabledTrainName: "My.Train");
+        var message = CreateMessage("Completed", "Completed", "My.Train", output: "{\"score\":42}");
+
+        await handler.HandleAsync(message, CancellationToken.None);
+
+        var evt = sender.Events[0].Message as TrainLifecycleEvent;
+        evt.Should().NotBeNull();
+        evt!.Output.Should().Be("{\"score\":42}");
+    }
+
+    [Test]
+    public async Task HandleAsync_NullOutput_MapsNull()
+    {
+        var sender = new RecordingTopicEventSender();
+        var handler = CreateHandler(sender, enabledTrainName: "My.Train");
+        var message = CreateMessage("Failed", "Failed", "My.Train");
+
+        await handler.HandleAsync(message, CancellationToken.None);
+
+        var evt = sender.Events[0].Message as TrainLifecycleEvent;
+        evt.Should().NotBeNull();
+        evt!.Output.Should().BeNull();
+    }
+
     #endregion
 
     #region No Enabled Trains
@@ -329,7 +357,8 @@ public class GraphQLTrainEventHandlerTests
         string trainState,
         string trainName,
         string? failureStep = null,
-        string? failureReason = null
+        string? failureReason = null,
+        string? output = null
     ) =>
         new(
             MetadataId: 42,
@@ -340,7 +369,8 @@ public class GraphQLTrainEventHandlerTests
             FailureStep: failureStep,
             FailureReason: failureReason,
             EventType: eventType,
-            Executor: "RemoteWorker"
+            Executor: "RemoteWorker",
+            Output: output
         );
 
     private static TrainRegistration CreateRegistrationWithDistinctTypes(

@@ -70,7 +70,8 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
                 : TrainState.Pending,
             Timestamp: message.Timestamp,
             FailureStep: message.FailureStep,
-            FailureReason: message.FailureReason
+            FailureReason: message.FailureReason,
+            Output: message.Output
         );
 
         await _eventSender.SendAsync(topicName, lifecycleEvent, ct);

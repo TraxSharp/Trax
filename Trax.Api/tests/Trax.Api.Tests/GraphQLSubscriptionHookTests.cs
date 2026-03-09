@@ -203,6 +203,36 @@ public class GraphQLSubscriptionHookTests
     }
 
     [Test]
+    public async Task OnCompleted_MapsOutputCorrectly()
+    {
+        var sender = new RecordingTopicEventSender();
+        var hook = CreateHook(sender, enabledTrainName: "My.Train");
+        var metadata = CreateMetadata("My.Train");
+        metadata.TrainState = TrainState.Completed;
+        metadata.Output = "{\"score\":42}";
+
+        await hook.OnCompleted(metadata, CancellationToken.None);
+
+        var evt = sender.Events[0].Message as TrainLifecycleEvent;
+        evt.Should().NotBeNull();
+        evt!.Output.Should().Be("{\"score\":42}");
+    }
+
+    [Test]
+    public async Task OnStarted_OutputIsNull()
+    {
+        var sender = new RecordingTopicEventSender();
+        var hook = CreateHook(sender, enabledTrainName: "My.Train");
+        var metadata = CreateMetadata("My.Train");
+
+        await hook.OnStarted(metadata, CancellationToken.None);
+
+        var evt = sender.Events[0].Message as TrainLifecycleEvent;
+        evt.Should().NotBeNull();
+        evt!.Output.Should().BeNull();
+    }
+
+    [Test]
     public async Task OnStarted_NoEndTime_UsesCurrentUtcTime()
     {
         var sender = new RecordingTopicEventSender();

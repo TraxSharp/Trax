@@ -12,5 +12,6 @@ public record TrainLifecycleEvent(
     TrainState TrainState,
     DateTime Timestamp,
     string? FailureStep,
-    string? FailureReason
+    string? FailureReason,
+    string? Output
 );

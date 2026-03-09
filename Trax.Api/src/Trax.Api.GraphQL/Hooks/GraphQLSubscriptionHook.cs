@@ -100,7 +100,8 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
             TrainState: metadata.TrainState,
             Timestamp: metadata.EndTime ?? DateTime.UtcNow,
             FailureStep: metadata.FailureStep,
-            FailureReason: metadata.FailureReason
+            FailureReason: metadata.FailureReason,
+            Output: metadata.Output
         );
 }
 

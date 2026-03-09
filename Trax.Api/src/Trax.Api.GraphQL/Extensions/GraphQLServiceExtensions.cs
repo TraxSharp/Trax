@@ -7,6 +7,7 @@ using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Api.GraphQL.Types;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
@@ -47,6 +48,7 @@ public static class GraphQLServiceExtensions
             .AddType<ObjectType<OperationsMutations>>()
             .AddType<ObjectType<DiscoverQueries>>()
             .AddType<ObjectType<OperationsQueries>>()
+            .AddType<TrainLifecycleEventType>()
             .AddTypeModule<TrainTypeModule>()
             .AddInMemorySubscriptions();
 
