@@ -20,7 +20,7 @@
             Flowthru — data pipeline framework by @Spelkington
             https://github.com/chaoticgoodcomputing/flowthru
         -->
-    <PackageReference Include="Flowthru" Version="0.1.15" />
+    <PackageReference Include="Flowthru" Version="0.1.23" />
 
     <!--
             KedroSpaceflights — Catalog, Pipeline factories, Schemas

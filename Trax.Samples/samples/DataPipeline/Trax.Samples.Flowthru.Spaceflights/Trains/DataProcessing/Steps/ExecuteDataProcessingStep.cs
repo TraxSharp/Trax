@@ -1,5 +1,5 @@
+using Flowthru.Pipelines;
 using Flowthru.Services;
-using Flowthru.Services.Models;
 using LanguageExt;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Step;
@@ -21,13 +21,19 @@ public class ExecuteDataProcessingStep(
     {
         logger.LogInformation("Executing flowthru pipeline: {PipelineName}", input.PipelineName);
 
-        var request = new PipelineExecutionRequest
+        var options = new ExecutionOptions
         {
-            PipelineName = input.PipelineName,
-            ExportMetadata = false,
+            SliceStrategy = new PipelineSliceStrategy
+            {
+                Pipelines = new System.Collections.Generic.HashSet<string> { input.PipelineName },
+            },
         };
 
-        var result = await flowthruService.ExecutePipelineAsync(request, CancellationToken);
+        var result = await flowthruService.ExecutePipelineAsync(
+            options,
+            exportMetadata: false,
+            cancellationToken: CancellationToken
+        );
 
         if (!result.Success)
         {
