@@ -77,6 +77,7 @@ services.AddTrax(trax => trax
 
 ## Remarks
 
+- **Build-time validation:** `UseLocalWorkers()` validates at startup that `UsePostgres()` has been configured. If not, the application throws `InvalidOperationException` with a message explaining the required configuration.
 - No connection string parameter is needed. `UseLocalWorkers()` uses the same `IDataContext` registered by `UsePostgres()`.
 - No additional NuGet packages required — this is included in `Trax.Scheduler`.
 - Jobs are queued to the `trax.background_job` table and dequeued atomically using PostgreSQL's `FOR UPDATE SKIP LOCKED`.

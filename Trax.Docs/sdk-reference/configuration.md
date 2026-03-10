@@ -18,7 +18,9 @@ The builder uses a **step builder pattern** that enforces ordering at compile ti
 
 This means you cannot call `AddMediator()` without first calling `AddEffects()`, and you cannot call `AddScheduler()` without first calling `AddMediator()`. The compiler catches incorrect ordering before you run your application.
 
-Effect-specific methods are nested inside `.AddEffects(effects => ...)`, which receives a `TraxEffectBuilder`.
+Effect-specific methods are nested inside `.AddEffects(effects => ...)`, which receives a `TraxEffectBuilder`. The `AddEffects` lambda must return the builder from the last chained call (`Func<TraxEffectBuilder, TraxEffectBuilder>`).
+
+Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData` — a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like `AddDataContextLogging()`. This provides compile-time safety: you cannot call `AddDataContextLogging()` without first configuring a data provider.
 
 ## Entry Point
 
@@ -40,7 +42,40 @@ services.AddTrax(trax => trax
 );
 ```
 
-## Signature
+## AddEffects Signature
+
+```csharp
+// With configuration
+public static TraxBuilderWithEffects AddEffects(
+    this TraxBuilder builder,
+    Func<TraxEffectBuilder, TraxEffectBuilder> configure
+)
+
+// Parameterless defaults (in-memory data storage)
+public static TraxBuilderWithEffects AddEffects(
+    this TraxBuilder builder
+)
+```
+
+The `AddEffects` callback is a `Func` — the lambda must return the builder from the last chained call. For expression-body lambdas (the common case), this happens naturally:
+
+```csharp
+.AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
+```
+
+For multi-statement lambdas, explicitly return the builder:
+
+```csharp
+.AddEffects(effects =>
+{
+    effects.ServiceCollection.AddSingleton(myService);
+    return effects.UsePostgres(connectionString).AddJson();
+})
+```
+
+The parameterless overload registers effects with default settings (in-memory data storage).
+
+## AddTrax Signature
 
 ```csharp
 public static IServiceCollection AddTrax(
@@ -59,6 +94,17 @@ Calling `AddTrax()` registers a `TraxMarker` singleton in the DI container. This
 | `TraxBuilderWithEffects` | `AddEffects()` | `AddMediator()` |
 | `TraxBuilderWithMediator` | `AddMediator()`, `AddScheduler()` | `AddScheduler()` |
 
+### Effect Builder Types
+
+Inside the `AddEffects()` callback, data provider methods return a more specific type:
+
+| Type | Returned By | Exposes |
+|------|-------------|---------|
+| `TraxEffectBuilder` | `AddEffects()` lambda | `UsePostgres()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddStepLogger()`, `AddStepProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()` |
+| `TraxEffectBuilderWithData` | `UsePostgres()`, `UseInMemory()` | Everything on `TraxEffectBuilder` plus `AddDataContextLogging()` |
+
+Generic effect methods (`AddJson`, `SaveTrainParameters`, `AddStepLogger`, `AddStepProgress`, `SetEffectLogLevel`, `UseBroadcaster`) preserve the concrete builder type through chaining — if you start with `TraxEffectBuilderWithData`, it stays `TraxEffectBuilderWithData`.
+
 ## Ordering Enforcement
 
 The step builder pattern provides two levels of ordering enforcement:
@@ -73,6 +119,24 @@ services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler.UseLocalWorkers())
+);
+
+// Compiles -- AddDataContextLogging() is available because UsePostgres() returns TraxEffectBuilderWithData
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddDataContextLogging()
+    )
+    .AddMediator(typeof(Program).Assembly)
+);
+
+// Does NOT compile -- AddDataContextLogging() requires TraxEffectBuilderWithData
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .AddJson()
+        .AddDataContextLogging()  // Error: AddDataContextLogging is not available on TraxEffectBuilder
+    )
+    .AddMediator(typeof(Program).Assembly)
 );
 
 // Does NOT compile -- AddMediator() is not available on TraxBuilder

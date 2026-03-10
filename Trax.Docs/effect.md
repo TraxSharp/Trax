@@ -62,12 +62,14 @@ This gives you atomicity (no half-written records) and modularity (add/remove pr
 ```csharp
 builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects
-        .UsePostgres(connectionString)          // Persist metadata
+        .UsePostgres(connectionString)          // Persist metadata (returns TraxEffectBuilderWithData)
         .SaveTrainParameters()                  // Include input/output in metadata
         .AddStepLogger(serializeStepData: true) // Log individual step executions
     )
 );
 ```
+
+The `AddEffects` callback is a `Func<TraxEffectBuilder, TraxEffectBuilder>` — the lambda returns the builder from the last chained call. Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData`, which unlocks data-dependent methods like `AddDataContextLogging` at compile time.
 
 Remove any line and the train still runs — it just passes through fewer stations.
 

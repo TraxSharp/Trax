@@ -13,8 +13,8 @@ Enables logging for database operations. Captures SQL queries, transaction bound
 ## Signature
 
 ```csharp
-public static TraxEffectBuilder AddDataContextLogging(
-    this TraxEffectBuilder effectBuilder,
+public static TraxEffectBuilderWithData AddDataContextLogging(
+    this TraxEffectBuilderWithData effectBuilder,
     LogLevel? minimumLogLevel = null,
     List<string>? blacklist = null
 )
@@ -29,7 +29,7 @@ public static TraxEffectBuilder AddDataContextLogging(
 
 ## Returns
 
-`TraxEffectBuilder` — for continued fluent chaining.
+`TraxEffectBuilderWithData` — for continued fluent chaining.
 
 ## Example
 
@@ -46,6 +46,6 @@ services.AddTrax(trax => trax
 
 ## Remarks
 
-- **Must** be called after a data provider ([UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}) or [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})). Throws an `Exception` if no data provider is registered.
+- **Requires** a data provider ([UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}) or [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})). This is enforced at compile time — `AddDataContextLogging` is only available on `TraxEffectBuilderWithData`, which is returned by the data provider methods. If you try to call it without a data provider, the code will not compile.
 - Registers `DataContextLoggingProvider` as an `ILoggerProvider`.
 - Log levels can be changed at runtime via the Dashboard's Server Settings page.

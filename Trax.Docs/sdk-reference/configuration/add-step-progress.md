@@ -13,10 +13,13 @@ Adds step-level progress tracking and cross-server cancellation checking as step
 ## Signature
 
 ```csharp
-public static TraxEffectBuilder AddStepProgress(
-    this TraxEffectBuilder effectBuilder
+public static TBuilder AddStepProgress<TBuilder>(
+    this TBuilder effectBuilder
 )
+    where TBuilder : TraxEffectBuilder
 ```
+
+The generic type parameter `TBuilder` is inferred by the compiler — callers just write `.AddStepProgress()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
 
 ## Parameters
 
@@ -24,7 +27,7 @@ None.
 
 ## Returns
 
-`TraxEffectBuilder` — for continued fluent chaining.
+`TBuilder` — the same builder type that was passed in, for continued fluent chaining.
 
 ## Example
 
@@ -44,7 +47,7 @@ services.AddTrax(trax => trax
 - `CancellationCheckProvider` queries the database before each step to check `Metadata.CancellationRequested`. If `true`, it throws `OperationCanceledException`, which `FinishTrain` maps to `TrainState.Cancelled`.
 - `StepProgressProvider` sets `Metadata.CurrentlyRunningStep` and `Metadata.StepStartedAt` before each step, and clears them after.
 - Both providers are registered as toggleable step effects visible on the dashboard Effects page.
-- Requires a database effect (`UsePostgres` or `UseInMemory`) to be registered.
+- Requires a data provider (`UsePostgres` or `UseInMemory`) to be registered. **Build-time validation:** If no data provider is configured, the application throws `InvalidOperationException` at startup with a message explaining the required configuration.
 
 ## Package
 

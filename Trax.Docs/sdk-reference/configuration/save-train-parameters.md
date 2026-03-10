@@ -13,12 +13,15 @@ Serializes train input and output parameters to JSON and stores them in the `Met
 ## Signature
 
 ```csharp
-public static TraxEffectBuilder SaveTrainParameters(
-    this TraxEffectBuilder effectBuilder,
+public static TBuilder SaveTrainParameters<TBuilder>(
+    this TBuilder effectBuilder,
     JsonSerializerOptions? jsonSerializerOptions = null,
     Action<ParameterEffectConfiguration>? configure = null
 )
+    where TBuilder : TraxEffectBuilder
 ```
+
+The generic type parameter `TBuilder` is inferred by the compiler — callers just write `.SaveTrainParameters()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
 
 ## Parameters
 
@@ -38,7 +41,7 @@ The configuration is registered as a singleton and can also be modified at runti
 
 ## Returns
 
-`TraxEffectBuilder` — for continued fluent chaining.
+`TBuilder` — the same builder type that was passed in, for continued fluent chaining.
 
 ## Examples
 

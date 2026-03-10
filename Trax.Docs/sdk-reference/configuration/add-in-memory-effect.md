@@ -13,7 +13,7 @@ Adds in-memory database support for testing and development. No external databas
 ## Signature
 
 ```csharp
-public static TraxEffectBuilder UseInMemory(
+public static TraxEffectBuilderWithData UseInMemory(
     this TraxEffectBuilder effectBuilder
 )
 ```
@@ -24,7 +24,7 @@ None.
 
 ## Returns
 
-`TraxEffectBuilder` — for continued fluent chaining.
+`TraxEffectBuilderWithData` — a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %}). This provides compile-time safety: methods that require a data provider are only available on the returned type.
 
 ## Example
 

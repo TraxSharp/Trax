@@ -13,11 +13,14 @@ Sets the minimum log level for Trax.Core effect logging.
 ## Signature
 
 ```csharp
-public static TraxEffectBuilder SetEffectLogLevel(
-    this TraxEffectBuilder builder,
+public static TBuilder SetEffectLogLevel<TBuilder>(
+    this TBuilder builder,
     LogLevel logLevel
 )
+    where TBuilder : TraxEffectBuilder
 ```
+
+The generic type parameter `TBuilder` is inferred by the compiler — callers just write `.SetEffectLogLevel(...)`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
 
 ## Parameters
 
@@ -27,7 +30,7 @@ public static TraxEffectBuilder SetEffectLogLevel(
 
 ## Returns
 
-`TraxEffectBuilder` — for continued fluent chaining.
+`TBuilder` — the same builder type that was passed in, for continued fluent chaining.
 
 ## Example
 

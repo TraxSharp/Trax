@@ -116,7 +116,7 @@ services.AddTrax(trax => trax
     {
         var config = new MyEffectConfiguration { EnableDetailedLogging = true };
         effects.ServiceCollection.AddSingleton(config);
-        effects.AddEffect<MyEffectProviderFactory>();
+        return effects.AddEffect<MyEffectProviderFactory>();
     })
 );
 ```

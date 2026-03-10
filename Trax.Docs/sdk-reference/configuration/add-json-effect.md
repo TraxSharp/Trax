@@ -13,10 +13,13 @@ Adds JSON change detection for tracking model mutations during train execution. 
 ## Signature
 
 ```csharp
-public static TraxEffectBuilder AddJson(
-    this TraxEffectBuilder effectBuilder
+public static TBuilder AddJson<TBuilder>(
+    this TBuilder effectBuilder
 )
+    where TBuilder : TraxEffectBuilder
 ```
+
+The generic type parameter `TBuilder` is inferred by the compiler — callers just write `.AddJson()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
 
 ## Parameters
 
@@ -24,7 +27,7 @@ None.
 
 ## Returns
 
-`TraxEffectBuilder` — for continued fluent chaining.
+`TBuilder` — the same builder type that was passed in, for continued fluent chaining.
 
 ## Example
 

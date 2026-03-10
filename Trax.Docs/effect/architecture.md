@@ -21,7 +21,7 @@ public abstract class Train<TIn, TOut>
 {
     public Task<TOut> Run(TIn input);
 
-    protected Train<TIn, TOut> Activate(TIn input);
+    public Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs);
 }
 
 // Step interface for individual operations
@@ -59,10 +59,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public string? CanonicalName { get; set; }
 
     // Prefers CanonicalName (interface name) over the concrete type's FullName
-    internal string TrainName =>
+    public string TrainName =>
         CanonicalName ?? GetType().FullName ?? GetType().Name;
 
-    internal long? ParentId { get; set; }
+    // Parent metadata ID, set automatically for dependent trains
+    public long? ParentId { get; internal set; }
 
     public override async Task<TOut> Run(TIn input, CancellationToken cancellationToken = default)
     {

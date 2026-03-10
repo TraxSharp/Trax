@@ -21,9 +21,9 @@ Includes: `Activate`, `Chain`, `ShortCircuit`, `Extract`, `AddServices`, `Resolv
 
 ### [Configuration]({{ site.baseurl }}{% link sdk-reference/configuration.md %}) (Effect)
 
-The `AddTrax` entry point and every extension method on the step builder types (`TraxBuilder`, `TraxBuilderWithEffects`, `TraxBuilderWithMediator`) and `TraxEffectBuilder` -- data providers, effect providers, and orchestration setup. The step builder pattern enforces configuration ordering at compile time: Effects -> Mediator -> Scheduler.
+The `AddTrax` entry point and every extension method on the step builder types (`TraxBuilder`, `TraxBuilderWithEffects`, `TraxBuilderWithMediator`), `TraxEffectBuilder`, and `TraxEffectBuilderWithData` -- data providers, effect providers, and orchestration setup. The step builder pattern enforces configuration ordering at compile time: Effects -> Mediator -> Scheduler. Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData`, which unlocks data-dependent methods like `AddDataContextLogging` at compile time.
 
-Includes: `UsePostgres`, `UseInMemory`, `AddJson`, `SaveTrainParameters`, `AddStepLogger`, `AddMediator`, `AddEffect`, `AddStepEffect`, `SetEffectLogLevel`.
+Includes: `UsePostgres`, `UseInMemory`, `AddJson`, `SaveTrainParameters`, `AddStepLogger`, `AddDataContextLogging`, `AddMediator`, `AddEffect`, `AddStepEffect`, `SetEffectLogLevel`.
 
 ### [Mediator API]({{ site.baseurl }}{% link sdk-reference/mediator-api.md %}) (Mediator)
 

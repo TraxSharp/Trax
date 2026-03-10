@@ -13,7 +13,7 @@ Adds PostgreSQL database support for persisting train metadata, logs, manifests,
 ## Signature
 
 ```csharp
-public static TraxEffectBuilder UsePostgres(
+public static TraxEffectBuilderWithData UsePostgres(
     this TraxEffectBuilder effectBuilder,
     string connectionString
 )
@@ -27,7 +27,7 @@ public static TraxEffectBuilder UsePostgres(
 
 ## Returns
 
-`TraxEffectBuilder` — for continued fluent chaining.
+`TraxEffectBuilderWithData` — a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %}). This provides compile-time safety: methods that require a data provider are only available on the returned type.
 
 ## Example
 
@@ -51,7 +51,7 @@ services.AddTrax(trax => trax
 
 ## Remarks
 
-- Must be called **before** `AddDataContextLogging` (which requires a data provider to be registered).
+- Returns `TraxEffectBuilderWithData`, which makes `AddDataContextLogging()` available at compile time. Methods that don't require a data provider (like `AddJson()`, `SaveTrainParameters()`) use generic self-type preservation and work on both `TraxEffectBuilder` and `TraxEffectBuilderWithData`.
 - The database migration runs synchronously on startup. Ensure the database server is accessible at application start time.
 - For testing/development without a database, use [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %}) instead.
 

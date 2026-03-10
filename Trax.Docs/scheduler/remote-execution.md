@@ -36,7 +36,7 @@ Two abstraction boundaries control where trains execute:
 | `PostgresJobSubmitter` | Inserts into `background_job` table (used by `UseLocalWorkers`) |
 | `HttpJobSubmitter` | POSTs to a remote HTTP endpoint (used by `UseRemoteWorkers`) |
 | `SqsJobSubmitter` | Sends to an SQS queue for Lambda consumption (used by [`UseSqsWorkers`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}), requires `Trax.Scheduler.Sqs`) |
-| `InMemoryJobSubmitter` | Runs inline, synchronously (used by `UseInMemoryWorkers`) |
+| `InMemoryJobSubmitter` | Runs inline, synchronously (automatic default when no database provider is configured) |
 | Custom | Implement `IJobSubmitter` and register via `OverrideSubmitter()` |
 
 **For run trains** (`run*` mutations, queries): The `IRunExecutor` interface controls where direct execution happens.

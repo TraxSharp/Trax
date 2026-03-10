@@ -15,15 +15,18 @@ Without `UseBroadcaster()`, subscriptions only fire for trains that execute in t
 ## Signature
 
 ```csharp
-public static TraxEffectBuilder UseBroadcaster(
-    this TraxEffectBuilder builder,
+public static TBuilder UseBroadcaster<TBuilder>(
+    this TBuilder builder,
     Action<BroadcasterBuilder> configure
 )
+    where TBuilder : TraxEffectBuilder
 ```
+
+The generic type parameter `TBuilder` is inferred by the compiler — callers just write `.UseBroadcaster(...)`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `builder` | `TraxEffectBuilder` | Yes | The effect configuration builder |
+| `builder` | `TBuilder` | Yes | The effect configuration builder |
 | `configure` | `Action<BroadcasterBuilder>` | Yes | Callback to select a transport (e.g., `UseRabbitMq()`) |
 
 ## What It Registers

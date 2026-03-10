@@ -13,7 +13,11 @@ Stores the train input (and optional extra objects) into Memory. Typically the *
 ## Signature
 
 ```csharp
-protected internal Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs)
+// Train<TInput, TReturn>
+public Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs)
+
+// ServiceTrain<TIn, TOut> — overrides to inject ServiceProvider for step DI
+public new Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs)
 ```
 
 ## Parameters

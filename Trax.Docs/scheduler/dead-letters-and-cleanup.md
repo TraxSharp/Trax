@@ -108,12 +108,14 @@ Cancelled trains are treated as terminal — they are eligible for cleanup but a
 
 ## Testing
 
-For integration tests, use the in-memory workers instead of Hangfire:
+For integration tests, omit `UsePostgres()` and the scheduler will automatically use `InMemoryJobSubmitter`:
 
 ```csharp
 services.AddTrax(trax => trax
-    .AddScheduler(scheduler => scheduler.UseInMemoryWorkers())
+    .AddEffects()
+    .AddMediator(typeof(Program).Assembly)
+    .AddScheduler()
 );
 ```
 
-Jobs execute inline, so tests are fast and don't need Hangfire infrastructure.
+Jobs execute inline, so tests are fast and don't need database infrastructure.

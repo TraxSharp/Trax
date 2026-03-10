@@ -13,11 +13,14 @@ Adds per-step execution logging as a step-level effect. Records individual step 
 ## Signature
 
 ```csharp
-public static TraxEffectBuilder AddStepLogger(
-    this TraxEffectBuilder effectBuilder,
+public static TBuilder AddStepLogger<TBuilder>(
+    this TBuilder effectBuilder,
     bool serializeStepData = false
 )
+    where TBuilder : TraxEffectBuilder
 ```
+
+The generic type parameter `TBuilder` is inferred by the compiler — callers just write `.AddStepLogger()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
 
 ## Parameters
 
@@ -27,7 +30,7 @@ public static TraxEffectBuilder AddStepLogger(
 
 ## Returns
 
-`TraxEffectBuilder` — for continued fluent chaining.
+`TBuilder` — the same builder type that was passed in, for continued fluent chaining.
 
 ## Example
 
