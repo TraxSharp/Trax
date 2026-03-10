@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;
 using LanguageExt;
@@ -16,9 +17,24 @@ namespace Trax.Core.Step;
 /// <typeparam name="TOut">The output type produced by this step</typeparam>
 public abstract class Step<TIn, TOut> : IStep<TIn, TOut>
 {
+    /// <summary>
+    /// Structured exception context when a step fails, including the train name, step name, and error details.
+    /// Set automatically by the railway error handler.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public TrainExceptionData? ExceptionData { get; private set; }
 
+    /// <summary>
+    /// The Either result from the preceding step in the chain.
+    /// Left contains an exception from a previous failure; Right contains this step's input.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public Either<Exception, TIn> PreviousResult { get; private set; }
+
+    /// <summary>
+    /// This step's Either result. Left contains the exception on failure; Right contains the output on success.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public Either<Exception, TOut> Result { get; private set; }
 
     /// <summary>
@@ -26,7 +42,7 @@ public abstract class Step<TIn, TOut> : IStep<TIn, TOut>
     /// Set automatically by the train before Run is called.
     /// Step implementations can use this to check for cancellation.
     /// </summary>
-    protected internal CancellationToken CancellationToken { get; internal set; }
+    public CancellationToken CancellationToken { get; protected internal set; }
 
     /// <summary>
     /// The core implementation method that performs the step's operation.

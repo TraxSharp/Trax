@@ -71,6 +71,6 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// <param name="input">The primary input for the train</param>
     /// <param name="otherInputs">Additional objects to store in the Monad's Memory</param>
     /// <returns>A Monad instance for method chaining</returns>
-    protected internal Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs) =>
+    public Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs) =>
         new Monad<TInput, TReturn>(this, CancellationToken).Activate(input, otherInputs);
 }

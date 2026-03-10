@@ -75,6 +75,14 @@ public static class FunctionalExtensions
                 || t.FullName?.StartsWith("System.Runtime.CompilerServices.ITuple") == true
         );
 
+    /// <summary>
+    /// Asserts that a nullable value is not null, throwing <see cref="InvalidOperationException"/>
+    /// with the caller's expression if null. Prefer over the null-forgiving operator (!) for runtime validation.
+    /// </summary>
+    /// <typeparam name="T">The type of the value</typeparam>
+    /// <param name="value">The value to check</param>
+    /// <param name="valueExpr">Auto-captured caller argument expression</param>
+    /// <exception cref="InvalidOperationException">Thrown when the value is null</exception>
     public static void AssertLoaded<T>(
         [NotNull] this T? value,
         [CallerArgumentExpression("value")] string? valueExpr = null
@@ -84,6 +92,17 @@ public static class FunctionalExtensions
             throw new InvalidOperationException($"{valueExpr} has not been loaded");
     }
 
+    /// <summary>
+    /// Asserts that a selector applied to each element of the collection produces a non-null value.
+    /// Use for validating that navigation properties are loaded on a collection of entities.
+    /// </summary>
+    /// <typeparam name="T">The element type of the collection</typeparam>
+    /// <typeparam name="U">The type returned by the selector</typeparam>
+    /// <param name="values">The collection to validate</param>
+    /// <param name="selector">The selector to apply to each element</param>
+    /// <param name="valuesExpr">Auto-captured caller argument expression for the collection</param>
+    /// <param name="selectorExpr">Auto-captured caller argument expression for the selector</param>
+    /// <exception cref="InvalidOperationException">Thrown when any selected value is null</exception>
     public static void AssertEachLoaded<T, U>(
         [NotNull] this IEnumerable<T> values,
         Func<T, U> selector,
