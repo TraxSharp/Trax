@@ -33,9 +33,10 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public Metadata? Metadata { get; internal set; }
 
     /// <summary>
-    /// ParentId for the train, used to establish parent-child relationships between trains.
+    /// The parent metadata ID for this train, used to establish parent-child relationships
+    /// between trains. Set automatically when a train is scheduled as a dependent of another train.
     /// </summary>
-    internal long? ParentId { get; set; }
+    public long? ParentId { get; internal set; }
 
     /// <summary>
     /// The EffectRunner is responsible for managing all effect providers and persisting
@@ -75,10 +76,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public string? CanonicalName { get; set; }
 
     /// <summary>
-    /// Gets the canonical train name. Prefers the interface name set at registration time,
-    /// falling back to the concrete type's FullName for trains resolved outside of DI.
+    /// Gets the canonical train name. Prefers the interface name set at registration time
+    /// via <c>AddScopedTraxRoute</c>, falling back to the concrete type's FullName for
+    /// trains resolved outside of DI.
     /// </summary>
-    internal string TrainName =>
+    public string TrainName =>
         CanonicalName
         ?? GetType().FullName
         ?? throw new TrainException($"Could not find FullName for ({GetType().Name})");
@@ -191,8 +193,13 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
     /// <summary>
     /// Creates a composable Monad helper with ServiceProvider for step DI.
+    /// Overrides the base Train.Activate to inject the ServiceProvider, enabling
+    /// automatic dependency resolution for steps via the Chain API.
     /// </summary>
-    protected new Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs) =>
+    /// <param name="input">The primary input for the train</param>
+    /// <param name="otherInputs">Additional objects to store in the Monad's Memory</param>
+    /// <returns>A Monad instance for method chaining with DI support</returns>
+    public new Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs) =>
         new Monad<TIn, TOut>(this, ServiceProvider!, CancellationToken).Activate(
             input,
             otherInputs

@@ -19,7 +19,7 @@ public class ServiceExtensionsRegistryTests
         var services = new ServiceCollection();
 
         // Act
-        services.AddTrax(trax => trax.AddEffects(_ => { }));
+        services.AddTrax(trax => trax.AddEffects(effects => effects));
         using var provider = services.BuildServiceProvider();
 
         // Assert
@@ -76,7 +76,7 @@ public class ServiceExtensionsRegistryTests
         var services = new ServiceCollection();
 
         // Act
-        services.AddTrax(trax => trax.AddEffects(_ => { }));
+        services.AddTrax(trax => trax.AddEffects(effects => effects));
         using var provider = services.BuildServiceProvider();
 
         // Assert

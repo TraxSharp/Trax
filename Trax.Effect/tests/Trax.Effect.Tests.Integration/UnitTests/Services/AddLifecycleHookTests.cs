@@ -116,7 +116,7 @@ public class AddLifecycleHookTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTrax(trax => trax.AddEffects(_ => { }));
+        services.AddTrax(trax => trax.AddEffects(effects => effects));
         using var provider = services.BuildServiceProvider();
 
         var runner = provider.GetService<ILifecycleHookRunner>();

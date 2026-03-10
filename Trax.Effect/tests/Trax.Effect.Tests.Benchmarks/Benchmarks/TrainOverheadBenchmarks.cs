@@ -26,7 +26,7 @@ public class TrainOverheadBenchmarks
     {
         // EffectTrain with no effect providers
         var noEffectsServices = new ServiceCollection();
-        noEffectsServices.AddTrax(trax => trax.AddEffects(_ => { }));
+        noEffectsServices.AddTrax(trax => trax.AddEffects());
         noEffectsServices.AddScopedTraxRoute<IEffectAddOneTrain, EffectAddOneTrain>();
         noEffectsServices.AddScopedTraxRoute<IEffectAddThreeTrain, EffectAddThreeTrain>();
         noEffectsServices.AddScopedTraxRoute<IEffectTransformTrain, EffectTransformTrain>();

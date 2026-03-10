@@ -62,7 +62,7 @@ public static class ServiceExtensions
     /// );
     /// ```
     /// </remarks>
-    public static TraxEffectBuilder UsePostgres(
+    public static TraxEffectBuilderWithData UsePostgres(
         this TraxEffectBuilder configurationBuilder,
         string connectionString
     )
@@ -105,9 +105,17 @@ public static class ServiceExtensions
         configurationBuilder.DataContextLoggingEffectEnabled = true;
 
         // Register the PostgresContextProviderFactory
-        return configurationBuilder.AddEffect<
-            IDataContextProviderFactory,
-            PostgresContextProviderFactory
-        >(toggleable: false);
+        configurationBuilder.AddEffect<IDataContextProviderFactory, PostgresContextProviderFactory>(
+            toggleable: false
+        );
+
+        configurationBuilder.HasDatabaseProvider = true;
+        configurationBuilder.HasDataProvider = true;
+
+        var promoted =
+            configurationBuilder as TraxEffectBuilderWithData
+            ?? new TraxEffectBuilderWithData(configurationBuilder);
+        promoted.DataContextLoggingEffectEnabled = true;
+        return promoted;
     }
 }

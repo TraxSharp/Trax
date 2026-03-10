@@ -30,5 +30,7 @@
     <ProjectReference Include="../../src/Trax.Effect.StepProvider.Logging/Trax.Effect.StepProvider.Logging.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.StepProvider.Progress/Trax.Effect.StepProvider.Progress.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
   </ItemGroup>
 </Project>

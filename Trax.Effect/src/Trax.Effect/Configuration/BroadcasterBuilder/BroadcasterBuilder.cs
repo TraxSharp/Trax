@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -18,7 +19,11 @@ public class BroadcasterBuilder
         EffectRegistry = parent.EffectRegistry;
     }
 
+    /// <inheritdoc cref="TraxEffectBuilder.TraxEffectBuilder.ServiceCollection"/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public IServiceCollection ServiceCollection { get; }
 
+    /// <inheritdoc cref="TraxEffectBuilder.TraxEffectBuilder.EffectRegistry"/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public IEffectRegistry? EffectRegistry { get; }
 }

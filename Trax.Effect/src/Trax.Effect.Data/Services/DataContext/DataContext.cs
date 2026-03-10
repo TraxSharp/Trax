@@ -237,12 +237,26 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     /// </remarks>
     public async Task Track(IModel model)
     {
+        var entry = Entry(model);
+
+        // Skip if already tracked — avoids base.Update() forcing Added → Modified
+        // on entities that haven't been saved yet (breaks InMemory provider).
+        if (entry.State != EntityState.Detached)
+            return;
+
+        // base.Update uses EF's key heuristic: Id == 0 → Added, Id > 0 → Modified.
+        // This correctly handles both new entities and entities loaded from another context.
         base.Update(model);
     }
 
     public async Task Update(IModel model)
     {
-        base.Update(model);
+        var entry = Entry(model);
+
+        // Skip if already tracked — EF change tracking detects property mutations
+        // automatically via snapshot comparison.
+        if (entry.State == EntityState.Detached)
+            base.Update(model);
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
@@ -50,8 +51,17 @@ public static class ServiceExtensions
     /// so this implementation is not suitable for production scenarios where data persistence
     /// is required.
     /// </remarks>
-    public static TraxEffectBuilder UseInMemory(this TraxEffectBuilder configurationBuilder) =>
+    public static TraxEffectBuilderWithData UseInMemory(this TraxEffectBuilder configurationBuilder)
+    {
         configurationBuilder.AddEffect<IDataContextProviderFactory, InMemoryContextProviderFactory>(
             toggleable: false
         );
+
+        configurationBuilder.HasDataProvider = true;
+
+        var promoted =
+            configurationBuilder as TraxEffectBuilderWithData
+            ?? new TraxEffectBuilderWithData(configurationBuilder);
+        return promoted;
+    }
 }

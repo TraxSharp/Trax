@@ -74,11 +74,12 @@ public static class ServiceExtensions
     /// );
     /// ```
     /// </remarks>
-    public static TraxEffectBuilder SaveTrainParameters(
-        this TraxEffectBuilder builder,
+    public static TBuilder SaveTrainParameters<TBuilder>(
+        this TBuilder builder,
         JsonSerializerOptions? jsonSerializerOptions = null,
         Action<ParameterEffectConfiguration>? configure = null
     )
+        where TBuilder : TraxEffectBuilder
     {
         jsonSerializerOptions ??= TraxJsonSerializationOptions.Default;
 
@@ -88,6 +89,7 @@ public static class ServiceExtensions
         builder.ServiceCollection.AddSingleton(effectConfiguration);
         builder.TrainParameterJsonSerializerOptions = jsonSerializerOptions;
 
-        return builder.AddEffect<ParameterEffectProviderFactory>();
+        builder.AddEffect<ParameterEffectProviderFactory>();
+        return builder;
     }
 }

@@ -46,13 +46,15 @@ public static class ServiceExtensions
     /// );
     /// ```
     /// </remarks>
-    public static TraxEffectBuilder AddJson(this TraxEffectBuilder configurationBuilder)
+    public static TBuilder AddJson<TBuilder>(this TBuilder configurationBuilder)
+        where TBuilder : TraxEffectBuilder
     {
         configurationBuilder.ServiceCollection.AddTransient<
             IJsonEffectProvider,
             JsonEffectProvider
         >();
 
-        return configurationBuilder.AddEffect<JsonEffectProviderFactory>();
+        configurationBuilder.AddEffect<JsonEffectProviderFactory>();
+        return configurationBuilder;
     }
 }

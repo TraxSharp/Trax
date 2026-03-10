@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Effect.Configuration.TraxBuilder;
@@ -12,6 +13,7 @@ public class TraxBuilderWithEffects
     /// <summary>
     /// The root builder that holds accumulated configuration state.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public TraxBuilder Root { get; }
 
     public TraxBuilderWithEffects(TraxBuilder root)
@@ -22,5 +24,6 @@ public class TraxBuilderWithEffects
     /// <summary>
     /// Gets the service collection for registering services.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public IServiceCollection ServiceCollection => Root.ServiceCollection;
 }

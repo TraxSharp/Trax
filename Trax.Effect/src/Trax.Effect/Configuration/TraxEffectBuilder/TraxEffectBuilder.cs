@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -11,6 +12,12 @@ namespace Trax.Effect.Configuration.TraxEffectBuilder;
 /// <summary>
 /// Builder for configuring the Trax effect system (data providers, step providers, lifecycle hooks).
 /// </summary>
+/// <remarks>
+/// After calling a data provider method (<c>UsePostgres()</c> or <c>UseInMemory()</c>), the builder
+/// is promoted to <see cref="TraxEffectBuilderWithData"/>, which unlocks additional methods such as
+/// <c>AddDataContextLogging()</c>. All general effect methods (e.g., <c>AddJson()</c>,
+/// <c>SaveTrainParameters()</c>) are available on both types via generic self-type preservation.
+/// </remarks>
 public class TraxEffectBuilder
 {
     private readonly TraxBuilder.TraxBuilder _parent;
@@ -20,24 +27,95 @@ public class TraxEffectBuilder
         _parent = parent;
     }
 
+    /// <summary>
+    /// Internal constructor for subtype promotion (e.g., <see cref="TraxEffectBuilderWithData"/>).
+    /// Shares the same parent — all mutable state is on the parent or on <see cref="ServiceCollection"/>.
+    /// </summary>
+    internal TraxEffectBuilder(TraxEffectBuilder source)
+        : this(source._parent)
+    {
+        // Copy builder-level state so the promoted instance carries forward
+        // any configuration set before promotion.
+        StepProgressEnabled = source.StepProgressEnabled;
+        DataContextLoggingEffectEnabled = source.DataContextLoggingEffectEnabled;
+        SerializeStepData = source.SerializeStepData;
+        LogLevel = source.LogLevel;
+        TrainParameterJsonSerializerOptions = source.TrainParameterJsonSerializerOptions;
+        NewtonsoftJsonSerializerSettings = source.NewtonsoftJsonSerializerSettings;
+    }
+
+    /// <summary>
+    /// Gets the service collection for registering services.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public IServiceCollection ServiceCollection => _parent.ServiceCollection;
 
+    /// <summary>
+    /// Gets the effect registry for toggling effect providers at runtime.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public IEffectRegistry? EffectRegistry => _parent.EffectRegistry;
 
+    /// <summary>
+    /// Whether a database-backed data provider (e.g., Postgres) was configured.
+    /// Propagated to the root builder so downstream subsystems (e.g., the scheduler)
+    /// can default to in-memory implementations when no database is available.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool HasDatabaseProvider
+    {
+        get => _parent.HasDatabaseProvider;
+        set => _parent.HasDatabaseProvider = value;
+    }
+
+    /// <summary>
+    /// Whether any data provider (<c>UsePostgres()</c> or <c>UseInMemory()</c>) was configured.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool HasDataProvider
+    {
+        get => _parent.HasDataProvider;
+        set => _parent.HasDataProvider = value;
+    }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool StepProgressEnabled { get; set; }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public bool DataContextLoggingEffectEnabled { get; set; } = false;
 
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public bool SerializeStepData { get; set; } = false;
 
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public LogLevel LogLevel { get; set; } = LogLevel.Debug;
 
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public JsonSerializerOptions TrainParameterJsonSerializerOptions { get; set; } =
         TraxJsonSerializationOptions.Default;
 
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public JsonSerializerSettings NewtonsoftJsonSerializerSettings { get; set; } =
         TraxJsonSerializationOptions.NewtonsoftDefault;
 
     internal TraxEffectConfiguration.TraxEffectConfiguration Build()
     {
+        if (StepProgressEnabled && !HasDataProvider)
+        {
+            throw new InvalidOperationException(
+                "AddStepProgress() requires a data provider (UsePostgres() or UseInMemory()). "
+                    + "Step progress tracking persists progress to metadata and checks for cancellation signals, "
+                    + "which requires a data context.\n\n"
+                    + "Add a data provider to your effects configuration:\n\n"
+                    + "  services.AddTrax(trax => trax\n"
+                    + "      .AddEffects(effects => effects\n"
+                    + "          .UsePostgres(connectionString) // or .UseInMemory()\n"
+                    + "          .AddStepProgress()\n"
+                    + "      )\n"
+                    + "  );\n"
+            );
+        }
+
         var configuration = new TraxEffectConfiguration.TraxEffectConfiguration
         {
             SystemJsonSerializerOptions = TrainParameterJsonSerializerOptions,

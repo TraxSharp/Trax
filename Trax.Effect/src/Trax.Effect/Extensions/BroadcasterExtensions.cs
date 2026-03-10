@@ -22,10 +22,11 @@ public static class BroadcasterExtensions
     /// The transport-specific <see cref="ITrainEventBroadcaster"/> and <see cref="ITrainEventReceiver"/>
     /// are registered by the callback (e.g., <c>b.UseRabbitMq("amqp://...")</c>).
     /// </remarks>
-    public static TraxEffectBuilder UseBroadcaster(
-        this TraxEffectBuilder builder,
+    public static TBuilder UseBroadcaster<TBuilder>(
+        this TBuilder builder,
         Action<BroadcasterBuilder> configure
     )
+        where TBuilder : TraxEffectBuilder
     {
         var broadcasterBuilder = new BroadcasterBuilder(builder);
         configure(broadcasterBuilder);
