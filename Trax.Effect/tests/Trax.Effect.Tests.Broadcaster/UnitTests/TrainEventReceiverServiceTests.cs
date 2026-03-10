@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
-namespace Trax.Effect.Tests.Broadcaster;
+namespace Trax.Effect.Tests.Broadcaster.UnitTests;
 
 [TestFixture]
 public class TrainEventReceiverServiceTests

@@ -5,7 +5,7 @@ using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 
-namespace Trax.Effect.Tests.Json.Integration;
+namespace Trax.Effect.Tests.Json.Integration.Fixtures;
 
 public abstract class TestSetup
 {

@@ -2,7 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
-namespace Trax.Effect.Tests.Broadcaster;
+namespace Trax.Effect.Tests.Broadcaster.UnitTests;
 
 [TestFixture]
 public class TrainLifecycleEventMessageTests

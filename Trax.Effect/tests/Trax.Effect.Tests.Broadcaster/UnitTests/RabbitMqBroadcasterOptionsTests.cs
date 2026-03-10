@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Trax.Effect.Broadcaster.RabbitMQ;
 
-namespace Trax.Effect.Tests.Broadcaster;
+namespace Trax.Effect.Tests.Broadcaster.UnitTests;
 
 [TestFixture]
 public class RabbitMqBroadcasterOptionsTests

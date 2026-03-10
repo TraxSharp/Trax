@@ -5,6 +5,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
+using Trax.Effect.Tests.Json.Integration.Fixtures;
 
 namespace Trax.Effect.Tests.Json.Integration.IntegrationTests;
 

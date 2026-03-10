@@ -5,6 +5,7 @@ using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
@@ -275,6 +276,80 @@ public class SaneDefaultsTests
     // and AddDataContextLogging() is only defined on TraxEffectBuilderWithData.
     //
     // This is the core compile-time safety guarantee of the typed builder pattern.
+
+    #endregion
+
+    #region TraxBuilderWithEffects Flag Exposure
+
+    [Test]
+    public void TraxBuilderWithEffects_AfterUsePostgres_HasDatabaseProviderTrue()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        var connectionString =
+            "Host=localhost;Port=5432;Database=trax_data_tests;Username=trax;Password=trax123";
+        Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects? captured = null;
+
+        services.AddTrax(trax =>
+        {
+            captured = trax.AddEffects(effects => effects.UsePostgres(connectionString));
+        });
+
+        captured.Should().NotBeNull();
+        captured!.HasDatabaseProvider.Should().BeTrue();
+    }
+
+    [Test]
+    public void TraxBuilderWithEffects_AfterUseInMemory_HasDatabaseProviderFalse()
+    {
+        var services = new ServiceCollection();
+
+        Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects? captured = null;
+
+        services.AddTrax(trax =>
+        {
+            captured = trax.AddEffects(effects => effects.UseInMemory());
+        });
+
+        captured.Should().NotBeNull();
+        captured!.HasDatabaseProvider.Should().BeFalse();
+    }
+
+    [Test]
+    public void TraxBuilderWithEffects_AfterUsePostgres_HasDataProviderTrue()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        var connectionString =
+            "Host=localhost;Port=5432;Database=trax_data_tests;Username=trax;Password=trax123";
+        Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects? captured = null;
+
+        services.AddTrax(trax =>
+        {
+            captured = trax.AddEffects(effects => effects.UsePostgres(connectionString));
+        });
+
+        captured.Should().NotBeNull();
+        captured!.HasDataProvider.Should().BeTrue();
+    }
+
+    [Test]
+    public void TraxBuilderWithEffects_AfterUseInMemory_HasDataProviderTrue()
+    {
+        var services = new ServiceCollection();
+
+        Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects? captured = null;
+
+        services.AddTrax(trax =>
+        {
+            captured = trax.AddEffects(effects => effects.UseInMemory());
+        });
+
+        captured.Should().NotBeNull();
+        captured!.HasDataProvider.Should().BeTrue();
+    }
 
     #endregion
 

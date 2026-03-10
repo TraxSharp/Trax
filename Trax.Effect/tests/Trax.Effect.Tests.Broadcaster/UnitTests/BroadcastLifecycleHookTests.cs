@@ -7,7 +7,7 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
-namespace Trax.Effect.Tests.Broadcaster;
+namespace Trax.Effect.Tests.Broadcaster.UnitTests;
 
 [TestFixture]
 public class BroadcastLifecycleHookTests

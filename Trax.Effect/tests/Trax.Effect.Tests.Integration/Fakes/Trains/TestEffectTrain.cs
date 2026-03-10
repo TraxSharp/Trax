@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
 
-namespace Trax.Effect.Tests.Integration.Examples.Trains;
+namespace Trax.Effect.Tests.Integration.Fakes.Trains;
 
 public class TestEffectTrain : ServiceTrain<TestEffectTrainInput, TestEffectTrain>, ITestEffectTrain
 {

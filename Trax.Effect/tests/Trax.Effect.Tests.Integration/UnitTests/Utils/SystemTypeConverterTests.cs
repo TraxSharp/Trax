@@ -1,7 +1,8 @@
 using System.Text.Json;
+using FluentAssertions;
 using Trax.Effect.Utils;
 
-namespace Trax.Effect.Tests.Integration.Utils.Converters;
+namespace Trax.Effect.Tests.Integration.UnitTests.Utils;
 
 [TestFixture]
 public class SystemTypeConverterTests
@@ -28,7 +29,7 @@ public class SystemTypeConverterTests
         var json = JsonSerializer.Serialize(testClass, _options);
 
         // Assert
-        StringAssert.Contains(typeToTest.AssemblyQualifiedName, json);
+        json.Should().Contain(typeToTest.AssemblyQualifiedName);
     }
 
     [Test]
@@ -44,7 +45,7 @@ public class SystemTypeConverterTests
         // The '+' in nested class names gets encoded as \u002B in JSON
         // We need to either decode the JSON first or use a different assertion approach
         var deserializedObj = JsonSerializer.Deserialize<TestClass>(json, _options);
-        Assert.AreEqual(typeof(TestClass), deserializedObj.TypeProperty);
+        deserializedObj!.TypeProperty.Should().Be(typeof(TestClass));
     }
 
     [Test]
@@ -57,7 +58,7 @@ public class SystemTypeConverterTests
         var json = JsonSerializer.Serialize(testClass, _options);
 
         // Assert
-        StringAssert.Contains("\"TypeProperty\":null", json);
+        json.Should().Contain("\"TypeProperty\":null");
     }
 
     [Test]
@@ -68,14 +69,13 @@ public class SystemTypeConverterTests
     {
         // Arrange
         var typeName = expectedType.AssemblyQualifiedName;
-        var json = $"{{\"TypeProperty\":\"{typeName.Replace("\"", "\\\"")}\"}}";
-        ;
+        var json = $"{{\"TypeProperty\":\"{typeName!.Replace("\"", "\\\"")}\"}}";
 
         // Act
         var result = JsonSerializer.Deserialize<TestClass>(json, _options);
 
         // Assert
-        Assert.AreEqual(expectedType, result.TypeProperty);
+        result!.TypeProperty.Should().Be(expectedType);
     }
 
     [Test]
@@ -83,14 +83,13 @@ public class SystemTypeConverterTests
     {
         // Arrange
         var typeName = typeof(TestClass).AssemblyQualifiedName;
-        var json = $"{{\"TypeProperty\":\"{typeName.Replace("\"", "\\\"")}\"}}";
-        ;
+        var json = $"{{\"TypeProperty\":\"{typeName!.Replace("\"", "\\\"")}\"}}";
 
         // Act
         var result = JsonSerializer.Deserialize<TestClass>(json, _options);
 
         // Assert
-        Assert.AreEqual(typeof(TestClass), result.TypeProperty);
+        result!.TypeProperty.Should().Be(typeof(TestClass));
     }
 
     [Test]
@@ -103,7 +102,7 @@ public class SystemTypeConverterTests
         var result = JsonSerializer.Deserialize<TestClass>(json, _options);
 
         // Assert
-        Assert.IsNull(result.TypeProperty);
+        result!.TypeProperty.Should().BeNull();
     }
 
     [Test]
@@ -113,12 +112,8 @@ public class SystemTypeConverterTests
         var json = "{\"TypeProperty\":\"NonExistentType, NonExistentAssembly\"}";
 
         // Act & Assert
-        var ex = Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<TestClass>(json, _options)
-        );
-
-        // Verify the exception message contains useful information
-        StringAssert.Contains("Unable to find type", ex.Message);
+        var act = () => JsonSerializer.Deserialize<TestClass>(json, _options);
+        act.Should().Throw<JsonException>().WithMessage("*Unable to find type*");
     }
 
     [Test]
@@ -135,7 +130,7 @@ public class SystemTypeConverterTests
         var deserialized = JsonSerializer.Deserialize<TestClass>(json, _options);
 
         // Assert
-        Assert.AreEqual(original.TypeProperty, deserialized.TypeProperty);
+        deserialized!.TypeProperty.Should().Be(original.TypeProperty);
     }
 
     [Test]
@@ -155,23 +150,23 @@ public class SystemTypeConverterTests
         var deserialized = JsonSerializer.Deserialize<ComplexObject>(json, _options);
 
         // Assert
-        Assert.AreEqual(original.Name, deserialized.Name);
-        Assert.AreEqual(original.IntType, deserialized.IntType);
-        Assert.AreEqual(original.StringType, deserialized.StringType);
-        Assert.AreEqual(original.CustomType, deserialized.CustomType);
+        deserialized!.Name.Should().Be(original.Name);
+        deserialized.IntType.Should().Be(original.IntType);
+        deserialized.StringType.Should().Be(original.StringType);
+        deserialized.CustomType.Should().Be(original.CustomType);
     }
 
     // Test helper classes
     private class TestClass
     {
-        public Type TypeProperty { get; set; }
+        public Type? TypeProperty { get; set; }
     }
 
     private class ComplexObject
     {
-        public string Name { get; set; }
-        public Type IntType { get; set; }
-        public Type StringType { get; set; }
-        public Type CustomType { get; set; }
+        public string Name { get; set; } = null!;
+        public Type? IntType { get; set; }
+        public Type? StringType { get; set; }
+        public Type? CustomType { get; set; }
     }
 }

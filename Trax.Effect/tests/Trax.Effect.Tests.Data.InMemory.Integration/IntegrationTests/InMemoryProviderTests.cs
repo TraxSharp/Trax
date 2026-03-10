@@ -9,6 +9,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.Tests.Data.InMemory.Integration.Fixtures;
 using Metadata = Trax.Effect.Models.Metadata.Metadata;
 
 namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;

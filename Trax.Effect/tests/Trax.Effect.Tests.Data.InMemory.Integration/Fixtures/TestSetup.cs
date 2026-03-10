@@ -3,7 +3,7 @@ using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 
-namespace Trax.Effect.Tests.Data.InMemory.Integration;
+namespace Trax.Effect.Tests.Data.InMemory.Integration.Fixtures;
 
 public abstract class TestSetup
 {

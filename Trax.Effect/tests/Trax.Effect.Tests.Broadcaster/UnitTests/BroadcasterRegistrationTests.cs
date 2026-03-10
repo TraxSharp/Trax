@@ -9,7 +9,7 @@ using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
 
-namespace Trax.Effect.Tests.Broadcaster;
+namespace Trax.Effect.Tests.Broadcaster.UnitTests;
 
 [TestFixture]
 public class BroadcasterRegistrationTests
