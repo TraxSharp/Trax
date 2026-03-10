@@ -75,7 +75,8 @@ public static class ServiceExtensions
     /// <see cref="Configuration.TraxEffectBuilder.TraxEffectBuilderWithData"/>,
     /// unlocking additional methods like <c>AddDataContextLogging()</c>.
     ///
-    /// If no data provider is configured, <c>UseInMemory()</c> is automatically applied as a sane default.
+    /// If no data provider is configured, features that require one (such as <c>AddScheduler()</c>
+    /// or <c>AddStepProgress()</c>) will throw at build time with a helpful error message.
     ///
     /// <code>
     /// services.AddTrax(trax => trax
@@ -104,8 +105,14 @@ public static class ServiceExtensions
     }
 
     /// <summary>
-    /// Configures the Trax effect system with default settings (in-memory data storage).
+    /// Configures the Trax effect system with default settings (no data provider).
     /// </summary>
+    /// <remarks>
+    /// This overload does not register a data provider. If you need data persistence
+    /// (required by <c>AddScheduler()</c>, <c>AddStepProgress()</c>, etc.), use
+    /// the overload that accepts a configure function and call <c>UsePostgres()</c>
+    /// or <c>UseInMemory()</c>.
+    /// </remarks>
     /// <param name="builder">The root Trax builder.</param>
     /// <returns>A <see cref="TraxBuilderWithEffects"/> that enables chaining <c>AddMediator()</c>.</returns>
     public static TraxBuilderWithEffects AddEffects(this TraxBuilder builder)

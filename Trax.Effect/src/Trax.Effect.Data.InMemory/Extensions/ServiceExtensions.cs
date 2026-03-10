@@ -1,7 +1,11 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
+using InMemoryContext = Trax.Effect.Data.InMemory.Services.InMemoryContext.InMemoryContext;
 using TraxEffectBuilder = Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder;
 
 namespace Trax.Effect.Data.InMemory.Extensions;
@@ -56,6 +60,14 @@ public static class ServiceExtensions
         configurationBuilder.AddEffect<IDataContextProviderFactory, InMemoryContextProviderFactory>(
             toggleable: false
         );
+
+        // Register IDataContext as scoped so services that resolve it directly from DI
+        // (e.g. SchedulerStartupService, ManifestManagerPollingService) work the same
+        // as with UsePostgres(). All scopes share the same underlying in-memory database
+        // via the "InMemoryDb" database name.
+        configurationBuilder.ServiceCollection.AddScoped<IDataContext>(_ => new InMemoryContext(
+            new DbContextOptionsBuilder<InMemoryContext>().UseInMemoryDatabase("InMemoryDb").Options
+        ));
 
         configurationBuilder.HasDataProvider = true;
 
