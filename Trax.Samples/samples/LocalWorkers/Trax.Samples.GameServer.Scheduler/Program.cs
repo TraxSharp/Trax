@@ -59,9 +59,8 @@ builder.Services.AddTrax(trax =>
         )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
-        {
-            // ── Global Configuration ────────────────────────────────────────
             scheduler
+                // ── Global Configuration ────────────────────────────────────────
                 .AddMetadataCleanup(cleanup =>
                 {
                     cleanup.AddTrainType<ILookupPlayerTrain>();
@@ -74,17 +73,15 @@ builder.Services.AddTrax(trax =>
                     cleanup.AddTrainType<IDistributeDailyRewardsTrain>();
                     cleanup.AddTrainType<ICorruptedDataRepairTrain>();
                 })
-                .UseLocalWorkers();
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 1. INTERVAL + DEPENDENCY CHAIN
-            //    Recalculate leaderboard every 5 minutes, then generate
-            //    a season report once recalculation completes.
-            //
-            //    recalculate-leaderboard (every 5 min)
-            //      └── generate-season-report (ThenInclude — depends on recalc)
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler
+                .UseLocalWorkers()
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 1. INTERVAL + DEPENDENCY CHAIN
+                //    Recalculate leaderboard every 5 minutes, then generate
+                //    a season report once recalculation completes.
+                //
+                //    recalculate-leaderboard (every 5 min)
+                //      └── generate-season-report (ThenInclude — depends on recalc)
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                 .Schedule<IRecalculateLeaderboardTrain>(
                     ManifestNames.RecalculateLeaderboard,
                     new RecalculateLeaderboardInput { Region = "global" },
@@ -93,37 +90,33 @@ builder.Services.AddTrax(trax =>
                 .ThenInclude<IGenerateSeasonReportTrain>(
                     ManifestNames.GenerateSeasonReport,
                     new GenerateSeasonReportInput { Season = "Season 7" }
-                );
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 2. CRON-BASED SCHEDULE
-            //    Distribute daily login rewards at midnight.
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler.Schedule<IDistributeDailyRewardsTrain>(
-                ManifestNames.DistributeDailyRewards,
-                new DistributeDailyRewardsInput { RewardType = "LoginBonus" },
-                Cron.Daily(hour: 0)
-            );
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 3. INTERVAL: Hourly player cleanup
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler.Schedule<ICleanupInactivePlayersTrain>(
-                ManifestNames.CleanupInactivePlayers,
-                new CleanupInactivePlayersInput { InactiveDays = 90 },
-                Every.Hours(1)
-            );
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 4. BATCH SCHEDULING + DORMANT DEPENDENTS
-            //    ScheduleMany creates one ProcessMatchResult per region.
-            //    IncludeMany creates dormant DetectCheatPattern dependents —
-            //    they only fire when CheckForAnomaliesStep activates them.
-            //
-            //    process-match-{region} (every 5 min, priority 24, max 5 concurrent)
-            //      └── detect-cheat-{region} (Dormant — activated on anomalies)
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 2. CRON-BASED SCHEDULE
+                //    Distribute daily login rewards at midnight.
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                .Schedule<IDistributeDailyRewardsTrain>(
+                    ManifestNames.DistributeDailyRewards,
+                    new DistributeDailyRewardsInput { RewardType = "LoginBonus" },
+                    Cron.Daily(hour: 0)
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 3. INTERVAL: Hourly player cleanup
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                .Schedule<ICleanupInactivePlayersTrain>(
+                    ManifestNames.CleanupInactivePlayers,
+                    new CleanupInactivePlayersInput { InactiveDays = 90 },
+                    Every.Hours(1)
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 4. BATCH SCHEDULING + DORMANT DEPENDENTS
+                //    ScheduleMany creates one ProcessMatchResult per region.
+                //    IncludeMany creates dormant DetectCheatPattern dependents —
+                //    they only fire when CheckForAnomaliesStep activates them.
+                //
+                //    process-match-{region} (every 5 min, priority 24, max 5 concurrent)
+                //      └── detect-cheat-{region} (Dormant — activated on anomalies)
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                 .ScheduleMany<IProcessMatchResultTrain>(
                     ManifestNames.ProcessMatch,
                     ManifestNames.Regions.Select(region => new ManifestItem(
@@ -154,69 +147,66 @@ builder.Services.AddTrax(trax =>
                         DependsOn: ManifestNames.WithIndex(ManifestNames.ProcessMatch, region)
                     )),
                     options: o => o.Dormant()
-                );
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 5. RETRY POLICY & DEAD LETTERS
-            //    This train always fails — dead-letters after 1 retry.
-            //    Check the dashboard dead letter page for failure details.
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler.Schedule<ICorruptedDataRepairTrain>(
-                ManifestNames.CorruptedDataRepair,
-                new CorruptedDataRepairInput { TableName = "player_sessions" },
-                Every.Seconds(30),
-                o => o.MaxRetries(1)
-            );
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 6. MISFIRE POLICIES
-            //    Two policies compared side-by-side:
-            //    - FireOnceNow: fires immediately on recovery (default)
-            //    - DoNothing:   skips if overdue, waits for next tick
-            //
-            //    Try it: stop the scheduler for >60 seconds, restart.
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler.Schedule<IRecalculateLeaderboardTrain>(
-                ManifestNames.MisfireFireOnce,
-                new RecalculateLeaderboardInput { Region = "Misfire: FireOnceNow" },
-                Every.Seconds(30),
-                o => o.OnMisfire(MisfirePolicy.FireOnceNow)
-            );
-
-            scheduler.Schedule<IRecalculateLeaderboardTrain>(
-                ManifestNames.MisfireDoNothing,
-                new RecalculateLeaderboardInput { Region = "Misfire: DoNothing" },
-                Every.Seconds(30),
-                o => o.OnMisfire(MisfirePolicy.DoNothing).MisfireThreshold(TimeSpan.FromSeconds(10))
-            );
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 7. ONE-OFF JOB
-            //    Welcome bonus distributed once, 1 minute after startup.
-            //    Auto-disables after firing.
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler.ScheduleOnce<IDistributeDailyRewardsTrain>(
-                ManifestNames.WelcomeBonus,
-                new DistributeDailyRewardsInput { RewardType = "WelcomeBonus" },
-                TimeSpan.FromMinutes(1)
-            );
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 8. EXCLUSION WINDOWS
-            //    Weekday-only leaderboard recalculation — skipped on weekends
-            //    and during the daily maintenance window (2:00–4:00 AM).
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler.Schedule<IRecalculateLeaderboardTrain>(
-                ManifestNames.WeekdayLeaderboard,
-                new RecalculateLeaderboardInput { Region = "Weekday Report" },
-                Every.Seconds(30),
-                o =>
-                    o.Exclude(Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday))
-                        .Exclude(
-                            Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00"))
-                        )
-            );
-        })
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 5. RETRY POLICY & DEAD LETTERS
+                //    This train always fails — dead-letters after 1 retry.
+                //    Check the dashboard dead letter page for failure details.
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                .Schedule<ICorruptedDataRepairTrain>(
+                    ManifestNames.CorruptedDataRepair,
+                    new CorruptedDataRepairInput { TableName = "player_sessions" },
+                    Every.Seconds(30),
+                    o => o.MaxRetries(1)
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 6. MISFIRE POLICIES
+                //    Two policies compared side-by-side:
+                //    - FireOnceNow: fires immediately on recovery (default)
+                //    - DoNothing:   skips if overdue, waits for next tick
+                //
+                //    Try it: stop the scheduler for >60 seconds, restart.
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                .Schedule<IRecalculateLeaderboardTrain>(
+                    ManifestNames.MisfireFireOnce,
+                    new RecalculateLeaderboardInput { Region = "Misfire: FireOnceNow" },
+                    Every.Seconds(30),
+                    o => o.OnMisfire(MisfirePolicy.FireOnceNow)
+                )
+                .Schedule<IRecalculateLeaderboardTrain>(
+                    ManifestNames.MisfireDoNothing,
+                    new RecalculateLeaderboardInput { Region = "Misfire: DoNothing" },
+                    Every.Seconds(30),
+                    o =>
+                        o.OnMisfire(MisfirePolicy.DoNothing)
+                            .MisfireThreshold(TimeSpan.FromSeconds(10))
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 7. ONE-OFF JOB
+                //    Welcome bonus distributed once, 1 minute after startup.
+                //    Auto-disables after firing.
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                .ScheduleOnce<IDistributeDailyRewardsTrain>(
+                    ManifestNames.WelcomeBonus,
+                    new DistributeDailyRewardsInput { RewardType = "WelcomeBonus" },
+                    TimeSpan.FromMinutes(1)
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 8. EXCLUSION WINDOWS
+                //    Weekday-only leaderboard recalculation — skipped on weekends
+                //    and during the daily maintenance window (2:00–4:00 AM).
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                .Schedule<IRecalculateLeaderboardTrain>(
+                    ManifestNames.WeekdayLeaderboard,
+                    new RecalculateLeaderboardInput { Region = "Weekday Report" },
+                    Every.Seconds(30),
+                    o =>
+                        o.Exclude(Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday))
+                            .Exclude(
+                                Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00"))
+                            )
+                )
+        )
 );
 
 builder.AddTraxDashboard();

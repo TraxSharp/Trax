@@ -79,30 +79,24 @@ builder.Services.AddTrax(trax =>
             effects
                 .UsePostgres(connectionString)
                 .AddDataContextLogging()
-                .AddJson()
-                .SaveTrainParameters()
-                .AddStepProgress()
                 .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString))
         )
         .AddMediator(typeof(ReviewContentTrain).Assembly)
         .AddScheduler(scheduler =>
-        {
-            // ── Ephemeral dispatch only — no scheduled jobs ──────────────────
-            // UseRemoteWorkers replaces the default PostgresJobSubmitter with
-            // HttpJobSubmitter. When a GraphQL queue* mutation is called, the
-            // JobDispatcher POSTs the job directly to the Runner via HTTP.
-            // No cron schedules, no intervals, no manifests — purely on-demand.
-            scheduler.UseRemoteWorkers(remote =>
-                remote.BaseUrl = "http://localhost:5205/trax/execute"
-            );
-
-            // ── Remote run offloading ────────────────────────────────────────
-            // UseRemoteRun replaces the default LocalRunExecutor with
-            // HttpRunExecutor. When a GraphQL run* mutation is called, the
-            // request is POSTed to the Runner and blocks until the train
-            // completes. Without this, runs execute in-process on this API.
-            scheduler.UseRemoteRun(remote => remote.BaseUrl = "http://localhost:5205/trax/run");
-        })
+            scheduler
+                // ── Ephemeral dispatch only — no scheduled jobs ──────────────────
+                // UseRemoteWorkers replaces the default PostgresJobSubmitter with
+                // HttpJobSubmitter. When a GraphQL queue* mutation is called, the
+                // JobDispatcher POSTs the job directly to the Runner via HTTP.
+                // No cron schedules, no intervals, no manifests — purely on-demand.
+                .UseRemoteWorkers(remote => remote.BaseUrl = "http://localhost:5205/trax/execute")
+                // ── Remote run offloading ────────────────────────────────────────
+                // UseRemoteRun replaces the default LocalRunExecutor with
+                // HttpRunExecutor. When a GraphQL run* mutation is called, the
+                // request is POSTed to the Runner and blocks until the train
+                // completes. Without this, runs execute in-process on this API.
+                .UseRemoteRun(remote => remote.BaseUrl = "http://localhost:5205/trax/run")
+        )
 );
 
 // ── Register GraphQL API ────────────────────────────────────────────────

@@ -82,7 +82,6 @@ builder.Services.AddTrax(trax =>
         )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
-        {
             scheduler
                 .AddMetadataCleanup(cleanup =>
                 {
@@ -90,13 +89,11 @@ builder.Services.AddTrax(trax =>
                     cleanup.AddTrainType<IDataScienceTrain>();
                     cleanup.AddTrainType<IReportingTrain>();
                 })
-                .UseLocalWorkers();
-
-            // ── Spaceflights Pipeline Topology ──────────────────────────────
-            //    data-processing (root, every 5 min)
-            //      └── data-science   (ThenInclude — depends on data-processing)
-            //          └── reporting   (ThenInclude — depends on data-science)
-            scheduler
+                .UseLocalWorkers()
+                // ── Spaceflights Pipeline Topology ──────────────────────────────
+                //    data-processing (root, every 5 min)
+                //      └── data-science   (ThenInclude — depends on data-processing)
+                //          └── reporting   (ThenInclude — depends on data-science)
                 .Schedule<IDataProcessingTrain>(
                     ManifestNames.DataProcessing,
                     new DataProcessingPipelineInput(),
@@ -106,11 +103,8 @@ builder.Services.AddTrax(trax =>
                     ManifestNames.DataScience,
                     new DataSciencePipelineInput()
                 )
-                .ThenInclude<IReportingTrain>(
-                    ManifestNames.Reporting,
-                    new ReportingPipelineInput()
-                );
-        })
+                .ThenInclude<IReportingTrain>(ManifestNames.Reporting, new ReportingPipelineInput())
+        )
 );
 
 builder.AddTraxDashboard();

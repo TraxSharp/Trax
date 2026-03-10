@@ -93,29 +93,27 @@ builder.Services.AddTrax(trax =>
         )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
-        {
-            // ── Key: scheduling only, no local execution ──────────────────
-            // PostgresJobSubmitter is the default — omit UseLocalWorkers() to schedule without executing locally
-            // Jobs accumulate until the Worker process picks them up.
-            scheduler.AddMetadataCleanup(cleanup =>
-            {
-                cleanup.AddTrainType<IMonitorSolarProductionTrain>();
-                cleanup.AddTrainType<IManageBatteryStorageTrain>();
-                cleanup.AddTrainType<IProcessChargingSessionTrain>();
-                cleanup.AddTrainType<IOptimizeMicrogridTrain>();
-                cleanup.AddTrainType<ITradeGridEnergyTrain>();
-                cleanup.AddTrainType<IGenerateSustainabilityReportTrain>();
-            });
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 1. INTERVAL + DEPENDENCY CHAIN
-            //    Monitor solar PV array output every 5 minutes, then manage
-            //    battery storage based on the latest solar production data.
-            //
-            //    monitor-solar-production (every 5 min)
-            //      └── manage-battery-storage (ThenInclude — depends on solar)
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             scheduler
+                // ── Key: scheduling only, no local execution ──────────────────
+                // PostgresJobSubmitter is the default — omit UseLocalWorkers() to schedule without executing locally
+                // Jobs accumulate until the Worker process picks them up.
+                .AddMetadataCleanup(cleanup =>
+                {
+                    cleanup.AddTrainType<IMonitorSolarProductionTrain>();
+                    cleanup.AddTrainType<IManageBatteryStorageTrain>();
+                    cleanup.AddTrainType<IProcessChargingSessionTrain>();
+                    cleanup.AddTrainType<IOptimizeMicrogridTrain>();
+                    cleanup.AddTrainType<ITradeGridEnergyTrain>();
+                    cleanup.AddTrainType<IGenerateSustainabilityReportTrain>();
+                })
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 1. INTERVAL + DEPENDENCY CHAIN
+                //    Monitor solar PV array output every 5 minutes, then manage
+                //    battery storage based on the latest solar production data.
+                //
+                //    monitor-solar-production (every 5 min)
+                //      └── manage-battery-storage (ThenInclude — depends on solar)
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                 .Schedule<IMonitorSolarProductionTrain>(
                     ManifestNames.MonitorSolarProduction,
                     new MonitorSolarProductionInput { ArrayId = "SPA-001", Region = "somerset" },
@@ -128,59 +126,55 @@ builder.Services.AddTrax(trax =>
                         BatteryBankId = "BAT-001",
                         TargetChargePercent = 80,
                     }
-                );
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 2. BATCH SCHEDULING — EV CHARGING PER ZONE
-            //    Process charging sessions per zone (plaza, data-center, parking)
-            //    every 2 minutes. Each zone has its own manifest.
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler.ScheduleMany<IProcessChargingSessionTrain>(
-                ManifestNames.ProcessChargingSession,
-                ManifestNames.Zones.Select(zone => new ManifestItem(
-                    zone,
-                    new ProcessChargingSessionInput
-                    {
-                        StationId = $"EVC-{zone.ToUpperInvariant()}",
-                        SessionType = zone == "parking" ? "Wireless" : "Wired",
-                    }
-                )),
-                Every.Minutes(2),
-                o => o.Group(group => group.MaxActiveJobs(3))
-            );
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 3. INTERVAL — MICROGRID OPTIMIZATION
-            //    Optimize energy distribution across the microgrid every 15 min.
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler.Schedule<IOptimizeMicrogridTrain>(
-                ManifestNames.OptimizeMicrogrid,
-                new OptimizeMicrogridInput { GridZone = "somerset-hub" },
-                Every.Minutes(15)
-            );
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 4. CRON — HOURLY GRID ENERGY TRADING
-            //    Sell excess energy back to the grid via PTC UBOSS every hour.
-            //    Rate: $0.14/kWh, up to 80% of battery can be sold.
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler.Schedule<ITradeGridEnergyTrain>(
-                ManifestNames.TradeGridEnergy,
-                new TradeGridEnergyInput { RatePerKwh = 0.14m, MaxSellPercent = 80 },
-                Cron.Hourly()
-            );
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 5. CRON — DAILY SUSTAINABILITY REPORT
-            //    Generate a sustainability report at midnight aggregating all
-            //    energy hub metrics: carbon offset, renewable %, revenue.
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            scheduler.Schedule<IGenerateSustainabilityReportTrain>(
-                ManifestNames.GenerateSustainabilityReport,
-                new GenerateSustainabilityReportInput { ReportPeriod = "Daily" },
-                Cron.Daily(hour: 0)
-            );
-        })
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 2. BATCH SCHEDULING — EV CHARGING PER ZONE
+                //    Process charging sessions per zone (plaza, data-center, parking)
+                //    every 2 minutes. Each zone has its own manifest.
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                .ScheduleMany<IProcessChargingSessionTrain>(
+                    ManifestNames.ProcessChargingSession,
+                    ManifestNames.Zones.Select(zone => new ManifestItem(
+                        zone,
+                        new ProcessChargingSessionInput
+                        {
+                            StationId = $"EVC-{zone.ToUpperInvariant()}",
+                            SessionType = zone == "parking" ? "Wireless" : "Wired",
+                        }
+                    )),
+                    Every.Minutes(2),
+                    o => o.Group(group => group.MaxActiveJobs(3))
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 3. INTERVAL — MICROGRID OPTIMIZATION
+                //    Optimize energy distribution across the microgrid every 15 min.
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                .Schedule<IOptimizeMicrogridTrain>(
+                    ManifestNames.OptimizeMicrogrid,
+                    new OptimizeMicrogridInput { GridZone = "somerset-hub" },
+                    Every.Minutes(15)
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 4. CRON — HOURLY GRID ENERGY TRADING
+                //    Sell excess energy back to the grid via PTC UBOSS every hour.
+                //    Rate: $0.14/kWh, up to 80% of battery can be sold.
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                .Schedule<ITradeGridEnergyTrain>(
+                    ManifestNames.TradeGridEnergy,
+                    new TradeGridEnergyInput { RatePerKwh = 0.14m, MaxSellPercent = 80 },
+                    Cron.Hourly()
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 5. CRON — DAILY SUSTAINABILITY REPORT
+                //    Generate a sustainability report at midnight aggregating all
+                //    energy hub metrics: carbon offset, renewable %, revenue.
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                .Schedule<IGenerateSustainabilityReportTrain>(
+                    ManifestNames.GenerateSustainabilityReport,
+                    new GenerateSustainabilityReportInput { ReportPeriod = "Daily" },
+                    Cron.Daily(hour: 0)
+                )
+        )
 );
 
 // ── Register GraphQL API ────────────────────────────────────────────────

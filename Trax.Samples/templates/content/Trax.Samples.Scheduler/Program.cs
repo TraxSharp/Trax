@@ -41,17 +41,16 @@ builder.Services.AddTrax(trax =>
         )
         .AddMediator(typeof(Program).Assembly)
         .AddScheduler(scheduler =>
-        {
-            scheduler.UseLocalWorkers();
-
-            // Schedule the HelloWorld train to run every 20 seconds.
-            // Replace this with your own trains and schedules.
-            scheduler.Schedule<IHelloWorldTrain>(
-                "hello-world",
-                new HelloWorldInput { Name = "Trax" },
-                Every.Seconds(20)
-            );
-        })
+            scheduler
+                .UseLocalWorkers()
+                // Schedule the HelloWorld train to run every 20 seconds.
+                // Replace this with your own trains and schedules.
+                .Schedule<IHelloWorldTrain>(
+                    "hello-world",
+                    new HelloWorldInput { Name = "Trax" },
+                    Every.Seconds(20)
+                )
+        )
 );
 
 var app = builder.Build();
