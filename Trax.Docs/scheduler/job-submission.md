@@ -163,14 +163,14 @@ If you're using Hangfire and need to migrate, see [Migrating from Hangfire](#mig
 
 ## InMemory Workers
 
-When no database provider is configured (i.e., `AddEffects()` without `UsePostgres()`), the scheduler automatically uses `InMemoryJobSubmitter`. This executes jobs immediately and synchronously — no background workers, no database tables. The `EnqueueAsync` call blocks until the train completes.
+When `UseInMemory()` is configured (no PostgreSQL), the scheduler automatically uses `InMemoryJobSubmitter`. This executes jobs immediately and synchronously — no background workers, no database tables. The `EnqueueAsync` call blocks until the train completes.
 
 This is useful for testing and local development where you want the scheduler API without database infrastructure:
 
 ```csharp
-// No UsePostgres() → InMemoryJobSubmitter is used automatically
+// UseInMemory() → InMemoryJobSubmitter is used automatically
 builder.Services.AddTrax(trax => trax
-    .AddEffects()
+    .AddEffects(effects => effects.UseInMemory())
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
         .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))

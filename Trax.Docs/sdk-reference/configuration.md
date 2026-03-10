@@ -51,7 +51,7 @@ public static TraxBuilderWithEffects AddEffects(
     Func<TraxEffectBuilder, TraxEffectBuilder> configure
 )
 
-// Parameterless defaults (in-memory data storage)
+// Parameterless defaults (no data provider)
 public static TraxBuilderWithEffects AddEffects(
     this TraxBuilder builder
 )
@@ -73,7 +73,7 @@ For multi-statement lambdas, explicitly return the builder:
 })
 ```
 
-The parameterless overload registers effects with default settings (in-memory data storage).
+The parameterless overload registers effects with no data provider. Features that require a data provider (such as `AddScheduler()` or `AddStepProgress()`) will throw at build time with a helpful error message.
 
 ## AddTrax Signature
 

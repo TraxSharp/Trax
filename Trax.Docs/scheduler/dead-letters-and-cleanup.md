@@ -108,11 +108,11 @@ Cancelled trains are treated as terminal — they are eligible for cleanup but a
 
 ## Testing
 
-For integration tests, omit `UsePostgres()` and the scheduler will automatically use `InMemoryJobSubmitter`:
+For integration tests, use `UseInMemory()` and the scheduler will automatically use `InMemoryJobSubmitter`:
 
 ```csharp
 services.AddTrax(trax => trax
-    .AddEffects()
+    .AddEffects(effects => effects.UseInMemory())
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler()
 );

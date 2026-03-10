@@ -20,17 +20,19 @@ AdminTrains.Types:
 
 ## The Polling Services
 
-The scheduler runs three hosted services:
+The scheduler registers hosted services based on the configured data provider:
 
-1. **SchedulerStartupService** (`IHostedService`) — runs once on startup, seeds manifests configured via `.Schedule()`, `.ScheduleMany()`, `.ThenInclude()`, `.ThenIncludeMany()`, `.Include()`, or `.IncludeMany()`, recovers stuck jobs, and cleans up orphaned manifest groups. Seeding failures prevent the host from starting — if your manifest configuration is broken, you want to know immediately.
+1. **SchedulerStartupService** (`IHostedService`, always registered) — runs once on startup, seeds manifests configured via `.Schedule()`, `.ScheduleMany()`, `.ThenInclude()`, `.ThenIncludeMany()`, `.Include()`, or `.IncludeMany()`. With PostgreSQL, also recovers stuck jobs and cleans up orphaned manifest groups. Seeding failures prevent the host from starting — if your manifest configuration is broken, you want to know immediately.
 
-2. **ManifestManagerPollingService** (`BackgroundService`) — polls on `ManifestManagerPollingInterval` (default: 5 seconds). Each cycle runs the ManifestManager train, which evaluates which manifests are due and writes to the work queue.
+2. **ManifestManagerPollingService** (`BackgroundService`, always registered) — polls on `ManifestManagerPollingInterval` (default: 5 seconds). With PostgreSQL, runs `ManifestManagerTrain` which evaluates manifests and writes to the work queue. With InMemory, runs `InMemoryManifestManagerTrain` which evaluates manifests and dispatches jobs directly via `InMemoryJobSubmitter` — jobs execute inline during the polling cycle.
 
-3. **JobDispatcherPollingService** (`BackgroundService`) — polls on `JobDispatcherPollingInterval` (default: 5 seconds). Each cycle runs the JobDispatcher train, which reads from the work queue, enforces capacity, and dispatches to the job submitter.
+3. **JobDispatcherPollingService** (`BackgroundService`, PostgreSQL only) — polls on `JobDispatcherPollingInterval` (default: 5 seconds). Each cycle runs the JobDispatcher train, which reads from the work queue, enforces capacity, and dispatches to the job submitter. Not registered with InMemory — the `InMemoryManifestManagerTrain` dispatches directly.
 
-The ManifestManager and JobDispatcher run independently on their own timers. They communicate through the work queue table — ManifestManager writes entries, JobDispatcher reads them. This means JobDispatcher may not see ManifestManager's freshly-queued entries until its next tick, but no work is lost. Independent intervals allow you to tune each service separately (e.g., fast manifest evaluation with slower dispatch, or vice versa).
+With PostgreSQL, the ManifestManager and JobDispatcher run independently on their own timers. They communicate through the work queue table — ManifestManager writes entries, JobDispatcher reads them. This means JobDispatcher may not see ManifestManager's freshly-queued entries until its next tick, but no work is lost. Independent intervals allow you to tune each service separately (e.g., fast manifest evaluation with slower dispatch, or vice versa).
 
 In multi-server deployments, each service uses a different concurrency strategy: the ManifestManager uses a PostgreSQL advisory lock for single-leader election, the JobDispatcher uses `FOR UPDATE SKIP LOCKED` for parallel per-entry dispatch, and the cleanup service is naturally idempotent. See [Multi-Server Concurrency](concurrency.md) for details.
+
+> **InMemory note:** The `InMemoryManifestManagerTrain` omits `CancelTimedOutJobsStep` and `ReapStalePendingMetadataStep` (which use `ExecuteUpdateAsync`, not supported by InMemory) and replaces `CreateWorkQueueEntriesStep` with `InMemoryDispatchJobsStep` (which dispatches jobs inline). This means timeout cancellation and stale-pending recovery are not available with InMemory.
 
 ## The Work Queue
 
