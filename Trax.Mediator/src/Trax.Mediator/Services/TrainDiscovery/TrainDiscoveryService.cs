@@ -5,6 +5,7 @@ using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Mediator.Services.TrainDiscovery;
 
+/// <inheritdoc />
 public class TrainDiscoveryService : ITrainDiscoveryService
 {
     private readonly IServiceCollection _serviceCollection;

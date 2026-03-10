@@ -10,6 +10,7 @@ using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Mediator.Tests.Postgres.Integration.Fixtures;
 using ManifestGroup = Trax.Effect.Models.ManifestGroup.ManifestGroup;
 
 namespace Trax.Mediator.Tests.Postgres.Integration.IntegrationTests;

@@ -7,7 +7,7 @@ using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainBus;
 
-namespace Trax.Mediator.Tests.MemoryLeak.Integration;
+namespace Trax.Mediator.Tests.MemoryLeak.Integration.Fixtures;
 
 /// <summary>
 /// Test setup for memory leak integration tests.
@@ -33,17 +33,7 @@ public static class TestSetup
 
         // Add Trax services with all providers
         services.AddTrax(trax =>
-            trax.AddEffects(effects =>
-                {
-                    // Use InMemory data context for tests (no external database dependencies)
-                    effects.UseInMemory();
-
-                    // Add JSON effect provider for serialization testing
-                    effects.AddJson();
-
-                    // Add parameter effect provider
-                    effects.SaveTrainParameters();
-                })
+            trax.AddEffects(effects => effects.UseInMemory().AddJson().SaveTrainParameters())
                 // Add train bus and mediator for testing train execution
                 .AddMediator(assemblies: [typeof(AssemblyMarker).Assembly])
         );
@@ -77,7 +67,7 @@ public static class TestSetup
 
         // Configure Trax without data persistence to focus on memory testing
         services.AddTrax(trax =>
-            trax.AddEffects(_ => { })
+            trax.AddEffects(effects => effects)
                 // No data context - focus purely on memory leak testing
                 .AddMediator(typeof(AssemblyMarker).Assembly)
         );
@@ -110,12 +100,7 @@ public static class TestSetup
         });
 
         services.AddTrax(trax =>
-            trax.AddEffects(effects =>
-            {
-                effects.UseInMemory();
-                effects.AddJson();
-                effects.SaveTrainParameters();
-            })
+            trax.AddEffects(effects => effects.UseInMemory().AddJson().SaveTrainParameters())
         );
 
         return services;

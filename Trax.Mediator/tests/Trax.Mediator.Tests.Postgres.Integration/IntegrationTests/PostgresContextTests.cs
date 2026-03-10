@@ -12,6 +12,7 @@ using Trax.Effect.Services.EffectStep;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
+using Trax.Mediator.Tests.Postgres.Integration.Fixtures;
 using Metadata = Trax.Effect.Models.Metadata.Metadata;
 
 namespace Trax.Mediator.Tests.Postgres.Integration.IntegrationTests;

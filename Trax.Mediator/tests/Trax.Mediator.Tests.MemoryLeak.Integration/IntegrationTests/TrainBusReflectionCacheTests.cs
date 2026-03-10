@@ -2,7 +2,8 @@ using System.Diagnostics;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Mediator.Services.TrainBus;
-using Trax.Mediator.Tests.MemoryLeak.Integration.TestTrains.TestModels;
+using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
+using Trax.Mediator.Tests.MemoryLeak.Integration.Fixtures;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Utils;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;

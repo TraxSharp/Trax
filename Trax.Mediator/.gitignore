@@ -143,3 +143,6 @@ _NCrunch*
 BenchmarkDotNet.Artifacts/
 # Semantic Release version file
 .release-version
+
+# Node modules (semantic-release)
+node_modules/

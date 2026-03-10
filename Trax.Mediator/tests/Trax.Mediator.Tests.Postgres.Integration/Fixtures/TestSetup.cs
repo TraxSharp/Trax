@@ -15,7 +15,7 @@ using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 
-namespace Trax.Mediator.Tests.Postgres.Integration;
+namespace Trax.Mediator.Tests.Postgres.Integration.Fixtures;
 
 [TestFixture]
 public abstract class TestSetup

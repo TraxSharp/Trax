@@ -1,8 +1,8 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Mediator.Tests.MemoryLeak.Integration.TestTrains.TestModels;
+using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
 
-namespace Trax.Mediator.Tests.MemoryLeak.Integration.TestTrains;
+namespace Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Trains;
 
 /// <summary>
 /// Interface for the memory test train.

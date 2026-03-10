@@ -215,7 +215,7 @@ public class TrainDiscoveryServiceTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(_ => { })
+            trax.AddEffects(effects => effects)
                 .AddMediator(assemblies: [typeof(TrainDiscoveryServiceTests).Assembly])
         );
         return services;

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.TraxBuilder;
 
@@ -22,5 +23,18 @@ public class TraxBuilderWithMediator
     /// <summary>
     /// Gets the service collection for registering services.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public IServiceCollection ServiceCollection => Root.ServiceCollection;
+
+    /// <summary>
+    /// Whether a database-backed data provider (e.g., Postgres) was configured in <c>AddEffects()</c>.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool HasDatabaseProvider => Root.HasDatabaseProvider;
+
+    /// <summary>
+    /// Whether any data provider (<c>UsePostgres()</c> or <c>UseInMemory()</c>) was configured.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool HasDataProvider => Root.HasDataProvider;
 }

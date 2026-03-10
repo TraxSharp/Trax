@@ -3,8 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Mediator.Services.TrainBus;
-using Trax.Mediator.Tests.MemoryLeak.Integration.TestTrains;
-using Trax.Mediator.Tests.MemoryLeak.Integration.TestTrains.TestModels;
+using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
+using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Trains;
+using Trax.Mediator.Tests.MemoryLeak.Integration.Fixtures;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Utils;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;

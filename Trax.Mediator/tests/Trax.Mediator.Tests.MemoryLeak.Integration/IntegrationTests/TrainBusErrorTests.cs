@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
 using Trax.Mediator.Services.TrainBus;
+using Trax.Mediator.Tests.MemoryLeak.Integration.Fixtures;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 

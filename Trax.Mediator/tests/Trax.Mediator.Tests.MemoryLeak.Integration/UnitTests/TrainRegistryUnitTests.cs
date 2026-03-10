@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Trax.Mediator.Services.TrainRegistry;
 
-namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
+namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;
 
 [TestFixture]
 public class TrainRegistryUnitTests

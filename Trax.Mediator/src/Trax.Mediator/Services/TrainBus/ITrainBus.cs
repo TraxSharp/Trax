@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Trax.Core.Route;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
@@ -19,28 +20,28 @@ namespace Trax.Mediator.Services.TrainBus;
 /// where the appropriate train is selected automatically based on the type of the input.
 ///
 /// Example usage:
-/// ```csharp
+/// <code>
 /// // Inject the train bus
 /// public class MyService(ITrainBus trainBus)
 /// {
 ///     public async Task ProcessOrder(OrderInput input)
 ///     {
 ///         // The bus will automatically find and execute the train that handles OrderInput
-///         var result = await trainBus.RunAsync<OrderResult>(input);
+///         var result = await trainBus.RunAsync&lt;OrderResult&gt;(input);
 ///         // Process the result
 ///     }
 /// }
-/// ```
+/// </code>
 /// </remarks>
 public interface ITrainBus
 {
     /// <summary>
     /// Executes a train that accepts the specified input type and returns the specified output type.
     /// </summary>
-    /// <typeparam name="TOut">The expected output type of the train</typeparam>
-    /// <param name="trainInput">The input object for the train</param>
-    /// <param name="metadata">Optional metadata to associate with the train execution</param>
-    /// <returns>A task that resolves to the train's output</returns>
+    /// <typeparam name="TOut">The expected output type of the train.</typeparam>
+    /// <param name="trainInput">The input object for the train.</param>
+    /// <param name="metadata">Optional metadata to associate with the train execution.</param>
+    /// <returns>A task that resolves to the train's output.</returns>
     /// <remarks>
     /// This method dynamically discovers and executes the appropriate train based on the
     /// type of the input object. The train must be registered with the train registry
@@ -59,30 +60,42 @@ public interface ITrainBus
     /// <summary>
     /// Executes a train with cancellation support.
     /// </summary>
-    /// <typeparam name="TOut">The expected output type of the train</typeparam>
-    /// <param name="trainInput">The input object for the train</param>
-    /// <param name="cancellationToken">Token to monitor for cancellation requests</param>
-    /// <param name="metadata">Optional metadata to associate with the train execution</param>
-    /// <returns>A task that resolves to the train's output</returns>
+    /// <typeparam name="TOut">The expected output type of the train.</typeparam>
+    /// <param name="trainInput">The input object for the train.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <param name="metadata">Optional metadata to associate with the train execution.</param>
+    /// <returns>A task that resolves to the train's output.</returns>
     public Task<TOut> RunAsync<TOut>(
         object trainInput,
         CancellationToken cancellationToken,
         Metadata? metadata = null
     );
 
+    /// <summary>
+    /// Executes a train that accepts the specified input type, discarding the output.
+    /// </summary>
+    /// <param name="trainInput">The input object for the train.</param>
+    /// <param name="metadata">Optional metadata to associate with the train execution.</param>
     public Task RunAsync(object trainInput, Metadata? metadata = null);
 
     /// <summary>
-    /// Executes a train with cancellation support, returning Unit.
+    /// Executes a train with cancellation support, discarding the output.
     /// </summary>
-    /// <param name="trainInput">The input object for the train</param>
-    /// <param name="cancellationToken">Token to monitor for cancellation requests</param>
-    /// <param name="metadata">Optional metadata to associate with the train execution</param>
+    /// <param name="trainInput">The input object for the train.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <param name="metadata">Optional metadata to associate with the train execution.</param>
     public Task RunAsync(
         object trainInput,
         CancellationToken cancellationToken,
         Metadata? metadata = null
     );
 
+    /// <summary>
+    /// Resolves and constructs a train instance for the given input type without executing it.
+    /// Used internally by the scheduler and job runner.
+    /// </summary>
+    /// <param name="trainInput">The input object whose type determines which train to resolve.</param>
+    /// <returns>The resolved train instance (unexecuted).</returns>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public object InitializeTrain(object trainInput);
 }

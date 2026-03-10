@@ -3,7 +3,7 @@ using FluentAssertions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Provider.Parameter.Configuration;
 using Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;
-using Trax.Mediator.Tests.MemoryLeak.Integration.TestTrains.TestModels;
+using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Utils;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;

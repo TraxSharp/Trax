@@ -1,4 +1,4 @@
-namespace Trax.Mediator.Tests.MemoryLeak.Integration.TestTrains.TestModels;
+namespace Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
 
 /// <summary>
 /// Base input model for memory test trains.

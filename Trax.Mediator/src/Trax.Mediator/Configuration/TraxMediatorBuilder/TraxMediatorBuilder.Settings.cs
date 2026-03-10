@@ -1,24 +1,10 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Effect.Configuration.TraxBuilder;
-using Trax.Mediator.Extensions;
 
 namespace Trax.Mediator.Configuration;
 
-/// <summary>
-/// Builder for configuring the Trax mediator system (train bus, train discovery, assembly scanning).
-/// </summary>
-public class TraxMediatorBuilder
+public partial class TraxMediatorBuilder
 {
-    private readonly TraxBuilderWithEffects _parent;
-    private ServiceLifetime _lifetime = ServiceLifetime.Transient;
-    private readonly List<Assembly> _assemblies = [];
-
-    internal TraxMediatorBuilder(TraxBuilderWithEffects parent)
-    {
-        _parent = parent;
-    }
-
     /// <summary>
     /// Adds assemblies to scan for <c>IServiceTrain&lt;TIn, TOut&gt;</c> implementations.
     /// </summary>
@@ -36,10 +22,5 @@ public class TraxMediatorBuilder
     {
         _lifetime = lifetime;
         return this;
-    }
-
-    internal void Build()
-    {
-        _parent.ServiceCollection.AddServiceTrainBus(_lifetime, [.. _assemblies]);
     }
 }

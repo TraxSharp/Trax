@@ -89,16 +89,25 @@ public static class ServiceExtensions
     /// Adds the Trax mediator system (train bus, registry, discovery, and assembly scanning).
     /// </summary>
     /// <param name="builder">The builder after effects have been configured</param>
-    /// <param name="configure">Action to configure the mediator builder</param>
+    /// <param name="configure">
+    /// A function that configures the mediator builder. Return the builder from the last chained call.
+    /// </param>
     /// <returns>A <see cref="TraxBuilderWithMediator"/> that enables chaining <c>AddScheduler()</c>.</returns>
     public static TraxBuilderWithMediator AddMediator(
         this TraxBuilderWithEffects builder,
-        Action<TraxMediatorBuilder> configure
+        Func<TraxMediatorBuilder, TraxMediatorBuilder> configure
     )
     {
         var mediatorBuilder = new TraxMediatorBuilder(builder);
         configure(mediatorBuilder);
-        mediatorBuilder.Build();
+        var configuration = mediatorBuilder.Build();
+
+        builder.ServiceCollection.AddSingleton(configuration);
+        builder.ServiceCollection.AddServiceTrainBus(
+            configuration.TrainLifetime,
+            configuration.Assemblies
+        );
+
         return new TraxBuilderWithMediator(builder);
     }
 
@@ -113,8 +122,7 @@ public static class ServiceExtensions
         params Assembly[] assemblies
     )
     {
-        builder.ServiceCollection.AddServiceTrainBus(ServiceLifetime.Transient, assemblies);
-        return new TraxBuilderWithMediator(builder);
+        return builder.AddMediator(mediator => mediator.ScanAssemblies(assemblies));
     }
 
     /// <summary>

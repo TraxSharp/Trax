@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Mediator.Tests.Postgres.Integration.Fixtures;
 
 namespace Trax.Mediator.Tests.Postgres.Integration.IntegrationTests;
 
