@@ -19,26 +19,80 @@ public class SchedulerBuilderValidationTests
     private static readonly string ConnectionString =
         "Host=localhost;Port=5432;Database=trax_scheduler_tests;Username=trax;Password=trax123";
 
-    #region UseLocalWorkers requires UsePostgres
+    #region AddScheduler requires a data provider
 
     [Test]
-    public void UseLocalWorkers_WithoutAnyDataProvider_ThrowsWithHelpfulMessage()
+    public void AddScheduler_WithoutDataProvider_ThrowsWithHelpfulMessage()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
         var act = () =>
             services.AddTrax(trax =>
-                trax.AddEffects()
-                    .AddMediator(typeof(AssemblyMarker).Assembly)
-                    .AddScheduler(scheduler => scheduler.UseLocalWorkers())
+                trax.AddEffects().AddMediator(typeof(AssemblyMarker).Assembly).AddScheduler()
             );
 
         act.Should()
             .Throw<InvalidOperationException>()
-            .WithMessage("*UseLocalWorkers()*")
-            .WithMessage("*UsePostgres()*");
+            .WithMessage("*AddScheduler()*")
+            .WithMessage("*UsePostgres*")
+            .WithMessage("*UseInMemory*");
     }
+
+    [Test]
+    public void AddScheduler_WithoutDataProvider_ErrorContainsCodeExample()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        var act = () =>
+            services.AddTrax(trax =>
+                trax.AddEffects().AddMediator(typeof(AssemblyMarker).Assembly).AddScheduler()
+            );
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*services.AddTrax*")
+            .WithMessage("*.AddEffects*")
+            .WithMessage("*.UsePostgres(connectionString)*")
+            .WithMessage("*.AddScheduler*");
+    }
+
+    [Test]
+    public void AddScheduler_WithInMemory_DoesNotThrow()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        var act = () =>
+            services.AddTrax(trax =>
+                trax.AddEffects(effects => effects.UseInMemory())
+                    .AddMediator(typeof(AssemblyMarker).Assembly)
+                    .AddScheduler()
+            );
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void AddScheduler_WithPostgres_DoesNotThrow()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        var act = () =>
+            services.AddTrax(trax =>
+                trax.AddEffects(effects => effects.UsePostgres(ConnectionString))
+                    .AddMediator(typeof(AssemblyMarker).Assembly)
+                    .AddScheduler()
+            );
+
+        act.Should().NotThrow();
+    }
+
+    #endregion
+
+    #region UseLocalWorkers requires UsePostgres
 
     [Test]
     public void UseLocalWorkers_WithInMemory_ThrowsWithHelpfulMessage()
@@ -84,7 +138,7 @@ public class SchedulerBuilderValidationTests
 
         var act = () =>
             services.AddTrax(trax =>
-                trax.AddEffects()
+                trax.AddEffects(effects => effects.UseInMemory())
                     .AddMediator(typeof(AssemblyMarker).Assembly)
                     .AddScheduler(scheduler => scheduler.UseLocalWorkers())
             );
@@ -99,17 +153,17 @@ public class SchedulerBuilderValidationTests
 
     #endregion
 
-    #region Other submitters do not require Postgres
+    #region Other submitters require data provider but not Postgres
 
     [Test]
-    public void UseRemoteWorkers_WithoutPostgres_DoesNotThrow()
+    public void UseRemoteWorkers_WithInMemory_DoesNotThrow()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
         var act = () =>
             services.AddTrax(trax =>
-                trax.AddEffects()
+                trax.AddEffects(effects => effects.UseInMemory())
                     .AddMediator(typeof(AssemblyMarker).Assembly)
                     .AddScheduler(scheduler =>
                         scheduler.UseRemoteWorkers(o => o.BaseUrl = "http://localhost:5000")
@@ -120,34 +174,20 @@ public class SchedulerBuilderValidationTests
     }
 
     [Test]
-    public void OverrideSubmitter_WithoutPostgres_DoesNotThrow()
+    public void OverrideSubmitter_WithInMemory_DoesNotThrow()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
         var act = () =>
             services.AddTrax(trax =>
-                trax.AddEffects()
+                trax.AddEffects(effects => effects.UseInMemory())
                     .AddMediator(typeof(AssemblyMarker).Assembly)
                     .AddScheduler(scheduler =>
                         scheduler.OverrideSubmitter(s =>
                             s.AddScoped<IJobSubmitter, InMemoryJobSubmitter>()
                         )
                     )
-            );
-
-        act.Should().NotThrow();
-    }
-
-    [Test]
-    public void ParameterlessAddScheduler_WithoutPostgres_DoesNotThrow()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-
-        var act = () =>
-            services.AddTrax(trax =>
-                trax.AddEffects().AddMediator(typeof(AssemblyMarker).Assembly).AddScheduler()
             );
 
         act.Should().NotThrow();

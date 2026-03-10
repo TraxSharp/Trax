@@ -14,9 +14,13 @@ namespace Trax.Scheduler.Services.ManifestManagerPollingService;
 /// and runs <see cref="IManifestManagerTrain"/> each cycle.
 /// </summary>
 /// <remarks>
-/// Uses a PostgreSQL advisory lock (<c>pg_try_advisory_xact_lock</c>) to ensure
+/// With PostgreSQL, uses an advisory lock (<c>pg_try_advisory_xact_lock</c>) to ensure
 /// only one server instance runs the manifest evaluation cycle at a time,
 /// preventing duplicate WorkQueue entries in multi-server deployments.
+///
+/// With InMemory, runs the train directly without transactions or advisory locks.
+/// The resolved <see cref="IManifestManagerTrain"/> is <see cref="InMemoryManifestManagerTrain"/>
+/// which dispatches jobs inline via <see cref="Services.JobSubmitter.InMemoryJobSubmitter"/>.
 /// </remarks>
 internal class ManifestManagerPollingService(
     IServiceProvider serviceProvider,
@@ -54,15 +58,17 @@ internal class ManifestManagerPollingService(
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
             // Advisory lock: single-leader election for manifest evaluation.
             // Prevents duplicate WorkQueue entries when multiple servers poll simultaneously.
-            if (dataContext is DbContext dbContext)
+            // InMemory doesn't support transactions or advisory locks — run without lock.
+            if (configuration.HasDatabaseProvider)
             {
+                var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
+
                 using var transaction = await dataContext.BeginTransaction(cancellationToken);
 
-                var acquired = await dbContext
+                var acquired = await ((DbContext)dataContext)
                     .Database.SqlQuery<bool>(
                         $"""SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager')) AS "Value" """
                     )
@@ -86,7 +92,6 @@ internal class ManifestManagerPollingService(
             }
             else
             {
-                // Non-EF provider (e.g., InMemory for tests) — run without lock
                 var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
 
                 logger.LogDebug("ManifestManager polling cycle starting");

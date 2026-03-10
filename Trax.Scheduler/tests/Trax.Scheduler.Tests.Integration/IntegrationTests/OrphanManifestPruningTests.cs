@@ -240,6 +240,7 @@ public class OrphanManifestPruningTests : TestSetup
         {
             PruneOrphanedManifests = true,
             RecoverStuckJobsOnStartup = false,
+            HasDatabaseProvider = true,
         };
         // PendingManifests is empty → expectedExternalIds is empty → all manifests are orphans
 
@@ -267,6 +268,7 @@ public class OrphanManifestPruningTests : TestSetup
         {
             PruneOrphanedManifests = false,
             RecoverStuckJobsOnStartup = false,
+            HasDatabaseProvider = true,
         };
 
         var startupService = CreateStartupService(configuration);
@@ -347,6 +349,7 @@ public class OrphanManifestPruningTests : TestSetup
         {
             PruneOrphanedManifests = pruneOrphanedManifests,
             RecoverStuckJobsOnStartup = false,
+            HasDatabaseProvider = true,
         };
 
         // Add a no-op PendingManifest that carries the ExpectedExternalIds

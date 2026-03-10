@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Configuration;
@@ -18,7 +20,7 @@ public class SchedulerConfigurationBuilderSettingsTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(effects => effects)
+            trax.AddEffects(effects => effects.UseInMemory())
                 .AddMediator(typeof(AssemblyMarker).Assembly)
                 .AddScheduler(scheduler =>
                 {
@@ -172,6 +174,42 @@ public class SchedulerConfigurationBuilderSettingsTests
 
         // Assert
         config.RecoverStuckJobsOnStartup.Should().BeFalse();
+    }
+
+    #endregion
+
+    #region HasDatabaseProvider
+
+    [Test]
+    public void HasDatabaseProvider_WithInMemory_IsFalse()
+    {
+        // Arrange — UseInMemory() sets HasDataProvider but NOT HasDatabaseProvider
+        var config = ResolveConfiguration(_ => { });
+
+        // Assert
+        config.HasDatabaseProvider.Should().BeFalse();
+    }
+
+    [Test]
+    public void HasDatabaseProvider_WithPostgres_IsTrue()
+    {
+        // Arrange — UsePostgres() sets both HasDataProvider and HasDatabaseProvider
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects =>
+                    effects.UsePostgres(
+                        "Host=localhost;Port=5432;Database=trax_scheduler_tests;Username=trax;Password=trax123"
+                    )
+                )
+                .AddMediator(typeof(AssemblyMarker).Assembly)
+                .AddScheduler()
+        );
+        using var provider = services.BuildServiceProvider();
+        var config = provider.GetRequiredService<SchedulerConfiguration>();
+
+        // Assert
+        config.HasDatabaseProvider.Should().BeTrue();
     }
 
     #endregion

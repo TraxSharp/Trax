@@ -18,6 +18,7 @@ public static class AdminTrains
     [
         typeof(IManifestManagerTrain),
         typeof(ManifestManagerTrain),
+        typeof(InMemoryManifestManagerTrain),
         typeof(IJobRunnerTrain),
         typeof(JobRunnerTrain),
         typeof(IMetadataCleanupTrain),

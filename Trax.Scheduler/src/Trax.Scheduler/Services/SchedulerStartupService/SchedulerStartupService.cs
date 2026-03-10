@@ -25,7 +25,9 @@ internal class SchedulerStartupService(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (configuration.RecoverStuckJobsOnStartup)
+        // RecoverStuckJobs only makes sense with a real database — in-memory data is
+        // lost on restart, so there are no stuck jobs to recover.
+        if (configuration.RecoverStuckJobsOnStartup && configuration.HasDatabaseProvider)
             await RecoverStuckJobs(cancellationToken);
 
         await SeedPendingManifests(cancellationToken);
@@ -101,25 +103,37 @@ internal class SchedulerStartupService(
             );
         }
 
-        // Prune orphaned manifests (manifests in DB that are no longer in the startup configuration)
-        var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
-
-        if (configuration.PruneOrphanedManifests)
+        // Prune and cleanup use ExecuteDeleteAsync/ExecuteUpdateAsync which are not
+        // supported by the InMemory EF Core provider. They're also unnecessary with
+        // InMemory since the database starts empty on each restart.
+        if (configuration.HasDatabaseProvider)
         {
-            var expectedExternalIds = configuration
-                .PendingManifests.SelectMany(p => p.ExpectedExternalIds)
-                .ToHashSet();
+            var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
-            await PruneOrphanedManifestsAsync(dataContext, expectedExternalIds, cancellationToken);
+            if (configuration.PruneOrphanedManifests)
+            {
+                var expectedExternalIds = configuration
+                    .PendingManifests.SelectMany(p => p.ExpectedExternalIds)
+                    .ToHashSet();
+
+                await PruneOrphanedManifestsAsync(
+                    dataContext,
+                    expectedExternalIds,
+                    cancellationToken
+                );
+            }
+
+            // Clean up orphaned ManifestGroups (groups with no manifests remaining)
+            var orphanedCount = await dataContext
+                .ManifestGroups.Where(g => !g.Manifests.Any())
+                .ExecuteDeleteAsync(cancellationToken);
+
+            if (orphanedCount > 0)
+                logger.LogInformation(
+                    "Cleaned up {Count} orphaned manifest group(s)",
+                    orphanedCount
+                );
         }
-
-        // Clean up orphaned ManifestGroups (groups with no manifests remaining)
-        var orphanedCount = await dataContext
-            .ManifestGroups.Where(g => !g.Manifests.Any())
-            .ExecuteDeleteAsync(cancellationToken);
-
-        if (orphanedCount > 0)
-            logger.LogInformation("Cleaned up {Count} orphaned manifest group(s)", orphanedCount);
 
         // Release closures and captured batch lists that are no longer needed
         configuration.PendingManifests.Clear();

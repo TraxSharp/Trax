@@ -1,6 +1,7 @@
 using Amazon.SQS;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Configuration;
@@ -20,7 +21,7 @@ public class UseSqsWorkersBuilderTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(effects => effects)
+            trax.AddEffects(effects => effects.UseInMemory())
                 .AddMediator(typeof(AssemblyMarker).Assembly)
                 .AddScheduler(scheduler =>
                 {

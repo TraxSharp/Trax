@@ -196,4 +196,15 @@ public class SchedulerConfiguration
     /// <see cref="Services.TraxScheduler.ITraxScheduler"/>.
     /// </remarks>
     public bool PruneOrphanedManifests { get; set; } = true;
+
+    /// <summary>
+    /// Whether a real database provider (e.g. PostgreSQL) is configured.
+    /// </summary>
+    /// <remarks>
+    /// Set during <c>Build()</c> based on <c>HasDatabaseProvider</c>. When false (e.g. InMemory),
+    /// startup operations that require database-specific features like <c>ExecuteDeleteAsync</c>
+    /// are skipped — the in-memory database starts empty on each restart, so prune and
+    /// recover operations are unnecessary.
+    /// </remarks>
+    internal bool HasDatabaseProvider { get; set; }
 }

@@ -71,6 +71,8 @@ public partial class SchedulerConfigurationBuilder
         ValidateNoCyclicGroupDependencies();
         ValidateSubmitterRequirements();
 
+        _configuration.HasDatabaseProvider = _parentBuilder.HasDatabaseProvider;
+
         // Exclude internal scheduler trains from MaxActiveJobs count
         foreach (var name in AdminTrains.FullNames)
             _configuration.ExcludedTrainTypeNames.Add(name);
@@ -95,11 +97,23 @@ public partial class SchedulerConfigurationBuilder
             sp.GetRequiredService<DormantDependentContext>()
         );
 
-        // Register internal scheduler trains (AddScopedTraxRoute for property injection)
-        _parentBuilder.ServiceCollection.AddScopedTraxRoute<
-            IManifestManagerTrain,
-            ManifestManagerTrain
-        >();
+        // Register internal scheduler trains (AddScopedTraxRoute for property injection).
+        // InMemory uses a simplified train that skips PostgreSQL-specific steps
+        // (CancelTimedOutJobs, ReapStalePending) and dispatches jobs inline.
+        if (_parentBuilder.HasDatabaseProvider)
+        {
+            _parentBuilder.ServiceCollection.AddScopedTraxRoute<
+                IManifestManagerTrain,
+                ManifestManagerTrain
+            >();
+        }
+        else
+        {
+            _parentBuilder.ServiceCollection.AddScopedTraxRoute<
+                IManifestManagerTrain,
+                InMemoryManifestManagerTrain
+            >();
+        }
         _parentBuilder.ServiceCollection.AddScopedTraxRoute<
             IJobDispatcherTrain,
             JobDispatcherTrain
@@ -132,12 +146,22 @@ public partial class SchedulerConfigurationBuilder
         // Registration order matters: .NET starts IHostedService instances sequentially in registration order.
         // SchedulerStartupService must complete before the polling services begin.
         _parentBuilder.ServiceCollection.AddHostedService<SchedulerStartupService>();
-        _parentBuilder.ServiceCollection.AddHostedService<ManifestManagerPollingService>();
-        _parentBuilder.ServiceCollection.AddHostedService<JobDispatcherPollingService>();
 
-        // Register the metadata cleanup service if configured
-        if (_configuration.MetadataCleanup is not null)
-            _parentBuilder.ServiceCollection.AddHostedService<MetadataCleanupPollingService>();
+        // ManifestManagerPollingService runs for both providers. With Postgres, the resolved
+        // IManifestManagerTrain uses advisory locks and creates WorkQueue entries. With InMemory,
+        // the resolved InMemoryManifestManagerTrain dispatches jobs inline — no JobDispatcher needed.
+        _parentBuilder.ServiceCollection.AddHostedService<ManifestManagerPollingService>();
+
+        // JobDispatcher and MetadataCleanup use PostgreSQL-specific operations
+        // (FOR UPDATE SKIP LOCKED, ExecuteUpdateAsync, ExecuteDeleteAsync) that are not
+        // supported by the InMemory EF Core provider.
+        if (_parentBuilder.HasDatabaseProvider)
+        {
+            _parentBuilder.ServiceCollection.AddHostedService<JobDispatcherPollingService>();
+
+            if (_configuration.MetadataCleanup is not null)
+                _parentBuilder.ServiceCollection.AddHostedService<MetadataCleanupPollingService>();
+        }
     }
 
     /// <summary>
@@ -184,6 +208,23 @@ public partial class SchedulerConfigurationBuilder
     /// </summary>
     private void ValidateSubmitterRequirements()
     {
+        // The scheduler's hosted services (ManifestManagerPollingService, JobDispatcherPollingService)
+        // depend on IDataContextProviderFactory. Without a data provider, they can't be resolved.
+        if (!_parentBuilder.HasDataProvider)
+        {
+            throw new InvalidOperationException(
+                "AddScheduler() requires a data provider (UsePostgres() or UseInMemory()). "
+                    + "The scheduler's background services need a data context to manage manifests, "
+                    + "metadata, and work queue entries.\n\n"
+                    + "Add a data provider to your effects configuration:\n\n"
+                    + "  services.AddTrax(trax => trax\n"
+                    + "      .AddEffects(effects => effects.UsePostgres(connectionString)) // or .UseInMemory()\n"
+                    + "      .AddMediator(assemblies)\n"
+                    + "      .AddScheduler(scheduler => ...)\n"
+                    + "  );\n"
+            );
+        }
+
         if (
             _configuredSubmitterSource is nameof(UseLocalWorkers)
             && !_parentBuilder.HasDatabaseProvider
