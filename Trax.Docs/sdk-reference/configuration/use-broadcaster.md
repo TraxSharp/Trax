@@ -135,7 +135,7 @@ builder.Services.AddTrax(trax =>
                 .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString))
         )
         .AddMediator(typeof(Program).Assembly)
-        .AddScheduler(scheduler => { /* ... */ })
+        .AddScheduler(scheduler => scheduler /* ... */)
 );
 
 // AddTraxGraphQL() auto-detects the broadcaster and registers

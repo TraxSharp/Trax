@@ -16,7 +16,7 @@ Adds the Trax.Core scheduler subsystem. Registers `ITraxScheduler`, the backgrou
 // With configuration
 public static TraxBuilderWithMediator AddScheduler(
     this TraxBuilderWithMediator builder,
-    Action<SchedulerConfigurationBuilder> configure
+    Func<SchedulerConfigurationBuilder, SchedulerConfigurationBuilder> configure
 )
 
 // Parameterless defaults
@@ -27,13 +27,13 @@ public static TraxBuilderWithMediator AddScheduler(
 
 `AddScheduler` is called on `TraxBuilderWithMediator` (the return type of `AddMediator()`), which enforces at compile time that effects and the mediator are configured before the scheduler.
 
-The parameterless overload registers the scheduler with default settings, equivalent to `AddScheduler(_ => { })`.
+The parameterless overload registers the scheduler with default settings, equivalent to `AddScheduler(scheduler => scheduler)`.
 
 ## Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `configure` | `Action<SchedulerConfigurationBuilder>` | No | Lambda that receives the scheduler builder for configuring options, execution backends, and schedules. Omit for defaults. |
+| `configure` | `Func<SchedulerConfigurationBuilder, SchedulerConfigurationBuilder>` | No | Lambda that receives the scheduler builder and returns it after configuring options, execution backends, and schedules. Omit for defaults. |
 
 ## Returns
 

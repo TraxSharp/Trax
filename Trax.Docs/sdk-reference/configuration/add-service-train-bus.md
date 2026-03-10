@@ -19,7 +19,7 @@ There are two overloads: a **builder overload** for full control, and a **shorth
 ```csharp
 public static TraxBuilderWithMediator AddMediator(
     this TraxBuilderWithEffects builder,
-    Action<TraxMediatorBuilder> configure
+    Func<TraxMediatorBuilder, TraxMediatorBuilder> configure
 )
 ```
 
