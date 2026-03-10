@@ -3,7 +3,7 @@ using Trax.Dashboard.Utilities;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
 
-namespace Trax.Dashboard.Tests.Integration;
+namespace Trax.Dashboard.Tests.Integration.UnitTests;
 
 [TestFixture]
 public class AdminQueryFiltersTests

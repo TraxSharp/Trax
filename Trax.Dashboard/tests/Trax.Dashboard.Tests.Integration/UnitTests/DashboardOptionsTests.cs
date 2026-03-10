@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Trax.Dashboard.Configuration;
 
-namespace Trax.Dashboard.Tests.Integration;
+namespace Trax.Dashboard.Tests.Integration.UnitTests;
 
 [TestFixture]
 public class DashboardOptionsTests

@@ -3,7 +3,7 @@ using Trax.Effect.Services.ServiceTrain;
 
 #pragma warning disable CS8766 // Nullability mismatch on Metadata property inherited from EffectTrain
 
-namespace Trax.Dashboard.Tests.Integration.Fakes;
+namespace Trax.Dashboard.Tests.Integration.Fakes.Trains;
 
 // --- Simple train A ---
 public record FakeInputA;

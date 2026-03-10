@@ -1,6 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Dashboard.Tests.Integration.Fakes;
+using Trax.Dashboard.Tests.Integration.Fakes.Trains;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.EffectRegistry;
@@ -10,7 +10,7 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Scheduling;
 
-namespace Trax.Dashboard.Tests.Integration;
+namespace Trax.Dashboard.Tests.Integration.UnitTests;
 
 [TestFixture]
 public class InferredSchedulingApiTests
@@ -23,7 +23,8 @@ public class InferredSchedulingApiTests
     {
         _services = new ServiceCollection();
         var root = new TraxBuilder(_services, new EffectRegistry());
-        _parentBuilder = root.AddEffects(_ => { }).AddMediator();
+        _parentBuilder = root.AddEffects(effects => effects)
+            .AddMediator(typeof(IFakeSchedulerTrainA).Assembly);
     }
 
     #region Single-type-param: Schedule, Include, ThenInclude
@@ -469,6 +470,8 @@ public class InferredSchedulingApiTests
                         new FakeManifestInputD(),
                         options => options.Group("group-a")
                     );
+
+                return scheduler;
             });
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*Circular dependency*");

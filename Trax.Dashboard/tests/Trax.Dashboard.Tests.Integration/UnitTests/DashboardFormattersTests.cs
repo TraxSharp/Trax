@@ -3,7 +3,7 @@ using Radzen;
 using Trax.Dashboard.Utilities;
 using Trax.Effect.Enums;
 
-namespace Trax.Dashboard.Tests.Integration;
+namespace Trax.Dashboard.Tests.Integration.UnitTests;
 
 [TestFixture]
 public class DashboardFormattersTests

@@ -4,7 +4,7 @@ using Trax.Effect.Services.ServiceTrain;
 
 #pragma warning disable CS8766 // Nullability mismatch on Metadata property inherited from EffectTrain
 
-namespace Trax.Dashboard.Tests.Integration.Fakes;
+namespace Trax.Dashboard.Tests.Integration.Fakes.Trains;
 
 // --- Manifest-compatible fakes for scheduler builder tests ---
 // These satisfy TTrain : IServiceTrain<TInput, Unit> where TInput : IManifestProperties

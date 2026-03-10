@@ -1,12 +1,12 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Dashboard.Extensions;
-using Trax.Dashboard.Tests.Integration.Fakes;
+using Trax.Dashboard.Tests.Integration.Fakes.Trains;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainDiscovery;
 
-namespace Trax.Dashboard.Tests.Integration;
+namespace Trax.Dashboard.Tests.Integration.UnitTests;
 
 [TestFixture]
 public class TrainBusIntegrationTests
@@ -18,7 +18,8 @@ public class TrainBusIntegrationTests
         var services = new ServiceCollection();
 
         services.AddTrax(trax =>
-            trax.AddEffects(_ => { }).AddMediator(assemblies: [typeof(FakeTrainA).Assembly])
+            trax.AddEffects(effects => effects)
+                .AddMediator(assemblies: [typeof(FakeTrainA).Assembly])
         );
 
         services.AddTraxDashboard();

@@ -1,6 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Dashboard.Tests.Integration.Fakes;
+using Trax.Dashboard.Tests.Integration.Fakes.Trains;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.EffectRegistry;
@@ -9,7 +9,7 @@ using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Scheduling;
 
-namespace Trax.Dashboard.Tests.Integration;
+namespace Trax.Dashboard.Tests.Integration.UnitTests;
 
 [TestFixture]
 public class CyclicDependencyValidationTests
@@ -22,7 +22,8 @@ public class CyclicDependencyValidationTests
     {
         _services = new ServiceCollection();
         var root = new TraxBuilder(_services, new EffectRegistry());
-        _parentBuilder = root.AddEffects(_ => { }).AddMediator();
+        _parentBuilder = root.AddEffects(effects => effects)
+            .AddMediator(typeof(IFakeSchedulerTrainA).Assembly);
     }
 
     #region Valid DAGs (no cycles)

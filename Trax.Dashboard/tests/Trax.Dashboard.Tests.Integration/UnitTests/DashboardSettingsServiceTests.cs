@@ -2,7 +2,7 @@ using FluentAssertions;
 using Trax.Dashboard.Services.DashboardSettings;
 using Trax.Dashboard.Services.LocalStorage;
 
-namespace Trax.Dashboard.Tests.Integration;
+namespace Trax.Dashboard.Tests.Integration.UnitTests;
 
 [TestFixture]
 public class DashboardSettingsServiceTests

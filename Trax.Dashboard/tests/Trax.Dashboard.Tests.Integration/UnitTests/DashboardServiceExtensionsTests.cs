@@ -5,7 +5,7 @@ using Trax.Dashboard.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Mediator.Services.TrainDiscovery;
 
-namespace Trax.Dashboard.Tests.Integration;
+namespace Trax.Dashboard.Tests.Integration.UnitTests;
 
 [TestFixture]
 public class DashboardServiceExtensionsTests

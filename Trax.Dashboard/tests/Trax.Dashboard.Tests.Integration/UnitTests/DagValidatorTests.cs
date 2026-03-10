@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Trax.Scheduler.Utilities;
 
-namespace Trax.Dashboard.Tests.Integration;
+namespace Trax.Dashboard.Tests.Integration.UnitTests;
 
 [TestFixture]
 public class DagValidatorTests

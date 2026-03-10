@@ -2,7 +2,7 @@ using FluentAssertions;
 using Trax.Dashboard.Models;
 using Trax.Dashboard.Utilities;
 
-namespace Trax.Dashboard.Tests.Integration;
+namespace Trax.Dashboard.Tests.Integration.UnitTests;
 
 [TestFixture]
 public class DagLayoutEngineTests
