@@ -18,11 +18,12 @@ using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Logging.Extensions;
-using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
-using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Tests.ArrayLogger.Services.ArrayLoggingProvider;
+using Trax.Scheduler.Tests.Integration.Fakes.Trains;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 using Trax.Scheduler.Trains.JobDispatcher;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;

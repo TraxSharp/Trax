@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Configuration;
@@ -10,6 +11,7 @@ using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.SchedulerStartupService;
 using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.JobDispatcher;
+using Trax.Scheduler.Trains.JobRunner;
 using Trax.Scheduler.Trains.ManifestManager;
 using Trax.Scheduler.Trains.MetadataCleanup;
 using Trax.Scheduler.Utilities;
@@ -26,9 +28,8 @@ namespace Trax.Scheduler.Configuration;
 ///     .AddEffects(effects => effects.UsePostgres(connectionString))
 ///     .AddMediator(assemblies)
 ///     .AddScheduler(scheduler => scheduler
-///         .PollingInterval(TimeSpan.FromSeconds(30))
-///         .MaxActiveJobs(100)
 ///         .UseLocalWorkers()
+///         .Schedule&lt;IMyTrain&gt;("my-job", new MyInput(), Every.Minutes(5))
 ///     )
 /// );
 /// </code>
@@ -38,6 +39,7 @@ public partial class SchedulerConfigurationBuilder
     private readonly TraxBuilderWithMediator _parentBuilder;
     private readonly SchedulerConfiguration _configuration = new();
     private Action<IServiceCollection>? _taskServerRegistration;
+    private string? _configuredSubmitterSource;
     private Action<IServiceCollection>? _remoteRunRegistration;
     private string? _rootScheduledExternalId;
     private string? _lastScheduledExternalId;
@@ -58,15 +60,16 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Gets the service collection for registering services.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public IServiceCollection ServiceCollection => _parentBuilder.ServiceCollection;
 
     /// <summary>
     /// Builds the scheduler configuration and registers all services.
     /// </summary>
-    /// <returns>The parent builder for continued chaining</returns>
-    internal TraxBuilderWithMediator Build()
+    internal void Build()
     {
         ValidateNoCyclicGroupDependencies();
+        ValidateSubmitterRequirements();
 
         // Exclude internal scheduler trains from MaxActiveJobs count
         foreach (var name in AdminTrains.FullNames)
@@ -106,12 +109,22 @@ public partial class SchedulerConfigurationBuilder
             MetadataCleanupTrain
         >();
 
-        // PostgresJobSubmitter is the default submitter since Postgres is required for scheduling.
-        // UseRemoteWorkers() and UseInMemoryWorkers() override this via last-registration-wins.
-        _parentBuilder.ServiceCollection.AddScoped<IJobSubmitter, PostgresJobSubmitter>();
-
-        // Register additional job submitter services if configured (may override the default above)
-        _taskServerRegistration?.Invoke(_parentBuilder.ServiceCollection);
+        // Register the job submitter. If the user explicitly configured one (UseLocalWorkers,
+        // UseRemoteWorkers, OverrideSubmitter), use that. Otherwise, default based on the
+        // data provider: PostgresJobSubmitter for Postgres, InMemoryJobSubmitter for InMemory.
+        if (_taskServerRegistration is not null)
+        {
+            _taskServerRegistration.Invoke(_parentBuilder.ServiceCollection);
+        }
+        else if (_parentBuilder.HasDatabaseProvider)
+        {
+            _parentBuilder.ServiceCollection.AddScoped<IJobSubmitter, PostgresJobSubmitter>();
+        }
+        else
+        {
+            _parentBuilder.ServiceCollection.AddScopedTraxRoute<IJobRunnerTrain, JobRunnerTrain>();
+            _parentBuilder.ServiceCollection.AddScoped<IJobSubmitter, InMemoryJobSubmitter>();
+        }
 
         // Register remote run executor if configured (overrides default LocalRunExecutor)
         _remoteRunRegistration?.Invoke(_parentBuilder.ServiceCollection);
@@ -125,8 +138,6 @@ public partial class SchedulerConfigurationBuilder
         // Register the metadata cleanup service if configured
         if (_configuration.MetadataCleanup is not null)
             _parentBuilder.ServiceCollection.AddHostedService<MetadataCleanupPollingService>();
-
-        return _parentBuilder;
     }
 
     /// <summary>
@@ -164,6 +175,33 @@ public partial class SchedulerConfigurationBuilder
             throw new InvalidOperationException(
                 $"Circular dependency detected among manifest groups: [{cycleGroups}]. "
                     + "Manifest groups must form a directed acyclic graph (DAG)."
+            );
+        }
+    }
+
+    /// <summary>
+    /// Validates that the configured job submitter has the required infrastructure.
+    /// </summary>
+    private void ValidateSubmitterRequirements()
+    {
+        if (
+            _configuredSubmitterSource is nameof(UseLocalWorkers)
+            && !_parentBuilder.HasDatabaseProvider
+        )
+        {
+            throw new InvalidOperationException(
+                "UseLocalWorkers() requires a PostgreSQL database provider. "
+                    + "Local workers poll the trax.background_job table using PostgreSQL's "
+                    + "FOR UPDATE SKIP LOCKED for atomic job dequeue.\n\n"
+                    + "Add UsePostgres() to your effects configuration:\n\n"
+                    + "  services.AddTrax(trax => trax\n"
+                    + "      .AddEffects(effects => effects.UsePostgres(connectionString))\n"
+                    + "      .AddMediator(assemblies)\n"
+                    + "      .AddScheduler(scheduler => scheduler.UseLocalWorkers())\n"
+                    + "  );\n\n"
+                    + "If you don't need PostgreSQL, omit UseLocalWorkers() to use the default "
+                    + "in-memory submitter, or use UseRemoteWorkers() / UseSqsWorkers() to "
+                    + "dispatch to an external system."
             );
         }
     }

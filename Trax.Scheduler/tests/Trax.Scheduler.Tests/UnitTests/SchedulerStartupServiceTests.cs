@@ -5,7 +5,7 @@ using Npgsql;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.SchedulerStartupService;
 
-namespace Trax.Scheduler.Tests;
+namespace Trax.Scheduler.Tests.UnitTests;
 
 [TestFixture]
 public class SchedulerStartupServiceTests

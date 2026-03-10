@@ -8,7 +8,8 @@ using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Tests.Integration.Fakes.Trains;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 using Trax.Scheduler.Trains.ManifestManager;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;

@@ -2,7 +2,7 @@ using LanguageExt;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
 
-namespace Trax.Scheduler.Tests.Integration.Examples.Trains;
+namespace Trax.Scheduler.Tests.Integration.Fakes.Trains;
 
 /// <summary>
 /// A simple test train for scheduler integration tests.

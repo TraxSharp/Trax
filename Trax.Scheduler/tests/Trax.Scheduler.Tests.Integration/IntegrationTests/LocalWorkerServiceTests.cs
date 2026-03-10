@@ -18,7 +18,8 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.LocalWorkerService;
-using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Tests.Integration.Fakes.Trains;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 

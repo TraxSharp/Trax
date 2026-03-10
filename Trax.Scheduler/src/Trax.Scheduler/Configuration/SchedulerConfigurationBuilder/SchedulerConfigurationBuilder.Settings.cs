@@ -202,6 +202,7 @@ public partial class SchedulerConfigurationBuilder
     /// <returns>The builder for method chaining</returns>
     internal SchedulerConfigurationBuilder UseInMemoryWorkers()
     {
+        _configuredSubmitterSource = nameof(UseInMemoryWorkers);
         _taskServerRegistration = services =>
         {
             services.AddScoped<IJobSubmitter, InMemoryJobSubmitter>();
@@ -227,13 +228,15 @@ public partial class SchedulerConfigurationBuilder
         Action<LocalWorkerOptions>? configure = null
     )
     {
+        _configuredSubmitterSource = nameof(UseLocalWorkers);
         _taskServerRegistration = services =>
         {
             var options = new LocalWorkerOptions();
             configure?.Invoke(options);
             services.AddSingleton(options);
 
-            // Register the job runner train that workers use to execute jobs
+            // Register the job submitter and runner train that workers use to execute jobs
+            services.AddScoped<IJobSubmitter, PostgresJobSubmitter>();
             services.AddScopedTraxRoute<IJobRunnerTrain, JobRunnerTrain>();
 
             services.AddHostedService<Scheduler.Services.LocalWorkerService.LocalWorkerService>();
@@ -259,6 +262,7 @@ public partial class SchedulerConfigurationBuilder
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder UseRemoteWorkers(Action<RemoteWorkerOptions> configure)
     {
+        _configuredSubmitterSource = nameof(UseRemoteWorkers);
         _taskServerRegistration = services =>
         {
             var options = new RemoteWorkerOptions();
@@ -312,17 +316,19 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
-    /// Overrides the default <see cref="PostgresJobSubmitter"/> with a custom job submitter.
+    /// Overrides the default job submitter with a custom implementation.
     /// </summary>
     /// <remarks>
     /// Use this as an escape hatch when the built-in submitters don't fit your use case.
-    /// Most users should use <see cref="UseLocalWorkers"/>, <see cref="UseRemoteWorkers"/>,
-    /// or <see cref="UseInMemoryWorkers"/> instead.
+    /// Most users should use <see cref="UseLocalWorkers"/> or <see cref="UseRemoteWorkers"/> instead.
+    /// When no override is configured, the scheduler defaults to <see cref="PostgresJobSubmitter"/>
+    /// (with <c>UsePostgres()</c>) or <see cref="InMemoryJobSubmitter"/> (without a database provider).
     /// </remarks>
     /// <param name="registration">The action to register your custom <see cref="IJobSubmitter"/></param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder OverrideSubmitter(Action<IServiceCollection> registration)
     {
+        _configuredSubmitterSource = nameof(OverrideSubmitter);
         _taskServerRegistration = registration;
         return this;
     }

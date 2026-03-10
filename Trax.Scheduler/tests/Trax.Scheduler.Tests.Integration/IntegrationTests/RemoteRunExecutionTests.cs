@@ -6,7 +6,8 @@ using Trax.Effect.Utils;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Services.RunExecutor;
-using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Tests.Integration.Fakes.Trains;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 

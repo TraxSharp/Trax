@@ -6,7 +6,7 @@ using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Services.RunExecutor;
 
-namespace Trax.Scheduler.Tests;
+namespace Trax.Scheduler.Tests.UnitTests;
 
 [TestFixture]
 public class HttpRunExecutorTests

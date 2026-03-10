@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Log.DTOs;
 
-namespace Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
+namespace Trax.Scheduler.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 
 public class ArrayLoggerEffect(string categoryName) : ILogger, IDisposable
 {

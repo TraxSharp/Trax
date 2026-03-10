@@ -11,7 +11,8 @@ using Trax.Effect.Services.EffectStep;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.StepProvider.Progress.Services.CancellationCheckProvider;
 using Trax.Scheduler.Services.CancellationRegistry;
-using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Tests.Integration.Fakes.Trains;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 

@@ -19,7 +19,7 @@ public class WorkerExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(_ => { }).AddMediator(typeof(AssemblyMarker).Assembly)
+            trax.AddEffects(effects => effects).AddMediator(typeof(AssemblyMarker).Assembly)
         );
         services.AddTraxWorker(configure);
         return services.BuildServiceProvider();
@@ -51,7 +51,7 @@ public class WorkerExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(_ => { }).AddMediator(typeof(AssemblyMarker).Assembly)
+            trax.AddEffects(effects => effects).AddMediator(typeof(AssemblyMarker).Assembly)
         );
         services.AddTraxWorker();
 

@@ -2,7 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Trax.Scheduler.Services.RunExecutor;
 
-namespace Trax.Scheduler.Tests;
+namespace Trax.Scheduler.Tests.UnitTests;
 
 [TestFixture]
 public class RemoteRunContractTests

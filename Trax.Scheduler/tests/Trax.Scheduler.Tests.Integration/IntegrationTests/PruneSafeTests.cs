@@ -14,7 +14,8 @@ using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Scheduling;
 using Trax.Scheduler.Services.TraxScheduler;
-using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Tests.Integration.Fakes.Trains;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 

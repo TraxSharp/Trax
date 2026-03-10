@@ -5,7 +5,7 @@ using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Extensions;
 
-namespace Trax.Scheduler.Tests;
+namespace Trax.Scheduler.Tests.UnitTests;
 
 [TestFixture]
 public class TrainNameExpanderTests

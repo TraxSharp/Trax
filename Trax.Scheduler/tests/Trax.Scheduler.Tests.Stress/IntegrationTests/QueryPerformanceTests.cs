@@ -17,9 +17,10 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.SchedulerStartupService;
 using Trax.Scheduler.Services.Scheduling;
 using Trax.Scheduler.Services.TraxScheduler;
-using Trax.Scheduler.Tests.Stress.Examples;
+using Trax.Scheduler.Tests.Stress.Fakes.Trains;
+using Trax.Scheduler.Tests.Stress.Fixtures;
 
-namespace Trax.Scheduler.Tests.Stress;
+namespace Trax.Scheduler.Tests.Stress.IntegrationTests;
 
 /// <summary>
 /// Stress tests that seed large volumes of data and verify that critical database
@@ -31,7 +32,7 @@ namespace Trax.Scheduler.Tests.Stress;
 /// </summary>
 [TestFixture]
 [Category("Stress")]
-public class QueryPerformanceTests : StressTestSetup
+public class QueryPerformanceTests : TestSetup
 {
     /// <summary>
     /// Number of manifests to seed. Each represents a scheduled job definition.

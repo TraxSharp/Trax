@@ -3,7 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Services.JobSubmitter;
-using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
 

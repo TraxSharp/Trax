@@ -24,19 +24,19 @@ using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Logging.Extensions;
-using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Scheduler.Extensions;
-using Trax.Scheduler.Tests.Stress.Examples;
+using Trax.Scheduler.Tests.ArrayLogger.Services.ArrayLoggingProvider;
+using Trax.Scheduler.Tests.Stress.Fakes.Trains;
 using Trax.Scheduler.Trains.JobRunner;
 
-namespace Trax.Scheduler.Tests.Stress;
+namespace Trax.Scheduler.Tests.Stress.Fixtures;
 
 [TestFixture]
 [Category("Stress")]
 [Ignore("Stress tests — run manually with: dotnet test --filter TestCategory=Stress")]
-public abstract class StressTestSetup
+public abstract class TestSetup
 {
     private ServiceProvider ServiceProvider { get; set; } = null!;
 

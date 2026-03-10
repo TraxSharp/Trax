@@ -3,7 +3,7 @@ using Trax.Scheduler.Trains.JobRunner;
 namespace Trax.Scheduler.Services.JobSubmitter;
 
 /// <summary>
-/// In-memory implementation of <see cref="IJobSubmitter"/> for testing purposes.
+/// In-memory implementation of <see cref="IJobSubmitter"/> for testing and local development.
 /// </summary>
 /// <remarks>
 /// This implementation executes jobs immediately and synchronously (awaitable) without
@@ -15,12 +15,15 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 /// Jobs are executed inline when <see cref="EnqueueAsync"/> is called, so the method
 /// returns only after the train completes.
 ///
-/// Example usage:
-/// ```csharp
+/// This submitter is registered automatically when no database provider is configured
+/// (i.e., <c>AddEffects()</c> without <c>UsePostgres()</c>):
+/// <code>
 /// services.AddTrax(trax => trax
-///     .AddScheduler(scheduler => scheduler.UseInMemoryWorkers())
+///     .AddEffects()
+///     .AddMediator(typeof(Program).Assembly)
+///     .AddScheduler()
 /// );
-/// ```
+/// </code>
 /// </remarks>
 public class InMemoryJobSubmitter(IJobRunnerTrain jobRunnerTrain) : IJobSubmitter
 {

@@ -18,12 +18,13 @@ public class SchedulerConfigurationBuilderSettingsTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(_ => { })
+            trax.AddEffects(effects => effects)
                 .AddMediator(typeof(AssemblyMarker).Assembly)
                 .AddScheduler(scheduler =>
                 {
                     scheduler.UseInMemoryWorkers();
                     configure(scheduler);
+                    return scheduler;
                 })
         );
         using var provider = services.BuildServiceProvider();

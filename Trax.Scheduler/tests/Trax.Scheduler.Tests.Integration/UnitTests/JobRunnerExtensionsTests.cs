@@ -20,7 +20,7 @@ public class JobRunnerExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(_ => { }).AddMediator(typeof(AssemblyMarker).Assembly)
+            trax.AddEffects(effects => effects).AddMediator(typeof(AssemblyMarker).Assembly)
         );
         services.AddTraxJobRunner();
         return services;

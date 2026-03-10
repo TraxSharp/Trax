@@ -53,7 +53,7 @@ public class RemoteJobRequestTests
         var original = new RemoteJobRequest(
             42,
             "{\"value\":\"hello\"}",
-            "Trax.Scheduler.Tests.Integration.Examples.Trains.SchedulerTestInput"
+            "Trax.Scheduler.Tests.Integration.Fakes.Trains.SchedulerTestInput"
         );
 
         var json = JsonSerializer.Serialize(original);
@@ -64,7 +64,7 @@ public class RemoteJobRequestTests
         deserialized.Input.Should().Be("{\"value\":\"hello\"}");
         deserialized
             .InputType.Should()
-            .Be("Trax.Scheduler.Tests.Integration.Examples.Trains.SchedulerTestInput");
+            .Be("Trax.Scheduler.Tests.Integration.Fakes.Trains.SchedulerTestInput");
     }
 
     [Test]

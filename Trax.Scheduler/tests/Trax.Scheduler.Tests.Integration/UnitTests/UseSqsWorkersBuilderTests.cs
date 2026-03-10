@@ -20,11 +20,12 @@ public class UseSqsWorkersBuilderTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(_ => { })
+            trax.AddEffects(effects => effects)
                 .AddMediator(typeof(AssemblyMarker).Assembly)
                 .AddScheduler(scheduler =>
                 {
                     configure(scheduler);
+                    return scheduler;
                 })
         );
         return services.BuildServiceProvider();

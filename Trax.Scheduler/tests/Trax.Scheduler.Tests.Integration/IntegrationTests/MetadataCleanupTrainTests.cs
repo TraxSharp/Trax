@@ -10,6 +10,7 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 using Trax.Scheduler.Trains.ManifestManager;
 using Trax.Scheduler.Trains.MetadataCleanup;
 

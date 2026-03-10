@@ -12,13 +12,13 @@ using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Logging.Extensions;
-using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Scheduler.Trains.JobRunner;
 
-namespace Trax.Scheduler.Tests.Integration;
+namespace Trax.Scheduler.Tests.Integration.Fixtures;
 
 [TestFixture]
 public abstract class TestSetup

@@ -6,7 +6,7 @@ using Trax.Effect.Utils;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Sqs.Configuration;
 using Trax.Scheduler.Sqs.Services;
-using Trax.Scheduler.Tests.Integration.Examples.Trains;
+using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
 
