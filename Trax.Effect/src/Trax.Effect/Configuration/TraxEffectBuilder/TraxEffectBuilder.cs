@@ -36,6 +36,7 @@ public partial class TraxEffectBuilder
     {
         // Copy builder-level state so the promoted instance carries forward
         // any configuration set before promotion.
+        MigrationsDisabled = source.MigrationsDisabled;
         StepProgressEnabled = source.StepProgressEnabled;
         DataContextLoggingEffectEnabled = source.DataContextLoggingEffectEnabled;
         SerializeStepData = source.SerializeStepData;
@@ -77,6 +78,14 @@ public partial class TraxEffectBuilder
         get => _parent.HasDataProvider;
         set => _parent.HasDataProvider = value;
     }
+
+    /// <summary>
+    /// When <c>true</c>, <see cref="Extensions.ServiceExtensions"/> skips the automatic database
+    /// migration that normally runs inside <c>UsePostgres()</c>. Use this in Lambda runners or
+    /// other environments where migrations are managed externally.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool MigrationsDisabled { get; set; }
 
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool StepProgressEnabled { get; set; }
