@@ -24,9 +24,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddTraxDashboard();
 
-builder.Services.AddTraxEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddServiceTrainBus(typeof(Program).Assembly)
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(typeof(Program).Assembly)
 );
 
 var app = builder.Build();
