@@ -251,7 +251,7 @@ This ensures trains performing critical operations (database transactions, exter
 Configure the grace period:
 
 ```csharp
-.UseLocalWorkers(options =>
+.ConfigureLocalWorkers(options =>
 {
     options.ShutdownTimeout = TimeSpan.FromSeconds(60); // default: 30 seconds
 })

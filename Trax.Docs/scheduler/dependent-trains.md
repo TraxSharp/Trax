@@ -32,7 +32,6 @@ Chain a dependent train after a `Schedule` call:
 ```csharp
 services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
-        .UseLocalWorkers()
         .Schedule<IExtractTrain>(
             "extract-data",
             new ExtractInput { Source = "api" },

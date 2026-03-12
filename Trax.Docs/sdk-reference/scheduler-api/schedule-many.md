@@ -160,7 +160,6 @@ var tables = new[] { "customers", "orders", "products" };
 
 services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
-        .UseLocalWorkers()
         .ScheduleMany<ISyncTableTrain>(
             "sync",
             tables.Select(table => new ManifestItem(

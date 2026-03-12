@@ -34,7 +34,7 @@ public static IServiceCollection AddTraxWorker(
 | `VisibilityTimeout` | `TimeSpan` | 30 minutes | How long a claimed job stays invisible before another worker can reclaim it (crash recovery) |
 | `ShutdownTimeout` | `TimeSpan` | 30 seconds | Grace period for in-flight jobs during shutdown |
 
-These are the same options used by [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}).
+These are the same options used by [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}).
 
 ## Examples
 
@@ -96,10 +96,10 @@ You can run multiple standalone worker processes against the same database. Post
 
 **Not registered:** ManifestManager, JobDispatcher, polling services, startup service. This process only executes — it doesn't schedule or dispatch.
 
-## How It Differs from UseLocalWorkers
+## How It Differs from the Scheduler's Local Workers
 
-| Aspect | `UseLocalWorkers()` | `AddTraxWorker()` |
-|--------|---------------------|-------------------|
+| Aspect | Scheduler (with Postgres) | `AddTraxWorker()` |
+|--------|---------------------------|-------------------|
 | **Used in** | Full scheduler process | Standalone worker process |
 | **Scheduling** | Yes (ManifestManager, JobDispatcher) | No |
 | **Dispatching** | Yes (writes to WorkQueue, background_job) | No |
@@ -123,5 +123,5 @@ dotnet add package Trax.Scheduler
 ## See Also
 
 - [Remote Execution]({{ site.baseurl }}{% link scheduler/remote-execution.md %}) — architecture overview and deployment models
-- [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) — local workers within the scheduler process
+- [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) — customizing local workers within the scheduler process
 - [AddTraxJobRunner]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-job-runner.md %}) — push-based alternative (HTTP endpoint)

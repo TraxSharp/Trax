@@ -24,16 +24,20 @@ type Mutation {
 
 Trax auto-generates strongly-typed mutations for trains that opt in with `[TraxMutation]`. Only trains with this attribute appear under `dispatch`. Trains annotated with `[TraxQuery]` appear under `query { discover { ... } }` instead — see [Queries]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}).
 
-Each whitelisted train gets a `run{TrainName}` mutation, a `queue{TrainName}` mutation, or both, depending on the `Operations` property on the attribute. These provide full GraphQL schema validation on the input, so errors are caught at the schema level rather than at runtime.
+Each whitelisted train gets a single mutation field named after the train (no prefix). The mutation's parameters and behavior depend on the operations passed to the attribute constructor:
+
+- **Run + Queue (default)** — when no operations are specified (or both `GraphQLOperation.Run` and `GraphQLOperation.Queue` are passed), the mutation accepts an optional `mode: ExecutionMode` parameter (`RUN` or `QUEUE`, default `RUN`) and an optional `priority: Int`.
+- **Run only** — the mutation always runs synchronously. No `mode` or `priority` parameters.
+- **Queue only** — the mutation always queues. Has `priority` but no `mode` parameter.
 
 ### Naming Convention
 
-The mutation names are derived from the train's service interface name (or overridden via `[TraxMutation(Name = "...")]`):
+The mutation name is derived from the train's service interface name (or overridden via `[TraxMutation(Name = "...")]`):
 1. Strip the `I` prefix
 2. Strip the `Train` suffix
-3. Prepend `run` or `queue`
+3. Use the result as the field name (camelCase)
 
-For example, `IBanPlayerTrain` produces `runBanPlayer` and `queueBanPlayer`.
+For example, `IBanPlayerTrain` produces `banPlayer`.
 
 ### Example
 
@@ -55,60 +59,81 @@ input BanPlayerInput {
   reason: String!
 }
 
+# Run synchronously (default mode)
 mutation {
   dispatch {
-    runBanPlayer(input: { playerId: "player-42", reason: "cheating" }) {
+    banPlayer(input: { playerId: "player-42", reason: "cheating" }) {
+      externalId
       metadataId
+      output { ... }
     }
   }
 }
 
+# Queue for async execution
 mutation {
   dispatch {
-    queueBanPlayer(
+    banPlayer(
       input: { playerId: "player-42", reason: "cheating" }
+      mode: QUEUE
       priority: 10
     ) {
-      workQueueId
       externalId
+      workQueueId
     }
   }
 }
 ```
 
-### run{TrainName}
+### Unified Response Type
 
-Runs the train synchronously via `ITrainBus`. The call blocks until the train completes.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `input` | `{TrainName}Input!` | Yes | Strongly-typed input matching the train's input record |
-
-**Returns**: depends on the train's output type.
-
-#### Trains with `Unit` output (no typed output)
-
-Returns `RunTrainResponse`:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `metadataId` | `Long!` | Metadata ID of the completed execution |
-
-#### Trains with typed output
-
-When a train's `ServiceTrain<TIn, TOut>` has a non-`Unit` output type, the mutation returns a per-train response type `Run{TrainName}Response` with the typed output included:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `metadataId` | `Long!` | Metadata ID of the completed execution |
-| `output` | `{OutputType}!` | The train's typed output, exposed as a GraphQL object type |
-
-For example, a train `ServiceTrain<LookupPlayerInput, LookupPlayerOutput>` annotated with `[TraxMutation]` produces:
+Every dispatch mutation returns a single per-train response type with nullable fields. Which fields are populated depends on the execution mode:
 
 ```graphql
-type RunLookupPlayerResponse {
-  metadataId: Long!
-  output: LookupPlayerOutput!
+type BanPlayerResponse {
+  externalId: String!       # always present
+  metadataId: Long          # present for RUN, null for QUEUE
+  output: BanPlayerOutput   # present for RUN (typed trains only), null for QUEUE
+  workQueueId: Long         # present for QUEUE, null for RUN
+}
+```
+
+| Field | Type | When Populated |
+|-------|------|----------------|
+| `externalId` | `String!` | Always — identifies the execution or work queue entry |
+| `metadataId` | `Long` | RUN mode — metadata ID of the completed execution |
+| `output` | `{OutputType}` | RUN mode, only for trains with non-`Unit` output |
+| `workQueueId` | `Long` | QUEUE mode — database ID of the created WorkQueue entry |
+
+### Run + Queue Mode (Default)
+
+When no operations are specified (or both `GraphQLOperation.Run` and `GraphQLOperation.Queue` are passed), the mutation includes a `mode` parameter:
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `input` | `{TrainName}Input!` | Yes | — | Strongly-typed input matching the train's input record |
+| `mode` | `ExecutionMode` | No | `RUN` | Whether to run synchronously (`RUN`) or queue for async execution (`QUEUE`) |
+| `priority` | `Int` | No | `0` | Dispatch priority (0-31, higher runs first). Silently ignored for `RUN` mode. |
+
+The `ExecutionMode` enum is automatically registered in the GraphQL schema when any train uses both Run and Queue operations:
+
+```graphql
+enum ExecutionMode {
+  RUN
+  QUEUE
+}
+```
+
+#### Example: Run + Queue train with typed output
+
+A train `ServiceTrain<LookupPlayerInput, LookupPlayerOutput>` annotated with `[TraxMutation]` (default, both modes) produces:
+
+```graphql
+type LookupPlayerResponse {
+  externalId: String!
+  metadataId: Long
+  output: LookupPlayerOutput
+  workQueueId: Long
 }
 
 type LookupPlayerOutput {
@@ -119,9 +144,11 @@ type LookupPlayerOutput {
   rating: Int!
 }
 
+# Run synchronously (default)
 mutation {
   dispatch {
-    runLookupPlayer(input: { playerId: "player-42" }) {
+    lookupPlayer(input: { playerId: "player-42" }) {
+      externalId
       metadataId
       output {
         playerId
@@ -133,25 +160,44 @@ mutation {
     }
   }
 }
+
+# Queue for async execution
+mutation {
+  dispatch {
+    lookupPlayer(
+      input: { playerId: "player-42" }
+      mode: QUEUE
+      priority: 5
+    ) {
+      externalId
+      workQueueId
+    }
+  }
+}
 ```
 
 The output type is automatically registered as a GraphQL `ObjectType` and deduplicated — if multiple trains share the same output type, only one GraphQL type is generated.
 
-### queue{TrainName}
+### Run-Only Mode
 
-Queues the train for asynchronous execution via the WorkQueue.
+When `GraphQLOperation.Run` is the only operation passed (e.g. `[TraxMutation(GraphQLOperation.Run)]`), the mutation always runs synchronously. No `mode` or `priority` parameters are generated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `input` | `{TrainName}Input!` | Yes | Strongly-typed input matching the train's input record |
+
+The response type still uses the unified format, but `workQueueId` will always be `null`.
+
+### Queue-Only Mode
+
+When `GraphQLOperation.Queue` is the only operation passed (e.g. `[TraxMutation(GraphQLOperation.Queue)]`), the mutation always queues. No `mode` parameter is generated, but `priority` is available.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `input` | `{TrainName}Input!` | Yes | — | Strongly-typed input matching the train's input record |
 | `priority` | `Int` | No | `0` | Dispatch priority (0-31, higher runs first) |
 
-**Returns**: `QueueTrainResponse`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `workQueueId` | `Long!` | Database ID of the created WorkQueue entry |
-| `externalId` | `String!` | External ID shared by the WorkQueue entry and its resulting Metadata — use this to correlate with [subscription]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) events |
+The response type still uses the unified format, but `metadataId` and `output` will always be `null`.
 
 ---
 

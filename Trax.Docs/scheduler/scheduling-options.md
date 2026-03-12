@@ -26,7 +26,6 @@ The group is set via the `ScheduleOptions` fluent builder using `.Group(...)`. W
 ```csharp
 services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
-        .UseLocalWorkers()
         // Single manifest — explicit group shared with other related jobs
         .Schedule<IExtractTrain>(
             "extract-users",

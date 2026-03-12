@@ -78,7 +78,7 @@ type DiscoverQueries {
 
 ### Query trains with `Unit` output
 
-When a query train has `Unit` output, it returns `RunTrainResponse`:
+When a query train has `Unit` output, it returns a response with the execution metadata:
 
 | Field | Type | Description |
 |-------|------|-------------|

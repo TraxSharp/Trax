@@ -61,19 +61,19 @@ builder.Services.AddTrax(trax => trax
     )
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
-        .UseLocalWorkers()                   // ← built-in, no extra packages
+        // Local workers enabled automatically with Postgres — no extra call needed
         .Schedule<IMyTrain, MyInput>(
             "my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```
 
-No connection string parameter needed — `UseLocalWorkers()` uses the same `IDataContext` already registered by `UsePostgres()`.
+No connection string parameter needed — local workers use the same `IDataContext` already registered by `UsePostgres()`.
 
 ### Configuration
 
 ```csharp
-.UseLocalWorkers(options =>
+.ConfigureLocalWorkers(options =>
 {
     options.WorkerCount = 4;                                   // default: Environment.ProcessorCount
     options.PollingInterval = TimeSpan.FromSeconds(2);         // default: 1 second
@@ -150,7 +150,7 @@ This is the same pattern Hangfire uses with its `InvisibilityTimeout` — a well
 
 ## Hangfire (Deprecated)
 
-> **Deprecated**: Use `UseLocalWorkers()` instead. The `Trax.Scheduler.Hangfire` package will be removed in a future version.
+> **Deprecated**: Local workers are now the default with Postgres. Remove any `UseHangfire()` call. The `Trax.Scheduler.Hangfire` package will be removed in a future version.
 
 The Hangfire backend wraps Hangfire's `IBackgroundJobClient.Enqueue()` to dispatch jobs. It brings 3 NuGet packages and creates its own database tables, but Trax.Core only uses a tiny fraction of Hangfire's capabilities:
 
@@ -189,10 +189,9 @@ Trax supports two remote execution models:
 ```csharp
 // Scheduler side:
 .AddScheduler(scheduler => scheduler
-    .UseRemoteWorkers(remote =>
-    {
-        remote.BaseUrl = "https://my-workers.example.com/trax/execute";
-    })
+    .UseRemoteWorkers(
+        remote => remote.BaseUrl = "https://my-workers.example.com/trax/execute",
+        routing => routing.ForTrain<IMyTrain>())
 )
 
 // Remote side:
@@ -209,10 +208,9 @@ using Trax.Scheduler.Sqs.Extensions;
 
 // Scheduler side:
 .AddScheduler(scheduler => scheduler
-    .UseSqsWorkers(sqs =>
-    {
-        sqs.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
-    })
+    .UseSqsWorkers(
+        sqs => sqs.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs",
+        routing => routing.ForTrain<IMyTrain>())
 )
 
 // Lambda side: use SqsJobRunnerHandler (see Trax.Scheduler.Sqs)
@@ -261,7 +259,7 @@ public class MyJobSubmitter : IJobSubmitter
       )
       .AddScheduler(scheduler => scheduler
 -         .UseHangfire(connectionString)
-+         .UseLocalWorkers()
++         // Local workers are now the default — no call needed
           .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
       )
   );

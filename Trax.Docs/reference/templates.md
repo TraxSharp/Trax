@@ -83,7 +83,7 @@ MyCompany.Api/
 **Sample trains:**
 
 - **LookupTrain** — a `[TraxQuery]` train that returns typed output. Generates a query field: `query { discover { lookup(input: { id: "42" }) { id name createdAt } } }`
-- **HelloWorldTrain** — a `[TraxMutation]` train that logs a greeting. Generates a mutation field: `mutation { dispatch { runHelloWorld(input: { name: "Trax" }) { metadataId } } }`
+- **HelloWorldTrain** — a `[TraxMutation]` train that logs a greeting. Generates a mutation field: `mutation { dispatch { helloWorld(input: { name: "Trax" }) { externalId metadataId } } }`
 
 **Packages:**
 
@@ -162,7 +162,7 @@ cd MyCompany.Scheduler && dotnet run
 cd MyCompany.Api && dotnet run
 ```
 
-The API can queue trains for the scheduler via `queue{TrainName}` mutations and run lightweight trains directly via `run{TrainName}` mutations.
+The API can queue trains for the scheduler via `{trainName}(mode: QUEUE)` mutations and run lightweight trains directly via `{trainName}` mutations (default mode is `RUN`).
 
 ## Adding Your Own Trains
 
@@ -203,7 +203,6 @@ Register the schedule in `Program.cs`:
 
 ```csharp
 scheduler
-    .UseLocalWorkers()
     .Schedule<ISyncCustomersTrain>(
         "sync-customers",
         new SyncCustomersInput { Region = "us-east" },

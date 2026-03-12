@@ -1,20 +1,20 @@
 ---
 layout: default
-title: UseLocalWorkers
+title: ConfigureLocalWorkers
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 2
 ---
 
-# UseLocalWorkers
+# ConfigureLocalWorkers
 
-Configures the built-in PostgreSQL local workers as the background execution backend for the Trax.Core scheduler.
+Customizes the built-in PostgreSQL local worker pool. Local workers are registered automatically when `UsePostgres()` is configured — no explicit call is needed to enable them.
 
 ## Signature
 
 ```csharp
-public SchedulerConfigurationBuilder UseLocalWorkers(
-    Action<LocalWorkerOptions>? configure = null
+public SchedulerConfigurationBuilder ConfigureLocalWorkers(
+    Action<LocalWorkerOptions> configure
 )
 ```
 
@@ -22,7 +22,7 @@ public SchedulerConfigurationBuilder UseLocalWorkers(
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `configure` | `Action<LocalWorkerOptions>?` | No | Optional callback to customize worker count, polling interval, and timeouts |
+| `configure` | `Action<LocalWorkerOptions>` | Yes | Callback to customize worker count, polling interval, and timeouts |
 
 ## Returns
 
@@ -39,7 +39,9 @@ public SchedulerConfigurationBuilder UseLocalWorkers(
 
 ## Examples
 
-### Basic Usage (Defaults)
+### Default Behavior (No Call Needed)
+
+When `UsePostgres()` is configured, local workers are enabled automatically with default settings. You don't need to call anything to get local execution:
 
 ```csharp
 services.AddTrax(trax => trax
@@ -48,7 +50,6 @@ services.AddTrax(trax => trax
     )
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
-        .UseLocalWorkers()
         .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
@@ -56,6 +57,8 @@ services.AddTrax(trax => trax
 
 ### Custom Configuration
 
+Use `ConfigureLocalWorkers()` to customize worker behavior:
+
 ```csharp
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
@@ -63,7 +66,7 @@ services.AddTrax(trax => trax
     )
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
-        .UseLocalWorkers(options =>
+        .ConfigureLocalWorkers(options =>
         {
             options.WorkerCount = 4;
             options.PollingInterval = TimeSpan.FromSeconds(2);
@@ -75,18 +78,44 @@ services.AddTrax(trax => trax
 );
 ```
 
+### Mixed Local and Remote Workers
+
+Local workers are always registered alongside remote submitters. Trains not routed to a remote submitter execute locally:
+
+```csharp
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(assemblies)
+    .AddScheduler(scheduler => scheduler
+        .ConfigureLocalWorkers(opts => opts.WorkerCount = 8)
+        .UseRemoteWorkers(
+            remote => remote.BaseUrl = "https://gpu-workers/trax/execute",
+            routing => routing
+                .ForTrain<IHeavyComputeTrain>()
+                .ForTrain<IAiInferenceTrain>())
+        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IHeavyComputeTrain, HeavyInput>("heavy-compute", new HeavyInput(), Every.Hours(1))
+    )
+);
+```
+
+In this example, `IHeavyComputeTrain` is dispatched to the remote HTTP endpoint, while `IMyTrain` executes locally with 8 worker threads.
+
 ## Remarks
 
-- **Build-time validation:** `UseLocalWorkers()` validates at startup that `UsePostgres()` has been configured. If not, the application throws `InvalidOperationException` with a message explaining the required configuration.
-- No connection string parameter is needed. `UseLocalWorkers()` uses the same `IDataContext` registered by `UsePostgres()`.
+- Local workers are the **implicit default** when `UsePostgres()` is configured. You only need `ConfigureLocalWorkers()` if you want to change the defaults.
+- No connection string parameter is needed. Local workers use the same `IDataContext` registered by `UsePostgres()`.
 - No additional NuGet packages required — this is included in `Trax.Scheduler`.
 - Jobs are queued to the `trax.background_job` table and dequeued atomically using PostgreSQL's `FOR UPDATE SKIP LOCKED`.
 - Workers delete job rows after execution (both success and failure). Trax.Core's Metadata and DeadLetter tables handle the audit trail.
 - If a worker crashes mid-execution, the job's `fetched_at` timestamp becomes stale and the job is reclaimed after `VisibilityTimeout`.
+- When `UseRemoteWorkers()` or `UseSqsWorkers()` is also configured, local workers still run — only the trains explicitly routed via `ForTrain<T>()` or `[TraxRemote]` are dispatched remotely.
 
 ## Registered Services
 
-`UseLocalWorkers()` registers:
+The scheduler automatically registers these services when `UsePostgres()` is configured:
 
 | Service | Lifetime | Description |
 |---------|----------|-------------|
@@ -104,4 +133,5 @@ dotnet add package Trax.Scheduler
 ## See Also
 
 - [Job Submission Architecture]({{ site.baseurl }}{% link scheduler/job-submission.md %}) — detailed architecture, crash recovery, comparison with Hangfire
-- [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) (deprecated)
+- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — per-train HTTP remote dispatch
+- [UseSqsWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}) — per-train SQS dispatch

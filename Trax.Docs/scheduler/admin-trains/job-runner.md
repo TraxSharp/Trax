@@ -71,4 +71,4 @@ See [Multi-Server Concurrency](../concurrency.md) for the full cross-service con
 
 ## Registration
 
-All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()`, `AddTraxWorker()`, or `AddTraxJobRunner()`. Additionally, `UseLocalWorkers()` registers `JobRunnerTrain` as a scoped train route so that local workers can resolve and execute it. You do **not** need to include the `Trax.Scheduler` assembly in `AddMediator()` — only pass your own train assemblies.
+All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()`, `AddTraxWorker()`, or `AddTraxJobRunner()`. Local workers (the implicit default when `UsePostgres()` is configured) register `JobRunnerTrain` as a scoped train route so that local workers can resolve and execute it. You do **not** need to include the `Trax.Scheduler` assembly in `AddMediator()` — only pass your own train assemblies.

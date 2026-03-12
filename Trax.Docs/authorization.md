@@ -114,7 +114,7 @@ app.UseTraxGraphQL(configure: endpoint => endpoint
 
 // Individual trains require specific policies
 [TraxAuthorize("Admin")]
-[TraxMutation(Operations = GraphQLOperation.Run)]
+[TraxMutation]
 public class AdminOnlyTrain : ServiceTrain<AdminInput, Unit>, IAdminOnlyTrain { ... }
 ```
 

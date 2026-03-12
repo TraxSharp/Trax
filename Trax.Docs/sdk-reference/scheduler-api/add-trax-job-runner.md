@@ -115,24 +115,31 @@ app.UseTraxJobRunner("/trax/execute").RequireAuthorization();
 app.Run();
 ```
 
-### AWS Lambda (via ASP.NET Lambda Hosting)
+### AWS Lambda (via TraxLambdaFunction base class)
+
+For Lambda deployments, use the `Trax.Runner.Lambda` package which provides a base class that handles service provider lifecycle, request routing, and cancellation:
 
 ```csharp
-var builder = WebApplication.CreateBuilder(args);
+using Amazon.Lambda.Core;
+using Amazon.Lambda.Serialization.SystemTextJson;
+using Trax.Runner.Lambda;
 
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(typeof(MyTrain).Assembly)
-);
-builder.Services.AddTraxJobRunner();
-builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
+[assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
 
-var app = builder.Build();
-app.UseTraxJobRunner("/trax/execute");
-app.Run();
+public class Function : TraxLambdaFunction
+{
+    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
+    {
+        var connString = configuration.GetConnectionString("TraxDatabase")!;
+
+        services.AddTrax(trax => trax
+            .AddEffects(effects => effects.UsePostgres(connString))
+            .AddMediator(typeof(MyTrain).Assembly));
+    }
+}
 ```
+
+See the [TraxLambdaFunction API reference]({{ site.baseurl }}{% link sdk-reference/scheduler-api/trax-lambda-function.md %}) for details.
 
 ## What It Registers
 
@@ -147,6 +154,7 @@ Registers the minimum set of services to run `JobRunnerTrain`:
 | `ITraxScheduler` → `TraxScheduler` | Scoped | Runtime scheduler interface |
 | `IDormantDependentContext` → `DormantDependentContext` | Scoped | Dependent train context |
 | `IJobRunnerTrain` → `JobRunnerTrain` | Scoped | The train execution pipeline |
+| `ITraxRequestHandler` → `TraxRequestHandler` | Scoped | Hosting-agnostic request handler for execute/run paths |
 
 **Not registered:** ManifestManager, JobDispatcher, polling services, startup service, `LocalWorkerService`. This process only runs trains — it doesn't schedule or dispatch them.
 

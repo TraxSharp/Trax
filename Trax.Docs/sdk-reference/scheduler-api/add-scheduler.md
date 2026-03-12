@@ -48,7 +48,6 @@ services.AddTrax(trax => trax
     )
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
-        .UseLocalWorkers()
         .ManifestManagerPollingInterval(TimeSpan.FromSeconds(5))
         .JobDispatcherPollingInterval(TimeSpan.FromSeconds(5))
         .MaxActiveJobs(50)
@@ -81,8 +80,9 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 
 | Method | Description |
 |--------|-------------|
-| [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) | Built-in PostgreSQL local workers (recommended) |
-| [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) | Dispatches queued jobs via HTTP POST to a remote endpoint |
+| [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) | Customizes the built-in PostgreSQL local workers (enabled by default with Postgres) |
+| [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) | Routes specific trains to a remote HTTP endpoint for execution |
+| [UseSqsWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}) | Routes specific trains to an Amazon SQS queue for execution (`Trax.Scheduler.Sqs`) |
 | [UseRemoteRun]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}) | Offloads synchronous `run` execution to a remote endpoint (blocks until complete) |
 | [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire as the execution backend (deprecated) |
 | `OverrideSubmitter(Action<IServiceCollection>)` | Registers a custom job submitter implementation |

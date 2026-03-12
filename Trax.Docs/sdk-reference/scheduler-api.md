@@ -22,8 +22,9 @@ Both share the same concepts: external IDs for upsert semantics, `Schedule` obje
 | Method | Description |
 |--------|-------------|
 | [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}) | Adds the scheduler subsystem and configures global options (polling, retries, timeouts) |
-| [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) | Built-in PostgreSQL local workers (recommended) |
-| [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) | Dispatches jobs via HTTP POST to a remote endpoint |
+| [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) | Customizes the built-in PostgreSQL local workers (enabled by default) |
+| [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) | Routes specific trains to a remote HTTP endpoint |
+| [TraxLambdaFunction]({{ site.baseurl }}{% link sdk-reference/scheduler-api/trax-lambda-function.md %}) | AWS Lambda base class for remote runners (`Trax.Runner.Lambda` package) |
 | [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire as the execution backend (deprecated) |
 
 ### Scheduling Methods

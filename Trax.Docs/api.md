@@ -130,7 +130,7 @@ Endpoint-level auth answers "can this user access the API?" For finer control, d
 
 ```csharp
 [TraxAuthorize("Admin")]
-[TraxMutation(Operations = GraphQLOperation.Run)]
+[TraxMutation]
 public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrain { ... }
 ```
 

@@ -110,7 +110,7 @@ Trax.Samples.Flowthru.Spaceflights/           ← library (trains)
 Trax.Samples.Flowthru.Spaceflights.Scheduler/ ← executable (scheduler + dashboard)
 ```
 
-The simplest deployment — one process that schedules and executes everything. The executable adds `AddScheduler()` with `UseLocalWorkers()` and `AddTraxDashboard()`.
+The simplest deployment — one process that schedules and executes everything. The executable adds `AddScheduler()` and `AddTraxDashboard()`. Local workers are the implicit default when `UsePostgres()` is configured.
 
 Good for: data pipelines, ETL jobs, background processing where a single server handles the load.
 
@@ -127,7 +127,7 @@ Trax.Samples.GameServer.Api/        ← executable (API only)
 Two processes share the same trains library. The scheduler process handles background execution and hosts the dashboard. The GraphQL process serves the API — it can run lightweight trains synchronously and queue heavy work for the scheduler.
 
 The split is simple:
-- **Scheduler:** `AddScheduler()` + `UseLocalWorkers()` + `AddTraxDashboard()`
+- **Scheduler:** `AddScheduler()` + `AddTraxDashboard()`
 - **API:** `AddTraxGraphQL()` — no scheduler, no executor
 
 Good for: web applications with both an API and background jobs, where the API needs to stay responsive and offload heavy work.
@@ -142,10 +142,10 @@ Trax.Samples.EnergyHub.Hub/     ← executable (API + scheduler + dashboard, no 
 Trax.Samples.EnergyHub.Worker/  ← executable (worker only, no API)
 ```
 
-The hub process manages scheduling and serves the API, but does **not** execute trains. Instead, it writes jobs to the `background_job` table via PostgresJobSubmitter (the default when `UseLocalWorkers()` is omitted). Separate worker processes poll that table and execute trains.
+The hub process manages scheduling and serves the API, but does **not** execute trains locally. Instead, it uses `OverrideSubmitter<PostgresJobSubmitter>()` to write jobs to the `background_job` table via PostgresJobSubmitter, bypassing the default local workers. Separate worker processes poll that table and execute trains.
 
 The split:
-- **Hub:** `AddScheduler()` (without `UseLocalWorkers()`) + `AddTraxGraphQL()` + `AddTraxDashboard()`
+- **Hub:** `AddScheduler()` + `OverrideSubmitter<PostgresJobSubmitter>()` + `AddTraxGraphQL()` + `AddTraxDashboard()`
 - **Worker:** `AddTraxWorker()` — polls `background_job` with `FOR UPDATE SKIP LOCKED`
 
 Workers scale horizontally — run as many as you need. The hub stays lightweight.
@@ -166,7 +166,7 @@ No scheduled jobs — all work is triggered by GraphQL mutations. The API dispat
 
 The split:
 - **API:** `AddScheduler()` + `UseRemoteWorkers()` + `UseRemoteRun()` + `AddTraxGraphQL()` + `AddTraxDashboard()`
-- **Runner:** `AddTraxJobRunner()` + `UseTraxRunEndpoint()` — no scheduler, no polling, no dashboard
+- **Runner:** `AddTraxJobRunner()` + `UseTraxRunEndpoint()` + `UseBroadcaster()` — no scheduler, no polling, no dashboard
 
 Query trains (e.g. `LookupModerationResult`) run synchronously on the API process. Queued trains (e.g. `ReviewContent`, `SendViolationNotice`) are POSTed to the Runner via `HttpJobSubmitter`. No `background_job` table is involved — jobs go directly over HTTP.
 

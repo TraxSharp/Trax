@@ -180,7 +180,6 @@ Uses the legacy three-type-parameter API with `map` and `dependsOn` functions. S
 ```csharp
 services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
-        .UseLocalWorkers()
         // A: Extract runs every 5 minutes
         .Schedule<IExtractTrain>(
             "etl-extract",

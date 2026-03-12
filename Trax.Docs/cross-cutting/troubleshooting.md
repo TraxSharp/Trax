@@ -54,7 +54,7 @@ The step builder pattern enforces configuration ordering at compile time. `AddMe
 services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))  // Step 1
     .AddMediator(typeof(Program).Assembly)                         // Step 2
-    .AddScheduler(scheduler => scheduler.UseLocalWorkers())        // Step 3
+    .AddScheduler()                                                // Step 3
 );
 ```
 

@@ -8,13 +8,14 @@ nav_order: 9
 
 # UseRemoteWorkers
 
-Configures the scheduler to dispatch jobs via HTTP POST to a remote endpoint instead of executing them locally.
+Routes specific trains to a remote HTTP endpoint for execution. Trains not included in the routing configuration continue to execute locally via `PostgresJobSubmitter` and `LocalWorkerService`.
 
 ## Signature
 
 ```csharp
 public SchedulerConfigurationBuilder UseRemoteWorkers(
-    Action<RemoteWorkerOptions> configure
+    Action<RemoteWorkerOptions> configure,
+    Action<SubmitterRouting> routing
 )
 ```
 
@@ -23,6 +24,7 @@ public SchedulerConfigurationBuilder UseRemoteWorkers(
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `configure` | `Action<RemoteWorkerOptions>` | Yes | Callback to set the remote endpoint URL and HTTP client options |
+| `routing` | `Action<SubmitterRouting>` | Yes | Callback to specify which trains should be dispatched to this remote endpoint |
 
 ## Returns
 
@@ -36,6 +38,12 @@ public SchedulerConfigurationBuilder UseRemoteWorkers(
 | `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` — add auth headers, custom timeouts, or any other HTTP configuration |
 | `Timeout` | `TimeSpan` | 30 seconds | HTTP request timeout for each job dispatch |
 
+## SubmitterRouting
+
+| Method | Description |
+|--------|-------------|
+| `ForTrain<TTrain>()` | Routes the specified train type to this remote endpoint. Returns the routing instance for chaining. |
+
 ## Examples
 
 ### Basic Usage
@@ -47,37 +55,86 @@ services.AddTrax(trax => trax
     )
     .AddMediator(assemblies)
     .AddScheduler(scheduler => scheduler
-        .UseRemoteWorkers(remote =>
-        {
-            remote.BaseUrl = "https://my-workers.example.com/trax/execute";
-        })
+        .UseRemoteWorkers(
+            remote => remote.BaseUrl = "https://my-workers.example.com/trax/execute",
+            routing => routing
+                .ForTrain<IHeavyComputeTrain>()
+                .ForTrain<IAiInferenceTrain>())
         .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IHeavyComputeTrain, HeavyInput>("heavy", new HeavyInput(), Every.Hours(1))
     )
 );
 ```
+
+In this example, `IHeavyComputeTrain` and `IAiInferenceTrain` are dispatched to the remote endpoint. `IMyTrain` executes locally via the default `PostgresJobSubmitter`.
 
 ### With Authentication
 
 Trax doesn't bake in any auth — use `ConfigureHttpClient` to add whatever headers your endpoint expects:
 
 ```csharp
-.UseRemoteWorkers(remote =>
-{
-    remote.BaseUrl = "https://my-workers.example.com/trax/execute";
-    remote.ConfigureHttpClient = client =>
-        client.DefaultRequestHeaders.Add("Authorization", "Bearer my-token");
-})
+.UseRemoteWorkers(
+    remote =>
+    {
+        remote.BaseUrl = "https://my-workers.example.com/trax/execute";
+        remote.ConfigureHttpClient = client =>
+            client.DefaultRequestHeaders.Add("Authorization", "Bearer my-token");
+    },
+    routing => routing.ForTrain<IHeavyComputeTrain>())
 ```
 
 ### With Custom Timeout
 
 ```csharp
-.UseRemoteWorkers(remote =>
-{
-    remote.BaseUrl = "https://my-workers.example.com/trax/execute";
-    remote.Timeout = TimeSpan.FromMinutes(2);
-})
+.UseRemoteWorkers(
+    remote =>
+    {
+        remote.BaseUrl = "https://my-workers.example.com/trax/execute";
+        remote.Timeout = TimeSpan.FromMinutes(2);
+    },
+    routing => routing.ForTrain<IHeavyComputeTrain>())
 ```
+
+### Multiple Remote Endpoints
+
+You can call `UseRemoteWorkers()` multiple times to route different trains to different endpoints:
+
+```csharp
+.AddScheduler(scheduler => scheduler
+    .UseRemoteWorkers(
+        remote => remote.BaseUrl = "https://gpu-workers/trax/execute",
+        routing => routing.ForTrain<IAiInferenceTrain>())
+    .UseRemoteWorkers(
+        remote => remote.BaseUrl = "https://cpu-workers/trax/execute",
+        routing => routing.ForTrain<IBatchProcessTrain>())
+)
+```
+
+Each train can only be routed to one submitter. Routing the same train to multiple endpoints throws `InvalidOperationException` at build time.
+
+### Attribute-Based Routing
+
+Trains can opt into remote execution via the `[TraxRemote]` attribute instead of explicit `ForTrain<T>()` calls:
+
+```csharp
+using Trax.Effect.Attributes;
+
+[TraxRemote]
+public class HeavyComputeTrain : ServiceTrain<HeavyInput, HeavyOutput>, IHeavyComputeTrain
+{
+    // ...
+}
+```
+
+When `UseRemoteWorkers()` is configured, trains marked with `[TraxRemote]` are automatically dispatched to the first registered remote submitter. Builder `ForTrain<T>()` routing takes precedence over the attribute.
+
+If no `UseRemoteWorkers()` is configured, `[TraxRemote]` is silently ignored — the train runs locally.
+
+## Routing Precedence
+
+1. **Builder `ForTrain<T>()`** — highest priority
+2. **`[TraxRemote]` attribute** — if no builder routing for this train
+3. **Default local `IJobSubmitter`** — fallback for everything else
 
 ## Registered Services
 
@@ -86,13 +143,13 @@ Trax doesn't bake in any auth — use `ConfigureHttpClient` to add whatever head
 | Service | Lifetime | Description |
 |---------|----------|-------------|
 | `RemoteWorkerOptions` | Singleton | Configuration options |
-| `IJobSubmitter` → `HttpJobSubmitter` | Scoped | Dispatches jobs via HTTP POST |
+| `HttpJobSubmitter` | Scoped (concrete type) | Dispatches jobs via HTTP POST — resolved per train via routing |
 
-> **Note:** `UseRemoteWorkers()` does **not** register `LocalWorkerService`. Execution happens entirely on the remote endpoint. If you need the scheduler to also run workers locally, use `UseLocalWorkers()` instead.
+> **Note:** `UseRemoteWorkers()` does **not** replace the default `IJobSubmitter`. Local workers continue to run for trains not routed to this endpoint.
 
 ## How It Works
 
-When the JobDispatcher calls `IJobSubmitter.EnqueueAsync()`, the `HttpJobSubmitter`:
+When the JobDispatcher processes a work queue entry, it checks the `JobSubmitterRoutingConfiguration` for the entry's train name. If a route exists to `HttpJobSubmitter`, the `HttpJobSubmitter`:
 
 1. Serializes a `RemoteJobRequest` containing the metadata ID and optional input
 2. POSTs the JSON payload to `BaseUrl`
@@ -110,4 +167,5 @@ dotnet add package Trax.Scheduler
 
 - [Remote Execution]({{ site.baseurl }}{% link scheduler/remote-execution.md %}) — architecture overview and deployment models
 - [AddTraxJobRunner]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-job-runner.md %}) — setting up the remote receiver endpoint
-- [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) — the local (default) execution backend
+- [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) — customizing the local (default) execution backend
+- [UseSqsWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}) — SQS-based per-train dispatch

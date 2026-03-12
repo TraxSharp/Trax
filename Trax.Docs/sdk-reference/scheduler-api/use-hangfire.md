@@ -8,7 +8,7 @@ nav_order: 2
 
 # UseHangfire (Deprecated)
 
-> **Deprecated**: Use [`UseLocalWorkers()`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) instead. The Hangfire package will be removed in a future version.
+> **Deprecated**: Local workers are now the implicit default when `UsePostgres()` is configured. Use [`ConfigureLocalWorkers()`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) to customize local worker options. The Hangfire package will be removed in a future version.
 
 Configures [Hangfire](https://www.hangfire.io/) as the execution backend for the Trax.Core scheduler, using PostgreSQL for job storage.
 

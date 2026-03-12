@@ -23,11 +23,11 @@ The scheduler automatically selects the right job submitter based on your effect
 
 | Effect Configuration | Job Submitter | Behavior |
 |---------------------|---------------|----------|
-| `UsePostgres(...)` | `PostgresJobSubmitter` | Inserts into `trax.background_job` table. Requires `UseLocalWorkers()` or a remote worker to process jobs. |
+| `UsePostgres(...)` | `PostgresJobSubmitter` | Inserts into `trax.background_job` table. Local workers are started automatically. |
 | `UseInMemory()` (no database) | `InMemoryJobSubmitter` | Executes jobs inline, synchronously. No database needed. Good for testing and prototyping. |
 | `OverrideSubmitter(...)` | Custom | Your own `IJobSubmitter` implementation takes priority over both defaults. |
 
-> **Validation:** The scheduler validates configuration at build time. `AddScheduler()` requires a data provider (`UsePostgres()` or `UseInMemory()`) — without one, it throws a clear `InvalidOperationException` with a message showing the fix. `UseLocalWorkers()` further requires `UsePostgres()` specifically. Similarly, `AddStepProgress()` without a data provider fails fast at build time.
+> **Validation:** The scheduler validates configuration at build time. `AddScheduler()` requires a data provider (`UsePostgres()` or `UseInMemory()`) — without one, it throws a clear `InvalidOperationException` with a message showing the fix. Similarly, `AddStepProgress()` without a data provider fails fast at build time.
 
 ### Configuration
 
@@ -49,7 +49,6 @@ builder.Services.AddTrax(trax => trax
         .PollingInterval(TimeSpan.FromSeconds(5))
         .MaxActiveJobs(10)
         .DefaultMaxRetries(3)
-        .UseLocalWorkers()
 
         // Schedule jobs directly in configuration
         .Schedule<IHelloWorldTrain, HelloWorldInput>(
@@ -69,7 +68,7 @@ var app = builder.Build();
 app.Run();
 ```
 
-*SDK Reference: [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}), [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}), [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %})*
+*SDK Reference: [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}), [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}), [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %})*
 
 `AddScheduler` registers hosted services based on the configured data provider:
 
@@ -82,16 +81,16 @@ app.Run();
 
 With InMemory, the `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that skips PostgreSQL-specific steps (`CancelTimedOutJobs`, `ReapStalePending`) and dispatches jobs directly via `InMemoryJobSubmitter` — no work queue or JobDispatcher needed.
 
-`UseLocalWorkers()` starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed — it reuses the `IDataContext` from `UsePostgres()`. See [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %}) for architecture details.
+When `UsePostgres()` is configured, the scheduler automatically starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed — it reuses the `IDataContext` from `UsePostgres()`. See [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %}) for architecture details.
 
 All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()` — you only need to pass your own train assemblies to `AddMediator()`.
 
 ### Local Worker Options
 
-You can customize the local workers' worker count, polling interval, and timeouts:
+You can customize the local workers' worker count, polling interval, and timeouts with `ConfigureLocalWorkers()`:
 
 ```csharp
-.UseLocalWorkers(options =>
+.ConfigureLocalWorkers(options =>
 {
     options.WorkerCount = 4;                                // default: processor count
     options.PollingInterval = TimeSpan.FromSeconds(2);      // default: 1 second
@@ -100,7 +99,7 @@ You can customize the local workers' worker count, polling interval, and timeout
 })
 ```
 
-See [UseLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) for full parameter documentation.
+See [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) for full parameter documentation.
 
 > **Migrating from Hangfire?** See the [migration guide]({{ site.baseurl }}{% link scheduler/job-submission.md %}#migrating-from-hangfire).
 
@@ -165,7 +164,6 @@ public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, SyncResult>, 
 
 ```csharp
 .AddScheduler(scheduler => scheduler
-    .UseLocalWorkers()
     .Schedule<ISyncCustomersTrain, SyncCustomersInput>(
         "sync-customers-us-east",
         new SyncCustomersInput { Region = "us-east", BatchSize = 500 },

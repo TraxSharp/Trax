@@ -47,8 +47,9 @@ services.AddTrax(trax => trax
     )
     .AddMediator(assemblies)
     .AddScheduler(scheduler => scheduler
-        .UseRemoteWorkers(remote =>
-            remote.BaseUrl = "https://my-runner.example.com/trax/execute"
+        .UseRemoteWorkers(
+            remote => remote.BaseUrl = "https://my-runner.example.com/trax/execute",
+            routing => routing.ForTrain<IMyTrain>()
         )
         .UseRemoteRun(remote =>
             remote.BaseUrl = "https://my-runner.example.com/trax/run"

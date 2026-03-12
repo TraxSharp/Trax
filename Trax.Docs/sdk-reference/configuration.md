@@ -36,7 +36,6 @@ services.AddTrax(trax => trax
     )
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
-        .UseLocalWorkers()
         .MaxActiveJobs(10)
     )
 );
@@ -118,7 +117,7 @@ The fluent chain `AddEffects()` -> `AddMediator()` -> `AddScheduler()` is enforc
 services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))
     .AddMediator(typeof(Program).Assembly)
-    .AddScheduler(scheduler => scheduler.UseLocalWorkers())
+    .AddScheduler()
 );
 
 // Compiles -- AddDataContextLogging() is available because UsePostgres() returns TraxEffectBuilderWithData
@@ -147,7 +146,7 @@ services.AddTrax(trax => trax
 // Does NOT compile -- AddScheduler() is not available on TraxBuilderWithEffects
 services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))
-    .AddScheduler(scheduler => scheduler.UseLocalWorkers())  // Error: TraxBuilderWithEffects has no AddScheduler
+    .AddScheduler()  // Error: TraxBuilderWithEffects has no AddScheduler
 );
 ```
 

@@ -44,7 +44,6 @@ If you create manifests dynamically at runtime via `ITraxScheduler` (outside of 
 ```csharp
 services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
-        .UseLocalWorkers()
         .PruneOrphanedManifests(false)  // Disable orphan cleanup
         .Schedule<IMyTrain>(
             "my-job",
@@ -91,8 +90,7 @@ scheduler
 
 // After: all schedules removed
 services.AddTrax(trax => trax
-    .AddScheduler(scheduler => scheduler
-        .UseLocalWorkers())
+    .AddScheduler()
 );
 
 // On next startup:
