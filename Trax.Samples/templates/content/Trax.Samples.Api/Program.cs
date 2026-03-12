@@ -2,8 +2,8 @@
 // Trax GraphQL API
 //
 // A GraphQL API powered by HotChocolate. Handles lightweight operations
-// directly via run mutations and can queue heavy work for a separate scheduler
-// process via queue mutations.
+// directly via mutations and can queue heavy work for a separate scheduler
+// process by passing mode: QUEUE.
 //
 // Prerequisites:
 //   1. Start PostgreSQL (e.g. docker compose up -d)
@@ -16,7 +16,7 @@
 //   query { discover { lookup(input: { id: "42" }) { id name createdAt } } }
 //
 //   # Run a mutation (from [TraxMutation])
-//   mutation { dispatch { runHelloWorld(input: { name: "Trax" }) { metadataId } } }
+//   mutation { dispatch { helloWorld(input: { name: "Trax" }) { externalId metadataId } } }
 //
 //   # Health check
 //   curl http://localhost:5002/trax/health

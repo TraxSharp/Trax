@@ -12,7 +12,7 @@ namespace Trax.Samples.EnergyHub.Trains.GridTrading.TradeGridEnergy;
 /// Up to 80% of battery capacity can be sold.
 /// </summary>
 [TraxMutation(
-    Operations = GraphQLOperation.Queue,
+    GraphQLOperation.Queue,
     Description = "Submits a grid energy sell order via PTC UBOSS"
 )]
 [TraxBroadcast]

@@ -12,7 +12,7 @@ namespace Trax.Samples.EnergyHub.Trains.Microgrid.OptimizeMicrogrid;
 /// Scheduled every 15 minutes.
 /// </summary>
 [TraxMutation(
-    Operations = GraphQLOperation.Queue,
+    GraphQLOperation.Queue,
     Description = "Optimizes energy distribution across the microgrid"
 )]
 public class OptimizeMicrogridTrain

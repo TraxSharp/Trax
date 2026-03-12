@@ -13,10 +13,9 @@
 //
 // GraphQL schema (auto-generated from train attributes):
 //   Queries:    monitorSolarProduction  — [TraxQuery]  (live sensor read)
-//   Mutations:  queueManageBatteryStorage, runProcessChargingSession,
-//               queueProcessChargingSession, queueOptimizeMicrogrid,
-//               queueTradeGridEnergy, runGenerateSustainabilityReport,
-//               queueGenerateSustainabilityReport
+//   Mutations:  manageBatteryStorage(Queue), processChargingSession(Run+Queue),
+//               optimizeMicrogrid(Queue), tradeGridEnergy(Queue),
+//               generateSustainabilityReport(Run+Queue)
 //   Subscriptions: onTrainStarted, onTrainCompleted, onTrainFailed
 //
 // Prerequisites:
@@ -38,12 +37,12 @@
 //   # Queue a grid energy trade
 //   curl -X POST http://localhost:5202/trax/graphql \
 //        -H "Content-Type: application/json" \
-//        -d '{"query":"mutation { dispatch { queueTradeGridEnergy(input: {ratePerKwh: 0.14, maxSellPercent: 80}) { workQueueId externalId } } }"}'
+//        -d '{"query":"mutation { dispatch { tradeGridEnergy(input: {ratePerKwh: 0.14, maxSellPercent: 80}) { externalId workQueueId } } }"}'
 //
 //   # Generate a sustainability report (runs synchronously on the hub)
 //   curl -X POST http://localhost:5202/trax/graphql \
 //        -H "Content-Type: application/json" \
-//        -d '{"query":"mutation { dispatch { runGenerateSustainabilityReport(input: {reportPeriod: \"Daily\"}) { carbonOffsetKg renewablePercent totalGenerationKwh revenueUsd } } }"}'
+//        -d '{"query":"mutation { dispatch { generateSustainabilityReport(input: {reportPeriod: \"Daily\"}) { externalId metadataId output { carbonOffsetKg renewablePercent totalGenerationKwh revenueUsd } } } }"}'
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Trax.Api.Extensions;

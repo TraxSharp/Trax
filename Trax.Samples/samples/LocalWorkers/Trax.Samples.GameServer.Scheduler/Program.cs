@@ -73,7 +73,6 @@ builder.Services.AddTrax(trax =>
                     cleanup.AddTrainType<IDistributeDailyRewardsTrain>();
                     cleanup.AddTrainType<ICorruptedDataRepairTrain>();
                 })
-                .UseLocalWorkers()
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                 // 1. INTERVAL + DEPENDENCY CHAIN
                 //    Recalculate leaderboard every 5 minutes, then generate

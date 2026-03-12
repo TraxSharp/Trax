@@ -3,7 +3,7 @@
 //
 // A game server API powered by HotChocolate GraphQL. Handles lightweight
 // operations directly and hands off heavy work to the scheduler via the
-// execute { queue*() } mutations. This process does NOT run a scheduler — start the
+// dispatch { trainName(mode: QUEUE) } mutations. This process does NOT run a scheduler — start the
 // Scheduler project alongside this one.
 //
 // Authentication: fake API key via X-Api-Key header (for demonstration only)
@@ -37,7 +37,7 @@
 //   curl -H "X-Api-Key: player-key-do-not-use-in-production" \
 //        -X POST http://localhost:5200/trax/graphql \
 //        -H "Content-Type: application/json" \
-//        -d '{"query":"mutation { dispatch { queueProcessMatchResult(input: {region: \"na\", matchId: \"match-999\", winnerId: \"player-1\", loserId: \"player-2\", winnerScore: 100, loserScore: 30}, priority: 10) { workQueueId externalId } } }"}'
+//        -d '{"query":"mutation { dispatch { processMatchResult(input: {region: \"na\", matchId: \"match-999\", winnerId: \"player-1\", loserId: \"player-2\", winnerScore: 100, loserScore: 30}, mode: QUEUE, priority: 10) { externalId workQueueId } } }"}'
 //
 //   # Subscribe to real-time train lifecycle events (use Banana Cake Pop IDE):
 //   #   subscription { onTrainStarted { metadataId trainName trainState timestamp } }
@@ -84,7 +84,7 @@ builder.Services.AddAuthorization(options =>
 
 // ── Register Trax Effect + Mediator (trains, bus, discovery, execution) ──
 // No AddScheduler() — the scheduler is a separate process.
-// All trains (API + scheduler) are registered so queueTrain can discover them.
+// All trains (API + scheduler) are registered so the execution service can discover them.
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
             effects

@@ -89,7 +89,6 @@ builder.Services.AddTrax(trax =>
                     cleanup.AddTrainType<IDataScienceTrain>();
                     cleanup.AddTrainType<IReportingTrain>();
                 })
-                .UseLocalWorkers()
                 // ── Spaceflights Pipeline Topology ──────────────────────────────
                 //    data-processing (root, every 5 min)
                 //      └── data-science   (ThenInclude — depends on data-processing)

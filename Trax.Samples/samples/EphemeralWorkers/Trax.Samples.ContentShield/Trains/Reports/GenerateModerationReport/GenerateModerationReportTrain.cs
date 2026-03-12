@@ -9,10 +9,7 @@ namespace Trax.Samples.ContentShield.Trains.Reports.GenerateModerationReport;
 /// Generates a summary report of moderation activity for the specified period.
 /// Scheduled daily at midnight. Can also be run on-demand via GraphQL.
 /// </summary>
-[TraxMutation(
-    Operations = GraphQLOperation.RunAndQueue,
-    Description = "Generates a moderation activity report"
-)]
+[TraxMutation(Description = "Generates a moderation activity report")]
 [TraxBroadcast]
 public class GenerateModerationReportTrain
     : ServiceTrain<GenerateModerationReportInput, GenerateModerationReportOutput>,

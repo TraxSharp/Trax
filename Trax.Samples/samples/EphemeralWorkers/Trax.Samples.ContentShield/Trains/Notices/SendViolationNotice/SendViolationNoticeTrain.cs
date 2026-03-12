@@ -13,7 +13,7 @@ namespace Trax.Samples.ContentShield.Trains.Notices.SendViolationNotice;
 /// Dispatched to the ephemeral Runner via HTTP (UseRemoteWorkers).
 /// </summary>
 [TraxMutation(
-    Operations = GraphQLOperation.Queue,
+    GraphQLOperation.Queue,
     Description = "Sends a violation notice to the content owner"
 )]
 [TraxBroadcast]

@@ -15,10 +15,9 @@
 //
 // GraphQL schema (auto-generated from train attributes):
 //   Queries:    lookupModerationResult                — [TraxQuery]
-//   Mutations:  queueReviewContent                    — [TraxMutation(Queue)]
-//               queueSendViolationNotice              — [TraxMutation(Queue)]
-//               runGenerateModerationReport           — [TraxMutation(RunAndQueue)]
-//               queueGenerateModerationReport         — [TraxMutation(RunAndQueue)]
+//   Mutations:  reviewContent                         — [TraxMutation(Queue)]
+//               sendViolationNotice                   — [TraxMutation(Queue)]
+//               generateModerationReport(mode: ...)   — [TraxMutation]  (default: Run + Queue)
 //   Subscriptions: onTrainStarted, onTrainCompleted, onTrainFailed
 //
 // Prerequisites:
@@ -40,12 +39,12 @@
 //   # Queue a content review (dispatched to Runner via HTTP)
 //   curl -X POST http://localhost:5204/trax/graphql \
 //        -H "Content-Type: application/json" \
-//        -d '{"query":"mutation { dispatch { queueReviewContent(input: {contentId: \"test-002\", contentType: \"video\", contentBody: \"suspicious video content\"}) { workQueueId externalId } } }"}'
+//        -d '{"query":"mutation { dispatch { reviewContent(input: {contentId: \"test-002\", contentType: \"video\", contentBody: \"suspicious video content\"}) { externalId workQueueId } } }"}'
 //
 //   # Generate a moderation report (offloaded to Runner via UseRemoteRun, blocks until done)
 //   curl -X POST http://localhost:5204/trax/graphql \
 //        -H "Content-Type: application/json" \
-//        -d '{"query":"mutation { dispatch { runGenerateModerationReport(input: {reportPeriod: \"Daily\"}) { totalReviewed totalFlagged topViolationTypes falsePositiveRate } } }"}'
+//        -d '{"query":"mutation { dispatch { generateModerationReport(input: {reportPeriod: \"Daily\"}) { externalId metadataId output { totalReviewed totalFlagged topViolationTypes falsePositiveRate } } } }"}'
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Trax.Api.Extensions;
@@ -60,6 +59,8 @@ using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Progress.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.ContentShield.Trains.ContentReview.ReviewContent;
+using Trax.Samples.ContentShield.Trains.Notices.SendViolationNotice;
+using Trax.Samples.ContentShield.Trains.Reports.GenerateModerationReport;
 using Trax.Scheduler.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -85,14 +86,21 @@ builder.Services.AddTrax(trax =>
         .AddScheduler(scheduler =>
             scheduler
                 // ── Ephemeral dispatch only — no scheduled jobs ──────────────────
-                // UseRemoteWorkers replaces the default PostgresJobSubmitter with
-                // HttpJobSubmitter. When a GraphQL queue* mutation is called, the
-                // JobDispatcher POSTs the job directly to the Runner via HTTP.
+                // UseRemoteWorkers routes the specified trains to HttpJobSubmitter.
+                // When a GraphQL mutation is called with mode: QUEUE for a routed train,
+                // the JobDispatcher POSTs the job directly to the Runner via HTTP.
                 // No cron schedules, no intervals, no manifests — purely on-demand.
-                .UseRemoteWorkers(remote => remote.BaseUrl = "http://localhost:5205/trax/execute")
+                .UseRemoteWorkers(
+                    remote => remote.BaseUrl = "http://localhost:5205/trax/execute",
+                    routing =>
+                        routing
+                            .ForTrain<IReviewContentTrain>()
+                            .ForTrain<ISendViolationNoticeTrain>()
+                            .ForTrain<IGenerateModerationReportTrain>()
+                )
                 // ── Remote run offloading ────────────────────────────────────────
                 // UseRemoteRun replaces the default LocalRunExecutor with
-                // HttpRunExecutor. When a GraphQL run* mutation is called, the
+                // HttpRunExecutor. When a GraphQL mutation runs (mode: RUN), the
                 // request is POSTed to the Runner and blocks until the train
                 // completes. Without this, runs execute in-process on this API.
                 .UseRemoteRun(remote => remote.BaseUrl = "http://localhost:5205/trax/run")

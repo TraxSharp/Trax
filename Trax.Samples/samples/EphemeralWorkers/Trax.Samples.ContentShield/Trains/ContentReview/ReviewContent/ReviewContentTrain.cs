@@ -12,10 +12,7 @@ namespace Trax.Samples.ContentShield.Trains.ContentReview.ReviewContent;
 ///
 /// Dispatched to the ephemeral Runner via HTTP (UseRemoteWorkers).
 /// </summary>
-[TraxMutation(
-    Operations = GraphQLOperation.Queue,
-    Description = "Reviews content for policy violations"
-)]
+[TraxMutation(GraphQLOperation.Queue, Description = "Reviews content for policy violations")]
 [TraxBroadcast]
 public class ReviewContentTrain
     : ServiceTrain<ReviewContentInput, ReviewContentOutput>,

@@ -29,11 +29,7 @@ public class ExecuteDataProcessingStep(
             },
         };
 
-        var result = await flowthruService.ExecutePipelineAsync(
-            options,
-            exportMetadata: false,
-            cancellationToken: CancellationToken
-        );
+        var result = await flowthruService.ExecutePipelineAsync(options);
 
         if (!result.Success)
         {
