@@ -20,7 +20,6 @@ namespace Trax.Effect.Configuration.TraxBuilder;
 ///     )
 ///     .AddMediator(typeof(Program).Assembly)
 ///     .AddScheduler(scheduler => scheduler
-///         .UseLocalWorkers()
 ///         .Schedule&lt;IMyTrain&gt;(...)
 ///     )
 /// );

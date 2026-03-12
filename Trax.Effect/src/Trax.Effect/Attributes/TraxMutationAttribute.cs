@@ -1,27 +1,66 @@
 namespace Trax.Effect.Attributes;
 
 /// <summary>
-/// Exposes a train as typed GraphQL mutation field(s) under <c>dispatch</c>.
-/// Generates <c>run{Name}</c> and/or <c>queue{Name}</c> mutations based on
-/// the <see cref="Operations"/> property.
+/// Exposes a train as a typed GraphQL mutation field under <c>dispatch</c>.
+/// Pass one or more <see cref="GraphQLOperation"/> values to control which execution
+/// modes are available. When no operations are specified, both <c>Run</c> and <c>Queue</c>
+/// are enabled (the mutation gets an optional <c>mode: ExecutionMode</c> parameter).
 /// </summary>
 /// <remarks>
-/// Place this attribute on the concrete train class. The generated field names are derived
+/// Place this attribute on the concrete train class. The generated field name is derived
 /// by stripping the <c>I</c> prefix and <c>Train</c> suffix from the service type name,
-/// then prepending <c>run</c> or <c>queue</c>
-/// (e.g. <c>IBanPlayerTrain</c> → <c>runBanPlayer</c> / <c>queueBanPlayer</c>).
+/// then lowercasing the first character
+/// (e.g. <c>IBanPlayerTrain</c> → <c>banPlayer</c>).
 ///
 /// Trains without this attribute (or <see cref="TraxQueryAttribute"/>) are not exposed
 /// as GraphQL endpoints. A train cannot have both attributes.
+///
+/// <example>
+/// <code>
+/// // Both run and queue (default — generates mode parameter)
+/// [TraxMutation]
+///
+/// // Explicit both
+/// [TraxMutation(GraphQLOperation.Run, GraphQLOperation.Queue)]
+///
+/// // Run only (no mode parameter)
+/// [TraxMutation(GraphQLOperation.Run)]
+///
+/// // Queue only (no mode parameter, includes priority)
+/// [TraxMutation(GraphQLOperation.Queue)]
+/// </code>
+/// </example>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
 public class TraxMutationAttribute : Attribute
 {
     /// <summary>
+    /// Initializes a new instance with the specified execution modes.
+    /// When no operations are provided, both <see cref="GraphQLOperation.Run"/> and
+    /// <see cref="GraphQLOperation.Queue"/> are enabled.
+    /// </summary>
+    /// <param name="operations">
+    /// One or more execution modes. Pass <see cref="GraphQLOperation.Run"/> for synchronous-only,
+    /// <see cref="GraphQLOperation.Queue"/> for queue-only, or both for a mutation with
+    /// an optional <c>mode</c> parameter.
+    /// </param>
+    public TraxMutationAttribute(params GraphQLOperation[] operations)
+    {
+        Operations =
+            operations.Length > 0
+                ? operations.Aggregate((a, b) => a | b)
+                : GraphQLOperation.Run | GraphQLOperation.Queue;
+    }
+
+    /// <summary>
+    /// The combined execution modes for this mutation, computed from the constructor params.
+    /// </summary>
+    public GraphQLOperation Operations { get; }
+
+    /// <summary>
     /// Overrides the auto-derived GraphQL field name.
     /// When null, the name is derived by stripping the "I" prefix and "Train" suffix
-    /// from the service type name (e.g. <c>IBanPlayerTrain</c> → <c>BanPlayer</c>).
-    /// This produces <c>runBanPlayer</c> and/or <c>queueBanPlayer</c>.
+    /// from the service type name (e.g. <c>IBanPlayerTrain</c> → <c>banPlayer</c>).
     /// </summary>
     public string? Name { get; init; }
 
@@ -31,32 +70,22 @@ public class TraxMutationAttribute : Attribute
     public string? Description { get; init; }
 
     /// <summary>
-    /// Marks the generated mutations as deprecated in the GraphQL schema.
+    /// Marks the generated mutation as deprecated in the GraphQL schema.
     /// Clients see a deprecation warning during introspection.
     /// </summary>
     public string? DeprecationReason { get; init; }
-
-    /// <summary>
-    /// Controls which mutation operations are generated.
-    /// Defaults to <see cref="GraphQLOperation.Run"/> (synchronous execution only).
-    /// Set to <see cref="GraphQLOperation.Queue"/> for scheduler dispatch only,
-    /// or <see cref="GraphQLOperation.RunAndQueue"/> for both.
-    /// </summary>
-    public GraphQLOperation Operations { get; init; } = GraphQLOperation.Run;
 }
 
 /// <summary>
-/// Controls which typed mutation operations are generated for a train.
+/// Controls which execution modes are available for a train's GraphQL mutation.
+/// Pass one or more values to <see cref="TraxMutationAttribute"/> to configure behavior.
 /// </summary>
 [Flags]
 public enum GraphQLOperation
 {
-    /// <summary>Generate only the <c>run{Name}</c> mutation (synchronous execution).</summary>
+    /// <summary>Synchronous execution — the mutation runs the train and returns the result immediately.</summary>
     Run = 1,
 
-    /// <summary>Generate only the <c>queue{Name}</c> mutation (scheduler dispatch).</summary>
+    /// <summary>Asynchronous execution — the mutation queues the train for later processing (includes priority parameter).</summary>
     Queue = 2,
-
-    /// <summary>Generate both <c>run{Name}</c> and <c>queue{Name}</c> mutations.</summary>
-    RunAndQueue = Run | Queue,
 }

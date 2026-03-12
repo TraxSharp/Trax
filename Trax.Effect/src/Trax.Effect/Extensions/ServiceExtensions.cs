@@ -33,7 +33,6 @@ public static class ServiceExtensions
     ///     )
     ///     .AddMediator(typeof(Program).Assembly)
     ///     .AddScheduler(scheduler => scheduler
-    ///         .UseLocalWorkers()
     ///         .Schedule&lt;IMyTrain&gt;(...)
     ///     )
     /// );
