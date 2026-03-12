@@ -25,26 +25,21 @@ dotnet add package Trax.Effect.Data.Postgres
 
 ## Setup
 
-Add the scheduler inside your `AddTraxEffects` configuration:
+Add the scheduler inside your `AddTrax` configuration:
 
 ```csharp
-builder.Services.AddTraxEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddServiceTrainBus(typeof(Program).Assembly, typeof(ManifestManagerTrain).Assembly)
-    .SaveTrainParameters()
-    .AddStepProgress()
-    .AddScheduler(scheduler =>
-    {
-        scheduler
-            .JobDispatcherPollingInterval(TimeSpan.FromSeconds(2))
-            .UsePostgresTaskServer();
-
-        scheduler.Schedule<IGenerateReportTrain>(
-            "nightly-report",
-            new GenerateReportInput { Format = "pdf" },
-            Cron.Daily(hour: 3)
-        );
-    })
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects =>
+            effects.UsePostgres(connectionString).SaveTrainParameters().AddStepProgress()
+        )
+        .AddMediator(typeof(Program).Assembly)
+        .AddScheduler(scheduler =>
+            scheduler.Schedule<IGenerateReportTrain>(
+                "nightly-report",
+                new GenerateReportInput { Format = "pdf" },
+                Cron.Daily(hour: 3)
+            )
+        )
 );
 ```
 
