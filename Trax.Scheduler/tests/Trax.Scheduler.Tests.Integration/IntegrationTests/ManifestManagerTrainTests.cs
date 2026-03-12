@@ -1075,6 +1075,115 @@ public class ManifestManagerTrainTests : TestSetup
 
     #endregion
 
+    #region Misfire Policy Tests
+
+    [Test]
+    public async Task Run_IntervalOverdueBeyondThreshold_FireOnceNow_QueuesJob()
+    {
+        // Arrange — interval=300s, lastRun=12min ago, default policy=FireOnceNow
+        // scheduledTime = lastRun + 300s = 7min ago, overdue 420s > default threshold 60s
+        // FireOnceNow fires regardless
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 300,
+            inputValue: "MisfireFireOnceNow"
+        );
+
+        var loaded = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        loaded.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-12);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert
+        DataContext.Reset();
+        var entries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == manifest.Id)
+            .ToListAsync();
+
+        entries
+            .Should()
+            .NotBeEmpty(
+                "FireOnceNow policy should queue the job even when overdue beyond threshold"
+            );
+    }
+
+    [Test]
+    public async Task Run_IntervalOverdueBeyondThreshold_DoNothing_SkipsJob()
+    {
+        // Arrange — interval=300s, lastRun=12min (720s) ago, policy=DoNothing, threshold=60s
+        // scheduledTime = lastRun + 300s = 7min ago (overdue 420s > 60s)
+        // DoNothing boundary: totalElapsed=720s, missedPeriods=floor(720/300)=2
+        // mostRecentBoundary = lastRun + 600s = 2min ago, sinceBoundary=120s > 60s → skip
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 300,
+            misfirePolicy: MisfirePolicy.DoNothing,
+            misfireThresholdSeconds: 60,
+            inputValue: "MisfireDoNothing_Skip"
+        );
+
+        var loaded = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        loaded.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-12);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert
+        DataContext.Reset();
+        var entries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == manifest.Id)
+            .ToListAsync();
+
+        entries
+            .Should()
+            .BeEmpty(
+                "DoNothing policy should skip the job when overdue beyond threshold of most recent boundary"
+            );
+    }
+
+    [Test]
+    public async Task Run_IntervalOverdue_DoNothing_WithinBoundaryThreshold_QueuesJob()
+    {
+        // Arrange — interval=300s, lastRun=10min 30s (630s) ago, policy=DoNothing, threshold=60s
+        // scheduledTime = lastRun + 300s = 5min30s ago (overdue 330s > 60s)
+        // DoNothing boundary: totalElapsed=630s, missedPeriods=floor(630/300)=2
+        // mostRecentBoundary = lastRun + 600s = 30s ago, sinceBoundary=30s ≤ 60s → fire
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 300,
+            misfirePolicy: MisfirePolicy.DoNothing,
+            misfireThresholdSeconds: 60,
+            inputValue: "MisfireDoNothing_Fire"
+        );
+
+        var loaded = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        loaded.LastSuccessfulRun = DateTime.UtcNow.AddSeconds(-630);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert
+        DataContext.Reset();
+        var entries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == manifest.Id)
+            .ToListAsync();
+
+        entries
+            .Should()
+            .NotBeEmpty(
+                "DoNothing policy should queue the job when within threshold of most recent boundary"
+            );
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private async Task<Manifest> CreateAndSaveManifest(
@@ -1084,7 +1193,9 @@ public class ManifestManagerTrainTests : TestSetup
         int maxRetries = 3,
         bool isEnabled = true,
         string inputValue = "TestValue",
-        DateTime? scheduledAt = null
+        DateTime? scheduledAt = null,
+        MisfirePolicy misfirePolicy = MisfirePolicy.FireOnceNow,
+        int? misfireThresholdSeconds = null
     )
     {
         var group = await TestSetup.CreateAndSaveManifestGroup(
@@ -1103,6 +1214,8 @@ public class ManifestManagerTrainTests : TestSetup
                 MaxRetries = maxRetries,
                 Properties = new SchedulerTestInput { Value = inputValue },
                 ScheduledAt = scheduledAt,
+                MisfirePolicy = misfirePolicy,
+                MisfireThresholdSeconds = misfireThresholdSeconds,
             }
         );
 

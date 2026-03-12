@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Configuration;
@@ -178,6 +179,78 @@ public class SchedulerConfigurationBuilderSettingsTests
 
     #endregion
 
+    #region Misfire Policy
+
+    [Test]
+    public void DefaultMisfirePolicy_Default_IsFireOnceNow()
+    {
+        // Act
+        var config = ResolveConfiguration(_ => { });
+
+        // Assert
+        config.DefaultMisfirePolicy.Should().Be(MisfirePolicy.FireOnceNow);
+    }
+
+    [Test]
+    public void DefaultMisfirePolicy_DoNothing_SetsValue()
+    {
+        // Act
+        var config = ResolveConfiguration(b => b.DefaultMisfirePolicy(MisfirePolicy.DoNothing));
+
+        // Assert
+        config.DefaultMisfirePolicy.Should().Be(MisfirePolicy.DoNothing);
+    }
+
+    [Test]
+    public void DefaultMisfireThreshold_Default_Is60Seconds()
+    {
+        // Act
+        var config = ResolveConfiguration(_ => { });
+
+        // Assert
+        config.DefaultMisfireThreshold.Should().Be(TimeSpan.FromSeconds(60));
+    }
+
+    [Test]
+    public void DefaultMisfireThreshold_SetsValue()
+    {
+        // Act
+        var config = ResolveConfiguration(b => b.DefaultMisfireThreshold(TimeSpan.FromMinutes(5)));
+
+        // Assert
+        config.DefaultMisfireThreshold.Should().Be(TimeSpan.FromMinutes(5));
+    }
+
+    #endregion
+
+    #region ExcludeFromMaxActiveJobs
+
+    [Test]
+    public void ExcludeFromMaxActiveJobs_AddsTrainTypeFullName()
+    {
+        // Act
+        var config = ResolveConfiguration(b => b.ExcludeFromMaxActiveJobs<ISettingsTestTrain>());
+
+        // Assert
+        config.ExcludedTrainTypeNames.Should().Contain(typeof(ISettingsTestTrain).FullName);
+    }
+
+    [Test]
+    public void ExcludeFromMaxActiveJobs_Multiple_AddsAll()
+    {
+        // Act
+        var config = ResolveConfiguration(b =>
+            b.ExcludeFromMaxActiveJobs<ISettingsTestTrain>()
+                .ExcludeFromMaxActiveJobs<ISettingsTestTrainB>()
+        );
+
+        // Assert
+        config.ExcludedTrainTypeNames.Should().Contain(typeof(ISettingsTestTrain).FullName);
+        config.ExcludedTrainTypeNames.Should().Contain(typeof(ISettingsTestTrainB).FullName);
+    }
+
+    #endregion
+
     #region HasDatabaseProvider
 
     [Test]
@@ -214,3 +287,7 @@ public class SchedulerConfigurationBuilderSettingsTests
 
     #endregion
 }
+
+internal interface ISettingsTestTrain;
+
+internal interface ISettingsTestTrainB;
