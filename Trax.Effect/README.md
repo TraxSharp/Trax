@@ -43,20 +43,20 @@ dotnet add package Trax.Effect.Provider.Parameter    # Serialize cargo to the jo
 Register station services in your `IServiceCollection`:
 
 ```csharp
-builder.Services.AddTraxEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .SaveTrainParameters()
-    .AddStepLogger(serializeStepData: true)
-    .AddStepProgress()
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects =>
+        effects.UsePostgres(connectionString).SaveTrainParameters().AddStepLogger(serializeStepData: true).AddStepProgress()
+    )
 );
 ```
 
 For development or tests, swap Postgres for in-memory:
 
 ```csharp
-builder.Services.AddTraxEffects(options => options
-    .AddInMemoryEffect()
-    .AddJsonEffect()
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects =>
+        effects.UseInMemory().AddJson()
+    )
 );
 ```
 
@@ -121,9 +121,9 @@ Think of it as: the train is boarding (`Pending`), in transit (`InProgress`), an
 Station services compose — enable as many as you need:
 
 ```csharp
-options
-    .AddPostgresEffect(connectionString)
-    .AddJsonEffect()
+effects
+    .UsePostgres(connectionString)
+    .AddJson()
     .SaveTrainParameters()
     .AddStepLogger(serializeStepData: true)
     .AddStepProgress();
@@ -138,7 +138,7 @@ builder.Services.AddScopedTraxRoute<ICreateUserTrain, CreateUserTrain>();
 builder.Services.AddTransientTraxRoute<IProcessOrderTrain, ProcessOrderTrain>();
 ```
 
-Or use `AddServiceTrainBus` (from [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/)) to auto-register all trains in an assembly.
+Or use `AddMediator` (from [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/)) to auto-register all trains in an assembly.
 
 ## Part of Trax
 
