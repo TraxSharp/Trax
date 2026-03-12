@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Dashboard.Tests.Integration.Fakes.Trains;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Extensions;
+using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Extensions;
@@ -422,6 +423,100 @@ public class InferredSchedulingApiTests
                             )),
                         options: o => o.Dormant()
                     )
+            );
+
+        act.Should().NotThrow();
+    }
+
+    #endregion
+
+    #region ScheduleOptions: Enabled and Exclusion
+
+    [Test]
+    public void Schedule_WithEnabledFalse_Succeeds()
+    {
+        var act = () =>
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.Schedule<IFakeSchedulerTrainA>(
+                    "job-disabled",
+                    new FakeManifestInputA(),
+                    Every.Minutes(5),
+                    options => options.Enabled(false)
+                )
+            );
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void Schedule_WithExclusion_Succeeds()
+    {
+        var act = () =>
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.Schedule<IFakeSchedulerTrainA>(
+                    "job-excluded",
+                    new FakeManifestInputA(),
+                    Every.Minutes(5),
+                    options =>
+                        options.Exclude(Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday))
+                )
+            );
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void Schedule_WithMultipleExclusions_Succeeds()
+    {
+        var act = () =>
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.Schedule<IFakeSchedulerTrainA>(
+                    "job-multi-exclude",
+                    new FakeManifestInputA(),
+                    Every.Minutes(5),
+                    options =>
+                        options
+                            .Exclude(Exclude.DaysOfWeek(DayOfWeek.Saturday))
+                            .Exclude(Exclude.DaysOfWeek(DayOfWeek.Sunday))
+                )
+            );
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void Include_WithEnabledFalse_Succeeds()
+    {
+        var act = () =>
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler
+                    .Schedule<IFakeSchedulerTrainA>(
+                        "root",
+                        new FakeManifestInputA(),
+                        Every.Minutes(5)
+                    )
+                    .Include<IFakeSchedulerTrainB>(
+                        "dep-disabled",
+                        new FakeManifestInputB(),
+                        options => options.Enabled(false)
+                    )
+            );
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void Schedule_WithEnabledFalseAndExclusion_Succeeds()
+    {
+        var act = () =>
+            _parentBuilder.AddScheduler(scheduler =>
+                scheduler.Schedule<IFakeSchedulerTrainA>(
+                    "job-disabled-excluded",
+                    new FakeManifestInputA(),
+                    Every.Minutes(5),
+                    options =>
+                        options.Enabled(false).Exclude(Exclude.DaysOfWeek(DayOfWeek.Saturday))
+                )
             );
 
         act.Should().NotThrow();
