@@ -412,17 +412,61 @@ Regardless of deployment model, every process that executes trains must:
 
 ## Failure Handling
 
-When the JobDispatcher dispatches a job, the Metadata record is committed to the database **before** the job is submitted to the worker. This is necessary because the worker needs to read the Metadata. However, if the submission fails (network timeout, remote worker unreachable, HTTP 5xx), the Metadata would be orphaned in `Pending` state.
+When the JobDispatcher dispatches a job, the Metadata record is committed to the database **before** the job is submitted to the worker. This is necessary because the worker needs to read the Metadata. However, if the submission fails (network timeout, remote worker unreachable, throttling), the Metadata would be orphaned in `Pending` state.
 
-Trax handles this with three layers of protection:
+Trax handles this with multiple layers of protection:
 
-1. **Immediate failure handling** — If `IJobSubmitter.EnqueueAsync()` throws, the DispatchJobsStep immediately marks the Metadata as `Failed` with the exception details. This covers the majority of dispatch failures.
+### 1. HTTP Retry with Exponential Backoff
 
-2. **Stale pending reaper** — The ManifestManager runs a `ReapStalePendingMetadataStep` on every polling cycle. Any Metadata that has been in `Pending` state longer than `StalePendingTimeout` (default: 20 minutes) is automatically marked as `Failed` with `FailureException = "StalePendingTimeout"` and `FailureStep = "ReapStalePendingMetadataStep"`. This catches edge cases where immediate failure handling also fails, or where the remote worker received the job but crashed before updating the Metadata.
+`HttpJobSubmitter` and `HttpRunExecutor` automatically retry on transient HTTP status codes (429 Too Many Requests, 502 Bad Gateway, 503 Service Unavailable) with exponential backoff and jitter. This handles short-lived throttling — for example, when AWS Lambda returns 429 because reserved concurrency is exhausted.
 
-3. **Dead-lettering** — After `MaxRetries` failed attempts, the ManifestManager creates a `DeadLetter` record and marks the manifest as `AwaitingIntervention`. Dead letters can be resolved via the Dashboard or programmatically.
+| Option | Default | Description |
+|--------|---------|-------------|
+| `Retry.MaxRetries` | 5 | Maximum retry attempts before giving up |
+| `Retry.BaseDelay` | 1 second | Starting delay, doubled on each attempt |
+| `Retry.MaxDelay` | 30 seconds | Cap on exponential growth |
 
-Configure the timeout via the builder API:
+Configure via `RemoteWorkerOptions.Retry` or `RemoteRunOptions.Retry`:
+
+```csharp
+.UseRemoteWorkers(
+    remote =>
+    {
+        remote.BaseUrl = "https://my-workers.example.com/trax/execute";
+        remote.Retry.MaxRetries = 10;
+        remote.Retry.BaseDelay = TimeSpan.FromSeconds(2);
+        remote.Retry.MaxDelay = TimeSpan.FromSeconds(60);
+    },
+    routing => routing.ForTrain<IMyTrain>())
+```
+
+Set `MaxRetries = 0` to disable retries entirely.
+
+If the server sends a `Retry-After` header (as Lambda does on 429), the helper respects it instead of using the computed backoff delay.
+
+### 2. Dispatch Requeue
+
+If the HTTP request still fails after exhausting retries, the work queue entry is automatically reset to `Queued` status so the next dispatcher cycle can try again. Each failed attempt:
+
+- Marks the orphaned Metadata as `Failed` (immutable audit record)
+- Increments `dispatch_attempts` on the work queue entry
+- Resets `status` to `Queued`, clears `metadata_id` and `dispatched_at`
+- On the next dispatch cycle, a **new** Metadata row is created
+
+After `MaxDispatchAttempts` failures, the entry stays in `Dispatched` status and feeds into the dead letter pipeline.
+
+```csharp
+.AddScheduler(scheduler => scheduler
+    .MaxDispatchAttempts(10) // default: 5
+    // ...
+)
+```
+
+Set `MaxDispatchAttempts(0)` to disable requeuing (immediate failure, matching pre-1.2.0 behavior).
+
+### 3. Stale Pending Reaper
+
+The ManifestManager runs a `ReapStalePendingMetadataStep` on every polling cycle. Any Metadata that has been in `Pending` state longer than `StalePendingTimeout` (default: 20 minutes) is automatically marked as `Failed`. This catches edge cases where the remote worker received the job but crashed before updating the Metadata.
 
 ```csharp
 .AddScheduler(scheduler => scheduler
@@ -433,7 +477,22 @@ Configure the timeout via the builder API:
 
 Or at runtime via the Dashboard under **Server Settings > Job Settings > Stale Pending Timeout**.
 
+### 4. Dead-Lettering
+
+After `MaxRetries` failed **executions** (distinct from dispatch attempts), the ManifestManager creates a `DeadLetter` record and marks the manifest as `AwaitingIntervention`. Dead letters can be resolved via the Dashboard or programmatically.
+
 Failed metadata feeds into the normal retry pipeline — if the manifest has retries remaining, the ManifestManager will create a new work queue entry on the next cycle.
+
+### Tuning for Throttled Environments
+
+When deploying to capacity-limited backends (e.g., AWS Lambda with reserved concurrency), align these settings:
+
+| Setting | Recommendation |
+|---------|---------------|
+| `MaxConcurrentDispatch` | Match or stay below the backend's concurrency limit |
+| `MaxActiveJobs` | Match the backend's concurrency limit to prevent dispatch overwhelming |
+| `Retry.MaxRetries` | 5-10 for throttle-heavy environments |
+| `MaxDispatchAttempts` | 5-10 to cover longer outages |
 
 ### Structured Error Propagation
 

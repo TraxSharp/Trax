@@ -49,12 +49,12 @@ public static WebApplication UseTraxGraphQL(
 `AddTraxGraphQL` calls `AddTraxApi()` internally (shared API services), then configures HotChocolate:
 
 - **Named GraphQL server** via `AddGraphQLServer("trax")` — uses a named schema so it coexists with your own HotChocolate schemas in the same application
-- **Query type**: `RootQuery` with two grouped sub-types:
-  - **`discover`** (`DiscoverQueries`) — auto-generated typed query fields for trains annotated with [`[TraxQuery]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %})
-  - **`operations`** (`OperationsQueries`) — predefined operational queries: `health` status, registered `trains` discovery, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution`
-- **Mutation type**: `RootMutation` with two grouped sub-types:
-  - **`dispatch`** (`DispatchMutations`) — auto-generated typed mutations for trains annotated with [`[TraxMutation]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}), with strongly-typed input objects derived from each train's input record. Each train gets a single mutation field (e.g. `banPlayer`) with an optional `mode: ExecutionMode` parameter when both Run and Queue operations are enabled (the default).
-  - **`operations`** (`OperationsMutations`) — `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
+- **Query type**: `RootQuery` with grouped sub-types:
+  - **`operations`** (`OperationsQueries`) — always present. Predefined operational queries: `health` status, registered `trains` discovery, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution`
+  - **`discover`** (`DiscoverQueries`) — only present when trains annotated with [`[TraxQuery]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) are registered. Auto-generated typed query fields for each query train.
+- **Mutation type**: `RootMutation` with grouped sub-types:
+  - **`operations`** (`OperationsMutations`) — always present. `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
+  - **`dispatch`** (`DispatchMutations`) — only present when trains annotated with [`[TraxMutation]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) are registered. Auto-generated typed mutations with strongly-typed input objects derived from each train's input record. Each train gets a single mutation field (e.g. `banPlayer`) with an optional `mode: ExecutionMode` parameter when both Run and Queue operations are enabled (the default).
 - **Subscription type**: `LifecycleSubscriptions` — real-time [lifecycle events]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) via WebSocket (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`)
 - **In-memory subscription transport** — HotChocolate's built-in pub/sub for delivering events to WebSocket clients
 - **Error filter**: `TraxErrorFilter` — exposes actual exception messages for train-related errors instead of HotChocolate's default "Unexpected Execution Error". Exposed types: `TrainException` (code: `TRAX_TRAIN_ERROR`), `TrainAuthorizationException` (code: `TRAX_AUTHORIZATION`), `InvalidOperationException` (code: `TRAX_INVALID_OPERATION`). All other exception types retain the default masked message.

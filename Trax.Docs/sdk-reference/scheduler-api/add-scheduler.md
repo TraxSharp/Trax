@@ -95,6 +95,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `ManifestManagerPollingInterval(TimeSpan)` | interval | 5 seconds | How often the ManifestManager evaluates manifests and writes to the work queue |
 | `JobDispatcherPollingInterval(TimeSpan)` | interval | 2 seconds | How often the JobDispatcher reads from the work queue and dispatches to the job submitter |
 | `MaxConcurrentDispatch(int)` | maxConcurrent | 1 | Max entries dispatched concurrently per polling cycle. Increase when using `UseRemoteWorkers` to avoid sequential HTTP blocking. See [Parallel Dispatch]({{ site.baseurl }}{% link scheduler/admin-trains/job-dispatcher.md %}#parallel-dispatch) |
+| `MaxDispatchAttempts(int)` | maxAttempts | 5 | Max dispatch attempts before permanently failing a work queue entry. When dispatch fails, the entry is requeued for the next cycle. Set to 0 to disable requeuing (fail immediately). See [Failure Handling]({{ site.baseurl }}{% link scheduler/remote-execution.md %}#failure-handling) |
 | `MaxActiveJobs(int?)` | maxJobs | 10 | Max concurrent active jobs (Pending + InProgress) globally. `null` = unlimited. Per-group limits can also be set from the dashboard on each ManifestGroup |
 | `ExcludeFromMaxActiveJobs<TTrain>()` | — | — | Excludes a train type from the MaxActiveJobs count |
 | `DefaultMaxRetries(int)` | maxRetries | 3 | Retry attempts before dead-lettering |

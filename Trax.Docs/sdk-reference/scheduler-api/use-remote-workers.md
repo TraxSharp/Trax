@@ -37,6 +37,17 @@ public SchedulerConfigurationBuilder UseRemoteWorkers(
 | `BaseUrl` | `string` | _(required)_ | The URL of the remote endpoint that receives job requests (e.g., `https://my-workers.example.com/trax/execute`) |
 | `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` — add auth headers, custom timeouts, or any other HTTP configuration |
 | `Timeout` | `TimeSpan` | 30 seconds | HTTP request timeout for each job dispatch |
+| `Retry` | `HttpRetryOptions` | _(see below)_ | Retry options for transient HTTP failures (429, 502, 503) |
+
+### HttpRetryOptions
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `MaxRetries` | `int` | 5 | Maximum retry attempts. Set to 0 to disable retries. |
+| `BaseDelay` | `TimeSpan` | 1 second | Starting delay between retries (doubled on each attempt with ±25% jitter) |
+| `MaxDelay` | `TimeSpan` | 30 seconds | Maximum delay cap to prevent unbounded exponential growth |
+
+Retries on HTTP 429 (Too Many Requests), 502 (Bad Gateway), and 503 (Service Unavailable). Respects the `Retry-After` header when present.
 
 ## SubmitterRouting
 

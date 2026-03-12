@@ -35,6 +35,7 @@ public SchedulerConfigurationBuilder UseRemoteRun(
 | `BaseUrl` | `string` | _(required)_ | The URL of the remote endpoint that receives run requests (e.g., `https://my-runner.example.com/trax/run`) |
 | `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` — add auth headers, custom timeouts, or any other HTTP configuration |
 | `Timeout` | `TimeSpan` | 5 minutes | HTTP request timeout. Longer default than `UseRemoteWorkers` (30s) because run requests block until the train completes |
+| `Retry` | `HttpRetryOptions` | _(see below)_ | Retry options for transient HTTP failures (429, 502, 503). Same configuration as [`RemoteWorkerOptions.Retry`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}#httpretryoptions) |
 
 ## Examples
 
