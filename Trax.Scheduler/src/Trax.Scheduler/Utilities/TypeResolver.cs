@@ -28,6 +28,32 @@ internal static class TypeResolver
                 return type;
         }
 
-        throw new TypeLoadException($"Unable to find type: {typeName}");
+        var namespacePrefix = GetNamespacePrefix(typeName);
+        var relevantAssemblies = AppDomain
+            .CurrentDomain.GetAssemblies()
+            .Where(a =>
+                !a.IsDynamic
+                && a.GetName().Name is { } name
+                && (
+                    namespacePrefix.StartsWith(name, StringComparison.OrdinalIgnoreCase)
+                    || name.StartsWith(namespacePrefix, StringComparison.OrdinalIgnoreCase)
+                )
+            )
+            .Select(a => a.GetName().Name)
+            .OrderBy(n => n)
+            .ToList();
+
+        var hint =
+            relevantAssemblies.Count > 0
+                ? $" Assemblies with a matching namespace prefix: [{string.Join(", ", relevantAssemblies)}]"
+                : " No loaded assemblies match the type's namespace prefix. Ensure the assembly containing this type is referenced and loaded.";
+
+        throw new TypeLoadException($"Unable to resolve type '{typeName}'.{hint}");
+    }
+
+    private static string GetNamespacePrefix(string typeName)
+    {
+        var lastDot = typeName.LastIndexOf('.');
+        return lastDot > 0 ? typeName[..lastDot] : typeName;
     }
 }

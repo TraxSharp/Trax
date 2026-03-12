@@ -78,7 +78,9 @@ internal class ReapStalePendingMetadataStep(
                         .SetProperty(
                             m => m.FailureReason,
                             "Job was not picked up within the configured stale pending timeout"
-                        ),
+                        )
+                        .SetProperty(m => m.FailureException, "StalePendingTimeout")
+                        .SetProperty(m => m.FailureStep, nameof(ReapStalePendingMetadataStep)),
                 CancellationToken
             );
 

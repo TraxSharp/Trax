@@ -5,7 +5,7 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// </summary>
 /// <remarks>
 /// On success, <see cref="OutputJson"/> and <see cref="OutputType"/> carry the serialized train output.
-/// On failure, <see cref="IsError"/> is true and <see cref="ErrorMessage"/> carries the error details.
+/// On failure, <see cref="IsError"/> is true and the structured error fields carry failure details.
 /// The <see cref="MetadataId"/> is included when available so the caller can reference the execution record.
 /// </remarks>
 /// <param name="MetadataId">The Metadata ID of the execution (0 if metadata was not created)</param>
@@ -14,11 +14,17 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// <param name="OutputType">Fully-qualified type name of the output (null for Unit trains or errors)</param>
 /// <param name="IsError">Whether the train execution failed</param>
 /// <param name="ErrorMessage">Error message when <paramref name="IsError"/> is true</param>
+/// <param name="ExceptionType">The .NET exception type name (e.g., "InvalidOperationException") when <paramref name="IsError"/> is true</param>
+/// <param name="FailureStep">The train step where the failure occurred, extracted from <c>TrainExceptionData</c> if available</param>
+/// <param name="StackTrace">The remote stack trace when <paramref name="IsError"/> is true</param>
 public record RemoteRunResponse(
     long MetadataId,
     string? ExternalId = null,
     string? OutputJson = null,
     string? OutputType = null,
     bool IsError = false,
-    string? ErrorMessage = null
+    string? ErrorMessage = null,
+    string? ExceptionType = null,
+    string? FailureStep = null,
+    string? StackTrace = null
 );

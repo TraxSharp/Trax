@@ -4,6 +4,7 @@ using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Services.RunExecutor;
 
@@ -19,6 +20,8 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// </remarks>
 public class HttpRunExecutor(HttpClient httpClient) : IRunExecutor
 {
+    private const int MaxErrorBodyLength = 2000;
+
     public async Task<RunTrainResult> ExecuteAsync(
         string trainName,
         object input,
@@ -35,19 +38,26 @@ public class HttpRunExecutor(HttpClient httpClient) : IRunExecutor
         var request = new RemoteRunRequest(trainName, inputJson, input.GetType().FullName!);
 
         var httpResponse = await httpClient.PostAsJsonAsync(string.Empty, request, ct);
-        httpResponse.EnsureSuccessStatusCode();
+
+        if (!httpResponse.IsSuccessStatusCode)
+        {
+            var body = await ReadErrorBodyAsync(httpResponse);
+            throw new TrainException(
+                $"Remote run endpoint returned HTTP {(int)httpResponse.StatusCode}: {body}"
+            );
+        }
 
         var response =
             await httpResponse.Content.ReadFromJsonAsync<RemoteRunResponse>(ct)
             ?? throw new TrainException("Remote run endpoint returned null response.");
 
         if (response.IsError)
-            throw new TrainException($"Remote train execution failed: {response.ErrorMessage}");
+            throw BuildExceptionFromErrorResponse(response);
 
         object? output = null;
         if (response.OutputJson is not null && response.OutputType is not null)
         {
-            var resolvedType = ResolveType(response.OutputType);
+            var resolvedType = TypeResolver.ResolveType(response.OutputType);
             output = JsonSerializer.Deserialize(
                 response.OutputJson,
                 resolvedType,
@@ -58,21 +68,49 @@ public class HttpRunExecutor(HttpClient httpClient) : IRunExecutor
         return new RunTrainResult(response.MetadataId, response.ExternalId ?? "", output);
     }
 
-    private static Type ResolveType(string typeName)
+    /// <summary>
+    /// Builds a <see cref="TrainException"/> from a <see cref="RemoteRunResponse"/> error.
+    /// If the response includes structured error fields (<see cref="RemoteRunResponse.ExceptionType"/>
+    /// and <see cref="RemoteRunResponse.FailureStep"/>), reconstructs a <see cref="TrainExceptionData"/>
+    /// JSON message so that <c>Metadata.AddException()</c> on the API side correctly parses
+    /// the failure into structured fields (FailureException, FailureStep, FailureReason).
+    /// </summary>
+    private static TrainException BuildExceptionFromErrorResponse(RemoteRunResponse response)
     {
-        var type = Type.GetType(typeName);
-        if (type is not null)
-            return type;
-
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        if (response.ExceptionType is not null)
         {
-            type = assembly.GetType(typeName);
-            if (type is not null)
-                return type;
+            var data = new TrainExceptionData
+            {
+                TrainName = "",
+                TrainExternalId = "",
+                Type = response.ExceptionType,
+                Step = response.FailureStep ?? "Unknown",
+                Message = response.ErrorMessage ?? "Remote train execution failed",
+            };
+
+            var json = JsonSerializer.Serialize(data);
+            return new TrainException(json);
         }
 
-        throw new TypeLoadException(
-            $"Unable to resolve output type from remote run response: {typeName}"
-        );
+        return new TrainException($"Remote train execution failed: {response.ErrorMessage}");
+    }
+
+    private static async Task<string> ReadErrorBodyAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (string.IsNullOrWhiteSpace(body))
+                return response.ReasonPhrase ?? "no response body";
+
+            return body.Length > MaxErrorBodyLength
+                ? body[..MaxErrorBodyLength] + "... (truncated)"
+                : body;
+        }
+        catch
+        {
+            return response.ReasonPhrase ?? "unable to read response body";
+        }
     }
 }

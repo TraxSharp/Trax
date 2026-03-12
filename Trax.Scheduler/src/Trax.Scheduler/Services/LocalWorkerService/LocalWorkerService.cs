@@ -9,6 +9,7 @@ using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Trains.JobRunner;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Services.LocalWorkerService;
 
@@ -142,7 +143,7 @@ internal class LocalWorkerService(
             object? deserializedInput = null;
             if (inputJson != null && inputType != null)
             {
-                var type = ResolveType(inputType);
+                var type = TypeResolver.ResolveType(inputType);
                 deserializedInput = JsonSerializer.Deserialize(
                     inputJson,
                     type,
@@ -218,21 +219,5 @@ internal class LocalWorkerService(
         }
 
         return true;
-    }
-
-    private static Type ResolveType(string typeName)
-    {
-        var type = Type.GetType(typeName);
-        if (type != null)
-            return type;
-
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            type = assembly.GetType(typeName);
-            if (type != null)
-                return type;
-        }
-
-        throw new TypeLoadException($"Unable to find type: {typeName}");
     }
 }

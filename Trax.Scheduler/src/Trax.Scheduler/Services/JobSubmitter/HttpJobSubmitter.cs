@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
 
@@ -15,6 +16,8 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 /// </remarks>
 public class HttpJobSubmitter(HttpClient httpClient) : IJobSubmitter
 {
+    private const int MaxErrorBodyLength = 2000;
+
     /// <inheritdoc />
     public Task<string> EnqueueAsync(long metadataId) =>
         EnqueueAsync(metadataId, CancellationToken.None);
@@ -51,7 +54,63 @@ public class HttpJobSubmitter(HttpClient httpClient) : IJobSubmitter
 
     private async Task PostAsync(RemoteJobRequest request, CancellationToken cancellationToken)
     {
-        var response = await httpClient.PostAsJsonAsync(string.Empty, request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        var httpResponse = await httpClient.PostAsJsonAsync(
+            string.Empty,
+            request,
+            cancellationToken
+        );
+
+        if (!httpResponse.IsSuccessStatusCode)
+        {
+            var body = await ReadErrorBodyAsync(httpResponse);
+            throw new TrainException(
+                $"Remote worker returned HTTP {(int)httpResponse.StatusCode}: {body}"
+            );
+        }
+
+        RemoteJobResponse? response;
+        try
+        {
+            response = await httpResponse.Content.ReadFromJsonAsync<RemoteJobResponse>(
+                cancellationToken
+            );
+        }
+        catch
+        {
+            // Response body is not valid RemoteJobResponse JSON — treat as success
+            // (e.g., older runner returning { metadataId: 123 } without IsError field)
+            return;
+        }
+
+        if (response is { IsError: true })
+        {
+            throw new TrainException(
+                $"Remote worker reported error: {response.ErrorMessage}"
+                    + (
+                        response.ExceptionType is not null
+                            ? $" [{response.ExceptionType}]"
+                            : string.Empty
+                    )
+            );
+        }
+    }
+
+    private static async Task<string> ReadErrorBodyAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (string.IsNullOrWhiteSpace(body))
+                return response.ReasonPhrase ?? "no response body";
+
+            return body.Length > MaxErrorBodyLength
+                ? body[..MaxErrorBodyLength] + "... (truncated)"
+                : body;
+        }
+        catch
+        {
+            return response.ReasonPhrase ?? "unable to read response body";
+        }
     }
 }

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using FluentAssertions;
+using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
@@ -15,16 +16,35 @@ public class HttpJobSubmitterTests
     #region Helpers
 
     private static (HttpJobSubmitter submitter, MockHttpMessageHandler handler) CreateSubmitter(
-        HttpStatusCode responseStatus = HttpStatusCode.OK
+        HttpStatusCode responseStatus = HttpStatusCode.OK,
+        string? responseBody = null
     )
     {
-        var handler = new MockHttpMessageHandler(responseStatus);
+        var handler = new MockHttpMessageHandler(responseStatus, responseBody);
         var httpClient = new HttpClient(handler)
         {
             BaseAddress = new Uri("https://test.example.com/trax/execute"),
         };
         return (new HttpJobSubmitter(httpClient), handler);
     }
+
+    private static string SerializeSuccessResponse(long metadataId) =>
+        JsonSerializer.Serialize(new RemoteJobResponse(metadataId));
+
+    private static string SerializeErrorResponse(
+        string errorMessage,
+        string? exceptionType = null,
+        string? stackTrace = null
+    ) =>
+        JsonSerializer.Serialize(
+            new RemoteJobResponse(
+                0,
+                IsError: true,
+                ErrorMessage: errorMessage,
+                ExceptionType: exceptionType,
+                StackTrace: stackTrace
+            )
+        );
 
     #endregion
 
@@ -33,27 +53,21 @@ public class HttpJobSubmitterTests
     [Test]
     public async Task EnqueueAsync_WithMetadataIdOnly_ReturnsHttpPrefixedJobId()
     {
-        // Arrange
-        var (submitter, _) = CreateSubmitter();
+        var (submitter, _) = CreateSubmitter(responseBody: SerializeSuccessResponse(42));
 
-        // Act
         var jobId = await submitter.EnqueueAsync(42);
 
-        // Assert
         jobId.Should().StartWith("http-");
-        jobId.Should().HaveLength("http-".Length + 32); // "http-" + 32 hex chars
+        jobId.Should().HaveLength("http-".Length + 32);
     }
 
     [Test]
     public async Task EnqueueAsync_WithMetadataIdOnly_PostsCorrectPayload()
     {
-        // Arrange
-        var (submitter, handler) = CreateSubmitter();
+        var (submitter, handler) = CreateSubmitter(responseBody: SerializeSuccessResponse(42));
 
-        // Act
         await submitter.EnqueueAsync(42);
 
-        // Assert
         handler.LastRequest.Should().NotBeNull();
         handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
 
@@ -69,13 +83,10 @@ public class HttpJobSubmitterTests
     [Test]
     public async Task EnqueueAsync_WithMetadataIdOnly_PostsToBaseAddress()
     {
-        // Arrange
-        var (submitter, handler) = CreateSubmitter();
+        var (submitter, handler) = CreateSubmitter(responseBody: SerializeSuccessResponse(42));
 
-        // Act
         await submitter.EnqueueAsync(42);
 
-        // Assert
         handler.LastRequest.Should().NotBeNull();
         handler
             .LastRequest!.RequestUri!.ToString()
@@ -90,14 +101,11 @@ public class HttpJobSubmitterTests
     [Test]
     public async Task EnqueueAsync_WithInput_SerializesInputAsJson()
     {
-        // Arrange
-        var (submitter, handler) = CreateSubmitter();
+        var (submitter, handler) = CreateSubmitter(responseBody: SerializeSuccessResponse(50));
         var input = new SchedulerTestInput { Value = "hello-world" };
 
-        // Act
         await submitter.EnqueueAsync(50, input);
 
-        // Assert
         var body = await handler.LastRequest!.Content!.ReadAsStringAsync();
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(body, WebOptions);
 
@@ -111,18 +119,14 @@ public class HttpJobSubmitterTests
     [Test]
     public async Task EnqueueAsync_WithInput_UsesManifestPropertiesSerialization()
     {
-        // Arrange
-        var (submitter, handler) = CreateSubmitter();
+        var (submitter, handler) = CreateSubmitter(responseBody: SerializeSuccessResponse(1));
         var input = new SchedulerTestInput { Value = "test-value" };
 
-        // Act
         await submitter.EnqueueAsync(1, input);
 
-        // Assert
         var body = await handler.LastRequest!.Content!.ReadAsStringAsync();
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(body, WebOptions);
 
-        // Verify the input JSON uses the same serialization as PostgresJobSubmitter
         var expectedJson = JsonSerializer.Serialize(
             input,
             input.GetType(),
@@ -134,15 +138,12 @@ public class HttpJobSubmitterTests
     [Test]
     public async Task EnqueueAsync_WithInput_ReturnsUniqueJobIds()
     {
-        // Arrange
-        var (submitter, _) = CreateSubmitter();
+        var (submitter, _) = CreateSubmitter(responseBody: SerializeSuccessResponse(1));
         var input = new SchedulerTestInput { Value = "test" };
 
-        // Act
         var jobId1 = await submitter.EnqueueAsync(1, input);
         var jobId2 = await submitter.EnqueueAsync(2, input);
 
-        // Assert
         jobId1.Should().NotBe(jobId2);
     }
 
@@ -153,14 +154,11 @@ public class HttpJobSubmitterTests
     [Test]
     public async Task EnqueueAsync_WithCancellationToken_PostsCorrectPayload()
     {
-        // Arrange
-        var (submitter, handler) = CreateSubmitter();
+        var (submitter, handler) = CreateSubmitter(responseBody: SerializeSuccessResponse(99));
         using var cts = new CancellationTokenSource();
 
-        // Act
         await submitter.EnqueueAsync(99, cts.Token);
 
-        // Assert
         var body = await handler.LastRequest!.Content!.ReadAsStringAsync();
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(body, WebOptions);
 
@@ -171,15 +169,12 @@ public class HttpJobSubmitterTests
     [Test]
     public async Task EnqueueAsync_WithInputAndCancellationToken_PostsCorrectPayload()
     {
-        // Arrange
-        var (submitter, handler) = CreateSubmitter();
+        var (submitter, handler) = CreateSubmitter(responseBody: SerializeSuccessResponse(77));
         var input = new SchedulerTestInput { Value = "with-ct" };
         using var cts = new CancellationTokenSource();
 
-        // Act
         await submitter.EnqueueAsync(77, input, cts.Token);
 
-        // Assert
         var body = await handler.LastRequest!.Content!.ReadAsStringAsync();
         var request = JsonSerializer.Deserialize<RemoteJobRequest>(body, WebOptions);
 
@@ -191,63 +186,131 @@ public class HttpJobSubmitterTests
     [Test]
     public void EnqueueAsync_WhenCancelled_ThrowsOperationCancelledException()
     {
-        // Arrange
         var (submitter, _) = CreateSubmitter();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        // Act & Assert
         var act = async () => await submitter.EnqueueAsync(1, cts.Token);
         act.Should().ThrowAsync<OperationCanceledException>();
     }
 
     #endregion
 
-    #region Error Handling Tests
+    #region Error Handling — Non-2xx HTTP Status
 
     [Test]
-    public void EnqueueAsync_WhenRemoteReturns500_ThrowsHttpRequestException()
+    public async Task EnqueueAsync_WhenRemoteReturns500_ThrowsTrainExceptionWithBody()
     {
-        // Arrange
-        var (submitter, _) = CreateSubmitter(HttpStatusCode.InternalServerError);
+        var errorBody = """{"detail":"Internal server error: database timeout"}""";
+        var (submitter, _) = CreateSubmitter(HttpStatusCode.InternalServerError, errorBody);
 
-        // Act & Assert
         var act = async () => await submitter.EnqueueAsync(42);
-        act.Should().ThrowAsync<HttpRequestException>();
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("500");
+        ex.Message.Should().Contain("database timeout");
     }
 
     [Test]
-    public void EnqueueAsync_WhenRemoteReturns401_ThrowsHttpRequestException()
+    public async Task EnqueueAsync_WhenRemoteReturns401_ThrowsTrainExceptionWithBody()
     {
-        // Arrange
-        var (submitter, _) = CreateSubmitter(HttpStatusCode.Unauthorized);
+        var (submitter, _) = CreateSubmitter(HttpStatusCode.Unauthorized, "Unauthorized");
 
-        // Act & Assert
         var act = async () => await submitter.EnqueueAsync(42);
-        act.Should().ThrowAsync<HttpRequestException>();
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("401");
     }
 
     [Test]
-    public void EnqueueAsync_WhenRemoteReturns404_ThrowsHttpRequestException()
+    public async Task EnqueueAsync_WhenRemoteReturns404_ThrowsTrainExceptionWithBody()
     {
-        // Arrange
-        var (submitter, _) = CreateSubmitter(HttpStatusCode.NotFound);
+        var (submitter, _) = CreateSubmitter(HttpStatusCode.NotFound, "Not Found");
 
-        // Act & Assert
         var act = async () => await submitter.EnqueueAsync(42);
-        act.Should().ThrowAsync<HttpRequestException>();
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("404");
     }
 
     [Test]
-    public void EnqueueAsync_WithInput_WhenRemoteReturns500_ThrowsHttpRequestException()
+    public async Task EnqueueAsync_WithInput_WhenRemoteReturns500_ThrowsTrainException()
     {
-        // Arrange
-        var (submitter, _) = CreateSubmitter(HttpStatusCode.InternalServerError);
+        var (submitter, _) = CreateSubmitter(HttpStatusCode.InternalServerError, "Server Error");
         var input = new SchedulerTestInput { Value = "test" };
 
-        // Act & Assert
         var act = async () => await submitter.EnqueueAsync(42, input);
-        act.Should().ThrowAsync<HttpRequestException>();
+        await act.Should().ThrowAsync<TrainException>();
+    }
+
+    [Test]
+    public async Task EnqueueAsync_Non2xx_WithEmptyBody_ThrowsTrainExceptionWithStatusCode()
+    {
+        var (submitter, _) = CreateSubmitter(HttpStatusCode.BadGateway, "");
+
+        var act = async () => await submitter.EnqueueAsync(42);
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("502");
+    }
+
+    [Test]
+    public async Task EnqueueAsync_Non2xx_WithHtmlBody_ThrowsTrainExceptionWithTruncatedBody()
+    {
+        var hugeHtml = new string('x', 5000);
+        var (submitter, _) = CreateSubmitter(HttpStatusCode.InternalServerError, hugeHtml);
+
+        var act = async () => await submitter.EnqueueAsync(42);
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("500");
+        ex.Message.Should().Contain("truncated");
+        ex.Message.Length.Should().BeLessThan(3000);
+    }
+
+    #endregion
+
+    #region Error Handling — IsError Response
+
+    [Test]
+    public async Task EnqueueAsync_SuccessResponse_WithIsErrorTrue_ThrowsTrainExceptionWithDetails()
+    {
+        var (submitter, _) = CreateSubmitter(
+            responseBody: SerializeErrorResponse(
+                "Train execution failed: validation error",
+                "InvalidOperationException"
+            )
+        );
+
+        var act = async () => await submitter.EnqueueAsync(42);
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("validation error");
+        ex.Message.Should().Contain("InvalidOperationException");
+    }
+
+    [Test]
+    public async Task EnqueueAsync_SuccessResponse_WithIsErrorFalse_ReturnsJobId()
+    {
+        var (submitter, _) = CreateSubmitter(responseBody: SerializeSuccessResponse(42));
+
+        var jobId = await submitter.EnqueueAsync(42);
+
+        jobId.Should().StartWith("http-");
+    }
+
+    [Test]
+    public async Task EnqueueAsync_WithInput_SuccessResponse_WithIsErrorTrue_ThrowsTrainExceptionWithDetails()
+    {
+        var (submitter, _) = CreateSubmitter(
+            responseBody: SerializeErrorResponse("Step failed", "TrainException")
+        );
+        var input = new SchedulerTestInput { Value = "test" };
+
+        var act = async () => await submitter.EnqueueAsync(42, input);
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("Step failed");
     }
 
     #endregion
@@ -257,18 +320,15 @@ public class HttpJobSubmitterTests
     [Test]
     public async Task EnqueueAsync_MultipleCalls_EachProducesUniqueJobId()
     {
-        // Arrange
-        var (submitter, _) = CreateSubmitter();
+        var (submitter, _) = CreateSubmitter(responseBody: SerializeSuccessResponse(0));
         var jobIds = new HashSet<string>();
 
-        // Act
         for (var i = 0; i < 10; i++)
         {
             var jobId = await submitter.EnqueueAsync(i);
             jobIds.Add(jobId);
         }
 
-        // Assert
         jobIds.Should().HaveCount(10);
     }
 
@@ -276,7 +336,8 @@ public class HttpJobSubmitterTests
 
     #region MockHttpMessageHandler
 
-    private class MockHttpMessageHandler(HttpStatusCode responseStatus) : HttpMessageHandler
+    private class MockHttpMessageHandler(HttpStatusCode responseStatus, string? responseBody = null)
+        : HttpMessageHandler
     {
         public HttpRequestMessage? LastRequest { get; private set; }
         public List<HttpRequestMessage> AllRequests { get; } = [];
@@ -288,7 +349,6 @@ public class HttpJobSubmitterTests
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Read and buffer the content so it can be read later
             string? content = null;
             if (request.Content is not null)
                 content = await request.Content.ReadAsStringAsync(cancellationToken);
@@ -304,7 +364,16 @@ public class HttpJobSubmitterTests
             LastRequest = clone;
             AllRequests.Add(clone);
 
-            return new HttpResponseMessage(responseStatus);
+            var response = new HttpResponseMessage(responseStatus);
+
+            if (responseBody is not null)
+                response.Content = new StringContent(
+                    responseBody,
+                    System.Text.Encoding.UTF8,
+                    "application/json"
+                );
+
+            return response;
         }
     }
 

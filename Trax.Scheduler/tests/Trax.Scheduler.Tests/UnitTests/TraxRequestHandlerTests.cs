@@ -3,6 +3,7 @@ using FluentAssertions;
 using LanguageExt;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Exceptions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainExecution;
@@ -21,7 +22,6 @@ public class TraxRequestHandlerTests
     [Test]
     public async Task ExecuteJobAsync_WithInput_DeserializesAndRunsJobRunner()
     {
-        // Arrange
         var input = new TestInput { Name = "hello", Value = 42 };
         var inputJson = JsonSerializer.Serialize(
             input,
@@ -35,10 +35,8 @@ public class TraxRequestHandlerTests
         var jobRunner = new FakeJobRunnerTrain();
         var handler = CreateHandler(jobRunner: jobRunner);
 
-        // Act
         var result = await handler.ExecuteJobAsync(request);
 
-        // Assert
         result.MetadataId.Should().Be(100);
         jobRunner.ReceivedRequest.Should().NotBeNull();
         jobRunner.ReceivedRequest!.MetadataId.Should().Be(100);
@@ -52,15 +50,12 @@ public class TraxRequestHandlerTests
     [Test]
     public async Task ExecuteJobAsync_WithoutInput_RunsWithNullInput()
     {
-        // Arrange
         var request = new RemoteJobRequest(MetadataId: 200);
         var jobRunner = new FakeJobRunnerTrain();
         var handler = CreateHandler(jobRunner: jobRunner);
 
-        // Act
         var result = await handler.ExecuteJobAsync(request);
 
-        // Assert
         result.MetadataId.Should().Be(200);
         jobRunner.ReceivedRequest.Should().NotBeNull();
         jobRunner.ReceivedRequest!.MetadataId.Should().Be(200);
@@ -70,7 +65,6 @@ public class TraxRequestHandlerTests
     [Test]
     public async Task ExecuteJobAsync_TrainFails_Throws()
     {
-        // Arrange
         var request = new RemoteJobRequest(MetadataId: 300);
         var jobRunner = new FakeJobRunnerTrain
         {
@@ -78,21 +72,18 @@ public class TraxRequestHandlerTests
         };
         var handler = CreateHandler(jobRunner: jobRunner);
 
-        // Act
         var act = async () => await handler.ExecuteJobAsync(request);
 
-        // Assert
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Train exploded");
     }
 
     #endregion
 
-    #region RunTrainAsync
+    #region RunTrainAsync — Success
 
     [Test]
     public async Task RunTrainAsync_Success_ReturnsSerializedOutput()
     {
-        // Arrange
         var output = new TestOutput { Result = "success", Count = 7 };
         var executionService = new FakeTrainExecutionService
         {
@@ -109,10 +100,8 @@ public class TraxRequestHandlerTests
         );
         var handler = CreateHandler(executionService: executionService);
 
-        // Act
         var response = await handler.RunTrainAsync(request);
 
-        // Assert
         response.MetadataId.Should().Be(500);
         response.ExternalId.Should().Be("ext-500");
         response.IsError.Should().BeFalse();
@@ -131,7 +120,6 @@ public class TraxRequestHandlerTests
     [Test]
     public async Task RunTrainAsync_NullOutput_ReturnsNullOutputFields()
     {
-        // Arrange
         var executionService = new FakeTrainExecutionService
         {
             ResultToReturn = new RunTrainResult(MetadataId: 600, ExternalId: "ext-600"),
@@ -143,20 +131,21 @@ public class TraxRequestHandlerTests
         );
         var handler = CreateHandler(executionService: executionService);
 
-        // Act
         var response = await handler.RunTrainAsync(request);
 
-        // Assert
         response.MetadataId.Should().Be(600);
         response.IsError.Should().BeFalse();
         response.OutputJson.Should().BeNull();
         response.OutputType.Should().BeNull();
     }
 
+    #endregion
+
+    #region RunTrainAsync — Error Handling
+
     [Test]
-    public async Task RunTrainAsync_TrainFails_ReturnsErrorResponse()
+    public async Task RunTrainAsync_TrainFailsWithPlainException_PopulatesExceptionTypeAndStackTrace()
     {
-        // Arrange
         var executionService = new FakeTrainExecutionService
         {
             ExceptionToThrow = new InvalidOperationException("Something broke"),
@@ -168,14 +157,137 @@ public class TraxRequestHandlerTests
         );
         var handler = CreateHandler(executionService: executionService);
 
-        // Act
         var response = await handler.RunTrainAsync(request);
 
-        // Assert
         response.IsError.Should().BeTrue();
         response.MetadataId.Should().Be(0);
         response.ErrorMessage.Should().Be("Something broke");
+        response.ExceptionType.Should().Be("InvalidOperationException");
+        response.StackTrace.Should().NotBeNull();
+        response.FailureStep.Should().BeNull();
         response.OutputJson.Should().BeNull();
+    }
+
+    [Test]
+    public async Task RunTrainAsync_TrainFailsWithTrainExceptionData_PopulatesStructuredErrorFields()
+    {
+        var exceptionData = new TrainExceptionData
+        {
+            TrainName = "My.Namespace.IMyTrain",
+            TrainExternalId = "ext-123",
+            Type = "ArgumentException",
+            Step = "ValidateInputStep",
+            Message = "Input was invalid",
+        };
+        var serializedData = JsonSerializer.Serialize(exceptionData);
+        var executionService = new FakeTrainExecutionService
+        {
+            ExceptionToThrow = new TrainException(serializedData),
+        };
+        var request = new RemoteRunRequest(
+            TrainName: "My.FailingTrain",
+            InputJson: "{}",
+            InputType: typeof(TestInput).FullName!
+        );
+        var handler = CreateHandler(executionService: executionService);
+
+        var response = await handler.RunTrainAsync(request);
+
+        response.IsError.Should().BeTrue();
+        response.ExceptionType.Should().Be("ArgumentException");
+        response.FailureStep.Should().Be("ValidateInputStep");
+        response.ErrorMessage.Should().Be("Input was invalid");
+        response.StackTrace.Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task RunTrainAsync_TrainFailsWithNestedInnerException_CapturesOuterExceptionType()
+    {
+        var inner = new ArgumentException("Bad argument");
+        var outer = new InvalidOperationException("Operation failed", inner);
+        var executionService = new FakeTrainExecutionService { ExceptionToThrow = outer };
+        var request = new RemoteRunRequest(
+            TrainName: "My.Train",
+            InputJson: "{}",
+            InputType: typeof(TestInput).FullName!
+        );
+        var handler = CreateHandler(executionService: executionService);
+
+        var response = await handler.RunTrainAsync(request);
+
+        response.IsError.Should().BeTrue();
+        response.ExceptionType.Should().Be("InvalidOperationException");
+        response.ErrorMessage.Should().Be("Operation failed");
+    }
+
+    [Test]
+    public async Task RunTrainAsync_TrainFails_StackTraceIsPopulated()
+    {
+        var executionService = new FakeTrainExecutionService
+        {
+            ExceptionToThrow = new InvalidOperationException("boom"),
+        };
+        var request = new RemoteRunRequest(
+            TrainName: "My.Train",
+            InputJson: "{}",
+            InputType: typeof(TestInput).FullName!
+        );
+        var handler = CreateHandler(executionService: executionService);
+
+        var response = await handler.RunTrainAsync(request);
+
+        response.IsError.Should().BeTrue();
+        response.StackTrace.Should().NotBeNullOrEmpty();
+    }
+
+    #endregion
+
+    #region BuildErrorResponse
+
+    [Test]
+    public void BuildErrorResponse_WithTrainExceptionData_ExtractsStructuredFields()
+    {
+        var data = new TrainExceptionData
+        {
+            TrainName = "My.Train",
+            TrainExternalId = "ext-1",
+            Type = "NullReferenceException",
+            Step = "LoadDataStep",
+            Message = "Object reference not set",
+        };
+        var ex = new TrainException(JsonSerializer.Serialize(data));
+
+        var response = TraxRequestHandler.BuildErrorResponse(ex);
+
+        response.IsError.Should().BeTrue();
+        response.ExceptionType.Should().Be("NullReferenceException");
+        response.FailureStep.Should().Be("LoadDataStep");
+        response.ErrorMessage.Should().Be("Object reference not set");
+    }
+
+    [Test]
+    public void BuildErrorResponse_WithPlainException_UsesRawExceptionDetails()
+    {
+        var ex = new ArgumentException("Bad value");
+
+        var response = TraxRequestHandler.BuildErrorResponse(ex);
+
+        response.IsError.Should().BeTrue();
+        response.ExceptionType.Should().Be("ArgumentException");
+        response.ErrorMessage.Should().Be("Bad value");
+        response.FailureStep.Should().BeNull();
+    }
+
+    [Test]
+    public void BuildErrorResponse_WithNonJsonMessage_FallsBackGracefully()
+    {
+        var ex = new InvalidOperationException("This is not { valid JSON");
+
+        var response = TraxRequestHandler.BuildErrorResponse(ex);
+
+        response.IsError.Should().BeTrue();
+        response.ExceptionType.Should().Be("InvalidOperationException");
+        response.ErrorMessage.Should().Be("This is not { valid JSON");
     }
 
     #endregion

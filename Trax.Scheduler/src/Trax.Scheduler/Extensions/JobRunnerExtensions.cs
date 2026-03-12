@@ -69,6 +69,7 @@ public static class JobRunnerExtensions
     /// <returns>The route handler builder for further configuration (e.g., <c>.RequireAuthorization()</c>)</returns>
     /// <remarks>
     /// Delegates to <see cref="ITraxRequestHandler.ExecuteJobAsync"/> for the actual execution.
+    /// Returns a <see cref="RemoteJobResponse"/> with structured error fields on failure.
     /// No authentication is baked in — apply your own ASP.NET middleware as needed.
     /// </remarks>
     public static RouteHandlerBuilder UseTraxJobRunner(
@@ -87,7 +88,7 @@ public static class JobRunnerExtensions
                 try
                 {
                     var result = await handler.ExecuteJobAsync(request);
-                    return Results.Ok(new { metadataId = result.MetadataId });
+                    return Results.Ok(new RemoteJobResponse(result.MetadataId));
                 }
                 catch (Exception ex)
                 {
@@ -96,9 +97,14 @@ public static class JobRunnerExtensions
                         "Remote job execution failed for Metadata {MetadataId}",
                         request.MetadataId
                     );
-                    return Results.Problem(
-                        detail: ex.Message,
-                        statusCode: StatusCodes.Status500InternalServerError
+                    return Results.Ok(
+                        new RemoteJobResponse(
+                            request.MetadataId,
+                            IsError: true,
+                            ErrorMessage: ex.Message,
+                            ExceptionType: ex.GetType().Name,
+                            StackTrace: ex.StackTrace
+                        )
                     );
                 }
             }
@@ -115,6 +121,7 @@ public static class JobRunnerExtensions
     /// Delegates to <see cref="ITraxRequestHandler.RunTrainAsync"/> for the actual execution.
     /// Unlike <see cref="UseTraxJobRunner"/> which is fire-and-forget (queue path), this endpoint
     /// blocks until the train completes and returns the serialized output in the response body.
+    /// Returns a <see cref="RemoteRunResponse"/> with structured error fields on failure.
     /// No authentication is baked in — apply your own ASP.NET middleware as needed.
     /// </remarks>
     public static RouteHandlerBuilder UseTraxRunEndpoint(
@@ -124,8 +131,26 @@ public static class JobRunnerExtensions
     {
         return endpoints.MapPost(
             route,
-            async (RemoteRunRequest request, ITraxRequestHandler handler) =>
-                Results.Ok(await handler.RunTrainAsync(request))
+            async (
+                RemoteRunRequest request,
+                ITraxRequestHandler handler,
+                ILogger<TraxRequestHandler> logger
+            ) =>
+            {
+                try
+                {
+                    return Results.Ok(await handler.RunTrainAsync(request));
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(
+                        ex,
+                        "Remote run execution failed for train {TrainName}",
+                        request.TrainName
+                    );
+                    return Results.Ok(TraxRequestHandler.BuildErrorResponse(ex));
+                }
+            }
         );
     }
 }

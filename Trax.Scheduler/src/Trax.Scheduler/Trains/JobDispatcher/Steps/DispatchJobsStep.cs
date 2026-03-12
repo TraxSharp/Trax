@@ -11,6 +11,7 @@ using Trax.Effect.Services.EffectStep;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
 
@@ -151,7 +152,7 @@ internal class DispatchJobsStep(
         object? deserializedInput = null;
         if (claimed is { Input: not null, InputTypeName: not null })
         {
-            var inputType = ResolveType(claimed.InputTypeName);
+            var inputType = TypeResolver.ResolveType(claimed.InputTypeName);
             deserializedInput = JsonSerializer.Deserialize(
                 claimed.Input,
                 inputType,
@@ -274,21 +275,5 @@ internal class DispatchJobsStep(
         return concreteType is not null
             ? (IJobSubmitter)provider.GetRequiredService(concreteType)
             : provider.GetRequiredService<IJobSubmitter>();
-    }
-
-    private static Type ResolveType(string typeName)
-    {
-        var type = Type.GetType(typeName);
-        if (type != null)
-            return type;
-
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            type = assembly.GetType(typeName);
-            if (type != null)
-                return type;
-        }
-
-        throw new TypeLoadException($"Unable to find type: {typeName}");
     }
 }
