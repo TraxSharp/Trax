@@ -40,19 +40,22 @@ Trax.Mediator depends on [Trax.Effect](https://www.nuget.org/packages/Trax.Effec
 Register your train assemblies during startup. The dispatch station scans them for all `IServiceTrain<TIn, TOut>` implementations and builds the cargo-to-train map automatically:
 
 ```csharp
-builder.Services.AddTraxEffects(options => options
-    .AddPostgresEffect(connectionString)
-    .AddServiceTrainBus(typeof(Program).Assembly)
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(typeof(Program).Assembly)
 );
 ```
 
 Multiple assemblies:
 
 ```csharp
-.AddServiceTrainBus(
-    typeof(Program).Assembly,
-    typeof(SomeTrainInAnotherProject).Assembly
-)
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(
+            typeof(Program).Assembly,
+            typeof(SomeTrainInAnotherProject).Assembly
+        )
+);
 ```
 
 That's it. Every `IServiceTrain<TIn, TOut>` in those assemblies is now dispatchable through `ITrainBus`.
@@ -115,7 +118,7 @@ public class TrainListEndpoint(ITrainRegistry registry)
 
 ## How It Works
 
-At startup, `AddServiceTrainBus` scans the provided assemblies for types implementing `IServiceTrain<TIn, TOut>`. It builds a dictionary from cargo type (input) to train type and registers each train in the DI container. When you call `RunAsync<TOut>(input)`, the dispatch station looks up `input.GetType()`, resolves the matching train from DI, and sends it on its way.
+At startup, `AddMediator` scans the provided assemblies for types implementing `IServiceTrain<TIn, TOut>`. It builds a dictionary from cargo type (input) to train type and registers each train in the DI container. When you call `RunAsync<TOut>(input)`, the dispatch station looks up `input.GetType()`, resolves the matching train from DI, and sends it on its way.
 
 ## Part of Trax
 
