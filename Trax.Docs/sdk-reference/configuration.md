@@ -78,12 +78,12 @@ The parameterless overload registers effects with no data provider. Features tha
 
 ```csharp
 public static IServiceCollection AddTrax(
-    this IServiceCollection serviceCollection,
-    Action<TraxBuilder>? options = null
+    this IServiceCollection services,
+    Action<TraxBuilder> configure
 )
 ```
 
-Calling `AddTrax()` registers a `TraxMarker` singleton in the DI container. This marker is checked at runtime by `AddTraxDashboard()` and `AddTraxGraphQL()` -- if the marker is missing, they throw `InvalidOperationException` with a message directing you to call `AddTrax()` first.
+`AddTrax` registers a `TraxMarker` singleton in the DI container. This marker is checked at runtime by `AddTraxDashboard()` and `AddTraxGraphQL()` -- if the marker is missing, they throw `InvalidOperationException` with a message directing you to call `AddTrax()` first.
 
 ## Step Builder Types
 

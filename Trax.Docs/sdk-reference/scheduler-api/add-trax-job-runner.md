@@ -166,8 +166,8 @@ Maps a `POST` endpoint at the specified route that:
 2. Deserializes the input (if present) using the fully-qualified type name
 3. Creates a new DI scope and resolves `IJobRunnerTrain`
 4. Calls `Run(new RunJobRequest(metadataId, input))`
-5. Returns `200 OK` with `{ "metadataId": 42 }` on success
-6. Returns `500` on failure
+5. Returns `200 OK` with a `RemoteJobResponse` containing the metadata ID on success
+6. On error: returns `200 OK` with `RemoteJobResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `StackTrace`)
 
 ### UseTraxRunEndpoint
 
@@ -177,7 +177,7 @@ Maps a `POST` endpoint at the specified route that handles synchronous run reque
 2. Resolves `ITrainExecutionService` and calls `RunAsync(trainName, inputJson)`
 3. Serializes the train output as JSON
 4. Returns `200 OK` with a `RemoteRunResponse` containing the metadata ID, output JSON, and output type
-5. On error: returns `200 OK` with `RemoteRunResponse.IsError = true` and the error message (in-band errors to distinguish from infrastructure failures)
+5. On error: returns `200 OK` with `RemoteRunResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `FailureStep`, `StackTrace`). Uses in-band errors to distinguish from infrastructure failures
 
 ## Shared Requirements
 

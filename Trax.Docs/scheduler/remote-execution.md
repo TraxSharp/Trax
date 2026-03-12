@@ -414,11 +414,13 @@ Regardless of deployment model, every process that executes trains must:
 
 When the JobDispatcher dispatches a job, the Metadata record is committed to the database **before** the job is submitted to the worker. This is necessary because the worker needs to read the Metadata. However, if the submission fails (network timeout, remote worker unreachable, HTTP 5xx), the Metadata would be orphaned in `Pending` state.
 
-Trax handles this with two layers of protection:
+Trax handles this with three layers of protection:
 
 1. **Immediate failure handling** — If `IJobSubmitter.EnqueueAsync()` throws, the DispatchJobsStep immediately marks the Metadata as `Failed` with the exception details. This covers the majority of dispatch failures.
 
-2. **Stale pending reaper** — The ManifestManager runs a `ReapStalePendingMetadataStep` on every polling cycle. Any Metadata that has been in `Pending` state longer than `StalePendingTimeout` (default: 20 minutes) is automatically marked as `Failed`. This catches edge cases where immediate failure handling also fails, or where the remote worker received the job but crashed before updating the Metadata.
+2. **Stale pending reaper** — The ManifestManager runs a `ReapStalePendingMetadataStep` on every polling cycle. Any Metadata that has been in `Pending` state longer than `StalePendingTimeout` (default: 20 minutes) is automatically marked as `Failed` with `FailureException = "StalePendingTimeout"` and `FailureStep = "ReapStalePendingMetadataStep"`. This catches edge cases where immediate failure handling also fails, or where the remote worker received the job but crashed before updating the Metadata.
+
+3. **Dead-lettering** — After `MaxRetries` failed attempts, the ManifestManager creates a `DeadLetter` record and marks the manifest as `AwaitingIntervention`. Dead letters can be resolved via the Dashboard or programmatically.
 
 Configure the timeout via the builder API:
 
@@ -432,6 +434,55 @@ Configure the timeout via the builder API:
 Or at runtime via the Dashboard under **Server Settings > Job Settings > Stale Pending Timeout**.
 
 Failed metadata feeds into the normal retry pipeline — if the manifest has retries remaining, the ManifestManager will create a new work queue entry on the next cycle.
+
+### Structured Error Propagation
+
+When a train fails on a remote worker, Trax preserves the full exception context across the HTTP boundary. Both endpoints (`/trax/execute` and `/trax/run`) return structured error responses with:
+
+| Field | Description |
+|-------|-------------|
+| `IsError` | Whether the execution failed |
+| `ErrorMessage` | The error message |
+| `ExceptionType` | The .NET exception type name (e.g., `"InvalidOperationException"`) |
+| `FailureStep` | The train step where the failure occurred (extracted from `TrainExceptionData`) |
+| `StackTrace` | The remote stack trace |
+
+On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. This ensures that `Metadata.AddException()` on the API side correctly parses the failure into `FailureException`, `FailureStep`, `FailureReason`, and `StackTrace` — the same fields you'd see for a locally-executed train failure.
+
+```
+Runner Process                         API Process
+─────────────────                      ───────────────────
+Train fails with exception
+    │
+    ▼
+TraxRequestHandler catches exception
+Extracts: Type, Step, Message, Stack
+    │
+    ▼
+RemoteRunResponse / RemoteJobResponse
+(structured error fields)
+    │
+    ├───── HTTP 200 + JSON body ──────→ HttpRunExecutor / HttpJobSubmitter
+                                        reads response body
+                                            │
+                                            ▼
+                                        Reconstructs TrainException
+                                        with TrainExceptionData JSON
+                                            │
+                                            ▼
+                                        Metadata.AddException() parses
+                                        into structured failure fields
+```
+
+If the HTTP call itself fails (network error, infrastructure 5xx before reaching the endpoint), the error body is read and included in the exception message for debugging — you'll see the HTTP status code and the response body rather than a generic "500 Internal Server Error".
+
+### Debugging Remote Failures
+
+When a remote job fails, check these in order:
+
+1. **Metadata table** — `SELECT failure_exception, failure_step, failure_reason, stack_trace FROM trax.metadata WHERE id = <id>`. These fields are populated from the structured error response.
+2. **Log table** — `SELECT * FROM trax.log WHERE metadata_id = <id> ORDER BY id`. If `AddDataContextLogging()` is enabled on the runner, step-level logs are persisted.
+3. **Stale pending check** — If `failure_exception = 'StalePendingTimeout'`, the runner never started executing. Check runner health, network connectivity, and deployment status.
 
 ## Limitations
 
