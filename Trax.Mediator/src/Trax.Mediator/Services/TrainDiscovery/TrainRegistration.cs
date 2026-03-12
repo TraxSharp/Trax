@@ -41,6 +41,14 @@ public class TrainRegistration
     public required bool IsBroadcastEnabled { get; init; }
 
     /// <summary>
+    /// Whether this train should be dispatched to a remote worker when one is configured.
+    /// True when the implementation class has a <see cref="TraxRemoteAttribute"/>.
+    /// If no remote submitter is configured, this is silently ignored and the train runs locally.
+    /// Builder-level routing via <c>ForTrain&lt;T&gt;()</c> takes precedence over this attribute.
+    /// </summary>
+    public required bool IsRemote { get; init; }
+
+    /// <summary>
     /// GraphQL field name override from <see cref="TraxQueryAttribute.Name"/> or
     /// <see cref="TraxMutationAttribute.Name"/>.
     /// Null means the TypeModule derives the name automatically.

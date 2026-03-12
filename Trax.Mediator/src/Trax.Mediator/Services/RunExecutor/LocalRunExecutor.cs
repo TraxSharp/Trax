@@ -56,6 +56,6 @@ public class LocalRunExecutor(ITrainBus trainBus, IDataContextProviderFactory da
 
         object? output = outputType == typeof(Unit) ? null : ((dynamic)task).Result;
 
-        return new RunTrainResult(metadata.Id, output);
+        return new RunTrainResult(metadata.Id, metadata.ExternalId, output);
     }
 }

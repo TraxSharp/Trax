@@ -39,4 +39,4 @@ public interface ITrainExecutionService
 
 public record QueueTrainResult(long WorkQueueId, string ExternalId);
 
-public record RunTrainResult(long MetadataId, object? Output = null);
+public record RunTrainResult(long MetadataId, string ExternalId, object? Output = null);

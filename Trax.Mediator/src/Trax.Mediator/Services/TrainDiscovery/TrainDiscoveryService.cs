@@ -51,6 +51,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             var (policies, roles) = GetAuthorizationRequirements(implementationType);
             var graphql = GetGraphQLMetadata(implementationType);
             var broadcastEnabled = HasBroadcastAttribute(implementationType);
+            var isRemote = HasRemoteAttribute(implementationType);
 
             registrations.Add(
                 new TrainRegistration
@@ -69,6 +70,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     IsQuery = graphql.IsQuery,
                     IsMutation = graphql.IsMutation,
                     IsBroadcastEnabled = broadcastEnabled,
+                    IsRemote = isRemote,
                     GraphQLName = graphql.Name,
                     GraphQLDescription = graphql.Description,
                     GraphQLDeprecationReason = graphql.DeprecationReason,
@@ -91,6 +93,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 var (policies, roles) = GetAuthorizationRequirements(implType);
                 var graphql = GetGraphQLMetadata(implType);
                 var broadcastEnabled = HasBroadcastAttribute(implType);
+                var isRemote = HasRemoteAttribute(implType);
 
                 return new TrainRegistration
                 {
@@ -109,6 +112,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     IsQuery = graphql.IsQuery,
                     IsMutation = graphql.IsMutation,
                     IsBroadcastEnabled = broadcastEnabled,
+                    IsRemote = isRemote,
                     GraphQLName = graphql.Name,
                     GraphQLDescription = graphql.Description,
                     GraphQLDeprecationReason = graphql.DeprecationReason,
@@ -198,6 +202,9 @@ public class TrainDiscoveryService : ITrainDiscoveryService
 
     private static bool HasBroadcastAttribute(Type implementationType) =>
         implementationType.GetCustomAttribute<TraxBroadcastAttribute>() is not null;
+
+    private static bool HasRemoteAttribute(Type implementationType) =>
+        implementationType.GetCustomAttribute<TraxRemoteAttribute>() is not null;
 
     private static string GetFriendlyTypeName(Type type)
     {

@@ -47,16 +47,17 @@ public class TrainExecutionServiceTests
     [Test]
     public void RunTrainResult_DefaultOutput_IsNull()
     {
-        var result = new RunTrainResult(42);
+        var result = new RunTrainResult(42, "ext-42");
         result.Output.Should().BeNull();
         result.MetadataId.Should().Be(42);
+        result.ExternalId.Should().Be("ext-42");
     }
 
     [Test]
     public void RunTrainResult_WithOutput_CarriesOutput()
     {
         var output = new TypedExecOutput { Value = "hello", Count = 7 };
-        var result = new RunTrainResult(99, output);
+        var result = new RunTrainResult(99, "ext-99", output);
 
         result.MetadataId.Should().Be(99);
         result.Output.Should().BeSameAs(output);
@@ -65,23 +66,23 @@ public class TrainExecutionServiceTests
     [Test]
     public void RunTrainResult_WithNullOutput_ExplicitNull()
     {
-        var result = new RunTrainResult(1, null);
+        var result = new RunTrainResult(1, "ext-1", null);
         result.Output.Should().BeNull();
     }
 
     [Test]
     public void RunTrainResult_RecordEquality_SameValues()
     {
-        var a = new RunTrainResult(10);
-        var b = new RunTrainResult(10);
+        var a = new RunTrainResult(10, "ext-10");
+        var b = new RunTrainResult(10, "ext-10");
         a.Should().Be(b);
     }
 
     [Test]
     public void RunTrainResult_RecordEquality_DifferentMetadataId()
     {
-        var a = new RunTrainResult(10);
-        var b = new RunTrainResult(20);
+        var a = new RunTrainResult(10, "ext-10");
+        var b = new RunTrainResult(20, "ext-20");
         a.Should().NotBe(b);
     }
 
@@ -89,8 +90,8 @@ public class TrainExecutionServiceTests
     public void RunTrainResult_RecordEquality_SameOutputReference()
     {
         var output = new TypedExecOutput { Value = "x", Count = 1 };
-        var a = new RunTrainResult(10, output);
-        var b = new RunTrainResult(10, output);
+        var a = new RunTrainResult(10, "ext-10", output);
+        var b = new RunTrainResult(10, "ext-10", output);
         a.Should().Be(b);
     }
 
@@ -114,6 +115,7 @@ public class TrainExecutionServiceTests
 
         // Assert
         result.MetadataId.Should().BeGreaterThan(0);
+        result.ExternalId.Should().NotBeNullOrEmpty();
         result.Output.Should().NotBeNull();
         result.Output.Should().BeOfType<TypedExecOutput>();
 
@@ -138,6 +140,7 @@ public class TrainExecutionServiceTests
 
         // Assert
         result.MetadataId.Should().BeGreaterThan(0);
+        result.ExternalId.Should().NotBeNullOrEmpty();
         result.Output.Should().BeNull("Unit trains should have null output");
     }
 

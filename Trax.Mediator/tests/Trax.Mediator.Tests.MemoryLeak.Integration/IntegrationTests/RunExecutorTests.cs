@@ -308,7 +308,7 @@ public class RunExecutorTests
             object input,
             Type outputType,
             CancellationToken ct = default
-        ) => Task.FromResult(new RunTrainResult(99999, "fake-output"));
+        ) => Task.FromResult(new RunTrainResult(99999, "fake-ext", "fake-output"));
     }
 
     #endregion
