@@ -99,7 +99,7 @@ Inside the `AddEffects()` callback, data provider methods return a more specific
 
 | Type | Returned By | Exposes |
 |------|-------------|---------|
-| `TraxEffectBuilder` | `AddEffects()` lambda | `UsePostgres()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddStepLogger()`, `AddStepProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()` |
+| `TraxEffectBuilder` | `AddEffects()` lambda | `SkipMigrations()`, `UsePostgres()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddStepLogger()`, `AddStepProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()` |
 | `TraxEffectBuilderWithData` | `UsePostgres()`, `UseInMemory()` | Everything on `TraxEffectBuilder` plus `AddDataContextLogging()` |
 
 Generic effect methods (`AddJson`, `SaveTrainParameters`, `AddStepLogger`, `AddStepProgress`, `SetEffectLogLevel`, `UseBroadcaster`) preserve the concrete builder type through chaining — if you start with `TraxEffectBuilderWithData`, it stays `TraxEffectBuilderWithData`.
@@ -175,6 +175,7 @@ These properties can be set directly on the `TraxEffectBuilder`:
 
 | Method | Description |
 |--------|-------------|
+| [SkipMigrations]({{ site.baseurl }}{% link sdk-reference/configuration/skip-migrations.md %}) | Disables automatic database migration in `UsePostgres()` for Lambda/serverless environments |
 | [UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}) | Adds PostgreSQL database support for metadata persistence |
 | [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %}) | Adds in-memory database support for testing/development |
 | [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %}) | Enables logging for database operations |

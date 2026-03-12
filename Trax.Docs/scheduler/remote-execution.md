@@ -157,6 +157,7 @@ public class Function : TraxLambdaFunction
 
         services.AddTrax(trax => trax
             .AddEffects(effects => effects
+                .SkipMigrations() // Migrations run separately (API/CI) — skip for faster cold starts
                 .UsePostgres(connString)
                 .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnString)))
             .AddMediator(typeof(MyTrain).Assembly));
@@ -394,6 +395,12 @@ app.UseTraxJobRunner("/trax/execute").RequireAuthorization();
 ```
 
 This keeps Trax focused on scheduling and execution while letting you use whatever auth strategy your infrastructure requires — API keys, JWT tokens, mTLS, IAM roles, or nothing at all.
+
+## Host Tracking
+
+Every metadata record automatically captures which host executed the train — hostname, environment type (Lambda, ECS, Kubernetes, etc.), and instance ID. This works across all deployment models with zero configuration. You can also add custom labels (region, service, team) via the builder API.
+
+See [Host Tracking]({{ site.baseurl }}{% link effect/host-tracking.md %}) for details on auto-detection, custom labels, and querying by host.
 
 ## Shared Requirements
 
