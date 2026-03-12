@@ -24,9 +24,9 @@ dotnet add package Trax.Api.GraphQL
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddTraxEffects(options => options
-    .AddServiceTrainBus(typeof(Program).Assembly)
-    .AddPostgresEffect(connectionString)
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(typeof(Program).Assembly)
 );
 
 builder.Services.AddTraxGraphQL();
