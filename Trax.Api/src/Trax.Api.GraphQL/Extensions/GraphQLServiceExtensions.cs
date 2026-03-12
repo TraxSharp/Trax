@@ -2,6 +2,7 @@ using HotChocolate.Types;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Extensions;
+using Trax.Api.GraphQL.Errors;
 using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
@@ -50,6 +51,7 @@ public static class GraphQLServiceExtensions
             .AddType<ObjectType<OperationsQueries>>()
             .AddType<TrainLifecycleEventType>()
             .AddTypeModule<TrainTypeModule>()
+            .AddErrorFilter<TraxErrorFilter>()
             .AddInMemorySubscriptions();
 
         // If a broadcaster receiver is registered (via UseBroadcaster()),
