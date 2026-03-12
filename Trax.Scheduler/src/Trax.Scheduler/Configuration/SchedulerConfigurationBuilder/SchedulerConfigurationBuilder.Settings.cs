@@ -47,6 +47,21 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
+    /// Sets the maximum number of work queue entries dispatched concurrently per polling cycle.
+    /// </summary>
+    /// <param name="maxConcurrent">The concurrency limit (minimum: 1, default: 1)</param>
+    /// <returns>The builder for method chaining</returns>
+    /// <remarks>
+    /// Useful when using <see cref="UseRemoteWorkers"/> where each dispatch blocks on an
+    /// HTTP POST until the remote endpoint completes. For local workers, this has minimal impact.
+    /// </remarks>
+    public SchedulerConfigurationBuilder MaxConcurrentDispatch(int maxConcurrent)
+    {
+        _configuration.MaxConcurrentDispatch = Math.Max(1, maxConcurrent);
+        return this;
+    }
+
+    /// <summary>
     /// Sets the maximum number of active jobs (Pending + InProgress) allowed across all manifests.
     /// </summary>
     /// <param name="maxJobs">The maximum active jobs (default: 100, null = unlimited)</param>

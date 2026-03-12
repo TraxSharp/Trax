@@ -22,13 +22,18 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
 /// using <c>FOR UPDATE SKIP LOCKED</c> to atomically claim the work queue entry.
 /// This ensures safe concurrent dispatch across multiple server instances.
 ///
+/// When <see cref="SchedulerConfiguration.MaxConcurrentDispatch"/> is greater than 1,
+/// entries are dispatched in parallel using a <see cref="SemaphoreSlim"/> to bound concurrency.
+/// This is useful for <c>UseRemoteWorkers()</c> where each dispatch blocks on an HTTP POST.
+///
 /// When <see cref="JobSubmitterRoutingConfiguration"/> is registered, the step resolves
 /// the correct submitter per train based on builder routing or [TraxRemote] attributes.
 /// </remarks>
 internal class DispatchJobsStep(
     IServiceProvider serviceProvider,
     ILogger<DispatchJobsStep> logger,
-    JobSubmitterRoutingConfiguration routingConfiguration
+    JobSubmitterRoutingConfiguration routingConfiguration,
+    SchedulerConfiguration schedulerConfiguration
 ) : EffectStep<List<WorkQueue>, Unit>
 {
     public override async Task<Unit> Run(List<WorkQueue> entries)
@@ -38,24 +43,60 @@ internal class DispatchJobsStep(
 
         logger.LogDebug("Starting DispatchJobsStep for {EntryCount} entries", entries.Count);
 
-        foreach (var entry in entries)
-        {
-            try
-            {
-                var dispatched = await TryClaimAndDispatchAsync(entry);
+        var maxConcurrent = schedulerConfiguration.MaxConcurrentDispatch;
 
-                if (dispatched)
-                    jobsDispatched++;
-            }
-            catch (Exception ex)
+        if (maxConcurrent <= 1)
+        {
+            foreach (var entry in entries)
             {
-                logger.LogError(
-                    ex,
-                    "Error dispatching work queue entry {WorkQueueId} (train: {TrainName})",
-                    entry.Id,
-                    entry.TrainName
-                );
+                try
+                {
+                    var dispatched = await TryClaimAndDispatchAsync(entry);
+
+                    if (dispatched)
+                        jobsDispatched++;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(
+                        ex,
+                        "Error dispatching work queue entry {WorkQueueId} (train: {TrainName})",
+                        entry.Id,
+                        entry.TrainName
+                    );
+                }
             }
+        }
+        else
+        {
+            using var semaphore = new SemaphoreSlim(maxConcurrent, maxConcurrent);
+
+            var tasks = entries.Select(async entry =>
+            {
+                await semaphore.WaitAsync(CancellationToken);
+                try
+                {
+                    var dispatched = await TryClaimAndDispatchAsync(entry);
+
+                    if (dispatched)
+                        Interlocked.Increment(ref jobsDispatched);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(
+                        ex,
+                        "Error dispatching work queue entry {WorkQueueId} (train: {TrainName})",
+                        entry.Id,
+                        entry.TrainName
+                    );
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
         }
 
         var duration = DateTime.UtcNow - dispatchStartTime;

@@ -49,6 +49,21 @@ public class SchedulerConfiguration
     public TimeSpan JobDispatcherPollingInterval { get; set; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
+    /// The maximum number of work queue entries dispatched concurrently within a single
+    /// JobDispatcher polling cycle.
+    /// </summary>
+    /// <remarks>
+    /// Controls how many entries <see cref="Trains.JobDispatcher.Steps.DispatchJobsStep"/>
+    /// processes in parallel. Useful when using <c>UseRemoteWorkers()</c> where each dispatch
+    /// is an HTTP POST that blocks until the remote endpoint completes — without this, entries
+    /// are dispatched sequentially, and cycle duration scales linearly with entry count.
+    /// For local workers (<c>PostgresJobSubmitter</c>), this has minimal impact since database
+    /// INSERT returns in microseconds.
+    /// Set to 1 for sequential dispatch (default, backward compatible).
+    /// </remarks>
+    public int MaxConcurrentDispatch { get; set; } = 1;
+
+    /// <summary>
     /// The maximum number of active jobs (Pending + InProgress Metadata) allowed across all manifests.
     /// </summary>
     /// <remarks>
