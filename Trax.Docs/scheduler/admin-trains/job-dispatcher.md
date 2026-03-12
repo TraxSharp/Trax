@@ -56,6 +56,35 @@ For each successfully claimed entry, the dispatcher:
 
 Each entry is processed in its own DI scope with a fresh `IDataContext`. If any individual entry fails (type resolution, serialization, database error), its transaction is rolled back, the error is logged, and the loop continues to the next entry. One bad entry doesn't affect the rest of the queue.
 
+## Parallel Dispatch
+
+By default, `DispatchJobsStep` processes entries sequentially — one `TryClaimAndDispatchAsync` at a time. This is optimal for local workers where `EnqueueAsync` is a fast database INSERT. But when using `UseRemoteWorkers()`, each dispatch is an HTTP POST that blocks until the remote endpoint finishes executing the train. Sequential dispatch in this scenario means cycle duration scales linearly with the number of entries.
+
+`MaxConcurrentDispatch` controls how many entries are dispatched in parallel within a single polling cycle:
+
+```csharp
+.AddScheduler(scheduler => scheduler
+    .MaxConcurrentDispatch(10)
+    .UseRemoteWorkers(
+        remote => remote.BaseUrl = "https://my-workers.example.com/trax/execute",
+        routing => routing.ForTrain<IHeavyComputeTrain>())
+)
+```
+
+When `MaxConcurrentDispatch > 1`, the step uses a `SemaphoreSlim` to bound concurrency and `Task.WhenAll` to dispatch entries in parallel. Each entry still gets its own DI scope and database transaction — the `FOR UPDATE SKIP LOCKED` pattern ensures no two concurrent dispatches claim the same entry, even within the same cycle.
+
+| `MaxConcurrentDispatch` | Behavior |
+|-------------------------|----------|
+| `1` (default) | Sequential `foreach` loop — zero overhead, exact backward compatibility |
+| `> 1` | Parallel dispatch bounded by `SemaphoreSlim` — entries are started in priority order but may complete in any order |
+
+**Considerations:**
+- Each concurrent dispatch opens its own database connection. Keep the value well below your connection pool size (default Npgsql pool: 100).
+- Priority ordering within a cycle is best-effort when dispatching in parallel — entries are *started* in priority order, but complete in arbitrary order. This matches the existing behavior in multi-server deployments.
+- Error handling is per-entry: if one dispatch fails (HTTP timeout, network error), the others continue. Failed dispatches mark their Metadata as `Failed` immediately, same as the sequential path.
+
+*SDK Reference: [AddScheduler — MaxConcurrentDispatch]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %})*
+
 ## MaxActiveJobs Enforcement
 
 Capacity is enforced at two independent levels: global and per-group.

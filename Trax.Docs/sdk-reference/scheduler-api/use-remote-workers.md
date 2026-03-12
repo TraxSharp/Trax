@@ -130,6 +130,27 @@ When `UseRemoteWorkers()` is configured, trains marked with `[TraxRemote]` are a
 
 If no `UseRemoteWorkers()` is configured, `[TraxRemote]` is silently ignored — the train runs locally.
 
+## Performance
+
+By default, the JobDispatcher dispatches entries sequentially — one at a time. For local workers (`PostgresJobSubmitter`), this is fine because `EnqueueAsync` just inserts a database row (microseconds). But for `HttpJobSubmitter`, each dispatch blocks until the remote endpoint finishes executing the train. If each Lambda invocation takes 2 seconds and 50 entries are eligible, a single dispatch cycle takes ~100 seconds.
+
+Use `MaxConcurrentDispatch` to parallelize HTTP dispatch:
+
+```csharp
+.AddScheduler(scheduler => scheduler
+    .MaxConcurrentDispatch(10)
+    .UseRemoteWorkers(
+        remote => remote.BaseUrl = "https://my-workers.example.com/trax/execute",
+        routing => routing.ForTrain<IHeavyComputeTrain>())
+)
+```
+
+This dispatches up to 10 entries concurrently within a single polling cycle, bounded by a `SemaphoreSlim`. The `FOR UPDATE SKIP LOCKED` pattern ensures safe concurrent dispatch — no duplicate Metadata records, even with intra-cycle parallelism.
+
+Keep `MaxConcurrentDispatch` well below your database connection pool size (default Npgsql pool: 100), since each concurrent dispatch opens its own DI scope and database connection.
+
+See [Parallel Dispatch]({{ site.baseurl }}{% link scheduler/admin-trains/job-dispatcher.md %}#parallel-dispatch) for details.
+
 ## Routing Precedence
 
 1. **Builder `ForTrain<T>()`** — highest priority

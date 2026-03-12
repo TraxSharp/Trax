@@ -133,6 +133,14 @@ Unlike the ManifestManager, the JobDispatcher benefits from **parallel dispatch*
 
 The `FOR UPDATE SKIP LOCKED` pattern allows fine-grained, per-entry parallelism: multiple servers work through the queue concurrently, each atomically claiming the next available entry. This is the same pattern used by the [LocalWorkerService](job-submission.md#worker-lifecycle) for job execution.
 
+### Intra-Cycle Parallelism
+
+In addition to multi-server parallelism, a single server can dispatch multiple entries concurrently within a single polling cycle via `MaxConcurrentDispatch`. This is particularly important when using `UseRemoteWorkers()`, where each dispatch blocks on an HTTP POST. Without intra-cycle parallelism, dispatching 50 entries at 2 seconds each takes ~100 seconds — blocking the polling service from starting the next cycle.
+
+With `MaxConcurrentDispatch(10)`, the same 50 entries are dispatched in ~10 seconds (5 batches of 10). The `FOR UPDATE SKIP LOCKED` pattern ensures safety — concurrent dispatches within the same cycle cannot claim the same entry, just as concurrent dispatches across servers cannot.
+
+See [JobDispatcher — Parallel Dispatch](admin-trains/job-dispatcher.md#parallel-dispatch) for configuration details.
+
 ### Per-Entry DI Scope
 
 Each entry is dispatched within its own DI scope, following the same pattern as the LocalWorkerService. This provides:
