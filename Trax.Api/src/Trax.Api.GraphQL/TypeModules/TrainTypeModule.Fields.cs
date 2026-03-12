@@ -11,7 +11,7 @@ using Trax.Mediator.Services.TrainExecution;
 namespace Trax.Api.GraphQL.TypeModules;
 
 /// <summary>
-/// Partial containing the GraphQL field builders (query, run, queue)
+/// Partial containing the GraphQL field builders (query, mutation)
 /// and shared resolver helpers.
 /// </summary>
 public partial class TrainTypeModule
@@ -58,75 +58,64 @@ public partial class TrainTypeModule
     }
 
     /// <summary>
-    /// Adds a "run{TrainName}" mutation field that executes the train synchronously.
-    /// Returns a per-train response type (metadataId + output) for typed trains,
-    /// or a generic RunTrainResponse for untyped trains.
+    /// Adds a single mutation field for a train. The field name is camelCase(trainName)
+    /// with no run/queue prefix. Supports optional mode and priority arguments
+    /// depending on the train's GraphQLOperations configuration.
     /// </summary>
-    private static void AddRunField(
+    private static void AddMutationField(
         IObjectTypeDescriptor descriptor,
         TrainRegistration registration,
         string trainName
     )
     {
+        var fieldName = char.ToLowerInvariant(trainName[0]) + trainName[1..];
+
         var field = descriptor
-            .Field($"run{trainName}")
+            .Field(fieldName)
             .Argument("input", a => a.Type(NonNullInputType(registration.InputType)));
 
-        ApplyDescriptionAndDeprecation(field, registration, prefix: "Run");
+        ApplyDescriptionAndDeprecation(field, registration);
 
-        if (HasTypedOutput(registration))
+        var hasRun = registration.GraphQLOperations.HasFlag(GraphQLOperation.Run);
+        var hasQueue = registration.GraphQLOperations.HasFlag(GraphQLOperation.Queue);
+
+        // Add mode argument when both Run and Queue are supported
+        if (hasRun && hasQueue)
         {
-            // Reference the eagerly-created Run{TrainName}Response type by name
-            field
-                .Type(new NamedTypeNode($"Run{trainName}Response"))
-                .Resolve(async ctx => await RunTrainAsync(ctx, registration));
+            field.Argument(
+                "mode",
+                a =>
+                    a.Type(new NamedTypeNode("ExecutionMode"))
+                        .DefaultValue(new EnumValueNode("RUN"))
+            );
+        }
+
+        // Add priority argument when Queue is supported
+        if (hasQueue)
+            field.Argument("priority", a => a.Type<IntType>());
+
+        // Set return type to the per-train response type
+        field.Type(new NamedTypeNode($"{trainName}Response"));
+
+        // Resolver logic depends on the operations configuration
+        if (hasRun && hasQueue)
+        {
+            field.Resolve(async ctx =>
+            {
+                var mode = ctx.ArgumentValue<string>("mode");
+                if (mode == "QUEUE")
+                    return await QueueTrainAsync(ctx, registration);
+                return (object)await RunTrainAsync(ctx, registration);
+            });
+        }
+        else if (hasQueue)
+        {
+            field.Resolve(async ctx => await QueueTrainAsync(ctx, registration));
         }
         else
         {
-            field
-                .Type<NonNullType<ObjectType<RunTrainResponse>>>()
-                .Resolve(async ctx =>
-                {
-                    var result = await RunTrainAsync(ctx, registration);
-                    return new RunTrainResponse(result.MetadataId);
-                });
+            field.Resolve(async ctx => await RunTrainAsync(ctx, registration));
         }
-    }
-
-    /// <summary>
-    /// Adds a "queue{TrainName}" mutation field that enqueues the train for
-    /// asynchronous execution. Always returns QueueTrainResponse (workQueueId + externalId).
-    /// Accepts an optional priority argument (defaults to 0).
-    /// </summary>
-    private static void AddQueueField(
-        IObjectTypeDescriptor descriptor,
-        TrainRegistration registration,
-        string trainName
-    )
-    {
-        var field = descriptor
-            .Field($"queue{trainName}")
-            .Argument("input", a => a.Type(NonNullInputType(registration.InputType)))
-            .Argument("priority", a => a.Type<IntType>());
-
-        ApplyDescriptionAndDeprecation(field, registration, prefix: "Queue");
-
-        field
-            .Type<NonNullType<ObjectType<QueueTrainResponse>>>()
-            .Resolve(async ctx =>
-            {
-                var inputJson = SerializeInput(ctx, registration.InputType);
-                var priority = ctx.ArgumentValue<int?>("priority") ?? 0;
-                var executionService = ctx.Service<ITrainExecutionService>();
-
-                var result = await executionService.QueueAsync(
-                    registration.ServiceTypeName,
-                    inputJson,
-                    priority,
-                    ctx.RequestAborted
-                );
-                return new QueueTrainResponse(result.WorkQueueId, result.ExternalId);
-            });
     }
 
     // ──────────────────────────────────────────────
@@ -152,6 +141,26 @@ public partial class TrainTypeModule
     }
 
     /// <summary>
+    /// Serializes the "input" argument from the resolver context and queues
+    /// the train for async execution via ITrainExecutionService.
+    /// </summary>
+    private static async Task<QueueTrainResult> QueueTrainAsync(
+        IResolverContext ctx,
+        TrainRegistration registration
+    )
+    {
+        var inputJson = SerializeInput(ctx, registration.InputType);
+        var priority = ctx.ArgumentValue<int?>("priority") ?? 0;
+        var executionService = ctx.Service<ITrainExecutionService>();
+        return await executionService.QueueAsync(
+            registration.ServiceTypeName,
+            inputJson,
+            priority,
+            ctx.RequestAborted
+        );
+    }
+
+    /// <summary>
     /// Extracts the "input" argument and serializes it to JSON using the
     /// Trax system serializer options.
     /// </summary>
@@ -166,22 +175,15 @@ public partial class TrainTypeModule
     }
 
     /// <summary>
-    /// Applies GraphQL description and deprecation reason to a field descriptor,
-    /// optionally prefixing the description (e.g. "Run: ..." or "Queue: ...").
+    /// Applies GraphQL description and deprecation reason to a field descriptor.
     /// </summary>
     private static void ApplyDescriptionAndDeprecation(
         IObjectFieldDescriptor field,
-        TrainRegistration registration,
-        string? prefix = null
+        TrainRegistration registration
     )
     {
         if (registration.GraphQLDescription is not null)
-        {
-            var description = prefix is null
-                ? registration.GraphQLDescription
-                : $"{prefix}: {registration.GraphQLDescription}";
-            field.Description(description);
-        }
+            field.Description(registration.GraphQLDescription);
 
         if (registration.GraphQLDeprecationReason is not null)
             field.Deprecated(registration.GraphQLDeprecationReason);

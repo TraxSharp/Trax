@@ -504,6 +504,7 @@ public class GraphQLSubscriptionHookTests
             IsMutation = false,
             IsBroadcastEnabled = subscriptionEnabled,
             GraphQLOperations = GraphQLOperation.Run,
+            IsRemote = false,
         };
     }
 
@@ -528,6 +529,7 @@ public class GraphQLSubscriptionHookTests
             IsMutation = false,
             IsBroadcastEnabled = subscriptionEnabled,
             GraphQLOperations = GraphQLOperation.Run,
+            IsRemote = false,
         };
     }
 

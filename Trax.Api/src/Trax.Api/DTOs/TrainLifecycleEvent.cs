@@ -13,5 +13,7 @@ public record TrainLifecycleEvent(
     DateTime Timestamp,
     string? FailureStep,
     string? FailureReason,
-    string? Output
+    string? Output,
+    string? HostName = null,
+    string? HostEnvironment = null
 );

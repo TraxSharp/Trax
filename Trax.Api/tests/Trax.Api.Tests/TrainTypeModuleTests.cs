@@ -10,12 +10,8 @@ namespace Trax.Api.Tests;
 
 /// <summary>
 /// Tests for TrainTypeModule's CreateTypesAsync — verifies type generation
-/// for typed vs Unit output trains, input/output deduplication, name derivation, etc.
-///
-/// Note: per-train response ObjectTypes are created lazily inside the ObjectTypeExtension
-/// delegate (called by HotChocolate during schema initialization), so they are NOT visible
-/// in the returned IReadOnlyCollection. We test their generation indirectly via type counts
-/// and the presence/absence of ObjectType&lt;TOut&gt; registrations.
+/// for typed vs Unit output trains, input/output deduplication, name derivation,
+/// ExecutionMode enum registration, and per-train response types.
 /// </summary>
 [TestFixture]
 public class TrainTypeModuleTests
@@ -201,7 +197,8 @@ public class TrainTypeModuleTests
             IsQuery = false,
             IsMutation = false,
             IsBroadcastEnabled = false,
-            GraphQLOperations = GraphQLOperation.Run,
+            GraphQLOperations = GraphQLOperation.Run | GraphQLOperation.Queue,
+            IsRemote = false,
         };
         var discovery = new StubDiscoveryService([reg]);
         var module = new TrainTypeModule(discovery);
@@ -246,9 +243,10 @@ public class TrainTypeModuleTests
     #region Type Counts — verifying typed vs Unit train type generation
 
     [Test]
-    public async Task CreateTypesAsync_UnitTrain_GeneratesInputAndExtension()
+    public async Task CreateTypesAsync_UnitTrain_GeneratesInputResponseEnumAndExtension()
     {
-        // Unit train with Run+Queue → InputObjectType<TIn> + ObjectTypeExtension
+        // Unit train with RunAndQueue →
+        // InputObjectType<TIn> + ObjectType (response) + EnumType (ExecutionMode) + ObjectTypeExtension = 4
         var discovery = new StubDiscoveryService([
             CreateRegistration<UnitInput>("UnitTrain", typeof(Unit)),
         ]);
@@ -256,21 +254,24 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        // InputObjectType<UnitInput> + ObjectTypeExtension = 2
-        types.Should().HaveCount(2);
+        types.Should().HaveCount(4);
         types.Should().ContainSingle(t => t is ObjectTypeExtension);
+        types.Should().ContainSingle(t => t is EnumType);
         types
             .Should()
             .ContainSingle(t =>
                 t.GetType().IsGenericType
                 && t.GetType().GetGenericTypeDefinition() == typeof(InputObjectType<>)
             );
+        // Per-train response type
+        GetNonGenericObjectTypes(types).Should().HaveCount(1);
     }
 
     [Test]
-    public async Task CreateTypesAsync_TypedTrain_GeneratesInputOutputResponseAndExtension()
+    public async Task CreateTypesAsync_TypedTrain_GeneratesInputOutputResponseEnumAndExtension()
     {
-        // Typed train → InputObjectType<TIn> + ObjectType<TOut> + ObjectType (response) + ObjectTypeExtension = 4
+        // Typed train with RunAndQueue →
+        // InputObjectType<TIn> + ObjectType<TOut> + ObjectType (response) + EnumType + ObjectTypeExtension = 5
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>("TypedTrain", typeof(TypedOutput)),
         ]);
@@ -278,8 +279,9 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        types.Should().HaveCount(4);
+        types.Should().HaveCount(5);
         types.Should().ContainSingle(t => t is ObjectTypeExtension);
+        types.Should().ContainSingle(t => t is EnumType);
         types
             .Should()
             .ContainSingle(t =>
@@ -299,9 +301,9 @@ public class TrainTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_MixedTrains_CorrectTypeCount()
     {
-        // 1 typed + 1 Unit, different input types →
+        // 1 typed + 1 Unit, different input types, both RunAndQueue →
         // InputObjectType<TypedInput> + InputObjectType<UnitInput> + ObjectType<TypedOutput>
-        // + ObjectType (response) + ObjectTypeExtension = 5
+        // + 2x ObjectType (response) + EnumType + ObjectTypeExtension = 7
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
                 "TypedTrain",
@@ -314,7 +316,61 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        types.Should().HaveCount(5);
+        types.Should().HaveCount(7);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_RunOnlyTrain_DoesNotRegisterExecutionModeEnum()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<UnitInput>(
+                "RunOnly",
+                typeof(Unit),
+                name: "RunOnly",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        types.OfType<EnumType>().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_QueueOnlyTrain_DoesNotRegisterExecutionModeEnum()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<UnitInput>(
+                "QueueOnly",
+                typeof(Unit),
+                name: "QueueOnly",
+                operations: GraphQLOperation.Queue
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        types.OfType<EnumType>().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_RunAndQueueTrain_RegistersExecutionModeEnum()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<UnitInput>(
+                "Both",
+                typeof(Unit),
+                name: "Both",
+                operations: GraphQLOperation.Run | GraphQLOperation.Queue
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        types.OfType<EnumType>().Should().HaveCount(1);
     }
 
     #endregion
@@ -449,7 +505,7 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        // Each typed Run train gets its own response ObjectType
+        // Each mutation train gets its own response ObjectType
         GetNonGenericObjectTypes(types).Should().HaveCount(2);
     }
 
@@ -467,13 +523,13 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        // Response ObjectType is created eagerly and included in the returned types
         GetNonGenericObjectTypes(types).Should().HaveCount(1);
     }
 
     [Test]
-    public async Task CreateTypesAsync_UnitOutputTrain_DoesNotCreatePerTrainResponseType()
+    public async Task CreateTypesAsync_UnitOutputTrain_CreatesPerTrainResponseType()
     {
+        // All mutation trains now get a response type (externalId + metadataId/workQueueId)
         var discovery = new StubDiscoveryService([
             CreateRegistration<UnitInput>("UnitTrain", typeof(Unit), name: "Unit"),
         ]);
@@ -481,13 +537,13 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        GetNonGenericObjectTypes(types).Should().BeEmpty();
+        GetNonGenericObjectTypes(types).Should().HaveCount(1);
     }
 
     [Test]
-    public async Task CreateTypesAsync_QueueOnlyTypedTrain_NoResponseType()
+    public async Task CreateTypesAsync_QueueOnlyTypedTrain_CreatesResponseType()
     {
-        // Queue-only trains don't get a per-train response type (queue always returns QueueTrainResponse)
+        // Queue-only trains now get a per-train response type with externalId + workQueueId
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
                 "QueueOnly",
@@ -500,19 +556,19 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        GetNonGenericObjectTypes(types).Should().BeEmpty();
+        GetNonGenericObjectTypes(types).Should().HaveCount(1);
     }
 
     [Test]
     public async Task CreateTypesAsync_RunAndQueueTypedTrain_CreatesOneResponseType()
     {
-        // Run+Queue typed train: response type only for the Run operation
+        // RunAndQueue typed train: single response type with all fields
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
                 "Both",
                 typeof(TypedOutput),
                 name: "Both",
-                operations: GraphQLOperation.RunAndQueue
+                operations: GraphQLOperation.Run | GraphQLOperation.Queue
             ),
         ]);
         var module = new TrainTypeModule(discovery);
@@ -597,7 +653,7 @@ public class TrainTypeModuleTests
     public async Task CreateTypesAsync_QueryTrainWithTypedOutput_TypeCount()
     {
         // Query typed train → InputObjectType<TIn> + ObjectType<TOut> + ObjectTypeExtension = 3
-        // No per-train response type for queries
+        // No per-train response type or ExecutionMode enum for queries
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
                 "LookupTrain",
@@ -644,7 +700,7 @@ public class TrainTypeModuleTests
         string? serviceTypeName = null,
         string? description = null,
         string? deprecationReason = null,
-        GraphQLOperation operations = GraphQLOperation.Run,
+        GraphQLOperation operations = GraphQLOperation.Run | GraphQLOperation.Queue,
         bool isQuery = false
     )
     {
@@ -668,6 +724,7 @@ public class TrainTypeModuleTests
             GraphQLDescription = description,
             GraphQLDeprecationReason = deprecationReason,
             GraphQLOperations = operations,
+            IsRemote = false,
         };
     }
 

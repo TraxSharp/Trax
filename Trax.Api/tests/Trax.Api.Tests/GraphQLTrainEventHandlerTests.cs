@@ -396,6 +396,7 @@ public class GraphQLTrainEventHandlerTests
             IsMutation = false,
             IsBroadcastEnabled = broadcastEnabled,
             GraphQLOperations = GraphQLOperation.Run,
+            IsRemote = false,
         };
     }
 
@@ -419,8 +420,56 @@ public class GraphQLTrainEventHandlerTests
             IsMutation = false,
             IsBroadcastEnabled = broadcastEnabled,
             GraphQLOperations = GraphQLOperation.Run,
+            IsRemote = false,
         };
     }
+
+    #region Host Fields
+
+    [Test]
+    public async Task HandleAsync_MessageWithHostFields_ForwardsHostFieldsToEvent()
+    {
+        var sender = new RecordingTopicEventSender();
+        var handler = CreateHandler(sender, enabledTrainName: "Namespace.MyTrain");
+        var message = new TrainLifecycleEventMessage(
+            MetadataId: 42,
+            ExternalId: "ext-123",
+            TrainName: "Namespace.MyTrain",
+            TrainState: "Completed",
+            Timestamp: new DateTime(2026, 3, 6, 12, 0, 0, DateTimeKind.Utc),
+            FailureStep: null,
+            FailureReason: null,
+            EventType: "Completed",
+            Executor: "RemoteWorker",
+            Output: null,
+            HostName: "lambda-host-42",
+            HostEnvironment: "lambda"
+        );
+
+        await handler.HandleAsync(message, CancellationToken.None);
+
+        sender.Events.Should().ContainSingle();
+        var evt = (TrainLifecycleEvent)sender.Events[0].Message;
+        evt.HostName.Should().Be("lambda-host-42");
+        evt.HostEnvironment.Should().Be("lambda");
+    }
+
+    [Test]
+    public async Task HandleAsync_MessageWithoutHostFields_HostFieldsAreNull()
+    {
+        var sender = new RecordingTopicEventSender();
+        var handler = CreateHandler(sender, enabledTrainName: "Namespace.MyTrain");
+        var message = CreateMessage("Completed", "Completed", "Namespace.MyTrain");
+
+        await handler.HandleAsync(message, CancellationToken.None);
+
+        sender.Events.Should().ContainSingle();
+        var evt = (TrainLifecycleEvent)sender.Events[0].Message;
+        evt.HostName.Should().BeNull();
+        evt.HostEnvironment.Should().BeNull();
+    }
+
+    #endregion
 
     /// <summary>
     /// Minimal Type subclass that returns a controlled FullName for testing the HashSet lookup.

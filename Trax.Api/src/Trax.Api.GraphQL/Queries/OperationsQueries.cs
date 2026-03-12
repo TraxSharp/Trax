@@ -159,7 +159,10 @@ public class OperationsQueries
                 m.FailureStep,
                 m.FailureReason,
                 m.ManifestId,
-                m.CancellationRequested
+                m.CancellationRequested,
+                m.HostName,
+                m.HostEnvironment,
+                m.HostInstanceId
             ))
             .ToListAsync(ct);
 
@@ -187,7 +190,10 @@ public class OperationsQueries
                 m.FailureStep,
                 m.FailureReason,
                 m.ManifestId,
-                m.CancellationRequested
+                m.CancellationRequested,
+                m.HostName,
+                m.HostEnvironment,
+                m.HostInstanceId
             ))
             .FirstOrDefaultAsync(ct);
     }

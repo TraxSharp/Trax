@@ -12,5 +12,8 @@ public record ExecutionSummary(
     string? FailureStep,
     string? FailureReason,
     long? ManifestId,
-    bool CancellationRequested
+    bool CancellationRequested,
+    string? HostName = null,
+    string? HostEnvironment = null,
+    string? HostInstanceId = null
 );

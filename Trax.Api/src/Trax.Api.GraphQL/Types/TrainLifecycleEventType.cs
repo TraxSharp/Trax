@@ -22,6 +22,8 @@ public class TrainLifecycleEventType : ObjectType<TrainLifecycleEvent>
         descriptor.Field(e => e.Timestamp);
         descriptor.Field(e => e.FailureStep);
         descriptor.Field(e => e.FailureReason);
+        descriptor.Field(e => e.HostName);
+        descriptor.Field(e => e.HostEnvironment);
 
         descriptor
             .Field("output")

@@ -71,7 +71,9 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
             Timestamp: message.Timestamp,
             FailureStep: message.FailureStep,
             FailureReason: message.FailureReason,
-            Output: message.Output
+            Output: message.Output,
+            HostName: message.HostName,
+            HostEnvironment: message.HostEnvironment
         );
 
         await _eventSender.SendAsync(topicName, lifecycleEvent, ct);

@@ -60,7 +60,7 @@ For per-train authorization, decorate train classes with `[TraxAuthorize]`:
 
 ```csharp
 [TraxAuthorize("Admin")]
-[TraxMutation(Operations = GraphQLOperation.Run)]
+[TraxMutation(GraphQLOperation.Run)]
 public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrain { ... }
 ```
 

@@ -1,7 +1,6 @@
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
 using HotChocolate.Types.Descriptors;
-using Trax.Api.DTOs;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -11,7 +10,7 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// <summary>
 /// A HotChocolate TypeModule that dynamically generates GraphQL queries and mutations
 /// from discovered train registrations. Each train marked with [TraxMutation]/[TraxQuery] attributes
-/// gets corresponding query/mutation fields wired to the TrainExecutionService.
+/// gets a corresponding mutation/query field wired to the TrainExecutionService.
 /// </summary>
 public partial class TrainTypeModule(ITrainDiscoveryService discoveryService) : TypeModule
 {
@@ -19,7 +18,8 @@ public partial class TrainTypeModule(ITrainDiscoveryService discoveryService) : 
     /// Discovers all registered trains and generates the GraphQL schema types:
     /// - InputObjectType for each unique input type
     /// - ObjectType for each unique typed output
-    /// - Per-train response types for mutations with typed output (e.g. RunCreatePlayerResponse)
+    /// - Per-train response types for mutations (e.g. CreatePlayerResponse)
+    /// - ExecutionMode enum type (when any train supports both Run and Queue)
     /// - ObjectTypeExtension on "DispatchMutations" / "DiscoverQueries" to add fields
     /// </summary>
     public override ValueTask<IReadOnlyCollection<ITypeSystemMember>> CreateTypesAsync(
@@ -34,6 +34,7 @@ public partial class TrainTypeModule(ITrainDiscoveryService discoveryService) : 
         var usedOutputTypes = new HashSet<Type>();
         var mutationFields = new List<(TrainRegistration Registration, string TrainName)>();
         var queryFields = new List<(TrainRegistration Registration, string TrainName)>();
+        var needsExecutionModeEnum = false;
 
         foreach (var reg in registrations)
         {
@@ -71,16 +72,24 @@ public partial class TrainTypeModule(ITrainDiscoveryService discoveryService) : 
             }
             else
             {
-                // Eagerly create a response wrapper type for Run mutations with typed output
-                // (e.g. "RunCreatePlayerResponse" with metadataId + output fields)
-                if (HasTypedOutput(reg) && reg.GraphQLOperations.HasFlag(GraphQLOperation.Run))
-                    types.Add(BuildRunResponseType(trainName, reg.OutputType));
+                // Every mutation train gets a response type
+                types.Add(BuildResponseType(trainName, reg));
+
+                if (
+                    reg.GraphQLOperations.HasFlag(GraphQLOperation.Run)
+                    && reg.GraphQLOperations.HasFlag(GraphQLOperation.Queue)
+                )
+                    needsExecutionModeEnum = true;
 
                 mutationFields.Add((reg, trainName));
             }
         }
 
-        // Extend the root mutation type with run*/queue* fields for each mutation train
+        // Register ExecutionMode enum if any train supports both modes
+        if (needsExecutionModeEnum)
+            types.Add(BuildExecutionModeEnumType());
+
+        // Extend the root mutation type with fields for each mutation train
         if (mutationFields.Count > 0)
         {
             types.Add(
@@ -88,13 +97,7 @@ public partial class TrainTypeModule(ITrainDiscoveryService discoveryService) : 
                 {
                     d.Name("DispatchMutations");
                     foreach (var (reg, name) in mutationFields)
-                    {
-                        if (reg.GraphQLOperations.HasFlag(GraphQLOperation.Run))
-                            AddRunField(d, reg, name);
-
-                        if (reg.GraphQLOperations.HasFlag(GraphQLOperation.Queue))
-                            AddQueueField(d, reg, name);
-                    }
+                        AddMutationField(d, reg, name);
                 })
             );
         }
@@ -116,26 +119,62 @@ public partial class TrainTypeModule(ITrainDiscoveryService discoveryService) : 
     }
 
     /// <summary>
-    /// Builds a response wrapper ObjectType for Run mutations that have typed output.
-    /// The generated type has two fields: metadataId (Long!) and output (OutputType!).
+    /// Builds the ExecutionMode enum type with RUN and QUEUE values.
     /// </summary>
-    private static ObjectType BuildRunResponseType(string trainName, Type outputType)
+    private static EnumType BuildExecutionModeEnumType()
     {
-        var responseTypeName = $"Run{trainName}Response";
+        return new EnumType(d =>
+        {
+            d.Name("ExecutionMode");
+            d.Description("Controls how a train mutation is executed.");
+            d.Value("RUN").Description("Execute synchronously and return the result.");
+            d.Value("QUEUE").Description("Queue for asynchronous execution via the scheduler.");
+        });
+    }
+
+    /// <summary>
+    /// Builds a response ObjectType for a mutation train. The response always includes
+    /// externalId (non-null). Other fields (metadataId, output, workQueueId) are nullable
+    /// and populated based on the execution mode.
+    /// </summary>
+    private static ObjectType BuildResponseType(string trainName, TrainRegistration registration)
+    {
+        var responseTypeName = $"{trainName}Response";
+        var hasTypedOutput = HasTypedOutput(registration);
 
         return new ObjectType(d =>
         {
             d.Name(responseTypeName);
+
+            d.Field("externalId")
+                .Type<NonNullType<StringType>>()
+                .Resolve(ctx =>
+                    ctx.Parent<object>() switch
+                    {
+                        RunTrainResult r => r.ExternalId,
+                        QueueTrainResult q => q.ExternalId,
+                        _ => throw new InvalidOperationException("Unexpected parent type"),
+                    }
+                );
+
             d.Field("metadataId")
-                .Type<NonNullType<LongType>>()
-                .Resolve(ctx => ((RunTrainResult)ctx.Parent<object>()).MetadataId);
-            d.Field("output")
-                .Type(
-                    typeof(NonNullType<>).MakeGenericType(
-                        typeof(ObjectType<>).MakeGenericType(outputType)
-                    )
-                )
-                .Resolve(ctx => ((RunTrainResult)ctx.Parent<object>()).Output);
+                .Type<LongType>()
+                .Resolve(ctx =>
+                    ctx.Parent<object>() is RunTrainResult r ? (long?)r.MetadataId : null
+                );
+
+            d.Field("workQueueId")
+                .Type<LongType>()
+                .Resolve(ctx =>
+                    ctx.Parent<object>() is QueueTrainResult q ? (long?)q.WorkQueueId : null
+                );
+
+            if (hasTypedOutput)
+            {
+                d.Field("output")
+                    .Type(typeof(ObjectType<>).MakeGenericType(registration.OutputType))
+                    .Resolve(ctx => ctx.Parent<object>() is RunTrainResult r ? r.Output : null);
+            }
         });
     }
 
