@@ -4,6 +4,7 @@ using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
 
@@ -92,67 +93,6 @@ public class SchedulerBuilderValidationTests
 
     #endregion
 
-    #region UseLocalWorkers requires UsePostgres
-
-    [Test]
-    public void UseLocalWorkers_WithInMemory_ThrowsWithHelpfulMessage()
-    {
-        // UseInMemory does NOT set HasDatabaseProvider — only UsePostgres does.
-        var services = new ServiceCollection();
-        services.AddLogging();
-
-        var act = () =>
-            services.AddTrax(trax =>
-                trax.AddEffects(effects => effects.UseInMemory())
-                    .AddMediator(typeof(AssemblyMarker).Assembly)
-                    .AddScheduler(scheduler => scheduler.UseLocalWorkers())
-            );
-
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*UseLocalWorkers()*")
-            .WithMessage("*UsePostgres()*");
-    }
-
-    [Test]
-    public void UseLocalWorkers_WithPostgres_DoesNotThrow()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-
-        var act = () =>
-            services.AddTrax(trax =>
-                trax.AddEffects(effects => effects.UsePostgres(ConnectionString))
-                    .AddMediator(typeof(AssemblyMarker).Assembly)
-                    .AddScheduler(scheduler => scheduler.UseLocalWorkers())
-            );
-
-        act.Should().NotThrow();
-    }
-
-    [Test]
-    public void UseLocalWorkers_ErrorMessage_ContainsCodeExample()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-
-        var act = () =>
-            services.AddTrax(trax =>
-                trax.AddEffects(effects => effects.UseInMemory())
-                    .AddMediator(typeof(AssemblyMarker).Assembly)
-                    .AddScheduler(scheduler => scheduler.UseLocalWorkers())
-            );
-
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*services.AddTrax*")
-            .WithMessage("*.AddEffects*")
-            .WithMessage("*.UsePostgres(connectionString)*")
-            .WithMessage("*.AddScheduler*");
-    }
-
-    #endregion
-
     #region Other submitters require data provider but not Postgres
 
     [Test]
@@ -166,7 +106,10 @@ public class SchedulerBuilderValidationTests
                 trax.AddEffects(effects => effects.UseInMemory())
                     .AddMediator(typeof(AssemblyMarker).Assembly)
                     .AddScheduler(scheduler =>
-                        scheduler.UseRemoteWorkers(o => o.BaseUrl = "http://localhost:5000")
+                        scheduler.UseRemoteWorkers(
+                            o => o.BaseUrl = "http://localhost:5000",
+                            routing => routing.ForTrain<ITestTrain>()
+                        )
                     )
             );
 
@@ -194,4 +137,89 @@ public class SchedulerBuilderValidationTests
     }
 
     #endregion
+
+    #region Duplicate train routing validation
+
+    [Test]
+    public void UseRemoteWorkers_DuplicateTrainAcrossSubmitters_ThrowsAtBuildTime()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        var act = () =>
+            services.AddTrax(trax =>
+                trax.AddEffects(effects => effects.UseInMemory())
+                    .AddMediator(typeof(AssemblyMarker).Assembly)
+                    .AddScheduler(scheduler =>
+                        scheduler
+                            .UseRemoteWorkers(
+                                o => o.BaseUrl = "http://endpoint-a",
+                                routing => routing.ForTrain<ITestTrain>()
+                            )
+                            .UseRemoteWorkers(
+                                o => o.BaseUrl = "http://endpoint-b",
+                                routing => routing.ForTrain<ITestTrain>()
+                            )
+                    )
+            );
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*routed to multiple submitters*")
+            .WithMessage("*ForTrain*");
+    }
+
+    [Test]
+    public void UseRemoteWorkers_DifferentTrainsAcrossSubmitters_DoesNotThrow()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        var act = () =>
+            services.AddTrax(trax =>
+                trax.AddEffects(effects => effects.UseInMemory())
+                    .AddMediator(typeof(AssemblyMarker).Assembly)
+                    .AddScheduler(scheduler =>
+                        scheduler
+                            .UseRemoteWorkers(
+                                o => o.BaseUrl = "http://endpoint-a",
+                                routing => routing.ForTrain<ITestTrain>()
+                            )
+                            .UseRemoteWorkers(
+                                o => o.BaseUrl = "http://endpoint-b",
+                                routing => routing.ForTrain<ITestTrainB>()
+                            )
+                    )
+            );
+
+        act.Should().NotThrow();
+    }
+
+    #endregion
+
+    #region ConfigureLocalWorkers
+
+    [Test]
+    public void ConfigureLocalWorkers_WithPostgres_RegistersCustomOptions()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UsePostgres(ConnectionString))
+                .AddMediator(typeof(AssemblyMarker).Assembly)
+                .AddScheduler(scheduler =>
+                    scheduler.ConfigureLocalWorkers(opts => opts.WorkerCount = 8)
+                )
+        );
+
+        var options = services.BuildServiceProvider().GetService<LocalWorkerOptions>();
+        options.Should().NotBeNull();
+        options!.WorkerCount.Should().Be(8);
+    }
+
+    #endregion
 }
+
+internal interface ITestTrain { }
+
+internal interface ITestTrainB { }

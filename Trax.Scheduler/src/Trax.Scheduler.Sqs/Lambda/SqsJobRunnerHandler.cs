@@ -2,10 +2,8 @@ using System.Text.Json;
 using Amazon.Lambda.SQSEvents;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Trax.Effect.Utils;
 using Trax.Scheduler.Services.JobSubmitter;
-using Trax.Scheduler.Trains.JobRunner;
-using Trax.Scheduler.Utilities;
+using Trax.Scheduler.Services.RequestHandler;
 
 namespace Trax.Scheduler.Sqs.Lambda;
 
@@ -13,8 +11,8 @@ namespace Trax.Scheduler.Sqs.Lambda;
 /// AWS Lambda handler that processes SQS messages containing <see cref="RemoteJobRequest"/> payloads.
 /// </summary>
 /// <remarks>
-/// Each SQS record is deserialized as a <see cref="RemoteJobRequest"/> and run through
-/// <see cref="IJobRunnerTrain"/>. Exceptions are re-thrown so that Lambda marks the message
+/// Each SQS record is deserialized as a <see cref="RemoteJobRequest"/> and executed via
+/// <see cref="ITraxRequestHandler"/>. Exceptions are re-thrown so that Lambda marks the message
 /// as failed, allowing SQS retry and dead-letter queue policies to apply.
 ///
 /// Usage in a Lambda function:
@@ -37,7 +35,7 @@ namespace Trax.Scheduler.Sqs.Lambda;
 public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
 {
     /// <summary>
-    /// Processes all SQS records in the event, running each through <see cref="IJobRunnerTrain"/>.
+    /// Processes all SQS records in the event, running each through <see cref="ITraxRequestHandler"/>.
     /// </summary>
     /// <param name="sqsEvent">The SQS event containing one or more records</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -57,24 +55,8 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
                         "Failed to deserialize SQS message body as RemoteJobRequest."
                     );
 
-                object? deserializedInput = null;
-                if (request.Input is not null && request.InputType is not null)
-                {
-                    var type = TypeResolver.ResolveType(request.InputType);
-                    deserializedInput = JsonSerializer.Deserialize(
-                        request.Input,
-                        type,
-                        TraxJsonSerializationOptions.ManifestProperties
-                    );
-                }
-
-                var train = sp.GetRequiredService<IJobRunnerTrain>();
-
-                var jobRequest = deserializedInput is not null
-                    ? new RunJobRequest(request.MetadataId, deserializedInput)
-                    : new RunJobRequest(request.MetadataId);
-
-                await train.Run(jobRequest, cancellationToken);
+                var handler = sp.GetRequiredService<ITraxRequestHandler>();
+                await handler.ExecuteJobAsync(request, cancellationToken);
             }
             catch (Exception ex)
             {

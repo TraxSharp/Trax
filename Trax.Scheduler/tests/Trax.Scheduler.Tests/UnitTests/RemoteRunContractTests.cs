@@ -116,8 +116,18 @@ public class RemoteRunContractTests
     [Test]
     public void RemoteRunResponse_RecordEquality()
     {
-        var a = new RemoteRunResponse(42, "json", "type");
-        var b = new RemoteRunResponse(42, "json", "type");
+        var a = new RemoteRunResponse(
+            42,
+            ExternalId: "ext-42",
+            OutputJson: "json",
+            OutputType: "type"
+        );
+        var b = new RemoteRunResponse(
+            42,
+            ExternalId: "ext-42",
+            OutputJson: "json",
+            OutputType: "type"
+        );
         a.Should().Be(b);
     }
 

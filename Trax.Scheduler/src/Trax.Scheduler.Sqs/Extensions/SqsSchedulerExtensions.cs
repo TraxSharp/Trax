@@ -13,10 +13,16 @@ namespace Trax.Scheduler.Sqs.Extensions;
 public static class SqsSchedulerExtensions
 {
     /// <summary>
-    /// Dispatches jobs to an SQS queue for execution by Lambda or another SQS consumer.
+    /// Routes specific trains to an SQS queue for execution by Lambda or another SQS consumer.
     /// </summary>
     /// <remarks>
-    /// Overrides the default <see cref="PostgresJobSubmitter"/> via <see cref="SchedulerConfigurationBuilder.OverrideSubmitter"/>.
+    /// Trains not included in the <paramref name="routing"/> configuration continue to execute
+    /// locally via <c>PostgresJobSubmitter</c> and <c>LocalWorkerService</c>.
+    /// Only the trains specified via <c>ForTrain&lt;T&gt;()</c> are dispatched to SQS.
+    ///
+    /// Trains can also be marked with <c>[TraxRemote]</c> to opt into remote execution without
+    /// explicit <c>ForTrain&lt;T&gt;()</c> routing. Builder routing takes precedence over the attribute.
+    ///
     /// Jobs are sent as JSON messages containing a <see cref="RemoteJobRequest"/> payload.
     /// The consumer runs <c>JobRunnerTrain</c> to execute the train.
     ///
@@ -25,27 +31,39 @@ public static class SqsSchedulerExtensions
     /// </remarks>
     /// <param name="builder">The scheduler configuration builder</param>
     /// <param name="configure">Action to configure the SQS queue URL and client options</param>
+    /// <param name="routing">Action to specify which trains should be dispatched to SQS</param>
     /// <returns>The builder for method chaining</returns>
     public static SchedulerConfigurationBuilder UseSqsWorkers(
         this SchedulerConfigurationBuilder builder,
-        Action<SqsWorkerOptions> configure
+        Action<SqsWorkerOptions> configure,
+        Action<SubmitterRouting> routing
     )
     {
-        builder.OverrideSubmitter(services =>
-        {
-            var options = new SqsWorkerOptions();
-            configure(options);
-            services.AddSingleton(options);
+        var options = new SqsWorkerOptions();
+        configure(options);
 
-            services.AddSingleton<IAmazonSQS>(_ =>
-            {
-                var config = new AmazonSQSConfig();
-                options.ConfigureSqsClient?.Invoke(config);
-                return new AmazonSQSClient(config);
-            });
+        var submitterRouting = new SubmitterRouting();
+        routing(submitterRouting);
 
-            services.AddScoped<IJobSubmitter, SqsJobSubmitter>();
-        });
+        builder.AddRoutedSubmitter(
+            new RoutedSubmitterRegistration(
+                submitterRouting,
+                typeof(SqsJobSubmitter),
+                services =>
+                {
+                    services.AddSingleton(options);
+
+                    services.AddSingleton<IAmazonSQS>(_ =>
+                    {
+                        var config = new AmazonSQSConfig();
+                        options.ConfigureSqsClient?.Invoke(config);
+                        return new AmazonSQSClient(config);
+                    });
+
+                    services.AddScoped<SqsJobSubmitter>();
+                }
+            )
+        );
 
         return builder;
     }

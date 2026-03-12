@@ -1,20 +1,17 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Extensions;
-using Trax.Effect.Utils;
-using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.RequestHandler;
 using Trax.Scheduler.Services.RunExecutor;
 using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.JobRunner;
-using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Extensions;
 
@@ -30,7 +27,8 @@ namespace Trax.Scheduler.Extensions;
 public static class JobRunnerExtensions
 {
     /// <summary>
-    /// Registers the minimal DI services needed to run <see cref="JobRunnerTrain"/>.
+    /// Registers the minimal DI services needed to run <see cref="JobRunnerTrain"/>,
+    /// including <see cref="ITraxRequestHandler"/> for hosting-agnostic request handling.
     /// </summary>
     /// <remarks>
     /// This registers only the execution pipeline — no scheduling, no dispatching, no polling.
@@ -57,6 +55,9 @@ public static class JobRunnerExtensions
         // JobRunnerTrain (uses AddScopedTraxRoute for property injection)
         services.AddScopedTraxRoute<IJobRunnerTrain, JobRunnerTrain>();
 
+        // Hosting-agnostic request handler
+        services.AddScoped<ITraxRequestHandler, TraxRequestHandler>();
+
         return services;
     }
 
@@ -67,9 +68,8 @@ public static class JobRunnerExtensions
     /// <param name="route">The route to map (default: "/trax/execute")</param>
     /// <returns>The route handler builder for further configuration (e.g., <c>.RequireAuthorization()</c>)</returns>
     /// <remarks>
-    /// The endpoint receives a <see cref="RemoteJobRequest"/> JSON payload, deserializes the input,
-    /// and runs <see cref="JobRunnerTrain"/> to completion. No authentication is baked in —
-    /// apply your own ASP.NET middleware as needed.
+    /// Delegates to <see cref="ITraxRequestHandler.ExecuteJobAsync"/> for the actual execution.
+    /// No authentication is baked in — apply your own ASP.NET middleware as needed.
     /// </remarks>
     public static RouteHandlerBuilder UseTraxJobRunner(
         this IEndpointRouteBuilder endpoints,
@@ -78,32 +78,16 @@ public static class JobRunnerExtensions
     {
         return endpoints.MapPost(
             route,
-            async (RemoteJobRequest request, IServiceProvider sp) =>
+            async (
+                RemoteJobRequest request,
+                ITraxRequestHandler handler,
+                ILogger<JobRunnerTrain> logger
+            ) =>
             {
-                var logger = sp.GetRequiredService<ILogger<JobRunnerTrain>>();
-
                 try
                 {
-                    object? deserializedInput = null;
-                    if (request.Input is not null && request.InputType is not null)
-                    {
-                        var type = TypeResolver.ResolveType(request.InputType);
-                        deserializedInput = JsonSerializer.Deserialize(
-                            request.Input,
-                            type,
-                            TraxJsonSerializationOptions.ManifestProperties
-                        );
-                    }
-
-                    var train = sp.GetRequiredService<IJobRunnerTrain>();
-
-                    var jobRequest = deserializedInput is not null
-                        ? new RunJobRequest(request.MetadataId, deserializedInput)
-                        : new RunJobRequest(request.MetadataId);
-
-                    await train.Run(jobRequest, CancellationToken.None);
-
-                    return Results.Ok(new { metadataId = request.MetadataId });
+                    var result = await handler.ExecuteJobAsync(request);
+                    return Results.Ok(new { metadataId = result.MetadataId });
                 }
                 catch (Exception ex)
                 {
@@ -128,11 +112,9 @@ public static class JobRunnerExtensions
     /// <param name="route">The route to map (default: "/trax/run")</param>
     /// <returns>The route handler builder for further configuration (e.g., <c>.RequireAuthorization()</c>)</returns>
     /// <remarks>
+    /// Delegates to <see cref="ITraxRequestHandler.RunTrainAsync"/> for the actual execution.
     /// Unlike <see cref="UseTraxJobRunner"/> which is fire-and-forget (queue path), this endpoint
     /// blocks until the train completes and returns the serialized output in the response body.
-    /// The caller receives a <see cref="RemoteRunResponse"/> with the train output or error details.
-    ///
-    /// Set up the calling side with <c>UseRemoteRun()</c> on the scheduler builder.
     /// No authentication is baked in — apply your own ASP.NET middleware as needed.
     /// </remarks>
     public static RouteHandlerBuilder UseTraxRunEndpoint(
@@ -142,55 +124,8 @@ public static class JobRunnerExtensions
     {
         return endpoints.MapPost(
             route,
-            async (RemoteRunRequest request, IServiceProvider sp) =>
-            {
-                var logger = sp.GetRequiredService<ILoggerFactory>()
-                    .CreateLogger("Trax.RunEndpoint");
-
-                try
-                {
-                    var executionService = sp.GetRequiredService<ITrainExecutionService>();
-
-                    var result = await executionService.RunAsync(
-                        request.TrainName,
-                        request.InputJson,
-                        CancellationToken.None
-                    );
-
-                    string? outputJson = null;
-                    string? outputType = null;
-
-                    if (result.Output is not null)
-                    {
-                        outputType = result.Output.GetType().FullName;
-                        outputJson = JsonSerializer.Serialize(
-                            result.Output,
-                            result.Output.GetType(),
-                            TraxJsonSerializationOptions.ManifestProperties
-                        );
-                    }
-
-                    return Results.Ok(
-                        new RemoteRunResponse(result.MetadataId, outputJson, outputType)
-                    );
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(
-                        ex,
-                        "Remote run execution failed for train {TrainName}",
-                        request.TrainName
-                    );
-
-                    return Results.Ok(
-                        new RemoteRunResponse(
-                            MetadataId: 0,
-                            IsError: true,
-                            ErrorMessage: ex.Message
-                        )
-                    );
-                }
-            }
+            async (RemoteRunRequest request, ITraxRequestHandler handler) =>
+                Results.Ok(await handler.RunTrainAsync(request))
         );
     }
 }

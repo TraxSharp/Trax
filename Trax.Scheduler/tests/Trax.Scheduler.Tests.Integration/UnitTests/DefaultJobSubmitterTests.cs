@@ -144,16 +144,15 @@ public class DefaultJobSubmitterTests
     }
 
     [Test]
-    public void AddScheduler_WithUseLocalWorkers_RegistersPostgresJobSubmitter()
+    public void AddScheduler_WithPostgresDefault_RegistersPostgresJobSubmitter()
     {
-        // UseLocalWorkers explicitly sets _taskServerRegistration — should register
-        // PostgresJobSubmitter via the UseLocalWorkers path
+        // Local workers are the default when Postgres is configured — no explicit call needed
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
             trax.AddEffects(effects => effects.UsePostgres(ConnectionString))
                 .AddMediator(typeof(AssemblyMarker).Assembly)
-                .AddScheduler(scheduler => scheduler.UseLocalWorkers())
+                .AddScheduler()
         );
 
         // Assert

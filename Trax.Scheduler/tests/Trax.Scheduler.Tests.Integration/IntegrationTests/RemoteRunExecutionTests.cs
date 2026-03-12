@@ -176,13 +176,19 @@ public class RemoteRunExecutionTests : TestSetup
             );
         }
 
-        var response = new RemoteRunResponse(result.MetadataId, outputJson, outputType);
+        var response = new RemoteRunResponse(
+            result.MetadataId,
+            result.ExternalId,
+            outputJson,
+            outputType
+        );
         var wireJson = JsonSerializer.Serialize(response);
 
         // Step 3: Deserialize (as HttpRunExecutor would)
         var received = JsonSerializer.Deserialize<RemoteRunResponse>(wireJson);
         received.Should().NotBeNull();
         received!.MetadataId.Should().Be(result.MetadataId);
+        received.ExternalId.Should().Be(result.ExternalId);
         received.IsError.Should().BeFalse();
         received.OutputType.Should().Be(typeof(string).FullName);
         received.OutputJson.Should().NotBeNull();

@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Runner.Lambda" />
     <InternalsVisibleTo Include="Trax.Scheduler.Hangfire" />
     <InternalsVisibleTo Include="Trax.Scheduler.Sqs" />
     <InternalsVisibleTo Include="Trax.Scheduler.Tests" />

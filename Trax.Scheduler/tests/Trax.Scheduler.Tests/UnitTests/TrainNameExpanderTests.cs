@@ -42,6 +42,7 @@ public class TrainNameExpanderTests
             IsQuery = false,
             IsMutation = false,
             IsBroadcastEnabled = false,
+            IsRemote = false,
             GraphQLOperations = GraphQLOperation.Run,
         };
     }

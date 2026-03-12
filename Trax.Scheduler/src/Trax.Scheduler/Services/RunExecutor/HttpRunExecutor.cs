@@ -55,7 +55,7 @@ public class HttpRunExecutor(HttpClient httpClient) : IRunExecutor
             );
         }
 
-        return new RunTrainResult(response.MetadataId, output);
+        return new RunTrainResult(response.MetadataId, response.ExternalId ?? "", output);
     }
 
     private static Type ResolveType(string typeName)

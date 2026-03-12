@@ -9,6 +9,7 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.EffectStep;
 using Trax.Effect.Utils;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
@@ -20,9 +21,15 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
 /// Each entry is dispatched within its own DI scope and database transaction,
 /// using <c>FOR UPDATE SKIP LOCKED</c> to atomically claim the work queue entry.
 /// This ensures safe concurrent dispatch across multiple server instances.
+///
+/// When <see cref="JobSubmitterRoutingConfiguration"/> is registered, the step resolves
+/// the correct submitter per train based on builder routing or [TraxRemote] attributes.
 /// </remarks>
-internal class DispatchJobsStep(IServiceProvider serviceProvider, ILogger<DispatchJobsStep> logger)
-    : EffectStep<List<WorkQueue>, Unit>
+internal class DispatchJobsStep(
+    IServiceProvider serviceProvider,
+    ILogger<DispatchJobsStep> logger,
+    JobSubmitterRoutingConfiguration routingConfiguration
+) : EffectStep<List<WorkQueue>, Unit>
 {
     public override async Task<Unit> Run(List<WorkQueue> entries)
     {
@@ -74,7 +81,6 @@ internal class DispatchJobsStep(IServiceProvider serviceProvider, ILogger<Dispat
     {
         using var scope = serviceProvider.CreateScope();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        var jobSubmitter = scope.ServiceProvider.GetRequiredService<IJobSubmitter>();
 
         using var transaction = await dataContext.BeginTransaction(CancellationToken);
 
@@ -139,6 +145,9 @@ internal class DispatchJobsStep(IServiceProvider serviceProvider, ILogger<Dispat
         // synchronously and needs to read the Metadata, while PostgresJobSubmitter and
         // other submitters need the committed state to be visible.
         await dataContext.CommitTransaction();
+
+        // Resolve the correct submitter for this train (routed or default)
+        var jobSubmitter = ResolveSubmitter(scope.ServiceProvider, claimed.TrainName);
 
         // Enqueue to job submitter (outside the transaction).
         // If this fails, the Metadata is already committed — mark it as Failed
@@ -212,6 +221,18 @@ internal class DispatchJobsStep(IServiceProvider serviceProvider, ILogger<Dispat
                 metadataId
             );
         }
+    }
+
+    /// <summary>
+    /// Resolves the appropriate job submitter for a train based on routing configuration.
+    /// Falls back to the default IJobSubmitter if no routing is configured for this train.
+    /// </summary>
+    private IJobSubmitter ResolveSubmitter(IServiceProvider provider, string trainName)
+    {
+        var concreteType = routingConfiguration.GetSubmitterType(trainName);
+        return concreteType is not null
+            ? (IJobSubmitter)provider.GetRequiredService(concreteType)
+            : provider.GetRequiredService<IJobSubmitter>();
     }
 
     private static Type ResolveType(string typeName)

@@ -26,7 +26,6 @@ public partial class SchedulerConfigurationBuilder
     /// <code>
     /// builder.Services.AddTrax(trax => trax
     ///     .AddScheduler(scheduler => scheduler
-    ///         .UseLocalWorkers()
     ///         .Schedule&lt;IHelloWorldTrain, HelloWorldInput&gt;(
     ///             "hello-world",
     ///             new HelloWorldInput { Name = "Scheduler" },

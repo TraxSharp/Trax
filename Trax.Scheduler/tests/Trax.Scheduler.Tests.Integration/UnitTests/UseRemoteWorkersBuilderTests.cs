@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -36,7 +35,10 @@ public class UseRemoteWorkersBuilderTests
     {
         // Arrange & Act
         using var provider = BuildProvider(s =>
-            s.UseRemoteWorkers(o => o.BaseUrl = "https://test.example.com/trax/execute")
+            s.UseRemoteWorkers(
+                o => o.BaseUrl = "https://test.example.com/trax/execute",
+                routing => routing.ForTrain<ITestRemoteTrain>()
+            )
         );
 
         // Assert
@@ -50,14 +52,16 @@ public class UseRemoteWorkersBuilderTests
     {
         // Arrange & Act
         using var provider = BuildProvider(s =>
-            s.UseRemoteWorkers(o => o.BaseUrl = "https://test.example.com/trax/execute")
+            s.UseRemoteWorkers(
+                o => o.BaseUrl = "https://test.example.com/trax/execute",
+                routing => routing.ForTrain<ITestRemoteTrain>()
+            )
         );
 
-        // Assert
+        // Assert — HttpJobSubmitter is registered as a concrete type for routing
         using var scope = provider.CreateScope();
-        var submitter = scope.ServiceProvider.GetService<IJobSubmitter>();
+        var submitter = scope.ServiceProvider.GetService<HttpJobSubmitter>();
         submitter.Should().NotBeNull();
-        submitter.Should().BeOfType<HttpJobSubmitter>();
     }
 
     [Test]
@@ -65,11 +69,14 @@ public class UseRemoteWorkersBuilderTests
     {
         // Arrange & Act
         using var provider = BuildProvider(s =>
-            s.UseRemoteWorkers(o =>
-            {
-                o.BaseUrl = "https://test.example.com/trax/execute";
-                o.Timeout = TimeSpan.FromMinutes(5);
-            })
+            s.UseRemoteWorkers(
+                o =>
+                {
+                    o.BaseUrl = "https://test.example.com/trax/execute";
+                    o.Timeout = TimeSpan.FromMinutes(5);
+                },
+                routing => routing.ForTrain<ITestRemoteTrain>()
+            )
         );
 
         // Assert
@@ -85,15 +92,18 @@ public class UseRemoteWorkersBuilderTests
 
         // Act
         using var provider = BuildProvider(s =>
-            s.UseRemoteWorkers(o =>
-            {
-                o.BaseUrl = "https://test.example.com/trax/execute";
-                o.ConfigureHttpClient = client =>
+            s.UseRemoteWorkers(
+                o =>
                 {
-                    client.DefaultRequestHeaders.Add("X-Custom", "test");
-                    headerAdded = true;
-                };
-            })
+                    o.BaseUrl = "https://test.example.com/trax/execute";
+                    o.ConfigureHttpClient = client =>
+                    {
+                        client.DefaultRequestHeaders.Add("X-Custom", "test");
+                        headerAdded = true;
+                    };
+                },
+                routing => routing.ForTrain<ITestRemoteTrain>()
+            )
         );
 
         // Assert — the callback is stored in options
@@ -112,35 +122,41 @@ public class UseRemoteWorkersBuilderTests
     [Test]
     public void UseRemoteWorkers_DoesNotRegisterLocalWorkerOptions()
     {
-        // Arrange & Act
+        // Arrange & Act — InMemory provider does not register LocalWorkerOptions
         using var provider = BuildProvider(s =>
-            s.UseRemoteWorkers(o => o.BaseUrl = "https://test.example.com/trax/execute")
+            s.UseRemoteWorkers(
+                o => o.BaseUrl = "https://test.example.com/trax/execute",
+                routing => routing.ForTrain<ITestRemoteTrain>()
+            )
         );
 
-        // Assert — LocalWorkerOptions should not be registered
+        // Assert — LocalWorkerOptions should not be registered (InMemory provider)
         var localOptions = provider.GetService<LocalWorkerOptions>();
         localOptions.Should().BeNull();
     }
 
     #endregion
 
-    #region Overrides Previous Registration Tests
+    #region Routing Configuration Tests
 
     [Test]
-    public void UseRemoteWorkers_OverridesUseInMemoryWorkers()
+    public void UseRemoteWorkers_DefaultSubmitterRemainsInMemory()
     {
-        // Arrange & Act
+        // Remote workers are per-train routing — the default IJobSubmitter stays as InMemory
         using var provider = BuildProvider(s =>
-        {
-            s.UseInMemoryWorkers(); // First register in-memory
-            s.UseRemoteWorkers(o => o.BaseUrl = "https://test.example.com/trax/execute"); // Then override with remote
-        });
+            s.UseRemoteWorkers(
+                o => o.BaseUrl = "https://test.example.com/trax/execute",
+                routing => routing.ForTrain<ITestRemoteTrain>()
+            )
+        );
 
-        // Assert
+        // Assert — default IJobSubmitter is still InMemoryJobSubmitter
         using var scope = provider.CreateScope();
         var submitter = scope.ServiceProvider.GetService<IJobSubmitter>();
-        submitter.Should().BeOfType<HttpJobSubmitter>();
+        submitter.Should().BeOfType<InMemoryJobSubmitter>();
     }
 
     #endregion
 }
+
+internal interface ITestRemoteTrain { }

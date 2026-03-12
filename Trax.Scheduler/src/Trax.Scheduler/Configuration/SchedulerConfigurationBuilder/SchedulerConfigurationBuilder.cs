@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Configuration;
+using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Services.JobDispatcherPollingService;
@@ -28,18 +29,25 @@ namespace Trax.Scheduler.Configuration;
 ///     .AddEffects(effects => effects.UsePostgres(connectionString))
 ///     .AddMediator(assemblies)
 ///     .AddScheduler(scheduler => scheduler
-///         .UseLocalWorkers()
 ///         .Schedule&lt;IMyTrain&gt;("my-job", new MyInput(), Every.Minutes(5))
 ///     )
 /// );
 /// </code>
+/// Local workers are enabled by default when PostgreSQL is configured.
+/// Use <c>UseRemoteWorkers()</c> to route specific trains to a remote endpoint.
 /// </remarks>
 public partial class SchedulerConfigurationBuilder
 {
     private readonly TraxBuilderWithMediator _parentBuilder;
     private readonly SchedulerConfiguration _configuration = new();
+    private readonly LocalWorkerOptions _localWorkerOptions = new();
+    private readonly JobSubmitterRoutingConfiguration _routingConfiguration = new();
+
+    private readonly List<RoutedSubmitterRegistration> _routedSubmitterRegistrations = [];
+
+    // Legacy: supports UseInMemoryWorkers() and OverrideSubmitter()
     private Action<IServiceCollection>? _taskServerRegistration;
-    private string? _configuredSubmitterSource;
+
     private Action<IServiceCollection>? _remoteRunRegistration;
     private string? _rootScheduledExternalId;
     private string? _lastScheduledExternalId;
@@ -64,12 +72,21 @@ public partial class SchedulerConfigurationBuilder
     public IServiceCollection ServiceCollection => _parentBuilder.ServiceCollection;
 
     /// <summary>
+    /// Adds a routed submitter registration. Used by extension methods (e.g., UseSqsWorkers)
+    /// to register additional submitter backends with per-train routing.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public void AddRoutedSubmitter(RoutedSubmitterRegistration registration) =>
+        _routedSubmitterRegistrations.Add(registration);
+
+    /// <summary>
     /// Builds the scheduler configuration and registers all services.
     /// </summary>
     internal void Build()
     {
         ValidateNoCyclicGroupDependencies();
         ValidateSubmitterRequirements();
+        ValidateRoutedSubmitters();
 
         _configuration.HasDatabaseProvider = _parentBuilder.HasDatabaseProvider;
 
@@ -123,22 +140,32 @@ public partial class SchedulerConfigurationBuilder
             MetadataCleanupTrain
         >();
 
-        // Register the job submitter. If the user explicitly configured one (UseLocalWorkers,
-        // UseRemoteWorkers, OverrideSubmitter), use that. Otherwise, default based on the
-        // data provider: PostgresJobSubmitter for Postgres, InMemoryJobSubmitter for InMemory.
+        // Register the job submitter and local workers.
+        // Priority: UseInMemoryWorkers/OverrideSubmitter > default (Postgres local workers or InMemory).
         if (_taskServerRegistration is not null)
         {
             _taskServerRegistration.Invoke(_parentBuilder.ServiceCollection);
         }
         else if (_parentBuilder.HasDatabaseProvider)
         {
+            // Default: PostgresJobSubmitter + local worker threads
+            _parentBuilder.ServiceCollection.AddSingleton(_localWorkerOptions);
             _parentBuilder.ServiceCollection.AddScoped<IJobSubmitter, PostgresJobSubmitter>();
+            _parentBuilder.ServiceCollection.AddScopedTraxRoute<IJobRunnerTrain, JobRunnerTrain>();
+            _parentBuilder.ServiceCollection.AddHostedService<Services.LocalWorkerService.LocalWorkerService>();
         }
         else
         {
             _parentBuilder.ServiceCollection.AddScopedTraxRoute<IJobRunnerTrain, JobRunnerTrain>();
             _parentBuilder.ServiceCollection.AddScoped<IJobSubmitter, InMemoryJobSubmitter>();
         }
+
+        // Register routed submitters (UseRemoteWorkers, UseSqsWorkers with ForTrain routing)
+        RegisterRoutedSubmitters();
+
+        // Always register routing configuration (DispatchJobsStep requires it via constructor injection).
+        // An empty configuration with no routes is a no-op — GetSubmitterType returns null for all trains.
+        _parentBuilder.ServiceCollection.AddSingleton(_routingConfiguration);
 
         // Register remote run executor if configured (overrides default LocalRunExecutor)
         _remoteRunRegistration?.Invoke(_parentBuilder.ServiceCollection);
@@ -161,6 +188,46 @@ public partial class SchedulerConfigurationBuilder
 
             if (_configuration.MetadataCleanup is not null)
                 _parentBuilder.ServiceCollection.AddHostedService<MetadataCleanupPollingService>();
+        }
+    }
+
+    /// <summary>
+    /// Registers routed submitters and builds the routing configuration.
+    /// </summary>
+    private void RegisterRoutedSubmitters()
+    {
+        if (_routedSubmitterRegistrations.Count == 0)
+            return;
+
+        Type? firstSubmitterType = null;
+
+        foreach (var registration in _routedSubmitterRegistrations)
+        {
+            // Register the concrete submitter type with its dependencies (HttpClient, options, etc.)
+            registration.Register(_parentBuilder.ServiceCollection);
+
+            firstSubmitterType ??= registration.SubmitterType;
+
+            // Add explicit ForTrain routes
+            foreach (var trainName in registration.Routing.TrainNames)
+            {
+                _routingConfiguration.AddRoute(trainName, registration.SubmitterType);
+            }
+        }
+
+        // Discover [TraxRemote] attribute trains and register them for attribute-based routing
+        var discoveryService = new TrainDiscoveryService(_parentBuilder.ServiceCollection);
+        var remoteTrains = discoveryService.DiscoverTrains().Where(r => r.IsRemote);
+
+        foreach (var train in remoteTrains)
+        {
+            _routingConfiguration.AddAttributeRemoteTrain(train.ServiceType.FullName!);
+        }
+
+        // Set the attribute default submitter to the first registered remote submitter
+        if (firstSubmitterType is not null)
+        {
+            _routingConfiguration.SetAttributeDefaultSubmitter(firstSubmitterType);
         }
     }
 
@@ -224,26 +291,43 @@ public partial class SchedulerConfigurationBuilder
                     + "  );\n"
             );
         }
+    }
 
-        if (
-            _configuredSubmitterSource is nameof(UseLocalWorkers)
-            && !_parentBuilder.HasDatabaseProvider
-        )
+    /// <summary>
+    /// Validates that no train appears in multiple routed submitter configurations.
+    /// </summary>
+    private void ValidateRoutedSubmitters()
+    {
+        if (_routedSubmitterRegistrations.Count <= 1)
+            return;
+
+        var seen = new Dictionary<string, string>();
+        foreach (var registration in _routedSubmitterRegistrations)
         {
-            throw new InvalidOperationException(
-                "UseLocalWorkers() requires a PostgreSQL database provider. "
-                    + "Local workers poll the trax.background_job table using PostgreSQL's "
-                    + "FOR UPDATE SKIP LOCKED for atomic job dequeue.\n\n"
-                    + "Add UsePostgres() to your effects configuration:\n\n"
-                    + "  services.AddTrax(trax => trax\n"
-                    + "      .AddEffects(effects => effects.UsePostgres(connectionString))\n"
-                    + "      .AddMediator(assemblies)\n"
-                    + "      .AddScheduler(scheduler => scheduler.UseLocalWorkers())\n"
-                    + "  );\n\n"
-                    + "If you don't need PostgreSQL, omit UseLocalWorkers() to use the default "
-                    + "in-memory submitter, or use UseRemoteWorkers() / UseSqsWorkers() to "
-                    + "dispatch to an external system."
-            );
+            var submitterName = registration.SubmitterType.Name;
+            foreach (var trainName in registration.Routing.TrainNames)
+            {
+                if (seen.TryGetValue(trainName, out var existingSubmitter))
+                {
+                    throw new InvalidOperationException(
+                        $"Train '{trainName}' is routed to multiple submitters: "
+                            + $"'{existingSubmitter}' and '{submitterName}'. "
+                            + "Each train can only be routed to one submitter.\n\n"
+                            + "Remove the duplicate ForTrain<T>() call from one of the submitter configurations."
+                    );
+                }
+                seen[trainName] = submitterName;
+            }
         }
     }
 }
+
+/// <summary>
+/// Record for tracking a routed submitter registration.
+/// Used by extension methods (e.g., <c>UseSqsWorkers()</c>) to register additional submitter backends.
+/// </summary>
+public record RoutedSubmitterRegistration(
+    SubmitterRouting Routing,
+    Type SubmitterType,
+    Action<IServiceCollection> Register
+);

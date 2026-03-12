@@ -30,7 +30,6 @@ public static class SchedulerExtensions
     ///     )
     ///     .AddMediator(typeof(Program).Assembly)
     ///     .AddScheduler(scheduler => scheduler
-    ///         .UseLocalWorkers()
     ///         .Schedule&lt;IMyTrain&gt;("my-job", new MyInput(), Every.Minutes(5))
     ///     )
     /// );

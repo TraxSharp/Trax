@@ -39,8 +39,9 @@ public class UseSqsWorkersBuilderTests
     {
         // Arrange & Act
         using var provider = BuildProvider(s =>
-            s.UseSqsWorkers(o =>
-                o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs"
+            s.UseSqsWorkers(
+                o => o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs",
+                routing => routing.ForTrain<ITestSqsTrain>()
             )
         );
 
@@ -55,11 +56,14 @@ public class UseSqsWorkersBuilderTests
     {
         // Arrange & Act
         using var provider = BuildProvider(s =>
-            s.UseSqsWorkers(o =>
-            {
-                o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
-                o.ConfigureSqsClient = cfg => cfg.ServiceURL = "http://localhost:4566";
-            })
+            s.UseSqsWorkers(
+                o =>
+                {
+                    o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
+                    o.ConfigureSqsClient = cfg => cfg.ServiceURL = "http://localhost:4566";
+                },
+                routing => routing.ForTrain<ITestSqsTrain>()
+            )
         );
 
         // Assert
@@ -72,27 +76,30 @@ public class UseSqsWorkersBuilderTests
     {
         // Arrange & Act
         using var provider = BuildProvider(s =>
-            s.UseSqsWorkers(o =>
-            {
-                o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
-                o.ConfigureSqsClient = cfg => cfg.ServiceURL = "http://localhost:4566";
-            })
+            s.UseSqsWorkers(
+                o =>
+                {
+                    o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
+                    o.ConfigureSqsClient = cfg => cfg.ServiceURL = "http://localhost:4566";
+                },
+                routing => routing.ForTrain<ITestSqsTrain>()
+            )
         );
 
-        // Assert
+        // Assert — SqsJobSubmitter is registered as a concrete type for routing
         using var scope = provider.CreateScope();
-        var submitter = scope.ServiceProvider.GetService<IJobSubmitter>();
+        var submitter = scope.ServiceProvider.GetService<SqsJobSubmitter>();
         submitter.Should().NotBeNull();
-        submitter.Should().BeOfType<SqsJobSubmitter>();
     }
 
     [Test]
     public void UseSqsWorkers_DoesNotRegisterLocalWorkerOptions()
     {
-        // Arrange & Act
+        // Arrange & Act — InMemory provider does not register LocalWorkerOptions
         using var provider = BuildProvider(s =>
-            s.UseSqsWorkers(o =>
-                o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs"
+            s.UseSqsWorkers(
+                o => o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs",
+                routing => routing.ForTrain<ITestSqsTrain>()
             )
         );
 
@@ -109,14 +116,17 @@ public class UseSqsWorkersBuilderTests
 
         // Act
         using var provider = BuildProvider(s =>
-            s.UseSqsWorkers(o =>
-            {
-                o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
-                o.ConfigureSqsClient = _ =>
+            s.UseSqsWorkers(
+                o =>
                 {
-                    callbackInvoked = true;
-                };
-            })
+                    o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
+                    o.ConfigureSqsClient = _ =>
+                    {
+                        callbackInvoked = true;
+                    };
+                },
+                routing => routing.ForTrain<ITestSqsTrain>()
+            )
         );
 
         // Assert
@@ -129,27 +139,30 @@ public class UseSqsWorkersBuilderTests
 
     #endregion
 
-    #region Overrides Previous Registration Tests
+    #region Routing Configuration Tests
 
     [Test]
-    public void UseSqsWorkers_OverridesUseInMemoryWorkers()
+    public void UseSqsWorkers_DefaultSubmitterRemainsInMemory()
     {
-        // Arrange & Act
+        // SQS workers are per-train routing — the default IJobSubmitter stays as InMemory
         using var provider = BuildProvider(s =>
-        {
-            s.UseInMemoryWorkers();
-            s.UseSqsWorkers(o =>
-            {
-                o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
-                o.ConfigureSqsClient = cfg => cfg.ServiceURL = "http://localhost:4566";
-            });
-        });
+            s.UseSqsWorkers(
+                o =>
+                {
+                    o.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
+                    o.ConfigureSqsClient = cfg => cfg.ServiceURL = "http://localhost:4566";
+                },
+                routing => routing.ForTrain<ITestSqsTrain>()
+            )
+        );
 
-        // Assert
+        // Assert — default IJobSubmitter is still InMemoryJobSubmitter
         using var scope = provider.CreateScope();
         var submitter = scope.ServiceProvider.GetService<IJobSubmitter>();
-        submitter.Should().BeOfType<SqsJobSubmitter>();
+        submitter.Should().BeOfType<InMemoryJobSubmitter>();
     }
 
     #endregion
 }
+
+internal interface ITestSqsTrain { }
