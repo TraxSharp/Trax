@@ -57,6 +57,7 @@ public static WebApplication UseTraxGraphQL(
   - **`operations`** (`OperationsMutations`) — `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
 - **Subscription type**: `LifecycleSubscriptions` — real-time [lifecycle events]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) via WebSocket (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`)
 - **In-memory subscription transport** — HotChocolate's built-in pub/sub for delivering events to WebSocket clients
+- **Error filter**: `TraxErrorFilter` — exposes actual exception messages for train-related errors instead of HotChocolate's default "Unexpected Execution Error". Exposed types: `TrainException` (code: `TRAX_TRAIN_ERROR`), `TrainAuthorizationException` (code: `TRAX_AUTHORIZATION`), `InvalidOperationException` (code: `TRAX_INVALID_OPERATION`). All other exception types retain the default masked message.
 - **Lifecycle hook**: `GraphQLSubscriptionHook` — automatically registered to publish train state transitions to the subscription transport
 
 ## Prerequisites
