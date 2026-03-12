@@ -7,6 +7,7 @@ using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Effect.Models.Host;
 using Trax.Effect.Models.Metadata.DTOs;
 
 namespace Trax.Effect.Models.Metadata;
@@ -215,6 +216,34 @@ public class Metadata : IModel, IDisposable
     public string? CurrentlyRunningStep { get; set; }
 
     /// <summary>
+    /// Gets or sets the hostname of the machine where the train executed.
+    /// </summary>
+    [Column("host_name")]
+    public string? HostName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the environment type where the train executed
+    /// (e.g., <c>"lambda"</c>, <c>"ecs"</c>, <c>"kubernetes"</c>, <c>"azure-app-service"</c>, <c>"server"</c>).
+    /// </summary>
+    [Column("host_environment")]
+    public string? HostEnvironment { get; set; }
+
+    /// <summary>
+    /// Gets or sets the instance-level identifier of the host
+    /// (e.g., Lambda log stream, ECS task ID, Kubernetes pod name, or <c>{MachineName}-{PID}</c>).
+    /// </summary>
+    [Column("host_instance_id")]
+    public string? HostInstanceId { get; set; }
+
+    /// <summary>
+    /// Gets or sets user-provided key-value labels serialized as JSON
+    /// (e.g., region, service, team). Stored as JSONB in PostgreSQL.
+    /// </summary>
+    [Column("host_labels")]
+    [JsonIgnore]
+    public string? HostLabels { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether this train is a child of another train.
     /// </summary>
     /// <remarks>
@@ -324,6 +353,8 @@ public class Metadata : IModel, IDisposable
     /// </remarks>
     public static Metadata Create(CreateMetadata metadata)
     {
+        var host = TraxHostInfo.Current;
+
         var newTrain = new Metadata
         {
             Name = metadata.Name,
@@ -333,6 +364,12 @@ public class Metadata : IModel, IDisposable
             StartTime = DateTime.UtcNow,
             ParentId = metadata.ParentId,
             ManifestId = metadata.ManifestId,
+            HostName = host?.HostName,
+            HostEnvironment = host?.HostEnvironment,
+            HostInstanceId = host?.HostInstanceId,
+            HostLabels = host?.Labels is { Count: > 0 }
+                ? JsonSerializer.Serialize(host.Labels)
+                : null,
         };
 
         newTrain.SetInputObject(metadata.Input);

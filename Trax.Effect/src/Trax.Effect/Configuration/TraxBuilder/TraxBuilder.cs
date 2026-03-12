@@ -25,7 +25,7 @@ namespace Trax.Effect.Configuration.TraxBuilder;
 /// );
 /// </code>
 /// </remarks>
-public class TraxBuilder(IServiceCollection services, IEffectRegistry registry)
+public partial class TraxBuilder(IServiceCollection services, IEffectRegistry registry)
 {
     /// <summary>
     /// Gets the service collection for registering services.

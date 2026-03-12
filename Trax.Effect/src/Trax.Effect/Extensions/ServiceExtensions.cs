@@ -48,6 +48,21 @@ public static class ServiceExtensions
 
         configure(builder);
 
+        // Build and set the process-wide host identity
+        var hostInfo = Models.Host.TraxHostInfo.AutoDetect();
+        if (builder.HostEnvironmentOverride != null)
+            hostInfo = hostInfo with { HostEnvironment = builder.HostEnvironmentOverride };
+        if (builder.HostInstanceIdOverride != null)
+            hostInfo = hostInfo with { HostInstanceId = builder.HostInstanceIdOverride };
+        if (builder.HostLabels.Count > 0)
+        {
+            var mergedLabels = new Dictionary<string, string>(hostInfo.Labels);
+            foreach (var (key, value) in builder.HostLabels)
+                mergedLabels[key] = value;
+            hostInfo = hostInfo with { Labels = mergedLabels };
+        }
+        Models.Host.TraxHostInfo.Current = hostInfo;
+
         // Use effect configuration from AddEffects(), or defaults if not called
         var effectConfig =
             builder.EffectConfiguration

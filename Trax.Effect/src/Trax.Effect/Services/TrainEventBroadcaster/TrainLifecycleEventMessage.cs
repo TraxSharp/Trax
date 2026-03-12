@@ -16,5 +16,7 @@ public record TrainLifecycleEventMessage(
     [property: JsonPropertyName("failureReason")] string? FailureReason,
     [property: JsonPropertyName("eventType")] string EventType,
     [property: JsonPropertyName("executor")] string? Executor,
-    [property: JsonPropertyName("output")] string? Output
+    [property: JsonPropertyName("output")] string? Output,
+    [property: JsonPropertyName("hostName")] string? HostName = null,
+    [property: JsonPropertyName("hostEnvironment")] string? HostEnvironment = null
 );

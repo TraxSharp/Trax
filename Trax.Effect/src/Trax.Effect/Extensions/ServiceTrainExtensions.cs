@@ -1,9 +1,11 @@
+using System.Text.Json;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.Host;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.ServiceTrain;
@@ -75,6 +77,18 @@ internal static class ServiceTrainExtensions
             serviceTrain.TrainName
         );
         serviceTrain.Metadata.TrainState = TrainState.InProgress;
+
+        // Stamp execution host identity — overwrites any values set by the dispatcher
+        // so the metadata reflects WHERE the train actually ran.
+        if (TraxHostInfo.Current is { } host)
+        {
+            serviceTrain.Metadata.HostName = host.HostName;
+            serviceTrain.Metadata.HostEnvironment = host.HostEnvironment;
+            serviceTrain.Metadata.HostInstanceId = host.HostInstanceId;
+            serviceTrain.Metadata.HostLabels = host.Labels is { Count: > 0 }
+                ? JsonSerializer.Serialize(host.Labels)
+                : null;
+        }
 
         await serviceTrain.EffectRunner.Update(serviceTrain.Metadata);
 

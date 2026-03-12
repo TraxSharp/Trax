@@ -65,7 +65,9 @@ public class BroadcastLifecycleHook : ITrainLifecycleHook
             FailureReason: metadata.FailureReason,
             EventType: eventType,
             Executor: LocalExecutor,
-            Output: metadata.Output
+            Output: metadata.Output,
+            HostName: metadata.HostName,
+            HostEnvironment: metadata.HostEnvironment
         );
 
         _logger?.LogDebug(

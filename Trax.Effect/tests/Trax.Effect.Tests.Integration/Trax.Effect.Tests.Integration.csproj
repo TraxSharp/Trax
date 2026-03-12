@@ -25,6 +25,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../src/Trax.Effect/Trax.Effect.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.StepProvider.Logging/Trax.Effect.StepProvider.Logging.csproj" />

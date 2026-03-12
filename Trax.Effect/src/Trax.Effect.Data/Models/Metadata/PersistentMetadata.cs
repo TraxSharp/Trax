@@ -50,6 +50,8 @@ public class PersistentMetadata : Effect.Models.Metadata.Metadata
                     v => v
                 )
                 .HasColumnType("jsonb");
+
+            entity.Property(e => e.HostLabels).HasConversion(v => v, v => v).HasColumnType("jsonb");
         });
     }
 }
