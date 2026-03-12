@@ -82,6 +82,18 @@ public class WorkQueue : IModel
     [Column("priority")]
     public int Priority { get; set; }
 
+    /// <summary>
+    /// Number of times dispatch has been attempted and failed for this entry.
+    /// </summary>
+    /// <remarks>
+    /// Incremented each time the job submitter fails to deliver the job (e.g., remote
+    /// worker throttling or unavailability). When the entry is requeued after a dispatch
+    /// failure, this counter is preserved so the system can stop retrying after
+    /// <c>MaxDispatchAttempts</c> is reached.
+    /// </remarks>
+    [Column("dispatch_attempts")]
+    public int DispatchAttempts { get; set; }
+
     #endregion
 
     #region ForeignKeys
