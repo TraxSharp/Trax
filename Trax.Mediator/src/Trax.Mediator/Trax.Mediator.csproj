@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Mediator.Tests.MemoryLeak.Integration" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Trax.Effect" Version="1.*" />
     <PackageReference Include="Trax.Effect.Data" Version="1.*" />
   </ItemGroup>

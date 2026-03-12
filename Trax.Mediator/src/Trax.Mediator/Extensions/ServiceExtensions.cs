@@ -126,6 +126,41 @@ public static class ServiceExtensions
     }
 
     /// <summary>
+    /// Registers pre-scanned train types with the DI container. Used internally by
+    /// <see cref="AddServiceTrainBus"/> to avoid a second assembly scan.
+    /// </summary>
+    internal static IServiceCollection RegisterServiceTrains(
+        this IServiceCollection services,
+        IReadOnlyList<(Type ServiceType, Type ImplementationType)> trains,
+        ServiceLifetime serviceLifetime
+    )
+    {
+        foreach (var (serviceType, implementationType) in trains)
+        {
+            switch (serviceLifetime)
+            {
+                case ServiceLifetime.Singleton:
+                    services.AddSingletonTraxRoute(serviceType, implementationType);
+                    break;
+                case ServiceLifetime.Scoped:
+                    services.AddScopedTraxRoute(serviceType, implementationType);
+                    break;
+                case ServiceLifetime.Transient:
+                    services.AddTransientTraxRoute(serviceType, implementationType);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(serviceLifetime),
+                        serviceLifetime,
+                        null
+                    );
+            }
+        }
+
+        return services;
+    }
+
+    /// <summary>
     /// Adds the train bus and registry to the service collection.
     /// </summary>
     public static IServiceCollection AddServiceTrainBus(
@@ -143,6 +178,6 @@ public static class ServiceExtensions
             .AddScoped<ITrainBus, TrainBus>()
             .AddScoped<IRunExecutor, LocalRunExecutor>()
             .AddScoped<ITrainExecutionService, TrainExecutionService>()
-            .RegisterServiceTrains(serviceTrainLifetime, assemblies);
+            .RegisterServiceTrains(trainRegistry.DiscoveredTrains, serviceTrainLifetime);
     }
 }

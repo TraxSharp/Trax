@@ -58,16 +58,25 @@ public class TrainRegistry : ITrainRegistry
     /// IServiceTrain&lt;TIn, TOut&gt; interface, a TrainException is thrown
     /// with detailed information about the invalid implementation.
     /// </remarks>
+    /// <summary>
+    /// The discovered (serviceType, implementationType) pairs from assembly scanning.
+    /// Reused by <c>RegisterServiceTrains</c> to avoid a second assembly scan.
+    /// </summary>
+    internal IReadOnlyList<(Type ServiceType, Type ImplementationType)> DiscoveredTrains { get; }
+
     public TrainRegistry(params Assembly[] assemblies)
     {
         // The type we will be looking for in our assemblies
         var trainType = typeof(IServiceTrain<,>);
 
-        var allTrainTypes = new HashSet<Type>();
+        // Single scan: capture both the service type (interface) and the concrete type.
+        // A HashSet keyed by concrete type prevents duplicates when the same assembly is passed twice.
+        var seen = new HashSet<Type>();
+        var discovered = new List<(Type ServiceType, Type ImplementationType)>();
 
         foreach (var assembly in assemblies)
         {
-            var trainTypes = assembly
+            var concreteTypes = assembly
                 .GetTypes()
                 .Where(x => x.IsClass)
                 .Where(x => x.IsAbstract == false)
@@ -76,25 +85,49 @@ public class TrainRegistry : ITrainRegistry
                         .Where(y => y.IsGenericType)
                         .Select(y => y.GetGenericTypeDefinition())
                         .Contains(trainType)
-                )
-                .Select(x =>
-                    // Prefer to inject via interface, but if it doesn't exist then inject by underlying type
-                    x.GetInterfaces()
-                        .FirstOrDefault(y => !y.IsGenericType && y != typeof(IDisposable))
-                    ?? x
                 );
 
-            allTrainTypes.UnionWith(trainTypes);
+            foreach (var concreteType in concreteTypes)
+            {
+                if (!seen.Add(concreteType))
+                    continue;
+
+                // Prefer a non-generic interface (e.g., IMyTrain). If none exists, fall back
+                // to the closed IServiceTrain<TIn, TOut> generic — this matches the original
+                // RegisterServiceTrains behavior and avoids DI disposal issues when the
+                // service type is the concrete class itself.
+                var serviceType =
+                    concreteType
+                        .GetInterfaces()
+                        .FirstOrDefault(y => !y.IsGenericType && y != typeof(IDisposable))
+                    ?? concreteType
+                        .GetInterfaces()
+                        .FirstOrDefault(y =>
+                            y.IsGenericType && y.GetGenericTypeDefinition() == trainType
+                        )
+                    ?? throw new TrainException(
+                        $"Could not find an interface attached to ({concreteType.Name}) with Full Name ({concreteType.FullName}) on Assembly ({concreteType.AssemblyQualifiedName}). At least one Interface is required."
+                    );
+
+                discovered.Add((serviceType, concreteType));
+            }
         }
+
+        DiscoveredTrains = discovered;
 
         // Build the input type → train mapping, skipping duplicates.
         // Multiple trains can share the same input type (e.g., internal scheduler
         // trains using Unit). These are resolved directly from DI rather than the bus.
         InputTypeToTrain = new Dictionary<Type, Type>();
-        foreach (var wf in allTrainTypes)
+        foreach (var (serviceType, implementationType) in discovered)
         {
+            // Use the concrete type to find IServiceTrain<TIn, TOut> — the service type
+            // may be a non-generic interface (IMyTrain) whose GetInterfaces() includes
+            // IServiceTrain<,>, or it may itself be IServiceTrain<,> when no dedicated
+            // interface exists. The concrete type always has it.
             var inputType =
-                wf.GetInterfaces()
+                implementationType
+                    .GetInterfaces()
                     .Where(interfaceType => interfaceType.IsGenericType)
                     .FirstOrDefault(interfaceType =>
                         interfaceType.GetGenericTypeDefinition() == trainType
@@ -102,10 +135,10 @@ public class TrainRegistry : ITrainRegistry
                     ?.GetGenericArguments()
                     .FirstOrDefault()
                 ?? throw new TrainException(
-                    $"Could not find an interface and/or an inherited interface of type ({trainType.Name}) on target type ({wf.Name}) with FullName ({wf.FullName}) on Assembly ({wf.AssemblyQualifiedName})."
+                    $"Could not find an interface and/or an inherited interface of type ({trainType.Name}) on target type ({implementationType.Name}) with FullName ({implementationType.FullName}) on Assembly ({implementationType.AssemblyQualifiedName})."
                 );
 
-            InputTypeToTrain.TryAdd(inputType, wf);
+            InputTypeToTrain.TryAdd(inputType, serviceType);
         }
     }
 }
