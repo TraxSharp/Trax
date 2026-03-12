@@ -123,6 +123,37 @@
     </RadzenRow>
 </RadzenCard>
 
+@* ── Execution Host ── *@
+@if (_metadata.HostName is not null || _metadata.HostEnvironment is not null)
+{
+    <RadzenCard class="rz-mb-4">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Execution Host</RadzenText>
+        <RadzenRow Gap="1rem">
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                <RadzenStack Gap="0.75rem">
+                    <FieldDisplay Label="Hostname" Value="@(_metadata.HostName ?? "—")" />
+                    <FieldDisplay Label="Environment" Value="@(_metadata.HostEnvironment ?? "—")" />
+                </RadzenStack>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                <RadzenStack Gap="0.75rem">
+                    <FieldDisplay Label="Instance ID" Value="@(_metadata.HostInstanceId ?? "—")" />
+                </RadzenStack>
+            </RadzenColumn>
+            @if (!string.IsNullOrWhiteSpace(_metadata.HostLabels))
+            {
+                <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                    <RadzenStack Gap="0.75rem">
+                        <FieldDisplay Label="Labels">
+                            <pre style="font-size: 0.75rem; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(_metadata.HostLabels)</pre>
+                        </FieldDisplay>
+                    </RadzenStack>
+                </RadzenColumn>
+            }
+        </RadzenRow>
+    </RadzenCard>
+}
+
 @* ── Step Progress (only if in progress with a running step) ── *@
 @if (_metadata.TrainState == TrainState.InProgress && !string.IsNullOrWhiteSpace(_metadata.CurrentlyRunningStep))
 {

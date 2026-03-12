@@ -21,7 +21,7 @@ public class CyclicDependencyValidationTests
     public void SetUp()
     {
         _services = new ServiceCollection();
-        var root = new TraxBuilder(_services, new EffectRegistry());
+        var root = new TraxBuilder(_services, new EffectRegistry()) { HasDataProvider = true };
         _parentBuilder = root.AddEffects(effects => effects)
             .AddMediator(typeof(IFakeSchedulerTrainA).Assembly);
     }
