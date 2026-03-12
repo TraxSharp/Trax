@@ -264,14 +264,14 @@ public partial class SchedulerConfigurationBuilder
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder UseRemoteWorkers(
         Action<RemoteWorkerOptions> configure,
-        Action<SubmitterRouting> routing
+        Action<SubmitterRouting>? routing = null
     )
     {
         var options = new RemoteWorkerOptions();
         configure(options);
 
         var submitterRouting = new SubmitterRouting();
-        routing(submitterRouting);
+        routing?.Invoke(submitterRouting);
 
         _routedSubmitterRegistrations.Add(
             new RoutedSubmitterRegistration(

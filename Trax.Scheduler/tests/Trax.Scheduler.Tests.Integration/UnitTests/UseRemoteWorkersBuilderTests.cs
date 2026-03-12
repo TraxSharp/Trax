@@ -157,6 +157,38 @@ public class UseRemoteWorkersBuilderTests
     }
 
     #endregion
+
+    #region Optional Routing Tests
+
+    [Test]
+    public void UseRemoteWorkers_WithoutRouting_RegistersRemoteWorkerOptions()
+    {
+        // Arrange & Act
+        using var provider = BuildProvider(s =>
+            s.UseRemoteWorkers(o => o.BaseUrl = "https://test.example.com/trax/execute")
+        );
+
+        // Assert
+        var options = provider.GetService<RemoteWorkerOptions>();
+        options.Should().NotBeNull();
+        options!.BaseUrl.Should().Be("https://test.example.com/trax/execute");
+    }
+
+    [Test]
+    public void UseRemoteWorkers_WithoutRouting_RegistersHttpJobSubmitter()
+    {
+        // Arrange & Act
+        using var provider = BuildProvider(s =>
+            s.UseRemoteWorkers(o => o.BaseUrl = "https://test.example.com/trax/execute")
+        );
+
+        // Assert
+        using var scope = provider.CreateScope();
+        var submitter = scope.ServiceProvider.GetService<HttpJobSubmitter>();
+        submitter.Should().NotBeNull();
+    }
+
+    #endregion
 }
 
 internal interface ITestRemoteTrain { }

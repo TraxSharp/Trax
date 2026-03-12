@@ -36,14 +36,14 @@ public static class SqsSchedulerExtensions
     public static SchedulerConfigurationBuilder UseSqsWorkers(
         this SchedulerConfigurationBuilder builder,
         Action<SqsWorkerOptions> configure,
-        Action<SubmitterRouting> routing
+        Action<SubmitterRouting>? routing = null
     )
     {
         var options = new SqsWorkerOptions();
         configure(options);
 
         var submitterRouting = new SubmitterRouting();
-        routing(submitterRouting);
+        routing?.Invoke(submitterRouting);
 
         builder.AddRoutedSubmitter(
             new RoutedSubmitterRegistration(
