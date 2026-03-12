@@ -22,7 +22,7 @@ dotnet add package Trax.Scheduler.Sqs
 public static SchedulerConfigurationBuilder UseSqsWorkers(
     this SchedulerConfigurationBuilder builder,
     Action<SqsWorkerOptions> configure,
-    Action<SubmitterRouting> routing
+    Action<SubmitterRouting>? routing = null
 )
 ```
 
@@ -33,7 +33,7 @@ Defined in `Trax.Scheduler.Sqs.Extensions.SqsSchedulerExtensions`.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `configure` | `Action<SqsWorkerOptions>` | Yes | Callback to set the SQS queue URL and client options |
-| `routing` | `Action<SubmitterRouting>` | Yes | Callback to specify which trains should be dispatched to this SQS queue |
+| `routing` | `Action<SubmitterRouting>?` | No | Callback to specify which trains should be dispatched to this SQS queue. When omitted, only `[TraxRemote]`-attributed trains are routed. |
 
 ## Returns
 

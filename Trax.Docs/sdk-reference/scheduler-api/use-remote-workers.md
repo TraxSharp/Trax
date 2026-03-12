@@ -15,7 +15,7 @@ Routes specific trains to a remote HTTP endpoint for execution. Trains not inclu
 ```csharp
 public SchedulerConfigurationBuilder UseRemoteWorkers(
     Action<RemoteWorkerOptions> configure,
-    Action<SubmitterRouting> routing
+    Action<SubmitterRouting>? routing = null
 )
 ```
 
@@ -24,7 +24,7 @@ public SchedulerConfigurationBuilder UseRemoteWorkers(
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `configure` | `Action<RemoteWorkerOptions>` | Yes | Callback to set the remote endpoint URL and HTTP client options |
-| `routing` | `Action<SubmitterRouting>` | Yes | Callback to specify which trains should be dispatched to this remote endpoint |
+| `routing` | `Action<SubmitterRouting>?` | No | Callback to specify which trains should be dispatched to this remote endpoint. When omitted, only `[TraxRemote]`-attributed trains are routed. |
 
 ## Returns
 
