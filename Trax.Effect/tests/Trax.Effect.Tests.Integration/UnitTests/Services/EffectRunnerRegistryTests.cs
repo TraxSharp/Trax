@@ -101,6 +101,78 @@ public class EffectRunnerRegistryTests
 
     #endregion
 
+    #region EffectRunner Behavior
+
+    [Test]
+    public async Task EffectRunner_SaveChanges_CallsAllProviders()
+    {
+        var registry = new EffectRegistry();
+        var factory1 = new TrackingEffectFactory();
+        var factory2 = new TrackingEffectFactory2();
+        registry.Register(typeof(TrackingEffectFactory), enabled: true);
+        registry.Register(typeof(TrackingEffectFactory2), enabled: true);
+
+        using var runner = new EffectRunner([factory1, factory2], registry);
+        await runner.SaveChanges(CancellationToken.None);
+
+        factory1.Provider.SaveChangesCalled.Should().BeTrue();
+        factory2.Provider.SaveChangesCalled.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task EffectRunner_Track_DelegatesToAllProviders()
+    {
+        var registry = new EffectRegistry();
+        var factory1 = new TrackingEffectFactory();
+        var factory2 = new TrackingEffectFactory2();
+        registry.Register(typeof(TrackingEffectFactory), enabled: true);
+        registry.Register(typeof(TrackingEffectFactory2), enabled: true);
+
+        using var runner = new EffectRunner([factory1, factory2], registry);
+        await runner.Track(new FakeModel());
+
+        factory1.Provider.TrackCalled.Should().BeTrue();
+        factory2.Provider.TrackCalled.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task EffectRunner_Update_DelegatesToAllProviders()
+    {
+        var registry = new EffectRegistry();
+        var factory1 = new TrackingEffectFactory();
+        var factory2 = new TrackingEffectFactory2();
+        registry.Register(typeof(TrackingEffectFactory), enabled: true);
+        registry.Register(typeof(TrackingEffectFactory2), enabled: true);
+
+        using var runner = new EffectRunner([factory1, factory2], registry);
+        await runner.Update(new FakeModel());
+
+        factory1.Provider.UpdateCalled.Should().BeTrue();
+        factory2.Provider.UpdateCalled.Should().BeTrue();
+    }
+
+    [Test]
+    public void EffectRunner_Dispose_HandlesProviderDisposalFailure()
+    {
+        var registry = new EffectRegistry();
+        var throwingFactory = new ThrowingDisposeEffectFactory();
+        var normalFactory = new TrackingEffectFactory();
+        registry.Register(typeof(ThrowingDisposeEffectFactory), enabled: true);
+        registry.Register(typeof(TrackingEffectFactory), enabled: true);
+
+        var runner = new EffectRunner([throwingFactory, normalFactory], registry);
+
+        // Should not throw — disposal failures are caught internally
+        var act = () => runner.Dispose();
+        act.Should().NotThrow();
+
+        // Both providers should have had Dispose called
+        throwingFactory.Provider.DisposeCalled.Should().BeTrue();
+        normalFactory.Provider.DisposeCalled.Should().BeTrue();
+    }
+
+    #endregion
+
     #region StepEffectRunner
 
     [Test]
@@ -187,6 +259,27 @@ public class EffectRunnerRegistryTests
 
     #endregion
 
+    #region StepEffectRunner Behavior
+
+    [Test]
+    public void StepEffectRunner_Dispose_HandlesProviderDisposalFailure()
+    {
+        var registry = new EffectRegistry();
+        var throwingFactory = new ThrowingDisposeStepEffectFactory();
+        var normalFactory = new EnabledStepEffectFactory();
+        registry.Register(typeof(ThrowingDisposeStepEffectFactory), enabled: true);
+        registry.Register(typeof(EnabledStepEffectFactory), enabled: true);
+
+        var runner = new StepEffectRunner([throwingFactory, normalFactory], registry);
+
+        var act = () => runner.Dispose();
+        act.Should().NotThrow();
+
+        throwingFactory.Provider.DisposeCalled.Should().BeTrue();
+    }
+
+    #endregion
+
     #region Test Stubs
 
     private class StubEffectProvider : IEffectProvider
@@ -259,6 +352,112 @@ public class EffectRunnerRegistryTests
             CreateCalled = true;
             return new StubStepEffectProvider();
         }
+    }
+
+    private class FakeModel : IModel
+    {
+        public long Id => 1;
+
+        public override string ToString() => "FakeModel";
+    }
+
+    private class TrackingEffectProvider : IEffectProvider
+    {
+        public bool SaveChangesCalled { get; private set; }
+        public bool TrackCalled { get; private set; }
+        public bool UpdateCalled { get; private set; }
+        public bool DisposeCalled { get; private set; }
+
+        public Task SaveChanges(CancellationToken cancellationToken)
+        {
+            SaveChangesCalled = true;
+            return Task.CompletedTask;
+        }
+
+        public Task Track(IModel model)
+        {
+            TrackCalled = true;
+            return Task.CompletedTask;
+        }
+
+        public Task Update(IModel model)
+        {
+            UpdateCalled = true;
+            return Task.CompletedTask;
+        }
+
+        public void Dispose()
+        {
+            DisposeCalled = true;
+        }
+    }
+
+    private class TrackingEffectFactory : IEffectProviderFactory
+    {
+        public TrackingEffectProvider Provider { get; } = new();
+
+        public IEffectProvider Create() => Provider;
+    }
+
+    private class TrackingEffectFactory2 : IEffectProviderFactory
+    {
+        public TrackingEffectProvider Provider { get; } = new();
+
+        public IEffectProvider Create() => Provider;
+    }
+
+    private class ThrowingDisposeEffectProvider : IEffectProvider
+    {
+        public bool DisposeCalled { get; private set; }
+
+        public Task SaveChanges(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task Track(IModel model) => Task.CompletedTask;
+
+        public Task Update(IModel model) => Task.CompletedTask;
+
+        public void Dispose()
+        {
+            DisposeCalled = true;
+            throw new InvalidOperationException("Disposal failed");
+        }
+    }
+
+    private class ThrowingDisposeEffectFactory : IEffectProviderFactory
+    {
+        public ThrowingDisposeEffectProvider Provider { get; } = new();
+
+        public IEffectProvider Create() => Provider;
+    }
+
+    private class ThrowingDisposeStepEffectProvider : IStepEffectProvider
+    {
+        public bool DisposeCalled { get; private set; }
+
+        public Task BeforeStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
+            EffectStep<TIn, TOut> effectStep,
+            ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
+
+        public Task AfterStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
+            EffectStep<TIn, TOut> effectStep,
+            ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
+            CancellationToken cancellationToken
+        ) => Task.CompletedTask;
+
+        public void Dispose()
+        {
+            DisposeCalled = true;
+            throw new InvalidOperationException("Disposal failed");
+        }
+    }
+
+    private class ThrowingDisposeStepEffectFactory : IStepEffectProviderFactory
+    {
+        public ThrowingDisposeStepEffectProvider Provider { get; } = new();
+
+        public IStepEffectProvider Create() => Provider;
     }
 
     #endregion
