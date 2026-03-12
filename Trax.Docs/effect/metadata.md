@@ -31,10 +31,18 @@ public class Metadata : IModel, IDisposable
     public bool CancellationRequested { get; set; }   // Cross-server cancellation flag
     public DateTime? StepStartedAt { get; set; }      // Current step start timestamp
     public string? CurrentlyRunningStep { get; set; } // Name of the currently running step
+    public string? HostName { get; set; }              // Machine hostname where the train ran
+    public string? HostEnvironment { get; set; }       // Environment type (lambda, ecs, kubernetes, server)
+    public string? HostInstanceId { get; set; }        // Instance identifier (pod name, Lambda stream, etc.)
+    public string? HostLabels { get; set; }            // User-provided labels as JSON (region, service, team)
 }
 ```
 
 The `TrainState` tracks the journey: `Pending` (boarding) -> `InProgress` (in transit) -> `Completed` (arrived), `Failed` (derailed), or `Cancelled`. If a train derails, the journey log captures the exception, stack trace, and which stop it happened at.
+
+## Host Tracking
+
+In distributed environments (Lambda, ECS, multiple servers), every metadata record captures where the train actually executed. Host information is auto-detected at startup and stamped on each execution — see [Host Tracking](host-tracking.md) for details on auto-detection, custom labels, and the builder API.
 
 ## Nested Trains
 
