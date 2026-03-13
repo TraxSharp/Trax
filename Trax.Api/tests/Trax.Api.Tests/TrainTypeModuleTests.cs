@@ -2,6 +2,8 @@ using FluentAssertions;
 using HotChocolate.Types;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Api.GraphQL.Mutations;
+using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -143,7 +145,7 @@ public class TrainTypeModuleTests
     #region Field Generation and ObjectTypeExtension
 
     [Test]
-    public async Task CreateTypesAsync_RunOnlyTrain_GeneratesExtension()
+    public async Task CreateTypesAsync_RunOnlyTrain_GeneratesExtensions()
     {
         var discovery = new StubDiscoveryService([
             CreateRegistration<UnitInput>(
@@ -157,11 +159,12 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        types.OfType<ObjectTypeExtension>().Should().HaveCount(1);
+        // DispatchMutations field extension + RootMutation dispatch extension
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
     }
 
     [Test]
-    public async Task CreateTypesAsync_QueueOnlyTrain_GeneratesExtension()
+    public async Task CreateTypesAsync_QueueOnlyTrain_GeneratesExtensions()
     {
         var discovery = new StubDiscoveryService([
             CreateRegistration<UnitInput>(
@@ -175,7 +178,8 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        types.OfType<ObjectTypeExtension>().Should().HaveCount(1);
+        // DispatchMutations field extension + RootMutation dispatch extension
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
     }
 
     [Test]
@@ -220,7 +224,7 @@ public class TrainTypeModuleTests
     }
 
     [Test]
-    public async Task CreateTypesAsync_GraphQLEnabledTrains_ExactlyOneObjectTypeExtension()
+    public async Task CreateTypesAsync_GraphQLEnabledTrains_GeneratesTwoExtensions()
     {
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
@@ -234,8 +238,8 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        // All trains share a single ObjectTypeExtension for "DispatchMutations"
-        types.OfType<ObjectTypeExtension>().Should().HaveCount(1);
+        // DispatchMutations field extension + RootMutation dispatch extension
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
     }
 
     #endregion
@@ -243,10 +247,11 @@ public class TrainTypeModuleTests
     #region Type Counts — verifying typed vs Unit train type generation
 
     [Test]
-    public async Task CreateTypesAsync_UnitTrain_GeneratesInputResponseEnumAndExtension()
+    public async Task CreateTypesAsync_UnitTrain_GeneratesInputResponseEnumAndExtensions()
     {
         // Unit train with RunAndQueue →
-        // InputObjectType<TIn> + ObjectType (response) + EnumType (ExecutionMode) + ObjectTypeExtension = 4
+        // InputObjectType<TIn> + ObjectType (response) + EnumType (ExecutionMode)
+        // + ObjectType<DispatchMutations> + 2x ObjectTypeExtension (DispatchMutations fields + RootMutation dispatch) = 6
         var discovery = new StubDiscoveryService([
             CreateRegistration<UnitInput>("UnitTrain", typeof(Unit)),
         ]);
@@ -254,8 +259,8 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        types.Should().HaveCount(4);
-        types.Should().ContainSingle(t => t is ObjectTypeExtension);
+        types.Should().HaveCount(6);
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
         types.Should().ContainSingle(t => t is EnumType);
         types
             .Should()
@@ -268,10 +273,11 @@ public class TrainTypeModuleTests
     }
 
     [Test]
-    public async Task CreateTypesAsync_TypedTrain_GeneratesInputOutputResponseEnumAndExtension()
+    public async Task CreateTypesAsync_TypedTrain_GeneratesInputOutputResponseEnumAndExtensions()
     {
         // Typed train with RunAndQueue →
-        // InputObjectType<TIn> + ObjectType<TOut> + ObjectType (response) + EnumType + ObjectTypeExtension = 5
+        // InputObjectType<TIn> + ObjectType<TOut> + ObjectType (response) + EnumType
+        // + ObjectType<DispatchMutations> + 2x ObjectTypeExtension = 7
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>("TypedTrain", typeof(TypedOutput)),
         ]);
@@ -279,8 +285,8 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        types.Should().HaveCount(5);
-        types.Should().ContainSingle(t => t is ObjectTypeExtension);
+        types.Should().HaveCount(7);
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
         types.Should().ContainSingle(t => t is EnumType);
         types
             .Should()
@@ -288,12 +294,8 @@ public class TrainTypeModuleTests
                 t.GetType().IsGenericType
                 && t.GetType().GetGenericTypeDefinition() == typeof(InputObjectType<>)
             );
-        types
-            .Should()
-            .ContainSingle(t =>
-                t.GetType().IsGenericType
-                && t.GetType().GetGenericTypeDefinition() == typeof(ObjectType<>)
-            );
+        // ObjectType<TOut> (GetGenericObjectTypes excludes namespace marker types)
+        GetGenericObjectTypes(types).Should().HaveCount(1);
         // Per-train response type (non-generic ObjectType)
         GetNonGenericObjectTypes(types).Should().HaveCount(1);
     }
@@ -303,7 +305,8 @@ public class TrainTypeModuleTests
     {
         // 1 typed + 1 Unit, different input types, both RunAndQueue →
         // InputObjectType<TypedInput> + InputObjectType<UnitInput> + ObjectType<TypedOutput>
-        // + 2x ObjectType (response) + EnumType + ObjectTypeExtension = 7
+        // + 2x ObjectType (response) + EnumType
+        // + ObjectType<DispatchMutations> + 2x ObjectTypeExtension (DispatchMutations fields + RootMutation) = 9
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
                 "TypedTrain",
@@ -316,7 +319,7 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        types.Should().HaveCount(7);
+        types.Should().HaveCount(9);
     }
 
     [Test]
@@ -583,7 +586,7 @@ public class TrainTypeModuleTests
     #region Query Train Generation
 
     [Test]
-    public async Task CreateTypesAsync_QueryTrain_GeneratesDiscoverQueriesExtension()
+    public async Task CreateTypesAsync_QueryTrain_GeneratesDiscoverQueriesExtensions()
     {
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
@@ -598,7 +601,8 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        types.OfType<ObjectTypeExtension>().Should().HaveCount(1);
+        // DiscoverQueries field extension + RootQuery discover extension
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
     }
 
     [Test]
@@ -622,7 +626,7 @@ public class TrainTypeModuleTests
     }
 
     [Test]
-    public async Task CreateTypesAsync_MixedQueryAndMutationTrains_GeneratesTwoExtensions()
+    public async Task CreateTypesAsync_MixedQueryAndMutationTrains_GeneratesFourExtensions()
     {
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
@@ -645,14 +649,16 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        // One ObjectTypeExtension for DiscoverQueries, one for DispatchMutations
-        types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
+        // DiscoverQueries fields + RootQuery discover + DispatchMutations fields + RootMutation dispatch
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(4);
     }
 
     [Test]
     public async Task CreateTypesAsync_QueryTrainWithTypedOutput_TypeCount()
     {
-        // Query typed train → InputObjectType<TIn> + ObjectType<TOut> + ObjectTypeExtension = 3
+        // Query typed train →
+        // InputObjectType<TIn> + ObjectType<TOut>
+        // + ObjectType<DiscoverQueries> + 2x ObjectTypeExtension (DiscoverQueries fields + RootQuery discover) = 5
         // No per-train response type or ExecutionMode enum for queries
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
@@ -667,7 +673,134 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        types.Should().HaveCount(3);
+        types.Should().HaveCount(5);
+    }
+
+    #endregion
+
+    #region Conditional Root Type Extensions
+
+    [Test]
+    public async Task CreateTypesAsync_OnlyMutationTrains_ExtendsRootMutationNotRootQuery()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<UnitInput>(
+                "BanTrain",
+                typeof(Unit),
+                name: "Ban",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // Should have ObjectType<DispatchMutations> but not ObjectType<DiscoverQueries>
+        types
+            .Should()
+            .ContainSingle(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(ObjectType<>)
+                && t.GetType().GetGenericArguments()[0] == typeof(DispatchMutations)
+            );
+        types
+            .Should()
+            .NotContain(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(ObjectType<>)
+                && t.GetType().GetGenericArguments()[0] == typeof(DiscoverQueries)
+            );
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_OnlyQueryTrains_ExtendsRootQueryNotRootMutation()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(TypedOutput),
+                name: "Lookup",
+                isQuery: true,
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // Should have ObjectType<DiscoverQueries> but not ObjectType<DispatchMutations>
+        types
+            .Should()
+            .ContainSingle(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(ObjectType<>)
+                && t.GetType().GetGenericArguments()[0] == typeof(DiscoverQueries)
+            );
+        types
+            .Should()
+            .NotContain(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(ObjectType<>)
+                && t.GetType().GetGenericArguments()[0] == typeof(DispatchMutations)
+            );
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_MixedTrains_ExtendsBothRootTypes()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(TypedOutput),
+                name: "Lookup",
+                serviceTypeName: "LookupTrain",
+                isQuery: true,
+                operations: GraphQLOperation.Run
+            ),
+            CreateRegistration<UnitInput>(
+                "BanTrain",
+                typeof(Unit),
+                name: "Ban",
+                serviceTypeName: "BanTrain",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        types
+            .Should()
+            .ContainSingle(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(ObjectType<>)
+                && t.GetType().GetGenericArguments()[0] == typeof(DiscoverQueries)
+            );
+        types
+            .Should()
+            .ContainSingle(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(ObjectType<>)
+                && t.GetType().GetGenericArguments()[0] == typeof(DispatchMutations)
+            );
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_EmptyRegistrations_NoNamespaceTypesRegistered()
+    {
+        var discovery = new StubDiscoveryService([]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        types.Should().BeEmpty();
+        types
+            .Should()
+            .NotContain(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(ObjectType<>)
+                && NamespaceMarkerTypes.Contains(t.GetType().GetGenericArguments()[0])
+            );
     }
 
     #endregion
@@ -681,6 +814,12 @@ public class TrainTypeModuleTests
         return types.Where(t => t.GetType() == typeof(ObjectType)).ToList();
     }
 
+    private static readonly System.Collections.Generic.HashSet<Type> NamespaceMarkerTypes =
+    [
+        typeof(DiscoverQueries),
+        typeof(DispatchMutations),
+    ];
+
     private static List<ITypeSystemMember> GetGenericObjectTypes(
         IReadOnlyCollection<ITypeSystemMember> types
     )
@@ -689,6 +828,7 @@ public class TrainTypeModuleTests
             .Where(t =>
                 t.GetType().IsGenericType
                 && t.GetType().GetGenericTypeDefinition() == typeof(ObjectType<>)
+                && !NamespaceMarkerTypes.Contains(t.GetType().GetGenericArguments()[0])
             )
             .ToList();
     }
