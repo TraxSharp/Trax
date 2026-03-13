@@ -6,6 +6,7 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Utils;
+using Trax.Mediator.Services.ConcurrencyLimiter;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -15,6 +16,7 @@ namespace Trax.Mediator.Services.TrainExecution;
 public class TrainExecutionService(
     ITrainDiscoveryService discoveryService,
     IRunExecutor runExecutor,
+    IConcurrencyLimiter concurrencyLimiter,
     IDataContextProviderFactory dataContextFactory,
     IServiceProvider serviceProvider
 ) : ITrainExecutionService
@@ -66,6 +68,11 @@ public class TrainExecutionService(
         var input = DeserializeInput(inputJson, registration);
 
         registration.ServiceType.FullName.AssertLoaded();
+
+        using var permit = await concurrencyLimiter.AcquireAsync(
+            registration.ServiceType.FullName,
+            ct
+        );
 
         return await runExecutor.ExecuteAsync(
             registration.ServiceType.FullName,

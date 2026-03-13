@@ -312,7 +312,108 @@ public class TrainExecutionServiceTests
 
     #endregion
 
+    #region Concurrency Limiting
+
+    [Test]
+    public async Task RunAsync_WithConcurrencyLimit_BlocksAtLimit()
+    {
+        // Arrange — rebuild with concurrency limit of 2
+        if (_serviceProvider is IDisposable d)
+            d.Dispose();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UseInMemory())
+                .AddMediator(mediator =>
+                    mediator
+                        .ScanAssemblies(typeof(TrainExecutionServiceTests).Assembly)
+                        .ConcurrentRunLimit<ISlowExecTrain>(2)
+                )
+        );
+        _serviceProvider = services.BuildServiceProvider();
+
+        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var inputJson = JsonSerializer.Serialize(
+            new SlowExecInput { DelayMs = 500 },
+            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+        );
+
+        // Act — fire 3 concurrent requests, limit is 2
+        var task1 = executionService.RunAsync(nameof(ISlowExecTrain), inputJson);
+        var task2 = executionService.RunAsync(nameof(ISlowExecTrain), inputJson);
+        var task3 = executionService.RunAsync(nameof(ISlowExecTrain), inputJson);
+
+        // Wait for first two to complete
+        var firstTwo = await Task.WhenAny(Task.WhenAll(task1, task2), Task.Delay(3000));
+        firstTwo.Should().NotBeNull();
+
+        // Third should complete after one of the first two finishes
+        var result3 = await task3;
+        result3.MetadataId.Should().BeGreaterThan(0);
+    }
+
+    [Test]
+    public async Task RunAsync_CancelledWhileWaitingForPermit_ThrowsOperationCancelled()
+    {
+        // Arrange — rebuild with concurrency limit of 1
+        if (_serviceProvider is IDisposable d)
+            d.Dispose();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UseInMemory())
+                .AddMediator(mediator =>
+                    mediator
+                        .ScanAssemblies(typeof(TrainExecutionServiceTests).Assembly)
+                        .ConcurrentRunLimit<ISlowExecTrain>(1)
+                )
+        );
+        _serviceProvider = services.BuildServiceProvider();
+
+        var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
+        var inputJson = JsonSerializer.Serialize(
+            new SlowExecInput { DelayMs = 2000 },
+            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+        );
+
+        // Act — first request holds the slot, second gets cancelled
+        var task1 = executionService.RunAsync(nameof(ISlowExecTrain), inputJson);
+
+        // Small delay to ensure task1 acquires the permit
+        await Task.Delay(50);
+
+        using var cts = new CancellationTokenSource(200);
+        var act = async () =>
+            await executionService.RunAsync(nameof(ISlowExecTrain), inputJson, cts.Token);
+
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        // Clean up first task
+        await task1;
+    }
+
+    #endregion
+
     #region Test Trains
+
+    public record SlowExecInput
+    {
+        public int DelayMs { get; init; }
+    }
+
+    public interface ISlowExecTrain : IServiceTrain<SlowExecInput, Unit>;
+
+    public class SlowExecTrain : ServiceTrain<SlowExecInput, Unit>, ISlowExecTrain
+    {
+        protected override async Task<Either<Exception, Unit>> RunInternal(SlowExecInput input)
+        {
+            await Task.Delay(input.DelayMs);
+            return Unit.Default;
+        }
+    }
 
     public record TypedExecInput
     {

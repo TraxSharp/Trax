@@ -19,10 +19,16 @@ public partial class TraxMediatorBuilder
             );
         }
 
-        return new MediatorConfiguration
+        var configuration = new MediatorConfiguration
         {
             TrainLifetime = _lifetime,
             Assemblies = [.. _assemblies],
+            GlobalMaxConcurrentRun = _globalMaxConcurrentRun,
         };
+
+        foreach (var (trainName, limit) in _concurrencyOverrides)
+            configuration.ConcurrencyOverrides[trainName] = limit;
+
+        return configuration;
     }
 }

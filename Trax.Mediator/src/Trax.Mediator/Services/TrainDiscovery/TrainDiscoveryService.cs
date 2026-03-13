@@ -52,6 +52,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             var graphql = GetGraphQLMetadata(implementationType);
             var broadcastEnabled = HasBroadcastAttribute(implementationType);
             var isRemote = HasRemoteAttribute(implementationType);
+            var concurrencyLimit = GetConcurrencyLimit(implementationType);
 
             registrations.Add(
                 new TrainRegistration
@@ -75,6 +76,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     GraphQLDescription = graphql.Description,
                     GraphQLDeprecationReason = graphql.DeprecationReason,
                     GraphQLOperations = graphql.Operations,
+                    MaxConcurrentRun = concurrencyLimit,
                 }
             );
         }
@@ -94,6 +96,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 var graphql = GetGraphQLMetadata(implType);
                 var broadcastEnabled = HasBroadcastAttribute(implType);
                 var isRemote = HasRemoteAttribute(implType);
+                var concurrencyLimit = GetConcurrencyLimit(implType);
 
                 return new TrainRegistration
                 {
@@ -117,6 +120,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     GraphQLDescription = graphql.Description,
                     GraphQLDeprecationReason = graphql.DeprecationReason,
                     GraphQLOperations = graphql.Operations,
+                    MaxConcurrentRun = concurrencyLimit,
                 };
             })
             .ToList()
@@ -205,6 +209,9 @@ public class TrainDiscoveryService : ITrainDiscoveryService
 
     private static bool HasRemoteAttribute(Type implementationType) =>
         implementationType.GetCustomAttribute<TraxRemoteAttribute>() is not null;
+
+    private static int? GetConcurrencyLimit(Type implementationType) =>
+        implementationType.GetCustomAttribute<TraxConcurrencyLimitAttribute>()?.MaxConcurrent;
 
     private static string GetFriendlyTypeName(Type type)
     {

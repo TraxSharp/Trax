@@ -8,6 +8,7 @@ using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
+using Trax.Mediator.Services.ConcurrencyLimiter;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -175,6 +176,7 @@ public static class ServiceExtensions
             .AddSingleton<IServiceCollection>(serviceCollection)
             .AddSingleton<ITrainRegistry>(trainRegistry)
             .AddSingleton<ITrainDiscoveryService, TrainDiscoveryService>()
+            .AddSingleton<IConcurrencyLimiter, ConcurrencyLimiter>()
             .AddScoped<ITrainBus, TrainBus>()
             .AddScoped<IRunExecutor, LocalRunExecutor>()
             .AddScoped<ITrainExecutionService, TrainExecutionService>()

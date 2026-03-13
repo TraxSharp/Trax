@@ -208,6 +208,42 @@ public class TrainDiscoveryServiceTests
 
     #endregion
 
+    #region MaxConcurrentRun
+
+    [Test]
+    public void DiscoverTrains_WithConcurrencyLimitAttribute_SetsMaxConcurrentRun()
+    {
+        var services = CreateServicesWithTrains();
+        using var provider = services.BuildServiceProvider();
+
+        var discovery = provider.GetRequiredService<ITrainDiscoveryService>();
+        var registrations = discovery.DiscoverTrains();
+
+        var limited = registrations.FirstOrDefault(r =>
+            r.ImplementationType == typeof(ConcurrencyLimitedTrain)
+        );
+
+        limited.Should().NotBeNull();
+        limited!.MaxConcurrentRun.Should().Be(15);
+    }
+
+    [Test]
+    public void DiscoverTrains_WithoutConcurrencyLimitAttribute_MaxConcurrentRunIsNull()
+    {
+        var services = CreateServicesWithTrains();
+        using var provider = services.BuildServiceProvider();
+
+        var discovery = provider.GetRequiredService<ITrainDiscoveryService>();
+        var registrations = discovery.DiscoverTrains();
+
+        var plain = registrations.FirstOrDefault(r => r.ImplementationType == typeof(PlainTrain));
+
+        plain.Should().NotBeNull();
+        plain!.MaxConcurrentRun.Should().BeNull();
+    }
+
+    #endregion
+
     #region Setup
 
     private static IServiceCollection CreateServicesWithTrains()
@@ -306,6 +342,20 @@ public class TrainDiscoveryServiceTests
             Task.FromResult<Either<Exception, DiscoveryOutput>>(
                 new DiscoveryOutput { Result = "graphql" }
             );
+    }
+
+    public record ConcurrencyLimitedInput;
+
+    public interface IConcurrencyLimitedTrain : IServiceTrain<ConcurrencyLimitedInput, Unit>;
+
+    [TraxConcurrencyLimit(15)]
+    public class ConcurrencyLimitedTrain
+        : ServiceTrain<ConcurrencyLimitedInput, Unit>,
+            IConcurrencyLimitedTrain
+    {
+        protected override Task<Either<Exception, Unit>> RunInternal(
+            ConcurrencyLimitedInput input
+        ) => Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
     #endregion

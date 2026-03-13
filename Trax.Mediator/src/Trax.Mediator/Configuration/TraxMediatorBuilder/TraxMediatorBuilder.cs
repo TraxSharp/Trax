@@ -12,6 +12,8 @@ public partial class TraxMediatorBuilder
     private readonly TraxBuilderWithEffects _parent;
     private ServiceLifetime _lifetime = ServiceLifetime.Transient;
     private readonly List<Assembly> _assemblies = [];
+    private int? _globalMaxConcurrentRun;
+    private readonly Dictionary<string, int> _concurrencyOverrides = new();
 
     internal TraxMediatorBuilder(TraxBuilderWithEffects parent)
     {
