@@ -29,4 +29,13 @@ public class RemoteRunOptions
     /// block until the train completes (unlike queue dispatch which is fire-and-forget).
     /// </summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Retry options for transient HTTP failures (429, 502, 503).
+    /// </summary>
+    /// <remarks>
+    /// Defaults to 5 retries with exponential backoff starting at 1 second.
+    /// Set <see cref="HttpRetryOptions.MaxRetries"/> to 0 to disable retries.
+    /// </remarks>
+    public HttpRetryOptions Retry { get; set; } = new();
 }

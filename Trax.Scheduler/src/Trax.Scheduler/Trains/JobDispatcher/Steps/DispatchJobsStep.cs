@@ -217,12 +217,12 @@ internal class DispatchJobsStep(
         {
             logger.LogError(
                 ex,
-                "Failed to enqueue work queue entry {WorkQueueId} (Metadata: {MetadataId}). Marking metadata as failed",
+                "Failed to enqueue work queue entry {WorkQueueId} (Metadata: {MetadataId}). Handling dispatch failure",
                 entry.Id,
                 metadata.Id
             );
 
-            await FailOrphanedMetadataAsync(metadata.Id, ex);
+            await HandleDispatchFailureAsync(entry.Id, metadata.Id, ex);
             return false;
         }
 
@@ -230,27 +230,80 @@ internal class DispatchJobsStep(
     }
 
     /// <summary>
-    /// Marks an orphaned Metadata record as Failed after an enqueue failure.
-    /// Uses a fresh scope since the original transaction was already committed.
+    /// Handles a dispatch failure by marking the orphaned Metadata as Failed and optionally
+    /// requeuing the work queue entry for retry on the next dispatcher cycle.
     /// </summary>
-    private async Task FailOrphanedMetadataAsync(long metadataId, Exception exception)
+    /// <remarks>
+    /// The Metadata record is always marked as Failed (it represents one failed dispatch attempt).
+    /// If <see cref="SchedulerConfiguration.MaxDispatchAttempts"/> is greater than 0 and the
+    /// entry hasn't exhausted its attempts, the work queue entry is reset to Queued status
+    /// so the next dispatcher cycle creates a new Metadata and retries. The failed Metadata
+    /// stays as an immutable audit record.
+    /// </remarks>
+    private async Task HandleDispatchFailureAsync(
+        long workQueueId,
+        long metadataId,
+        Exception exception
+    )
     {
         try
         {
             using var scope = serviceProvider.CreateScope();
             var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
+            // 1. Mark orphaned metadata as Failed
             var metadata = await dataContext.Metadatas.FirstOrDefaultAsync(
                 m => m.Id == metadataId,
                 CancellationToken
             );
 
-            if (metadata is null || metadata.TrainState != TrainState.Pending)
-                return;
+            if (metadata is not null && metadata.TrainState == TrainState.Pending)
+            {
+                metadata.TrainState = TrainState.Failed;
+                metadata.EndTime = DateTime.UtcNow;
+                metadata.AddException(exception);
+            }
 
-            metadata.TrainState = TrainState.Failed;
-            metadata.EndTime = DateTime.UtcNow;
-            metadata.AddException(exception);
+            // 2. Requeue the work queue entry if attempts remain
+            var maxAttempts = schedulerConfiguration.MaxDispatchAttempts;
+
+            if (maxAttempts > 0)
+            {
+                var workQueueEntry = await dataContext.WorkQueues.FirstOrDefaultAsync(
+                    w => w.Id == workQueueId,
+                    CancellationToken
+                );
+
+                if (workQueueEntry is not null)
+                {
+                    workQueueEntry.DispatchAttempts++;
+
+                    if (workQueueEntry.DispatchAttempts < maxAttempts)
+                    {
+                        workQueueEntry.Status = WorkQueueStatus.Queued;
+                        workQueueEntry.MetadataId = null;
+                        workQueueEntry.DispatchedAt = null;
+
+                        logger.LogWarning(
+                            "Requeued work queue entry {WorkQueueId} after dispatch failure "
+                                + "(attempt {Attempt}/{MaxAttempts})",
+                            workQueueId,
+                            workQueueEntry.DispatchAttempts,
+                            maxAttempts
+                        );
+                    }
+                    else
+                    {
+                        logger.LogError(
+                            "Work queue entry {WorkQueueId} exhausted dispatch attempts "
+                                + "({Attempts}/{MaxAttempts}). Leaving as Dispatched for dead letter handling",
+                            workQueueId,
+                            workQueueEntry.DispatchAttempts,
+                            maxAttempts
+                        );
+                    }
+                }
+            }
 
             await dataContext.SaveChanges(CancellationToken);
         }
@@ -258,8 +311,10 @@ internal class DispatchJobsStep(
         {
             logger.LogError(
                 ex,
-                "Failed to mark orphaned Metadata {MetadataId} as failed. "
-                    + "The ReapStalePendingMetadataStep will recover it on the next ManifestManager cycle",
+                "Failed to handle dispatch failure for work queue entry {WorkQueueId} "
+                    + "(Metadata: {MetadataId}). The ReapStalePendingMetadataStep will recover it "
+                    + "on the next ManifestManager cycle",
+                workQueueId,
                 metadataId
             );
         }

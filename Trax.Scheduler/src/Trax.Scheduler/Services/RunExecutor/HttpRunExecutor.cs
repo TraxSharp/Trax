@@ -1,9 +1,12 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Http;
 using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Services.RunExecutor;
@@ -17,8 +20,15 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// and POSTs it to the configured <see cref="Configuration.RemoteRunOptions.BaseUrl"/>.
 /// The remote endpoint runs the train via <c>ITrainExecutionService.RunAsync()</c> and
 /// returns a <see cref="RemoteRunResponse"/> with the serialized output.
+///
+/// Retries transient HTTP failures (429, 502, 503) with exponential backoff.
+/// Configure retry behavior via <see cref="RemoteRunOptions.Retry"/>.
 /// </remarks>
-public class HttpRunExecutor(HttpClient httpClient) : IRunExecutor
+public class HttpRunExecutor(
+    HttpClient httpClient,
+    RemoteRunOptions options,
+    ILogger<HttpRunExecutor> logger
+) : IRunExecutor
 {
     private const int MaxErrorBodyLength = 2000;
 
@@ -37,7 +47,13 @@ public class HttpRunExecutor(HttpClient httpClient) : IRunExecutor
 
         var request = new RemoteRunRequest(trainName, inputJson, input.GetType().FullName!);
 
-        var httpResponse = await httpClient.PostAsJsonAsync(string.Empty, request, ct);
+        using var httpResponse = await HttpRetryHelper.PostWithRetryAsync(
+            httpClient,
+            request,
+            options.Retry,
+            logger,
+            ct
+        );
 
         if (!httpResponse.IsSuccessStatusCode)
         {

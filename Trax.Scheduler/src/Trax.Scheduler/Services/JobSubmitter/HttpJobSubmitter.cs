@@ -1,8 +1,10 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Http;
 
 namespace Trax.Scheduler.Services.JobSubmitter;
 
@@ -13,8 +15,15 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 /// Used by <c>UseRemoteWorkers()</c>. Serializes a <see cref="RemoteJobRequest"/> as JSON
 /// and POSTs it to the configured <see cref="RemoteWorkerOptions.BaseUrl"/>.
 /// The remote endpoint runs <see cref="Trains.JobRunner.JobRunnerTrain"/> to execute the train.
+///
+/// Retries transient HTTP failures (429, 502, 503) with exponential backoff.
+/// Configure retry behavior via <see cref="RemoteWorkerOptions.Retry"/>.
 /// </remarks>
-public class HttpJobSubmitter(HttpClient httpClient) : IJobSubmitter
+public class HttpJobSubmitter(
+    HttpClient httpClient,
+    RemoteWorkerOptions options,
+    ILogger<HttpJobSubmitter> logger
+) : IJobSubmitter
 {
     private const int MaxErrorBodyLength = 2000;
 
@@ -54,9 +63,11 @@ public class HttpJobSubmitter(HttpClient httpClient) : IJobSubmitter
 
     private async Task PostAsync(RemoteJobRequest request, CancellationToken cancellationToken)
     {
-        var httpResponse = await httpClient.PostAsJsonAsync(
-            string.Empty,
+        using var httpResponse = await HttpRetryHelper.PostWithRetryAsync(
+            httpClient,
             request,
+            options.Retry,
+            logger,
             cancellationToken
         );
 

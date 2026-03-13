@@ -78,6 +78,18 @@ public class SchedulerConfiguration
     public int? MaxActiveJobs { get; set; } = 10;
 
     /// <summary>
+    /// The maximum number of dispatch attempts before a work queue entry is permanently failed.
+    /// </summary>
+    /// <remarks>
+    /// When the job submitter fails (e.g., remote worker throttling or unavailability) and
+    /// retries are exhausted, the work queue entry is requeued for the next dispatcher cycle.
+    /// After this many total failed attempts, the entry is left in Dispatched status and the
+    /// dead letter mechanism handles it. Set to 0 to disable requeuing (fail immediately on
+    /// first dispatch failure, preserving pre-1.2.0 behavior).
+    /// </remarks>
+    public int MaxDispatchAttempts { get; set; } = 5;
+
+    /// <summary>
     /// Priority boost automatically applied to dependent train work queue entries.
     /// </summary>
     /// <remarks>

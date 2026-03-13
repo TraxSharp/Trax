@@ -1,8 +1,10 @@
 using System.Net;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 
@@ -25,7 +27,11 @@ public class HttpJobSubmitterTests
         {
             BaseAddress = new Uri("https://test.example.com/trax/execute"),
         };
-        return (new HttpJobSubmitter(httpClient), handler);
+        var options = new RemoteWorkerOptions { Retry = new HttpRetryOptions { MaxRetries = 0 } };
+        return (
+            new HttpJobSubmitter(httpClient, options, NullLogger<HttpJobSubmitter>.Instance),
+            handler
+        );
     }
 
     private static string SerializeSuccessResponse(long metadataId) =>
@@ -334,6 +340,99 @@ public class HttpJobSubmitterTests
 
     #endregion
 
+    #region Retry Behavior
+
+    [Test]
+    public async Task EnqueueAsync_429ThenSuccess_RetriesAndSucceeds()
+    {
+        var handler = new SequentialHttpMessageHandler([
+            (HttpStatusCode.TooManyRequests, "{}"),
+            (HttpStatusCode.OK, SerializeSuccessResponse(42)),
+        ]);
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://test.example.com/trax/execute"),
+        };
+        var options = new RemoteWorkerOptions
+        {
+            Retry = new HttpRetryOptions
+            {
+                MaxRetries = 3,
+                BaseDelay = TimeSpan.FromMilliseconds(1),
+            },
+        };
+        var submitter = new HttpJobSubmitter(
+            client,
+            options,
+            NullLogger<HttpJobSubmitter>.Instance
+        );
+
+        var jobId = await submitter.EnqueueAsync(42);
+
+        jobId.Should().StartWith("http-");
+        handler.RequestCount.Should().Be(2);
+    }
+
+    [Test]
+    public async Task EnqueueAsync_429ExceedsMaxRetries_ThrowsTrainException()
+    {
+        var handler = new SequentialHttpMessageHandler([
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+        ]);
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://test.example.com/trax/execute"),
+        };
+        var options = new RemoteWorkerOptions
+        {
+            Retry = new HttpRetryOptions
+            {
+                MaxRetries = 3,
+                BaseDelay = TimeSpan.FromMilliseconds(1),
+            },
+        };
+        var submitter = new HttpJobSubmitter(
+            client,
+            options,
+            NullLogger<HttpJobSubmitter>.Instance
+        );
+
+        var act = async () => await submitter.EnqueueAsync(42);
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("429");
+        handler.RequestCount.Should().Be(4); // 1 initial + 3 retries
+    }
+
+    [Test]
+    public async Task EnqueueAsync_WithRetryDisabled_DoesNotRetry429()
+    {
+        var handler = new SequentialHttpMessageHandler([
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+            (HttpStatusCode.OK, SerializeSuccessResponse(42)),
+        ]);
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://test.example.com/trax/execute"),
+        };
+        var options = new RemoteWorkerOptions { Retry = new HttpRetryOptions { MaxRetries = 0 } };
+        var submitter = new HttpJobSubmitter(
+            client,
+            options,
+            NullLogger<HttpJobSubmitter>.Instance
+        );
+
+        var act = async () => await submitter.EnqueueAsync(42);
+
+        await act.Should().ThrowAsync<TrainException>();
+        handler.RequestCount.Should().Be(1);
+    }
+
+    #endregion
+
     #region MockHttpMessageHandler
 
     private class MockHttpMessageHandler(HttpStatusCode responseStatus, string? responseBody = null)
@@ -374,6 +473,32 @@ public class HttpJobSubmitterTests
                 );
 
             return response;
+        }
+    }
+
+    private class SequentialHttpMessageHandler(List<(HttpStatusCode Status, string Body)> responses)
+        : HttpMessageHandler
+    {
+        private int _callIndex;
+        public int RequestCount => _callIndex;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var index = _callIndex < responses.Count ? _callIndex : responses.Count - 1;
+            _callIndex++;
+
+            var (status, body) = responses[index];
+            var response = new HttpResponseMessage(status)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+            };
+
+            return Task.FromResult(response);
         }
     }
 

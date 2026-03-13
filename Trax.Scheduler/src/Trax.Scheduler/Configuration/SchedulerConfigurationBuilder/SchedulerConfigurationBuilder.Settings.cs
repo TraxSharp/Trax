@@ -62,6 +62,23 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
+    /// Sets the maximum number of dispatch attempts before a work queue entry is permanently failed.
+    /// </summary>
+    /// <param name="maxAttempts">The maximum attempts (default: 5, 0 = fail immediately on first dispatch failure)</param>
+    /// <returns>The builder for method chaining</returns>
+    /// <remarks>
+    /// When the job submitter fails (e.g., remote worker throttling after retry exhaustion),
+    /// the work queue entry is requeued for the next dispatcher cycle. After this many total
+    /// failed attempts, the entry stays in Dispatched status and the dead letter mechanism
+    /// handles it. Set to 0 to disable requeuing (preserves pre-1.2.0 behavior).
+    /// </remarks>
+    public SchedulerConfigurationBuilder MaxDispatchAttempts(int maxAttempts)
+    {
+        _configuration.MaxDispatchAttempts = Math.Max(0, maxAttempts);
+        return this;
+    }
+
+    /// <summary>
     /// Sets the maximum number of active jobs (Pending + InProgress) allowed across all manifests.
     /// </summary>
     /// <param name="maxJobs">The maximum active jobs (default: 100, null = unlimited)</param>

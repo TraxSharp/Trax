@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.RunExecutor;
 
 namespace Trax.Scheduler.Tests.UnitTests;
@@ -23,7 +25,7 @@ public class HttpRunExecutorTests
         );
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var result = await executor.ExecuteAsync(
             "My.Train",
@@ -45,7 +47,7 @@ public class HttpRunExecutorTests
         var response = new RemoteRunResponse(MetadataId: 10);
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var result = await executor.ExecuteAsync(
             "My.UnitTrain",
@@ -71,7 +73,7 @@ public class HttpRunExecutorTests
         );
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var act = async () =>
             await executor.ExecuteAsync(
@@ -98,7 +100,7 @@ public class HttpRunExecutorTests
         );
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var act = async () =>
             await executor.ExecuteAsync(
@@ -129,7 +131,7 @@ public class HttpRunExecutorTests
         );
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var act = async () =>
             await executor.ExecuteAsync(
@@ -158,7 +160,7 @@ public class HttpRunExecutorTests
         );
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var act = async () =>
             await executor.ExecuteAsync(
@@ -185,7 +187,7 @@ public class HttpRunExecutorTests
         );
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var act = async () =>
             await executor.ExecuteAsync(
@@ -212,7 +214,7 @@ public class HttpRunExecutorTests
         );
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var act = async () =>
             await executor.ExecuteAsync(
@@ -241,7 +243,7 @@ public class HttpRunExecutorTests
             responseBody: errorBody
         );
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var act = async () =>
             await executor.ExecuteAsync(
@@ -260,7 +262,7 @@ public class HttpRunExecutorTests
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.BadGateway, responseBody: "");
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var act = async () =>
             await executor.ExecuteAsync(
@@ -283,7 +285,7 @@ public class HttpRunExecutorTests
             responseBody: htmlBody
         );
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var act = async () =>
             await executor.ExecuteAsync(
@@ -306,7 +308,7 @@ public class HttpRunExecutorTests
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, responseBody: "null");
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
 
         var act = async () =>
             await executor.ExecuteAsync(
@@ -336,7 +338,7 @@ public class HttpRunExecutorTests
             }
         );
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
         var input = new TestInput { Name = "serialize-test" };
 
         await executor.ExecuteAsync("My.Train.FullName", input, typeof(TestOutput));
@@ -356,7 +358,7 @@ public class HttpRunExecutorTests
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, new RemoteRunResponse(1));
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(client);
+        var executor = CreateExecutor(client);
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
@@ -370,6 +372,88 @@ public class HttpRunExecutorTests
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
+
+    #endregion
+
+    #region Retry Behavior
+
+    [Test]
+    public async Task ExecuteAsync_429ThenSuccess_RetriesAndReturnsResult()
+    {
+        var successResponse = new RemoteRunResponse(MetadataId: 42);
+        var handler = new SequentialFakeHandler([
+            (HttpStatusCode.TooManyRequests, "{}"),
+            (HttpStatusCode.OK, JsonSerializer.Serialize(successResponse)),
+        ]);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = new HttpRunExecutor(
+            client,
+            new RemoteRunOptions
+            {
+                Retry = new HttpRetryOptions
+                {
+                    MaxRetries = 3,
+                    BaseDelay = TimeSpan.FromMilliseconds(1),
+                },
+            },
+            NullLogger<HttpRunExecutor>.Instance
+        );
+
+        var result = await executor.ExecuteAsync(
+            "My.Train",
+            new TestInput { Name = "retry-test" },
+            typeof(TestOutput)
+        );
+
+        result.MetadataId.Should().Be(42);
+        handler.RequestCount.Should().Be(2);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_429ExceedsMaxRetries_ThrowsTrainException()
+    {
+        var handler = new SequentialFakeHandler([
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+        ]);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = new HttpRunExecutor(
+            client,
+            new RemoteRunOptions
+            {
+                Retry = new HttpRetryOptions
+                {
+                    MaxRetries = 3,
+                    BaseDelay = TimeSpan.FromMilliseconds(1),
+                },
+            },
+            NullLogger<HttpRunExecutor>.Instance
+        );
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "fail" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("429");
+        handler.RequestCount.Should().Be(4);
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private static HttpRunExecutor CreateExecutor(HttpClient client) =>
+        new(
+            client,
+            new RemoteRunOptions { Retry = new HttpRetryOptions { MaxRetries = 0 } },
+            NullLogger<HttpRunExecutor>.Instance
+        );
 
     #endregion
 
@@ -433,6 +517,36 @@ public class HttpRunExecutorTests
                     "application/json"
                 ),
             };
+        }
+    }
+
+    private class SequentialFakeHandler(List<(HttpStatusCode Status, string Body)> responses)
+        : HttpMessageHandler
+    {
+        private int _callIndex;
+        public int RequestCount => _callIndex;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var index = _callIndex < responses.Count ? _callIndex : responses.Count - 1;
+            _callIndex++;
+
+            var (status, body) = responses[index];
+            return Task.FromResult(
+                new HttpResponseMessage(status)
+                {
+                    Content = new StringContent(
+                        body,
+                        System.Text.Encoding.UTF8,
+                        "application/json"
+                    ),
+                }
+            );
         }
     }
 

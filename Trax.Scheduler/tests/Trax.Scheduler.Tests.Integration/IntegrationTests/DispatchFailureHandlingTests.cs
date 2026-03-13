@@ -19,6 +19,7 @@ using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Mediator.Extensions;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Tests.ArrayLogger.Services.ArrayLoggingProvider;
@@ -191,7 +192,7 @@ public class DispatchFailureHandlingTests
     }
 
     [Test]
-    public async Task Dispatch_WhenEnqueueFails_WorkQueueStillDispatched()
+    public async Task Dispatch_WhenEnqueueFails_WorkQueueRequeuedForRetry()
     {
         // Arrange
         var manifest = await CreateAndSaveManifest();
@@ -206,14 +207,16 @@ public class DispatchFailureHandlingTests
         if (train is IDisposable d)
             d.Dispose();
 
-        // Assert — the work_queue entry was committed as Dispatched before the enqueue failure
+        // Assert — with MaxDispatchAttempts > 0 (default: 5), the entry is requeued
         _dataContext.Reset();
         var updatedEntry = await _dataContext
             .WorkQueues.AsNoTracking()
             .FirstAsync(q => q.Id == entry.Id);
 
-        updatedEntry.Status.Should().Be(WorkQueueStatus.Dispatched);
-        updatedEntry.MetadataId.Should().NotBeNull();
+        updatedEntry.Status.Should().Be(WorkQueueStatus.Queued);
+        updatedEntry.MetadataId.Should().BeNull();
+        updatedEntry.DispatchedAt.Should().BeNull();
+        updatedEntry.DispatchAttempts.Should().Be(1);
     }
 
     [Test]
@@ -317,6 +320,145 @@ public class DispatchFailureHandlingTests
                 "failed dispatch should not leave orphaned Pending metadata that blocks capacity"
             );
     }
+
+    #region Requeue Behavior
+
+    [Test]
+    public async Task Dispatch_WhenEnqueueFails_DispatchAttemptsIncremented()
+    {
+        // Arrange
+        var manifest = await CreateAndSaveManifest();
+        var entry = await CreateAndSaveWorkQueueEntry(manifest);
+
+        // Act — run dispatcher twice, both times will fail
+        for (var i = 0; i < 2; i++)
+        {
+            using var trainScope = _serviceProvider.CreateScope();
+            var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
+            await train.Run(Unit.Default);
+            if (train is IDisposable d)
+                d.Dispose();
+        }
+
+        // Assert — dispatch_attempts should be 2 after two failed attempts
+        _dataContext.Reset();
+        var updatedEntry = await _dataContext
+            .WorkQueues.AsNoTracking()
+            .FirstAsync(q => q.Id == entry.Id);
+
+        updatedEntry.DispatchAttempts.Should().Be(2);
+        updatedEntry.Status.Should().Be(WorkQueueStatus.Queued);
+    }
+
+    [Test]
+    public async Task Dispatch_WhenEnqueueFails_CreatesNewMetadataEachAttempt()
+    {
+        // Arrange
+        var manifest = await CreateAndSaveManifest();
+        await CreateAndSaveWorkQueueEntry(manifest);
+
+        // Act — run dispatcher twice
+        for (var i = 0; i < 2; i++)
+        {
+            using var trainScope = _serviceProvider.CreateScope();
+            var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
+            await train.Run(Unit.Default);
+            if (train is IDisposable d)
+                d.Dispose();
+        }
+
+        // Assert — should have 2 separate Failed metadata rows (one per attempt)
+        _dataContext.Reset();
+        var metadataRecords = await _dataContext
+            .Metadatas.AsNoTracking()
+            .Where(m => m.ManifestId == manifest.Id)
+            .ToListAsync();
+
+        metadataRecords.Should().HaveCount(2);
+        metadataRecords.Should().AllSatisfy(m => m.TrainState.Should().Be(TrainState.Failed));
+    }
+
+    [Test]
+    public async Task Dispatch_WhenMaxDispatchAttemptsExhausted_StaysDispatched()
+    {
+        // Arrange — set MaxDispatchAttempts to 2 via the configuration
+        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalMax = config.MaxDispatchAttempts;
+        config.MaxDispatchAttempts = 2;
+
+        try
+        {
+            var manifest = await CreateAndSaveManifest();
+            var entry = await CreateAndSaveWorkQueueEntry(manifest);
+
+            // Act — run dispatcher 3 times (exceeds max of 2)
+            for (var i = 0; i < 3; i++)
+            {
+                using var trainScope = _serviceProvider.CreateScope();
+                var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
+                await train.Run(Unit.Default);
+                if (train is IDisposable d)
+                    d.Dispose();
+            }
+
+            // Assert — after exhausting attempts, entry stays Dispatched
+            _dataContext.Reset();
+            var updatedEntry = await _dataContext
+                .WorkQueues.AsNoTracking()
+                .FirstAsync(q => q.Id == entry.Id);
+
+            updatedEntry.DispatchAttempts.Should().Be(2);
+            updatedEntry.Status.Should().Be(WorkQueueStatus.Dispatched);
+
+            // Should have exactly 2 metadata rows (not 3, because third attempt wasn't dispatched)
+            var metadataCount = await _dataContext
+                .Metadatas.AsNoTracking()
+                .Where(m => m.ManifestId == manifest.Id)
+                .CountAsync();
+            metadataCount.Should().Be(2);
+        }
+        finally
+        {
+            config.MaxDispatchAttempts = originalMax;
+        }
+    }
+
+    [Test]
+    public async Task Dispatch_WhenMaxDispatchAttemptsZero_DoesNotRequeue()
+    {
+        // Arrange — disable requeue (pre-1.2.0 behavior)
+        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalMax = config.MaxDispatchAttempts;
+        config.MaxDispatchAttempts = 0;
+
+        try
+        {
+            var manifest = await CreateAndSaveManifest();
+            var entry = await CreateAndSaveWorkQueueEntry(manifest);
+
+            using var trainScope = _serviceProvider.CreateScope();
+            var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
+            await train.Run(Unit.Default);
+            if (train is IDisposable d)
+                d.Dispose();
+
+            // Assert — entry stays Dispatched (no requeue)
+            _dataContext.Reset();
+            var updatedEntry = await _dataContext
+                .WorkQueues.AsNoTracking()
+                .FirstAsync(q => q.Id == entry.Id);
+
+            updatedEntry.Status.Should().Be(WorkQueueStatus.Dispatched);
+            updatedEntry.MetadataId.Should().NotBeNull();
+            updatedEntry.DispatchAttempts.Should().Be(0);
+        }
+        finally
+        {
+            config.MaxDispatchAttempts = originalMax;
+        }
+    }
+
+    #endregion
 
     #region Helper Methods
 

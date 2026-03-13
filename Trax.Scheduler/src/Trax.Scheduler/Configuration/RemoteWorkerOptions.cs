@@ -31,4 +31,13 @@ public class RemoteWorkerOptions
     /// HTTP request timeout for each job dispatch.
     /// </summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Retry options for transient HTTP failures (429, 502, 503).
+    /// </summary>
+    /// <remarks>
+    /// Defaults to 5 retries with exponential backoff starting at 1 second.
+    /// Set <see cref="HttpRetryOptions.MaxRetries"/> to 0 to disable retries.
+    /// </remarks>
+    public HttpRetryOptions Retry { get; set; } = new();
 }
