@@ -82,7 +82,11 @@ builder.Services.AddTrax(trax =>
                 .AddDataContextLogging()
                 .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString))
         )
-        .AddMediator(typeof(ReviewContentTrain).Assembly)
+        .AddMediator(mediator =>
+            mediator
+                .ScanAssemblies(typeof(ReviewContentTrain).Assembly)
+                .GlobalConcurrentRunLimit(25)
+        )
         .AddScheduler(scheduler =>
             scheduler
                 // ── Ephemeral dispatch only — no scheduled jobs ──────────────────
