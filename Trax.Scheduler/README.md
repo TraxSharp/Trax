@@ -183,7 +183,7 @@ Trax.Core              pipelines, steps, railway error propagation
 
 **Next layer:** When you need a programmatic interface for external consumers — queuing jobs, running trains on demand, and querying state over HTTP — add [Trax.Api.GraphQL](https://www.nuget.org/packages/Trax.Api.GraphQL/).
 
-Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
 
 ## License
 
