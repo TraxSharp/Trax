@@ -68,7 +68,7 @@ A data pipeline sample using the [Flowthru](https://github.com/chaoticgoodcomput
 | [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/) | Timetables — recurring trains with retries and dead-lettering |
 | [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/) | Control room — monitor every journey on the network |
 
-Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
 
 ## License
 
