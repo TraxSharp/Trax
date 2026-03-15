@@ -7,7 +7,7 @@ export default function Hero() {
         {/* Left — text, left-aligned */}
         <div className="max-w-xl">
           <p className="font-mono text-sm tracking-wider text-accent">
-            MIT licensed. Open source, forever.
+            MIT licensed.
           </p>
           <h1 className="mt-4 text-4xl font-bold leading-[1.15] tracking-tight text-text-primary sm:text-5xl">
             A framework for
