@@ -139,7 +139,7 @@ Trax.Core          ← you are here
 
 **Next layer:** When you need execution logging, DI, or persistent metadata, add [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/).
 
-Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
 
 ## License
 
