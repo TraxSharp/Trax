@@ -3,6 +3,7 @@ layout: default
 title: Cross-Cutting
 nav_order: 11
 has_children: true
+section: Guides
 ---
 
 # Cross-Cutting Concerns

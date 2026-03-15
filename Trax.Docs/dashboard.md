@@ -2,6 +2,7 @@
 layout: default
 title: Dashboard
 nav_order: 8
+section: Packages
 ---
 
 # Dashboard

@@ -45,7 +45,7 @@ if (result.IsRight)
 }
 ```
 
-This is the foundation of [Railway Oriented Programming](railway-programming.md) — the main track carries `Right` values, the derailment track carries `Left` values.
+This is the foundation of [Railway Oriented Programming](railway-programming.md) — the right track carries `Right` values, the left track carries `Left` values.
 
 ## Unit
 
@@ -66,18 +66,18 @@ public class ValidateEmailStep : Step<CreateUserRequest, Unit>
 }
 ```
 
-`Unit.Default` is the only value of the `Unit` type. When a stop returns `Unit`, it's saying "I did my work, but I'm not loading any new cargo onto the train." The next stop picks up what it needs from whatever's already on board.
+`Unit.Default` is the only value of the `Unit` type. When a junction returns `Unit`, it's saying "I did my work, but I'm not loading any new cargo onto the train." The next junction picks up what it needs from whatever's already on board.
 
 ## Effects
 
-In functional programming, an *effect* is a side effect — anything that reaches outside the function boundary. Database writes, HTTP calls, logging, file I/O: these are all effects. A pure function takes input and returns output without touching the outside world. Obviously, a train that does nothing observable isn't very useful, so the question becomes: how do you manage side effects without scattering them through every stop?
+In functional programming, an *effect* is a side effect — anything that reaches outside the function boundary. Database writes, HTTP calls, logging, file I/O: these are all effects. A pure function takes input and returns output without touching the outside world. Obviously, a train that does nothing observable isn't very useful, so the question becomes: how do you manage side effects without scattering them through every junction?
 
-In Trax, effects are **station services** — operations that happen as the train passes through its route. Stops don't write directly to a database or logger. Instead, the train tracks models (like `Metadata`) during the journey, and **effect providers** (the station service crews) handle the actual work at the end. If the train arrives at its destination, all providers run their `SaveChanges` and the services are applied atomically. If any stop derails the train, nothing is saved.
+In Trax, effects are operations that happen as the train passes through its route. Junctions don't write directly to a database or logger. Instead, the train tracks models (like `Metadata`) during the journey, and **effect providers** handle the actual work at the end. If the train reaches the right track (success), all providers run their `SaveChanges` and effects are applied atomically. If any junction switches the train to the left track (failure), nothing is saved.
 
 This gives you two things:
 
-1. **Atomicity** — A derailment means no station services are applied. No half-written database records, no orphaned log entries.
-2. **Modularity** — Each station service is an independent plugin. Adding Postgres persistence doesn't change your train code. Removing the JSON logger doesn't either.
+1. **Atomicity** — A left-track result means no effects are applied. No half-written database records, no orphaned log entries.
+2. **Modularity** — Each effect provider is an independent plugin. Adding Postgres persistence doesn't change your train code. Removing the JSON logger doesn't either.
 
 ```csharp
 services.AddTrax(trax => trax
@@ -90,9 +90,9 @@ services.AddTrax(trax => trax
 );
 ```
 
-Remove any line and the train still runs — it just passes through fewer stations. Add a line and you gain new observability without modifying a single stop.
+Remove any line and the train still runs — it just passes through fewer junctions. Add a line and you gain new observability without modifying a single junction.
 
-The `ServiceTrain` base class manages this lifecycle. When you use a plain `Train` (the bare locomotive), you get routing and derailment propagation but no station services. When you use `ServiceTrain` (the full commercial service), you get the complete station service network on top.
+The `ServiceTrain` base class manages this lifecycle. When you use a plain `Train`, you get routing and error propagation but no effect providers. When you use `ServiceTrain`, you get the full effect provider network on top.
 
 See [Effect Providers](../effect/effect-providers.md) for configuring each provider, and [Core & Effects](../effect/architecture.md) for how the `EffectRunner` coordinates them internally.
 

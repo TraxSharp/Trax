@@ -7,7 +7,7 @@ nav_order: 3
 
 # Memory
 
-Memory is how steps communicate in a train. Think of it as the cargo the train carries between stops — a type-keyed dictionary that accumulates as the train executes. Each step pulls its input from Memory and pushes its output back in.
+Memory is how steps communicate in a train. Think of it as the cargo the train carries between junctions — a type-keyed dictionary that accumulates as the train executes. Each step pulls its input from Memory and pushes its output back in.
 
 ## How It Works
 

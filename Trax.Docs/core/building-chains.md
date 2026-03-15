@@ -7,11 +7,11 @@ nav_order: 2
 
 # Building Chains
 
-Every train's `RunInternal` method is a chain: `Activate` seeds Memory, `.Chain<T>()` adds stops, and `.Resolve()` returns the result.
+Every train's `RunInternal` method is a chain: `Activate` seeds Memory, `.Chain<T>()` adds junctions, and `.Resolve()` returns the result.
 
 ## Chain
 
-`.Chain<TStep>()` is the primary way to add a stop to a train's route. It resolves the step, pulls its input from [Memory](memory.md), runs it, and stores the output back in Memory.
+`.Chain<TStep>()` is the primary way to add a junction to a train's route. It resolves the step, pulls its input from [Memory](memory.md), runs it, and stores the output back in Memory.
 
 ```csharp
 Activate(input)
@@ -27,7 +27,7 @@ For all overloads, type parameter constraints, and step-wiring behavior, see [SD
 
 ### Railway Behavior
 
-If a previous step derailed the train, `.Chain<TStep>()` is skipped entirely. The exception propagates through the chain until it reaches `.Resolve()`, which returns it as `Left(exception)`.
+If a previous step switched the train to the left track, `.Chain<TStep>()` is skipped entirely. The exception propagates through the chain until it reaches `.Resolve()`, which returns it as `Left(exception)`.
 
 ```csharp
 Activate(input)
@@ -98,7 +98,7 @@ public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderResult>
 }
 ```
 
-> **This behavior is intentionally inverted from Chain.** A `Chain` step that throws stops the train with an error. A `ShortCircuit` step that throws means "no short-circuit available, keep going." The exception is swallowed, not propagated.
+> **This behavior is intentionally inverted from Chain.** A `Chain` step that throws switches the train to the left track with an error. A `ShortCircuit` step that throws means "no short-circuit available, keep going." The exception is swallowed, not propagated.
 
 See [SDK Reference: ShortCircuit]({{ site.baseurl }}{% link sdk-reference/train-methods/short-circuit.md %}) for all overloads, the step signature, and a full example.
 

@@ -8,7 +8,7 @@ has_children: true
 
 # Configuring Effect Providers
 
-Effect providers are the station services that handle side effects as a train runs — database writes, logging, serialization. Each provider is independent: add or remove any of them without changing your train code. For the conceptual background, see [Effect overview]({{ site.baseurl }}{% link effect.md %}).
+Effect providers handle side effects as a train runs — database writes, logging, serialization. Each provider is independent: add or remove any of them without changing your train code. For the conceptual background, see [Effect overview]({{ site.baseurl }}{% link effect.md %}).
 
 ## Database Persistence (Postgres or InMemory)
 
@@ -145,7 +145,7 @@ services.AddTrax(trax => trax
 
 *SDK Reference: [AddLifecycleHook]({{ site.baseurl }}{% link sdk-reference/configuration/add-lifecycle-hook.md %})*
 
-Lifecycle hooks implement `ITrainLifecycleHook` and fire at four points: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. Unlike effect providers, hook exceptions are **caught and logged, never propagated** — a failing Slack webhook will never derail a train.
+Lifecycle hooks implement `ITrainLifecycleHook` and fire at four points: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. Unlike effect providers, hook exceptions are **caught and logged, never propagated** — a failing Slack webhook will never cause a train to fail.
 
 The `Trax.Api.GraphQL` package includes a built-in hook (`GraphQLSubscriptionHook`) that publishes lifecycle events to [GraphQL subscriptions]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) over WebSocket. It's automatically registered by `AddTraxGraphQL()`. Only trains decorated with [`[TraxBroadcast]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-subscription-attribute.md %}) have their events published.
 

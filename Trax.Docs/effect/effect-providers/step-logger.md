@@ -66,5 +66,5 @@ See [Steps: EffectStep vs Step]({{ site.baseurl }}{% link core/trains-and-steps.
 ## When to Use It
 
 - **Debugging slow trains** — The timing data shows which step is the bottleneck.
-- **Tracing failures** — The Railway state tells you exactly where and why a train entered the failure track.
+- **Tracing failures** — The Railway state tells you exactly where and why a train switched to the left track.
 - **Development** — Pair with `serializeStepData: true` to see step-by-step data flow through the chain.

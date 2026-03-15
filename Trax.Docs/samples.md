@@ -2,6 +2,7 @@
 layout: default
 title: Samples & Deployment
 nav_order: 10
+section: Guides
 ---
 
 # Samples & Deployment Patterns

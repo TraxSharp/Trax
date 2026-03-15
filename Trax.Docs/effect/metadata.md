@@ -7,7 +7,7 @@ nav_order: 1
 
 # Metadata
 
-Every train journey produces a log — the metadata record. It captures everything about the trip: when it departed, where it went, what it was carrying, and whether it arrived or derailed.
+Every train execution produces a metadata record. It captures everything about the run: when it started, what steps it passed through, what it was carrying, and whether it completed or failed.
 
 ```csharp
 public class Metadata : IModel, IDisposable
@@ -38,7 +38,7 @@ public class Metadata : IModel, IDisposable
 }
 ```
 
-The `TrainState` tracks the journey: `Pending` (boarding) -> `InProgress` (in transit) -> `Completed` (arrived), `Failed` (derailed), or `Cancelled`. If a train derails, the journey log captures the exception, stack trace, and which stop it happened at.
+The `TrainState` tracks the lifecycle: `Pending` -> `InProgress` -> `Completed`, `Failed`, or `Cancelled`. If a train fails, the metadata record captures the exception, stack trace, and which step it happened at.
 
 ## Host Tracking
 
@@ -46,7 +46,7 @@ In distributed environments (Lambda, ECS, multiple servers), every metadata reco
 
 ## Nested Trains
 
-A stop can dispatch another train mid-journey by injecting `ITrainBus`. Pass the current `Metadata` to the child train to link the journeys — this creates a tree of journey logs you can query to trace execution across an entire network of trains.
+A step can dispatch another train mid-execution by injecting `ITrainBus`. Pass the current `Metadata` to the child train to link the executions — this creates a tree of metadata records you can query to trace execution across an entire network of trains.
 
 See [Mediator: Nested Trains]({{ site.baseurl }}{% link mediator.md %}#nested-trains) for implementation details.
 

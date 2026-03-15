@@ -3,6 +3,7 @@ layout: default
 title: SDK Reference
 nav_order: 13
 has_children: true
+section: SDK Reference
 ---
 
 # SDK Reference

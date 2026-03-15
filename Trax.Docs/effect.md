@@ -3,11 +3,12 @@ layout: default
 title: Effect
 nav_order: 4
 has_children: true
+section: Packages
 ---
 
 # Trax.Effect
 
-`Trax.Effect` upgrades a bare train into a full commercial service — with journey logging, dependency injection, and pluggable station services (effect providers).
+`Trax.Effect` upgrades the core pipeline engine into a full commercial service — with journey logging, dependency injection, and pluggable effect providers.
 
 ```bash
 dotnet add package Trax.Effect
@@ -21,18 +22,18 @@ Everything in [Core](core.md), plus:
 - **`ServiceTrain<TIn, TOut>`** — extends `Train` with automatic metadata tracking
 - **Execution metadata** — every train run produces a queryable record (state, timing, input/output, errors)
 - **Dependency injection** — steps resolved from your DI container
-- **Effect providers** — pluggable station services for persistence, logging, and serialization
+- **Effect providers** — pluggable providers for persistence, logging, and serialization
 - **Lifecycle hooks** — fire on train state transitions (started, completed, failed, cancelled) for notifications, metrics, or real-time updates
 - **Atomic side effects** — all providers save together on success; nothing is saved on failure
 
 ## Train vs ServiceTrain
 
-**`Train<TIn, TOut>`** (Core) — The bare locomotive. Chains steps, propagates errors, manages Memory. No logging, no DI, no side effects.
+**`Train<TIn, TOut>`** (Core) — The core pipeline engine. Chains steps, propagates errors, manages Memory. No logging, no DI, no side effects.
 
 **`ServiceTrain<TIn, TOut>`** (Effect) — The full commercial service. Wraps every journey with:
-- Journey logging (departure time, arrival time, success/derailment, cargo in/out)
-- Station services (database persistence, JSON logging, parameter serialization)
-- Integration with `ITrainBus` for dispatch station discovery
+- Journey logging (departure time, arrival time, right track / left track, cargo in/out)
+- Effect providers (database persistence, JSON logging, parameter serialization)
+- Integration with `ITrainBus` for dispatch discovery
 - `IServiceProvider` access for step instantiation
 
 ```csharp
@@ -50,10 +51,10 @@ The code inside `RunInternal` is identical — `ServiceTrain` adds the infrastru
 
 ## The Effect Pattern
 
-Effects are station services — operations that happen as the train passes through its route. Steps don't write directly to a database or logger. Instead, the train tracks models during the journey, and effect providers handle the actual work at the end:
+Effects are operations that happen as the train passes through its route — provided by pluggable effect providers. Steps don't write directly to a database or logger. Instead, the train tracks models during the journey, and effect providers handle the actual work at the end:
 
-- If the train arrives, all providers run `SaveChanges` and services are applied atomically
-- If any step derails the train, nothing is saved
+- If the train reaches the right track (success), all providers run `SaveChanges` and effects are applied atomically
+- If any step takes the left track (failure), nothing is saved
 
 This gives you atomicity (no half-written records) and modularity (add/remove providers without changing train code).
 
@@ -71,7 +72,7 @@ builder.Services.AddTrax(trax => trax
 
 The `AddEffects` callback is a `Func<TraxEffectBuilder, TraxEffectBuilder>` — the lambda returns the builder from the last chained call. Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData`, which unlocks data-dependent methods like `AddDataContextLogging` at compile time.
 
-Remove any line and the train still runs — it just passes through fewer stations.
+Remove any line and the train still runs — it just passes through fewer junctions.
 
 ## When to Use Effect
 

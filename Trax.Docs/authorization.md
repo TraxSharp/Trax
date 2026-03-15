@@ -2,6 +2,7 @@
 layout: default
 title: Authorization
 nav_order: 9
+section: Guides
 ---
 
 # Authorization

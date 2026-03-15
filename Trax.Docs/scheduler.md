@@ -3,6 +3,7 @@ layout: default
 title: Scheduling
 nav_order: 6
 has_children: true
+section: Packages
 ---
 
 # Scheduling

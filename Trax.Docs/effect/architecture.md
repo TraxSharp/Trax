@@ -11,7 +11,7 @@ How the Effect system works internally — the `ServiceTrain` lifecycle, `Effect
 
 ## Trax.Core (Core Engine)
 
-The foundation layer providing Railway Oriented Programming patterns. In the train metaphor, this is the locomotive — the engine that moves data through a chain of steps.
+The foundation layer providing Railway Oriented Programming patterns — chaining steps, propagating errors, and managing Memory.
 
 ### Key Classes
 
@@ -39,7 +39,7 @@ This layer handles chaining, error propagation, and the core train lifecycle.
 
 ## Trax.Effect (Enhanced Trains)
 
-Extends core trains with dependency injection, metadata tracking, and effect management. Where `Train` is the bare locomotive, `ServiceTrain` is the full commercial service — it logs every journey and coordinates station services (effect providers) along the way.
+Extends core trains with dependency injection, metadata tracking, and effect management. `ServiceTrain` wraps every execution with metadata tracking and coordinates effect providers.
 
 ### ServiceTrain<TIn, TOut>
 
