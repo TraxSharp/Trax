@@ -72,8 +72,10 @@ export default async function ProblemSolution() {
         />
 
         <p className="mt-6 text-sm text-text-muted lg:ml-auto lg:max-w-2xl">
-          A compile-time analyzer catches broken chains before you ever run the
-          code.
+          Each step&apos;s output is stored in Memory by type. The next step
+          declares what it needs as its input, and Trax wires them together
+          automatically. A compile-time analyzer catches broken chains before
+          you ever run the code.
         </p>
       </div>
     </section>
