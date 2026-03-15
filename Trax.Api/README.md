@@ -86,7 +86,7 @@ Trax.Core              pipelines, steps, railway error propagation
 
 **Next layer:** When you need a monitoring UI for inspecting trains, browsing execution history, and managing manifests from a browser, add [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/).
 
-Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
 
 ## License
 
