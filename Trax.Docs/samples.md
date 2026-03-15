@@ -174,19 +174,46 @@ The Runner uses `UseBroadcaster(b => b.UseRabbitMq(...))` to publish lifecycle e
 
 Good for: serverless/FaaS deployments, on-demand workloads with zero idle cost, event-driven architectures where all work is API-triggered.
 
+### Model 5: Single-Server with Real-Time Subscriptions
+
+**Sample:** `ChatService/`
+
+```
+Trax.Samples.ChatService.Data/     ← data layer (EF Core entities, DbContext, migrations)
+Trax.Samples.ChatService/          ← library (trains, lifecycle hook, subscription types)
+Trax.Samples.ChatService.Api/      ← executable (single server)
+Trax.Samples.ChatService.Client/   ← React + TypeScript frontend (Apollo Client, graphql-ws)
+```
+
+A single-server chat application that demonstrates how Trax lifecycle hooks can power domain-specific real-time GraphQL subscriptions. No scheduler or workers — everything runs in one process.
+
+The key innovation is the `ChatLifecycleHook`, a custom `ITrainLifecycleHook` that intercepts completed chat mutation trains. When a `SendMessage` train completes, the hook reads `metadata.Output` (the serialized train output), extracts the `chatRoomId`, and publishes a `ChatSubscriptionEvent` to a room-scoped HotChocolate topic. Clients subscribed to that room receive the event in real time.
+
+This approach works because:
+- Chat mutation trains are decorated with `[TraxBroadcast]`, which causes lifecycle hooks to fire
+- The hook is registered via `AddLifecycleHook<ChatLifecycleHookFactory>()` on the effect builder
+- A custom `ChatSubscriptions` type extends the "trax" GraphQL schema with `onChatEvent(chatRoomId: "...")` alongside the standard Trax lifecycle subscriptions
+
+The sample also includes its own EF Core data layer in a separate project (`ChatService.Data`) with `ChatRoom`, `ChatParticipant`, and `ChatMessage` entities. The `ChatDbContext` uses the `chat` schema to coexist with Trax's `trax` schema in the same database.
+
+A React + TypeScript frontend (`ChatService.Client`) demonstrates the full client/server GraphQL interaction. It uses Apollo Client with a split link — HTTP for queries/mutations and `graphql-ws` for subscriptions — connecting to the HotChocolate endpoint at `localhost:5210/trax/graphql`. The UI lets you switch between users (Alice, Bob, Charlie), create and join rooms, send messages, and see real-time subscription delivery in action.
+
+Good for: real-time applications, chat systems, collaboration tools, notification feeds — anywhere you need domain-specific subscriptions driven by train completion events.
+
 ## Comparing the Models
 
-| Capability | Standalone | Separate API | Distributed | Ephemeral |
-|-----------|-----------|-------------|------------|-----------|
-| Processes | 1 | 2 | 2+ | 2 |
-| Scheduler | In-process | In-process (scheduler) | Hub (scheduling only) | API (dispatch only) |
-| Execution | In-process | In-process (scheduler) | Workers (polling) | Runner (HTTP push) |
-| API | None | Separate process | Hub | In-process |
-| Dashboard | In-process | In scheduler | In hub | In API |
-| Job table | `background_job` | `background_job` | `background_job` | None (direct HTTP) |
-| Horizontal scaling | No | No | Workers scale independently | Runner auto-scales |
+| Capability | Standalone | Separate API | Distributed | Ephemeral | Chat (Real-Time) |
+|-----------|-----------|-------------|------------|-----------|-----------------|
+| Processes | 1 | 2 | 2+ | 2 | 1 |
+| Scheduler | In-process | In-process (scheduler) | Hub (scheduling only) | API (dispatch only) | None |
+| Execution | In-process | In-process (scheduler) | Workers (polling) | Runner (HTTP push) | In-process |
+| API | None | Separate process | Hub | In-process | In-process |
+| Dashboard | In-process | In scheduler | In hub | In API | None |
+| Job table | `background_job` | `background_job` | `background_job` | None (direct HTTP) | None |
+| Horizontal scaling | No | No | Workers scale independently | Runner auto-scales | No |
+| Custom subscriptions | No | No | No | No | Lifecycle hook → topics |
 
-In all three models, the trains library is identical. Only the `Program.cs` files differ.
+In all models, the trains library is identical. Only the `Program.cs` files differ.
 
 ## Running the Samples
 
@@ -239,3 +266,38 @@ dotnet run --project samples/EphemeralWorkers/Trax.Samples.ContentShield.Api
 ```
 
 Dashboard at `http://localhost:5204/trax`. GraphQL IDE at `http://localhost:5204/trax/graphql`.
+
+### ChatService (Single-Server Real-Time)
+
+```bash
+# Terminal 1 — API
+dotnet run --project samples/ChatService/Trax.Samples.ChatService.Api
+
+# Terminal 2 — React client (optional)
+cd samples/ChatService/Trax.Samples.ChatService.Client
+npm install && npm run dev
+```
+
+GraphQL IDE at `http://localhost:5210/trax/graphql`. React client at `http://localhost:5173`.
+
+Authentication uses `X-Api-Key` header with three users: `alice-key`, `bob-key`, `charlie-key`.
+The React client provides a user switcher dropdown — open multiple browser tabs to simulate different users chatting in real time.
+
+**Quick walkthrough:**
+
+```graphql
+# 1. Create a room (as Alice)
+mutation { dispatch { createChatRoom(input: { name: "General", userId: "alice", displayName: "Alice" }) { externalId output { chatRoomId name } } } }
+
+# 2. Join the room (as Bob) — use the chatRoomId from step 1
+mutation { dispatch { joinChatRoom(input: { chatRoomId: "<id>", userId: "bob", displayName: "Bob" }) { externalId output { joinedAt } } } }
+
+# 3. Subscribe to real-time events (in a second tab)
+subscription { onChatEvent(chatRoomId: "<id>") { eventType payload timestamp } }
+
+# 4. Send a message — the subscription tab receives it
+mutation { dispatch { sendMessage(input: { chatRoomId: "<id>", senderUserId: "alice", content: "Hello Bob!" }) { externalId output { messageId content sentAt } } } }
+
+# 5. Query chat history
+{ discover { getChatHistory(input: { chatRoomId: "<id>" }) { messages { senderDisplayName content sentAt } } } }
+```
