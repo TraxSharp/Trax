@@ -18,6 +18,14 @@
     <Project Path="samples/EphemeralWorkers/Trax.Samples.ContentShield.Api/Trax.Samples.ContentShield.Api.csproj" />
     <Project Path="samples/EphemeralWorkers/Trax.Samples.ContentShield.Runner/Trax.Samples.ContentShield.Runner.csproj" />
   </Folder>
+  <Folder Name="/samples/ChatService/">
+    <Project Path="samples/ChatService/Trax.Samples.ChatService.Data/Trax.Samples.ChatService.Data.csproj" />
+    <Project Path="samples/ChatService/Trax.Samples.ChatService/Trax.Samples.ChatService.csproj" />
+    <Project Path="samples/ChatService/Trax.Samples.ChatService.Api/Trax.Samples.ChatService.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.Samples.ChatService.Tests/Trax.Samples.ChatService.Tests.csproj" />
+  </Folder>
   <Folder Name="/templates/">
     <Project Path="templates/Trax.Samples.Templates.csproj" />
   </Folder>

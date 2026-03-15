@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trax.Samples.ChatService.Data\Trax.Samples.ChatService.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HotChocolate.AspNetCore" Version="14.*" />
+    <PackageReference Include="Trax.Effect" Version="1.*" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
+    <PackageReference Include="Trax.Mediator" Version="1.*" />
+  </ItemGroup>
+</Project>

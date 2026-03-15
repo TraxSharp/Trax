@@ -1,0 +1,404 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  background: #f0f2f5;
+  color: #1a1a1a;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  height: 100vh;
+}
+
+.sidebar {
+  width: 300px;
+  background: #fff;
+  border-right: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-title {
+  padding: 16px;
+  font-size: 20px;
+  font-weight: 700;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+/* ── User Selector ──────────────────────────────────────────────────────── */
+
+.user-selector {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-selector label {
+  font-size: 13px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.user-selector select {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* ── Room List ──────────────────────────────────────────────────────────── */
+
+.room-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.room-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.room-list-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.room-list-header button {
+  padding: 4px 12px;
+  font-size: 13px;
+  border: 1px solid #0084ff;
+  background: #0084ff;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.room-list-header button:hover {
+  background: #0073e6;
+}
+
+.room-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.room-item:hover {
+  background: #f5f5f5;
+}
+
+.room-item-selected {
+  background: #e8f0fe;
+}
+
+.room-item-selected:hover {
+  background: #d4e4fc;
+}
+
+.room-item-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.room-item-meta {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.room-item-unread {
+  display: inline-block;
+  background: #0084ff;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 1px 6px;
+  margin-left: 6px;
+}
+
+.room-list-empty {
+  padding: 16px;
+  color: #888;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ── Join Room ──────────────────────────────────────────────────────────── */
+
+.room-list-join {
+  padding: 12px 16px;
+  border-top: 1px solid #e0e0e0;
+  margin-top: auto;
+}
+
+.room-list-join h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.room-list-join-hint {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.room-list-join form {
+  display: flex;
+  gap: 6px;
+}
+
+.room-list-join input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.room-list-join button {
+  padding: 6px 12px;
+  border: 1px solid #0084ff;
+  background: #0084ff;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+/* ── No Room Placeholder ────────────────────────────────────────────────── */
+
+.no-room {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #888;
+  font-size: 16px;
+}
+
+/* ── Chat Room ──────────────────────────────────────────────────────────── */
+
+.chat-room {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chat-room-header {
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.chat-room-id {
+  font-size: 13px;
+  color: #666;
+  font-family: monospace;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-loading {
+  text-align: center;
+  color: #888;
+  padding: 20px;
+}
+
+/* ── Messages ───────────────────────────────────────────────────────────── */
+
+.message {
+  max-width: 70%;
+}
+
+.message-own {
+  align-self: flex-end;
+}
+
+.message-other {
+  align-self: flex-start;
+}
+
+.message-meta {
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 2px;
+  display: flex;
+  gap: 6px;
+}
+
+.message-own .message-meta {
+  justify-content: flex-end;
+}
+
+.message-sender {
+  font-weight: 600;
+}
+
+.message-bubble {
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.message-own .message-bubble {
+  background: #0084ff;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.message-pending .message-bubble {
+  background: #a0c8f0;
+}
+
+.message-pending .message-meta {
+  opacity: 0.5;
+}
+
+.message-other .message-bubble {
+  background: #e4e6eb;
+  color: #1a1a1a;
+  border-bottom-left-radius: 4px;
+}
+
+/* ── Chat Input ─────────────────────────────────────────────────────────── */
+
+.chat-input {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #fff;
+  border-top: 1px solid #e0e0e0;
+}
+
+.chat-input input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #ccc;
+  border-radius: 20px;
+  font-size: 14px;
+  outline: none;
+}
+
+.chat-input input:focus {
+  border-color: #0084ff;
+}
+
+.chat-input button {
+  padding: 10px 20px;
+  border: none;
+  background: #0084ff;
+  color: #fff;
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.chat-input button:hover {
+  background: #0073e6;
+}
+
+.chat-input button:disabled {
+  background: #b0b0b0;
+  cursor: not-allowed;
+}
+
+/* ── Dialog ─────────────────────────────────────────────────────────────── */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.dialog {
+  background: #fff;
+  padding: 24px;
+  border-radius: 8px;
+  width: 360px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.dialog h3 {
+  margin-bottom: 16px;
+  font-size: 18px;
+}
+
+.dialog input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog-actions button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.dialog-actions button[type="button"] {
+  border: 1px solid #ccc;
+  background: #fff;
+}
+
+.dialog-actions button[type="submit"] {
+  border: none;
+  background: #0084ff;
+  color: #fff;
+}
+
+.dialog-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
