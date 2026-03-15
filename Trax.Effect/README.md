@@ -155,7 +155,7 @@ Trax.Core              pipelines, steps, railway error propagation
 
 **Next layer:** When you need decoupled dispatch (callers don't know which train handles a request), add [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/).
 
-Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
 
 ## License
 
