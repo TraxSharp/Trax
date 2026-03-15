@@ -90,7 +90,7 @@ Trax.Core              pipelines, steps, railway error propagation
             └→ Trax.Dashboard  ← you are here
 ```
 
-Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
 
 ## License
 
