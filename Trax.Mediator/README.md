@@ -135,7 +135,7 @@ Trax.Core              pipelines, steps, railway error propagation
 
 **Next layer:** When you need recurring background jobs with retries and dead-lettering, add [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/).
 
-Full documentation: [traxsharp.github.io/Trax.Docs](https://traxsharp.github.io/Trax.Docs)
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
 
 ## License
 
