@@ -1,0 +1,3 @@
+[submodule "docs-source"]
+	path = docs-source
+	url = https://github.com/TraxSharp/Trax.Docs.git

@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+:root {
+  /* Trax palette — forest green on warm charcoal */
+  --bg-primary: #101010;
+  --bg-secondary: #181818;
+  --bg-tertiary: #212121;
+  --bg-card: #1a1a1a;
+  --bg-hover: #282828;
+
+  --text-primary: #e4e2de;
+  --text-secondary: #a09d96;
+  --text-muted: #686560;
+
+  /* Forest green — the brand color */
+  --accent: #3d8b37;
+  --accent-hover: #2d6b29;
+  --accent-muted: #1a2e18;
+  --accent-bright: #5cb85c;
+
+  /* Signal amber — warnings, attention */
+  --signal: #d4a24c;
+  --signal-muted: #332a14;
+
+  /* Derail red */
+  --derail: #c45c5c;
+  --derail-muted: #2e1616;
+
+  --border: #2a2a28;
+  --border-hover: #3a3a37;
+
+  --success: #3d8b37;
+  --warning: #d4a24c;
+  --error: #c45c5c;
+  --info: #7a9ec2;
+}
+
+@theme inline {
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-bg-card: var(--bg-card);
+  --color-bg-hover: var(--bg-hover);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-muted: var(--accent-muted);
+  --color-accent-bright: var(--accent-bright);
+  --color-signal: var(--signal);
+  --color-signal-muted: var(--signal-muted);
+  --color-derail: var(--derail);
+  --color-derail-muted: var(--derail-muted);
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-info: var(--info);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+::selection {
+  background: var(--accent-muted);
+  color: var(--accent-bright);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
