@@ -10,30 +10,25 @@ Source for [traxsharp.net](https://traxsharp.net) — the documentation and mark
 - **Tailwind CSS 4** (dark theme)
 - **Shiki** for server-side syntax highlighting
 - **MDX** via `next-mdx-remote` for docs and blog rendering
-- **Trax.Docs** as content source (git submodule or local workspace)
+- **Trax.Docs** as content source (local workspace or cloned at build time)
 
 ## Getting Started
 
 ```bash
-# Clone with submodule
-git clone --recurse-submodules https://github.com/TraxSharp/Trax.Website.git
+git clone https://github.com/TraxSharp/Trax.Website.git
 cd Trax.Website
-
-# Install dependencies
 npm install
-
-# Start dev server
 npm run dev
 ```
 
-If you're working in the [Trax monorepo workspace](https://github.com/TraxSharp), the dev server automatically picks up docs from `../Trax.Docs/` instead of the submodule.
+If you're working in the [Trax monorepo workspace](https://github.com/TraxSharp), the dev server automatically picks up docs from `../Trax.Docs/`. Otherwise it clones the latest from GitHub.
 
 ## Docs Sync
 
 Documentation markdown lives in [Trax.Docs](https://github.com/TraxSharp/Trax.Docs). The sync script runs automatically on `npm run dev` and `npm run build`:
 
-1. Prefers the local workspace (`../Trax.Docs/`) if it exists
-2. Falls back to the `docs-source/` git submodule
+1. Uses the local workspace (`../Trax.Docs/`) if it exists
+2. Otherwise shallow-clones `main` from GitHub
 3. Copies all `.md` files into `.docs-cache/` (gitignored)
 
 ## Project Structure

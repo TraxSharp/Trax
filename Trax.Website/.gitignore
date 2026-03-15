@@ -33,8 +33,9 @@ yarn-error.log*
 # env files
 .env*.local
 
-# docs cache (synced from submodule at build time)
+# docs (synced at build time from local workspace or GitHub)
 .docs-cache/
+.docs-clone/
 
 # vercel
 .vercel
