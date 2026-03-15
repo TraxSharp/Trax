@@ -4,7 +4,7 @@ remote_theme: just-the-docs/just-the-docs@v0.10.0
 
 # GitHub Pages settings
 baseurl: "/Trax.Docs"
-url: "https://traxsharp.github.io"
+url: "https://traxsharp.net"
 
 # Build settings
 markdown: kramdown
