@@ -22,7 +22,7 @@ MyApp/                          ← library (class library, not executable)
       IFeature1Train.cs
       Feature1Train.cs
       Feature1Input.cs
-      Steps/
+      Junctions/
     Feature2/
       ...
   ManifestNames.cs
@@ -40,7 +40,7 @@ MyApp.Api/                      ← executable (thin wrapper)
 
 The library project contains everything that defines *what your application does*:
 
-- **Trains** — `ServiceTrain<TIn, TOut>` implementations with their steps
+- **Trains** — `ServiceTrain<TIn, TOut>` implementations with their junctions
 - **Interfaces** — `IServiceTrain<TIn, TOut>` contracts for each train
 - **Inputs and outputs** — POCOs that define each train's data contract
 - **ManifestNames** — string constants for scheduler manifest IDs
@@ -79,7 +79,7 @@ Each executable is a `Microsoft.NET.Sdk.Web` project with a `ProjectReference` t
   <ItemGroup>
     <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
-    <PackageReference Include="Trax.Effect.StepProvider.Progress" Version="1.*" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.*" />
     <PackageReference Include="Trax.Dashboard" Version="1.*" />
   </ItemGroup>
 </Project>

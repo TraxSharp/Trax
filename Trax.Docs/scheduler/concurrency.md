@@ -26,7 +26,7 @@ This page documents the concurrency model, the guarantees it provides, and the i
 
 The ManifestManager evaluates which manifests are "due" for execution and writes WorkQueue entries. If two servers run the ManifestManager simultaneously, they both load the same manifests, both evaluate them as due, and both insert duplicate WorkQueue entries — causing the same train to be dispatched twice.
 
-The race window exists between `LoadManifestsStep` (which reads `HasQueuedWork = false`) and `CreateWorkQueueEntriesStep` (which inserts the entry). This is a classic time-of-check-time-of-use (TOCTOU) bug.
+The race window exists between `LoadManifestsJunction` (which reads `HasQueuedWork = false`) and `CreateWorkQueueEntriesJunction` (which inserts the entry). This is a classic time-of-check-time-of-use (TOCTOU) bug.
 
 ### The Solution
 
@@ -64,9 +64,9 @@ The lock key is `hashtext('trax_manifest_manager')`, which produces a stable 32-
 
 The advisory lock wraps the entire ManifestManager train in a single transaction. This has two implications:
 
-1. **Atomicity**: All `SaveChanges()` calls within the train steps (ReapFailedJobsStep, CreateWorkQueueEntriesStep) are buffered within the transaction. If the train fails partway through, everything rolls back — no partial state (e.g., dead letters created but WorkQueue entries missing).
+1. **Atomicity**: All `SaveChanges()` calls within the train junctions (ReapFailedJobsJunction, CreateWorkQueueEntriesJunction) are buffered within the transaction. If the train fails partway through, everything rolls back — no partial state (e.g., dead letters created but WorkQueue entries missing).
 
-2. **Visibility delay**: WorkQueue entries created by CreateWorkQueueEntriesStep are not visible to the JobDispatcher until the ManifestManager transaction commits. This is typically a few milliseconds of additional latency. The JobDispatcher picks them up on its next polling tick — no work is lost.
+2. **Visibility delay**: WorkQueue entries created by CreateWorkQueueEntriesJunction are not visible to the JobDispatcher until the ManifestManager transaction commits. This is typically a few milliseconds of additional latency. The JobDispatcher picks them up on its next polling tick — no work is lost.
 
 ### Non-Postgres Providers
 
@@ -82,7 +82,7 @@ CREATE UNIQUE INDEX ix_work_queue_unique_queued_manifest
     WHERE status = 'queued' AND manifest_id IS NOT NULL;
 ```
 
-If the advisory lock is somehow bypassed (e.g., a bug, a code path that doesn't go through the polling service), this index causes a constraint violation on the second insert. The existing per-entry `try/catch` in `CreateWorkQueueEntriesStep` catches the error and logs it — no crash, no corruption.
+If the advisory lock is somehow bypassed (e.g., a bug, a code path that doesn't go through the polling service), this index causes a constraint violation on the second insert. The existing per-entry `try/catch` in `CreateWorkQueueEntriesJunction` catches the error and logs it — no crash, no corruption.
 
 Manual WorkQueue entries (from the dashboard or `TriggerAsync`) have `manifest_id IS NULL` and are excluded from this index. Multiple manual triggers for different purposes are always allowed.
 
@@ -94,7 +94,7 @@ The JobDispatcher loads `Queued` WorkQueue entries and dispatches them — creat
 
 ### The Solution
 
-The DispatchJobsStep uses PostgreSQL's `FOR UPDATE SKIP LOCKED` to atomically claim each WorkQueue entry before dispatching it. Each entry is processed within its own DI scope and database transaction:
+The DispatchJobsJunction uses PostgreSQL's `FOR UPDATE SKIP LOCKED` to atomically claim each WorkQueue entry before dispatching it. Each entry is processed within its own DI scope and database transaction:
 
 ```sql
 SELECT * FROM trax.work_queue
@@ -151,7 +151,7 @@ Each entry is dispatched within its own DI scope, following the same pattern as 
 
 ### Capacity Limit Approximation
 
-With multiple servers, `MaxActiveJobs` enforcement is approximate. Each server independently counts active Metadata records in `LoadDispatchCapacityStep`. Between the count and the actual dispatch, another server may have dispatched entries, causing the total to slightly exceed the configured limit.
+With multiple servers, `MaxActiveJobs` enforcement is approximate. Each server independently counts active Metadata records in `LoadDispatchCapacityJunction`. Between the count and the actual dispatch, another server may have dispatched entries, causing the total to slightly exceed the configured limit.
 
 This is a deliberate tradeoff. `MaxActiveJobs` is a soft limit to prevent overwhelming the system — not a strict concurrency semaphore. The alternative (a global advisory lock for the entire dispatch cycle) would serialize all dispatch activity, defeating the purpose of multi-server deployment.
 

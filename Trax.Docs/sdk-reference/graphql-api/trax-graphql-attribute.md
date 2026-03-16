@@ -102,7 +102,7 @@ public class LookupPlayerTrain
 {
     protected override async Task<Either<Exception, LookupPlayerOutput>> RunInternal(
         LookupPlayerInput input
-    ) => Activate(input).Chain<FetchPlayerStep>().Resolve();
+    ) => Activate(input).Chain<FetchPlayerJunction>().Resolve();
 }
 ```
 
@@ -130,7 +130,7 @@ query {
 public class BanPlayerTrain : ServiceTrain<BanPlayerInput, Unit>, IBanPlayerTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(BanPlayerInput input) =>
-        Activate(input).Chain<ApplyBanStep>().Resolve();
+        Activate(input).Chain<ApplyBanJunction>().Resolve();
 }
 ```
 
@@ -184,7 +184,7 @@ public class RecalculateLeaderboardTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(
         RecalculateLeaderboardInput input
-    ) => Activate(input).Chain<AggregateScoresStep>().Chain<RankPlayersStep>().Resolve();
+    ) => Activate(input).Chain<AggregateScoresJunction>().Chain<RankPlayersJunction>().Resolve();
 }
 ```
 

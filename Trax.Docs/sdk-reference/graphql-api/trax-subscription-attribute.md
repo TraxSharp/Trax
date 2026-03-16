@@ -29,7 +29,7 @@ A simple marker attribute with no properties — just opt-in/opt-out.
 public class LookupPlayerTrain : ServiceTrain<LookupPlayerInput, LookupPlayerOutput>, ILookupPlayerTrain
 {
     protected override async Task<Either<Exception, LookupPlayerOutput>> RunInternal(LookupPlayerInput input) =>
-        Activate(input).Chain<FetchPlayerStep>().Resolve();
+        Activate(input).Chain<FetchPlayerJunction>().Resolve();
 }
 ```
 

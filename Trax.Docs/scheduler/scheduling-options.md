@@ -287,7 +287,7 @@ Misfire policies only apply to `Cron` and `Interval` schedule types. Dependent m
 
 ## Timeout Enforcement
 
-The ManifestManager actively cancels jobs that exceed their configured timeout. Each polling cycle, the `CancelTimedOutJobsStep` checks all InProgress metadata and cancels any where the elapsed time exceeds the manifest's `TimeoutSeconds` (or the global `DefaultJobTimeout`).
+The ManifestManager actively cancels jobs that exceed their configured timeout. Each polling cycle, the `CancelTimedOutJobsJunction` checks all InProgress metadata and cancels any where the elapsed time exceeds the manifest's `TimeoutSeconds` (or the global `DefaultJobTimeout`).
 
 **Per-manifest timeout**: Set via `Timeout()` on `ScheduleOptions`:
 

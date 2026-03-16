@@ -11,7 +11,7 @@ How the Effect system works internally — the `ServiceTrain` lifecycle, `Effect
 
 ## Trax.Core (Core Engine)
 
-The foundation layer providing Railway Oriented Programming patterns — chaining steps, propagating errors, and managing Memory.
+The foundation layer providing Railway Oriented Programming patterns — chaining junctions, propagating errors, and managing Memory.
 
 ### Key Classes
 
@@ -24,14 +24,14 @@ public abstract class Train<TIn, TOut>
     public Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs);
 }
 
-// Step interface for individual operations
-public interface IStep<TIn, TOut>
+// Junction interface for individual operations
+public interface IJunction<TIn, TOut>
 {
     Task<TOut> Run(TIn input);
 }
 
 // Chaining is done via methods on Train<TIn, TOut> itself
-// e.g. Activate(input).Chain<MyStep>().Chain<MyOtherStep>().Resolve()
+// e.g. Activate(input).Chain<MyJunction>().Chain<MyOtherJunction>().Resolve()
 // See SDK Reference > Train Methods for all overloads
 ```
 
@@ -48,7 +48,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 {
     // Internal framework properties (injected automatically)
     [Inject] public IEffectRunner? EffectRunner { get; set; }
-    [Inject] public IStepEffectRunner? StepEffectRunner { get; set; }
+    [Inject] public IJunctionEffectRunner? JunctionEffectRunner { get; set; }
     [Inject] public ILifecycleHookRunner? LifecycleHookRunner { get; set; }
     [Inject] public ILogger<ServiceTrain<TIn, TOut>>? Logger { get; set; }
     [Inject] public IServiceProvider? ServiceProvider { get; set; }
@@ -144,7 +144,7 @@ public class EffectRunner : IEffectRunner
 }
 ```
 
-This layer adds metadata tracking, effect coordination, and handles the train lifecycle (create metadata -> run steps -> save effects).
+This layer adds metadata tracking, effect coordination, and handles the train lifecycle (create metadata -> run junctions -> save effects).
 
 ### Canonical Train Naming
 
@@ -229,7 +229,7 @@ The full lifecycle of a `ServiceTrain` execution, corresponding to the `Run` met
            [Return Result]
 ```
 
-Steps execute inside the "Execute Train Chain" box. Each mutation to the train's `Metadata` is followed by an `Update` call that notifies all registered effect providers — allowing them to react immediately (e.g., `ParameterEffect` re-serializes input/output parameters). The final `SaveChanges` call persists all accumulated side effects. Both success and failure paths call `SaveChanges`, so metadata is always persisted regardless of outcome.
+Junctions execute inside the "Execute Train Chain" box. Each mutation to the train's `Metadata` is followed by an `Update` call that notifies all registered effect providers — allowing them to react immediately (e.g., `ParameterEffect` re-serializes input/output parameters). The final `SaveChanges` call persists all accumulated side effects. Both success and failure paths call `SaveChanges`, so metadata is always persisted regardless of outcome.
 
 ## Data Layer
 
@@ -292,7 +292,7 @@ Key tables:
 | **WORK_QUEUE** | Transient queue between scheduling and dispatch |
 | **DEAD_LETTER** | Failed jobs that exceeded retry limits |
 | **BACKGROUND_JOB** | PostgreSQL job submission queue with visibility timeout |
-| **STEP_METADATA** | In-memory step tracking (not persisted to database) |
+| **JUNCTION_METADATA** | In-memory junction tracking (not persisted to database) |
 
 ### Implementation Variants
 

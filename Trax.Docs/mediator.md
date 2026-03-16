@@ -67,7 +67,7 @@ Each input type must map to exactly one train — duplicates cause a startup exc
 
 ## Nested Trains
 
-Steps and trains can dispatch other trains through the `TrainBus`. Pass the current `Metadata` to link parent and child journeys:
+Junctions and trains can dispatch other trains through the `TrainBus`. Pass the current `Metadata` to link parent and child journeys:
 
 ```csharp
 var result = await TrainBus.RunAsync<ChildResult>(

@@ -31,8 +31,8 @@ services.AddTrax(trax => trax
         .AddDataContextLogging()
         .AddJson()
         .SaveTrainParameters()
-        .AddStepLogger()
-        .AddStepProgress()
+        .AddJunctionLogger()
+        .AddJunctionProgress()
     )
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
@@ -72,7 +72,7 @@ For multi-statement lambdas, explicitly return the builder:
 })
 ```
 
-The parameterless overload registers effects with no data provider. Features that require a data provider (such as `AddScheduler()` or `AddStepProgress()`) will throw at build time with a helpful error message.
+The parameterless overload registers effects with no data provider. Features that require a data provider (such as `AddScheduler()` or `AddJunctionProgress()`) will throw at build time with a helpful error message.
 
 ## AddTrax Signature
 
@@ -99,10 +99,10 @@ Inside the `AddEffects()` callback, data provider methods return a more specific
 
 | Type | Returned By | Exposes |
 |------|-------------|---------|
-| `TraxEffectBuilder` | `AddEffects()` lambda | `SkipMigrations()`, `UsePostgres()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddStepLogger()`, `AddStepProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()` |
+| `TraxEffectBuilder` | `AddEffects()` lambda | `SkipMigrations()`, `UsePostgres()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddJunctionLogger()`, `AddJunctionProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()` |
 | `TraxEffectBuilderWithData` | `UsePostgres()`, `UseInMemory()` | Everything on `TraxEffectBuilder` plus `AddDataContextLogging()` |
 
-Generic effect methods (`AddJson`, `SaveTrainParameters`, `AddStepLogger`, `AddStepProgress`, `SetEffectLogLevel`, `UseBroadcaster`) preserve the concrete builder type through chaining — if you start with `TraxEffectBuilderWithData`, it stays `TraxEffectBuilderWithData`.
+Generic effect methods (`AddJson`, `SaveTrainParameters`, `AddJunctionLogger`, `AddJunctionProgress`, `SetEffectLogLevel`, `UseBroadcaster`) preserve the concrete builder type through chaining — if you start with `TraxEffectBuilderWithData`, it stays `TraxEffectBuilderWithData`.
 
 ## Ordering Enforcement
 
@@ -166,7 +166,7 @@ These properties can be set directly on the `TraxEffectBuilder`:
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `ServiceCollection` | `IServiceCollection` | (from constructor) | Direct access to the DI container for manual registrations |
-| `SerializeStepData` | `bool` | `false` | Whether step input/output data should be serialized globally |
+| `SerializeJunctionData` | `bool` | `false` | Whether junction input/output data should be serialized globally |
 | `LogLevel` | `LogLevel` | `LogLevel.Debug` | Minimum log level for effect logging |
 | `TrainParameterJsonSerializerOptions` | `JsonSerializerOptions` | `TraxJsonSerializationOptions.Default` | System.Text.Json options for parameter serialization |
 | `NewtonsoftJsonSerializerSettings` | `JsonSerializerSettings` | `TraxJsonSerializationOptions.NewtonsoftDefault` | Newtonsoft.Json settings for legacy serialization |
@@ -181,9 +181,9 @@ These properties can be set directly on the `TraxEffectBuilder`:
 | [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %}) | Enables logging for database operations |
 | [AddJson]({{ site.baseurl }}{% link sdk-reference/configuration/add-json-effect.md %}) | Adds JSON change detection for tracking model mutations |
 | [SaveTrainParameters]({{ site.baseurl }}{% link sdk-reference/configuration/save-train-parameters.md %}) | Serializes train input/output to JSON for persistence (optionally configurable) |
-| [AddStepLogger]({{ site.baseurl }}{% link sdk-reference/configuration/add-step-logger.md %}) | Adds per-step execution logging |
-| [AddStepProgress]({{ site.baseurl }}{% link sdk-reference/configuration/add-step-progress.md %}) | Adds step progress tracking and cross-server cancellation checking |
+| [AddJunctionLogger]({{ site.baseurl }}{% link sdk-reference/configuration/add-junction-logger.md %}) | Adds per-junction execution logging |
+| [AddJunctionProgress]({{ site.baseurl }}{% link sdk-reference/configuration/add-junction-progress.md %}) | Adds junction progress tracking and cross-server cancellation checking |
 | [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %}) | Registers the TrainBus and discovers trains via assembly scanning. Accepts `params Assembly[]` shorthand or `Func<TraxMediatorBuilder, TraxMediatorBuilder>` for full control (custom lifetime, multiple assemblies). Called on `TraxBuilderWithEffects`, returns `TraxBuilderWithMediator` |
-| [AddEffect / AddStepEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect.md %}) | Registers custom effect provider factories |
+| [AddEffect / AddJunctionEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect.md %}) | Registers custom effect provider factories |
 | [AddLifecycleHook]({{ site.baseurl }}{% link sdk-reference/configuration/add-lifecycle-hook.md %}) | Registers lifecycle hooks that fire on train state transitions |
 | [SetEffectLogLevel]({{ site.baseurl }}{% link sdk-reference/configuration/set-effect-log-level.md %}) | Sets the minimum log level for effect logging |

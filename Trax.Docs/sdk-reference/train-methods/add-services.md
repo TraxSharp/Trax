@@ -8,7 +8,7 @@ nav_order: 6
 
 # AddServices
 
-Stores DI services into Memory so that subsequent steps can access them. Services are stored by their **interface type** (the generic type parameter), not their concrete type.
+Stores DI services into Memory so that subsequent junctions can access them. Services are stored by their **interface type** (the generic type parameter), not their concrete type.
 
 Has overloads for 1 through 7 services.
 
@@ -26,7 +26,7 @@ public Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6, T7>(T1 s1, T2 
 
 ## Type Parameters
 
-Each `T1` through `T7` should be an **interface type**. The service is stored in Memory under this interface type, enabling steps to resolve it by interface.
+Each `T1` through `T7` should be an **interface type**. The service is stored in Memory under this interface type, enabling junctions to resolve it by interface.
 
 ## Parameters
 
@@ -75,5 +75,5 @@ public class ProcessOrderTrain(
 ## Remarks
 
 - Use interface types as the generic parameters — `AddServices<IMyService>(myService)`, not `AddServices<MyService>(myService)`.
-- Steps resolve services from Memory by their interface type during construction. See [Steps]({{ site.baseurl }}{% link core/trains-and-steps.md %}) for how constructor injection works.
+- Junctions resolve services from Memory by their interface type during construction. See [Junctions]({{ site.baseurl }}{% link core/trains-and-junctions.md %}) for how constructor injection works.
 - For more than 7 services, split across multiple `AddServices` calls.

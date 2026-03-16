@@ -7,9 +7,9 @@ nav_order: 3
 
 # Testing
 
-## Unit Testing Steps
+## Unit Testing Junctions
 
-Steps are easy to test because they're just classes with a `Run` method. Create simple fake implementations of your dependencies:
+Junctions are easy to test because they're just classes with a `Run` method. Create simple fake implementations of your dependencies:
 
 ```csharp
 // A simple fake repository for testing
@@ -33,25 +33,25 @@ public class FakeUserRepository : IUserRepository
 }
 
 [Test]
-public async Task ValidateEmailStep_ThrowsForDuplicateEmail()
+public async Task ValidateEmailJunction_ThrowsForDuplicateEmail()
 {
     // Arrange
     var repo = new FakeUserRepository();
     repo.AddExisting(new User { Id = 1, Email = "taken@example.com" });
 
-    var step = new ValidateEmailStep(repo);
+    var junction = new ValidateEmailJunction(repo);
     var request = new CreateUserRequest { Email = "taken@example.com" };
 
     // Act & Assert
-    await Assert.ThrowsAsync<ValidationException>(() => step.Run(request));
+    await Assert.ThrowsAsync<ValidationException>(() => junction.Run(request));
 }
 
 [Test]
-public async Task CreateUserStep_ReturnsNewUser()
+public async Task CreateUserJunction_ReturnsNewUser()
 {
     // Arrange
     var repo = new FakeUserRepository();
-    var step = new CreateUserStep(repo);
+    var junction = new CreateUserJunction(repo);
     var request = new CreateUserRequest
     {
         Email = "new@example.com",
@@ -60,7 +60,7 @@ public async Task CreateUserStep_ReturnsNewUser()
     };
 
     // Act
-    var result = await step.Run(request);
+    var result = await junction.Run(request);
 
     // Assert
     Assert.Equal(1, result.Id);  // First user gets ID 1
@@ -140,33 +140,33 @@ public async Task Train_PersistsMetadata()
 
 ## Testing Cancellation
 
-Verify that your steps and trains handle cancellation correctly by passing a pre-cancelled or timed token:
+Verify that your junctions and trains handle cancellation correctly by passing a pre-cancelled or timed token:
 
 ```csharp
 [Test]
-public async Task Train_WithCancelledToken_DoesNotExecuteSteps()
+public async Task Train_WithCancelledToken_DoesNotExecuteJunctions()
 {
     // Arrange
     using var cts = new CancellationTokenSource();
     cts.Cancel();
     var train = new MyTrain();
 
-    // Act & Assert — train should throw, step should not run
+    // Act & Assert — train should throw, junction should not run
     var act = () => train.Run(input, cts.Token);
     await act.Should().ThrowAsync<Exception>();
 }
 
 [Test]
-public async Task Step_UsesToken_ForAsyncOperations()
+public async Task Junction_UsesToken_ForAsyncOperations()
 {
     // Arrange
     using var cts = new CancellationTokenSource();
-    var train = new TestTrain(new MyStep());
+    var train = new TestTrain(new MyJunction());
 
     // Act
     await train.Run("input", cts.Token);
 
-    // Assert — verify the step received the token
+    // Assert — verify the junction received the token
     // (access via a test helper that captures this.CancellationToken)
 }
 ```

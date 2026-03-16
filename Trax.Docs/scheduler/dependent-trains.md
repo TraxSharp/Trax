@@ -53,7 +53,7 @@ Chaining works: `.Schedule(...).ThenInclude(...).ThenInclude(...)` creates A &ra
 
 ## Fan-Out: Include
 
-Sometimes one job needs to trigger multiple independent downstream jobs. An extract might feed both a transform pipeline and a validation step. `ThenInclude` can't express this — it always chains from the previous manifest, producing a linear pipeline.
+Sometimes one job needs to trigger multiple independent downstream jobs. An extract might feed both a transform pipeline and a validation junction. `ThenInclude` can't express this — it always chains from the previous manifest, producing a linear pipeline.
 
 `Include` solves this. It always branches from the **root** `Schedule`, not the cursor:
 
@@ -195,11 +195,11 @@ The `delta-bronze-*` manifests appear in the topology with `ScheduleType.Dormant
 
 ### Runtime Activation
 
-Inject `IDormantDependentContext` into any step within the parent train:
+Inject `IDormantDependentContext` into any junction within the parent train:
 
 ```csharp
 public class QueueDeltaBronzeTasks(IDormantDependentContext dormants)
-    : Step<(NetSuiteTable Table, Dictionary<int, List<int>> Buckets), Unit>
+    : Junction<(NetSuiteTable Table, Dictionary<int, List<int>> Buckets), Unit>
 {
     public override async Task<Unit> Run(
         (NetSuiteTable Table, Dictionary<int, List<int>> Buckets) input)
@@ -251,7 +251,7 @@ The `schedule_type` enum has two dependency values: `dependent` and `dormant_dep
 
 ### Evaluation in ManifestManagerTrain
 
-The `DetermineJobsToQueueStep` runs two passes:
+The `DetermineJobsToQueueJunction` runs two passes:
 
 1. **Time-based manifests** (Cron, Interval): checked against their schedule as before. `DormantDependent` manifests are explicitly excluded from this pass.
 2. **Dependent manifests**: only `ScheduleType.Dependent` manifests are checked against their parent's `LastSuccessfulRun`. `DormantDependent` manifests are excluded—they are never auto-queued.

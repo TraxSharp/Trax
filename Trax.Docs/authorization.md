@@ -26,7 +26,7 @@ using Trax.Effect.Attributes;
 public class DeleteUserTrain : ServiceTrain<DeleteUserInput, Unit>, IDeleteUserTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(DeleteUserInput input) =>
-        Activate(input).Chain<DeleteUserStep>().Resolve();
+        Activate(input).Chain<DeleteUserJunction>().Resolve();
 }
 
 // Requires the user to have at least one of the listed roles
@@ -34,7 +34,7 @@ public class DeleteUserTrain : ServiceTrain<DeleteUserInput, Unit>, IDeleteUserT
 public class GenerateReportTrain : ServiceTrain<ReportInput, ReportOutput>, IGenerateReportTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(ReportInput input) =>
-        Activate(input).Chain<GenerateReportStep>().Resolve();
+        Activate(input).Chain<GenerateReportJunction>().Resolve();
 }
 
 // No attribute — no per-train auth check

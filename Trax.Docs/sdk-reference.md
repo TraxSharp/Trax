@@ -16,15 +16,15 @@ For conceptual explanations and tutorials, see [Core]({{ site.baseurl }}{% link 
 
 ### [Train Methods]({{ site.baseurl }}{% link sdk-reference/train-methods.md %}) (Core)
 
-Methods available inside `RunInternal` on `Train<TInput, TReturn>` — the core building blocks for composing steps into a pipeline.
+Methods available inside `RunInternal` on `Train<TInput, TReturn>` — the core building blocks for composing junctions into a pipeline.
 
 Includes: `Activate`, `Chain`, `ShortCircuit`, `Extract`, `AddServices`, `Resolve`, `Run` / `RunEither`.
 
 ### [Configuration]({{ site.baseurl }}{% link sdk-reference/configuration.md %}) (Effect)
 
-The `AddTrax` entry point and every extension method on the step builder types (`TraxBuilder`, `TraxBuilderWithEffects`, `TraxBuilderWithMediator`), `TraxEffectBuilder`, and `TraxEffectBuilderWithData` -- data providers, effect providers, and orchestration setup. The step builder pattern enforces configuration ordering at compile time: Effects -> Mediator -> Scheduler. Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData`, which unlocks data-dependent methods like `AddDataContextLogging` at compile time.
+The `AddTrax` entry point and every extension method on the builder types (`TraxBuilder`, `TraxBuilderWithEffects`, `TraxBuilderWithMediator`), `TraxEffectBuilder`, and `TraxEffectBuilderWithData` -- data providers, effect providers, and orchestration setup. The builder pattern enforces configuration ordering at compile time: Effects -> Mediator -> Scheduler. Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData`, which unlocks data-dependent methods like `AddDataContextLogging` at compile time.
 
-Includes: `UsePostgres`, `UseInMemory`, `AddJson`, `SaveTrainParameters`, `AddStepLogger`, `AddDataContextLogging`, `AddMediator`, `AddEffect`, `AddStepEffect`, `SetEffectLogLevel`.
+Includes: `UsePostgres`, `UseInMemory`, `AddJson`, `SaveTrainParameters`, `AddJunctionLogger`, `AddDataContextLogging`, `AddMediator`, `AddEffect`, `AddJunctionEffect`, `SetEffectLogLevel`.
 
 ### [Mediator API]({{ site.baseurl }}{% link sdk-reference/mediator-api.md %}) (Mediator)
 

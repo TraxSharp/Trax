@@ -84,7 +84,7 @@ Use these methods when your train class (or its base class) uses `[Inject]` prop
 ```csharp
 [Inject] public IEffectRunner? EffectRunner { get; set; }
 [Inject] public ILogger<ServiceTrain<TIn, TOut>>? Logger { get; set; }
-[Inject] public IStepEffectRunner? StepEffectRunner { get; set; }
+[Inject] public IJunctionEffectRunner? JunctionEffectRunner { get; set; }
 ```
 
 Without `AddTraxRoute`, these properties would remain `null` after DI resolution.

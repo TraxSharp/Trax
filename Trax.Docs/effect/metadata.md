@@ -7,7 +7,7 @@ nav_order: 1
 
 # Metadata
 
-Every train execution produces a metadata record. It captures everything about the run: when it started, what steps it passed through, what it was carrying, and whether it completed or failed.
+Every train execution produces a metadata record. It captures everything about the run: when it started, what junctions it passed through, what it was carrying, and whether it completed or failed.
 
 ```csharp
 public class Metadata : IModel, IDisposable
@@ -21,7 +21,7 @@ public class Metadata : IModel, IDisposable
     public DateTime? EndTime { get; set; }            // When the train finished
     public string? Input { get; set; }                // Serialized input (jsonb)
     public string? Output { get; set; }               // Serialized output (jsonb)
-    public string? FailureStep { get; }               // Which step failed
+    public string? FailureJunction { get; }               // Which junction failed
     public string? FailureException { get; }          // Exception type
     public string? FailureReason { get; }             // Error message
     public string? StackTrace { get; set; }           // Stack trace if failed
@@ -29,8 +29,8 @@ public class Metadata : IModel, IDisposable
     public long? ManifestId { get; set; }             // For scheduled trains
     public DateTime? ScheduledTime { get; set; }      // Scheduled execution time
     public bool CancellationRequested { get; set; }   // Cross-server cancellation flag
-    public DateTime? StepStartedAt { get; set; }      // Current step start timestamp
-    public string? CurrentlyRunningStep { get; set; } // Name of the currently running step
+    public DateTime? JunctionStartedAt { get; set; }      // Current junction start timestamp
+    public string? CurrentlyRunningJunction { get; set; } // Name of the currently running junction
     public string? HostName { get; set; }              // Machine hostname where the train ran
     public string? HostEnvironment { get; set; }       // Environment type (lambda, ecs, kubernetes, server)
     public string? HostInstanceId { get; set; }        // Instance identifier (pod name, Lambda stream, etc.)
@@ -38,7 +38,7 @@ public class Metadata : IModel, IDisposable
 }
 ```
 
-The `TrainState` tracks the lifecycle: `Pending` -> `InProgress` -> `Completed`, `Failed`, or `Cancelled`. If a train fails, the metadata record captures the exception, stack trace, and which step it happened at.
+The `TrainState` tracks the lifecycle: `Pending` -> `InProgress` -> `Completed`, `Failed`, or `Cancelled`. If a train fails, the metadata record captures the exception, stack trace, and which junction it happened at.
 
 ## Host Tracking
 
@@ -46,7 +46,7 @@ In distributed environments (Lambda, ECS, multiple servers), every metadata reco
 
 ## Nested Trains
 
-A step can dispatch another train mid-execution by injecting `ITrainBus`. Pass the current `Metadata` to the child train to link the executions — this creates a tree of metadata records you can query to trace execution across an entire network of trains.
+A junction can dispatch another train mid-execution by injecting `ITrainBus`. Pass the current `Metadata` to the child train to link the executions — this creates a tree of metadata records you can query to trace execution across an entire network of trains.
 
 See [Mediator: Nested Trains]({{ site.baseurl }}{% link mediator.md %}#nested-trains) for implementation details.
 

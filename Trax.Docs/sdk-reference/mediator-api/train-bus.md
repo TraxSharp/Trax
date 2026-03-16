@@ -90,8 +90,8 @@ public class OrderController(ITrainBus trainBus) : ControllerBase
 ### Nested Trains (Parent-Child Metadata)
 
 ```csharp
-// Inside a train step
-public class ProcessOrderStep(ITrainBus trainBus) : EffectStep<OrderInput, OrderResult>
+// Inside a train junction
+public class ProcessOrderJunction(ITrainBus trainBus) : EffectJunction<OrderInput, OrderResult>
 {
     public override async Task<OrderResult> Run(OrderInput input)
     {

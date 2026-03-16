@@ -317,7 +317,7 @@ query {
         trainState
         startTime
         endTime
-        failureStep
+        failureJunction
         failureReason
         manifestId
         cancellationRequested
@@ -347,7 +347,7 @@ query {
 | `trainState` | `TrainState!` | Current state (`Pending`, `InProgress`, `Completed`, `Failed`, `Cancelled`) |
 | `startTime` | `DateTime!` | When execution began |
 | `endTime` | `DateTime` | When execution finished (null if still running) |
-| `failureStep` | `String` | Name of the step that failed (null if no failure) |
+| `failureJunction` | `String` | Name of the junction that failed (null if no failure) |
 | `failureReason` | `String` | Exception message on failure |
 | `manifestId` | `Long` | Associated manifest ID (null if not scheduler-initiated) |
 | `cancellationRequested` | `Boolean!` | Whether cancellation was requested |
@@ -368,7 +368,7 @@ query {
       trainState
       startTime
       endTime
-      failureStep
+      failureJunction
       failureReason
     }
   }

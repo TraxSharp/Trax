@@ -13,28 +13,28 @@ The ManifestManager is the first half of each polling cycle. It figures out whic
 ## Chain
 
 ```
-LoadManifests → ReapFailedJobs → DetermineJobsToQueue → CreateWorkQueueEntries
+LoadManifestsJunction → ReapFailedJobsJunction → DetermineJobsToQueueJunction → CreateWorkQueueEntriesJunction
 ```
 
-## Steps
+## Junctions
 
-### LoadManifestsStep
+### LoadManifestsJunction
 
 Projects all enabled manifests into lightweight `ManifestDispatchView` records using a single database query with pre-computed aggregate flags (`FailedCount`, `HasAwaitingDeadLetter`, `HasQueuedWork`, `HasActiveExecution`). These flags are computed via COUNT/EXISTS subqueries pushed into the database, keeping query cost O(manifests) regardless of how large the child tables (`Metadatas`, `DeadLetters`, `WorkQueues`) grow.
 
 The projection uses `AsNoTracking()` — the results are read-only snapshots used for scheduling decisions only. No unbounded child collections are loaded into memory.
 
-### ReapFailedJobsStep
+### ReapFailedJobsJunction
 
 Scans loaded manifests for any whose failure count meets or exceeds `MaxRetries`. For each, it creates a `DeadLetter` record with status `AwaitingIntervention` and persists immediately.
 
 A manifest is only reaped if it doesn't already have an unresolved dead letter. This prevents duplicate dead letters from accumulating when the same manifest fails across multiple polling cycles.
 
-The step returns the list of newly created dead letters so `DetermineJobsToQueueStep` can skip those manifests without re-querying the database.
+The junction returns the list of newly created dead letters so `DetermineJobsToQueueJunction` can skip those manifests without re-querying the database.
 
-### DetermineJobsToQueueStep
+### DetermineJobsToQueueJunction
 
-The decision step. It runs two passes over the loaded manifests:
+The decision junction. It runs two passes over the loaded manifests:
 
 **Pass 1: Time-based manifests** (Cron and Interval). For each, it checks whether the manifest is due using `SchedulingHelpers.ShouldRunNow()`, which dispatches to either cron parsing or interval arithmetic based on the schedule type.
 
@@ -51,7 +51,7 @@ Both passes apply the same per-manifest guards before evaluating the schedule:
 
 `MaxActiveJobs` is deliberately **not** enforced here. The ManifestManager freely identifies all due manifests. The JobDispatcher handles capacity gating at dispatch time. This keeps the two concerns separate—scheduling logic doesn't need to know about system-wide capacity.
 
-### CreateWorkQueueEntriesStep
+### CreateWorkQueueEntriesJunction
 
 For each manifest identified as due, creates a `WorkQueue` entry with:
 - `TrainName` from the manifest's `Name` (the canonical interface name, e.g. `MyApp.Trains.IProcessOrderTrain`)
@@ -80,11 +80,11 @@ This is a **non-blocking try-lock** — if another server already holds it, the 
 
 The lock is `xact`-scoped (transaction-scoped), meaning it auto-releases when the wrapping transaction commits or rolls back. The entire ManifestManagerTrain runs within this transaction, so all database changes (dead letters, WorkQueue entries) are committed atomically. If the train fails partway through, everything rolls back — no partial state.
 
-This is the primary concurrency control. It ensures that in a multi-server deployment, only one server evaluates manifests at a time, eliminating the TOCTOU race between `LoadManifestsStep` (which reads `HasQueuedWork = false`) and `CreateWorkQueueEntriesStep` (which inserts the entry).
+This is the primary concurrency control. It ensures that in a multi-server deployment, only one server evaluates manifests at a time, eliminating the TOCTOU race between `LoadManifestsJunction` (which reads `HasQueuedWork = false`) and `CreateWorkQueueEntriesJunction` (which inserts the entry).
 
 ### Inner Layer: Logical State Guards
 
-Even within a single-server cycle, `DetermineJobsToQueueStep` applies per-manifest guards via `ShouldSkipManifest` before evaluating schedules:
+Even within a single-server cycle, `DetermineJobsToQueueJunction` applies per-manifest guards via `ShouldSkipManifest` before evaluating schedules:
 
 | Guard | Flag | Prevents |
 |-------|------|----------|
@@ -105,7 +105,7 @@ CREATE UNIQUE INDEX ix_work_queue_unique_queued_manifest
     WHERE status = 'queued' AND manifest_id IS NOT NULL;
 ```
 
-If the advisory lock is somehow bypassed (e.g., a bug, a code path that doesn't go through the polling service), this index causes a constraint violation on the second insert. The per-entry `try/catch` in `CreateWorkQueueEntriesStep` catches the error and logs it — no crash, no corruption. Manual WorkQueue entries (`manifest_id IS NULL`) are excluded from this index.
+If the advisory lock is somehow bypassed (e.g., a bug, a code path that doesn't go through the polling service), this index causes a constraint violation on the second insert. The per-entry `try/catch` in `CreateWorkQueueEntriesJunction` catches the error and logs it — no crash, no corruption. Manual WorkQueue entries (`manifest_id IS NULL`) are excluded from this index.
 
 ### Non-Postgres Providers
 
@@ -115,6 +115,6 @@ See [Multi-Server Concurrency](../concurrency.md) for the full cross-service con
 
 ## What Changed
 
-Previously, this train had an `EnqueueJobsStep` as its final step. That step would directly create Metadata records and enqueue to the job submitter (Hangfire). `MaxActiveJobs` was enforced there, meaning the ManifestManager was both the scheduler and the dispatcher.
+Previously, this train had an `EnqueueJobsJunction` as its final junction. That junction would directly create Metadata records and enqueue to the job submitter (Hangfire). `MaxActiveJobs` was enforced there, meaning the ManifestManager was both the scheduler and the dispatcher.
 
 Now those responsibilities are split. The ManifestManager writes intent to the work queue. The [JobDispatcher](job-dispatcher.md) reads from it and handles the actual dispatch. This means `TriggerAsync`, dashboard re-runs, and scheduled manifests all converge on the same dispatch path.

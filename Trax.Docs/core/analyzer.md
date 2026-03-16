@@ -7,7 +7,7 @@ nav_order: 4
 
 # Analyzer
 
-Trax.Core includes a Roslyn analyzer that validates your train's route at compile time — like a route planner that checks every junction has the cargo it needs before the train ever departs. When you chain steps via `.Chain<TStep>()`, the analyzer simulates the runtime Memory dictionary to verify that each step's input type is available before that step executes.
+Trax.Core includes a Roslyn analyzer that validates your train's route at compile time — like a route planner that checks every junction has the cargo it needs before the train ever departs. When you chain junctions via `.Chain<TJunction>()`, the analyzer simulates the runtime Memory dictionary to verify that each junction's input type is available before that junction executes.
 
 ## The Problem
 
@@ -15,14 +15,14 @@ Consider this train:
 
 ```csharp
 Activate(input)                          // input: RunJobRequest
-    .Chain<LoadMetadataStep>()           // TIn=RunJobRequest -> TOut=Metadata
-    .Chain<ValidateMetadataStateStep>()  // TIn=Metadata -> TOut=Unit
-    .Chain<RunScheduledTrainStep>()
-    .Chain<UpdateManifestSuccessStep>()
+    .Chain<LoadMetadataJunction>()           // TIn=RunJobRequest -> TOut=Metadata
+    .Chain<ValidateMetadataStateJunction>()  // TIn=Metadata -> TOut=Unit
+    .Chain<RunScheduledTrainJunction>()
+    .Chain<UpdateManifestSuccessJunction>()
     .Resolve();
 ```
 
-If someone removes `LoadMetadataStep`, `ValidateMetadataStateStep` expects `Metadata` in Memory but nothing produces it. Today this is a runtime error — the train fails when it tries to find `Metadata` in the dictionary. You won't discover this until the code actually runs.
+If someone removes `LoadMetadataJunction`, `ValidateMetadataStateJunction` expects `Metadata` in Memory but nothing produces it. Today this is a runtime error — the train fails when it tries to find `Metadata` in the dictionary. You won't discover this until the code actually runs.
 
 The analyzer makes it a compile-time error. You see the problem immediately in your IDE, before you even build.
 
@@ -32,32 +32,32 @@ The analyzer triggers on every `.Resolve()` call in a `Train<,>` or `ServiceTrai
 
 ```
 Activate(input)       -> Memory = { TInput, Unit }
-.Chain<StepA>()       -> Check: is StepA's TIn in Memory? Add StepA's TOut.
-.Chain<StepB>()       -> Check: is StepB's TIn in Memory? Add StepB's TOut.
+.Chain<JunctionA>()   -> Check: is JunctionA's TIn in Memory? Add JunctionA's TOut.
+.Chain<JunctionB>()   -> Check: is JunctionB's TIn in Memory? Add JunctionB's TOut.
 .Resolve()            -> Check: is TReturn in Memory?
 ```
 
 | Method | What the analyzer does |
 |--------|----------------------|
 | `Activate(input)` | Seeds Memory with `TInput` and `Unit` |
-| `.Chain<TStep>()` | Checks `TIn` in Memory, then adds `TOut` |
-| `.ShortCircuit<TStep>()` | Same as `Chain` — checks `TIn` in Memory, adds `TOut` |
+| `.Chain<TJunction>()` | Checks `TIn` in Memory, then adds `TOut` |
+| `.ShortCircuit<TJunction>()` | Same as `Chain` — checks `TIn` in Memory, adds `TOut` |
 | `.AddServices<T1, T2>()` | Adds each type argument to Memory |
 | `.Extract<TIn, TOut>()` | Adds `TOut` to Memory |
 | `.Resolve()` | Checks `TReturn` in Memory |
 
 ## Diagnostics
 
-### CHAIN001: Step input type not available (Error)
+### CHAIN001: Junction input type not available (Error)
 
-Fires when a step needs a type that no previous step has produced.
+Fires when a junction needs a type that no previous junction has produced.
 
 ```csharp
 public class BrokenTrain : ServiceTrain<string, Unit>
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(string input) =>
         Activate(input)
-            .Chain<LogGreetingStep>()  // <- CHAIN001: LogGreetingStep requires HelloWorldInput,
+            .Chain<LogGreetingJunction>()  // <- CHAIN001: LogGreetingJunction requires HelloWorldInput,
             .Resolve();               //   but Memory only has [string, Unit]
 }
 ```
@@ -65,8 +65,8 @@ public class BrokenTrain : ServiceTrain<string, Unit>
 The message tells you exactly what's missing and what's available:
 
 ```
-error CHAIN001: Step 'LogGreetingStep' requires input type 'HelloWorldInput'
-which has not been produced by a previous step. Available: [string, Unit].
+error CHAIN001: Junction 'LogGreetingJunction' requires input type 'HelloWorldInput'
+which has not been produced by a previous junction. Available: [string, Unit].
 ```
 
 ### CHAIN002: Train return type not available (Error)
@@ -78,7 +78,7 @@ public class MissingReturnTrain : ServiceTrain<OrderRequest, Receipt>
 {
     protected override async Task<Either<Exception, Receipt>> RunInternal(OrderRequest input) =>
         Activate(input)
-            .Chain<ValidateOrderStep>()  // Returns Unit
+            .Chain<ValidateOrderJunction>()  // Returns Unit
             .Resolve();                  // <- CHAIN002: Receipt not in Memory
 }
 ```
@@ -87,15 +87,15 @@ public class MissingReturnTrain : ServiceTrain<OrderRequest, Receipt>
 
 The analyzer mirrors the runtime's Memory behavior:
 
-**Tuple outputs are decomposed.** When a step produces `(User, Order)`, the analyzer adds `User` and `Order` to Memory individually (not the tuple itself). This matches how the runtime stores tuple elements.
+**Tuple outputs are decomposed.** When a junction produces `(User, Order)`, the analyzer adds `User` and `Order` to Memory individually (not the tuple itself). This matches how the runtime stores tuple elements.
 
-**Tuple inputs are validated component-by-component.** When a step takes `(User, Order)`, the analyzer checks that both `User` and `Order` are individually available in Memory.
+**Tuple inputs are validated component-by-component.** When a junction takes `(User, Order)`, the analyzer checks that both `User` and `Order` are individually available in Memory.
 
-**Interface resolution works through concrete types.** When a step produces `ConcreteUser` (which implements `IUser`), the analyzer adds both `ConcreteUser` and `IUser` to Memory. A subsequent step requiring `IUser` will pass validation.
+**Interface resolution works through concrete types.** When a junction produces `ConcreteUser` (which implements `IUser`), the analyzer adds both `ConcreteUser` and `IUser` to Memory. A subsequent junction requiring `IUser` will pass validation.
 
 ## Known Limitations
 
-**Sibling interface inputs.** When the train's `TInput` is an interface (e.g., `Train<IFoo, Unit>`) and a step requires a different interface that the runtime concrete type also implements, the analyzer can't verify this. Suppress with `#pragma warning disable CHAIN001`.
+**Sibling interface inputs.** When the train's `TInput` is an interface (e.g., `Train<IFoo, Unit>`) and a junction requires a different interface that the runtime concrete type also implements, the analyzer can't verify this. Suppress with `#pragma warning disable CHAIN001`.
 
 **Cross-method chains.** The analyzer only looks within a single method body. If you build a chain across helper methods, it won't follow the calls.
 
@@ -119,7 +119,7 @@ If the analyzer fires on a chain that you know is correct (interface patterns, d
 
 ```csharp
 #pragma warning disable CHAIN001
-    .Chain<MyDynamicStep>()
+    .Chain<MyDynamicJunction>()
 #pragma warning restore CHAIN001
 ```
 

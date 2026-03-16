@@ -26,10 +26,10 @@ Type-safe pipelines with no infrastructure. No database, no DI container, no ASP
 dotnet add package Trax.Core
 ```
 
-### Define Steps
+### Define Junctions
 
 ```csharp
-public class ValidateEmailStep : Step<CreateUserRequest, Unit>
+public class ValidateEmailJunction : Junction<CreateUserRequest, Unit>
 {
     public override async Task<Unit> Run(CreateUserRequest input)
     {
@@ -42,7 +42,7 @@ public class ValidateEmailStep : Step<CreateUserRequest, Unit>
         => new EmailAddressAttribute().IsValid(email);
 }
 
-public class FormatNameStep : Step<CreateUserRequest, FullName>
+public class FormatNameJunction : Junction<CreateUserRequest, FullName>
 {
     public override Task<FullName> Run(CreateUserRequest input)
         => Task.FromResult(new FullName($"{input.FirstName} {input.LastName}"));
@@ -56,8 +56,8 @@ public class CreateUserTrain : Train<CreateUserRequest, FullName>
 {
     protected override async Task<Either<Exception, FullName>> RunInternal(CreateUserRequest input)
         => Activate(input)
-            .Chain<ValidateEmailStep>()
-            .Chain<FormatNameStep>()
+            .Chain<ValidateEmailJunction>()
+            .Chain<FormatNameJunction>()
             .Resolve();
 }
 ```
@@ -123,9 +123,9 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 {
     protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
         => Activate(input)
-            .Chain<ValidateEmailStep>()
-            .Chain<CreateUserInDatabaseStep>()
-            .Chain<SendWelcomeEmailStep>()
+            .Chain<ValidateEmailJunction>()
+            .Chain<CreateUserInDatabaseJunction>()
+            .Chain<SendWelcomeEmailJunction>()
             .Resolve();
 }
 ```
@@ -159,8 +159,8 @@ builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
         .SaveTrainParameters()
-        .AddStepLogger(serializeStepData: true)
-        .AddStepProgress()
+        .AddJunctionLogger(serializeJunctionData: true)
+        .AddJunctionProgress()
     )
     .AddMediator(typeof(Program).Assembly)
 );

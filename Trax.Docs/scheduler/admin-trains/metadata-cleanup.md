@@ -13,18 +13,18 @@ The MetadataCleanup train deletes old metadata rows for high-frequency internal 
 ## Chain
 
 ```
-DeleteExpiredMetadata
+DeleteExpiredMetadataJunction
 ```
 
-One step. It's a simple train because the logic is straightforward—the complexity is in the deletion query, not in orchestration.
+One junction. It's a simple train because the logic is straightforward—the complexity is in the deletion query, not in orchestration.
 
 ## How It Runs
 
 The `MetadataCleanupPollingService` is a separate `BackgroundService` from the manifest polling service. It runs on its own interval (`CleanupInterval`, default: 1 minute) and invokes the MetadataCleanupTrain each cycle. It also runs a cleanup immediately on startup.
 
-## The Deletion Step
+## The Deletion Junction
 
-`DeleteExpiredMetadataStep` uses EF Core's `ExecuteDeleteAsync` for efficient bulk deletion—no entities are loaded into memory. It deletes in two passes to respect foreign key constraints:
+`DeleteExpiredMetadataJunction` uses EF Core's `ExecuteDeleteAsync` for efficient bulk deletion—no entities are loaded into memory. It deletes in two passes to respect foreign key constraints:
 
 1. **Delete log entries** for matching metadata rows
 2. **Delete metadata rows** themselves
@@ -43,17 +43,17 @@ The MetadataCleanup train uses no application-level locking. Multiple servers ca
 
 ### Implicit Database Locks
 
-`DeleteExpiredMetadataStep` uses EF Core's `ExecuteDeleteAsync()`, which translates to atomic `DELETE FROM ... WHERE ...` SQL statements. The database engine acquires implicit row-level locks during these deletes. If two servers execute the same `DELETE` concurrently, the first deletes the rows and the second finds no matching rows — a no-op. No errors, no side effects.
+`DeleteExpiredMetadataJunction` uses EF Core's `ExecuteDeleteAsync()`, which translates to atomic `DELETE FROM ... WHERE ...` SQL statements. The database engine acquires implicit row-level locks during these deletes. If two servers execute the same `DELETE` concurrently, the first deletes the rows and the second finds no matching rows — a no-op. No errors, no side effects.
 
 ### Deletion Order
 
-The step deletes in a specific order to respect foreign key constraints:
+The junction deletes in a specific order to respect foreign key constraints:
 
 1. **WorkQueue entries** — delete entries whose `MetadataId` matches the set to be cleaned
 2. **Log entries** — delete logs whose `MetadataId` matches
 3. **Metadata rows** — delete the metadata itself
 
-This ordering prevents FK constraint violations. Each `ExecuteDeleteAsync` is its own SQL statement (not wrapped in an explicit transaction), so a failure in step 2 would leave orphaned WorkQueue deletions — but since the Metadata rows survive, the next cleanup cycle will retry and complete the deletion.
+This ordering prevents FK constraint violations. Each `ExecuteDeleteAsync` is its own SQL statement (not wrapped in an explicit transaction), so a failure in pass 2 would leave orphaned WorkQueue deletions — but since the Metadata rows survive, the next cleanup cycle will retry and complete the deletion.
 
 ### Safety Boundary
 

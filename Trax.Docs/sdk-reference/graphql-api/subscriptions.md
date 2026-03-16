@@ -34,7 +34,7 @@ type TrainLifecycleEvent {
   trainName: String!
   trainState: TrainState!
   timestamp: DateTime!
-  failureStep: String
+  failureJunction: String
   failureReason: String
 }
 ```
@@ -46,7 +46,7 @@ type TrainLifecycleEvent {
 | `trainName` | The canonical train name (the service interface's fully-qualified name, e.g. `MyApp.Trains.IProcessOrderTrain`) |
 | `trainState` | The current state of the train (`InProgress`, `Completed`, `Failed`, `Cancelled`) |
 | `timestamp` | When the event occurred (end time if available, otherwise current UTC time) |
-| `failureStep` | The step that failed (only present on failed trains) |
+| `failureJunction` | The junction that failed (only present on failed trains) |
 | `failureReason` | The failure message (only present on failed trains) |
 
 ## Examples
@@ -71,7 +71,7 @@ subscription {
   onTrainFailed {
     metadataId
     trainName
-    failureStep
+    failureJunction
     failureReason
     timestamp
   }
@@ -90,7 +90,7 @@ subscription { onTrainStarted { metadataId trainName trainState } }
 subscription { onTrainCompleted { metadataId trainName trainState } }
 
 # Tab 3
-subscription { onTrainFailed { metadataId trainName failureStep failureReason } }
+subscription { onTrainFailed { metadataId trainName failureJunction failureReason } }
 
 # Tab 4
 subscription { onTrainCancelled { metadataId trainName trainState } }

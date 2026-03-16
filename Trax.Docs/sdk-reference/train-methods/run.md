@@ -31,7 +31,7 @@ public Task<Either<Exception, TReturn>> RunEither(TInput input)
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `input` | `TInput` | Yes | The input data for the train |
-| `cancellationToken` | `CancellationToken` | No | Token to monitor for cancellation requests. When provided, it is stored on the `Train.CancellationToken` property and propagated to every step before execution. Defaults to `CancellationToken.None` when omitted. |
+| `cancellationToken` | `CancellationToken` | No | Token to monitor for cancellation requests. When provided, it is stored on the `Train.CancellationToken` property and propagated to every junction before execution. Defaults to `CancellationToken.None` when omitted. |
 
 > **Note:** `RunEither` does not accept a `CancellationToken` parameter. Set the token via `Run` or by assigning `Train.CancellationToken` directly before calling `RunEither`.
 
@@ -88,10 +88,10 @@ public async Task<IActionResult> ProcessOrder(
 4. **`Run`**: Unwraps the `Either` result. If `Left`, rethrows the exception. If `Right`, returns the value.
 5. **`RunEither`**: Returns the `Either` directly without unwrapping.
 
-During step execution, the train's `CancellationToken` is automatically propagated to each step before its `Run` method is called. Steps access the token via `this.CancellationToken`. Before each step executes, `CancellationToken.ThrowIfCancellationRequested()` is called — if the token is already cancelled, the step is skipped entirely.
+During junction execution, the train's `CancellationToken` is automatically propagated to each junction before its `Run` method is called. Junctions access the token via `this.CancellationToken`. Before each junction executes, `CancellationToken.ThrowIfCancellationRequested()` is called — if the token is already cancelled, the junction is skipped entirely.
 
 ## Remarks
 
 - `RunEither` is useful when you want functional-style error handling without try/catch. It pairs naturally with LanguageExt's `Match`, `Map`, `Bind`, etc.
 - In most applications, trains are executed through `ITrainBus.RunAsync` (which calls `Run` internally) rather than calling `Run` directly. See [TrainBus]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %}).
-- The `cancellationToken` parameter stores the token before calling `RunInternal`. All steps in the chain then receive the token automatically. See [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %}) for details on how cancellation propagates through the pipeline.
+- The `cancellationToken` parameter stores the token before calling `RunInternal`. All junctions in the chain then receive the token automatically. See [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %}) for details on how cancellation propagates through the pipeline.

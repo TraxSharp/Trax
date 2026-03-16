@@ -8,7 +8,7 @@ nav_order: 1
 
 # Activate
 
-Stores the train input (and optional extra objects) into Memory. Typically the **first** method called in `RunInternal`. After activation, the input is available to subsequent steps via Memory's type-based lookup.
+Stores the train input (and optional extra objects) into Memory. Typically the **first** method called in `RunInternal`. After activation, the input is available to subsequent junctions via Memory's type-based lookup.
 
 ## Signature
 
@@ -16,7 +16,7 @@ Stores the train input (and optional extra objects) into Memory. Typically the *
 // Train<TInput, TReturn>
 public Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs)
 
-// ServiceTrain<TIn, TOut> — overrides to inject ServiceProvider for step DI
+// ServiceTrain<TIn, TOut> — overrides to inject ServiceProvider for junction DI
 public new Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs)
 ```
 
@@ -69,6 +69,6 @@ If `input` is `null`, the train's exception is set to `"Input ({typeof(TInput)})
 
 ## Remarks
 
-- Memory is initialized with `Unit.Default` under `typeof(Unit)`, allowing parameterless step invocations.
+- Memory is initialized with `Unit.Default` under `typeof(Unit)`, allowing parameterless junction invocations.
 - The `otherInputs` parameter follows the same tuple/interface storage rules as the primary input.
 - See [Memory]({{ site.baseurl }}{% link core/memory.md %}) for details on how the type-keyed dictionary works.

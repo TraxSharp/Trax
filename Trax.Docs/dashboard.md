@@ -75,7 +75,7 @@ When `Trax.Effect.Data` is registered, the dashboard exposes pages for browsing 
 
 | Page | Description |
 |------|-------------|
-| **Metadata** | Train execution history—start/end times, success/failure, inputs/outputs. Includes a "Current Step" column for InProgress trains and per-row cancel buttons. |
+| **Metadata** | Train execution history—start/end times, success/failure, inputs/outputs. Includes a "Current Junction" column for InProgress trains and per-row cancel buttons. |
 | **Logs** | Application log entries captured during train execution |
 | **Manifests** | Scheduled job definitions (requires Scheduler) |
 | **Manifest Groups** | Manifest group settings and aggregate execution stats (requires Scheduler). Includes a "Cancel All Running" button. |
@@ -89,7 +89,7 @@ Clicking the visibility icon on a dead letter row opens a detail page with:
 
 - **Dead Letter Details**: Status badge, dead-lettered timestamp, retry count, reason, resolution info
 - **Manifest Details**: Linked manifest name, schedule, max retries, timeout, properties JSON
-- **Most Recent Failure**: The latest failed execution's failure step, exception, reason, stack trace, and input
+- **Most Recent Failure**: The latest failed execution's failure junction, exception, reason, stack trace, and input
 - **Failed Execution History**: A full grid of all failed metadata runs for the manifest, each linking to the metadata detail page
 
 Two action buttons appear when the dead letter is in `AwaitingIntervention` status:
@@ -101,7 +101,7 @@ Two action buttons appear when the dead letter is in `AwaitingIntervention` stat
 
 Clicking a metadata row opens a detail page with train state, timing, input/output, and exception details.
 
-**State Transition Timeline** — A visual horizontal stepper at the top of the detail page shows the train's state progression: Pending → InProgress → Completed/Failed/Cancelled. Each step is color-coded and displays the timestamp when that state was reached, along with the duration between transitions (wait time, execution time). Past states are filled, the current state pulses, and future states are dimmed.
+**State Transition Timeline** — A visual horizontal stepper at the top of the detail page shows the train's state progression: Pending → InProgress → Completed/Failed/Cancelled. Each state is color-coded and displays the timestamp when that state was reached, along with the duration between transitions (wait time, execution time). Past states are filled, the current state pulses, and future states are dimmed.
 
 **Exception Viewer** — When a train has failed, the failure details card includes a collapsible stack trace viewer with:
 - Syntax highlighting for C# stack traces (method names, file paths, and line numbers each in distinct colors)
@@ -109,9 +109,9 @@ Clicking a metadata row opens a detail page with train state, timing, input/outp
 - Auto-collapse for long stack traces (expanded by default for short ones)
 - Inner exception separator formatting
 
-When `AddStepProgress()` is registered and the train is `InProgress`, a **Step Progress** card appears showing:
-- **Currently Running** — the name of the step currently executing
-- **Step Started** — when the step began (HH:mm:ss)
+When `AddJunctionProgress()` is registered and the train is `InProgress`, a **Junction Progress** card appears showing:
+- **Currently Running** — the name of the junction currently executing
+- **Junction Started** — when the junction began (HH:mm:ss)
 
 A **Cancel** button appears for InProgress trains. Clicking it sets `cancel_requested = true` in the database and attempts to cancel the train via `ICancellationRegistry` (instant for same-server). Cancelled trains transition to `TrainState.Cancelled`.
 
@@ -144,7 +144,7 @@ Cancelled trains are excluded from the success rate calculation — cancellation
 
 ### Effects Page
 
-The **Effects** page (`/trax/settings/effects`) shows all registered effect and step effect provider factories. From this page you can:
+The **Effects** page (`/trax/settings/effects`) shows all registered effect and junction effect provider factories. From this page you can:
 
 - **Enable/disable** toggleable effects at runtime (changes apply to the next train execution scope)
 - **Configure** effects that expose runtime settings — click the gear icon to open a dynamic form dialog

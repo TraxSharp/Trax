@@ -19,9 +19,9 @@ public class RobustTrain : ServiceTrain<ProcessOrderRequest, ProcessOrderResult>
         try
         {
             return await Activate(input)
-                .Chain<ValidateOrderStep>()
-                .Chain<ProcessPaymentStep>()
-                .Chain<FulfillOrderStep>()
+                .Chain<ValidateOrderJunction>()
+                .Chain<ProcessPaymentJunction>()
+                .Chain<FulfillOrderJunction>()
                 .Resolve();
         }
         catch (PaymentException ex)
@@ -42,10 +42,10 @@ public class RobustTrain : ServiceTrain<ProcessOrderRequest, ProcessOrderResult>
 
 *SDK Reference: [Activate]({{ site.baseurl }}{% link sdk-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link sdk-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %})*
 
-### Step-Level Error Handling
+### Junction-Level Error Handling
 
 ```csharp
-public class RobustStep(IPaymentGateway PaymentGateway) : Step<PaymentRequest, PaymentResult>
+public class RobustJunction(IPaymentGateway PaymentGateway) : Junction<PaymentRequest, PaymentResult>
 {
     public override async Task<PaymentResult> Run(PaymentRequest input)
     {
@@ -80,12 +80,12 @@ public async Task<IActionResult> CreateOrder(
 }
 ```
 
-### Using the Token in Steps
+### Using the Token in Junctions
 
-Access `this.CancellationToken` inside any step to pass it to async operations:
+Access `this.CancellationToken` inside any junction to pass it to async operations:
 
 ```csharp
-public class QueryDatabaseStep(IDataContext context) : Step<UserId, User>
+public class QueryDatabaseJunction(IDataContext context) : Junction<UserId, User>
 {
     public override async Task<User> Run(UserId input)
     {
@@ -96,12 +96,12 @@ public class QueryDatabaseStep(IDataContext context) : Step<UserId, User>
 }
 ```
 
-### Checking Cancellation in Long-Running Steps
+### Checking Cancellation in Long-Running Junctions
 
-For steps that iterate over large collections, check cancellation periodically:
+For junctions that iterate over large collections, check cancellation periodically:
 
 ```csharp
-public class BatchProcessStep : Step<BatchInput, BatchResult>
+public class BatchProcessJunction : Junction<BatchInput, BatchResult>
 {
     public override async Task<BatchResult> Run(BatchInput input)
     {

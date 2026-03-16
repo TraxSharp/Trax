@@ -66,16 +66,16 @@ Like `Schedule`, the builder captures the manifest and seeds it on startup with 
 
 ## Auto-Disable Behavior
 
-When a `ScheduleType.Once` manifest completes successfully, the `UpdateManifestSuccessStep` sets `IsEnabled = false` on the manifest. The manifest stays in the database for audit purposes — you can see its execution history in the dashboard — but the ManifestManager skips it on subsequent polling cycles.
+When a `ScheduleType.Once` manifest completes successfully, the `UpdateManifestSuccessJunction` sets `IsEnabled = false` on the manifest. The manifest stays in the database for audit purposes — you can see its execution history in the dashboard — but the ManifestManager skips it on subsequent polling cycles.
 
 If the job fails, normal retry logic applies. Retries continue until the job succeeds (and auto-disables) or exceeds `MaxRetries` (and is dead-lettered). A dead-lettered once-manifest can be retried from the dashboard like any other dead letter.
 
 ## How It Works Internally
 
 1. **Manifest creation**: `ScheduleOnceAsync` creates a manifest with `ScheduleType = Once` and `ScheduledAt` set to `DateTime.UtcNow + delay`.
-2. **Queuing**: The ManifestManager's `DetermineJobsToQueueStep` evaluates Once manifests via `ShouldRunOnce` — it queues the manifest when the current time is at or past `ScheduledAt`.
-3. **Dispatch filtering**: The JobDispatcher's `LoadQueuedJobsStep` filters out work queue entries whose `ScheduledAt` is still in the future. This applies to both delayed triggers and Once manifests.
-4. **Auto-disable on success**: The `UpdateManifestSuccessStep` checks if the manifest is `ScheduleType.Once`. If so, it sets `IsEnabled = false` after recording the successful execution.
+2. **Queuing**: The ManifestManager's `DetermineJobsToQueueJunction` evaluates Once manifests via `ShouldRunOnce` — it queues the manifest when the current time is at or past `ScheduledAt`.
+3. **Dispatch filtering**: The JobDispatcher's `LoadQueuedJobsJunction` filters out work queue entries whose `ScheduledAt` is still in the future. This applies to both delayed triggers and Once manifests.
+4. **Auto-disable on success**: The `UpdateManifestSuccessJunction` checks if the manifest is `ScheduleType.Once`. If so, it sets `IsEnabled = false` after recording the successful execution.
 
 ## When to Use Which
 

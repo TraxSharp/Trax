@@ -13,12 +13,12 @@ The JobDispatcher is the single gateway between the work queue and the job submi
 ## Chain
 
 ```
-LoadQueuedJobs → LoadDispatchCapacity → ApplyCapacityLimits → DispatchJobs
+LoadQueuedJobsJunction → LoadDispatchCapacityJunction → ApplyCapacityLimitsJunction → DispatchJobsJunction
 ```
 
-## Steps
+## Junctions
 
-### LoadQueuedJobsStep
+### LoadQueuedJobsJunction
 
 Loads all `WorkQueue` entries with `Status = Queued`, filtering out entries whose `ManifestGroup` has `IsEnabled = false`. The results are ordered by three keys:
 
@@ -28,11 +28,11 @@ Loads all `WorkQueue` entries with `Status = Queued`, filtering out entries whos
 
 This replaces the previous dependent-first ordering with a fully configurable priority system.
 
-### DispatchJobsStep
+### DispatchJobsJunction
 
-The core of the dispatcher. For each entry that passes the capacity checks in earlier steps, the dispatcher atomically claims and dispatches it within its own DI scope and database transaction.
+The core of the dispatcher. For each entry that passes the capacity checks in earlier junctions, the dispatcher atomically claims and dispatches it within its own DI scope and database transaction.
 
-**Atomic claim via `FOR UPDATE SKIP LOCKED`**: before dispatching an entry, the step re-selects it from the database with a row-level lock:
+**Atomic claim via `FOR UPDATE SKIP LOCKED`**: before dispatching an entry, the junction re-selects it from the database with a row-level lock:
 
 ```sql
 SELECT * FROM trax.work_queue
@@ -58,7 +58,7 @@ Each entry is processed in its own DI scope with a fresh `IDataContext`. If any 
 
 ## Parallel Dispatch
 
-By default, `DispatchJobsStep` processes entries sequentially — one `TryClaimAndDispatchAsync` at a time. This is optimal for local workers where `EnqueueAsync` is a fast database INSERT. But when using `UseRemoteWorkers()`, each dispatch is an HTTP POST that blocks until the remote endpoint finishes executing the train. Sequential dispatch in this scenario means cycle duration scales linearly with the number of entries.
+By default, `DispatchJobsJunction` processes entries sequentially — one `TryClaimAndDispatchAsync` at a time. This is optimal for local workers where `EnqueueAsync` is a fast database INSERT. But when using `UseRemoteWorkers()`, each dispatch is an HTTP POST that blocks until the remote endpoint finishes executing the train. Sequential dispatch in this scenario means cycle duration scales linearly with the number of entries.
 
 `MaxConcurrentDispatch` controls how many entries are dispatched in parallel within a single polling cycle:
 
@@ -71,7 +71,7 @@ By default, `DispatchJobsStep` processes entries sequentially — one `TryClaimA
 )
 ```
 
-When `MaxConcurrentDispatch > 1`, the step uses a `SemaphoreSlim` to bound concurrency and `Task.WhenAll` to dispatch entries in parallel. Each entry still gets its own DI scope and database transaction — the `FOR UPDATE SKIP LOCKED` pattern ensures no two concurrent dispatches claim the same entry, even within the same cycle.
+When `MaxConcurrentDispatch > 1`, the junction uses a `SemaphoreSlim` to bound concurrency and `Task.WhenAll` to dispatch entries in parallel. Each entry still gets its own DI scope and database transaction — the `FOR UPDATE SKIP LOCKED` pattern ensures no two concurrent dispatches claim the same entry, even within the same cycle.
 
 | `MaxConcurrentDispatch` | Behavior |
 |-------------------------|----------|
@@ -149,7 +149,7 @@ Because Group A has higher priority, its entries appear first in the sorted queu
 
 ## Why a Separate Train
 
-Before the JobDispatcher existed, the ManifestManager handled dispatch directly. `MaxActiveJobs` was checked in its `EnqueueJobsStep`. That worked fine when the ManifestManager was the only source of job execution.
+Before the JobDispatcher existed, the ManifestManager handled dispatch directly. `MaxActiveJobs` was checked in its `EnqueueJobsJunction`. That worked fine when the ManifestManager was the only source of job execution.
 
 But other sources exist: `TriggerAsync` for manual triggers, the dashboard for re-runs. Each of those had to independently create Metadata and enqueue to Hangfire, bypassing the ManifestManager's capacity check entirely.
 

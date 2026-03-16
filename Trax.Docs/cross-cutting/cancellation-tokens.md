@@ -7,11 +7,11 @@ nav_order: 1
 
 # Cancellation Tokens
 
-Trax.Core threads `CancellationToken` through the entire pipeline — from the initial `Run` call, through every step, down to EF Core queries and background service shutdown. This enables graceful cancellation of trains in response to HTTP request aborts, application shutdown, or explicit user cancellation.
+Trax.Core threads `CancellationToken` through the entire pipeline — from the initial `Run` call, through every junction, down to EF Core queries and background service shutdown. This enables graceful cancellation of trains in response to HTTP request aborts, application shutdown, or explicit user cancellation.
 
 ## How It Works
 
-CancellationToken propagation is **property-based**, not parameter-based. The token is stored as a property on `Train` and `Step`, so the `Step.Run(TIn input)` signature stays unchanged:
+CancellationToken propagation is **property-based**, not parameter-based. The token is stored as a property on `Train` and `Junction`, so the `Junction.Run(TIn input)` signature stays unchanged:
 
 ```
 Run(input, cancellationToken)
@@ -21,10 +21,10 @@ Run(input, cancellationToken)
 │      Train                │
 │  CancellationToken = ct  │
 └──────────┬───────────────┘
-           │  Chain(step)
+           │  Chain(junction)
            ▼
 ┌──────────────────────────┐
-│      Step                 │
+│      Junction              │
 │  CancellationToken = ct  │  ← set automatically before Run() is called
 │  Run(input)               │  ← your code accesses this.CancellationToken
 └──────────────────────────┘
@@ -32,8 +32,8 @@ Run(input, cancellationToken)
 
 1. The caller passes a `CancellationToken` to `train.Run(input, cancellationToken)`
 2. The train stores it on its `CancellationToken` property
-3. Before each step executes, `RailwayStep` copies the token from the train to the step
-4. The step checks `CancellationToken.ThrowIfCancellationRequested()` before `Run()` is called
+3. Before each junction executes, `RailwayJunction` copies the token from the train to the junction
+4. The junction checks `CancellationToken.ThrowIfCancellationRequested()` before `Run()` is called
 5. Inside `Run()`, your code accesses `this.CancellationToken` for async operations
 
 ## Passing a Token to a Train
@@ -54,12 +54,12 @@ If you call `Run(input)` without a token, `CancellationToken` defaults to `Cance
 
 *SDK Reference: [Run / RunEither]({{ site.baseurl }}{% link sdk-reference/train-methods/run.md %})*
 
-## Using the Token Inside Steps
+## Using the Token Inside Junctions
 
-Access `this.CancellationToken` in your step's `Run` method. It is set automatically before `Run` is called — you never need to set it yourself:
+Access `this.CancellationToken` in your junction's `Run` method. It is set automatically before `Run` is called — you never need to set it yourself:
 
 ```csharp
-public class FetchDataStep(IHttpClientFactory httpFactory) : Step<FetchRequest, ApiResponse>
+public class FetchDataJunction(IHttpClientFactory httpFactory) : Junction<FetchRequest, ApiResponse>
 {
     public override async Task<ApiResponse> Run(FetchRequest input)
     {
@@ -118,33 +118,33 @@ public override async Task<BatchResult> Run(BatchRequest input)
 
 ### Pre-Cancelled Token
 
-If the token is already cancelled when a step is about to execute, `OperationCanceledException` is thrown **before** `Run()` is called. The step never executes:
+If the token is already cancelled when a junction is about to execute, `OperationCanceledException` is thrown **before** `Run()` is called. The junction never executes:
 
 ```csharp
 using var cts = new CancellationTokenSource();
 cts.Cancel();
 
-// Throws OperationCanceledException — no steps execute
+// Throws OperationCanceledException — no junctions execute
 await train.Run(input, cts.Token);
 ```
 
-### Cancellation Between Steps
+### Cancellation Between Junctions
 
-If a token is cancelled after Step 1 completes but before Step 2 starts, Step 2 is skipped:
+If a token is cancelled after Junction 1 completes but before Junction 2 starts, Junction 2 is skipped:
 
 ```
-Step 1 executes ✓
+Junction 1 executes ✓
                     ← token cancelled here
-Step 2 skipped (ThrowIfCancellationRequested fires)
-Step 3 skipped
+Junction 2 skipped (ThrowIfCancellationRequested fires)
+Junction 3 skipped
 ```
 
-### Cancellation During a Step
+### Cancellation During a Junction
 
-If a step is awaiting an async operation when the token is cancelled, the operation throws `OperationCanceledException` which propagates up:
+If a junction is awaiting an async operation when the token is cancelled, the operation throws `OperationCanceledException` which propagates up:
 
 ```csharp
-// This step will be interrupted if the token is cancelled during the delay
+// This junction will be interrupted if the token is cancelled during the delay
 public override async Task<string> Run(string input)
 {
     await Task.Delay(TimeSpan.FromSeconds(30), CancellationToken);
@@ -156,8 +156,8 @@ public override async Task<string> Run(string input)
 
 Cancellation is treated differently from regular exceptions:
 
-- **Regular exceptions** are wrapped with `TrainExceptionData` (step name, train name, etc.) and returned as `Left` in the Railway pattern
-- **`OperationCanceledException`** propagates cleanly without wrapping — it is not a step failure, it is an explicit abort signal
+- **Regular exceptions** are wrapped with `TrainExceptionData` (junction name, train name, etc.) and returned as `Left` in the Railway pattern
+- **`OperationCanceledException`** propagates cleanly without wrapping — it is not a junction failure, it is an explicit abort signal
 
 This means cancellation always throws (even with `RunEither`), which matches the .NET convention that cancellation is exceptional flow, not a business error.
 
@@ -265,17 +265,17 @@ Configure the grace period:
 
 - `SaveChangesAsync(CancellationToken)` — transaction commits use the token
 - `BeginTransaction(CancellationToken)` — transaction starts use the token
-- Step effect providers receive the token for their before/after hooks
+- Junction effect providers receive the token for their before/after hooks
 
-If a train is cancelled mid-execution, the `ServiceTrain` catch block still runs `FinishTrain` to record the cancellation in Metadata — so you get an audit trail even for cancelled trains. `FinishTrain` also clears the step progress columns (`CurrentlyRunningStep` and `StepStartedAt`) as a safety net.
+If a train is cancelled mid-execution, the `ServiceTrain` catch block still runs `FinishTrain` to record the cancellation in Metadata — so you get an audit trail even for cancelled trains. `FinishTrain` also clears the junction progress columns (`CurrentlyRunningJunction` and `JunctionStartedAt`) as a safety net.
 
 ## Cancelling Running Trains
 
-Trax.Core supports two complementary cancellation paths: **same-server** (instant) and **cross-server** (between-step).
+Trax.Core supports two complementary cancellation paths: **same-server** (instant) and **cross-server** (between-junction).
 
 ### Same-Server: ICancellationRegistry
 
-When the scheduler is configured, `LocalWorkerService` registers each in-flight train's `CancellationTokenSource` with `ICancellationRegistry`. Calling `TryCancel(metadataId)` fires the CTS immediately, interrupting the train mid-step:
+When the scheduler is configured, `LocalWorkerService` registers each in-flight train's `CancellationTokenSource` with `ICancellationRegistry`. Calling `TryCancel(metadataId)` fires the CTS immediately, interrupting the train mid-junction:
 
 ```
 Dashboard "Cancel" button
@@ -287,13 +287,13 @@ Dashboard "Cancel" button
 
 ### Cross-Server: CancellationCheckProvider
 
-For multi-server deployments where the cancelling server may not be the one executing the train, the `CancellationCheckProvider` step effect queries the `cancel_requested` column before each step:
+For multi-server deployments where the cancelling server may not be the one executing the train, the `CancellationCheckProvider` junction effect queries the `cancel_requested` column before each junction:
 
 ```
-CancellationCheckProvider.BeforeStepExecution()
+CancellationCheckProvider.BeforeJunctionExecution()
     → SELECT cancel_requested FROM metadata WHERE id = @id
     → if true: throw OperationCanceledException
-    → train terminates at next step boundary
+    → train terminates at next junction boundary
 ```
 
 Enable both paths with a single call:
@@ -302,12 +302,12 @@ Enable both paths with a single call:
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
-        .AddStepProgress()  // Adds CancellationCheckProvider + StepProgressProvider
+        .AddJunctionProgress()  // Adds CancellationCheckProvider + JunctionProgressProvider
     )
 );
 ```
 
-*See also: [Step Progress]({{ site.baseurl }}{% link effect/effect-providers/step-progress.md %})*
+*See also: [Junction Progress]({{ site.baseurl }}{% link effect/effect-providers/junction-progress.md %})*
 
 ## Programmatic Cancellation API
 
@@ -322,7 +322,7 @@ int cancelled = await scheduler.CancelGroupAsync(groupId);
 ```
 
 Both methods use dual-layer cancellation:
-1. **Database flag** (`CancellationRequested = true`) — works cross-server, picked up by `CancellationCheckProvider` at the next step boundary
+1. **Database flag** (`CancellationRequested = true`) — works cross-server, picked up by `CancellationCheckProvider` at the next junction boundary
 2. **Same-server instant cancel** (`ICancellationRegistry.TryCancel()`) — immediately fires the `CancellationTokenSource` if the job is running on the same server
 
 Cancelled trains transition to `TrainState.Cancelled`, are **not retried**, and **do not create dead letters**.
@@ -331,7 +331,7 @@ Cancelled trains transition to `TrainState.Cancelled`, are **not retried**, and 
 
 ## Automatic Timeout Cancellation
 
-The ManifestManager automatically cancels jobs that exceed their configured timeout. Each polling cycle, the `CancelTimedOutJobsStep` checks all InProgress metadata and cancels any where the elapsed time exceeds the manifest's `TimeoutSeconds` (or the global `DefaultJobTimeout`).
+The ManifestManager automatically cancels jobs that exceed their configured timeout. Each polling cycle, the `CancelTimedOutJobsJunction` checks all InProgress metadata and cancels any where the elapsed time exceeds the manifest's `TimeoutSeconds` (or the global `DefaultJobTimeout`).
 
 This is distinct from dead-lettering — timeout cancellation actively interrupts the running train rather than waiting for it to fail and then moving it to the dead letter queue. The job transitions to `TrainState.Cancelled` and is not retried.
 
@@ -370,42 +370,42 @@ The built-in `PostgresJobSubmitter` and `InMemoryJobSubmitter` both implement th
 
 ## Testing with Cancellation Tokens
 
-### Verify a step respects the token
+### Verify a junction respects the token
 
 ```csharp
 [Test]
-public async Task Step_Cancellation_StopsExecution()
+public async Task Junction_Cancellation_StopsExecution()
 {
     using var cts = new CancellationTokenSource();
     cts.Cancel();
 
-    var step = new CountingStep();
-    var train = new TestTrain(step);
+    var junction = new CountingJunction();
+    var train = new TestTrain(junction);
 
-    // Cancelled token prevents the step from executing
+    // Cancelled token prevents the junction from executing
     var act = () => train.Run("input", cts.Token);
     await act.Should().ThrowAsync<Exception>();
 
-    step.ExecutionCount.Should().Be(0);
+    junction.ExecutionCount.Should().Be(0);
 }
 ```
 
-### Verify a step uses the token for async operations
+### Verify a junction uses the token for async operations
 
 ```csharp
 [Test]
-public async Task Step_UsesToken_ForAsyncCalls()
+public async Task Junction_UsesToken_ForAsyncCalls()
 {
     using var cts = new CancellationTokenSource();
-    var step = new TokenCapturingStep();
-    var train = new TestTrain(step);
+    var junction = new TokenCapturingJunction();
+    var train = new TestTrain(junction);
 
     await train.Run("input", cts.Token);
 
-    step.CapturedToken.Should().Be(cts.Token);
+    junction.CapturedToken.Should().Be(cts.Token);
 }
 
-private class TokenCapturingStep : Step<string, string>
+private class TokenCapturingJunction : Junction<string, string>
 {
     public CancellationToken CapturedToken { get; private set; }
 
@@ -421,7 +421,7 @@ private class TokenCapturingStep : Step<string, string>
 
 ```csharp
 [Test]
-public async Task Train_CancelDuringStep_PropagatesCancellation()
+public async Task Train_CancelDuringJunction_PropagatesCancellation()
 {
     using var cts = new CancellationTokenSource();
     cts.CancelAfter(TimeSpan.FromMilliseconds(50));
@@ -440,12 +440,12 @@ public async Task Train_CancelDuringStep_PropagatesCancellation()
 | Layer | How the token arrives | What it's used for |
 |-------|----------------------|-------------------|
 | **Train** | `Run(input, ct)` or `RunEither(input, ct)` | Stored on `Train.CancellationToken` property |
-| **Step** | Copied from train before `Run()` is called | Access via `this.CancellationToken` in `Run()` |
+| **Junction** | Copied from train before `Run()` is called | Access via `this.CancellationToken` in `Run()` |
 | **TrainBus** | `RunAsync<TOut>(input, ct)` | Forwarded to `train.Run(input, ct)` |
 | **ServiceTrain** | Inherited from `Train` | Passed to `SaveChangesAsync`, `BeginTransaction` |
 | **Background Services** | `stoppingToken` from `ExecuteAsync` | Passed to `train.Run(input, stoppingToken)` |
 | **LocalWorkerService** | `shutdownCts.Token` (grace period) | Passed to `train.Run(input, shutdownCts.Token)` |
 | **Job Submitter** | `EnqueueAsync(id, ct)` | Passed to `SaveChangesAsync` / `train.Run()` |
 | **Dashboard** | Component disposal token | Passed to event handler async calls |
-| **CancellationCheckProvider** | DB `cancel_requested` flag | Throws `OperationCanceledException` before step |
+| **CancellationCheckProvider** | DB `cancel_requested` flag | Throws `OperationCanceledException` before junction |
 | **ICancellationRegistry** | `CancellationTokenSource` lookup | `TryCancel()` fires CTS for same-server instant cancel |

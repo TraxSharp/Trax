@@ -177,7 +177,7 @@ Maps a `POST` endpoint at the specified route that handles synchronous run reque
 2. Resolves `ITrainExecutionService` and calls `RunAsync(trainName, inputJson)`
 3. Serializes the train output as JSON
 4. Returns `200 OK` with a `RemoteRunResponse` containing the metadata ID, output JSON, and output type
-5. On error: returns `200 OK` with `RemoteRunResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `FailureStep`, `StackTrace`). Uses in-band errors to distinguish from infrastructure failures
+5. On error: returns `200 OK` with `RemoteRunResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `FailureJunction`, `StackTrace`). Uses in-band errors to distinguish from infrastructure failures
 
 ## Shared Requirements
 

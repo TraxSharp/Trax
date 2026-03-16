@@ -42,7 +42,7 @@ Every `ServiceTrain` execution creates a `Metadata` row:
 | `TrainState` | Pending -> InProgress -> Completed or Failed |
 | `StartTime` / `EndTime` | Execution duration |
 | `Input` / `Output` | Serialized JSON (requires [Parameter Effect](parameter-effect.md)) |
-| `FailureStep` | Which step threw |
+| `FailureJunction` | Which junction threw |
 | `FailureException` | Exception type |
 | `FailureReason` | Error message |
 | `StackTrace` | Full stack trace on failure |

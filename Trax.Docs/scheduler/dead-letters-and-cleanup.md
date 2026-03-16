@@ -72,7 +72,7 @@ System trains like `ManifestManagerTrain` run frequently (every 5 seconds by def
 ┌─────────────────────────────────────────────────────────────────┐
 │                  MetadataCleanupTrain                         │
 │                                                                  │
-│  DeleteExpiredMetadataStep:                                      │
+│  DeleteExpiredMetadataJunction:                                      │
 │    1. Find metadata matching whitelist + older than retention    │
 │    2. Only terminal states (Completed / Failed / Cancelled)      │
 │    3. Delete associated work queue entries (FK safety)            │

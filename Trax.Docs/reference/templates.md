@@ -64,14 +64,14 @@ MyCompany.Api/
     │   ├── LookupTrain.cs
     │   ├── LookupInput.cs
     │   ├── LookupOutput.cs
-    │   └── Steps/
-    │       └── FetchDataStep.cs
+    │   └── Junctions/
+    │       └── FetchDataJunction.cs
     └── HelloWorld/
         ├── IHelloWorldTrain.cs
         ├── HelloWorldTrain.cs
         ├── HelloWorldInput.cs
-        └── Steps/
-            └── LogGreetingStep.cs
+        └── Junctions/
+            └── LogGreetingJunction.cs
 ```
 
 **Program.cs** configures:
@@ -111,13 +111,13 @@ MyCompany.Scheduler/
         ├── IHelloWorldTrain.cs
         ├── HelloWorldTrain.cs
         ├── HelloWorldInput.cs
-        └── Steps/
-            └── LogGreetingStep.cs
+        └── Junctions/
+            └── LogGreetingJunction.cs
 ```
 
 **Program.cs** configures:
 
-- **Trax Effects** — train bus, PostgreSQL persistence, JSON and parameter providers, step progress tracking
+- **Trax Effects** — train bus, PostgreSQL persistence, JSON and parameter providers, junction progress tracking
 - **Scheduler** — PostgreSQL local workers with a HelloWorld job running every 20 seconds
 - **Dashboard** — Trax Blazor Dashboard at `/trax`
 
@@ -128,7 +128,7 @@ MyCompany.Scheduler/
 <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
 <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
 <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
-<PackageReference Include="Trax.Effect.StepProvider.Progress" Version="1.*" />
+<PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.*" />
 <PackageReference Include="Trax.Mediator" Version="1.*" />
 <PackageReference Include="Trax.Scheduler" Version="1.*" />
 <PackageReference Include="Trax.Dashboard" Version="1.*" />
@@ -175,7 +175,7 @@ public class GetCustomerTrain
 {
     protected override async Task<Either<Exception, CustomerOutput>> RunInternal(
         GetCustomerInput input
-    ) => Activate(input).Chain<FetchCustomerStep>().Resolve();
+    ) => Activate(input).Chain<FetchCustomerJunction>().Resolve();
 }
 ```
 
@@ -193,8 +193,8 @@ public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, Unit>, ISyncC
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(SyncCustomersInput input) =>
         Activate(input)
-            .Chain<FetchCustomersStep>()
-            .Chain<UpsertCustomersStep>()
+            .Chain<FetchCustomersJunction>()
+            .Chain<UpsertCustomersJunction>()
             .Resolve();
 }
 ```

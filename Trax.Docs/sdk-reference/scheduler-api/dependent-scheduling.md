@@ -364,8 +364,8 @@ All activations are performed in a single database transaction. If any validatio
 ### Example
 
 ```csharp
-public class SelectiveDispatchStep(IDormantDependentContext dormants)
-    : Step<DispatchInput, Unit>
+public class SelectiveDispatchJunction(IDormantDependentContext dormants)
+    : Junction<DispatchInput, Unit>
 {
     public override async Task<Unit> Run(DispatchInput input)
     {

@@ -13,7 +13,7 @@ All three run background work in .NET. They solve different problems.
 
 **Hangfire** is a background job processor. Its strength is simplicity — pass a lambda expression, and the method runs in the background with automatic retries, persistence, and a rich monitoring dashboard. Fire-and-forget, delayed, recurring, and continuation jobs are all one-liners.
 
-**Trax** is a layered workflow framework where each package builds on the one below it. You can use just the pipeline engine ([Core]({{ site.baseurl }}{% link core.md %})), add execution logging and DI ([Effect]({{ site.baseurl }}{% link effect.md %})), add decoupled dispatch ([Mediator]({{ site.baseurl }}{% link mediator.md %})), and then add scheduling ([Scheduler]({{ site.baseurl }}{% link scheduler.md %})), an [API]({{ site.baseurl }}{% link api.md %}), or a [Dashboard]({{ site.baseurl }}{% link dashboard.md %})) — stopping at whatever layer solves your problem. Its strength is composable, multi-step trains with typed inputs, railway error handling, dependency chains between scheduled jobs, and automatic execution tracking. The scheduler is one layer, not the whole system.
+**Trax** is a layered workflow framework where each package builds on the one below it. You can use just the pipeline engine ([Core]({{ site.baseurl }}{% link core.md %})), add execution logging and DI ([Effect]({{ site.baseurl }}{% link effect.md %})), add decoupled dispatch ([Mediator]({{ site.baseurl }}{% link mediator.md %})), and then add scheduling ([Scheduler]({{ site.baseurl }}{% link scheduler.md %})), an [API]({{ site.baseurl }}{% link api.md %}), or a [Dashboard]({{ site.baseurl }}{% link dashboard.md %})) — stopping at whatever layer solves your problem. Its strength is composable, multi-junction trains with typed inputs, railway error handling, dependency chains between scheduled jobs, and automatic execution tracking. The scheduler is one layer, not the whole system.
 
 ## Feature Comparison
 
@@ -36,15 +36,15 @@ Trax now supports second-granularity cron via 6-field expressions (e.g., `*/15 *
 
 | Feature | Trax | Quartz.NET | Hangfire |
 |---|---|---|---|
-| Unit of work | `Step` — typed, composable | `IJob` — single `Execute` method | Any public method |
-| Multi-step composition | `.Chain<StepA>().Chain<StepB>()` with railway error handling | None built-in | None built-in |
+| Unit of work | `Junction<TIn, TOut>` — typed, composable | `IJob` — single `Execute` method | Any public method |
+| Multi-junction composition | `.Chain<JunctionA>().Chain<JunctionB>()` with railway error handling | None built-in | None built-in |
 | Error propagation | Either monad — failures short-circuit the chain | `JobExecutionException` thrown from `Execute` | Exception causes `FailedState` |
 | Type safety | Strong — `IServiceTrain<TInput, TOutput>`, `IManifestProperties` | Weak — `JobDataMap` (string-keyed dictionary) | Strong — compile-time lambda expressions |
 | Job dependencies | First-class: `Include()`, `ThenInclude()` with DAG validation | Manual via listeners or job code | `ContinueJobWith(parentId, ...)` |
 | Dormant dependents | Yes — parent activates children at runtime with custom input | No | No |
 | Dependency validation | Startup-time DAG cycle detection | No | No |
 
-This is where the three diverge most. A Quartz or Hangfire job is a single unit — complex logic lives in one `Execute` method or one lambda. A Trax train splits that logic into discrete steps, each with its own class, dependencies, and tests. The chain short-circuits on the first failure, and the railway pattern makes error paths explicit rather than relying on try/catch.
+This is where the three diverge most. A Quartz or Hangfire job is a single unit — complex logic lives in one `Execute` method or one lambda. A Trax train splits that logic into discrete junctions, each with its own class, dependencies, and tests. The chain short-circuits on the first failure, and the railway pattern makes error paths explicit rather than relying on try/catch.
 
 The dependency system is unique to Trax. A manifest can declare that it depends on another manifest. When the parent completes, the child fires automatically. Dormant dependents go further — the parent decides at runtime which children to activate and with what input. Hangfire has continuations, but they're linear (A then B) and don't support DAG topologies or runtime activation.
 
@@ -88,24 +88,24 @@ Trax and Hangfire both handle retries automatically; Quartz leaves it to the job
 
 | Feature | Trax | Quartz.NET | Hangfire |
 |---|---|---|---|
-| Cancellation support | First-class — `CancellationToken` threaded through trains, steps, and EF Core | `IInterruptableJob` interface | `IJobCancellationToken` parameter |
+| Cancellation support | First-class — `CancellationToken` threaded through trains, junctions, and EF Core | `IInterruptableJob` interface | `IJobCancellationToken` parameter |
 | Cancel from UI | Yes — per-train and per-group cancel buttons | Pause/resume (not cancel) | Delete from dashboard |
 | Cancel from code | `CancelAsync(metadataId)`, `CancelGroupAsync(groupId)` | `scheduler.Interrupt(jobKey)` | `BackgroundJob.Delete(jobId)` |
 | Same-server cancellation | Instant via `ICancellationRegistry` | Instant via thread interrupt | Instant via `CancellationToken` |
-| Cross-server cancellation | Between-step via DB flag + `CancellationCheckProvider` | Not supported | Not supported natively |
+| Cross-server cancellation | Between-junction via DB flag + `CancellationCheckProvider` | Not supported | Not supported natively |
 | Cancelled state | Dedicated `TrainState.Cancelled` — excluded from retries, dead letters, and success rate | No dedicated state | `DeletedState` |
 
-Trax treats cancellation as a first-class state. A cancelled train transitions to `TrainState.Cancelled`, is excluded from retry logic and success rate calculations, and won't produce dead letters. The same `CancellationToken` flows from ASP.NET Core through the train into every step and EF Core query. Cross-server cancellation — where the dashboard runs on one machine and the train runs on another — polls a DB flag between steps, so it's between-step rather than instant, but no work is lost.
+Trax treats cancellation as a first-class state. A cancelled train transitions to `TrainState.Cancelled`, is excluded from retry logic and success rate calculations, and won't produce dead letters. The same `CancellationToken` flows from ASP.NET Core through the train into every junction and EF Core query. Cross-server cancellation — where the dashboard runs on one machine and the train runs on another — polls a DB flag between junctions, so it's between-junction rather than instant, but no work is lost.
 
-### Lifecycle Hooks and Step Progress
+### Lifecycle Hooks and Junction Progress
 
 | Feature | Trax | Quartz.NET | Hangfire |
 |---|---|---|---|
 | Lifecycle hooks | `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled` | `IJobListener`, `ITriggerListener`, `ISchedulerListener` | `IElectStateFilter`, `IApplyStateFilter` |
-| Step-level progress | Yes — real-time "currently running step" via `AddStepProgress()` | No (single-unit jobs) | No (single-unit jobs) |
+| Junction-level progress | Yes — real-time "currently running junction" via `AddJunctionProgress()` | No (single-unit jobs) | No (single-unit jobs) |
 | Real-time subscriptions | GraphQL subscriptions via `GraphQLSubscriptionHook` | No | SignalR via community packages |
 
-Quartz.NET has the most granular listener system — separate interfaces for job, trigger, and scheduler events. Hangfire uses state filters that fire on state transitions. Trax's lifecycle hooks are simpler (four events) but integrate directly with the effect system and GraphQL subscriptions. Step progress tracking is unique to Trax — since trains are multi-step, the dashboard can show which step is currently executing in real time.
+Quartz.NET has the most granular listener system — separate interfaces for job, trigger, and scheduler events. Hangfire uses state filters that fire on state transitions. Trax's lifecycle hooks are simpler (four events) but integrate directly with the effect system and GraphQL subscriptions. Junction progress tracking is unique to Trax — since trains are multi-junction, the dashboard can show which junction is currently executing in real time.
 
 ### Dashboard and Monitoring
 
@@ -124,16 +124,17 @@ Hangfire's dashboard is its flagship feature — battle-tested, rich, and purpos
 
 | Feature | Trax | Quartz.NET | Hangfire |
 |---|---|---|---|
-| Lines to schedule "hello world" | ~50 (train + step + manifest) | ~30 (job class + scheduler config) | ~5 (`BackgroundJob.Enqueue(...)`) |
-| DI integration | Full — constructor injection in trains and steps | Full — scoped services via `IJobFactory` | Full — scoped services via `JobActivator` |
-| Testing | In-memory data provider, steps testable in isolation | In-memory store, manual trigger | Service replacement via DI |
-| Learning curve | Incremental — each layer adds concepts (Core: trains/steps, Effect: metadata/DI, Scheduler: manifests) | Medium — standard scheduler concepts | Lowest — "call a method in the background" |
+| Lines to schedule "hello world" | ~50 (train + junction + manifest) | ~30 (job class + scheduler config) | ~5 (`BackgroundJob.Enqueue(...)`) |
 
-Hangfire wins on ceremony. You can go from zero to a running background job in five lines. Trax's learning curve scales with adoption — Core alone requires understanding trains and steps, Effect adds metadata and DI, and the Scheduler adds manifests and dispatch. You don't need to learn all layers upfront, but reaching scheduled jobs means traversing the full stack. That structure pays off in larger systems — but it's real overhead for simple tasks.
+| DI integration | Full — constructor injection in trains and junctions | Full — scoped services via `IJobFactory` | Full — scoped services via `JobActivator` |
+| Testing | In-memory data provider, junctions testable in isolation | In-memory store, manual trigger | Service replacement via DI |
+| Learning curve | Incremental — each layer adds concepts (Core: trains/junctions, Effect: metadata/DI, Scheduler: manifests) | Medium — standard scheduler concepts | Lowest — "call a method in the background" |
+
+Hangfire wins on ceremony. You can go from zero to a running background job in five lines. Trax's learning curve scales with adoption — Core alone requires understanding trains and junctions, Effect adds metadata and DI, and the Scheduler adds manifests and dispatch. You don't need to learn all layers upfront, but reaching scheduled jobs means traversing the full stack. That structure pays off in larger systems — but it's real overhead for simple tasks.
 
 ## When to Choose Trax
 
-**Your scheduled work has internal structure.** If a job has distinct phases — extract, transform, validate, load — splitting them into steps makes each phase independently testable, reusable, and visible in execution metadata. A monolithic `Execute()` method hides that structure.
+**Your scheduled work has internal structure.** If a job has distinct phases — extract, transform, validate, load — splitting them into junctions makes each phase independently testable, reusable, and visible in execution metadata. A monolithic `Execute()` method hides that structure.
 
 **Jobs depend on other jobs.** The dependency system with `Include()`, `ThenInclude()`, and dormant dependents handles DAG topologies that neither Quartz nor Hangfire supports natively. If "job B should only run after job A succeeds" is a core requirement, Trax models it directly rather than bolting it on with listeners or continuations.
 
@@ -143,17 +144,17 @@ Hangfire wins on ceremony. You can go from zero to a running background job in f
 
 **You want dead-lettering.** The separation between "will retry" and "needs human attention" matters for operations. After max retries, the job moves to a dead-letter table and stops consuming retry cycles. Operators can review, fix the root cause, and re-trigger.
 
-**You're already using the Trax effect system.** If your application already uses `ServiceTrain` for workflow composition, the scheduler is a natural extension — same base classes, same step model, same metadata tracking. The scheduler adds a timetable to trains you've already built.
+**You're already using the Trax effect system.** If your application already uses `ServiceTrain` for workflow composition, the scheduler is a natural extension — same base classes, same junction model, same metadata tracking. The scheduler adds a timetable to trains you've already built.
 
 ## When NOT to Choose Trax
 
-**You need a simple background job processor.** If the job is "send this email in 5 minutes" or "resize this image asynchronously," Hangfire does it in one line. Trax now supports delayed one-off jobs via `ScheduleOnceAsync`, but the train/step/manifest model still adds ceremony compared to Hangfire's lambda-based approach for simple fire-and-forget work with no internal structure.
+**You need a simple background job processor.** If the job is "send this email in 5 minutes" or "resize this image asynchronously," Hangfire does it in one line. Trax now supports delayed one-off jobs via `ScheduleOnceAsync`, but the train/junction/manifest model still adds ceremony compared to Hangfire's lambda-based approach for simple fire-and-forget work with no internal structure.
 
 **You need DST-aware scheduling or 7-field cron with year.** Trax supports second-granularity cron via 6-field expressions and calendar exclusions, but DST-aware interval handling and Quartz.NET's 7-field (year) format are not supported.
 
 **You're not on PostgreSQL.** Trax's distributed coordination relies on PostgreSQL advisory locks and `FOR UPDATE SKIP LOCKED`. There is no SQL Server, MySQL, or Redis backend. If your infrastructure is on a different database, Quartz.NET or Hangfire will work; Trax won't.
 
-**You want the lowest learning curve.** The Trax learning curve is incremental — trains and steps at Core, metadata and DI at Effect, dispatch at Mediator, manifests at Scheduler — but reaching scheduled jobs means understanding the full stack. Hangfire requires understanding `BackgroundJob.Enqueue()`. For teams that need to onboard quickly or for projects where background work is a small part of the system, the layered abstraction cost isn't justified.
+**You want the lowest learning curve.** The Trax learning curve is incremental — trains and junctions at Core, metadata and DI at Effect, dispatch at Mediator, manifests at Scheduler — but reaching scheduled jobs means understanding the full stack. Hangfire requires understanding `BackgroundJob.Enqueue()`. For teams that need to onboard quickly or for projects where background work is a small part of the system, the layered abstraction cost isn't justified.
 
 **You need built-in access control on the dashboard.** Hangfire's dashboard includes middleware-based authorization out of the box. Trax's API layer provides per-train authorization via `[TraxAuthorize]` and endpoint-level auth via `UseTraxGraphQL(configure: endpoint => endpoint.RequireAuthorization())`, but the dashboard UI itself doesn't gate page access — you'd add that via ASP.NET Core middleware. Hangfire has the edge on dashboard-specific access control.
 

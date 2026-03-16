@@ -58,11 +58,11 @@ services.AddTrax(trax => trax
 );
 ```
 
-## "Unable to resolve service for type 'IStep'"
+## "Unable to resolve service for type 'IJunction'"
 
-A step's dependency isn't registered in the DI container.
+A junction's dependency isn't registered in the DI container.
 
-**Cause:** Your step injects a service that wasn't added to `IServiceCollection`.
+**Cause:** Your junction injects a service that wasn't added to `IServiceCollection`.
 
 **Fix:** Register the missing service:
 ```csharp
@@ -70,20 +70,20 @@ services.AddScoped<IUserRepository, UserRepository>();
 services.AddScoped<IEmailService, EmailService>();
 ```
 
-## Step runs but Memory doesn't have the expected type
+## Junction runs but Memory doesn't have the expected type
 
-The chain couldn't find a type in Memory to pass to your step.
+The chain couldn't find a type in Memory to pass to your junction.
 
 **Causes:**
-- A previous step didn't return or add the expected type to Memory
-- Type mismatch between step output and next step's input
+- A previous junction didn't return or add the expected type to Memory
+- Type mismatch between junction output and next junction's input
 
-**Fix:** Check the chain flow. Each step's input type must exist in Memory (either from `Activate()` or a previous step's output):
+**Fix:** Check the chain flow. Each junction's input type must exist in Memory (either from `Activate()` or a previous junction's output):
 ```csharp
 Activate(input)                    // Memory: CreateUserRequest
-    .Chain<ValidateStep>()         // Takes CreateUserRequest, returns Unit
-    .Chain<CreateUserStep>()       // Takes CreateUserRequest, returns User
-    .Chain<SendEmailStep>()        // Takes User (from previous step)
+    .Chain<ValidateJunction>()         // Takes CreateUserRequest, returns Unit
+    .Chain<CreateUserJunction>()       // Takes CreateUserRequest, returns User
+    .Chain<SendEmailJunction>()        // Takes User (from previous junction)
     .Resolve();
 ```
 
@@ -93,9 +93,9 @@ The [Analyzer](../core/analyzer.md) catches most of these issues at compile time
 
 Check `FailureException` and `FailureReason` in the metadata record for details. Common causes:
 - An effect provider failed during `SaveChanges` (database connection, serialization error)
-- A step threw after the main train logic completed
+- A junction threw after the main train logic completed
 
-## Steps execute out of order or skip unexpectedly
+## Junctions execute out of order or skip unexpectedly
 
 If you're using `ShortCircuit`, remember that throwing an exception means "continue" not "stop." See [ShortCircuit](short-circuit.md) for details or [SDK Reference: ShortCircuit]({{ site.baseurl }}{% link sdk-reference/train-methods/short-circuit.md %}) for all overloads.
 

@@ -32,7 +32,7 @@ With PostgreSQL, the ManifestManager and JobDispatcher run independently on thei
 
 In multi-server deployments, each service uses a different concurrency strategy: the ManifestManager uses a PostgreSQL advisory lock for single-leader election, the JobDispatcher uses `FOR UPDATE SKIP LOCKED` for parallel per-entry dispatch, and the cleanup service is naturally idempotent. See [Multi-Server Concurrency](concurrency.md) for details.
 
-> **InMemory note:** The `InMemoryManifestManagerTrain` omits `CancelTimedOutJobsStep` and `ReapStalePendingMetadataStep` (which use `ExecuteUpdateAsync`, not supported by InMemory) and replaces `CreateWorkQueueEntriesStep` with `InMemoryDispatchJobsStep` (which dispatches jobs inline). This means timeout cancellation and stale-pending recovery are not available with InMemory.
+> **InMemory note:** The `InMemoryManifestManagerTrain` omits `CancelTimedOutJobsJunction` and `ReapStalePendingMetadataJunction` (which use `ExecuteUpdateAsync`, not supported by InMemory) and replaces `CreateWorkQueueEntriesJunction` with `InMemoryDispatchJobsJunction` (which dispatches jobs inline). This means timeout cancellation and stale-pending recovery are not available with InMemory.
 
 ## The Work Queue
 

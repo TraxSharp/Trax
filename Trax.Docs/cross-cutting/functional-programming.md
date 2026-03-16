@@ -22,12 +22,12 @@ Trax.Core uses `Either<Exception, T>` as the return type for trains. A train eit
 ```csharp
 protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
     => Activate(input)
-        .Chain<ValidateEmailStep>()
-        .Chain<CreateUserStep>()
+        .Chain<ValidateEmailJunction>()
+        .Chain<CreateUserJunction>()
         .Resolve();
 ```
 
-You'll see `Either<Exception, T>` in every `RunInternal` signature. The chain handles the wrapping—if a step throws, the chain catches it and returns `Left(exception)`. If everything succeeds, you get `Right(result)`.
+You'll see `Either<Exception, T>` in every `RunInternal` signature. The chain handles the wrapping—if a junction throws, the chain catches it and returns `Left(exception)`. If everything succeeds, you get `Right(result)`.
 
 To inspect the result:
 
@@ -51,10 +51,10 @@ This is the foundation of [Railway Oriented Programming](railway-programming.md)
 
 `Unit` means "no meaningful return value." It's the functional equivalent of `void`, except you can use it as a generic type argument.
 
-In C#, you can't write `Task<void>` or `Step<string, void>`. `Unit` fills that gap:
+In C#, you can't write `Task<void>` or use `void` as a generic type argument. `Unit` fills that gap:
 
 ```csharp
-public class ValidateEmailStep : Step<CreateUserRequest, Unit>
+public class ValidateEmailJunction : Junction<CreateUserRequest, Unit>
 {
     public override async Task<Unit> Run(CreateUserRequest input)
     {
@@ -85,7 +85,7 @@ services.AddTrax(trax => trax
         .UsePostgres(connectionString)             // Database persistence
         .AddJson()                                 // Debug logging
         .SaveTrainParameters()                     // Input/output serialization
-        .AddStepLogger()                           // Per-step logging
+        .AddJunctionLogger()                       // Per-junction logging
     )
 );
 ```
@@ -106,7 +106,7 @@ EffectRunner.AssertLoaded();           // throws if EffectRunner is null
 registration.ServiceType.FullName.AssertLoaded();
 
 // Assert a property across a collection
-steps.AssertEachLoaded(s => s.Metadata);  // throws if any step's Metadata is null
+junctions.AssertEachLoaded(j => j.Metadata);  // throws if any junction's Metadata is null
 ```
 
 Both methods use `[CallerArgumentExpression]` to include the source expression in the error message, making it easy to identify what failed without a debugger.

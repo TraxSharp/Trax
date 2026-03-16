@@ -466,7 +466,7 @@ Set `MaxDispatchAttempts(0)` to disable requeuing (immediate failure, matching p
 
 ### 3. Stale Pending Reaper
 
-The ManifestManager runs a `ReapStalePendingMetadataStep` on every polling cycle. Any Metadata that has been in `Pending` state longer than `StalePendingTimeout` (default: 20 minutes) is automatically marked as `Failed`. This catches edge cases where the remote worker received the job but crashed before updating the Metadata.
+The ManifestManager runs a `ReapStalePendingMetadataJunction` on every polling cycle. Any Metadata that has been in `Pending` state longer than `StalePendingTimeout` (default: 20 minutes) is automatically marked as `Failed`. This catches edge cases where the remote worker received the job but crashed before updating the Metadata.
 
 ```csharp
 .AddScheduler(scheduler => scheduler
@@ -503,10 +503,10 @@ When a train fails on a remote worker, Trax preserves the full exception context
 | `IsError` | Whether the execution failed |
 | `ErrorMessage` | The error message |
 | `ExceptionType` | The .NET exception type name (e.g., `"InvalidOperationException"`) |
-| `FailureStep` | The train step where the failure occurred (extracted from `TrainExceptionData`) |
+| `FailureJunction` | The train junction where the failure occurred (extracted from `TrainExceptionData`) |
 | `StackTrace` | The remote stack trace |
 
-On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. This ensures that `Metadata.AddException()` on the API side correctly parses the failure into `FailureException`, `FailureStep`, `FailureReason`, and `StackTrace` — the same fields you'd see for a locally-executed train failure.
+On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. This ensures that `Metadata.AddException()` on the API side correctly parses the failure into `FailureException`, `FailureJunction`, `FailureReason`, and `StackTrace` — the same fields you'd see for a locally-executed train failure.
 
 ```
 Runner Process                         API Process
@@ -515,7 +515,7 @@ Train fails with exception
     │
     ▼
 TraxRequestHandler catches exception
-Extracts: Type, Step, Message, Stack
+Extracts: Type, Junction, Message, Stack
     │
     ▼
 RemoteRunResponse / RemoteJobResponse
@@ -539,8 +539,8 @@ If the HTTP call itself fails (network error, infrastructure 5xx before reaching
 
 When a remote job fails, check these in order:
 
-1. **Metadata table** — `SELECT failure_exception, failure_step, failure_reason, stack_trace FROM trax.metadata WHERE id = <id>`. These fields are populated from the structured error response.
-2. **Log table** — `SELECT * FROM trax.log WHERE metadata_id = <id> ORDER BY id`. If `AddDataContextLogging()` is enabled on the runner, step-level logs are persisted.
+1. **Metadata table** — `SELECT failure_exception, failure_junction, failure_reason, stack_trace FROM trax.metadata WHERE id = <id>`. These fields are populated from the structured error response.
+2. **Log table** — `SELECT * FROM trax.log WHERE metadata_id = <id> ORDER BY id`. If `AddDataContextLogging()` is enabled on the runner, junction-level logs are persisted.
 3. **Stale pending check** — If `failure_exception = 'StalePendingTimeout'`, the runner never started executing. Check runner health, network connectivity, and deployment status.
 
 ## Limitations

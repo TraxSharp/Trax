@@ -88,48 +88,48 @@ This configuration can also be changed at runtime from the dashboard's [Effects 
 
 See [Parameter Effect](effect-providers/parameter-effect.md) for details, custom serialization options, and configuration properties.
 
-## Step Logger (`AddStepLogger`)
+## Junction Logger (`AddJunctionLogger`)
 
-**Use when:** You want structured logging for individual step executions inside a train.
-
-```csharp
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .AddStepLogger(serializeStepData: true)
-    )
-);
-```
-
-*SDK Reference: [AddStepLogger]({{ site.baseurl }}{% link sdk-reference/configuration/add-step-logger.md %})*
-
-This hooks into `EffectStep` (not base `Step`) lifecycle events. Before and after each step runs, it logs structured `StepMetadata` containing the step name, input/output types, timing, and Railway state (`Right`/`Left`). When `serializeStepData` is `true`, the step's output is also serialized to JSON in the log entry.
-
-Requires steps to inherit from `EffectStep<TIn, TOut>` instead of `Step<TIn, TOut>`. See [EffectStep vs Step]({{ site.baseurl }}{% link core/trains-and-steps.md %}#effectstep-vs-step).
-
-See [Step Logger](effect-providers/step-logger.md) for the full StepMetadata field reference.
-
-## Step Progress & Cancellation Check (`AddStepProgress`)
-
-**Use when:** You need per-step progress visibility in the dashboard and/or the ability to cancel running trains from the dashboard (including cross-server cancellation).
+**Use when:** You want structured logging for individual junction executions inside a train.
 
 ```csharp
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
-        .AddStepProgress()
+        .AddJunctionLogger(serializeJunctionData: true)
     )
 );
 ```
 
-*SDK Reference: [AddStepProgress]({{ site.baseurl }}{% link sdk-reference/configuration/add-step-progress.md %})*
+*SDK Reference: [AddJunctionLogger]({{ site.baseurl }}{% link sdk-reference/configuration/add-junction-logger.md %})*
 
-This registers two step-level effect providers:
+This hooks into `EffectJunction` (not base `Junction`) lifecycle events. Before and after each junction runs, it logs structured `JunctionMetadata` containing the junction name, input/output types, timing, and Railway state (`Right`/`Left`). When `serializeJunctionData` is `true`, the junction's output is also serialized to JSON in the log entry.
 
-1. **CancellationCheckProvider** — Before each step, queries the database for `Metadata.CancellationRequested`. If `true`, throws `OperationCanceledException`, which maps to `TrainState.Cancelled`.
-2. **StepProgressProvider** — Before each step, writes the step name and start time to `Metadata.CurrentlyRunningStep` and `Metadata.StepStartedAt`. After the step, clears both columns.
+Requires junctions to inherit from `EffectJunction<TIn, TOut>` instead of `Junction<TIn, TOut>`. See [EffectJunction vs Junction]({{ site.baseurl }}{% link core/trains-and-junctions.md %}#effectjunction-vs-junction).
 
-The cancellation check runs first so a cancelled train never writes progress columns for a step that won't execute. Requires steps to inherit from `EffectStep<TIn, TOut>`.
+See [Junction Logger](effect-providers/junction-logger.md) for the full JunctionMetadata field reference.
 
-See [Step Progress](effect-providers/step-progress.md) for the dual-path cancellation architecture and dashboard integration.
+## Junction Progress & Cancellation Check (`AddJunctionProgress`)
+
+**Use when:** You need per-junction progress visibility in the dashboard and/or the ability to cancel running trains from the dashboard (including cross-server cancellation).
+
+```csharp
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .AddJunctionProgress()
+    )
+);
+```
+
+*SDK Reference: [AddJunctionProgress]({{ site.baseurl }}{% link sdk-reference/configuration/add-junction-progress.md %})*
+
+This registers two junction-level effect providers:
+
+1. **CancellationCheckProvider** — Before each junction, queries the database for `Metadata.CancellationRequested`. If `true`, throws `OperationCanceledException`, which maps to `TrainState.Cancelled`.
+2. **JunctionProgressProvider** — Before each junction, writes the junction name and start time to `Metadata.CurrentlyRunningJunction` and `Metadata.JunctionStartedAt`. After the junction, clears both columns.
+
+The cancellation check runs first so a cancelled train never writes progress columns for a junction that won't execute. Requires junctions to inherit from `EffectJunction<TIn, TOut>`.
+
+See [Junction Progress](effect-providers/junction-progress.md) for the dual-path cancellation architecture and dashboard integration.
 
 ## Lifecycle Hooks (`AddLifecycleHook`)
 
@@ -158,8 +158,8 @@ services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)             // Persist metadata
         .SaveTrainParameters()                     // Include input/output in metadata
-        .AddStepLogger(serializeStepData: true)    // Log individual step executions
-        .AddStepProgress()                         // Step progress + cancellation check
+        .AddJunctionLogger(serializeJunctionData: true)    // Log individual junction executions
+        .AddJunctionProgress()                         // Junction progress + cancellation check
     )
     .AddMediator(assemblies)                       // Enable train discovery
 );
@@ -172,7 +172,7 @@ services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UseInMemory()                             // Fast, no database needed
         .AddJson()                                 // Log state changes
-        .AddStepLogger()                           // Log step executions
+        .AddJunctionLogger()                           // Log junction executions
     )
     .AddMediator(assemblies)
 );

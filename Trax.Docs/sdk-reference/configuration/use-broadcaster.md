@@ -85,7 +85,7 @@ The `TrainLifecycleEventMessage` is a serializable record containing:
 | `TrainName` | `string` | Fully-qualified train class name |
 | `TrainState` | `string` | Current state (serialized as string for transport) |
 | `Timestamp` | `DateTime` | When the event occurred |
-| `FailureStep` | `string?` | Step that failed (if applicable) |
+| `FailureJunction` | `string?` | Junction that failed (if applicable) |
 | `FailureReason` | `string?` | Failure message (if applicable) |
 | `EventType` | `string` | One of: `Started`, `Completed`, `Failed`, `Cancelled` |
 | `Executor` | `string?` | Assembly name of the process that broadcast the event |

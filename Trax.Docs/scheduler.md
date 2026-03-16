@@ -87,7 +87,7 @@ await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput>(
 
 ### Dependent Manifests
 
-A manifest can depend on another manifest — one train's arrival triggers another's departure. Instead of running on a timer, it fires when its parent's `LastSuccessfulRun` advances past the dependent's own. This is how you build ETL chains, post-processing steps, or any train that should only run after another succeeds. See [Dependent Trains](scheduler/dependent-trains.md).
+A manifest can depend on another manifest — one train's arrival triggers another's departure. Instead of running on a timer, it fires when its parent's `LastSuccessfulRun` advances past the dependent's own. This is how you build ETL chains, post-processing junctions, or any train that should only run after another succeeds. See [Dependent Trains](scheduler/dependent-trains.md).
 
 ```csharp
 scheduler

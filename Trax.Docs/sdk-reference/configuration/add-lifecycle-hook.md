@@ -72,7 +72,7 @@ public interface ITrainLifecycleHookFactory
 }
 ```
 
-Mirrors the existing `IEffectProviderFactory` / `IStepEffectProviderFactory` pattern. The factory is a singleton; it creates a new hook instance per train execution.
+Mirrors the existing `IEffectProviderFactory` / `IJunctionEffectProviderFactory` pattern. The factory is a singleton; it creates a new hook instance per train execution.
 
 ## Error Handling
 

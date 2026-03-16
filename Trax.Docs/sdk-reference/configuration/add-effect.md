@@ -1,14 +1,14 @@
 ---
 layout: default
-title: AddEffect / AddStepEffect
+title: AddEffect / AddJunctionEffect
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 8
 ---
 
-# AddEffect / AddStepEffect
+# AddEffect / AddJunctionEffect
 
-Registers custom effect provider factories. `AddEffect` registers train-level effects (run once per train execution); `AddStepEffect` registers step-level effects (run once per step).
+Registers custom effect provider factories. `AddEffect` registers train-level effects (run once per train execution); `AddJunctionEffect` registers junction-level effects (run once per junction).
 
 ## AddEffect Signatures
 
@@ -42,29 +42,29 @@ public static TraxEffectBuilder AddEffect<TIEffectProviderFactory, TEffectProvid
   where TEffectProviderFactory : class, TIEffectProviderFactory
 ```
 
-## AddStepEffect Signatures
+## AddJunctionEffect Signatures
 
 ```csharp
 // Type only, auto-created
-public static TraxEffectBuilder AddStepEffect<TStepEffectProviderFactory>(
+public static TraxEffectBuilder AddJunctionEffect<TJunctionEffectProviderFactory>(
     this TraxEffectBuilder builder,
     bool toggleable = true
-) where TStepEffectProviderFactory : class, IStepEffectProviderFactory
+) where TJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
 
 // Pre-created instance
-public static TraxEffectBuilder AddStepEffect<TStepEffectProviderFactory>(
+public static TraxEffectBuilder AddJunctionEffect<TJunctionEffectProviderFactory>(
     this TraxEffectBuilder builder,
-    TStepEffectProviderFactory factory,
+    TJunctionEffectProviderFactory factory,
     bool toggleable = true
-) where TStepEffectProviderFactory : class, IStepEffectProviderFactory
+) where TJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
 
 // Interface + implementation, pre-created instance
-public static TraxEffectBuilder AddStepEffect<TIStepEffectProviderFactory, TStepEffectProviderFactory>(
+public static TraxEffectBuilder AddJunctionEffect<TIJunctionEffectProviderFactory, TJunctionEffectProviderFactory>(
     this TraxEffectBuilder builder,
-    TStepEffectProviderFactory factory,
+    TJunctionEffectProviderFactory factory,
     bool toggleable = true
-) where TIStepEffectProviderFactory : class, IStepEffectProviderFactory
-  where TStepEffectProviderFactory : class, TIStepEffectProviderFactory
+) where TIJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
+  where TJunctionEffectProviderFactory : class, TIJunctionEffectProviderFactory
 ```
 
 ## Parameters
@@ -84,14 +84,14 @@ public static TraxEffectBuilder AddStepEffect<TIStepEffectProviderFactory, TStep
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .AddEffect<MyCustomEffectProviderFactory>()
-        .AddStepEffect<MyCustomStepEffectProviderFactory>(toggleable: false)
+        .AddJunctionEffect<MyCustomJunctionEffectProviderFactory>(toggleable: false)
     )
 );
 ```
 
 ## Configurable Factories
 
-Factories can optionally expose runtime-configurable settings by implementing `IConfigurableEffectProviderFactory<TConfiguration>` (or `IConfigurableStepEffectProviderFactory<TConfiguration>` for step effects). The configuration type is a POCO class registered as a singleton in DI.
+Factories can optionally expose runtime-configurable settings by implementing `IConfigurableEffectProviderFactory<TConfiguration>` (or `IConfigurableJunctionEffectProviderFactory<TConfiguration>` for junction effects). The configuration type is a POCO class registered as a singleton in DI.
 
 ```csharp
 public class MyEffectConfiguration
@@ -126,6 +126,6 @@ Configurable factories appear with a settings button on the dashboard's [Effects
 ## Remarks
 
 - **Train-level effects** (`AddEffect`): Implement `IEffectProviderFactory`. Called at train start and end. Used for cross-cutting concerns like data persistence, audit logging, etc.
-- **Step-level effects** (`AddStepEffect`): Implement `IStepEffectProviderFactory`. Called before and after each step. Used for step-level logging, metrics, etc.
+- **Junction-level effects** (`AddJunctionEffect`): Implement `IJunctionEffectProviderFactory`. Called before and after each junction. Used for junction-level logging, metrics, etc.
 - The interface+implementation overloads register the factory under both the interface type and `IEffectProviderFactory`, enabling resolution by either type.
 - See [Effect Providers]({{ site.baseurl }}{% link effect/effect-providers.md %}) for conceptual background on the effect system.

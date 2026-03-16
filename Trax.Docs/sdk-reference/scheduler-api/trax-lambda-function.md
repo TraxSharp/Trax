@@ -109,7 +109,7 @@ public class Function : TraxLambdaFunction
             .AddEffects(effects => effects
                 .UsePostgres(connString)
                 .SaveTrainParameters()
-                .AddStepProgress()
+                .AddJunctionProgress()
                 .UseBroadcaster(b => b.UseRabbitMq(rabbitMq)))
             .AddMediator(
                 typeof(MyClientTrains.AssemblyMarker).Assembly,

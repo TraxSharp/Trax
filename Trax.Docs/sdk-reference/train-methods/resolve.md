@@ -65,7 +65,7 @@ protected override async Task<Either<Exception, string>> RunInternal(Unit input)
 
 `Resolve()` follows this order:
 
-1. **Exception**: If any step set an exception, return `Left(exception)`.
+1. **Exception**: If any junction set an exception, return `Left(exception)`.
 2. **Short-circuit value**: If [ShortCircuit]({{ site.baseurl }}{% link sdk-reference/train-methods/short-circuit.md %}) captured a value, return `Right(shortCircuitValue)`.
 3. **Memory lookup**: Extract `TReturn` from Memory by type.
 4. **Fallback**: If `TReturn` is not found in Memory, return `Left(TrainException("Could not find type: ({TReturn})."))`.

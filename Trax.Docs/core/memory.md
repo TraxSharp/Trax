@@ -7,44 +7,44 @@ nav_order: 3
 
 # Memory
 
-Memory is how steps communicate in a train. Think of it as the cargo the train carries between junctions — a type-keyed dictionary that accumulates as the train executes. Each step pulls its input from Memory and pushes its output back in.
+Memory is how junctions communicate in a train. Think of it as the cargo the train carries between junctions — a type-keyed dictionary that accumulates as the train executes. Each junction pulls its input from Memory and pushes its output back in.
 
 ## How It Works
 
-When you call `Activate(input)`, Memory is seeded with two entries: your input type and `Unit`. As each step runs, its output is stored in Memory under that output's type:
+When you call `Activate(input)`, Memory is seeded with two entries: your input type and `Unit`. As each junction runs, its output is stored in Memory under that output's type:
 
 ```csharp
 Activate(request)                  // Memory: { CreateUserRequest, Unit }
-    .Chain<ValidateEmailStep>()    // Takes CreateUserRequest, returns Unit -> Memory unchanged
-    .Chain<CreateUserStep>()       // Takes CreateUserRequest, returns User -> Memory: { CreateUserRequest, Unit, User }
-    .Chain<SendEmailStep>()        // Takes User from Memory
+    .Chain<ValidateEmailJunction>()    // Takes CreateUserRequest, returns Unit -> Memory unchanged
+    .Chain<CreateUserJunction>()       // Takes CreateUserRequest, returns User -> Memory: { CreateUserRequest, Unit, User }
+    .Chain<SendEmailJunction>()        // Takes User from Memory
     .Resolve();                    // Resolves User from Memory
 ```
 
-Each step declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the step, and stores `TOut` back. If `TIn` isn't in Memory, the train fails at runtime — though the [Analyzer](analyzer.md) catches this at compile time.
+Each junction declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the junction, and stores `TOut` back. If `TIn` isn't in Memory, the train fails at runtime — though the [Analyzer](analyzer.md) catches this at compile time.
 
 ## Storage by Type
 
-Memory stores one value per type. If two steps both return `string`, the second one overwrites the first. This is by design — use distinct types to avoid collisions:
+Memory stores one value per type. If two junctions both return `string`, the second one overwrites the first. This is by design — use distinct types to avoid collisions:
 
 ```csharp
 // These would collide in Memory (both produce string)
-.Chain<GetFirstNameStep>()   // Returns string
-.Chain<GetLastNameStep>()    // Returns string — overwrites the first!
+.Chain<GetFirstNameJunction>()   // Returns string
+.Chain<GetLastNameJunction>()    // Returns string — overwrites the first!
 
 // Use distinct types instead
-.Chain<GetFirstNameStep>()   // Returns FirstName
-.Chain<GetLastNameStep>()    // Returns LastName
+.Chain<GetFirstNameJunction>()   // Returns FirstName
+.Chain<GetLastNameJunction>()    // Returns LastName
 ```
 
-This is why Trax encourages specific types (records, value objects) over primitives. A step signature like `Step<User, EmailAddress>` tells you exactly what goes in and what comes out — `Step<User, string>` doesn't.
+This is why Trax encourages specific types (records, value objects) over primitives. A junction signature like `Junction<User, EmailAddress>` tells you exactly what goes in and what comes out — `Junction<User, string>` doesn't.
 
 ## References, Not Copies
 
-Memory stores references, not copies. When you modify an object in a step, every subsequent step sees the modification:
+Memory stores references, not copies. When you modify an object in a junction, every subsequent junction sees the modification:
 
 ```csharp
-public class EnrichUserStep : Step<User, Unit>
+public class EnrichUserJunction : Junction<User, Unit>
 {
     public override async Task<Unit> Run(User user)
     {
@@ -55,25 +55,25 @@ public class EnrichUserStep : Step<User, Unit>
 }
 ```
 
-This means you don't need to "pass through" a type just to keep it in Memory. If a step receives a `User` and modifies it in place, return `Unit`. The next step that needs `User` will get the same (now modified) reference:
+This means you don't need to "pass through" a type just to keep it in Memory. If a junction receives a `User` and modifies it in place, return `Unit`. The next junction that needs `User` will get the same (now modified) reference:
 
 ```csharp
 Activate(input)
-    .Chain<CreateUserStep>()       // Returns User -> stored in Memory
-    .Chain<ValidateUserStep>()     // Takes User, returns Unit (validation only)
-    .Chain<EnrichUserStep>()       // Takes User, returns Unit (modifies in place)
-    .Chain<SendNotificationStep>() // Takes User — sees all modifications
+    .Chain<CreateUserJunction>()       // Returns User -> stored in Memory
+    .Chain<ValidateUserJunction>()     // Takes User, returns Unit (validation only)
+    .Chain<EnrichUserJunction>()       // Takes User, returns Unit (modifies in place)
+    .Chain<SendNotificationJunction>() // Takes User — sees all modifications
     .Resolve();
 ```
 
-Only return a type from a step when you're producing something **new** for Memory. If you're just reading or mutating an existing object, return `Unit`.
+Only return a type from a junction when you're producing something **new** for Memory. If you're just reading or mutating an existing object, return `Unit`.
 
 ## Tuples
 
-When a step returns a tuple, Memory deconstructs it and stores each element individually:
+When a junction returns a tuple, Memory deconstructs it and stores each element individually:
 
 ```csharp
-public class LoadEntitiesStep : Step<LoadRequest, (User, Order, Payment)>
+public class LoadEntitiesJunction : Junction<LoadRequest, (User, Order, Payment)>
 {
     public override async Task<(User, Order, Payment)> Run(LoadRequest input)
     {
@@ -84,13 +84,13 @@ public class LoadEntitiesStep : Step<LoadRequest, (User, Order, Payment)>
         return (user, order, payment);
     }
 }
-// After this step, Memory contains: { LoadRequest, Unit, User, Order, Payment }
+// After this junction, Memory contains: { LoadRequest, Unit, User, Order, Payment }
 ```
 
-When a step takes a tuple as input, Memory reconstructs it from the individual elements:
+When a junction takes a tuple as input, Memory reconstructs it from the individual elements:
 
 ```csharp
-public class ProcessCheckoutStep : Step<(User, Order, Payment), Receipt>
+public class ProcessCheckoutJunction : Junction<(User, Order, Payment), Receipt>
 {
     public override async Task<Receipt> Run((User User, Order Order, Payment Payment) input)
     {
@@ -100,17 +100,17 @@ public class ProcessCheckoutStep : Step<(User, Order, Payment), Receipt>
 // Memory finds User, Order, and Payment individually, constructs the tuple, and passes it in
 ```
 
-This lets you load multiple entities in one step and consume them individually — or as a group — in later steps:
+This lets you load multiple entities in one junction and consume them individually — or as a group — in later junctions:
 
 ```csharp
 public class CheckoutTrain : ServiceTrain<CheckoutRequest, Receipt>
 {
     protected override async Task<Either<Exception, Receipt>> RunInternal(CheckoutRequest input)
         => Activate(input)
-            .Chain<LoadEntitiesStep>()     // Returns (User, Order, Payment) — deconstructed into Memory
-            .Chain<ValidateUserStep>()     // Takes User from Memory
-            .Chain<ValidateOrderStep>()    // Takes Order from Memory
-            .Chain<ProcessCheckoutStep>()  // Takes (User, Order, Payment) — reconstructed from Memory
+            .Chain<LoadEntitiesJunction>()     // Returns (User, Order, Payment) — deconstructed into Memory
+            .Chain<ValidateUserJunction>()     // Takes User from Memory
+            .Chain<ValidateOrderJunction>()    // Takes Order from Memory
+            .Chain<ProcessCheckoutJunction>()  // Takes (User, Order, Payment) — reconstructed from Memory
             .Resolve();
 }
 ```

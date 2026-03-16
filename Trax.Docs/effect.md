@@ -21,28 +21,28 @@ Everything in [Core](core.md), plus:
 
 - **`ServiceTrain<TIn, TOut>`** — extends `Train` with automatic metadata tracking
 - **Execution metadata** — every train run produces a queryable record (state, timing, input/output, errors)
-- **Dependency injection** — steps resolved from your DI container
+- **Dependency injection** — junctions resolved from your DI container
 - **Effect providers** — pluggable providers for persistence, logging, and serialization
 - **Lifecycle hooks** — fire on train state transitions (started, completed, failed, cancelled) for notifications, metrics, or real-time updates
 - **Atomic side effects** — all providers save together on success; nothing is saved on failure
 
 ## Train vs ServiceTrain
 
-**`Train<TIn, TOut>`** (Core) — The core pipeline engine. Chains steps, propagates errors, manages Memory. No logging, no DI, no side effects.
+**`Train<TIn, TOut>`** (Core) — The core pipeline engine. Chains junctions, propagates errors, manages Memory. No logging, no DI, no side effects.
 
 **`ServiceTrain<TIn, TOut>`** (Effect) — The full commercial service. Wraps every journey with:
 - Journey logging (departure time, arrival time, right track / left track, cargo in/out)
 - Effect providers (database persistence, JSON logging, parameter serialization)
 - Integration with `ITrainBus` for dispatch discovery
-- `IServiceProvider` access for step instantiation
+- `IServiceProvider` access for junction instantiation
 
 ```csharp
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
     protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
         => Activate(input)
-            .Chain<ValidateUserStep>()
-            .Chain<CreateUserStep>()
+            .Chain<ValidateUserJunction>()
+            .Chain<CreateUserJunction>()
             .Resolve();
 }
 ```
@@ -51,10 +51,10 @@ The code inside `RunInternal` is identical — `ServiceTrain` adds the infrastru
 
 ## The Effect Pattern
 
-Effects are operations that happen as the train passes through its route — provided by pluggable effect providers. Steps don't write directly to a database or logger. Instead, the train tracks models during the journey, and effect providers handle the actual work at the end:
+Effects are operations that happen as the train passes through its route — provided by pluggable effect providers. Junctions don't write directly to a database or logger. Instead, the train tracks models during the journey, and effect providers handle the actual work at the end:
 
 - If the train reaches the right track (success), all providers run `SaveChanges` and effects are applied atomically
-- If any step takes the left track (failure), nothing is saved
+- If any junction takes the left track (failure), nothing is saved
 
 This gives you atomicity (no half-written records) and modularity (add/remove providers without changing train code).
 
@@ -65,7 +65,7 @@ builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)          // Persist metadata (returns TraxEffectBuilderWithData)
         .SaveTrainParameters()                  // Include input/output in metadata
-        .AddStepLogger(serializeStepData: true) // Log individual step executions
+        .AddJunctionLogger(serializeJunctionData: true) // Log individual junction executions
     )
 );
 ```
