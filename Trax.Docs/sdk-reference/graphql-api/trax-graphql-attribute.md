@@ -24,6 +24,7 @@ public class TraxQueryAttribute : Attribute
     public string? Name { get; init; }
     public string? Description { get; init; }
     public string? DeprecationReason { get; init; }
+    public string? Namespace { get; init; }
 }
 ```
 
@@ -36,6 +37,7 @@ Query trains always execute synchronously via `RunAsync`. There are no operation
 | `Name` | `string?` | `null` | Overrides the auto-derived GraphQL field name. When null, the name is derived by stripping the `I` prefix and `Train` suffix from the service type name. |
 | `Description` | `string?` | `null` | Human-readable description that appears in the GraphQL schema documentation. |
 | `DeprecationReason` | `string?` | `null` | Marks the generated field as deprecated in the schema. |
+| `Namespace` | `string?` | `null` | Groups this field under a sub-namespace. When set, the field appears under `discover { namespace { field } }` instead of directly under `discover`. |
 
 ## TraxMutation Definition
 
@@ -48,6 +50,7 @@ public class TraxMutationAttribute : Attribute
     public string? Name { get; init; }
     public string? Description { get; init; }
     public string? DeprecationReason { get; init; }
+    public string? Namespace { get; init; }
     public GraphQLOperation Operations { get; }  // computed from constructor params
 }
 ```
@@ -61,6 +64,7 @@ The constructor accepts `params GraphQLOperation[]`. When no operations are pass
 | `Name` | `string?` | `null` | Overrides the auto-derived GraphQL field name. When null, the name is derived by stripping the `I` prefix and `Train` suffix from the service type name. |
 | `Description` | `string?` | `null` | Human-readable description that appears in the GraphQL schema documentation. |
 | `DeprecationReason` | `string?` | `null` | Marks the generated fields as deprecated in the schema. |
+| `Namespace` | `string?` | `null` | Groups this field under a sub-namespace. When set, the field appears under `dispatch { namespace { field } }` instead of directly under `dispatch`. |
 | `Operations` | `GraphQLOperation` | `Run \| Queue` | Read-only. Flags value computed from constructor params. When both `Run` and `Queue` are set, a `mode` parameter is exposed; `Run` alone is synchronous-only; `Queue` alone is async-only. |
 
 ## GraphQLOperation Enum
@@ -90,6 +94,44 @@ When `Name` is null (the default), the field name is derived from the train's se
 | `IBanPlayerTrain` | `banPlayer` | `banPlayer` |
 
 When `Name` is set, it's used directly: `[TraxMutation(Name = "BanUser")]` produces `banUser`.
+
+## Namespaces
+
+Use the `Namespace` property to group related trains under a sub-namespace in the GraphQL schema. This keeps the schema organized as the number of trains grows.
+
+```csharp
+[TraxQuery(Namespace = "players", Description = "Looks up a player profile")]
+public class LookupPlayerTrain : ServiceTrain<LookupPlayerInput, PlayerProfile>, ILookupPlayerTrain { ... }
+
+[TraxQuery(Namespace = "players", Description = "Searches for players")]
+public class SearchPlayersTrain : ServiceTrain<SearchPlayersInput, SearchResult>, ISearchPlayersTrain { ... }
+
+[TraxMutation(Namespace = "alerts", Description = "Creates a new alert")]
+public class CreateAlertTrain : ServiceTrain<CreateAlertInput, Alert>, ICreateAlertTrain { ... }
+```
+
+This produces the following schema structure:
+
+```graphql
+query {
+  discover {
+    players {
+      lookupPlayer(input: { playerId: "player-42" }) { ... }
+      searchPlayers(input: { query: "ace" }) { ... }
+    }
+  }
+}
+
+mutation {
+  dispatch {
+    alerts {
+      createAlert(input: { message: "Server overloaded" }) { ... }
+    }
+  }
+}
+```
+
+Trains without `Namespace` remain at the root level of `discover` or `dispatch`. Both namespaced and non-namespaced trains can coexist. The `[TraxQueryModel]` attribute also supports `Namespace` for entity queries.
 
 ## Examples
 
@@ -216,6 +258,7 @@ The attribute metadata is available through `ITrainDiscoveryService`. Each `Trai
 - `IsQuery` — whether the train has `[TraxQuery]`
 - `IsMutation` — whether the train has `[TraxMutation]`
 - `GraphQLName` — the name override (null if auto-derived)
+- `GraphQLNamespace` — the namespace grouping (null if at root level)
 
 The `trains` GraphQL query also exposes these fields.
 

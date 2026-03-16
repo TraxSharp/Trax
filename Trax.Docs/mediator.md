@@ -78,6 +78,12 @@ var result = await TrainBus.RunAsync<ChildResult>(
 
 This creates a tree of journey logs you can query to trace execution across trains.
 
+## Scope Isolation
+
+Every `RunAsync` call creates its own DI scope. The train is resolved and executed within this scope, which is disposed when the call returns. This is especially important for Blazor Server where the circuit scope persists for the entire connection — without per-call scoping, trains would share `DbContext` instances and other scoped resources across executions.
+
+Nested dispatch (a train calling `TrainBus.RunAsync` for a child train) also creates a separate scope. Each train is a self-contained black box.
+
 ## Direct Injection
 
 You don't have to use the bus. `AddMediator` also registers each train by its interface, so you can inject them directly when you know exactly which train you need:

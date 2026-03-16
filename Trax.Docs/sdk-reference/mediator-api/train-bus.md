@@ -106,6 +106,17 @@ public class ProcessOrderJunction(ITrainBus trainBus) : EffectJunction<OrderInpu
 }
 ```
 
+## Scope Isolation
+
+Each `RunAsync` call creates a child DI scope. The train and all its dependencies are resolved from this scope, which is disposed when the call returns. This means:
+
+- **Blazor Server safe** — circuit-scoped services don't leak between train executions
+- **Resource cleanup** — scoped services (`DbContext`, etc.) are disposed after each train
+- **Nested isolation** — when a train dispatches another train via `ITrainBus`, the child train gets its own scope. Each train is a black box
+- **Scheduler compatible** — the scheduler already creates per-job scopes; the additional child scope from `TrainBus` adds isolation for the actual train within the job runner's scope
+
+`InitializeTrain` does **not** create a child scope — it resolves from the `TrainBus`'s own scope. This is an internal method used by the scheduler infrastructure.
+
 ## Remarks
 
 - Trains are discovered by input type at registration time (via [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})). Each input type maps to exactly one train.

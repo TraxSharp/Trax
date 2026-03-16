@@ -24,7 +24,7 @@ type Mutation {
 
 Trax auto-generates strongly-typed mutations for trains that opt in with `[TraxMutation]`. Only trains with this attribute appear under `dispatch`. Trains annotated with `[TraxQuery]` appear under `query { discover { ... } }` instead — see [Queries]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}).
 
-Each whitelisted train gets a single mutation field named after the train (no prefix). The mutation's parameters and behavior depend on the operations passed to the attribute constructor:
+Each whitelisted train gets a single mutation field named after the train (no prefix). Trains with `Namespace` set are grouped under a sub-namespace (e.g. `dispatch { alerts { createAlert } }`). The mutation's parameters and behavior depend on the operations passed to the attribute constructor:
 
 - **Run + Queue (default)** — when no operations are specified (or both `GraphQLOperation.Run` and `GraphQLOperation.Queue` are passed), the mutation accepts an optional `mode: ExecutionMode` parameter (`RUN` or `QUEUE`, default `RUN`) and an optional `priority: Int`.
 - **Run only** — the mutation always runs synchronously. No `mode` or `priority` parameters.

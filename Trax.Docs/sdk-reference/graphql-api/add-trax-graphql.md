@@ -16,13 +16,24 @@ Registers the Trax GraphQL schema and services using HotChocolate. This adds the
 
 ```csharp
 public static IServiceCollection AddTraxGraphQL(this IServiceCollection services)
+public static IServiceCollection AddTraxGraphQL(
+    this IServiceCollection services,
+    Func<TraxGraphQLBuilder, TraxGraphQLBuilder> configure)
 ```
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `services` | `IServiceCollection` | Yes | The service collection |
+| `configure` | `Func<TraxGraphQLBuilder, TraxGraphQLBuilder>` | No | Optional builder for registering DbContext-based [query models]({{ site.baseurl }}{% link sdk-reference/graphql-api/query-models.md %}). |
 
 **Returns**: `IServiceCollection` for continued chaining.
+
+The parameterless overload calls the builder overload with an identity function. Use the builder overload to register DbContexts whose entities are annotated with `[TraxQueryModel]`:
+
+```csharp
+builder.Services.AddTraxGraphQL(graphql => graphql
+    .AddDbContext<GameDbContext>());
+```
 
 ### UseTraxGraphQL
 
@@ -51,7 +62,7 @@ public static WebApplication UseTraxGraphQL(
 - **Named GraphQL server** via `AddGraphQLServer("trax")` — uses a named schema so it coexists with your own HotChocolate schemas in the same application
 - **Query type**: `RootQuery` with grouped sub-types:
   - **`operations`** (`OperationsQueries`) — always present. Predefined operational queries: `health` status, registered `trains` discovery, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution`
-  - **`discover`** (`DiscoverQueries`) — only present when trains annotated with [`[TraxQuery]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) are registered. Auto-generated typed query fields for each query train.
+  - **`discover`** (`DiscoverQueries`) — present when trains annotated with [`[TraxQuery]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) are registered, or when entities annotated with [`[TraxQueryModel]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/query-models.md %}) are discovered via `AddDbContext<T>()`. Contains auto-generated typed query fields for each query train, and paginated/filterable/sortable fields for each query model.
 - **Mutation type**: `RootMutation` with grouped sub-types:
   - **`operations`** (`OperationsMutations`) — always present. `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
   - **`dispatch`** (`DispatchMutations`) — only present when trains annotated with [`[TraxMutation]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) are registered. Auto-generated typed mutations with strongly-typed input objects derived from each train's input record. Each train gets a single mutation field (e.g. `banPlayer`) with an optional `mode: ExecutionMode` parameter when both Run and Queue operations are enabled (the default).

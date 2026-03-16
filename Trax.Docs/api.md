@@ -18,7 +18,7 @@ The API is designed to run on a **separate machine** from the scheduler. The two
 | **Queue** (delegated) | Creates a `WorkQueue` entry in the database. The scheduler picks it up on its next poll cycle and dispatches it on the scheduler machine. | Heavy trains, recurring work, anything that should run on dedicated scheduler infrastructure. |
 | **Run** (direct) | Calls `ITrainBus.RunAsync` on the API machine (default) or offloads to a remote endpoint via [`UseRemoteRun()`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}). Either way, the call blocks until completion and returns the train output. | Lightweight on-demand trains where you need the result immediately. When using `UseRemoteRun()`, the API machine doesn't need to run the train code locally. |
 
-Trains opt into the GraphQL schema with the [`[TraxQuery]` or `[TraxMutation]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) attributes. Only annotated trains get typed fields generated.
+Trains opt into the GraphQL schema with the [`[TraxQuery]` or `[TraxMutation]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) attributes. Only annotated trains get typed fields generated. EF Core entities can also be exposed directly as paginated, filterable, sortable queries using [`[TraxQueryModel]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/query-models.md %}).
 
 ## Quick Setup
 
@@ -37,7 +37,7 @@ builder.Services.AddTrax(trax => trax
     .AddMediator(typeof(Program).Assembly)
 );
 
-builder.Services.AddTraxGraphQL();
+builder.Services.AddTraxGraphQL(); // or: AddTraxGraphQL(g => g.AddDbContext<MyDbContext>())
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
