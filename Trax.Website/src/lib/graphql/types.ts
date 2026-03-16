@@ -57,7 +57,7 @@ export interface TrainEvent {
   trainName: string;
   trainState: string;
   timestamp: string;
-  failureStep?: string;
+  failureJunction?: string;
   failureReason?: string;
 }
 

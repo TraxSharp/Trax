@@ -4,13 +4,13 @@ const layers = [
   {
     name: "Core",
     cmd: "dotnet add package Trax.Core",
-    desc: "The pipeline engine. Define sequences of steps with typed inputs and outputs. Errors short-circuit automatically. No dependencies, no database, no DI container — just the pipeline.",
+    desc: "The pipeline engine. Define sequences of junctions with typed inputs and outputs. Errors short-circuit automatically. No dependencies, no database, no DI container — just the pipeline.",
     href: "/docs/core",
   },
   {
     name: "Effect",
     cmd: "dotnet add package Trax.Effect",
-    desc: "Adds execution tracking. Every pipeline run gets recorded — when it started, when it finished, which step failed, what the input was. Stores to PostgreSQL or in-memory. Plugs into .NET dependency injection.",
+    desc: "Adds execution tracking. Every pipeline run gets recorded — when it started, when it finished, which junction failed, what the input was. Stores to PostgreSQL or in-memory. Plugs into .NET dependency injection.",
     href: "/docs/effect",
   },
   {

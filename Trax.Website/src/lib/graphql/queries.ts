@@ -66,7 +66,7 @@ export const EXECUTIONS_QUERY = gql`
           trainState
           startTime
           endTime
-          failureStep
+          failureJunction
           failureReason
           cancellationRequested
         }

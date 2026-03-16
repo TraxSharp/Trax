@@ -14,16 +14,16 @@ We're excited to announce the public launch of **Trax** — a .NET framework for
 
 ## What is Trax?
 
-Trax brings Railway Oriented Programming to .NET. Instead of scattering error handling across your codebase, you build **trains** — typed pipelines of steps where each step's output feeds the next. If any step fails, the rest are skipped automatically.
+Trax brings Railway Oriented Programming to .NET. Instead of scattering error handling across your codebase, you build **trains** — typed pipelines of junctions where each junction's output feeds the next. If any junction fails, the rest are skipped automatically.
 
 ```csharp
 public class ProcessOrderTrain : Train<OrderRequest, OrderReceipt>
 {
     protected override async Task<Either<Exception, OrderReceipt>> RunInternal(OrderRequest input)
         => Activate(input)
-            .Chain<CheckInventoryStep>()
-            .Chain<ChargePaymentStep>()
-            .Chain<CreateShipmentStep>()
+            .Chain<CheckInventoryJunction>()
+            .Chain<ChargePaymentJunction>()
+            .Chain<CreateShipmentJunction>()
             .Resolve();
 }
 ```

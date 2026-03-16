@@ -11,7 +11,7 @@ export default function ComparisonTable() {
             </h2>
             <p className="mt-3 text-text-secondary">
               Trax solves a different problem — composable, type-safe
-              multi-step workflows with built-in observability. It can
+              multi-junction workflows with built-in observability. It can
               even use Hangfire as a backend.
             </p>
             <Link
@@ -38,7 +38,7 @@ export default function ComparisonTable() {
               </thead>
               <tbody className="text-text-secondary">
                 <Row
-                  label="Multi-step composition"
+                  label="Multi-junction composition"
                   trax="Chain API"
                   quartz="Manual"
                   hangfire="Continuations"
@@ -62,7 +62,7 @@ export default function ComparisonTable() {
                   hangfire="Linear"
                 />
                 <Row
-                  label="Step-level progress"
+                  label="Junction-level progress"
                   trax="Built-in"
                   quartz="No"
                   hangfire="No"

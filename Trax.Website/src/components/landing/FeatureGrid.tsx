@@ -2,13 +2,13 @@ const features = [
   {
     title: "Compile-time chain validation",
     description:
-      "A Roslyn analyzer checks your chains at build time. Mismatched types between steps? You\u2019ll know before you run anything.",
+      "A Roslyn analyzer checks your chains at build time. Mismatched types between junctions? You\u2019ll know before you run anything.",
     packages: ["Trax.Core"],
   },
   {
     title: "Execution metadata",
     description:
-      "Every pipeline run is tracked \u2014 start time, end time, which step failed, the exception, the input parameters. Queryable in Postgres or in-memory.",
+      "Every pipeline run is tracked \u2014 start time, end time, which junction failed, the exception, the input parameters. Queryable in Postgres or in-memory.",
     packages: ["Trax.Effect", "Trax.Effect.Data.Postgres"],
   },
   {
@@ -20,7 +20,7 @@ const features = [
   {
     title: "CancellationToken everywhere",
     description:
-      "First-class cancellation through pipelines, steps, the dashboard, and the mediator. Not bolted on \u2014 it\u2019s threaded through the whole stack.",
+      "First-class cancellation through pipelines, junctions, the dashboard, and the mediator. Not bolted on \u2014 it\u2019s threaded through the whole stack.",
     packages: ["Trax.Core", "Trax.Effect", "Trax.Mediator", "Trax.Dashboard"],
   },
   {

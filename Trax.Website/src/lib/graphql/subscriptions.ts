@@ -32,7 +32,7 @@ export const ON_TRAIN_FAILED = gql`
       trainName
       trainState
       timestamp
-      failureStep
+      failureJunction
       failureReason
     }
   }

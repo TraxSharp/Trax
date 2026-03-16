@@ -17,9 +17,9 @@ return new OrderReceipt(payment, shipment);`;
 const solutionCode = `protected override async Task<Either<Exception, OrderReceipt>>
     RunInternal(OrderRequest input)
     => Activate(input)
-        .Chain<CheckInventoryStep>()
-        .Chain<ChargePaymentStep>()
-        .Chain<CreateShipmentStep>()
+        .Chain<CheckInventoryJunction>()
+        .Chain<ChargePaymentJunction>()
+        .Chain<CreateShipmentJunction>()
         .Resolve();`;
 
 export default async function ProblemSolution() {
@@ -60,7 +60,7 @@ export default async function ProblemSolution() {
             Same logic. Read it top to bottom.
           </h2>
           <p className="mt-3 text-text-secondary">
-            Each step&apos;s output feeds the next. Errors short-circuit
+            Each junction&apos;s output feeds the next. Errors short-circuit
             automatically — no if-statements, no try-catch, no early returns.
             What&apos;s left is just the business logic, in order.
           </p>
@@ -72,7 +72,7 @@ export default async function ProblemSolution() {
         />
 
         <p className="mt-6 text-sm text-text-muted lg:ml-auto lg:max-w-2xl">
-          Each step&apos;s output is stored in Memory by type. The next step
+          Each junction&apos;s output is stored in Memory by type. The next junction
           declares what it needs as its input, and Trax wires them together
           automatically. A compile-time analyzer catches broken chains before
           you ever run the code.
