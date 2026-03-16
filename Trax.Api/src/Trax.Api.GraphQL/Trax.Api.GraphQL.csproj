@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="HotChocolate.AspNetCore" Version="14.*" />
+    <PackageReference Include="HotChocolate.AspNetCore" Version="15.*" />
+    <PackageReference Include="HotChocolate.Data" Version="15.*" />
+    <PackageReference Include="HotChocolate.Data.EntityFramework" Version="15.*" />
   </ItemGroup>
 </Project>

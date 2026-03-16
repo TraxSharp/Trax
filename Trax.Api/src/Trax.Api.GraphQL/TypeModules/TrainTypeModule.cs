@@ -1,6 +1,8 @@
 using HotChocolate.Execution.Configuration;
+using HotChocolate.Language;
 using HotChocolate.Types;
 using HotChocolate.Types.Descriptors;
+using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Effect.Attributes;
@@ -14,7 +16,10 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// from discovered train registrations. Each train marked with [TraxMutation]/[TraxQuery] attributes
 /// gets a corresponding mutation/query field wired to the TrainExecutionService.
 /// </summary>
-public partial class TrainTypeModule(ITrainDiscoveryService discoveryService) : TypeModule
+public partial class TrainTypeModule(
+    ITrainDiscoveryService discoveryService,
+    GraphQLConfiguration? graphQLConfiguration = null
+) : TypeModule
 {
     /// <summary>
     /// Discovers all registered trains and generates the GraphQL schema types:
@@ -99,47 +104,111 @@ public partial class TrainTypeModule(ITrainDiscoveryService discoveryService) : 
             types.Add(
                 new ObjectTypeExtension(d =>
                 {
-                    d.Name("DispatchMutations");
-                    foreach (var (reg, name) in mutationFields)
-                        AddMutationField(d, reg, name);
-                })
-            );
-            types.Add(
-                new ObjectTypeExtension(d =>
-                {
                     d.Name("RootMutation");
                     d.Field("dispatch")
                         .Type<ObjectType<DispatchMutations>>()
                         .Resolve(_ => new DispatchMutations());
                 })
             );
+
+            AddGroupedFields(types, mutationFields, "DispatchMutations", AddMutationField);
         }
 
-        // Register DiscoverQueries type + extend RootQuery with a "discover" field,
-        // but only when there are query trains.
+        // Register DiscoverQueries type + extend RootQuery with a "discover" field.
+        // When query model registrations exist, the base type and discover field are
+        // already registered in GraphQLServiceExtensions — only add the field extension.
+        var discoverBaseRegisteredExternally = graphQLConfiguration?.ModelRegistrations.Count > 0;
+
         if (queryFields.Count > 0)
         {
-            types.Add(new ObjectType<DiscoverQueries>());
-            types.Add(
-                new ObjectTypeExtension(d =>
-                {
-                    d.Name("DiscoverQueries");
-                    foreach (var (reg, name) in queryFields)
-                        AddQueryField(d, reg, name);
-                })
-            );
-            types.Add(
-                new ObjectTypeExtension(d =>
-                {
-                    d.Name("RootQuery");
-                    d.Field("discover")
-                        .Type<ObjectType<DiscoverQueries>>()
-                        .Resolve(_ => new DiscoverQueries());
-                })
-            );
+            if (!discoverBaseRegisteredExternally)
+            {
+                types.Add(new ObjectType<DiscoverQueries>());
+                types.Add(
+                    new ObjectTypeExtension(d =>
+                    {
+                        d.Name("RootQuery");
+                        d.Field("discover")
+                            .Type<ObjectType<DiscoverQueries>>()
+                            .Resolve(_ => new DiscoverQueries());
+                    })
+                );
+            }
+
+            AddGroupedFields(types, queryFields, "DiscoverQueries", AddQueryField);
         }
 
         return new ValueTask<IReadOnlyCollection<ITypeSystemMember>>(types);
+    }
+
+    /// <summary>
+    /// Groups fields by namespace and creates the appropriate type extensions.
+    /// Fields with no namespace go directly on the parent type. Fields with a namespace
+    /// get an intermediate ObjectType (e.g. "AlertsDiscoverQueries") and a field on the
+    /// parent type pointing to it.
+    /// </summary>
+    private void AddGroupedFields(
+        List<ITypeSystemMember> types,
+        List<(TrainRegistration Registration, string TrainName)> fields,
+        string parentTypeName,
+        Action<IObjectTypeDescriptor, TrainRegistration, string> addField
+    )
+    {
+        var byNamespace = fields.GroupBy(f => f.Registration.GraphQLNamespace);
+
+        foreach (var group in byNamespace)
+        {
+            if (group.Key is null)
+            {
+                // No namespace — add fields directly to the parent type
+                types.Add(
+                    new ObjectTypeExtension(d =>
+                    {
+                        d.Name(parentTypeName);
+                        foreach (var (reg, name) in group)
+                            addField(d, reg, name);
+                    })
+                );
+            }
+            else
+            {
+                // Namespace — create intermediate type and add fields to it
+                var nsTypeName = NamespaceTypeName(group.Key, parentTypeName);
+                var nsFieldName = CamelCase(group.Key);
+
+                // Register the base ObjectType for this namespace (only once across modules)
+                if (graphQLConfiguration?.RegisteredNamespaceTypes.Add(nsTypeName) ?? true)
+                {
+                    types.Add(new ObjectType(d => d.Name(nsTypeName)));
+                }
+
+                // Add fields to the namespace type
+                types.Add(
+                    new ObjectTypeExtension(d =>
+                    {
+                        d.Name(nsTypeName);
+                        foreach (var (reg, name) in group)
+                            addField(d, reg, name);
+                    })
+                );
+
+                // Add the namespace field to the parent type (only once across modules)
+                var nsFieldKey = $"{parentTypeName}.{nsFieldName}";
+                if (graphQLConfiguration?.RegisteredNamespaceTypes.Add(nsFieldKey) ?? true)
+                {
+                    var capturedNsTypeName = nsTypeName;
+                    types.Add(
+                        new ObjectTypeExtension(d =>
+                        {
+                            d.Name(parentTypeName);
+                            d.Field(nsFieldName)
+                                .Type(new NamedTypeNode(capturedNsTypeName))
+                                .Resolve(_ => new object());
+                        })
+                    );
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -227,4 +296,23 @@ public partial class TrainTypeModule(ITrainDiscoveryService discoveryService) : 
 
         return name;
     }
+
+    /// <summary>
+    /// Builds the HotChocolate type name for a namespace group.
+    /// e.g. ("alerts", "DiscoverQueries") → "AlertsDiscoverQueries"
+    /// </summary>
+    internal static string NamespaceTypeName(string ns, string parentTypeName) =>
+        PascalCase(ns) + parentTypeName;
+
+    /// <summary>
+    /// Capitalizes the first character of a string.
+    /// </summary>
+    internal static string PascalCase(string value) =>
+        string.IsNullOrEmpty(value) ? value : char.ToUpperInvariant(value[0]) + value[1..];
+
+    /// <summary>
+    /// Lowercases the first character of a string.
+    /// </summary>
+    internal static string CamelCase(string value) =>
+        string.IsNullOrEmpty(value) ? value : char.ToLowerInvariant(value[0]) + value[1..];
 }

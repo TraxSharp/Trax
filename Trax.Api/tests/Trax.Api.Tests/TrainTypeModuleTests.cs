@@ -2,6 +2,7 @@ using FluentAssertions;
 using HotChocolate.Types;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
@@ -805,6 +806,254 @@ public class TrainTypeModuleTests
 
     #endregion
 
+    #region Namespace Grouping
+
+    [Test]
+    public async Task CreateTypesAsync_MutationWithNamespace_CreatesNamespaceTypeAndExtension()
+    {
+        var config = new GraphQLConfiguration([]);
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<UnitInput>(
+                "BanTrain",
+                typeof(Unit),
+                name: "Ban",
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "players"
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery, config);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // Should have a non-generic ObjectType for the namespace (PlayersDispatchMutations)
+        var nsTypes = types.Where(t => t.GetType() == typeof(ObjectType)).ToList();
+        // Per-train response type + namespace base type = 2
+        nsTypes.Should().HaveCount(2);
+
+        // Should have extensions: DispatchMutations (namespace field) + RootMutation (dispatch)
+        // + PlayersDispatchMutations (fields)
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(3);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_QueryWithNamespace_CreatesNamespaceTypeAndExtension()
+    {
+        var config = new GraphQLConfiguration([]);
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(TypedOutput),
+                name: "Lookup",
+                isQuery: true,
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "players"
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery, config);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // Should have ObjectType<DiscoverQueries> + ObjectType for namespace (PlayersDiscoverQueries)
+        // + InputObjectType<TypedInput> + ObjectType<TypedOutput>
+        // + extensions: RootQuery (discover) + DiscoverQueries (namespace field) + PlayersDiscoverQueries (fields)
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(3);
+
+        // Namespace base type should be registered
+        config.RegisteredNamespaceTypes.Should().Contain("PlayersDiscoverQueries");
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_MultipleTrainsInSameNamespace_ShareIntermediateType()
+    {
+        var config = new GraphQLConfiguration([]);
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(TypedOutput),
+                name: "Lookup",
+                serviceTypeName: "LookupTrain",
+                isQuery: true,
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "players"
+            ),
+            CreateRegistration<TypedInput2>(
+                "SearchTrain",
+                typeof(TypedOutput2),
+                name: "Search",
+                serviceTypeName: "SearchTrain",
+                isQuery: true,
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "players"
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery, config);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // Only one namespace base type should be registered
+        config.RegisteredNamespaceTypes.Count(n => n == "PlayersDiscoverQueries").Should().Be(1);
+
+        // Only one namespace field extension on DiscoverQueries
+        config.RegisteredNamespaceTypes.Should().Contain("DiscoverQueries.players");
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_DifferentNamespaces_CreatesSeparateTypes()
+    {
+        var config = new GraphQLConfiguration([]);
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(TypedOutput),
+                name: "Lookup",
+                serviceTypeName: "LookupTrain",
+                isQuery: true,
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "players"
+            ),
+            CreateRegistration<TypedInput2>(
+                "AlertTrain",
+                typeof(TypedOutput2),
+                name: "Alert",
+                serviceTypeName: "AlertTrain",
+                isQuery: true,
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "alerts"
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery, config);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        config.RegisteredNamespaceTypes.Should().Contain("PlayersDiscoverQueries");
+        config.RegisteredNamespaceTypes.Should().Contain("AlertsDiscoverQueries");
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_MixedNamespacedAndRoot_BothGenerated()
+    {
+        var config = new GraphQLConfiguration([]);
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(TypedOutput),
+                name: "Lookup",
+                serviceTypeName: "LookupTrain",
+                isQuery: true,
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "players"
+            ),
+            CreateRegistration<TypedInput2>(
+                "HealthTrain",
+                typeof(TypedOutput2),
+                name: "Health",
+                serviceTypeName: "HealthTrain",
+                isQuery: true,
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery, config);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // Should have extensions for:
+        // - RootQuery (discover)
+        // - DiscoverQueries (namespace field for "players" + root field "Health")
+        // - PlayersDiscoverQueries (fields)
+        types.OfType<ObjectTypeExtension>().Should().HaveCountGreaterThanOrEqualTo(3);
+
+        // Namespace type should exist
+        config.RegisteredNamespaceTypes.Should().Contain("PlayersDiscoverQueries");
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_NullNamespace_BackwardCompatible()
+    {
+        // Existing behavior: no namespace, fields go directly on DiscoverQueries
+        var config = new GraphQLConfiguration([]);
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(TypedOutput),
+                name: "Lookup",
+                isQuery: true,
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery, config);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // No namespace types should be registered
+        config.RegisteredNamespaceTypes.Should().BeEmpty();
+
+        // Should still have DiscoverQueries extension + RootQuery extension
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_SameNamespaceOnQueryAndMutation_CreatesSeparateNamespaceTypes()
+    {
+        var config = new GraphQLConfiguration([]);
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(TypedOutput),
+                name: "Lookup",
+                serviceTypeName: "LookupTrain",
+                isQuery: true,
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "alerts"
+            ),
+            CreateRegistration<UnitInput>(
+                "CreateAlertTrain",
+                typeof(Unit),
+                name: "CreateAlert",
+                serviceTypeName: "CreateAlertTrain",
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "alerts"
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery, config);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // Should create separate namespace types for queries vs mutations
+        config.RegisteredNamespaceTypes.Should().Contain("AlertsDiscoverQueries");
+        config.RegisteredNamespaceTypes.Should().Contain("AlertsDispatchMutations");
+    }
+
+    [Test]
+    public void NamespaceTypeName_CombinesCorrectly()
+    {
+        TrainTypeModule
+            .NamespaceTypeName("alerts", "DiscoverQueries")
+            .Should()
+            .Be("AlertsDiscoverQueries");
+        TrainTypeModule
+            .NamespaceTypeName("players", "DispatchMutations")
+            .Should()
+            .Be("PlayersDispatchMutations");
+    }
+
+    [Test]
+    public void PascalCase_CapitalizesFirstChar()
+    {
+        TrainTypeModule.PascalCase("alerts").Should().Be("Alerts");
+        TrainTypeModule.PascalCase("Players").Should().Be("Players");
+        TrainTypeModule.PascalCase("a").Should().Be("A");
+    }
+
+    [Test]
+    public void CamelCase_LowercasesFirstChar()
+    {
+        TrainTypeModule.CamelCase("Alerts").Should().Be("alerts");
+        TrainTypeModule.CamelCase("players").Should().Be("players");
+        TrainTypeModule.CamelCase("A").Should().Be("a");
+    }
+
+    #endregion
+
     #region Helpers
 
     private static List<ITypeSystemMember> GetNonGenericObjectTypes(
@@ -841,7 +1090,8 @@ public class TrainTypeModuleTests
         string? description = null,
         string? deprecationReason = null,
         GraphQLOperation operations = GraphQLOperation.Run | GraphQLOperation.Queue,
-        bool isQuery = false
+        bool isQuery = false,
+        string? graphqlNamespace = null
     )
     {
         return new TrainRegistration
@@ -864,6 +1114,7 @@ public class TrainTypeModuleTests
             GraphQLDescription = description,
             GraphQLDeprecationReason = deprecationReason,
             GraphQLOperations = operations,
+            GraphQLNamespace = graphqlNamespace,
             IsRemote = false,
         };
     }
