@@ -2,25 +2,25 @@ using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
 
 public partial class Monad<TInput, TReturn>
 {
-    #region Chain<TStep, TIn, TOut>
+    #region Chain<TJunction, TIn, TOut>
 
     /// <summary>
-    /// Executes a step with the provided input and captures the output.
+    /// Executes a junction with the provided input and captures the output.
     /// This is the core Chain method that all other Chain methods ultimately call.
     /// </summary>
-    internal Monad<TInput, TReturn> Chain<TStep, TIn, TOut>(
-        TStep step,
-        Either<Exception, TIn> previousStep,
+    internal Monad<TInput, TReturn> Chain<TJunction, TIn, TOut>(
+        TJunction junction,
+        Either<Exception, TIn> previousJunction,
         out Either<Exception, TOut> outVar
     )
-        where TStep : IStep<TIn, TOut>
+        where TJunction : IJunction<TIn, TOut>
     {
         // If there's already an exception, short-circuit
         if (Exception is not null)
@@ -29,8 +29,8 @@ public partial class Monad<TInput, TReturn>
             return this;
         }
 
-        // Execute the step directly without thread pool scheduling
-        var task = step.RailwayStep(previousStep, Train);
+        // Execute the junction directly without thread pool scheduling
+        var task = junction.RailwayJunction(previousJunction, Train);
 
         if (task.IsCompletedSuccessfully)
         {
@@ -38,7 +38,7 @@ public partial class Monad<TInput, TReturn>
         }
         else
         {
-            // Suppress the SynchronizationContext so that continuations from the step's
+            // Suppress the SynchronizationContext so that continuations from the junction's
             // async work are posted to the thread pool instead of trying to marshal back
             // to the captured context. Without this, .GetAwaiter().GetResult() deadlocks
             // in environments with a single-threaded SynchronizationContext (Blazor Server,
@@ -74,10 +74,10 @@ public partial class Monad<TInput, TReturn>
     }
 
     /// <summary>
-    /// Executes a step with input extracted from Memory.
+    /// Executes a junction with input extracted from Memory.
     /// </summary>
-    internal Monad<TInput, TReturn> Chain<TStep, TIn, TOut>(TStep step)
-        where TStep : IStep<TIn, TOut>
+    internal Monad<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
+        where TJunction : IJunction<TIn, TOut>
     {
         // Extract the input from Memory
         var input = this.ExtractTypeFromMemory<TIn, TInput, TReturn>();
@@ -85,129 +85,132 @@ public partial class Monad<TInput, TReturn>
         if (input is null)
             return this;
 
-        return Chain<TStep, TIn, TOut>(step, input, out var x);
+        return Chain<TJunction, TIn, TOut>(junction, input, out var x);
     }
 
     /// <summary>
-    /// Creates and executes a step with the provided input.
+    /// Creates and executes a junction with the provided input.
     /// </summary>
-    internal Monad<TInput, TReturn> Chain<TStep, TIn, TOut>(
-        Either<Exception, TIn> previousStep,
+    internal Monad<TInput, TReturn> Chain<TJunction, TIn, TOut>(
+        Either<Exception, TIn> previousJunction,
         out Either<Exception, TOut> outVar
     )
-        where TStep : IStep<TIn, TOut>, new() =>
-        Chain<TStep, TIn, TOut>(new TStep(), previousStep, out outVar);
+        where TJunction : IJunction<TIn, TOut>, new() =>
+        Chain<TJunction, TIn, TOut>(new TJunction(), previousJunction, out outVar);
 
     /// <summary>
-    /// Creates and executes a step with input extracted from Memory.
+    /// Creates and executes a junction with input extracted from Memory.
     /// </summary>
-    internal Monad<TInput, TReturn> Chain<TStep, TIn, TOut>()
-        where TStep : IStep<TIn, TOut>, new() => Chain<TStep, TIn, TOut>(new TStep());
+    internal Monad<TInput, TReturn> Chain<TJunction, TIn, TOut>()
+        where TJunction : IJunction<TIn, TOut>, new() =>
+        Chain<TJunction, TIn, TOut>(new TJunction());
 
     #endregion
 
-    #region Chain<TStep>
+    #region Chain<TJunction>
 
     /// <summary>
-    /// Executes a step that is resolved from Memory by its interface type.
+    /// Executes a junction that is resolved from Memory by its interface type.
     /// </summary>
     // ReSharper disable once InconsistentNaming
-    internal Monad<TInput, TReturn> IChain<TStep>()
-        where TStep : class
+    internal Monad<TInput, TReturn> IChain<TJunction>()
+        where TJunction : class
     {
-        var stepType = typeof(TStep);
+        var junctionType = typeof(TJunction);
 
-        // Verify that TStep is an interface
-        if (!stepType.IsInterface)
+        // Verify that TJunction is an interface
+        if (!junctionType.IsInterface)
         {
             Exception ??= new TrainException(
-                $"Step ({stepType}) must be an interface to call IChain."
+                $"Junction ({junctionType}) must be an interface to call IChain."
             );
 
             return this;
         }
 
-        // Extract the step instance from Memory
-        var stepService = this.ExtractTypeFromMemory<TStep, TInput, TReturn>();
+        // Extract the junction instance from Memory
+        var junctionService = this.ExtractTypeFromMemory<TJunction, TInput, TReturn>();
 
-        if (stepService is null)
+        if (junctionService is null)
             return this;
 
-        return Chain<TStep>(stepService);
+        return Chain<TJunction>(junctionService);
     }
 
     /// <summary>
-    /// Creates and executes a step by its type.
+    /// Creates and executes a junction by its type.
     /// </summary>
-    public Monad<TInput, TReturn> Chain<TStep>()
-        where TStep : class
+    public Monad<TInput, TReturn> Chain<TJunction>()
+        where TJunction : class
     {
         if (Exception is not null)
             return this;
 
-        // Create an instance of the step
-        var stepInstance = this.InitializeStep<TStep, TInput, TReturn>();
+        // Create an instance of the junction
+        var junctionInstance = this.InitializeJunction<TJunction, TInput, TReturn>();
 
-        if (stepInstance is null)
+        if (junctionInstance is null)
             return this;
 
-        return Chain<TStep>(stepInstance);
+        return Chain<TJunction>(junctionInstance);
     }
 
     /// <summary>
-    /// Executes a step instance.
+    /// Executes a junction instance.
     /// </summary>
-    public Monad<TInput, TReturn> Chain<TStep>(TStep stepInstance)
-        where TStep : class
+    public Monad<TInput, TReturn> Chain<TJunction>(TJunction junctionInstance)
+        where TJunction : class
     {
-        // Extract the input and output types from the step
-        var (tIn, tOut) = ReflectionHelpers.ExtractStepTypeArguments<TStep>();
+        // Extract the input and output types from the junction
+        var (tIn, tOut) = ReflectionHelpers.ExtractJunctionTypeArguments<TJunction>();
 
         // Find the appropriate Chain method to call
-        var chainMethod = ReflectionHelpers.FindGenericChainMethod<TStep, TInput, TReturn>(
+        var chainMethod = ReflectionHelpers.FindGenericChainMethod<TJunction, TInput, TReturn>(
             this,
             tIn,
             tOut,
             1
         );
 
-        // Execute the step
-        var result = chainMethod.Invoke(this, [stepInstance]);
+        // Execute the junction
+        var result = chainMethod.Invoke(this, [junctionInstance]);
 
         return (Monad<TInput, TReturn>)result!;
     }
 
     #endregion
 
-    #region Chain<TStep, TIn>
+    #region Chain<TJunction, TIn>
 
     /// <summary>
-    /// Executes a step with the provided input and Unit output.
+    /// Executes a junction with the provided input and Unit output.
     /// </summary>
-    internal Monad<TInput, TReturn> Chain<TStep, TIn>(
-        TStep step,
-        Either<Exception, TIn> previousStep
+    internal Monad<TInput, TReturn> Chain<TJunction, TIn>(
+        TJunction junction,
+        Either<Exception, TIn> previousJunction
     )
-        where TStep : IStep<TIn, Unit> => Chain<TStep, TIn, Unit>(step, previousStep, out var x);
+        where TJunction : IJunction<TIn, Unit> =>
+        Chain<TJunction, TIn, Unit>(junction, previousJunction, out var x);
 
     /// <summary>
-    /// Executes a step with input extracted from Memory and Unit output.
+    /// Executes a junction with input extracted from Memory and Unit output.
     /// </summary>
-    internal Monad<TInput, TReturn> Chain<TStep, TIn>(TStep step)
-        where TStep : IStep<TIn, Unit> => Chain<TStep, TIn, Unit>(step);
+    internal Monad<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
+        where TJunction : IJunction<TIn, Unit> => Chain<TJunction, TIn, Unit>(junction);
 
     /// <summary>
-    /// Creates and executes a step with the provided input and Unit output.
+    /// Creates and executes a junction with the provided input and Unit output.
     /// </summary>
-    internal Monad<TInput, TReturn> Chain<TStep, TIn>(Either<Exception, TIn> previousStep)
-        where TStep : IStep<TIn, Unit>, new() =>
-        Chain<TStep, TIn, Unit>(new TStep(), previousStep, out var x);
+    internal Monad<TInput, TReturn> Chain<TJunction, TIn>(Either<Exception, TIn> previousJunction)
+        where TJunction : IJunction<TIn, Unit>, new() =>
+        Chain<TJunction, TIn, Unit>(new TJunction(), previousJunction, out var x);
 
     /// <summary>
-    /// Creates and executes a step with input extracted from Memory and Unit output.
+    /// Creates and executes a junction with input extracted from Memory and Unit output.
     /// </summary>
-    internal Monad<TInput, TReturn> Chain<TStep, TIn>()
-        where TStep : IStep<TIn, Unit>, new() => Chain<TStep, TIn, Unit>(new TStep());
+    internal Monad<TInput, TReturn> Chain<TJunction, TIn>()
+        where TJunction : IJunction<TIn, Unit>, new() =>
+        Chain<TJunction, TIn, Unit>(new TJunction());
 
     #endregion
 }

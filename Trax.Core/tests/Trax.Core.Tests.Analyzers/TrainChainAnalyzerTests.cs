@@ -27,9 +27,9 @@ namespace LanguageExt
     }
 }
 
-namespace Trax.Core.Step
+namespace Trax.Core.Junction
 {
-    public interface IStep<TIn, TOut> { }
+    public interface IJunction<TIn, TOut> { }
 }
 
 namespace Trax.Core.Train
@@ -45,12 +45,12 @@ namespace Trax.Core.Monad
 {
     public class Monad<TInput, TReturn>
     {
-        public Monad<TInput, TReturn> Chain<TStep>() where TStep : class => this;
-        public Monad<TInput, TReturn> Chain<TStep, TIn, TOut>() where TStep : Trax.Core.Step.IStep<TIn, TOut> => this;
+        public Monad<TInput, TReturn> Chain<TJunction>() where TJunction : class => this;
+        public Monad<TInput, TReturn> Chain<TJunction, TIn, TOut>() where TJunction : Trax.Core.Junction.IJunction<TIn, TOut> => this;
         public Monad<TInput, TReturn> AddServices<T1>() => this;
         public Monad<TInput, TReturn> AddServices<T1, T2>() => this;
-        public Monad<TInput, TReturn> IChain<TStep>() where TStep : class => this;
-        public Monad<TInput, TReturn> ShortCircuit<TStep>() where TStep : class => this;
+        public Monad<TInput, TReturn> IChain<TJunction>() where TJunction : class => this;
+        public Monad<TInput, TReturn> ShortCircuit<TJunction>() where TJunction : class => this;
         public Monad<TInput, TReturn> Extract<TIn, TOut>() => this;
         public TReturn Resolve() => default!;
     }
@@ -87,14 +87,14 @@ namespace TestApp
     public class OrderRequest { }
     public class OrderResult { }
 
-    public class ProcessOrderStep : Trax.Core.Step.IStep<OrderRequest, OrderResult> { }
+    public class ProcessOrderJunction : Trax.Core.Junction.IJunction<OrderRequest, OrderResult> { }
 
     public class TestTrain : Trax.Core.Train.Train<OrderRequest, OrderResult>
     {
         public void Run(OrderRequest input)
         {
             Activate(input)
-                .Chain<ProcessOrderStep>()
+                .Chain<ProcessOrderJunction>()
                 .Resolve();
         }
     }
@@ -116,16 +116,16 @@ namespace TestApp
     public class Intermediate { }
     public class NeedsSpecial { }
 
-    public class StepA : Trax.Core.Step.IStep<MyInput, Intermediate> { }
-    public class StepB : Trax.Core.Step.IStep<NeedsSpecial, LanguageExt.Unit> { }
+    public class JunctionA : Trax.Core.Junction.IJunction<MyInput, Intermediate> { }
+    public class JunctionB : Trax.Core.Junction.IJunction<NeedsSpecial, LanguageExt.Unit> { }
 
     public class TestTrain : Trax.Core.Train.Train<MyInput, LanguageExt.Unit>
     {
         public void Run(MyInput input)
         {
             Activate(input)
-                .Chain<StepA>()
-                .{|#0:Chain<StepB>()|}
+                .Chain<JunctionA>()
+                .{|#0:Chain<JunctionB>()|}
                 .Resolve();
         }
     }
@@ -133,7 +133,7 @@ namespace TestApp
 
         var expected = new DiagnosticResult("CHAIN001", DiagnosticSeverity.Error)
             .WithLocation(0)
-            .WithArguments("StepB", "NeedsSpecial", "Unit, MyInput, Intermediate");
+            .WithArguments("JunctionB", "NeedsSpecial", "Unit, MyInput, Intermediate");
 
         var test = CreateTest(source, expected);
         await test.RunAsync();
@@ -151,14 +151,14 @@ namespace TestApp
     public class Receipt { }
     public class Validated { }
 
-    public class ValidateStep : Trax.Core.Step.IStep<OrderRequest, Validated> { }
+    public class ValidateJunction : Trax.Core.Junction.IJunction<OrderRequest, Validated> { }
 
     public class TestTrain : Trax.Core.Train.Train<OrderRequest, Receipt>
     {
         public void Run(OrderRequest input)
         {
             Activate(input)
-                .Chain<ValidateStep>()
+                .Chain<ValidateJunction>()
                 .{|#0:Resolve()|};
         }
     }
@@ -188,18 +188,18 @@ namespace TestApp
     public class Order { }
     public class Combined { }
 
-    public class ProduceUserStep : Trax.Core.Step.IStep<string, User> { }
-    public class ProduceOrderStep : Trax.Core.Step.IStep<User, Order> { }
-    public class CombineStep : Trax.Core.Step.IStep<(User, Order), Combined> { }
+    public class ProduceUserJunction : Trax.Core.Junction.IJunction<string, User> { }
+    public class ProduceOrderJunction : Trax.Core.Junction.IJunction<User, Order> { }
+    public class CombineJunction : Trax.Core.Junction.IJunction<(User, Order), Combined> { }
 
     public class TestTrain : Trax.Core.Train.Train<string, Combined>
     {
         public void Run(string input)
         {
             Activate(input)
-                .Chain<ProduceUserStep>()
-                .Chain<ProduceOrderStep>()
-                .Chain<CombineStep>()
+                .Chain<ProduceUserJunction>()
+                .Chain<ProduceOrderJunction>()
+                .Chain<CombineJunction>()
                 .Resolve();
         }
     }
@@ -222,17 +222,17 @@ namespace TestApp
     public class Order { }
     public class Combined { }
 
-    public class ProduceUserStep : Trax.Core.Step.IStep<MyInput, User> { }
-    // Note: no step produces Order
-    public class CombineStep : Trax.Core.Step.IStep<(User, Order), Combined> { }
+    public class ProduceUserJunction : Trax.Core.Junction.IJunction<MyInput, User> { }
+    // Note: no junction produces Order
+    public class CombineJunction : Trax.Core.Junction.IJunction<(User, Order), Combined> { }
 
     public class TestTrain : Trax.Core.Train.Train<MyInput, Combined>
     {
         public void Run(MyInput input)
         {
             Activate(input)
-                .Chain<ProduceUserStep>()
-                .{|#0:Chain<CombineStep>()|}
+                .Chain<ProduceUserJunction>()
+                .{|#0:Chain<CombineJunction>()|}
                 .Resolve();
         }
     }
@@ -240,7 +240,7 @@ namespace TestApp
 
         var expected = new DiagnosticResult("CHAIN001", DiagnosticSeverity.Error)
             .WithLocation(0)
-            .WithArguments("CombineStep", "(User, Order)", "Unit, MyInput, User");
+            .WithArguments("CombineJunction", "(User, Order)", "Unit, MyInput, User");
 
         var test = CreateTest(source, expected);
         await test.RunAsync();
@@ -257,16 +257,16 @@ namespace TestApp
     public class User { }
     public class Order { }
 
-    public class ProducePairStep : Trax.Core.Step.IStep<string, (User, Order)> { }
-    public class ConsumeUserStep : Trax.Core.Step.IStep<User, LanguageExt.Unit> { }
+    public class ProducePairJunction : Trax.Core.Junction.IJunction<string, (User, Order)> { }
+    public class ConsumeUserJunction : Trax.Core.Junction.IJunction<User, LanguageExt.Unit> { }
 
     public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
     {
         public void Run(string input)
         {
             Activate(input)
-                .Chain<ProducePairStep>()
-                .Chain<ConsumeUserStep>()
+                .Chain<ProducePairJunction>()
+                .Chain<ConsumeUserJunction>()
                 .Resolve();
         }
     }
@@ -292,16 +292,16 @@ namespace TestApp
     public class ConcreteUser : IUser { }
     public class Result { }
 
-    public class ProduceUserStep : Trax.Core.Step.IStep<string, ConcreteUser> { }
-    public class ConsumeInterfaceStep : Trax.Core.Step.IStep<IUser, Result> { }
+    public class ProduceUserJunction : Trax.Core.Junction.IJunction<string, ConcreteUser> { }
+    public class ConsumeInterfaceJunction : Trax.Core.Junction.IJunction<IUser, Result> { }
 
     public class TestTrain : Trax.Core.Train.Train<string, Result>
     {
         public void Run(string input)
         {
             Activate(input)
-                .Chain<ProduceUserStep>()
-                .Chain<ConsumeInterfaceStep>()
+                .Chain<ProduceUserJunction>()
+                .Chain<ConsumeInterfaceJunction>()
                 .Resolve();
         }
     }
@@ -324,16 +324,16 @@ namespace TestApp
     public class UnrelatedType { }
     public class Result { }
 
-    public class ProduceUnrelatedStep : Trax.Core.Step.IStep<MyInput, UnrelatedType> { }
-    public class ConsumeInterfaceStep : Trax.Core.Step.IStep<IUser, Result> { }
+    public class ProduceUnrelatedJunction : Trax.Core.Junction.IJunction<MyInput, UnrelatedType> { }
+    public class ConsumeInterfaceJunction : Trax.Core.Junction.IJunction<IUser, Result> { }
 
     public class TestTrain : Trax.Core.Train.Train<MyInput, Result>
     {
         public void Run(MyInput input)
         {
             Activate(input)
-                .Chain<ProduceUnrelatedStep>()
-                .{|#0:Chain<ConsumeInterfaceStep>()|}
+                .Chain<ProduceUnrelatedJunction>()
+                .{|#0:Chain<ConsumeInterfaceJunction>()|}
                 .Resolve();
         }
     }
@@ -341,7 +341,7 @@ namespace TestApp
 
         var expected = new DiagnosticResult("CHAIN001", DiagnosticSeverity.Error)
             .WithLocation(0)
-            .WithArguments("ConsumeInterfaceStep", "IUser", "Unit, MyInput, UnrelatedType");
+            .WithArguments("ConsumeInterfaceJunction", "IUser", "Unit, MyInput, UnrelatedType");
 
         var test = CreateTest(source, expected);
         await test.RunAsync();
@@ -362,16 +362,16 @@ namespace TestApp
     public class User { }
     public class Order { }
 
-    public class ProduceUserStep : Trax.Core.Step.IStep<string, User> { }
-    public class ProduceOrderStep : Trax.Core.Step.IStep<User, Order> { }
+    public class ProduceUserJunction : Trax.Core.Junction.IJunction<string, User> { }
+    public class ProduceOrderJunction : Trax.Core.Junction.IJunction<User, Order> { }
 
     public class TestTrain : Trax.Core.Train.Train<string, (User, Order)>
     {
         public void Run(string input)
         {
             Activate(input)
-                .Chain<ProduceUserStep>()
-                .Chain<ProduceOrderStep>()
+                .Chain<ProduceUserJunction>()
+                .Chain<ProduceOrderJunction>()
                 .Resolve();
         }
     }
@@ -393,15 +393,15 @@ namespace TestApp
     public class User { }
     public class Order { }
 
-    public class ProduceUserStep : Trax.Core.Step.IStep<MyInput, User> { }
-    // Note: no step produces Order
+    public class ProduceUserJunction : Trax.Core.Junction.IJunction<MyInput, User> { }
+    // Note: no junction produces Order
 
     public class TestTrain : Trax.Core.Train.Train<MyInput, (User, Order)>
     {
         public void Run(MyInput input)
         {
             Activate(input)
-                .Chain<ProduceUserStep>()
+                .Chain<ProduceUserJunction>()
                 .{|#0:Resolve()|};
         }
     }
@@ -430,7 +430,7 @@ namespace TestApp
     public interface IRepository { }
     public class Result { }
 
-    public class ConsumeRepoStep : Trax.Core.Step.IStep<IRepository, Result> { }
+    public class ConsumeRepoJunction : Trax.Core.Junction.IJunction<IRepository, Result> { }
 
     public class TestTrain : Trax.Core.Train.Train<string, Result>
     {
@@ -438,7 +438,7 @@ namespace TestApp
         {
             Activate(input)
                 .AddServices<IRepository>()
-                .Chain<ConsumeRepoStep>()
+                .Chain<ConsumeRepoJunction>()
                 .Resolve();
         }
     }
@@ -456,10 +456,10 @@ namespace TestApp
             + @"
 namespace TestApp
 {
-    public interface IProduceResult : Trax.Core.Step.IStep<string, Result> { }
+    public interface IProduceResult : Trax.Core.Junction.IJunction<string, Result> { }
     public class Result { }
 
-    public class ConsumeResultStep : Trax.Core.Step.IStep<Result, LanguageExt.Unit> { }
+    public class ConsumeResultJunction : Trax.Core.Junction.IJunction<Result, LanguageExt.Unit> { }
 
     public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
     {
@@ -467,7 +467,7 @@ namespace TestApp
         {
             Activate(input)
                 .IChain<IProduceResult>()
-                .Chain<ConsumeResultStep>()
+                .Chain<ConsumeResultJunction>()
                 .Resolve();
         }
     }
@@ -488,17 +488,17 @@ namespace TestApp
     public class Container { }
     public class Inner { }
 
-    public class ProduceContainerStep : Trax.Core.Step.IStep<string, Container> { }
-    public class ConsumeInnerStep : Trax.Core.Step.IStep<Inner, LanguageExt.Unit> { }
+    public class ProduceContainerJunction : Trax.Core.Junction.IJunction<string, Container> { }
+    public class ConsumeInnerJunction : Trax.Core.Junction.IJunction<Inner, LanguageExt.Unit> { }
 
     public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
     {
         public void Run(string input)
         {
             Activate(input)
-                .Chain<ProduceContainerStep>()
+                .Chain<ProduceContainerJunction>()
                 .Extract<Container, Inner>()
-                .Chain<ConsumeInnerStep>()
+                .Chain<ConsumeInnerJunction>()
                 .Resolve();
         }
     }
@@ -523,14 +523,14 @@ namespace TestApp
     public class OrderRequest { }
     public class OrderResult { }
 
-    public class ProcessOrderStep : Trax.Core.Step.IStep<OrderRequest, OrderResult> { }
+    public class ProcessOrderJunction : Trax.Core.Junction.IJunction<OrderRequest, OrderResult> { }
 
     public class TestTrain : Trax.Core.Train.Train<OrderRequest, OrderResult>
     {
         public void Run(OrderRequest input)
         {
             Activate(input)
-                .ShortCircuit<ProcessOrderStep>()
+                .ShortCircuit<ProcessOrderJunction>()
                 .Resolve();
         }
     }
@@ -552,14 +552,14 @@ namespace TestApp
     public class NeedsSpecial { }
     public class Result { }
 
-    public class BadStep : Trax.Core.Step.IStep<NeedsSpecial, Result> { }
+    public class BadJunction : Trax.Core.Junction.IJunction<NeedsSpecial, Result> { }
 
     public class TestTrain : Trax.Core.Train.Train<MyInput, Result>
     {
         public void Run(MyInput input)
         {
             Activate(input)
-                .{|#0:ShortCircuit<BadStep>()|}
+                .{|#0:ShortCircuit<BadJunction>()|}
                 .Resolve();
         }
     }
@@ -567,7 +567,7 @@ namespace TestApp
 
         var expected = new DiagnosticResult("CHAIN001", DiagnosticSeverity.Error)
             .WithLocation(0)
-            .WithArguments("BadStep", "NeedsSpecial", "Unit, MyInput");
+            .WithArguments("BadJunction", "NeedsSpecial", "Unit, MyInput");
 
         var test = CreateTest(source, expected);
         await test.RunAsync();
@@ -585,16 +585,16 @@ namespace TestApp
     public class Validated { }
     public class Receipt { }
 
-    public class ValidateStep : Trax.Core.Step.IStep<OrderRequest, Validated> { }
-    public class CacheCheckStep : Trax.Core.Step.IStep<OrderRequest, Receipt> { }
+    public class ValidateJunction : Trax.Core.Junction.IJunction<OrderRequest, Validated> { }
+    public class CacheCheckJunction : Trax.Core.Junction.IJunction<OrderRequest, Receipt> { }
 
     public class TestTrain : Trax.Core.Train.Train<OrderRequest, Receipt>
     {
         public void Run(OrderRequest input)
         {
             Activate(input)
-                .ShortCircuit<CacheCheckStep>()
-                .Chain<ValidateStep>()
+                .ShortCircuit<CacheCheckJunction>()
+                .Chain<ValidateJunction>()
                 .Resolve();
         }
     }
@@ -616,14 +616,14 @@ namespace TestApp
     public class Intermediate { }
     public class Receipt { }
 
-    public class MissStep : Trax.Core.Step.IStep<OrderRequest, Intermediate> { }
+    public class MissJunction : Trax.Core.Junction.IJunction<OrderRequest, Intermediate> { }
 
     public class TestTrain : Trax.Core.Train.Train<OrderRequest, Receipt>
     {
         public void Run(OrderRequest input)
         {
             Activate(input)
-                .ShortCircuit<MissStep>()
+                .ShortCircuit<MissJunction>()
                 .{|#0:Resolve()|};
         }
     }
@@ -649,16 +649,16 @@ namespace TestApp
     public class CachedData { }
     public class FinalResult { }
 
-    public class CacheStep : Trax.Core.Step.IStep<OrderRequest, CachedData> { }
-    public class ProcessStep : Trax.Core.Step.IStep<CachedData, FinalResult> { }
+    public class CacheJunction : Trax.Core.Junction.IJunction<OrderRequest, CachedData> { }
+    public class ProcessJunction : Trax.Core.Junction.IJunction<CachedData, FinalResult> { }
 
     public class TestTrain : Trax.Core.Train.Train<OrderRequest, FinalResult>
     {
         public void Run(OrderRequest input)
         {
             Activate(input)
-                .ShortCircuit<CacheStep>()
-                .Chain<ProcessStep>()
+                .ShortCircuit<CacheJunction>()
+                .Chain<ProcessJunction>()
                 .Resolve();
         }
     }
@@ -679,16 +679,16 @@ namespace TestApp
     public class User { }
     public class Order { }
 
-    public class ProducePairStep : Trax.Core.Step.IStep<string, (User, Order)> { }
-    public class ConsumeUserStep : Trax.Core.Step.IStep<User, LanguageExt.Unit> { }
+    public class ProducePairJunction : Trax.Core.Junction.IJunction<string, (User, Order)> { }
+    public class ConsumeUserJunction : Trax.Core.Junction.IJunction<User, LanguageExt.Unit> { }
 
     public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
     {
         public void Run(string input)
         {
             Activate(input)
-                .ShortCircuit<ProducePairStep>()
-                .Chain<ConsumeUserStep>()
+                .ShortCircuit<ProducePairJunction>()
+                .Chain<ConsumeUserJunction>()
                 .Resolve();
         }
     }
@@ -727,7 +727,7 @@ namespace TestApp
     }
 
     [Test]
-    public async Task Activate_OtherInputs_SatisfiesStepInput_NoDiagnostics()
+    public async Task Activate_OtherInputs_SatisfiesJunctionInput_NoDiagnostics()
     {
         var source =
             StubTypes
@@ -738,14 +738,14 @@ namespace TestApp
     public class ExtraService { }
     public class Result { }
 
-    public class NeedsServiceStep : Trax.Core.Step.IStep<ExtraService, Result> { }
+    public class NeedsServiceJunction : Trax.Core.Junction.IJunction<ExtraService, Result> { }
 
     public class TestTrain : Trax.Core.Train.Train<MyInput, Result>
     {
         public void Run(MyInput input, ExtraService svc)
         {
             Activate(input, svc)
-                .Chain<NeedsServiceStep>()
+                .Chain<NeedsServiceJunction>()
                 .Resolve();
         }
     }
@@ -768,14 +768,14 @@ namespace TestApp
     public class ConcreteService : IService { }
     public class Result { }
 
-    public class NeedsInterfaceStep : Trax.Core.Step.IStep<IService, Result> { }
+    public class NeedsInterfaceJunction : Trax.Core.Junction.IJunction<IService, Result> { }
 
     public class TestTrain : Trax.Core.Train.Train<MyInput, Result>
     {
         public void Run(MyInput input, ConcreteService svc)
         {
             Activate(input, svc)
-                .Chain<NeedsInterfaceStep>()
+                .Chain<NeedsInterfaceJunction>()
                 .Resolve();
         }
     }
@@ -798,14 +798,14 @@ namespace TestApp
     public class ServiceB { }
     public class Result { }
 
-    public class NeedsBothStep : Trax.Core.Step.IStep<(ServiceA, ServiceB), Result> { }
+    public class NeedsBothJunction : Trax.Core.Junction.IJunction<(ServiceA, ServiceB), Result> { }
 
     public class TestTrain : Trax.Core.Train.Train<MyInput, Result>
     {
         public void Run(MyInput input, ServiceA a, ServiceB b)
         {
             Activate(input, a, b)
-                .Chain<NeedsBothStep>()
+                .Chain<NeedsBothJunction>()
                 .Resolve();
         }
     }

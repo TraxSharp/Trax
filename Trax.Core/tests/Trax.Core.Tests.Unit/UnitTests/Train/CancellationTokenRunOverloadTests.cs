@@ -1,7 +1,7 @@
 using FluentAssertions;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
@@ -73,11 +73,11 @@ public class CancellationTokenRunOverloadTests : TestSetup
         // Arrange
         using var cts = new CancellationTokenSource();
         cts.Cancel();
-        var step = new CountingStep();
-        var train = new StepTrain(step);
+        var junction = new CountingJunction();
+        var train = new JunctionTrain(junction);
 
         // Act & Assert — Chain uses Task.Run().Result which wraps
-        // OperationCanceledException; verify the step was never executed
+        // OperationCanceledException; verify the junction was never executed
         Exception? caught = null;
         try
         {
@@ -89,7 +89,7 @@ public class CancellationTokenRunOverloadTests : TestSetup
         }
 
         caught.Should().NotBeNull();
-        step.ExecutionCount.Should().Be(0);
+        junction.ExecutionCount.Should().Be(0);
     }
 
     #region Test Helpers
@@ -97,13 +97,13 @@ public class CancellationTokenRunOverloadTests : TestSetup
     private class SimpleTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> RunInternal(string input) =>
-            Activate(input).Chain(new ProcessStep()).Resolve();
+            Activate(input).Chain(new ProcessJunction()).Resolve();
     }
 
     private class FailingTrain : Train<string, string>
     {
         protected override async Task<Either<Exception, string>> RunInternal(string input) =>
-            Activate(input).Chain(new FailStep()).Resolve();
+            Activate(input).Chain(new FailJunction()).Resolve();
     }
 
     private class TokenCapturingTrain : Train<string, string>
@@ -117,28 +117,28 @@ public class CancellationTokenRunOverloadTests : TestSetup
         }
     }
 
-    private class StepTrain : Train<string, string>
+    private class JunctionTrain : Train<string, string>
     {
-        private readonly Step<string, string> _step;
+        private readonly Junction<string, string> _junction;
 
-        public StepTrain(Step<string, string> step) => _step = step;
+        public JunctionTrain(Junction<string, string> junction) => _junction = junction;
 
         protected override async Task<Either<Exception, string>> RunInternal(string input) =>
-            Activate(input).Chain(_step).Resolve();
+            Activate(input).Chain(_junction).Resolve();
     }
 
-    private class ProcessStep : Step<string, string>
+    private class ProcessJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input + "_processed");
     }
 
-    private class FailStep : Step<string, string>
+    private class FailJunction : Junction<string, string>
     {
         public override Task<string> Run(string input) =>
             throw new InvalidOperationException("test failure");
     }
 
-    private class CountingStep : Step<string, string>
+    private class CountingJunction : Junction<string, string>
     {
         public int ExecutionCount { get; private set; }
 

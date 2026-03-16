@@ -1,14 +1,14 @@
 using FluentAssertions;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
 public class ChainTests : TestSetup
 {
-    // Chain<TStep, TIn, TOut>(TStep, TIn, TOut)
+    // Chain<TJunction, TIn, TOut>(TJunction, TIn, TOut)
     [Theory]
     public async Task TestChainThreeTypes()
     {
@@ -18,7 +18,11 @@ public class ChainTests : TestSetup
         var train = new TestTrain().Activate(trainInput);
 
         // Act
-        train.Chain<TestStep, string, bool>(new TestStep(), stringInput, out var returnValue);
+        train.Chain<TestJunction, string, bool>(
+            new TestJunction(),
+            stringInput,
+            out var returnValue
+        );
 
         // Assert
         returnValue.IsRight.Should().BeTrue();
@@ -27,16 +31,20 @@ public class ChainTests : TestSetup
         train.Exception.Should().BeNull();
     }
 
-    // Chain<TStep, TIn, TOut>(TStep, TIn, TOut)
+    // Chain<TJunction, TIn, TOut>(TJunction, TIn, TOut)
     [Theory]
-    public async Task TestChainThreeTypesPreviousStepException()
+    public async Task TestChainThreeTypesPreviousJunctionException()
     {
         // Arrange
         var trainInput = 1;
         var train = new TestTrain().Activate(trainInput);
 
         // Act
-        train.Chain<TestStep, string, bool>(new TestStep(), new Exception(), out var returnValue);
+        train.Chain<TestJunction, string, bool>(
+            new TestJunction(),
+            new Exception(),
+            out var returnValue
+        );
 
         // Assert
         returnValue.IsLeft.Should().BeTrue();
@@ -44,9 +52,9 @@ public class ChainTests : TestSetup
         train.Exception.Should().NotBeNull();
     }
 
-    // Chain<TStep, TIn, TOut>(TStep, TIn, TOut)
+    // Chain<TJunction, TIn, TOut>(TJunction, TIn, TOut)
     [Theory]
-    public async Task TestChainThreeTypesStepException()
+    public async Task TestChainThreeTypesJunctionException()
     {
         // Arrange
         var trainInput = 1;
@@ -54,8 +62,8 @@ public class ChainTests : TestSetup
         var train = new TestTrain().Activate(trainInput);
 
         // Act
-        train.Chain<TestExceptionStep, string, bool>(
-            new TestExceptionStep(),
+        train.Chain<TestExceptionJunction, string, bool>(
+            new TestExceptionJunction(),
             stringInput,
             out var returnValue
         );
@@ -66,7 +74,7 @@ public class ChainTests : TestSetup
         train.Exception.Should().NotBeNull();
     }
 
-    // Chain<TStep, TIn, TOut>(TStep, TIn, TOut)
+    // Chain<TJunction, TIn, TOut>(TJunction, TIn, TOut)
     [Theory]
     public async Task TestChainThreeTypesTupleOutput()
     {
@@ -76,8 +84,8 @@ public class ChainTests : TestSetup
         var train = new TestTrain().Activate(trainInput);
 
         // Act
-        train.Chain<TestTupleOutputStep, string, (bool, char)>(
-            new TestTupleOutputStep(),
+        train.Chain<TestTupleOutputJunction, string, (bool, char)>(
+            new TestTupleOutputJunction(),
             stringInput,
             out var returnValue
         );
@@ -90,7 +98,7 @@ public class ChainTests : TestSetup
         train.Exception.Should().BeNull();
     }
 
-    // Chain<TStep, TIn, TOut>(TStep)
+    // Chain<TJunction, TIn, TOut>(TJunction)
     [Theory]
     public async Task TestChainThreeTypesOneInput()
     {
@@ -100,7 +108,7 @@ public class ChainTests : TestSetup
         var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        train.Chain<TestStep, string, bool>(new TestStep());
+        train.Chain<TestJunction, string, bool>(new TestJunction());
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -108,7 +116,7 @@ public class ChainTests : TestSetup
         train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
-    // Chain<TStep, TIn, TOut>(TIn, TOut)
+    // Chain<TJunction, TIn, TOut>(TIn, TOut)
     [Theory]
     public async Task TestChainThreeTypesTwoInputs()
     {
@@ -118,7 +126,7 @@ public class ChainTests : TestSetup
         var train = new TestTrain().Activate(input);
 
         // Act
-        train.Chain<TestStep, string, bool>(inputString, out var returnValue);
+        train.Chain<TestJunction, string, bool>(inputString, out var returnValue);
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -128,7 +136,7 @@ public class ChainTests : TestSetup
         returnValue.ValueUnsafe().Should().BeTrue();
     }
 
-    // Chain<TStep, TIn, TOut>()
+    // Chain<TJunction, TIn, TOut>()
     [Theory]
     public async Task TestChainThreeTypesNoInput()
     {
@@ -138,7 +146,7 @@ public class ChainTests : TestSetup
         var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        train.Chain<TestStep, string, bool>();
+        train.Chain<TestJunction, string, bool>();
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -146,18 +154,18 @@ public class ChainTests : TestSetup
         train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
-    // IChain<TStep>()
+    // IChain<TJunction>()
     [Theory]
     public async Task TestIChainOneTypeNoInput()
     {
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var testStep = (ITestStep)new TestStep();
-        var train = new TestTrain().Activate(input, inputString).AddServices(testStep);
+        var testJunction = (ITestJunction)new TestJunction();
+        var train = new TestTrain().Activate(input, inputString).AddServices(testJunction);
 
         // Act
-        train.IChain<ITestStep>();
+        train.IChain<ITestJunction>();
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -165,7 +173,7 @@ public class ChainTests : TestSetup
         train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
-    // IChain<TStep>()
+    // IChain<TJunction>()
     [Theory]
     public async Task TestInvalidIChainOneTypeNoInputNotInterface()
     {
@@ -175,14 +183,14 @@ public class ChainTests : TestSetup
         var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        train.IChain<TestStep>();
+        train.IChain<TestJunction>();
 
         // Assert
         train.Memory.Should().NotBeNull();
         train.Exception.Should().NotBeNull();
     }
 
-    // Chain<TStep>()
+    // Chain<TJunction>()
     [Theory]
     public async Task TestChainOneTypeNoInput()
     {
@@ -192,7 +200,7 @@ public class ChainTests : TestSetup
         var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        train.Chain<TestStep>();
+        train.Chain<TestJunction>();
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -200,18 +208,18 @@ public class ChainTests : TestSetup
         train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
-    // Chain<TStep>(TStep)
+    // Chain<TJunction>(TJunction)
     [Theory]
     public async Task TestChainOneTypeOneInput()
     {
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var testStep = new TestStep();
+        var testJunction = new TestJunction();
         var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        train.Chain<TestStep>(testStep);
+        train.Chain<TestJunction>(testJunction);
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -219,63 +227,63 @@ public class ChainTests : TestSetup
         train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
-    // Chain<TStep, TIn>(TStep, TIn)
+    // Chain<TJunction, TIn>(TJunction, TIn)
     [Theory]
     public async Task TestChainTwoTypeTwoInput()
     {
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var testStep = new TestUnitStep();
+        var testJunction = new TestUnitJunction();
         var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        train.Chain<TestUnitStep, string>(testStep, inputString);
+        train.Chain<TestUnitJunction, string>(testJunction, inputString);
 
         // Assert
         train.Memory.Should().NotBeNull();
         train.Exception.Should().BeNull();
     }
 
-    // Chain<TStep, TIn>(TStep, TIn)
+    // Chain<TJunction, TIn>(TJunction, TIn)
     [Theory]
     public async Task TestInvalidChainTwoTypeTwoInput()
     {
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var testStep = new TestUnitStep();
+        var testJunction = new TestUnitJunction();
         var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        train.Chain<TestUnitStep, string>(testStep, new Exception());
+        train.Chain<TestUnitJunction, string>(testJunction, new Exception());
 
         // Assert
         train.Memory.Should().NotBeNull();
         train.Exception.Should().NotBeNull();
     }
 
-    // Chain<TStep, TIn>(TStep)
+    // Chain<TJunction, TIn>(TJunction)
     [Theory]
     public async Task TestChainTwoTypeOneInput()
     {
         // Arrange
         var input = 1;
         var inputString = "hello";
-        var testStep = new TestUnitStep();
+        var testJunction = new TestUnitJunction();
         var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        train.Chain<TestUnitStep, string>(testStep);
+        train.Chain<TestUnitJunction, string>(testJunction);
 
         // Assert
         train.Memory.Should().NotBeNull();
         train.Exception.Should().BeNull();
     }
 
-    // Chain<TStep, TIn>(TIn)
+    // Chain<TJunction, TIn>(TIn)
     [Theory]
-    public async Task TestChainTwoTypeOnePreviousStepInput()
+    public async Task TestChainTwoTypeOnePreviousJunctionInput()
     {
         // Arrange
         var input = 1;
@@ -283,30 +291,30 @@ public class ChainTests : TestSetup
         var train = new TestTrain().Activate(input);
 
         // Act
-        train.Chain<TestUnitStep, string>(inputString);
+        train.Chain<TestUnitJunction, string>(inputString);
 
         // Assert
         train.Memory.Should().NotBeNull();
         train.Exception.Should().BeNull();
     }
 
-    // Chain<TStep, TIn>(TIn)
+    // Chain<TJunction, TIn>(TIn)
     [Theory]
-    public async Task TestInvalidChainTwoTypeOnePreviousStepInput()
+    public async Task TestInvalidChainTwoTypeOnePreviousJunctionInput()
     {
         // Arrange
         var input = 1;
         var train = new TestTrain().Activate(input);
 
         // Act
-        train.Chain<TestUnitStep, string>(new Exception());
+        train.Chain<TestUnitJunction, string>(new Exception());
 
         // Assert
         train.Memory.Should().NotBeNull();
         train.Exception.Should().NotBeNull();
     }
 
-    // Chain<TStep, TIn>()
+    // Chain<TJunction, TIn>()
     [Theory]
     public async Task TestChainTwoTypeNoInput()
     {
@@ -316,34 +324,34 @@ public class ChainTests : TestSetup
         var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        train.Chain<TestUnitStep, string>();
+        train.Chain<TestUnitJunction, string>();
 
         // Assert
         train.Memory.Should().NotBeNull();
         train.Exception.Should().BeNull();
     }
 
-    private class TestTupleOutputStep : Step<string, (bool, char)>
+    private class TestTupleOutputJunction : Junction<string, (bool, char)>
     {
         public override async Task<(bool, char)> Run(string input) =>
             (input.Equals("hello"), input.First());
     }
 
-    private class TestExceptionStep : Step<string, bool>
+    private class TestExceptionJunction : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => throw new NotImplementedException();
     }
 
-    private interface ITestUnitStep : IStep<string, LanguageExt.Unit>;
+    private interface ITestUnitJunction : IJunction<string, LanguageExt.Unit>;
 
-    private class TestUnitStep : Step<string, LanguageExt.Unit>, ITestUnitStep
+    private class TestUnitJunction : Junction<string, LanguageExt.Unit>, ITestUnitJunction
     {
         public override async Task<LanguageExt.Unit> Run(string input) => LanguageExt.Unit.Default;
     }
 
-    private interface ITestStep : IStep<string, bool> { }
+    private interface ITestJunction : IJunction<string, bool> { }
 
-    private class TestStep : Step<string, bool>, ITestStep
+    private class TestJunction : Junction<string, bool>, ITestJunction
     {
         public override async Task<bool> Run(string input) => input.Equals("hello");
     }

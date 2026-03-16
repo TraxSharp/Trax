@@ -1,7 +1,7 @@
 using FluentAssertions;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
@@ -13,12 +13,16 @@ public class ShortCircuitTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var testStep = new TestStep();
+        var testJunction = new TestJunction();
         var inputString = "hello";
         var train = new TestTrain().Activate(input);
 
         // Act
-        train.ShortCircuitChain<TestStep, string, bool>(testStep, inputString, out var returnValue);
+        train.ShortCircuitChain<TestJunction, string, bool>(
+            testJunction,
+            inputString,
+            out var returnValue
+        );
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -33,13 +37,13 @@ public class ShortCircuitTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var testStep = new TestTupleOutputStep();
+        var testJunction = new TestTupleOutputJunction();
         var inputString = "hello";
         var train = new TestTrain().Activate(input);
 
         // Act
-        train.ShortCircuitChain<TestTupleOutputStep, string, (bool, char)>(
-            testStep,
+        train.ShortCircuitChain<TestTupleOutputJunction, string, (bool, char)>(
+            testJunction,
             inputString,
             out var returnValue
         );
@@ -58,13 +62,13 @@ public class ShortCircuitTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var testStep = new TestExceptionStep();
+        var testJunction = new TestExceptionJunction();
         var inputString = "hello";
         var train = new TestTrain().Activate(input);
 
         // Act
-        train.ShortCircuitChain<TestExceptionStep, string, bool>(
-            testStep,
+        train.ShortCircuitChain<TestExceptionJunction, string, bool>(
+            testJunction,
             inputString,
             out var returnValue
         );
@@ -86,7 +90,7 @@ public class ShortCircuitTests : TestSetup
         var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        train.ShortCircuit<TestStepStringOutput>();
+        train.ShortCircuit<TestJunctionStringOutput>();
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -102,7 +106,7 @@ public class ShortCircuitTests : TestSetup
         var train = new TestTrain().Activate(input);
 
         // Act
-        train.ShortCircuit<TestStepStringOutput>();
+        train.ShortCircuit<TestJunctionStringOutput>();
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -110,37 +114,37 @@ public class ShortCircuitTests : TestSetup
     }
 
     [Theory]
-    public async Task TestValidOptionStepTest()
+    public async Task TestValidOptionJunctionTest()
     {
         // Arrange
         var input = new Option<object>();
         var train = new TestTrainOption().Activate(input);
 
         // Act
-        train.ShortCircuit<TestOptionStepTest>();
+        train.ShortCircuit<TestOptionJunctionTest>();
 
         // Assert
         train.Memory.Should().NotBeNull();
         train.Exception.Should().BeNull();
     }
 
-    private class TestExceptionStep : Step<string, bool>
+    private class TestExceptionJunction : Junction<string, bool>
     {
         public override Task<bool> Run(string input) => throw new NotImplementedException();
     }
 
-    private class TestTupleOutputStep : Step<string, (bool, char)>
+    private class TestTupleOutputJunction : Junction<string, (bool, char)>
     {
         public override async Task<(bool, char)> Run(string input) =>
             (input.Equals("hello"), input.First());
     }
 
-    private class TestStep : Step<string, bool>
+    private class TestJunction : Junction<string, bool>
     {
         public override async Task<bool> Run(string input) => input.Equals("hello");
     }
 
-    private class TestStepStringOutput : Step<string, string>
+    private class TestJunctionStringOutput : Junction<string, string>
     {
         public override async Task<string> Run(string input) => input + "world";
     }
@@ -151,7 +155,7 @@ public class ShortCircuitTests : TestSetup
             throw new NotImplementedException();
     }
 
-    public class TestOptionStepTest : Step<Option<object>, string>
+    public class TestOptionJunctionTest : Junction<Option<object>, string>
     {
         public override async Task<string> Run(Option<object> input)
         {

@@ -15,7 +15,7 @@ public class TrainExceptionDataTests : TestSetup
             TrainName = "MyTrain",
             TrainExternalId = "ext-123",
             Type = "InvalidOperationException",
-            Step = "ValidateInput",
+            Junction = "ValidateInput",
             Message = "Input was null",
         };
 
@@ -28,7 +28,7 @@ public class TrainExceptionDataTests : TestSetup
         deserialized!.TrainName.Should().Be("MyTrain");
         deserialized.TrainExternalId.Should().Be("ext-123");
         deserialized.Type.Should().Be("InvalidOperationException");
-        deserialized.Step.Should().Be("ValidateInput");
+        deserialized.Junction.Should().Be("ValidateInput");
         deserialized.Message.Should().Be("Input was null");
     }
 
@@ -41,7 +41,7 @@ public class TrainExceptionDataTests : TestSetup
             TrainName = "Test",
             TrainExternalId = "id",
             Type = "Exception",
-            Step = "Step",
+            Junction = "Junction",
             Message = "msg",
         };
 
@@ -52,7 +52,7 @@ public class TrainExceptionDataTests : TestSetup
         json.Should().Contain("\"trainName\"");
         json.Should().Contain("\"trainExternalId\"");
         json.Should().Contain("\"type\"");
-        json.Should().Contain("\"step\"");
+        json.Should().Contain("\"junction\"");
         json.Should().Contain("\"message\"");
         // Should NOT contain PascalCase property names
         json.Should().NotContain("\"TrainName\"");
@@ -68,7 +68,7 @@ public class TrainExceptionDataTests : TestSetup
             TrainName = "Test",
             TrainExternalId = "id",
             Type = "Exception",
-            Step = "Step",
+            Junction = "Junction",
             Message = "Line1\nLine2\tTabbed \"quoted\" <html>",
         };
 
@@ -85,7 +85,7 @@ public class TrainExceptionDataTests : TestSetup
     {
         // Arrange
         var json =
-            """{"trainName":"HelloTrain","trainExternalId":"abc-456","type":"ArgumentException","step":"ParseStep","message":"bad arg"}""";
+            """{"trainName":"HelloTrain","trainExternalId":"abc-456","type":"ArgumentException","junction":"ParseJunction","message":"bad arg"}""";
 
         // Act
         var data = JsonSerializer.Deserialize<TrainExceptionData>(json);
@@ -95,7 +95,7 @@ public class TrainExceptionDataTests : TestSetup
         data!.TrainName.Should().Be("HelloTrain");
         data.TrainExternalId.Should().Be("abc-456");
         data.Type.Should().Be("ArgumentException");
-        data.Step.Should().Be("ParseStep");
+        data.Junction.Should().Be("ParseJunction");
         data.Message.Should().Be("bad arg");
     }
 }

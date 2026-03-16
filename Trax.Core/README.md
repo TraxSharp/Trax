@@ -28,7 +28,7 @@ public async Task<OrderReceipt> ProcessOrder(OrderRequest request)
 }
 ```
 
-Every step needs its own null check, error branch, and early return. The business logic — check inventory, charge payment, create shipment — gets lost in the noise.
+Every junction needs its own null check, error branch, and early return. The business logic — check inventory, charge payment, create shipment — gets lost in the noise.
 
 ## With Trax.Core
 
@@ -37,14 +37,14 @@ public class ProcessOrderTrain : Train<OrderRequest, OrderReceipt>
 {
     protected override async Task<Either<Exception, OrderReceipt>> RunInternal(OrderRequest input)
         => Activate(input)
-            .Chain<CheckInventoryStep>()
-            .Chain<ChargePaymentStep>()
-            .Chain<CreateShipmentStep>()
+            .Chain<CheckInventoryJunction>()
+            .Chain<ChargePaymentJunction>()
+            .Chain<CreateShipmentJunction>()
             .Resolve();
 }
 ```
 
-A train departs with its cargo (`Activate`), visits each stop along the route (`.Chain<T>`), and arrives at its destination (`Resolve`). If `CheckInventoryStep` throws, the train derails — `ChargePaymentStep` and `CreateShipmentStep` are never reached. The exception propagates through the chain automatically.
+A train departs with its cargo (`Activate`), visits each stop along the route (`.Chain<T>`), and arrives at its destination (`Resolve`). If `CheckInventoryJunction` throws, the train derails — `ChargePaymentJunction` and `CreateShipmentJunction` are never reached. The exception propagates through the chain automatically.
 
 ```
 Main Track:     Input → [Stop 1] → [Stop 2] → [Stop 3] → Output
@@ -52,7 +52,7 @@ Main Track:     Input → [Stop 1] → [Stop 2] → [Stop 3] → Output
 Derailed:              Exception → [Skip]  → [Skip]  → Exception
 ```
 
-Each stop is its own class with its own dependencies, testable in isolation.
+Each junction is its own class with its own dependencies, testable in isolation.
 
 ## Installation
 
@@ -64,10 +64,10 @@ dotnet add package Trax.Core
 
 ## Quick Start
 
-**1. Define a stop.** Each step takes one type of cargo in and produces one type of cargo out:
+**1. Define a junction.** Each junction takes one type of cargo in and produces one type of cargo out:
 
 ```csharp
-public class ValidateEmailStep(IUserRepository repo) : Step<CreateUserRequest, Unit>
+public class ValidateEmailJunction(IUserRepository repo) : Junction<CreateUserRequest, Unit>
 {
     public override async Task<Unit> Run(CreateUserRequest input)
     {
@@ -80,21 +80,21 @@ public class ValidateEmailStep(IUserRepository repo) : Step<CreateUserRequest, U
 }
 ```
 
-**2. Build a route by chaining stops into a train:**
+**2. Build a route by chaining junctions into a train:**
 
 ```csharp
 public class CreateUserTrain : Train<CreateUserRequest, User>
 {
     protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
         => Activate(input)
-            .Chain<ValidateEmailStep>()
-            .Chain<CreateUserInDatabaseStep>()
-            .Chain<SendWelcomeEmailStep>()
+            .Chain<ValidateEmailJunction>()
+            .Chain<CreateUserInDatabaseJunction>()
+            .Chain<SendWelcomeEmailJunction>()
             .Resolve();
 }
 ```
 
-`Activate` loads the initial cargo and the train departs. At each stop, `.Chain<T>` picks up the cargo `T` needs from what the train is carrying, runs the step, and loads the output back on. `Resolve` unloads the final delivery at the destination.
+`Activate` loads the initial cargo and the train departs. At each stop, `.Chain<T>` picks up the cargo `T` needs from what the train is carrying, runs the junction, and loads the output back on. `Resolve` unloads the final delivery at the destination.
 
 The train carries all of this in **Memory** — a type-keyed store that accumulates as the train moves through its route. Each stop can use anything a previous stop produced.
 
@@ -114,12 +114,12 @@ Trax.Core ships with a Roslyn analyzer that validates your route at build time. 
 
 | Diagnostic | Meaning |
 |------------|---------|
-| **CHAIN001** | A stop expects cargo that isn't on the train at that point in the route |
+| **CHAIN001** | A junction expects cargo that isn't on the train at that point in the route |
 | **CHAIN002** | The train's final delivery type isn't on board when `Resolve()` is called |
 
 ## IDE Extensions
 
-Inlay hint extensions show `TIn → TOut` types inline for each `.Chain<TStep>()` call, so you can see what cargo flows through each stop at a glance.
+Inlay hint extensions show `TIn → TOut` types inline for each `.Chain<TJunction>()` call, so you can see what cargo flows through each stop at a glance.
 
 - **VSCode** — [Trax.Core Chain Hints](https://marketplace.visualstudio.com/items?itemName=Trax.Core.trax-hints) on the Marketplace
 - **Rider / ReSharper** — Search for **Trax.Core Chain Hints** in JetBrains Marketplace

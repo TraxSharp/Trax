@@ -6,20 +6,20 @@ namespace Trax.Core.Monad;
 /// <summary>
 /// The composable monadic computation context for Trax.Core.
 /// Returned by Train.Activate(), this class provides the fluent Chain/Resolve/Extract API
-/// for building Railway-oriented trains as a sequence of steps.
+/// for building Railway-oriented trains as a sequence of junctions.
 /// </summary>
 /// <typeparam name="TInput">The type of input the owning train accepts</typeparam>
 /// <typeparam name="TReturn">The type of result the owning train produces</typeparam>
 public partial class Monad<TInput, TReturn>
 {
     /// <summary>
-    /// Reference to the owning Train, used by steps for context (CancellationToken, ExternalId, type name).
+    /// Reference to the owning Train, used by junctions for context (CancellationToken, ExternalId, type name).
     /// </summary>
     internal Train<TInput, TReturn> Train { get; }
 
     /// <summary>
     /// The memory dictionary that stores all objects available to the chain.
-    /// This includes inputs, outputs of steps, and services.
+    /// This includes inputs, outputs of junctions, and services.
     /// Objects are stored by their Type, allowing for type-based retrieval.
     /// </summary>
     internal Dictionary<Type, object> Memory { get; private set; }
@@ -56,7 +56,7 @@ public partial class Monad<TInput, TReturn>
     }
 
     /// <summary>
-    /// Creates a Monad for a ServiceTrain (with ServiceProvider for step DI).
+    /// Creates a Monad for a ServiceTrain (with ServiceProvider for junction DI).
     /// </summary>
     internal Monad(
         Train<TInput, TReturn> train,

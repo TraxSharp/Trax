@@ -18,7 +18,7 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(
-            DiagnosticDescriptors.StepInputNotInMemory,
+            DiagnosticDescriptors.JunctionInputNotInMemory,
             DiagnosticDescriptors.ResolveTypeNotInMemory
         );
 
@@ -90,7 +90,7 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
                     break;
 
                 case "IChain":
-                    // Interface-based chaining resolves the step from Memory.
+                    // Interface-based chaining resolves the junction from Memory.
                     // Track the output type if possible.
                     HandleIChain(call, memory);
                     break;
@@ -115,17 +115,17 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
         MemorySimulator memory
     )
     {
-        // Get the TStep type argument from Chain<TStep>()
-        var stepType = GetSingleTypeArgument(call.Method);
-        if (stepType == null)
+        // Get the TJunction type argument from Chain<TJunction>()
+        var junctionType = GetSingleTypeArgument(call.Method);
+        if (junctionType == null)
             return;
 
-        // Resolve TIn/TOut from the step's IStep<TIn, TOut> interface
-        var stepTypes = StepTypeResolver.Resolve(stepType);
-        if (stepTypes == null)
+        // Resolve TIn/TOut from the step's IJunction<TIn, TOut> interface
+        var junctionTypes = JunctionTypeResolver.Resolve(junctionType);
+        if (junctionTypes == null)
             return;
 
-        var (tIn, tOut) = stepTypes.Value;
+        var (tIn, tOut) = junctionTypes.Value;
 
         // Check that TIn is available in Memory
         if (IsValueTuple(tIn))
@@ -137,9 +137,9 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
             if (missing.Count > 0)
             {
                 var diagnostic = Diagnostic.Create(
-                    DiagnosticDescriptors.StepInputNotInMemory,
+                    DiagnosticDescriptors.JunctionInputNotInMemory,
                     GetPreciseLocation(call.Invocation),
-                    stepType.Name,
+                    junctionType.Name,
                     tIn.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
                     memory.GetAvailableTypesString()
                 );
@@ -151,9 +151,9 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
             // Non-tuple: direct check. Interface inputs work automatically
             // because AddType now stores all interfaces alongside concrete types.
             var diagnostic = Diagnostic.Create(
-                DiagnosticDescriptors.StepInputNotInMemory,
+                DiagnosticDescriptors.JunctionInputNotInMemory,
                 GetPreciseLocation(call.Invocation),
-                stepType.Name,
+                junctionType.Name,
                 tIn.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
                 memory.GetAvailableTypesString()
             );
@@ -238,17 +238,17 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
 
     private static void HandleIChain(ChainCall call, MemorySimulator memory)
     {
-        // IChain<TStep>() — resolves a step from Memory by interface type.
+        // IChain<TJunction>() — resolves a step from Memory by interface type.
         // Try to get TIn/TOut from the interface to track the output.
-        var stepType = GetSingleTypeArgument(call.Method);
-        if (stepType == null)
+        var junctionType = GetSingleTypeArgument(call.Method);
+        if (junctionType == null)
             return;
 
-        var stepTypes = StepTypeResolver.Resolve(stepType);
-        if (stepTypes == null)
+        var junctionTypes = JunctionTypeResolver.Resolve(junctionType);
+        if (junctionTypes == null)
             return;
 
-        memory.AddType(stepTypes.Value.TOut);
+        memory.AddType(junctionTypes.Value.TOut);
     }
 
     private static void HandleExtract(ChainCall call, MemorySimulator memory)
@@ -307,16 +307,16 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// Gets the single type argument from a generic method like Chain&lt;TStep&gt;().
-    /// For the overload Chain&lt;TStep&gt;() that we care about, the method itself has
-    /// type arguments that get resolved via reflection at runtime. We need to find TStep
+    /// Gets the single type argument from a generic method like Chain&lt;TJunction&gt;().
+    /// For the overload Chain&lt;TJunction&gt;() that we care about, the method itself has
+    /// type arguments that get resolved via reflection at runtime. We need to find TJunction
     /// from the method's type arguments.
     /// </summary>
     private static INamedTypeSymbol? GetSingleTypeArgument(IMethodSymbol method)
     {
-        // Chain<TStep>() at the call site has its type arguments in TypeArguments.
-        // But the actual method signature may have more type parameters (TStep, TIn, TOut)
-        // that get inferred. We want the first one, which is always TStep.
+        // Chain<TJunction>() at the call site has its type arguments in TypeArguments.
+        // But the actual method signature may have more type parameters (TJunction, TIn, TOut)
+        // that get inferred. We want the first one, which is always TJunction.
         if (
             method.TypeArguments.Length >= 1
             && method.TypeArguments[0] is INamedTypeSymbol namedType
@@ -350,8 +350,8 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
 
     /// <summary>
     /// Gets a precise diagnostic location for a chained invocation.
-    /// For member access calls like .Chain&lt;StepB&gt;(), returns the span of just
-    /// "Chain&lt;StepB&gt;()" rather than the entire chain from Activate().
+    /// For member access calls like .Chain&lt;JunctionB&gt;(), returns the span of just
+    /// "Chain&lt;JunctionB&gt;()" rather than the entire chain from Activate().
     /// </summary>
     private static Location GetPreciseLocation(InvocationExpressionSyntax invocation)
     {

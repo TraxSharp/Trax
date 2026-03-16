@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using LanguageExt;
+using Trax.Core.Junction;
 using Trax.Core.Monad;
-using Trax.Core.Step;
 
 namespace Trax.Core.Utils;
 
@@ -14,47 +14,47 @@ namespace Trax.Core.Utils;
 internal static class ReflectionHelpers
 {
     /// <summary>
-    /// Cache for step type arguments (TIn, TOut) keyed by the step type.
-    /// Since a step's IStep&lt;TIn, TOut&gt; interface never changes, this is safe to cache statically.
+    /// Cache for junction type arguments (TIn, TOut) keyed by the junction type.
+    /// Since a junction's IJunction&lt;TIn, TOut&gt; interface never changes, this is safe to cache statically.
     /// </summary>
     private static readonly ConcurrentDictionary<
         Type,
         (Type TIn, Type TOut)
-    > StepTypeArgumentsCache = new();
+    > JunctionTypeArgumentsCache = new();
 
     /// <summary>
-    /// Cache for resolved generic MethodInfo instances, keyed by (ownerType, methodName, stepType, tIn, tOut, paramCount).
+    /// Cache for resolved generic MethodInfo instances, keyed by (ownerType, methodName, junctionType, tIn, tOut, paramCount).
     /// </summary>
     private static readonly ConcurrentDictionary<
-        (Type OwnerType, string MethodName, Type StepType, Type TIn, Type TOut, int ParamCount),
+        (Type OwnerType, string MethodName, Type JunctionType, Type TIn, Type TOut, int ParamCount),
         MethodInfo
     > GenericMethodCache = new();
 
     /// <summary>
-    /// Extracts the input and output type arguments from an IStep implementation.
-    /// Results are cached per step type for subsequent calls.
+    /// Extracts the input and output type arguments from an IJunction implementation.
+    /// Results are cached per junction type for subsequent calls.
     /// </summary>
-    /// <typeparam name="TStep">The step type</typeparam>
+    /// <typeparam name="TJunction">The junction type</typeparam>
     /// <returns>A tuple containing the input type and output type</returns>
-    /// <exception cref="InvalidOperationException">Thrown if TStep does not implement IStep&lt;TIn, TOut&gt;</exception>
-    internal static (Type, Type) ExtractStepTypeArguments<TStep>()
+    /// <exception cref="InvalidOperationException">Thrown if TJunction does not implement IJunction&lt;TIn, TOut&gt;</exception>
+    internal static (Type, Type) ExtractJunctionTypeArguments<TJunction>()
     {
-        var stepType = typeof(TStep);
+        var junctionType = typeof(TJunction);
 
-        if (StepTypeArgumentsCache.TryGetValue(stepType, out var cached))
+        if (JunctionTypeArgumentsCache.TryGetValue(junctionType, out var cached))
             return cached;
 
-        // Find the IStep<,> interface
-        var interfaceType = stepType
+        // Find the IJunction<,> interface
+        var interfaceType = junctionType
             .GetInterfaces()
             .FirstOrDefault(i =>
-                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IStep<,>)
+                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IJunction<,>)
             );
 
         if (interfaceType is null)
         {
             throw new InvalidOperationException(
-                $"{nameof(TStep)} does not implement IStep<TIn, TOut>."
+                $"{nameof(TJunction)} does not implement IJunction<TIn, TOut>."
             );
         }
 
@@ -62,16 +62,16 @@ internal static class ReflectionHelpers
         var types = interfaceType.GetGenericArguments();
         var result = (types[0], types[1]);
 
-        StepTypeArgumentsCache.TryAdd(stepType, result);
+        JunctionTypeArgumentsCache.TryAdd(junctionType, result);
 
         return result;
     }
 
     /// <summary>
     /// Finds the ShortCircuitChain method that matches the specified types and parameter count.
-    /// Results are cached per (monadType, stepType, tIn, tOut, paramCount) combination.
+    /// Results are cached per (monadType, junctionType, tIn, tOut, paramCount) combination.
     /// </summary>
-    internal static MethodInfo FindGenericChainInternalMethod<TStep, TInput, TReturn>(
+    internal static MethodInfo FindGenericChainInternalMethod<TJunction, TInput, TReturn>(
         Monad<TInput, TReturn> monad,
         Type tIn,
         Type tOut,
@@ -81,7 +81,7 @@ internal static class ReflectionHelpers
         var cacheKey = (
             monad.GetType(),
             "ShortCircuitChain",
-            typeof(TStep),
+            typeof(TJunction),
             tIn,
             tOut,
             parameterCount
@@ -114,23 +114,23 @@ internal static class ReflectionHelpers
                         throw new InvalidOperationException("Suitable 'Chain' method not found.");
                 }
 
-                return methods.First().MakeGenericMethod(typeof(TStep), tIn, tOut);
+                return methods.First().MakeGenericMethod(typeof(TJunction), tIn, tOut);
             }
         );
     }
 
     /// <summary>
     /// Finds the Chain method that matches the specified types and parameter count.
-    /// Results are cached per (monadType, stepType, tIn, tOut, paramCount) combination.
+    /// Results are cached per (monadType, junctionType, tIn, tOut, paramCount) combination.
     /// </summary>
-    internal static MethodInfo FindGenericChainMethod<TStep, TInput, TReturn>(
+    internal static MethodInfo FindGenericChainMethod<TJunction, TInput, TReturn>(
         Monad<TInput, TReturn> monad,
         Type tIn,
         Type tOut,
         int parameterCount
     )
     {
-        var cacheKey = (monad.GetType(), "Chain", typeof(TStep), tIn, tOut, parameterCount);
+        var cacheKey = (monad.GetType(), "Chain", typeof(TJunction), tIn, tOut, parameterCount);
 
         if (GenericMethodCache.TryGetValue(cacheKey, out var cached))
             return cached;
@@ -159,7 +159,7 @@ internal static class ReflectionHelpers
                         throw new InvalidOperationException("Suitable 'Chain' method not found.");
                 }
 
-                return methods.First().MakeGenericMethod(typeof(TStep), tIn, tOut);
+                return methods.First().MakeGenericMethod(typeof(TJunction), tIn, tOut);
             }
         );
     }

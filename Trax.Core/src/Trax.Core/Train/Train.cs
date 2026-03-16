@@ -20,7 +20,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     public string ExternalId { get; set; } = Guid.NewGuid().ToString("N");
 
     /// <summary>
-    /// The CancellationToken for this train execution. Steps can access this
+    /// The CancellationToken for this train execution. Junctions can access this
     /// via their own CancellationToken property which is set before Run is called.
     /// </summary>
     [JsonIgnore]
@@ -33,7 +33,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// <param name="input">The input data for the train</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests</param>
     /// <returns>The result produced by the train</returns>
-    /// <exception cref="Exception">Thrown if any step in the train fails</exception>
+    /// <exception cref="Exception">Thrown if any junction in the train fails</exception>
     public virtual async Task<TReturn> Run(
         TInput input,
         CancellationToken cancellationToken = default
@@ -65,7 +65,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     protected abstract Task<Either<Exception, TReturn>> RunInternal(TInput input);
 
     /// <summary>
-    /// Creates a composable Monad helper for chaining steps.
+    /// Creates a composable Monad helper for chaining junctions.
     /// This is typically the first method called in a train's RunInternal implementation.
     /// </summary>
     /// <param name="input">The primary input for the train</param>

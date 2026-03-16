@@ -3,12 +3,12 @@ using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Tests.Examples.Brewery;
-using Trax.Core.Tests.Examples.Brewery.Steps.Bottle;
-using Trax.Core.Tests.Examples.Brewery.Steps.Brew;
-using Trax.Core.Tests.Examples.Brewery.Steps.Ferment;
-using Trax.Core.Tests.Examples.Brewery.Steps.Prepare;
+using Trax.Core.Tests.Examples.Brewery.Junctions.Bottle;
+using Trax.Core.Tests.Examples.Brewery.Junctions.Brew;
+using Trax.Core.Tests.Examples.Brewery.Junctions.Ferment;
+using Trax.Core.Tests.Examples.Brewery.Junctions.Prepare;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Tests;
@@ -45,8 +45,8 @@ public class TrainTests : TestSetup
             Activate(input, "this is a test string to make sure it gets added to memory")
                 .Chain<IPrepare, Ingredients, BrewingJug>(prepare)
                 .Chain<Ferment, BrewingJug>()
-                .Chain<TwoTupleStepTest, (Ingredients, BrewingJug)>()
-                .Chain<ThreeTupleStepTest, (Ingredients, BrewingJug, Unit)>()
+                .Chain<TwoTupleJunctionTest, (Ingredients, BrewingJug)>()
+                .Chain<ThreeTupleJunctionTest, (Ingredients, BrewingJug, Unit)>()
                 .Chain<IBrew, BrewingJug>(brew)
                 .Chain<IBottle, BrewingJug, List<GlassBottle>>(bottle)
                 .Resolve();
@@ -64,8 +64,8 @@ public class TrainTests : TestSetup
                 .AddServices(ferment)
                 .Chain<Prepare>()
                 .Chain<Ferment>()
-                .Chain<TwoTupleStepTest>()
-                .Chain<ThreeTupleStepTest>()
+                .Chain<TwoTupleJunctionTest>()
+                .Chain<ThreeTupleJunctionTest>()
                 .Chain(brew)
                 .Chain<Bottle>()
                 .Resolve();
@@ -83,10 +83,10 @@ public class TrainTests : TestSetup
             return Activate(input, "this is a test string to make sure it gets added to memory")
                 .AddServices(ferment)
                 .Chain<PrepareWithInterface>()
-                .Chain<TwoTupleStepInterfaceTest>() // What we're really testing here
+                .Chain<TwoTupleJunctionInterfaceTest>() // What we're really testing here
                 .Chain<CastBrewingJug>()
                 .Chain<Ferment>()
-                .Chain<ThreeTupleStepTest>()
+                .Chain<ThreeTupleJunctionTest>()
                 .Chain(brew)
                 .Chain<Bottle>()
                 .Resolve();
@@ -102,8 +102,8 @@ public class TrainTests : TestSetup
             var brew = new Brew();
             var ferment = new Ferment();
 
-            // IFerment implements IStep and IFerment
-            // Normally, AddServices looks for the First Interface that is not IStep
+            // IFerment implements IJunction and IFerment
+            // Normally, AddServices looks for the First Interface that is not IJunction
             // This uses a Type argument to do a Service addition to find IFerment
             // (which is actually the second interface that it implements)
 
@@ -111,8 +111,8 @@ public class TrainTests : TestSetup
                 .AddServices<IFerment>(ferment)
                 .Chain<Prepare>()
                 .IChain<IFerment>()
-                .Chain<TwoTupleStepTest>()
-                .Chain<ThreeTupleStepTest>()
+                .Chain<TwoTupleJunctionTest>()
+                .Chain<ThreeTupleJunctionTest>()
                 .Chain(brew)
                 .Chain<Bottle>()
                 .Resolve();
@@ -129,8 +129,8 @@ public class TrainTests : TestSetup
             var ferment = new Ferment();
             var prepare = new Prepare(ferment);
 
-            // IFerment implements IStep and IFerment
-            // Normally, AddServices looks for the First Interface that is not IStep
+            // IFerment implements IJunction and IFerment
+            // Normally, AddServices looks for the First Interface that is not IJunction
             // This uses a Type argument to do a Service addition to find IFerment
             // (which is actually the second interface that it implements)
 
@@ -138,8 +138,8 @@ public class TrainTests : TestSetup
                 .AddServices<IPrepare, IFerment>(prepare, ferment)
                 .IChain<IPrepare>()
                 .IChain<IFerment>()
-                .Chain<TwoTupleStepTest>()
-                .Chain<ThreeTupleStepTest>()
+                .Chain<TwoTupleJunctionTest>()
+                .Chain<ThreeTupleJunctionTest>()
                 .Chain(brew)
                 .Chain<Bottle>()
                 .Resolve();
@@ -158,8 +158,8 @@ public class TrainTests : TestSetup
                 .AddServices(ferment)
                 .Chain<Prepare>()
                 .Chain<Ferment>()
-                .Chain<TwoTupleStepTest>()
-                .Chain<ThreeTupleStepTest>()
+                .Chain<TwoTupleJunctionTest>()
+                .Chain<ThreeTupleJunctionTest>()
                 .Chain(brew)
                 .Chain<Bottle>()
                 .Resolve();
@@ -170,7 +170,11 @@ public class TrainTests : TestSetup
     {
         protected override async Task<Either<Exception, (bool, double, object)>> RunInternal(
             (int, string, object) input
-        ) => Activate(input).Chain<TupleReturnStep>().ShortCircuit<TupleReturnStep>().Resolve();
+        ) =>
+            Activate(input)
+                .Chain<TupleReturnJunction>()
+                .ShortCircuit<TupleReturnJunction>()
+                .Resolve();
     }
 
     private class ChainTestWithUnitInput : Train<Ingredients, List<GlassBottle>>
@@ -186,8 +190,8 @@ public class TrainTests : TestSetup
                 .Chain<Meditate>()
                 .Chain<Prepare>()
                 .Chain<Ferment>()
-                .Chain<TwoTupleStepTest>()
-                .Chain<ThreeTupleStepTest>()
+                .Chain<TwoTupleJunctionTest>()
+                .Chain<ThreeTupleJunctionTest>()
                 .Chain(brew)
                 .Chain<Bottle>()
                 .Resolve();
@@ -206,8 +210,8 @@ public class TrainTests : TestSetup
                 .AddServices(prepare, ferment)
                 .IChain<IPrepare>()
                 .Chain<Ferment>()
-                .Chain<TwoTupleStepTest>()
-                .Chain<ThreeTupleStepTest>()
+                .Chain<TwoTupleJunctionTest>()
+                .Chain<ThreeTupleJunctionTest>()
                 .ShortCircuit<StealCinnamonAndRunAway>()
                 .Chain(brew)
                 .Chain<Bottle>()
@@ -228,8 +232,8 @@ public class TrainTests : TestSetup
                 .IChain<IPrepare>()
                 .ShortCircuit<TripTryingToSteal>()
                 .Chain<Ferment>()
-                .Chain<TwoTupleStepTest>()
-                .Chain<ThreeTupleStepTest>()
+                .Chain<TwoTupleJunctionTest>()
+                .Chain<ThreeTupleJunctionTest>()
                 .Chain(brew)
                 .Chain<Bottle>()
                 .Resolve();
@@ -274,12 +278,12 @@ public class TrainTests : TestSetup
         ) => Activate(input).Extract<OuterField, InnerField>().Resolve();
     }
 
-    private class StubFerment : Step<BrewingJug, Unit>, IFerment
+    private class StubFerment : Junction<BrewingJug, Unit>, IFerment
     {
         public override Task<Unit> Run(BrewingJug input) => Task.FromResult(Unit.Default);
     }
 
-    private class TwoTupleStepTest : Step<(Ingredients, BrewingJug), Unit>
+    private class TwoTupleJunctionTest : Junction<(Ingredients, BrewingJug), Unit>
     {
         public override async Task<Unit> Run((Ingredients, BrewingJug) input)
         {
@@ -295,7 +299,7 @@ public class TrainTests : TestSetup
     /// <summary>
     /// Tests to ensure that tuple casting to interface works correctly
     /// </summary>
-    private class TwoTupleStepInterfaceTest : Step<(Ingredients, IBrewingJug), Unit>
+    private class TwoTupleJunctionInterfaceTest : Junction<(Ingredients, IBrewingJug), Unit>
     {
         public override async Task<Unit> Run((Ingredients, IBrewingJug) input)
         {
@@ -308,7 +312,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class CastBrewingJug : Step<IBrewingJug, BrewingJug>
+    private class CastBrewingJug : Junction<IBrewingJug, BrewingJug>
     {
         public override async Task<BrewingJug> Run(IBrewingJug input)
         {
@@ -317,7 +321,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class TupleReturnStep : Step<Unit, (bool, double, object)>
+    private class TupleReturnJunction : Junction<Unit, (bool, double, object)>
     {
         public override async Task<(bool, double, object)> Run(Unit input)
         {
@@ -325,7 +329,7 @@ public class TrainTests : TestSetup
         }
     }
 
-    private class ThreeTupleStepTest : Step<(Ingredients, BrewingJug, Unit), Unit>
+    private class ThreeTupleJunctionTest : Junction<(Ingredients, BrewingJug, Unit), Unit>
     {
         public override async Task<Unit> Run((Ingredients, BrewingJug, Unit) input)
         {

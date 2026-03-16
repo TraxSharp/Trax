@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Trax.Core.Exceptions;
 
 /// <summary>
-/// Structured data about an exception that occurs within a train step.
+/// Structured data about an exception that occurs within a train junction.
 /// Used for serializing exception information with proper JSON escaping.
 /// </summary>
 public class TrainExceptionData
@@ -21,10 +21,10 @@ public class TrainExceptionData
     public required string Type { get; set; }
 
     /// <summary>
-    /// The name of the train step where the exception occurred.
+    /// The name of the train junction where the exception occurred.
     /// </summary>
-    [JsonPropertyName("step")]
-    public required string Step { get; set; }
+    [JsonPropertyName("junction")]
+    public required string Junction { get; set; }
 
     /// <summary>
     /// The error message from the original exception.

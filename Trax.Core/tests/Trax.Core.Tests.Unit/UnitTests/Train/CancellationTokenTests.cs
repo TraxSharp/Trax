@@ -1,6 +1,6 @@
 using FluentAssertions;
 using LanguageExt;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
@@ -35,45 +35,45 @@ public class CancellationTokenTests : TestSetup
     }
 
     [Theory]
-    public async Task Step_CancellationToken_IsSetFromTrain()
+    public async Task Junction_CancellationToken_IsSetFromTrain()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        var step = new TokenCapturingStep();
-        var train = new SingleStepTrain(step);
+        var junction = new TokenCapturingJunction();
+        var train = new SingleJunctionTrain(junction);
 
         // Act
         await train.Run("input", cts.Token);
 
         // Assert
-        step.CapturedToken.Should().Be(cts.Token);
+        junction.CapturedToken.Should().Be(cts.Token);
     }
 
     [Theory]
-    public async Task Step_CancellationToken_IsNone_WhenTrainCalledWithoutToken()
+    public async Task Junction_CancellationToken_IsNone_WhenTrainCalledWithoutToken()
     {
         // Arrange
-        var step = new TokenCapturingStep();
-        var train = new SingleStepTrain(step);
+        var junction = new TokenCapturingJunction();
+        var train = new SingleJunctionTrain(junction);
 
         // Act
         await train.Run("input");
 
         // Assert
-        step.CapturedToken.Should().Be(CancellationToken.None);
+        junction.CapturedToken.Should().Be(CancellationToken.None);
     }
 
     [Theory]
-    public async Task CancelledToken_BeforeStepExecution_ThrowsAndPreventsExecution()
+    public async Task CancelledToken_BeforeJunctionExecution_ThrowsAndPreventsExecution()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
         cts.Cancel();
-        var step = new CountingStep();
-        var train = new SingleStepTrain(step);
+        var junction = new CountingJunction();
+        var train = new SingleJunctionTrain(junction);
 
         // Act & Assert — Chain uses Task.Run().Result which may wrap the
-        // OperationCanceledException; verify the step was never executed
+        // OperationCanceledException; verify the junction was never executed
         Exception? caught = null;
         try
         {
@@ -86,19 +86,19 @@ public class CancellationTokenTests : TestSetup
 
         caught.Should().NotBeNull();
         HasCancellationException(caught!).Should().BeTrue();
-        step.ExecutionCount.Should().Be(0);
+        junction.ExecutionCount.Should().Be(0);
     }
 
     [Theory]
-    public async Task CancelledToken_BetweenSteps_SkipsSubsequentSteps()
+    public async Task CancelledToken_BetweenJunctions_SkipsSubsequentJunctions()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        var step1 = new CancellationTriggerStep(cts);
-        var step2 = new CountingStep();
-        var train = new TwoStepTrain(step1, step2);
+        var junction1 = new CancellationTriggerJunction(cts);
+        var junction2 = new CountingJunction();
+        var train = new TwoJunctionTrain(junction1, junction2);
 
-        // Act & Assert — step1 cancels the token; step2 should not run
+        // Act & Assert — junction1 cancels the token; junction2 should not run
         Exception? caught = null;
         try
         {
@@ -111,17 +111,17 @@ public class CancellationTokenTests : TestSetup
 
         caught.Should().NotBeNull();
         HasCancellationException(caught!).Should().BeTrue();
-        step1.ExecutionCount.Should().Be(1);
-        step2.ExecutionCount.Should().Be(0);
+        junction1.ExecutionCount.Should().Be(1);
+        junction2.ExecutionCount.Should().Be(0);
     }
 
     [Theory]
-    public async Task CancelledToken_DuringStep_PropagatesAsException()
+    public async Task CancelledToken_DuringJunction_PropagatesAsException()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        var step = new SlowStep();
-        var train = new SingleStepTrain(step);
+        var junction = new SlowJunction();
+        var train = new SingleJunctionTrain(junction);
 
         // Cancel after a short delay
         cts.CancelAfter(TimeSpan.FromMilliseconds(50));
@@ -147,10 +147,10 @@ public class CancellationTokenTests : TestSetup
         // Arrange
         using var cts = new CancellationTokenSource();
         cts.Cancel();
-        var step = new TokenCapturingStep();
-        var train = new SingleStepTrain(step);
+        var junction = new TokenCapturingJunction();
+        var train = new SingleJunctionTrain(junction);
 
-        // Act — the step never runs because the token is already cancelled
+        // Act — the junction never runs because the token is already cancelled
         Exception? caught = null;
         try
         {
@@ -163,7 +163,7 @@ public class CancellationTokenTests : TestSetup
 
         // Assert
         caught.Should().NotBeNull();
-        step.ExceptionData.Should().BeNull();
+        junction.ExceptionData.Should().BeNull();
     }
 
     /// <summary>
@@ -182,20 +182,20 @@ public class CancellationTokenTests : TestSetup
     }
 
     [Theory]
-    public async Task MultipleSteps_AllReceiveToken()
+    public async Task MultipleJunctions_AllReceiveToken()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        var step1 = new TokenCapturingStep();
-        var step2 = new TokenCapturingPassthroughStep();
-        var train = new TwoStepTrain(step1, step2);
+        var junction1 = new TokenCapturingJunction();
+        var junction2 = new TokenCapturingPassthroughJunction();
+        var train = new TwoJunctionTrain(junction1, junction2);
 
         // Act
         await train.Run("input", cts.Token);
 
         // Assert
-        step1.CapturedToken.Should().Be(cts.Token);
-        step2.CapturedToken.Should().Be(cts.Token);
+        junction1.CapturedToken.Should().Be(cts.Token);
+        junction2.CapturedToken.Should().Be(cts.Token);
     }
 
     #region Test Helpers
@@ -211,7 +211,7 @@ public class CancellationTokenTests : TestSetup
         }
     }
 
-    private class TokenCapturingStep : Step<string, string>
+    private class TokenCapturingJunction : Junction<string, string>
     {
         public CancellationToken CapturedToken { get; private set; }
 
@@ -222,7 +222,7 @@ public class CancellationTokenTests : TestSetup
         }
     }
 
-    private class TokenCapturingPassthroughStep : Step<string, string>
+    private class TokenCapturingPassthroughJunction : Junction<string, string>
     {
         public CancellationToken CapturedToken { get; private set; }
 
@@ -233,7 +233,7 @@ public class CancellationTokenTests : TestSetup
         }
     }
 
-    private class CountingStep : Step<string, string>
+    private class CountingJunction : Junction<string, string>
     {
         public int ExecutionCount { get; private set; }
 
@@ -244,12 +244,12 @@ public class CancellationTokenTests : TestSetup
         }
     }
 
-    private class CancellationTriggerStep : Step<string, string>
+    private class CancellationTriggerJunction : Junction<string, string>
     {
         private readonly CancellationTokenSource _cts;
         public int ExecutionCount { get; private set; }
 
-        public CancellationTriggerStep(CancellationTokenSource cts) => _cts = cts;
+        public CancellationTriggerJunction(CancellationTokenSource cts) => _cts = cts;
 
         public override Task<string> Run(string input)
         {
@@ -259,7 +259,7 @@ public class CancellationTokenTests : TestSetup
         }
     }
 
-    private class SlowStep : Step<string, string>
+    private class SlowJunction : Junction<string, string>
     {
         public override async Task<string> Run(string input)
         {
@@ -268,29 +268,32 @@ public class CancellationTokenTests : TestSetup
         }
     }
 
-    private class SingleStepTrain : Train<string, string>
+    private class SingleJunctionTrain : Train<string, string>
     {
-        private readonly Step<string, string> _step;
+        private readonly Junction<string, string> _junction;
 
-        public SingleStepTrain(Step<string, string> step) => _step = step;
+        public SingleJunctionTrain(Junction<string, string> junction) => _junction = junction;
 
         protected override async Task<Either<Exception, string>> RunInternal(string input) =>
-            Activate(input).Chain(_step).Resolve();
+            Activate(input).Chain(_junction).Resolve();
     }
 
-    private class TwoStepTrain : Train<string, string>
+    private class TwoJunctionTrain : Train<string, string>
     {
-        private readonly Step<string, string> _step1;
-        private readonly Step<string, string> _step2;
+        private readonly Junction<string, string> _junction1;
+        private readonly Junction<string, string> _junction2;
 
-        public TwoStepTrain(Step<string, string> step1, Step<string, string> step2)
+        public TwoJunctionTrain(
+            Junction<string, string> junction1,
+            Junction<string, string> junction2
+        )
         {
-            _step1 = step1;
-            _step2 = step2;
+            _junction1 = junction1;
+            _junction2 = junction2;
         }
 
         protected override async Task<Either<Exception, string>> RunInternal(string input) =>
-            Activate(input).Chain(_step1).Chain(_step2).Resolve();
+            Activate(input).Chain(_junction1).Chain(_junction2).Resolve();
     }
 
     #endregion

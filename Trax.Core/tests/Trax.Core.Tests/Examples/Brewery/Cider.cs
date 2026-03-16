@@ -1,9 +1,9 @@
 using LanguageExt;
 using Trax.Core.Exceptions;
-using Trax.Core.Tests.Examples.Brewery.Steps.Bottle;
-using Trax.Core.Tests.Examples.Brewery.Steps.Brew;
-using Trax.Core.Tests.Examples.Brewery.Steps.Ferment;
-using Trax.Core.Tests.Examples.Brewery.Steps.Prepare;
+using Trax.Core.Tests.Examples.Brewery.Junctions.Bottle;
+using Trax.Core.Tests.Examples.Brewery.Junctions.Brew;
+using Trax.Core.Tests.Examples.Brewery.Junctions.Ferment;
+using Trax.Core.Tests.Examples.Brewery.Junctions.Prepare;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Examples.Brewery;

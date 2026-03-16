@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
@@ -9,15 +9,15 @@ namespace Trax.Core.Monad;
 public partial class Monad<TInput, TReturn>
 {
     /// <summary>
-    /// Executes a step with short-circuit behavior, meaning that Left (exception) results
+    /// Executes a junction with short-circuit behavior, meaning that Left (exception) results
     /// are ignored and don't stop the chain.
     /// </summary>
-    internal Monad<TInput, TReturn> ShortCircuitChain<TStep, TIn, TOut>(
-        TStep step,
-        TIn previousStep,
+    internal Monad<TInput, TReturn> ShortCircuitChain<TJunction, TIn, TOut>(
+        TJunction junction,
+        TIn previousJunction,
         out Either<Exception, TOut> outVar
     )
-        where TStep : IStep<TIn, TOut>
+        where TJunction : IJunction<TIn, TOut>
     {
         // If there's already an exception, short-circuit
         if (Exception is not null)
@@ -26,8 +26,8 @@ public partial class Monad<TInput, TReturn>
             return this;
         }
 
-        // Execute the step directly without thread pool scheduling
-        var task = step.RailwayStep(previousStep, Train);
+        // Execute the junction directly without thread pool scheduling
+        var task = junction.RailwayJunction(previousJunction, Train);
         outVar = task.IsCompletedSuccessfully ? task.Result : task.GetAwaiter().GetResult();
 
         // We skip the Left for Short Circuiting - only process Right results
@@ -46,38 +46,37 @@ public partial class Monad<TInput, TReturn>
     }
 
     /// <summary>
-    /// Executes a step with short-circuit behavior, potentially ending the chain early
-    /// if the step returns a value of type TReturn.
+    /// Executes a junction with short-circuit behavior, potentially ending the chain early
+    /// if the junction returns a value of type TReturn.
     /// </summary>
-    public Monad<TInput, TReturn> ShortCircuit<TStep>()
-        where TStep : class
+    public Monad<TInput, TReturn> ShortCircuit<TJunction>()
+        where TJunction : class
     {
-        // Create an instance of the step
-        var stepInstance = this.InitializeStep<TStep, TInput, TReturn>();
+        // Create an instance of the junction
+        var junctionInstance = this.InitializeJunction<TJunction, TInput, TReturn>();
 
-        if (stepInstance is null)
+        if (junctionInstance is null)
             return this;
 
-        return ShortCircuit<TStep>(stepInstance);
+        return ShortCircuit<TJunction>(junctionInstance);
     }
 
     /// <summary>
-    /// Executes a step with short-circuit behavior, potentially ending the chain early
-    /// if the step returns a value of type TReturn.
+    /// Executes a junction with short-circuit behavior, potentially ending the chain early
+    /// if the junction returns a value of type TReturn.
     /// </summary>
-    public Monad<TInput, TReturn> ShortCircuit<TStep>(TStep stepInstance)
-        where TStep : class
+    public Monad<TInput, TReturn> ShortCircuit<TJunction>(TJunction junctionInstance)
+        where TJunction : class
     {
-        // Extract the input and output types from the step
-        var (tIn, tOut) = ReflectionHelpers.ExtractStepTypeArguments<TStep>();
+        // Extract the input and output types from the junction
+        var (tIn, tOut) = ReflectionHelpers.ExtractJunctionTypeArguments<TJunction>();
 
         // Find the appropriate ShortCircuitChain method to call
-        var chainMethod = ReflectionHelpers.FindGenericChainInternalMethod<TStep, TInput, TReturn>(
-            this,
-            tIn,
-            tOut,
-            3
-        );
+        var chainMethod = ReflectionHelpers.FindGenericChainInternalMethod<
+            TJunction,
+            TInput,
+            TReturn
+        >(this, tIn, tOut, 3);
 
         // Extract the input from Memory
         var input = MonadExtensions.ExtractTypeFromMemory(this, tIn);
@@ -88,12 +87,12 @@ public partial class Monad<TInput, TReturn>
             return this;
         }
 
-        // Execute the step
-        object[] parameters = [stepInstance, input, null!];
+        // Execute the junction
+        object[] parameters = [junctionInstance, input, null!];
         var result = chainMethod.Invoke(this, parameters);
         var outParam = parameters[2];
 
-        // If the step returns a value of type TReturn, set it as the ShortCircuitValue
+        // If the junction returns a value of type TReturn, set it as the ShortCircuitValue
         var maybeRightValue = ReflectionHelpers.GetRightFromDynamicEither(outParam);
         maybeRightValue.Iter(rightValue =>
         {

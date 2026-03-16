@@ -3,14 +3,14 @@ using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Tests;
 
 /// <summary>
 /// Tests to verify that JSON content in exception messages is properly escaped
-/// when exceptions are enriched with step information.
+/// when exceptions are enriched with junction information.
 /// </summary>
 public class JsonEscapingTests
 {
@@ -21,11 +21,11 @@ public class JsonEscapingTests
     }
 
     /// <summary>
-    /// Test step that throws an exception with JSON content in the message.
+    /// Test junction that throws an exception with JSON content in the message.
     /// This simulates the scenario described in the issue where a CybersourcePaymentsException
     /// contains JSON in its message.
     /// </summary>
-    private class TestStepWithJsonException : Step<string, string>
+    private class TestJunctionWithJsonException : Junction<string, string>
     {
         public override Task<string> Run(string input)
         {
@@ -38,18 +38,22 @@ public class JsonEscapingTests
     }
 
     [Test]
-    public async Task RailwayStep_WhenExceptionContainsJson_ShouldProduceValidJson()
+    public async Task RailwayJunction_WhenExceptionContainsJson_ShouldProduceValidJson()
     {
         // Arrange
-        var step = new TestStepWithJsonException();
+        var junction = new TestJunctionWithJsonException();
         var input = Either<Exception, string>.Right("test input");
         var train = new DummyTrain();
 
         // Act
-        var result = await step.RailwayStep(input, train);
+        var result = await junction.RailwayJunction(input, train);
 
         // Assert
-        Assert.That(result.IsLeft, Is.True, "Expected the step to fail and return Left(Exception)");
+        Assert.That(
+            result.IsLeft,
+            Is.True,
+            "Expected the junction to fail and return Left(Exception)"
+        );
 
         var exception = result.Swap().ValueUnsafe();
         var exceptionMessage = exception.Message;
@@ -64,7 +68,7 @@ public class JsonEscapingTests
         // Verify that we can deserialize the exception message
         var exceptionData = JsonSerializer.Deserialize<TrainExceptionData>(exceptionMessage);
         Assert.That(exceptionData, Is.Not.Null);
-        Assert.That(exceptionData.Step, Is.EqualTo("TestStepWithJsonException"));
+        Assert.That(exceptionData.Junction, Is.EqualTo("TestJunctionWithJsonException"));
         Assert.That(exceptionData.Type, Is.EqualTo("InvalidOperationException"));
 
         // Verify that the original JSON message is properly escaped within the message property
@@ -73,18 +77,22 @@ public class JsonEscapingTests
     }
 
     [Test]
-    public async Task RailwayStep_WhenExceptionContainsSpecialCharacters_ShouldProduceValidJson()
+    public async Task RailwayJunction_WhenExceptionContainsSpecialCharacters_ShouldProduceValidJson()
     {
         // Arrange
-        var step = new TestStepWithSpecialCharacters();
+        var junction = new TestJunctionWithSpecialCharacters();
         var input = Either<Exception, string>.Right("test input");
         var train = new DummyTrain();
 
         // Act
-        var result = await step.RailwayStep(input, train);
+        var result = await junction.RailwayJunction(input, train);
 
         // Assert
-        Assert.That(result.IsLeft, Is.True, "Expected the step to fail and return Left(Exception)");
+        Assert.That(
+            result.IsLeft,
+            Is.True,
+            "Expected the junction to fail and return Left(Exception)"
+        );
 
         var exception = result.Swap().ValueUnsafe();
         var exceptionMessage = exception.Message;
@@ -99,7 +107,7 @@ public class JsonEscapingTests
         // Verify that we can deserialize the exception message
         var exceptionData = JsonSerializer.Deserialize<TrainExceptionData>(exceptionMessage);
         Assert.That(exceptionData, Is.Not.Null);
-        Assert.That(exceptionData.Step, Is.EqualTo("TestStepWithSpecialCharacters"));
+        Assert.That(exceptionData.Junction, Is.EqualTo("TestJunctionWithSpecialCharacters"));
         Assert.That(exceptionData.Type, Is.EqualTo("InvalidOperationException"));
 
         // Verify that special characters are properly escaped
@@ -109,9 +117,9 @@ public class JsonEscapingTests
     }
 
     /// <summary>
-    /// Test step that throws an exception with special characters that need JSON escaping.
+    /// Test junction that throws an exception with special characters that need JSON escaping.
     /// </summary>
-    private class TestStepWithSpecialCharacters : Step<string, string>
+    private class TestJunctionWithSpecialCharacters : Junction<string, string>
     {
         public override Task<string> Run(string input)
         {

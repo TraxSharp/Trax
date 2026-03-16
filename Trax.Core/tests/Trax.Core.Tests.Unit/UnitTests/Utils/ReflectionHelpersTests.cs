@@ -1,6 +1,6 @@
 using FluentAssertions;
 using LanguageExt;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Utils;
@@ -8,10 +8,10 @@ namespace Trax.Core.Tests.Unit.UnitTests.Utils;
 public class ReflectionHelpersTests : TestSetup
 {
     [Theory]
-    public async Task ExtractStepTypeArguments_ValidStep_ReturnsTuple()
+    public async Task ExtractJunctionTypeArguments_ValidStep_ReturnsTuple()
     {
         // Act
-        var (tIn, tOut) = ReflectionHelpers.ExtractStepTypeArguments<TestStep>();
+        var (tIn, tOut) = ReflectionHelpers.ExtractJunctionTypeArguments<TestJunction>();
 
         // Assert
         tIn.Should().Be(typeof(string));
@@ -19,10 +19,10 @@ public class ReflectionHelpersTests : TestSetup
     }
 
     [Theory]
-    public async Task ExtractStepTypeArguments_NonStepType_ThrowsInvalidOperationException()
+    public async Task ExtractJunctionTypeArguments_NonStepType_ThrowsInvalidOperationException()
     {
         // Act & Assert
-        var act = () => ReflectionHelpers.ExtractStepTypeArguments<NotAStep>();
+        var act = () => ReflectionHelpers.ExtractJunctionTypeArguments<NotAJunction>();
         act.Should().Throw<InvalidOperationException>();
     }
 
@@ -54,12 +54,12 @@ public class ReflectionHelpersTests : TestSetup
 
     #region Test helpers
 
-    private class TestStep : Step<string, int>
+    private class TestJunction : Junction<string, int>
     {
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
     }
 
-    private class NotAStep { }
+    private class NotAJunction { }
 
     #endregion
 }

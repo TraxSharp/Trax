@@ -1,7 +1,7 @@
 using FluentAssertions;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
@@ -14,7 +14,7 @@ public class TrainSyncContextTests : TestSetup
 {
     /// <summary>
     /// Simulates an environment with a single-threaded SynchronizationContext
-    /// (like Blazor Server, WPF, or legacy ASP.NET). An async step that does NOT use
+    /// (like Blazor Server, WPF, or legacy ASP.NET). An async junction that does NOT use
     /// ConfigureAwait(false) would deadlock without the SynchronizationContext suppression
     /// in Chain, because the continuation tries to marshal back to the blocked thread.
     /// </summary>
@@ -32,14 +32,14 @@ public class TrainSyncContextTests : TestSetup
             var stepInput = "hello";
             var train = new TestTrain().Activate(trainInput);
 
-            // Act — chain a step that awaits WITHOUT ConfigureAwait(false)
-            train.Chain<AsyncStepWithoutConfigureAwait, string, int>(
-                new AsyncStepWithoutConfigureAwait(),
+            // Act — chain a junction that awaits WITHOUT ConfigureAwait(false)
+            train.Chain<AsyncJunctionWithoutConfigureAwait, string, int>(
+                new AsyncJunctionWithoutConfigureAwait(),
                 stepInput,
                 out var returnValue
             );
 
-            // Assert — step completed successfully, no deadlock
+            // Assert — junction completed successfully, no deadlock
             returnValue.IsRight.Should().BeTrue();
             returnValue.ValueUnsafe().Should().Be(stepInput.Length);
             train.Exception.Should().BeNull();
@@ -68,8 +68,8 @@ public class TrainSyncContextTests : TestSetup
             var train = new TestTrain().Activate(trainInput);
 
             // Act
-            train.Chain<AsyncStepWithoutConfigureAwait, string, int>(
-                new AsyncStepWithoutConfigureAwait(),
+            train.Chain<AsyncJunctionWithoutConfigureAwait, string, int>(
+                new AsyncJunctionWithoutConfigureAwait(),
                 stepInput,
                 out _
             );
@@ -84,11 +84,11 @@ public class TrainSyncContextTests : TestSetup
     }
 
     /// <summary>
-    /// Verifies SynchronizationContext is restored even when the step throws.
+    /// Verifies SynchronizationContext is restored even when the junction throws.
     /// </summary>
     [Theory]
     [CancelAfter(5000)]
-    public async Task ChainRestoresSyncContextOnStepException()
+    public async Task ChainRestoresSyncContextOnJunctionException()
     {
         // Arrange
         var syncContext = new SingleThreadSynchronizationContext();
@@ -101,8 +101,8 @@ public class TrainSyncContextTests : TestSetup
             var train = new TestTrain().Activate(trainInput);
 
             // Act
-            train.Chain<AsyncExceptionStep, string, int>(
-                new AsyncExceptionStep(),
+            train.Chain<AsyncExceptionJunction, string, int>(
+                new AsyncExceptionJunction(),
                 stepInput,
                 out var returnValue
             );
@@ -121,11 +121,11 @@ public class TrainSyncContextTests : TestSetup
     #region Test helpers
 
     /// <summary>
-    /// A step that uses Task.Delay (genuinely async) and does NOT use ConfigureAwait(false).
+    /// A junction that uses Task.Delay (genuinely async) and does NOT use ConfigureAwait(false).
     /// Without the SynchronizationContext suppression in Chain, this deadlocks in a
     /// single-threaded sync context.
     /// </summary>
-    private class AsyncStepWithoutConfigureAwait : Step<string, int>
+    private class AsyncJunctionWithoutConfigureAwait : Junction<string, int>
     {
         public override async Task<int> Run(string input)
         {
@@ -136,9 +136,9 @@ public class TrainSyncContextTests : TestSetup
     }
 
     /// <summary>
-    /// An async step that throws after an await, without ConfigureAwait(false).
+    /// An async junction that throws after an await, without ConfigureAwait(false).
     /// </summary>
-    private class AsyncExceptionStep : Step<string, int>
+    private class AsyncExceptionJunction : Junction<string, int>
     {
         public override async Task<int> Run(string input)
         {

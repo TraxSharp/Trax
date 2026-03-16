@@ -16,7 +16,7 @@ namespace Trax.Core.Extensions;
 public static class MonadExtensions
 {
     /// <summary>
-    /// Cache for step constructor info and parameter types, keyed by step type.
+    /// Cache for junction constructor info and parameter types, keyed by junction type.
     /// </summary>
     private static readonly ConcurrentDictionary<
         Type,
@@ -24,15 +24,17 @@ public static class MonadExtensions
     > ConstructorCache = new();
 
     /// <summary>
-    /// Initializes a step instance by extracting its constructor parameters from Memory.
+    /// Initializes a junction instance by extracting its constructor parameters from Memory.
     /// </summary>
-    public static TStep? InitializeStep<TStep, TInput, TReturn>(this Monad<TInput, TReturn> monad)
-        where TStep : class
+    public static TJunction? InitializeJunction<TJunction, TInput, TReturn>(
+        this Monad<TInput, TReturn> monad
+    )
+        where TJunction : class
     {
-        var stepType = typeof(TStep);
+        var junctionType = typeof(TJunction);
 
         var cached = ConstructorCache.GetOrAdd(
-            stepType,
+            junctionType,
             type =>
             {
                 if (!type.IsClass)
@@ -53,11 +55,13 @@ public static class MonadExtensions
 
         if (cached is null)
         {
-            if (!stepType.IsClass)
-                monad.Exception ??= new TrainException($"Step ({stepType}) must be a class.");
+            if (!junctionType.IsClass)
+                monad.Exception ??= new TrainException(
+                    $"Junction ({junctionType}) must be a class."
+                );
             else
                 monad.Exception ??= new TrainException(
-                    $"Step classes can only have a single constructor ({stepType})."
+                    $"Junction classes can only have a single constructor ({junctionType})."
                 );
             return null;
         }
@@ -70,18 +74,18 @@ public static class MonadExtensions
         if (monad.Exception is not null)
             return null;
 
-        // Create an instance of the step
-        var initializedStep = (TStep?)constructor.Invoke(constructorParameters);
+        // Create an instance of the junction
+        var initializedJunction = (TJunction?)constructor.Invoke(constructorParameters);
 
-        if (initializedStep is null)
+        if (initializedJunction is null)
         {
             monad.Exception ??= new TrainException(
-                $"Could not invoke constructor for ({stepType})."
+                $"Could not invoke constructor for ({junctionType})."
             );
             return null;
         }
 
-        return initializedStep;
+        return initializedJunction;
     }
 
     /// <summary>

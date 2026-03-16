@@ -2,7 +2,7 @@ using FluentAssertions;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Exceptions;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
@@ -63,7 +63,7 @@ public class ResolveTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var train = new TestStringTrain().Activate(input).ShortCircuit<TestShortCircuitStep>();
+        var train = new TestStringTrain().Activate(input).ShortCircuit<TestShortCircuitJunction>();
 
         // Act
         var result = train.Resolve();
@@ -115,7 +115,7 @@ public class ResolveTests : TestSetup
         ) => throw new NotImplementedException();
     }
 
-    private class TestShortCircuitStep : Step<int, string>
+    private class TestShortCircuitJunction : Junction<int, string>
     {
         public override async Task<string> Run(int input) => input.ToString();
     }

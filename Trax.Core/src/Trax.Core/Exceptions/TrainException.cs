@@ -12,7 +12,7 @@ namespace Trax.Core.Exceptions;
 /// 2. Provide context about where and why the error occurred
 /// 3. Propagate errors through the Railway-oriented programming pattern
 ///
-/// When a step in a train fails, it returns a Left(Exception) in the Either monad,
+/// When a junction in a train fails, it returns a Left(Exception) in the Either monad,
 /// which is typically a TrainException with details about the failure.
 /// </remarks>
 public class TrainException(string message) : Exception(message) { }
