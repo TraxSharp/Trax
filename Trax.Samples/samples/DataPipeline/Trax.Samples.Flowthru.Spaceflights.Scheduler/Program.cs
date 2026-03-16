@@ -22,9 +22,9 @@ using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StepProvider.Progress.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.Flowthru.Spaceflights;
 using Trax.Samples.Flowthru.Spaceflights.Trains.DataProcessing;
@@ -78,7 +78,7 @@ builder.Services.AddTrax(trax =>
                 .AddDataContextLogging()
                 .AddJson()
                 .SaveTrainParameters()
-                .AddStepProgress()
+                .AddJunctionProgress()
         )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>

@@ -1,6 +1,6 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.Scheduler.Trains.HelloWorld.Steps;
+using Trax.Samples.Scheduler.Trains.HelloWorld.Junctions;
 
 namespace Trax.Samples.Scheduler.Trains.HelloWorld;
 
@@ -10,5 +10,5 @@ namespace Trax.Samples.Scheduler.Trains.HelloWorld;
 public class HelloWorldTrain : ServiceTrain<HelloWorldInput, Unit>, IHelloWorldTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(HelloWorldInput input) =>
-        Activate(input).Chain<LogGreetingStep>().Resolve();
+        Activate(input).Chain<LogGreetingJunction>().Resolve();
 }

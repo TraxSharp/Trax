@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.Api.Trains.Lookup.Steps;
+using Trax.Samples.Api.Trains.Lookup.Junctions;
 
 namespace Trax.Samples.Api.Trains.Lookup;
 
@@ -13,5 +13,5 @@ namespace Trax.Samples.Api.Trains.Lookup;
 public class LookupTrain : ServiceTrain<LookupInput, LookupOutput>, ILookupTrain
 {
     protected override async Task<Either<Exception, LookupOutput>> RunInternal(LookupInput input) =>
-        Activate(input).Chain<FetchDataStep>().Resolve();
+        Activate(input).Chain<FetchDataJunction>().Resolve();
 }

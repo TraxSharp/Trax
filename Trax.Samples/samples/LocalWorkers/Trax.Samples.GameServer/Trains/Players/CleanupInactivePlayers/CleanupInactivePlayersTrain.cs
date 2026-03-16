@@ -1,6 +1,6 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.GameServer.Trains.Players.CleanupInactivePlayers.Steps;
+using Trax.Samples.GameServer.Trains.Players.CleanupInactivePlayers.Junctions;
 
 namespace Trax.Samples.GameServer.Trains.Players.CleanupInactivePlayers;
 
@@ -14,5 +14,6 @@ public class CleanupInactivePlayersTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(
         CleanupInactivePlayersInput input
-    ) => Activate(input).Chain<IdentifyInactiveStep>().Chain<ArchivePlayersStep>().Resolve();
+    ) =>
+        Activate(input).Chain<IdentifyInactiveJunction>().Chain<ArchivePlayersJunction>().Resolve();
 }

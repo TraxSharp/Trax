@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.ContentShield.Trains.ContentReview.ReviewContent.Steps;
+using Trax.Samples.ContentShield.Trains.ContentReview.ReviewContent.Junctions;
 
 namespace Trax.Samples.ContentShield.Trains.ContentReview.ReviewContent;
 
@@ -23,8 +23,8 @@ public class ReviewContentTrain
         ReviewContentInput input
     ) =>
         Activate(input)
-            .Chain<ClassifyContentStep>()
-            .Chain<ScoreContentStep>()
-            .Chain<FlagContentStep>()
+            .Chain<ClassifyContentJunction>()
+            .Chain<ScoreContentJunction>()
+            .Chain<FlagContentJunction>()
             .Resolve();
 }

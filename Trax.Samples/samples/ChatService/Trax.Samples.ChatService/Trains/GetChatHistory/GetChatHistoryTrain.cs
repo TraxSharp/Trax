@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.ChatService.Trains.GetChatHistory.Steps;
+using Trax.Samples.ChatService.Trains.GetChatHistory.Junctions;
 
 namespace Trax.Samples.ChatService.Trains.GetChatHistory;
 
@@ -12,5 +12,5 @@ public class GetChatHistoryTrain
 {
     protected override async Task<Either<Exception, GetChatHistoryOutput>> RunInternal(
         GetChatHistoryInput input
-    ) => Activate(input).Chain<FetchMessagesStep>().Resolve();
+    ) => Activate(input).Chain<FetchMessagesJunction>().Resolve();
 }

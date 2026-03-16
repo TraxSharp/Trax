@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.GameServer.Trains.Players.LookupPlayer.Steps;
+using Trax.Samples.GameServer.Trains.Players.LookupPlayer.Junctions;
 
 namespace Trax.Samples.GameServer.Trains.Players.LookupPlayer;
 
@@ -15,5 +15,5 @@ public class LookupPlayerTrain : ServiceTrain<LookupPlayerInput, PlayerProfile>,
 {
     protected override async Task<Either<Exception, PlayerProfile>> RunInternal(
         LookupPlayerInput input
-    ) => Activate(input).Chain<FetchPlayerStep>().Resolve();
+    ) => Activate(input).Chain<FetchPlayerJunction>().Resolve();
 }

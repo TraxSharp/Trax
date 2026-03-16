@@ -3,14 +3,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Samples.ChatService.Data.Entities;
 using Trax.Samples.ChatService.Tests.Fixtures;
 using Trax.Samples.ChatService.Trains.SendMessage;
-using Trax.Samples.ChatService.Trains.SendMessage.Steps;
+using Trax.Samples.ChatService.Trains.SendMessage.Junctions;
 
 namespace Trax.Samples.ChatService.Tests.IntegrationTests;
 
 [TestFixture]
 public class SendMessageTests
 {
-    #region ValidateSenderStep
+    #region ValidateSenderJunction
 
     [Test]
     public async Task ValidateSender_UserIsParticipant_ReturnsInput()
@@ -18,7 +18,7 @@ public class SendMessageTests
         using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithParticipant(db, "alice", "Alice");
 
-        var step = new ValidateSenderStep(db, NullLogger<ValidateSenderStep>.Instance);
+        var junction = new ValidateSenderJunction(db, NullLogger<ValidateSenderJunction>.Instance);
         var input = new SendMessageInput
         {
             ChatRoomId = roomId,
@@ -26,7 +26,7 @@ public class SendMessageTests
             Content = "Hello!",
         };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Should().Be(input);
     }
@@ -35,7 +35,7 @@ public class SendMessageTests
     public void ValidateSender_UserNotParticipant_Throws()
     {
         using var db = ChatDbContextFixture.Create();
-        var step = new ValidateSenderStep(db, NullLogger<ValidateSenderStep>.Instance);
+        var junction = new ValidateSenderJunction(db, NullLogger<ValidateSenderJunction>.Instance);
         var input = new SendMessageInput
         {
             ChatRoomId = Guid.NewGuid(),
@@ -43,7 +43,7 @@ public class SendMessageTests
             Content = "Hello!",
         };
 
-        var act = () => step.Run(input);
+        var act = () => junction.Run(input);
 
         act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not a participant*");
     }
@@ -52,7 +52,7 @@ public class SendMessageTests
     public void ValidateSender_EmptyContent_Throws()
     {
         using var db = ChatDbContextFixture.Create();
-        var step = new ValidateSenderStep(db, NullLogger<ValidateSenderStep>.Instance);
+        var junction = new ValidateSenderJunction(db, NullLogger<ValidateSenderJunction>.Instance);
         var input = new SendMessageInput
         {
             ChatRoomId = Guid.NewGuid(),
@@ -60,14 +60,14 @@ public class SendMessageTests
             Content = "",
         };
 
-        var act = () => step.Run(input);
+        var act = () => junction.Run(input);
 
         act.Should().ThrowAsync<ArgumentException>().WithMessage("*empty*");
     }
 
     #endregion
 
-    #region PersistMessageStep
+    #region PersistMessageJunction
 
     [Test]
     public async Task PersistMessage_SavesMessageAndUpdatesLastRead()
@@ -75,7 +75,7 @@ public class SendMessageTests
         using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithParticipant(db, "alice", "Alice");
 
-        var step = new PersistMessageStep(db, NullLogger<PersistMessageStep>.Instance);
+        var junction = new PersistMessageJunction(db, NullLogger<PersistMessageJunction>.Instance);
         var input = new SendMessageInput
         {
             ChatRoomId = roomId,
@@ -83,7 +83,7 @@ public class SendMessageTests
             Content = "Test message",
         };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.MessageId.Should().NotBeEmpty();
         result.ChatRoomId.Should().Be(roomId);

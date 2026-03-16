@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.ChatService.Trains.GetChatRooms.Steps;
+using Trax.Samples.ChatService.Trains.GetChatRooms.Junctions;
 
 namespace Trax.Samples.ChatService.Trains.GetChatRooms;
 
@@ -12,5 +12,5 @@ public class GetChatRoomsTrain
 {
     protected override async Task<Either<Exception, GetChatRoomsOutput>> RunInternal(
         GetChatRoomsInput input
-    ) => Activate(input).Chain<FetchRoomsStep>().Resolve();
+    ) => Activate(input).Chain<FetchRoomsJunction>().Resolve();
 }

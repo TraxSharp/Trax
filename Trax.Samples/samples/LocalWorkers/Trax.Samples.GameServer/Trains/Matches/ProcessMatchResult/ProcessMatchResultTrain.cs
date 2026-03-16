@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.GameServer.Trains.Matches.ProcessMatchResult.Steps;
+using Trax.Samples.GameServer.Trains.Matches.ProcessMatchResult.Junctions;
 
 namespace Trax.Samples.GameServer.Trains.Matches.ProcessMatchResult;
 
@@ -9,10 +9,10 @@ namespace Trax.Samples.GameServer.Trains.Matches.ProcessMatchResult;
 /// Multi-step match result processor. Can be queued from the API via GraphQL
 /// or run on a recurring schedule by the scheduler for batch reprocessing.
 ///
-/// Steps: ValidateMatch → UpdatePlayerStats → CheckForAnomalies
+/// Junctions: ValidateMatch → UpdatePlayerStats → CheckForAnomalies
 ///
 /// Returns a typed ProcessMatchResultOutput with match processing summary.
-/// When anomalies are detected, CheckForAnomaliesStep activates the dormant
+/// When anomalies are detected, CheckForAnomaliesJunction activates the dormant
 /// DetectCheatPattern dependent train via IDormantDependentContext.
 /// </summary>
 [TraxMutation(Description = "Processes a completed match result")]
@@ -25,8 +25,8 @@ public class ProcessMatchResultTrain
         ProcessMatchResultInput input
     ) =>
         Activate(input)
-            .Chain<ValidateMatchStep>()
-            .Chain<UpdatePlayerStatsStep>()
-            .Chain<CheckForAnomaliesStep>()
+            .Chain<ValidateMatchJunction>()
+            .Chain<UpdatePlayerStatsJunction>()
+            .Chain<CheckForAnomaliesJunction>()
             .Resolve();
 }

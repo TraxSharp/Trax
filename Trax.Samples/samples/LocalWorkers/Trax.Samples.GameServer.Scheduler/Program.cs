@@ -21,10 +21,10 @@ using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StepProvider.Progress.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.GameServer;
 using Trax.Samples.GameServer.Trains.Leaderboard.GenerateSeasonReport;
@@ -55,7 +55,7 @@ builder.Services.AddTrax(trax =>
                 .AddDataContextLogging()
                 .AddJson()
                 .SaveTrainParameters()
-                .AddStepProgress()
+                .AddJunctionProgress()
         )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
@@ -111,7 +111,7 @@ builder.Services.AddTrax(trax =>
                 // 4. BATCH SCHEDULING + DORMANT DEPENDENTS
                 //    ScheduleMany creates one ProcessMatchResult per region.
                 //    IncludeMany creates dormant DetectCheatPattern dependents —
-                //    they only fire when CheckForAnomaliesStep activates them.
+                //    they only fire when CheckForAnomaliesJunction activates them.
                 //
                 //    process-match-{region} (every 5 min, priority 24, max 5 concurrent)
                 //      └── detect-cheat-{region} (Dormant — activated on anomalies)

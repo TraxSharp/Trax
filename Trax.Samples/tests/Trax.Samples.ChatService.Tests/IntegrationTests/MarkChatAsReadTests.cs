@@ -4,14 +4,14 @@ using Trax.Samples.ChatService.Data;
 using Trax.Samples.ChatService.Data.Entities;
 using Trax.Samples.ChatService.Tests.Fixtures;
 using Trax.Samples.ChatService.Trains.MarkChatAsRead;
-using Trax.Samples.ChatService.Trains.MarkChatAsRead.Steps;
+using Trax.Samples.ChatService.Trains.MarkChatAsRead.Junctions;
 
 namespace Trax.Samples.ChatService.Tests.IntegrationTests;
 
 [TestFixture]
 public class MarkChatAsReadTests
 {
-    #region UpdateLastReadStep
+    #region UpdateLastReadJunction
 
     [Test]
     public async Task UpdateLastRead_SetsLastReadAt()
@@ -19,10 +19,10 @@ public class MarkChatAsReadTests
         using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithParticipant(db, "alice");
 
-        var step = new UpdateLastReadStep(db, NullLogger<UpdateLastReadStep>.Instance);
+        var junction = new UpdateLastReadJunction(db, NullLogger<UpdateLastReadJunction>.Instance);
         var input = new MarkChatAsReadInput { ChatRoomId = roomId, UserId = "alice" };
 
-        await step.Run(input);
+        await junction.Run(input);
 
         var participant = db.ChatParticipants.First(p =>
             p.ChatRoomId == roomId && p.UserId == "alice"
@@ -35,10 +35,10 @@ public class MarkChatAsReadTests
     public void UpdateLastRead_UserNotParticipant_Throws()
     {
         using var db = ChatDbContextFixture.Create();
-        var step = new UpdateLastReadStep(db, NullLogger<UpdateLastReadStep>.Instance);
+        var junction = new UpdateLastReadJunction(db, NullLogger<UpdateLastReadJunction>.Instance);
         var input = new MarkChatAsReadInput { ChatRoomId = Guid.NewGuid(), UserId = "nobody" };
 
-        var act = () => step.Run(input);
+        var act = () => junction.Run(input);
 
         act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not a participant*");
     }

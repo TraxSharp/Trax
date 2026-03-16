@@ -14,7 +14,7 @@
   <ItemGroup>
     <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
-    <PackageReference Include="Trax.Effect.StepProvider.Progress" Version="1.*" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.*" />
     <PackageReference Include="Trax.Effect.Broadcaster.RabbitMQ" Version="1.*" />
   </ItemGroup>
 </Project>

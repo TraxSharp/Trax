@@ -3,19 +3,19 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Samples.ChatService.Data.Entities;
 using Trax.Samples.ChatService.Tests.Fixtures;
 using Trax.Samples.ChatService.Trains.CreateChatRoom;
-using Trax.Samples.ChatService.Trains.CreateChatRoom.Steps;
+using Trax.Samples.ChatService.Trains.CreateChatRoom.Junctions;
 
 namespace Trax.Samples.ChatService.Tests.IntegrationTests;
 
 [TestFixture]
 public class CreateChatRoomTests
 {
-    #region ValidateInputStep
+    #region ValidateInputJunction
 
     [Test]
     public void ValidateInput_EmptyName_Throws()
     {
-        var step = new ValidateInputStep(NullLogger<ValidateInputStep>.Instance);
+        var junction = new ValidateInputJunction(NullLogger<ValidateInputJunction>.Instance);
         var input = new CreateChatRoomInput
         {
             Name = "",
@@ -23,7 +23,7 @@ public class CreateChatRoomTests
             DisplayName = "Alice",
         };
 
-        var act = () => step.Run(input);
+        var act = () => junction.Run(input);
 
         act.Should().ThrowAsync<ArgumentException>().WithMessage("*name*");
     }
@@ -31,7 +31,7 @@ public class CreateChatRoomTests
     [Test]
     public void ValidateInput_EmptyUserId_Throws()
     {
-        var step = new ValidateInputStep(NullLogger<ValidateInputStep>.Instance);
+        var junction = new ValidateInputJunction(NullLogger<ValidateInputJunction>.Instance);
         var input = new CreateChatRoomInput
         {
             Name = "General",
@@ -39,7 +39,7 @@ public class CreateChatRoomTests
             DisplayName = "Alice",
         };
 
-        var act = () => step.Run(input);
+        var act = () => junction.Run(input);
 
         act.Should().ThrowAsync<ArgumentException>().WithMessage("*User ID*");
     }
@@ -47,7 +47,7 @@ public class CreateChatRoomTests
     [Test]
     public async Task ValidateInput_ValidInput_ReturnsInput()
     {
-        var step = new ValidateInputStep(NullLogger<ValidateInputStep>.Instance);
+        var junction = new ValidateInputJunction(NullLogger<ValidateInputJunction>.Instance);
         var input = new CreateChatRoomInput
         {
             Name = "General",
@@ -55,20 +55,20 @@ public class CreateChatRoomTests
             DisplayName = "Alice",
         };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Should().Be(input);
     }
 
     #endregion
 
-    #region PersistRoomStep
+    #region PersistRoomJunction
 
     [Test]
     public async Task PersistRoom_CreatesRoomAndParticipant()
     {
         using var db = ChatDbContextFixture.Create();
-        var step = new PersistRoomStep(db, NullLogger<PersistRoomStep>.Instance);
+        var junction = new PersistRoomJunction(db, NullLogger<PersistRoomJunction>.Instance);
         var input = new CreateChatRoomInput
         {
             Name = "General",
@@ -76,7 +76,7 @@ public class CreateChatRoomTests
             DisplayName = "Alice",
         };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Name.Should().Be("General");
         result.ChatRoomId.Should().NotBeEmpty();

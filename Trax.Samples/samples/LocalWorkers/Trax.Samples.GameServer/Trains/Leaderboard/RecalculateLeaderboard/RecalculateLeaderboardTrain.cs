@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.GameServer.Trains.Leaderboard.RecalculateLeaderboard.Steps;
+using Trax.Samples.GameServer.Trains.Leaderboard.RecalculateLeaderboard.Junctions;
 
 namespace Trax.Samples.GameServer.Trains.Leaderboard.RecalculateLeaderboard;
 
@@ -17,5 +17,5 @@ public class RecalculateLeaderboardTrain
 {
     protected override async Task<Either<Exception, RecalculateLeaderboardOutput>> RunInternal(
         RecalculateLeaderboardInput input
-    ) => Activate(input).Chain<AggregateScoresStep>().Chain<RankPlayersStep>().Resolve();
+    ) => Activate(input).Chain<AggregateScoresJunction>().Chain<RankPlayersJunction>().Resolve();
 }

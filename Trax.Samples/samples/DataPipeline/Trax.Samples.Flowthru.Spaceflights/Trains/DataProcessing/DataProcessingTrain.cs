@@ -1,6 +1,6 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.Flowthru.Spaceflights.Trains.DataProcessing.Steps;
+using Trax.Samples.Flowthru.Spaceflights.Trains.DataProcessing.Junctions;
 
 namespace Trax.Samples.Flowthru.Spaceflights.Trains.DataProcessing;
 
@@ -14,5 +14,5 @@ public class DataProcessingTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(
         DataProcessingPipelineInput input
-    ) => Activate(input).Chain<ExecuteDataProcessingStep>().Resolve();
+    ) => Activate(input).Chain<ExecuteDataProcessingJunction>().Resolve();
 }

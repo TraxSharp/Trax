@@ -1,6 +1,6 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.GameServer.Trains.Rewards.DistributeDailyRewards.Steps;
+using Trax.Samples.GameServer.Trains.Rewards.DistributeDailyRewards.Junctions;
 
 namespace Trax.Samples.GameServer.Trains.Rewards.DistributeDailyRewards;
 
@@ -14,5 +14,5 @@ public class DistributeDailyRewardsTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(
         DistributeDailyRewardsInput input
-    ) => Activate(input).Chain<CalculateRewardsStep>().Chain<CreditPlayersStep>().Resolve();
+    ) => Activate(input).Chain<CalculateRewardsJunction>().Chain<CreditPlayersJunction>().Resolve();
 }

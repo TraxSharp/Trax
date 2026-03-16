@@ -1,13 +1,13 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.ContentShield.Trains.Notices.SendViolationNotice.Steps;
+using Trax.Samples.ContentShield.Trains.Notices.SendViolationNotice.Junctions;
 
 namespace Trax.Samples.ContentShield.Trains.Notices.SendViolationNotice;
 
 /// <summary>
 /// Sends a violation notice to the content owner. Dormant dependent — activated
-/// by FlagContentStep when content is flagged. Composes the notice from a template
+/// by FlagContentJunction when content is flagged. Composes the notice from a template
 /// and delivers it via email/push notification.
 ///
 /// Dispatched to the ephemeral Runner via HTTP (UseRemoteWorkers).
@@ -24,5 +24,5 @@ public class SendViolationNoticeTrain
 {
     protected override async Task<Either<Exception, SendViolationNoticeOutput>> RunInternal(
         SendViolationNoticeInput input
-    ) => Activate(input).Chain<ComposeNoticeStep>().Chain<DeliverNoticeStep>().Resolve();
+    ) => Activate(input).Chain<ComposeNoticeJunction>().Chain<DeliverNoticeJunction>().Resolve();
 }

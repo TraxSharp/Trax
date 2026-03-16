@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.EnergyHub.Trains.GridTrading.TradeGridEnergy.Steps;
+using Trax.Samples.EnergyHub.Trains.GridTrading.TradeGridEnergy.Junctions;
 
 namespace Trax.Samples.EnergyHub.Trains.GridTrading.TradeGridEnergy;
 
@@ -22,5 +22,5 @@ public class TradeGridEnergyTrain
 {
     protected override async Task<Either<Exception, TradeGridEnergyOutput>> RunInternal(
         TradeGridEnergyInput input
-    ) => Activate(input).Chain<CalculateExcessStep>().Chain<SubmitToUbossStep>().Resolve();
+    ) => Activate(input).Chain<CalculateExcessJunction>().Chain<SubmitToUbossJunction>().Resolve();
 }

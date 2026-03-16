@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.ContentShield.Trains.Reports.GenerateModerationReport.Steps;
+using Trax.Samples.ContentShield.Trains.Reports.GenerateModerationReport.Junctions;
 
 namespace Trax.Samples.ContentShield.Trains.Reports.GenerateModerationReport;
 
@@ -18,5 +18,5 @@ public class GenerateModerationReportTrain
 {
     protected override async Task<Either<Exception, GenerateModerationReportOutput>> RunInternal(
         GenerateModerationReportInput input
-    ) => Activate(input).Chain<AggregateMetricsStep>().Chain<FormatReportStep>().Resolve();
+    ) => Activate(input).Chain<AggregateMetricsJunction>().Chain<FormatReportJunction>().Resolve();
 }

@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.EnergyHub.Trains.SolarProduction.MonitorSolarProduction.Steps;
+using Trax.Samples.EnergyHub.Trains.SolarProduction.MonitorSolarProduction.Junctions;
 
 namespace Trax.Samples.EnergyHub.Trains.SolarProduction.MonitorSolarProduction;
 
@@ -17,5 +17,9 @@ public class MonitorSolarProductionTrain
 {
     protected override async Task<Either<Exception, MonitorSolarProductionOutput>> RunInternal(
         MonitorSolarProductionInput input
-    ) => Activate(input).Chain<ReadSolarSensorsStep>().Chain<CalculateOutputStep>().Resolve();
+    ) =>
+        Activate(input)
+            .Chain<ReadSolarSensorsJunction>()
+            .Chain<CalculateOutputJunction>()
+            .Resolve();
 }

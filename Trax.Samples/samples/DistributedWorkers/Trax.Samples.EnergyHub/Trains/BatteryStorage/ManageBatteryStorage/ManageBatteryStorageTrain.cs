@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.EnergyHub.Trains.BatteryStorage.ManageBatteryStorage.Steps;
+using Trax.Samples.EnergyHub.Trains.BatteryStorage.ManageBatteryStorage.Junctions;
 
 namespace Trax.Samples.EnergyHub.Trains.BatteryStorage.ManageBatteryStorage;
 
@@ -18,5 +18,9 @@ public class ManageBatteryStorageTrain
 {
     protected override async Task<Either<Exception, ManageBatteryStorageOutput>> RunInternal(
         ManageBatteryStorageInput input
-    ) => Activate(input).Chain<ReadBatteryStateStep>().Chain<OptimizeChargeLevelStep>().Resolve();
+    ) =>
+        Activate(input)
+            .Chain<ReadBatteryStateJunction>()
+            .Chain<OptimizeChargeLevelJunction>()
+            .Resolve();
 }

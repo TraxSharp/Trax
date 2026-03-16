@@ -22,7 +22,7 @@ dotnet new trax-server -n MyApp --ConnectionString "Host=db.example.com;Port=543
 
 The template creates an ASP.NET Core project with:
 
-- `AddTrax` configured with `AddEffects` (Postgres, step logging, step progress), `AddMediator`, and `AddScheduler`
+- `AddTrax` configured with `AddEffects` (Postgres, junction logging, junction progress), `AddMediator`, and `AddScheduler`
 - `AddTraxDashboard` for the control room
 - `AddScheduler` with a sample `HelloWorldTrain` departing every 20 seconds
 - A `Trains/` directory with an example train, cargo type, interface, and stop
@@ -51,7 +51,7 @@ The sample includes:
 - **HelloWorldTrain** — a simple scheduled train that logs a greeting every 20 seconds
 - **ExtractImportTrain** — a multi-stop ETL train with 10 parallel manifests departing every 5 minutes
 - **TransformLoadTrain** — a connected departure that runs after extract arrives
-- **DataQualityCheckTrain** — a dormant train waiting in the yard, activated from a step when anomalies are detected
+- **DataQualityCheckTrain** — a dormant train waiting in the yard, activated from a junction when anomalies are detected
 - Journey log cleanup configuration for the HelloWorld train
 
 ### Flowthru Spaceflights
@@ -62,7 +62,7 @@ A data pipeline sample using the [Flowthru](https://github.com/chaoticgoodcomput
 
 | Package | Purpose |
 |---------|---------|
-| [Trax.Core](https://www.nuget.org/packages/Trax.Core/) | The locomotive — `Train`, steps, railway programming |
+| [Trax.Core](https://www.nuget.org/packages/Trax.Core/) | The locomotive — `Train`, junctions, railway programming |
 | [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/) | `ServiceTrain` with journey logging and station services |
 | [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/) | Dispatch station — route cargo to the right train via `TrainBus` |
 | [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/) | Timetables — recurring trains with retries and dead-lettering |

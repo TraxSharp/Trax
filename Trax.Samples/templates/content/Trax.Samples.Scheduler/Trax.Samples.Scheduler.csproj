@@ -12,7 +12,7 @@
     <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
-    <PackageReference Include="Trax.Effect.StepProvider.Progress" Version="1.*" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.*" />
     <PackageReference Include="Trax.Mediator" Version="1.*" />
     <PackageReference Include="Trax.Scheduler" Version="1.*" />
     <PackageReference Include="Trax.Dashboard" Version="1.*" />

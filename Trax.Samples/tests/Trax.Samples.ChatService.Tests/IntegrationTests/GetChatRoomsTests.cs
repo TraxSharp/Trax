@@ -4,14 +4,14 @@ using Trax.Samples.ChatService.Data;
 using Trax.Samples.ChatService.Data.Entities;
 using Trax.Samples.ChatService.Tests.Fixtures;
 using Trax.Samples.ChatService.Trains.GetChatRooms;
-using Trax.Samples.ChatService.Trains.GetChatRooms.Steps;
+using Trax.Samples.ChatService.Trains.GetChatRooms.Junctions;
 
 namespace Trax.Samples.ChatService.Tests.IntegrationTests;
 
 [TestFixture]
 public class GetChatRoomsTests
 {
-    #region FetchRoomsStep
+    #region FetchRoomsJunction
 
     [Test]
     public async Task FetchRooms_ReturnsOnlyRoomsUserIsIn()
@@ -20,10 +20,10 @@ public class GetChatRoomsTests
         var aliceRoomId = await SeedRoomWithParticipant(db, "alice", "Room A");
         await SeedRoomWithParticipant(db, "bob", "Room B");
 
-        var step = new FetchRoomsStep(db, NullLogger<FetchRoomsStep>.Instance);
+        var junction = new FetchRoomsJunction(db, NullLogger<FetchRoomsJunction>.Instance);
         var input = new GetChatRoomsInput { UserId = "alice" };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Rooms.Should().ContainSingle();
         result.Rooms[0].Id.Should().Be(aliceRoomId);
@@ -47,10 +47,10 @@ public class GetChatRoomsTests
         );
         await db.SaveChangesAsync();
 
-        var step = new FetchRoomsStep(db, NullLogger<FetchRoomsStep>.Instance);
+        var junction = new FetchRoomsJunction(db, NullLogger<FetchRoomsJunction>.Instance);
         var input = new GetChatRoomsInput { UserId = "alice" };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Rooms.Should().ContainSingle();
         result.Rooms[0].ParticipantCount.Should().Be(2);
@@ -61,10 +61,10 @@ public class GetChatRoomsTests
     {
         using var db = ChatDbContextFixture.Create();
 
-        var step = new FetchRoomsStep(db, NullLogger<FetchRoomsStep>.Instance);
+        var junction = new FetchRoomsJunction(db, NullLogger<FetchRoomsJunction>.Instance);
         var input = new GetChatRoomsInput { UserId = "nobody" };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Rooms.Should().BeEmpty();
     }

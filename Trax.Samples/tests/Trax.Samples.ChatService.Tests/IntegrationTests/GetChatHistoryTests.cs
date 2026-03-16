@@ -4,14 +4,14 @@ using Trax.Samples.ChatService.Data;
 using Trax.Samples.ChatService.Data.Entities;
 using Trax.Samples.ChatService.Tests.Fixtures;
 using Trax.Samples.ChatService.Trains.GetChatHistory;
-using Trax.Samples.ChatService.Trains.GetChatHistory.Steps;
+using Trax.Samples.ChatService.Trains.GetChatHistory.Junctions;
 
 namespace Trax.Samples.ChatService.Tests.IntegrationTests;
 
 [TestFixture]
 public class GetChatHistoryTests
 {
-    #region FetchMessagesStep
+    #region FetchMessagesJunction
 
     [Test]
     public async Task FetchMessages_ReturnsMessagesInChronologicalOrder()
@@ -19,10 +19,10 @@ public class GetChatHistoryTests
         using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithMessages(db, 5);
 
-        var step = new FetchMessagesStep(db, NullLogger<FetchMessagesStep>.Instance);
+        var junction = new FetchMessagesJunction(db, NullLogger<FetchMessagesJunction>.Instance);
         var input = new GetChatHistoryInput { ChatRoomId = roomId, Take = 50 };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Messages.Should().HaveCount(5);
         result.Messages.Should().BeInAscendingOrder(m => m.SentAt);
@@ -34,10 +34,10 @@ public class GetChatHistoryTests
         using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithMessages(db, 10);
 
-        var step = new FetchMessagesStep(db, NullLogger<FetchMessagesStep>.Instance);
+        var junction = new FetchMessagesJunction(db, NullLogger<FetchMessagesJunction>.Instance);
         var input = new GetChatHistoryInput { ChatRoomId = roomId, Take = 3 };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Messages.Should().HaveCount(3);
     }
@@ -49,7 +49,7 @@ public class GetChatHistoryTests
         var baseTime = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
         var roomId = await SeedRoomWithTimedMessages(db, baseTime, 5);
 
-        var step = new FetchMessagesStep(db, NullLogger<FetchMessagesStep>.Instance);
+        var junction = new FetchMessagesJunction(db, NullLogger<FetchMessagesJunction>.Instance);
         var input = new GetChatHistoryInput
         {
             ChatRoomId = roomId,
@@ -57,7 +57,7 @@ public class GetChatHistoryTests
             Before = baseTime.AddMinutes(3),
         };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Messages.Should().HaveCount(3);
         result
@@ -79,10 +79,10 @@ public class GetChatHistoryTests
         db.ChatRooms.Add(room);
         await db.SaveChangesAsync();
 
-        var step = new FetchMessagesStep(db, NullLogger<FetchMessagesStep>.Instance);
+        var junction = new FetchMessagesJunction(db, NullLogger<FetchMessagesJunction>.Instance);
         var input = new GetChatHistoryInput { ChatRoomId = room.Id, Take = 50 };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Messages.Should().BeEmpty();
     }
@@ -94,10 +94,10 @@ public class GetChatHistoryTests
         var roomId1 = await SeedRoomWithMessages(db, 3);
         var roomId2 = await SeedRoomWithMessages(db, 5);
 
-        var step = new FetchMessagesStep(db, NullLogger<FetchMessagesStep>.Instance);
+        var junction = new FetchMessagesJunction(db, NullLogger<FetchMessagesJunction>.Instance);
         var input = new GetChatHistoryInput { ChatRoomId = roomId1, Take = 50 };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Messages.Should().HaveCount(3);
     }

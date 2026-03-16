@@ -1,6 +1,6 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.GameServer.Trains.Maintenance.CorruptedDataRepair.Steps;
+using Trax.Samples.GameServer.Trains.Maintenance.CorruptedDataRepair.Junctions;
 
 namespace Trax.Samples.GameServer.Trains.Maintenance.CorruptedDataRepair;
 
@@ -15,5 +15,5 @@ public class CorruptedDataRepairTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(
         CorruptedDataRepairInput input
-    ) => Activate(input).Chain<AttemptRepairStep>().Resolve();
+    ) => Activate(input).Chain<AttemptRepairJunction>().Resolve();
 }

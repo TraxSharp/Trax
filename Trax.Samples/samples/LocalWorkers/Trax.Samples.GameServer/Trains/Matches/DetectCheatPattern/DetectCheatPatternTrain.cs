@@ -1,13 +1,13 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.GameServer.Trains.Matches.DetectCheatPattern.Steps;
+using Trax.Samples.GameServer.Trains.Matches.DetectCheatPattern.Junctions;
 
 namespace Trax.Samples.GameServer.Trains.Matches.DetectCheatPattern;
 
 /// <summary>
 /// Dormant dependent train — only fires when anomalies are detected during match processing.
 /// Declared in the scheduler topology but never auto-fires; activated at runtime
-/// via IDormantDependentContext in CheckForAnomaliesStep.
+/// via IDormantDependentContext in CheckForAnomaliesJunction.
 /// </summary>
 public class DetectCheatPatternTrain
     : ServiceTrain<DetectCheatPatternInput, Unit>,
@@ -15,5 +15,5 @@ public class DetectCheatPatternTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(
         DetectCheatPatternInput input
-    ) => Activate(input).Chain<AnalyzePatternStep>().Chain<FlagPlayerStep>().Resolve();
+    ) => Activate(input).Chain<AnalyzePatternJunction>().Chain<FlagPlayerJunction>().Resolve();
 }

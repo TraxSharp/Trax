@@ -42,7 +42,7 @@
 //   # Subscribe to real-time train lifecycle events (use Banana Cake Pop IDE):
 //   #   subscription { onTrainStarted { metadataId trainName trainState timestamp } }
 //   #   subscription { onTrainCompleted { metadataId trainName trainState timestamp } }
-//   #   subscription { onTrainFailed { metadataId trainName failureStep failureReason } }
+//   #   subscription { onTrainFailed { metadataId trainName failureJunction failureReason } }
 //
 //   # Health check (no auth required)
 //   curl http://localhost:5200/trax/health
@@ -67,6 +67,12 @@ var connectionString =
     ?? throw new InvalidOperationException("Connection string 'TraxDatabase' not found.");
 
 builder.Services.AddLogging(logging => logging.AddConsole());
+
+// ── CORS — allow the Trax website (local dev) to connect ──────────────
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+});
 
 // ── Authentication — fake API key for demonstration ──────────────────────
 builder
@@ -108,6 +114,7 @@ var app = builder.Build();
 // X-Api-Key header on page load. Per-train auth via [TraxAuthorize] still
 // protects individual operations. For production, use cookie-based auth
 // or a separate IDE path.
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseTraxGraphQL();

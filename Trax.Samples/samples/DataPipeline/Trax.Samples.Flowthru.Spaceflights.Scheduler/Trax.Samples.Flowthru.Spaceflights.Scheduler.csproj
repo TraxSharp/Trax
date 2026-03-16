@@ -17,7 +17,7 @@
     <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.*" />
     <PackageReference Include="Trax.Effect.Data" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
-    <PackageReference Include="Trax.Effect.StepProvider.Progress" Version="1.*" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.*" />
     <PackageReference Include="Trax.Dashboard" Version="1.*" />
   </ItemGroup>
 </Project>

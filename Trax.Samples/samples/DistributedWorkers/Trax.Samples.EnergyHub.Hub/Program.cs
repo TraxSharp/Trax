@@ -52,10 +52,10 @@ using Trax.Effect.Broadcaster.RabbitMQ.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StepProvider.Progress.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.EnergyHub;
 using Trax.Samples.EnergyHub.Trains.BatteryStorage.ManageBatteryStorage;
@@ -87,7 +87,7 @@ builder.Services.AddTrax(trax =>
                 .AddDataContextLogging()
                 .AddJson()
                 .SaveTrainParameters()
-                .AddStepProgress()
+                .AddJunctionProgress()
                 .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString))
         )
         .AddMediator(typeof(ManifestNames).Assembly)

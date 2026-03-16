@@ -15,9 +15,9 @@
 using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StepProvider.Progress.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.Scheduler.Trains.HelloWorld;
 using Trax.Scheduler.Extensions;
@@ -37,7 +37,11 @@ builder.AddTraxDashboard();
 // ── Register Trax Effect + Scheduler ────────────────────────────────────
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
-            effects.UsePostgres(connectionString).AddJson().SaveTrainParameters().AddStepProgress()
+            effects
+                .UsePostgres(connectionString)
+                .AddJson()
+                .SaveTrainParameters()
+                .AddJunctionProgress()
         )
         .AddMediator(typeof(Program).Assembly)
         .AddScheduler(scheduler =>

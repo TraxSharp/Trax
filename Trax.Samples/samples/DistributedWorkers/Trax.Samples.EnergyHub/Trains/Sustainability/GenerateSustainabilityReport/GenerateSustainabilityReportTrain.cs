@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.EnergyHub.Trains.Sustainability.GenerateSustainabilityReport.Steps;
+using Trax.Samples.EnergyHub.Trains.Sustainability.GenerateSustainabilityReport.Junctions;
 
 namespace Trax.Samples.EnergyHub.Trains.Sustainability.GenerateSustainabilityReport;
 
@@ -19,5 +19,5 @@ public class GenerateSustainabilityReportTrain
     protected override async Task<
         Either<Exception, GenerateSustainabilityReportOutput>
     > RunInternal(GenerateSustainabilityReportInput input) =>
-        Activate(input).Chain<AggregateMetricsStep>().Chain<PublishReportStep>().Resolve();
+        Activate(input).Chain<AggregateMetricsJunction>().Chain<PublishReportJunction>().Resolve();
 }

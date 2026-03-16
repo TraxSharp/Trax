@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.EnergyHub.Trains.Microgrid.OptimizeMicrogrid.Steps;
+using Trax.Samples.EnergyHub.Trains.Microgrid.OptimizeMicrogrid.Junctions;
 
 namespace Trax.Samples.EnergyHub.Trains.Microgrid.OptimizeMicrogrid;
 
@@ -21,5 +21,9 @@ public class OptimizeMicrogridTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(
         OptimizeMicrogridInput input
-    ) => Activate(input).Chain<GatherEnergyMetricsStep>().Chain<ApplyDistributionStep>().Resolve();
+    ) =>
+        Activate(input)
+            .Chain<GatherEnergyMetricsJunction>()
+            .Chain<ApplyDistributionJunction>()
+            .Resolve();
 }

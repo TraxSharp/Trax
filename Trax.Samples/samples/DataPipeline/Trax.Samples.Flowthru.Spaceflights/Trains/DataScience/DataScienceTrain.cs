@@ -1,6 +1,6 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.Flowthru.Spaceflights.Trains.DataScience.Steps;
+using Trax.Samples.Flowthru.Spaceflights.Trains.DataScience.Junctions;
 
 namespace Trax.Samples.Flowthru.Spaceflights.Trains.DataScience;
 
@@ -12,5 +12,5 @@ public class DataScienceTrain : ServiceTrain<DataSciencePipelineInput, Unit>, ID
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(
         DataSciencePipelineInput input
-    ) => Activate(input).Chain<ExecuteDataScienceStep>().Resolve();
+    ) => Activate(input).Chain<ExecuteDataScienceJunction>().Resolve();
 }

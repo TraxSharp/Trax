@@ -4,20 +4,20 @@ using Trax.Samples.ChatService.Data;
 using Trax.Samples.ChatService.Data.Entities;
 using Trax.Samples.ChatService.Tests.Fixtures;
 using Trax.Samples.ChatService.Trains.JoinChatRoom;
-using Trax.Samples.ChatService.Trains.JoinChatRoom.Steps;
+using Trax.Samples.ChatService.Trains.JoinChatRoom.Junctions;
 
 namespace Trax.Samples.ChatService.Tests.IntegrationTests;
 
 [TestFixture]
 public class JoinChatRoomTests
 {
-    #region ValidateJoinStep
+    #region ValidateJoinJunction
 
     [Test]
     public void ValidateJoin_RoomDoesNotExist_Throws()
     {
         using var db = ChatDbContextFixture.Create();
-        var step = new ValidateJoinStep(db, NullLogger<ValidateJoinStep>.Instance);
+        var junction = new ValidateJoinJunction(db, NullLogger<ValidateJoinJunction>.Instance);
         var input = new JoinChatRoomInput
         {
             ChatRoomId = Guid.NewGuid(),
@@ -25,7 +25,7 @@ public class JoinChatRoomTests
             DisplayName = "Alice",
         };
 
-        var act = () => step.Run(input);
+        var act = () => junction.Run(input);
 
         act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*does not exist*");
     }
@@ -48,7 +48,7 @@ public class JoinChatRoomTests
         );
         await db.SaveChangesAsync();
 
-        var step = new ValidateJoinStep(db, NullLogger<ValidateJoinStep>.Instance);
+        var junction = new ValidateJoinJunction(db, NullLogger<ValidateJoinJunction>.Instance);
         var input = new JoinChatRoomInput
         {
             ChatRoomId = roomId,
@@ -56,7 +56,7 @@ public class JoinChatRoomTests
             DisplayName = "Alice",
         };
 
-        var act = () => step.Run(input);
+        var act = () => junction.Run(input);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -69,7 +69,7 @@ public class JoinChatRoomTests
         using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoom(db, "alice");
 
-        var step = new ValidateJoinStep(db, NullLogger<ValidateJoinStep>.Instance);
+        var junction = new ValidateJoinJunction(db, NullLogger<ValidateJoinJunction>.Instance);
         var input = new JoinChatRoomInput
         {
             ChatRoomId = roomId,
@@ -77,14 +77,14 @@ public class JoinChatRoomTests
             DisplayName = "Bob",
         };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.Should().Be(input);
     }
 
     #endregion
 
-    #region AddParticipantStep
+    #region AddParticipantJunction
 
     [Test]
     public async Task AddParticipant_PersistsParticipant()
@@ -92,7 +92,7 @@ public class JoinChatRoomTests
         using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoom(db, "alice");
 
-        var step = new AddParticipantStep(db, NullLogger<AddParticipantStep>.Instance);
+        var junction = new AddParticipantJunction(db, NullLogger<AddParticipantJunction>.Instance);
         var input = new JoinChatRoomInput
         {
             ChatRoomId = roomId,
@@ -100,7 +100,7 @@ public class JoinChatRoomTests
             DisplayName = "Bob",
         };
 
-        var result = await step.Run(input);
+        var result = await junction.Run(input);
 
         result.ChatRoomId.Should().Be(roomId);
         result.UserId.Should().Be("bob");

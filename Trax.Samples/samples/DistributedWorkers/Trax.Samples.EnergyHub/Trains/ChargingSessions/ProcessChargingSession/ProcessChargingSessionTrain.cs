@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.EnergyHub.Trains.ChargingSessions.ProcessChargingSession.Steps;
+using Trax.Samples.EnergyHub.Trains.ChargingSessions.ProcessChargingSession.Junctions;
 
 namespace Trax.Samples.EnergyHub.Trains.ChargingSessions.ProcessChargingSession;
 
@@ -18,5 +18,9 @@ public class ProcessChargingSessionTrain
 {
     protected override async Task<Either<Exception, ProcessChargingSessionOutput>> RunInternal(
         ProcessChargingSessionInput input
-    ) => Activate(input).Chain<CollectSessionDataStep>().Chain<CalculateBillingStep>().Resolve();
+    ) =>
+        Activate(input)
+            .Chain<CollectSessionDataJunction>()
+            .Chain<CalculateBillingJunction>()
+            .Resolve();
 }

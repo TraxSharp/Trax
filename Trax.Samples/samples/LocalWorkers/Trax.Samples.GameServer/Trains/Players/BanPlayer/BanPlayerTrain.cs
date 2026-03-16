@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.GameServer.Trains.Players.BanPlayer.Steps;
+using Trax.Samples.GameServer.Trains.Players.BanPlayer.Junctions;
 
 namespace Trax.Samples.GameServer.Trains.Players.BanPlayer;
 
@@ -14,5 +14,5 @@ namespace Trax.Samples.GameServer.Trains.Players.BanPlayer;
 public class BanPlayerTrain : ServiceTrain<BanPlayerInput, Unit>, IBanPlayerTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(BanPlayerInput input) =>
-        Activate(input).Chain<ApplyBanStep>().Resolve();
+        Activate(input).Chain<ApplyBanJunction>().Resolve();
 }

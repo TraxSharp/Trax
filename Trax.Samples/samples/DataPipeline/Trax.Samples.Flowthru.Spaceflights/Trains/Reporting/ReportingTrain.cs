@@ -1,6 +1,6 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.Flowthru.Spaceflights.Trains.Reporting.Steps;
+using Trax.Samples.Flowthru.Spaceflights.Trains.Reporting.Junctions;
 
 namespace Trax.Samples.Flowthru.Spaceflights.Trains.Reporting;
 
@@ -12,5 +12,5 @@ public class ReportingTrain : ServiceTrain<ReportingPipelineInput, Unit>, IRepor
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(
         ReportingPipelineInput input
-    ) => Activate(input).Chain<ExecuteReportingStep>().Resolve();
+    ) => Activate(input).Chain<ExecuteReportingJunction>().Resolve();
 }
