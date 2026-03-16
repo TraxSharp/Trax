@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Trax.Cli/Trax.Cli.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.Cli.Tests/Trax.Cli.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,19 @@
+using LanguageExt;
+using Trax.Effect.Attributes;
+using Trax.Effect.Services.ServiceTrain;
+using {{ Namespace }}.Junctions;
+
+namespace {{ Namespace }};
+
+/// <summary>
+/// {{ Description }}
+/// </summary>
+[{{ Attribute }}(Description = "{{ Description }}")]
+public class {{ TrainName }}Train
+    : ServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>,
+        I{{ TrainName }}Train
+{
+    protected override async Task<Either<Exception, {{ OutputTypeName }}>> RunInternal(
+        {{ InputTypeName }} input
+    ) => Activate(input).Chain<{{ TrainName }}Junction>().Resolve();
+}

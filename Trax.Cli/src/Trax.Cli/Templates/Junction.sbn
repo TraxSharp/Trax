@@ -1,0 +1,22 @@
+{{- if OutputIsUnit }}
+using LanguageExt;
+{{- end }}
+using Trax.Core.Models;
+
+namespace {{ Namespace }}.Junctions;
+
+public class {{ TrainName }}Junction(ILogger<{{ TrainName }}Junction> logger)
+    : Junction<{{ InputTypeName }}, {{ OutputTypeName }}>
+{
+    public override async Task<{{ OutputTypeName }}> Run({{ InputTypeName }} input)
+    {
+        logger.LogInformation("Running {{ TrainName }}");
+        {{- if HttpMethod }}
+        // TODO: Call external API here
+        // Original endpoint: {{ HttpMethod }} {{ HttpPath }}
+        {{- else }}
+        // TODO: Implement junction logic
+        {{- end }}
+        throw new NotImplementedException();
+    }
+}

@@ -1,0 +1,16 @@
+type Query {
+  search(query: String, limit: Int, offset: Int): SearchResult
+}
+
+type SearchResult {
+  items: [Item!]
+  totalCount: Int!
+  nextCursor: String
+}
+
+type Item {
+  id: ID!
+  name: String!
+  description: String
+  tags: [String!]
+}

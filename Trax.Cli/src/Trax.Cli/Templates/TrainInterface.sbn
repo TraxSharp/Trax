@@ -1,0 +1,8 @@
+{{- if InputIsUnit || OutputIsUnit }}
+using LanguageExt;
+{{- end }}
+using Trax.Effect.Services.ServiceTrain;
+
+namespace {{ Namespace }};
+
+public interface I{{ TrainName }}Train : IServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>;

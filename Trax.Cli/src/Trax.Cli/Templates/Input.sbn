@@ -1,0 +1,13 @@
+namespace {{ Namespace }};
+
+public record {{ TypeName }}
+{
+{{- for field in Fields }}
+  {{- if field.Description }}
+    /// <summary>
+    /// {{ field.Description }}
+    /// </summary>
+  {{- end }}
+    public {{ field.RequiredKeyword }}{{ field.TypeName }}{{ field.NullableMarker }} {{ field.SanitizedName }} { get; init; }
+{{- end }}
+}
