@@ -10,7 +10,10 @@ namespace Trax.Samples.EnergyHub.Trains.Sustainability.GenerateSustainabilityRep
 /// carbon offset, renewable percentage, total generation, and revenue.
 /// Scheduled daily at midnight via Cron.
 /// </summary>
-[TraxMutation(Description = "Generates a sustainability report for the energy hub")]
+[TraxMutation(
+    Namespace = "sustainability",
+    Description = "Generates a sustainability report for the energy hub"
+)]
 [TraxBroadcast]
 public class GenerateSustainabilityReportTrain
     : ServiceTrain<GenerateSustainabilityReportInput, GenerateSustainabilityReportOutput>,

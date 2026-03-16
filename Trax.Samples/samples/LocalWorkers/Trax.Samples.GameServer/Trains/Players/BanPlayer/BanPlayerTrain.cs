@@ -10,7 +10,11 @@ namespace Trax.Samples.GameServer.Trains.Players.BanPlayer;
 /// Requires the "Admin" authorization policy — players with only the "Player" role get 403.
 /// </summary>
 [TraxAuthorize("Admin")]
-[TraxMutation(GraphQLOperation.Run, Description = "Bans a player (admin only)")]
+[TraxMutation(
+    GraphQLOperation.Run,
+    Namespace = GraphQLNamespaces.Players,
+    Description = "Bans a player (admin only)"
+)]
 public class BanPlayerTrain : ServiceTrain<BanPlayerInput, Unit>, IBanPlayerTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(BanPlayerInput input) =>

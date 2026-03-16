@@ -9,7 +9,7 @@ namespace Trax.Samples.EnergyHub.Trains.SolarProduction.MonitorSolarProduction;
 /// Reads sensor data from the Solar PV Array and calculates production metrics.
 /// Scheduled every 5 minutes. ManageBatteryStorage depends on this via ThenInclude.
 /// </summary>
-[TraxQuery(Description = "Reads current solar PV array production metrics")]
+[TraxQuery(Namespace = "solar", Description = "Reads current solar PV array production metrics")]
 [TraxBroadcast]
 public class MonitorSolarProductionTrain
     : ServiceTrain<MonitorSolarProductionInput, MonitorSolarProductionOutput>,

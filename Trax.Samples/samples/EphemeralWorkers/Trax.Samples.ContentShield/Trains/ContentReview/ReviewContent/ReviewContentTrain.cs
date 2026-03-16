@@ -13,7 +13,11 @@ namespace Trax.Samples.ContentShield.Trains.ContentReview.ReviewContent;
 /// Dispatched to the ephemeral Runner via HTTP (UseRemoteWorkers).
 /// </summary>
 [TraxConcurrencyLimit(15)]
-[TraxMutation(GraphQLOperation.Queue, Description = "Reviews content for policy violations")]
+[TraxMutation(
+    GraphQLOperation.Queue,
+    Namespace = "moderation",
+    Description = "Reviews content for policy violations"
+)]
 [TraxBroadcast]
 public class ReviewContentTrain
     : ServiceTrain<ReviewContentInput, ReviewContentOutput>,

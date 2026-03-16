@@ -15,7 +15,10 @@ namespace Trax.Samples.GameServer.Trains.Matches.ProcessMatchResult;
 /// When anomalies are detected, CheckForAnomaliesJunction activates the dormant
 /// DetectCheatPattern dependent train via IDormantDependentContext.
 /// </summary>
-[TraxMutation(Description = "Processes a completed match result")]
+[TraxMutation(
+    Namespace = GraphQLNamespaces.Matches,
+    Description = "Processes a completed match result"
+)]
 [TraxBroadcast]
 public class ProcessMatchResultTrain
     : ServiceTrain<ProcessMatchResultInput, ProcessMatchResultOutput>,

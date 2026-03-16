@@ -9,7 +9,7 @@ namespace Trax.Samples.GameServer.Trains.Players.LookupPlayer;
 /// Lightweight train for fast player profile lookups.
 /// Designed to run directly on the API server via the GraphQL API.
 /// </summary>
-[TraxQuery(Description = "Looks up a player profile")]
+[TraxQuery(Namespace = GraphQLNamespaces.Players, Description = "Looks up a player profile")]
 [TraxBroadcast]
 public class LookupPlayerTrain : ServiceTrain<LookupPlayerInput, PlayerProfile>, ILookupPlayerTrain
 {
