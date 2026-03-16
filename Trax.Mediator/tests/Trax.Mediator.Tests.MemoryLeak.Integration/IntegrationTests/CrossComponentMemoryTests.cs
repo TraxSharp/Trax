@@ -417,7 +417,7 @@ public class MockTraxEffectConfiguration(JsonSerializerOptions options) : ITraxE
     public JsonSerializerSettings NewtonsoftJsonSerializerSettings { get; } =
         new() { ReferenceLoopHandling = ReferenceLoopHandling.Ignore };
 
-    public bool SerializeStepData { get; } = true;
+    public bool SerializeJunctionData { get; } = true;
     public LogLevel LogLevel { get; } = LogLevel.Debug;
 }
 

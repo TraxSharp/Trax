@@ -31,7 +31,7 @@
     <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
-    <PackageReference Include="Trax.Effect.StepProvider.Logging" Version="1.*" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" Version="1.*" />
   </ItemGroup>
 
   <ItemGroup>

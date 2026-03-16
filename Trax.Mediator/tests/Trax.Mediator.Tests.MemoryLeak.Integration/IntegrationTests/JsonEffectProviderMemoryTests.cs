@@ -446,7 +446,7 @@ public class JsonEffectProviderMemoryTests
     {
         public System.Text.Json.JsonSerializerOptions SystemJsonSerializerOptions { get; } = new();
         public JsonSerializerSettings NewtonsoftJsonSerializerSettings { get; } = new();
-        public bool SerializeStepData { get; } = false;
+        public bool SerializeJunctionData { get; } = false;
         public LogLevel LogLevel { get; } = LogLevel.Information;
     }
 }

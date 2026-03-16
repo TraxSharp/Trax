@@ -1,6 +1,6 @@
 using FluentAssertions;
 using LanguageExt;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Core.Train;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Utils;
 using Monad = Trax.Core.Monad;
@@ -59,9 +59,9 @@ public class CoreTrainMemoryTests
     }
 
     [Test]
-    public async Task Train_MemoryDictionary_ShouldGrowWithStepCount()
+    public async Task Train_MemoryDictionary_ShouldGrowWithJunctionCount()
     {
-        // Test how Memory dictionary grows with increasing number of steps
+        // Test how Memory dictionary grows with increasing number of junctions
         var smallTrainResult = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
             {
@@ -315,8 +315,8 @@ public class VeryLargeDataModel(string name, byte[] data)
     public string Description { get; } = new string('X', 10000); // Additional 10KB string
 }
 
-// Simple step that processes input
-public class ProcessStep : Step<SimpleInput, SimpleOutput>
+// Simple junction that processes input
+public class ProcessJunction : Junction<SimpleInput, SimpleOutput>
 {
     public override Task<SimpleOutput> Run(SimpleInput input)
     {
@@ -324,8 +324,8 @@ public class ProcessStep : Step<SimpleInput, SimpleOutput>
     }
 }
 
-// Step that processes SimpleOutput to SimpleOutput (for chaining)
-public class ProcessOutputStep : Step<SimpleOutput, SimpleOutput>
+// Junction that processes SimpleOutput to SimpleOutput (for chaining)
+public class ProcessOutputJunction : Junction<SimpleOutput, SimpleOutput>
 {
     public override Task<SimpleOutput> Run(SimpleOutput input)
     {
@@ -333,8 +333,8 @@ public class ProcessOutputStep : Step<SimpleOutput, SimpleOutput>
     }
 }
 
-// Step that handles large data
-public class LargeDataStep : Step<LargeDataModel, SimpleOutput>
+// Junction that handles large data
+public class LargeDataJunction : Junction<LargeDataModel, SimpleOutput>
 {
     public override Task<SimpleOutput> Run(LargeDataModel input)
     {
@@ -344,8 +344,8 @@ public class LargeDataStep : Step<LargeDataModel, SimpleOutput>
     }
 }
 
-// Step that returns a tuple
-public class TupleStep : Step<SimpleInput, (string Result, int Count, DateTime Timestamp)>
+// Junction that returns a tuple
+public class TupleJunction : Junction<SimpleInput, (string Result, int Count, DateTime Timestamp)>
 {
     public override Task<(string Result, int Count, DateTime Timestamp)> Run(SimpleInput input)
     {
@@ -364,7 +364,7 @@ public class SmallChainTrain : Train<SimpleInput, SimpleOutput>
 {
     protected override Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input)
     {
-        var result = Activate(input).Chain<ProcessStep>().Resolve();
+        var result = Activate(input).Chain<ProcessJunction>().Resolve();
         return Task.FromResult(result);
     }
 }
@@ -373,13 +373,13 @@ public class LargeChainTrain : Train<SimpleInput, SimpleOutput>
 {
     protected override Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input)
     {
-        // Chain multiple steps to fill Memory dictionary
+        // Chain multiple junctions to fill Memory dictionary
         var result = Activate(input)
-            .Chain<ProcessStep>()
-            .Chain<ProcessOutputStep>()
-            .Chain<ProcessOutputStep>()
-            .Chain<ProcessOutputStep>()
-            .Chain<ProcessOutputStep>()
+            .Chain<ProcessJunction>()
+            .Chain<ProcessOutputJunction>()
+            .Chain<ProcessOutputJunction>()
+            .Chain<ProcessOutputJunction>()
+            .Chain<ProcessOutputJunction>()
             .Resolve();
 
         return Task.FromResult(result);
@@ -390,7 +390,7 @@ public class LargeDataTrain : Train<LargeDataModel, SimpleOutput>
 {
     protected override Task<Either<Exception, SimpleOutput>> RunInternal(LargeDataModel input)
     {
-        var result = Activate(input).Chain<LargeDataStep>().Resolve();
+        var result = Activate(input).Chain<LargeDataJunction>().Resolve();
         return Task.FromResult(result);
     }
 }
@@ -400,7 +400,7 @@ public class VeryLargeDataTrain : Train<VeryLargeDataModel, SimpleOutput>
     protected override Task<Either<Exception, SimpleOutput>> RunInternal(VeryLargeDataModel input)
     {
         var largeModel = new LargeDataModel(input.Name, input.Data);
-        var result = Activate(input, largeModel).Chain<LargeDataStep>().Resolve();
+        var result = Activate(input, largeModel).Chain<LargeDataJunction>().Resolve();
         return Task.FromResult(result);
     }
 }
@@ -411,7 +411,7 @@ public class TupleTrain : Train<SimpleInput, (string Result, int Count, DateTime
         Either<Exception, (string Result, int Count, DateTime Timestamp)>
     > RunInternal(SimpleInput input)
     {
-        var result = Activate(input).Chain<TupleStep>().Resolve();
+        var result = Activate(input).Chain<TupleJunction>().Resolve();
         return Task.FromResult(result);
     }
 }
@@ -424,7 +424,7 @@ public class TestableTrain : Train<SimpleInput, SimpleOutput>
     protected override Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input)
     {
         _monad = Activate(input);
-        var result = _monad.Chain<ProcessStep>().Resolve();
+        var result = _monad.Chain<ProcessJunction>().Resolve();
         return Task.FromResult(result);
     }
 

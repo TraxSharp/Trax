@@ -89,7 +89,7 @@ The cancellation signal is forwarded to the train and all its stops.
 A stop can dispatch another train mid-journey. Pass the current `Metadata` to establish a parent-child relationship between the journeys:
 
 ```csharp
-public class SendWelcomeEmailStep(ITrainBus trainBus) : Step<User, Unit>
+public class SendWelcomeEmailJunction(ITrainBus trainBus) : Junction<User, Unit>
 {
     public override async Task<Unit> Run(User input)
     {
@@ -125,7 +125,7 @@ At startup, `AddMediator` scans the provided assemblies for types implementing `
 Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
 
 ```
-Trax.Core              pipelines, steps, railway error propagation
+Trax.Core              pipelines, junctions, railway error propagation
 └→ Trax.Effect         + execution logging, DI, pluggable storage
    └→ Trax.Mediator    ← you are here
       └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues

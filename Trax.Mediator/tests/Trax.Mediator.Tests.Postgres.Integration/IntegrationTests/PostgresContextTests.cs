@@ -3,12 +3,12 @@ using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Trax.Core.Step;
+using Trax.Core.Junction;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata.DTOs;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
@@ -63,7 +63,7 @@ public class PostgresContextTests : TestSetup
         metadata.Name.Should().Be(typeof(ITestTrain).FullName);
         metadata.FailureException.Should().BeNullOrEmpty();
         metadata.FailureReason.Should().BeNullOrEmpty();
-        metadata.FailureStep.Should().BeNullOrEmpty();
+        metadata.FailureJunction.Should().BeNullOrEmpty();
         metadata.TrainState.Should().Be(TrainState.Completed);
     }
 
@@ -82,7 +82,7 @@ public class PostgresContextTests : TestSetup
         metadata.Name.Should().Be(typeof(ITestTrain).FullName);
         metadata.FailureException.Should().BeNullOrEmpty();
         metadata.FailureReason.Should().BeNullOrEmpty();
-        metadata.FailureStep.Should().BeNullOrEmpty();
+        metadata.FailureJunction.Should().BeNullOrEmpty();
         metadata.TrainState.Should().Be(TrainState.Completed);
     }
 
@@ -104,13 +104,13 @@ public class PostgresContextTests : TestSetup
         trainMetadata.Name.Should().Be(typeof(ITestTrainWithinTrain).FullName);
         trainMetadata.FailureException.Should().BeNullOrEmpty();
         trainMetadata.FailureReason.Should().BeNullOrEmpty();
-        trainMetadata.FailureStep.Should().BeNullOrEmpty();
+        trainMetadata.FailureJunction.Should().BeNullOrEmpty();
         trainMetadata.TrainState.Should().Be(TrainState.Completed);
         var innerTrainMetadata = innerTrain!.Metadata!;
         innerTrainMetadata.Name.Should().Be(typeof(ITestTrain).FullName);
         innerTrainMetadata.FailureException.Should().BeNullOrEmpty();
         innerTrainMetadata.FailureReason.Should().BeNullOrEmpty();
-        innerTrainMetadata.FailureStep.Should().BeNullOrEmpty();
+        innerTrainMetadata.FailureJunction.Should().BeNullOrEmpty();
         innerTrainMetadata.TrainState.Should().Be(TrainState.Completed);
 
         using var dataContext = (IDataContext)dataContextProvider.Create();
@@ -168,14 +168,16 @@ public class PostgresContextTests : TestSetup
         > RunInternal(TestTrainWithinTrainInput input) =>
             Activate(input)
                 .AddServices<ITestTrainWithinTrain>(this)
-                .Chain<StepToRunTestTrain>()
+                .Chain<JunctionToRunTestTrain>()
                 .Resolve();
     }
 
     internal record TestTrainWithinTrainInput;
 
-    internal class StepToRunTestTrain(ITrainBus trainBus, ILogger<StepToRunTestTrain> logger)
-        : EffectStep<Unit, ITestTrain>
+    internal class JunctionToRunTestTrain(
+        ITrainBus trainBus,
+        ILogger<JunctionToRunTestTrain> logger
+    ) : EffectJunction<Unit, ITestTrain>
     {
         public override async Task<ITestTrain> Run(Unit input)
         {
