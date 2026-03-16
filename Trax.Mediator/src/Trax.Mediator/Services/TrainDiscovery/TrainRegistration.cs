@@ -71,6 +71,12 @@ public class TrainRegistration
     public required GraphQLOperation GraphQLOperations { get; init; }
 
     /// <summary>
+    /// Optional namespace to group this train's GraphQL field under.
+    /// When set, the field appears under a sub-namespace (e.g. <c>discover { alerts { field } }</c>).
+    /// </summary>
+    public string? GraphQLNamespace { get; init; }
+
+    /// <summary>
     /// Maximum concurrent RUN executions for this train, from <see cref="TraxConcurrencyLimitAttribute"/>.
     /// Null means no per-train limit (falls back to the global default or no limit).
     /// Builder-level overrides via <c>ConcurrentRunLimit&lt;T&gt;()</c> take precedence over this value.

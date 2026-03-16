@@ -76,6 +76,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     GraphQLDescription = graphql.Description,
                     GraphQLDeprecationReason = graphql.DeprecationReason,
                     GraphQLOperations = graphql.Operations,
+                    GraphQLNamespace = graphql.Namespace,
                     MaxConcurrentRun = concurrencyLimit,
                 }
             );
@@ -120,6 +121,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     GraphQLDescription = graphql.Description,
                     GraphQLDeprecationReason = graphql.DeprecationReason,
                     GraphQLOperations = graphql.Operations,
+                    GraphQLNamespace = graphql.Namespace,
                     MaxConcurrentRun = concurrencyLimit,
                 };
             })
@@ -172,7 +174,8 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         string? Name,
         string? Description,
         string? DeprecationReason,
-        GraphQLOperation Operations
+        GraphQLOperation Operations,
+        string? Namespace
     ) GetGraphQLMetadata(Type implementationType)
     {
         var queryAttr = implementationType.GetCustomAttribute<TraxQueryAttribute>();
@@ -184,7 +187,8 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 queryAttr.Name,
                 queryAttr.Description,
                 queryAttr.DeprecationReason,
-                GraphQLOperation.Run
+                GraphQLOperation.Run,
+                queryAttr.Namespace
             );
         }
 
@@ -197,11 +201,12 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 mutationAttr.Name,
                 mutationAttr.Description,
                 mutationAttr.DeprecationReason,
-                mutationAttr.Operations
+                mutationAttr.Operations,
+                mutationAttr.Namespace
             );
         }
 
-        return (false, false, null, null, null, GraphQLOperation.Run);
+        return (false, false, null, null, null, GraphQLOperation.Run, null);
     }
 
     private static bool HasBroadcastAttribute(Type implementationType) =>

@@ -21,6 +21,12 @@ namespace Trax.Mediator.Services.TrainBus;
 /// It uses reflection and dependency injection to dynamically discover, instantiate, and execute
 /// the appropriate train for a given input type.
 ///
+/// Each <c>RunAsync</c> call creates a child DI scope, resolves the train from that scope,
+/// executes it, and disposes the scope when done. This ensures each train execution is fully
+/// isolated — scoped services like <c>DbContext</c> are not shared across train executions.
+/// This is especially important in Blazor Server where the circuit-level scope persists for
+/// the entire connection.
+///
 /// The train bus relies on the train registry to map input types to train types,
 /// and uses the service provider to resolve and instantiate the train instances.
 ///
@@ -30,14 +36,20 @@ namespace Trax.Mediator.Services.TrainBus;
 /// - Property injection for trains
 /// - Metadata association for tracking and logging
 /// - Type-safe execution with generic output types
+/// - Per-execution scope isolation
 ///
-/// The train bus is typically registered as a scoped service in the dependency injection
+/// The train bus is registered as a scoped service in the dependency injection
 /// container, allowing it to be injected into controllers, services, or other components
 /// that need to execute trains.
 /// </remarks>
-/// <param name="serviceProvider">The service provider used to resolve train instances</param>
+/// <param name="serviceProvider">The service provider used to resolve train instances for <see cref="InitializeTrain"/></param>
+/// <param name="scopeFactory">Factory for creating child scopes per <c>RunAsync</c> call</param>
 /// <param name="registryService">The registry service that maps input types to train types</param>
-public class TrainBus(IServiceProvider serviceProvider, ITrainRegistry registryService) : ITrainBus
+public class TrainBus(
+    IServiceProvider serviceProvider,
+    IServiceScopeFactory scopeFactory,
+    ITrainRegistry registryService
+) : ITrainBus
 {
     /// <summary>
     /// Thread-safe cache for storing reflection method lookups to improve performance.
@@ -99,28 +111,48 @@ public class TrainBus(IServiceProvider serviceProvider, ITrainRegistry registryS
 
     public object InitializeTrain(object trainInput)
     {
+        return InitializeTrainFromProvider(serviceProvider, trainInput);
+    }
+
+    /// <summary>
+    /// Resolves and initializes a train from a specific service provider.
+    /// Used by <c>RunAsync</c> to resolve trains from child scopes, and by
+    /// <see cref="InitializeTrain"/> for backward-compatible resolution from the TrainBus's own scope.
+    /// </summary>
+    private static object InitializeTrainFromProvider(
+        IServiceProvider provider,
+        object trainInput,
+        ITrainRegistry registry
+    )
+    {
         if (trainInput == null)
             throw new TrainException("trainInput is null as input to TrainBus.SendAsync(...)");
 
         // The full type of the input, rather than just the interface
         var inputType = trainInput.GetType();
 
-        var foundTrain = registryService.InputTypeToTrain.TryGetValue(
-            inputType,
-            out var correctTrain
-        );
+        var foundTrain = registry.InputTypeToTrain.TryGetValue(inputType, out var correctTrain);
 
         if (foundTrain == false || correctTrain == null)
             throw new TrainException($"Could not find train with input type ({inputType.Name})");
 
-        var trainService = serviceProvider.GetRequiredService(correctTrain);
-        serviceProvider.InjectProperties(trainService);
+        var trainService = provider.GetRequiredService(correctTrain);
+        provider.InjectProperties(trainService);
 
         return trainService;
     }
 
     /// <summary>
+    /// Instance helper that delegates to the static method with this bus's registry.
+    /// </summary>
+    private object InitializeTrainFromProvider(IServiceProvider provider, object trainInput)
+    {
+        return InitializeTrainFromProvider(provider, trainInput, registryService);
+    }
+
+    /// <summary>
     /// Executes a train that accepts the specified input type and returns the specified output type.
+    /// Creates a child DI scope for the duration of the train execution.
     /// </summary>
     /// <typeparam name="TOut">The expected output type of the train</typeparam>
     /// <param name="trainInput">The input object for the train</param>
@@ -130,30 +162,10 @@ public class TrainBus(IServiceProvider serviceProvider, ITrainRegistry registryS
     /// Thrown when the input is null, no train is found for the input type,
     /// the Run method cannot be found on the train, or the Run method invocation fails.
     /// </exception>
-    /// <remarks>
-    /// This method performs the following steps:
-    /// 1. Validates that the input is not null
-    /// 2. Gets the type of the input object
-    /// 3. Looks up the train type in the registry based on the input type
-    /// 4. Resolves the train instance from the service provider
-    /// 5. Injects properties into the train instance
-    /// 6. Sets the parent ID if metadata is provided (for parent-child relationships)
-    /// 7. Finds the appropriate Run method on the train using reflection
-    /// 8. Invokes the Run method with the input (and metadata if scheduler-created)
-    /// 9. Returns the result cast to the expected output type
-    ///
-    /// The method uses reflection to find and invoke the Run method because trains
-    /// can have multiple Run method implementations, and we need to select the correct one
-    /// from Trax.Effect rather than the base Trax.Core implementation.
-    ///
-    /// When metadata with a ManifestId is provided (scheduler-created metadata), the
-    /// Run(TIn, Metadata) overload is called so the train uses that pre-created metadata
-    /// instead of creating a new one. This ensures the scheduler's metadata record is properly
-    /// updated from Pending to Completed.
-    /// </remarks>
-    public Task<TOut> RunAsync<TOut>(object trainInput, Metadata? metadata = null)
+    public async Task<TOut> RunAsync<TOut>(object trainInput, Metadata? metadata = null)
     {
-        var trainService = InitializeTrain(trainInput);
+        using var scope = scopeFactory.CreateScope();
+        var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
         var trainType = trainService.GetType();
 
         // When metadata is pre-created and Pending (from the scheduler or ad-hoc dashboard execution),
@@ -195,7 +207,7 @@ public class TrainBus(IServiceProvider serviceProvider, ITrainRegistry registryS
                     $"Failed to invoke Run(input, metadata) method for train type ({trainType.Name})"
                 );
 
-            return taskWithMetadata;
+            return await taskWithMetadata;
         }
 
         // Standard case: Get the 1-param Run method from cache
@@ -235,19 +247,21 @@ public class TrainBus(IServiceProvider serviceProvider, ITrainRegistry registryS
                 $"Failed to invoke Run method for train type ({trainService.GetType().Name})"
             );
 
-        return taskRunMethod;
+        return await taskRunMethod;
     }
 
     /// <summary>
     /// Executes a train with cancellation support.
+    /// Creates a child DI scope for the duration of the train execution.
     /// </summary>
-    public Task<TOut> RunAsync<TOut>(
+    public async Task<TOut> RunAsync<TOut>(
         object trainInput,
         CancellationToken cancellationToken,
         Metadata? metadata = null
     )
     {
-        var trainService = InitializeTrain(trainInput);
+        using var scope = scopeFactory.CreateScope();
+        var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
         var trainType = trainService.GetType();
 
         if (metadata != null)
@@ -290,7 +304,7 @@ public class TrainBus(IServiceProvider serviceProvider, ITrainRegistry registryS
                     $"Failed to invoke Run(input, metadata, ct) method for train type ({trainType.Name})"
                 );
 
-            return taskWithMetadata;
+            return await taskWithMetadata;
         }
 
         // Find Run(input, ct) — 2 params where second is CancellationToken
@@ -323,12 +337,13 @@ public class TrainBus(IServiceProvider serviceProvider, ITrainRegistry registryS
                 $"Failed to invoke Run(input, ct) method for train type ({trainType.Name})"
             );
 
-        return taskRunMethod;
+        return await taskRunMethod;
     }
 
     public async Task RunAsync(object trainInput, Metadata? metadata = null)
     {
-        var trainService = InitializeTrain(trainInput);
+        using var scope = scopeFactory.CreateScope();
+        var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
         var trainType = trainService.GetType();
 
         if (metadata != null)
@@ -406,7 +421,8 @@ public class TrainBus(IServiceProvider serviceProvider, ITrainRegistry registryS
         Metadata? metadata = null
     )
     {
-        var trainService = InitializeTrain(trainInput);
+        using var scope = scopeFactory.CreateScope();
+        var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
         var trainType = trainService.GetType();
 
         if (metadata != null)
