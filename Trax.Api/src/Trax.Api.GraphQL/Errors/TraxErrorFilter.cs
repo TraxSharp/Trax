@@ -12,7 +12,7 @@ namespace Trax.Api.GraphQL.Errors;
 /// <remarks>
 /// Exposed exception types:
 /// <list type="bullet">
-/// <item><see cref="TrainException"/> — train execution failures (step errors, remote errors)</item>
+/// <item><see cref="TrainException"/> — train execution failures (junction errors, remote errors)</item>
 /// <item><see cref="TrainAuthorizationException"/> — authorization failures</item>
 /// <item><see cref="InvalidOperationException"/> — configuration/input errors (missing train, bad input)</item>
 /// </list>

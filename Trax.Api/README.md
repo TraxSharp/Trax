@@ -76,7 +76,7 @@ public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrai
 Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
 
 ```
-Trax.Core              pipelines, steps, railway error propagation
+Trax.Core              pipelines, junctions, railway error propagation
 └→ Trax.Effect         + execution logging, DI, pluggable storage
    └→ Trax.Mediator       + decoupled dispatch via TrainBus
       └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues

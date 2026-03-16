@@ -69,7 +69,7 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
                 ? state
                 : TrainState.Pending,
             Timestamp: message.Timestamp,
-            FailureStep: message.FailureStep,
+            FailureJunction: message.FailureJunction,
             FailureReason: message.FailureReason,
             Output: message.Output,
             HostName: message.HostName,

@@ -9,7 +9,7 @@ public record ExecutionSummary(
     TrainState TrainState,
     DateTime StartTime,
     DateTime? EndTime,
-    string? FailureStep,
+    string? FailureJunction,
     string? FailureReason,
     long? ManifestId,
     bool CancellationRequested,

@@ -11,7 +11,7 @@ public record TrainLifecycleEvent(
     string TrainName,
     TrainState TrainState,
     DateTime Timestamp,
-    string? FailureStep,
+    string? FailureJunction,
     string? FailureReason,
     string? Output,
     string? HostName = null,

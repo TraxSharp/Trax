@@ -83,7 +83,7 @@ public class GraphQLTrainEventHandlerTests
             "Failed",
             "Failed",
             "My.Train",
-            failureStep: "StepA",
+            failureJunction: "JunctionA",
             failureReason: "boom"
         );
 
@@ -222,14 +222,14 @@ public class GraphQLTrainEventHandlerTests
             "Failed",
             "Failed",
             "My.Train",
-            failureStep: "ProcessData",
+            failureJunction: "ProcessData",
             failureReason: "NullReferenceException"
         );
 
         await handler.HandleAsync(message, CancellationToken.None);
 
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
-        evt!.FailureStep.Should().Be("ProcessData");
+        evt!.FailureJunction.Should().Be("ProcessData");
         evt.FailureReason.Should().Be("NullReferenceException");
     }
 
@@ -356,7 +356,7 @@ public class GraphQLTrainEventHandlerTests
         string eventType,
         string trainState,
         string trainName,
-        string? failureStep = null,
+        string? failureJunction = null,
         string? failureReason = null,
         string? output = null
     ) =>
@@ -366,7 +366,7 @@ public class GraphQLTrainEventHandlerTests
             TrainName: trainName,
             TrainState: trainState,
             Timestamp: new DateTime(2026, 3, 6, 12, 0, 0, DateTimeKind.Utc),
-            FailureStep: failureStep,
+            FailureJunction: failureJunction,
             FailureReason: failureReason,
             EventType: eventType,
             Executor: "RemoteWorker",
@@ -437,7 +437,7 @@ public class GraphQLTrainEventHandlerTests
             TrainName: "Namespace.MyTrain",
             TrainState: "Completed",
             Timestamp: new DateTime(2026, 3, 6, 12, 0, 0, DateTimeKind.Utc),
-            FailureStep: null,
+            FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",
             Executor: "RemoteWorker",

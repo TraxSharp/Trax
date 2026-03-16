@@ -22,12 +22,12 @@ public class TraxErrorFilterTests
     [Test]
     public void OnError_TrainException_ExposesMessageWithTrainErrorCode()
     {
-        var ex = new TrainException("Step failed: input was invalid");
+        var ex = new TrainException("Junction failed: input was invalid");
         var error = CreateError(ex);
 
         var result = _filter.OnError(error);
 
-        result.Message.Should().Be("Step failed: input was invalid");
+        result.Message.Should().Be("Junction failed: input was invalid");
         result.Code.Should().Be("TRAX_TRAIN_ERROR");
     }
 
@@ -35,7 +35,7 @@ public class TraxErrorFilterTests
     public void OnError_TrainExceptionWithJsonMessage_PreservesFullMessage()
     {
         var json =
-            """{"trainName":"My.Train","trainExternalId":"ext-1","type":"ArgumentException","step":"Validate","message":"Bad input"}""";
+            """{"trainName":"My.Train","trainExternalId":"ext-1","type":"ArgumentException","junction":"Validate","message":"Bad input"}""";
         var ex = new TrainException(json);
         var error = CreateError(ex);
 
