@@ -3,7 +3,7 @@
 
 <RadzenCard class="rz-mb-4 cs-exception-viewer">
     <RadzenStack Gap="0.75rem">
-        @* ── Header: Exception type + failure step ── *@
+        @* ── Header: Exception type + failure junction ── *@
         <div class="cs-exception-header" @onclick="ToggleStackTrace">
             <RadzenIcon Icon="@(_expanded ? "expand_more" : "chevron_right")"
                         class="@($"cs-exception-toggle {(_expanded ? "cs-exception-toggle--open" : "")}")" />
@@ -16,7 +16,7 @@
         <RadzenRow Gap="1rem">
             <RadzenColumn Size="12" SizeMD="6">
                 <RadzenStack Gap="0.75rem">
-                    <FieldDisplay Label="Failure Step" Value="@(FailureStep ?? "—")" />
+                    <FieldDisplay Label="Failure Junction" Value="@(FailureJunction ?? "—")" />
                     <FieldDisplay Label="Exception" Value="@(FailureException ?? "—")" />
                 </RadzenStack>
             </RadzenColumn>
@@ -59,7 +59,7 @@
 
 @code {
     [Parameter]
-    public string? FailureStep { get; set; }
+    public string? FailureJunction { get; set; }
 
     [Parameter]
     public string? FailureException { get; set; }

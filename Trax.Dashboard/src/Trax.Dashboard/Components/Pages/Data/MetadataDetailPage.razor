@@ -154,14 +154,14 @@
     </RadzenCard>
 }
 
-@* ── Step Progress (only if in progress with a running step) ── *@
-@if (_metadata.TrainState == TrainState.InProgress && !string.IsNullOrWhiteSpace(_metadata.CurrentlyRunningStep))
+@* ── Junction Progress (only if in progress with a running junction) ── *@
+@if (_metadata.TrainState == TrainState.InProgress && !string.IsNullOrWhiteSpace(_metadata.CurrentlyRunningJunction))
 {
     <RadzenCard class="rz-mb-4" Style="border-left: 4px solid var(--rz-info);">
-        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2" Style="color: var(--rz-info);">Step Progress</RadzenText>
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2" Style="color: var(--rz-info);">Junction Progress</RadzenText>
         <RadzenStack Gap="0.75rem">
-            <FieldDisplay Label="Currently Running" Value="@_metadata.CurrentlyRunningStep" />
-            <FieldDisplay Label="Step Started" Value="@(_metadata.StepStartedAt?.ToString("HH:mm:ss") ?? "—")" />
+            <FieldDisplay Label="Currently Running" Value="@_metadata.CurrentlyRunningJunction" />
+            <FieldDisplay Label="Junction Started" Value="@(_metadata.JunctionStartedAt?.ToString("HH:mm:ss") ?? "—")" />
         </RadzenStack>
     </RadzenCard>
 }
@@ -169,7 +169,7 @@
 @* ── Failure Details (only if failed) ── *@
 @if (_metadata.TrainState == TrainState.Failed)
 {
-    <ExceptionViewer FailureStep="@_metadata.FailureStep"
+    <ExceptionViewer FailureJunction="@_metadata.FailureJunction"
                      FailureException="@_metadata.FailureException"
                      FailureReason="@_metadata.FailureReason"
                      StackTrace="@_metadata.StackTrace" />

@@ -188,7 +188,7 @@
             <RadzenColumn Size="12" SizeMD="6">
                 <RadzenStack Gap="0.75rem">
                     <FieldDisplay Label="Metadata ID" Value="@_latestFailedRun.Id.ToString()" />
-                    <FieldDisplay Label="Failure Step" Value="@(_latestFailedRun.FailureStep ?? "—")" />
+                    <FieldDisplay Label="Failure Junction" Value="@(_latestFailedRun.FailureJunction ?? "—")" />
                     <FieldDisplay Label="Exception" Value="@(_latestFailedRun.FailureException ?? "—")" />
                     <FieldDisplay Label="Reason" Value="@(_latestFailedRun.FailureReason ?? "—")" />
                     <FieldDisplay Label="Start Time" Value="@_latestFailedRun.StartTime.ToString("yyyy-MM-dd HH:mm:ss")" />
@@ -269,8 +269,8 @@
                     <Template Context="m">@FormatDuration(m)</Template>
                 </RadzenDataGridColumn>
                 <RadzenDataGridColumn TItem="Metadata"
-                                      Property="FailureStep"
-                                      Title="Failure Step"
+                                      Property="FailureJunction"
+                                      Title="Failure Junction"
                                       Width="150px" />
                 <RadzenDataGridColumn TItem="Metadata"
                                       Property="FailureReason"

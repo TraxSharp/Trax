@@ -57,10 +57,10 @@
                               Title="State"
                               Width="120px" />
         <RadzenDataGridColumn TItem="Metadata"
-                              Property="CurrentlyRunningStep"
-                              Title="Current Step"
+                              Property="CurrentlyRunningJunction"
+                              Title="Current Junction"
                               Width="150px">
-            <Template Context="m">@(m.TrainState == TrainState.InProgress ? (m.CurrentlyRunningStep ?? "—") : "—")</Template>
+            <Template Context="m">@(m.TrainState == TrainState.InProgress ? (m.CurrentlyRunningJunction ?? "—") : "—")</Template>
         </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="Metadata"
                               Property="ExternalId"
@@ -78,8 +78,8 @@
                               Width="180px"
                               FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
         <RadzenDataGridColumn TItem="Metadata"
-                              Property="FailureStep"
-                              Title="Failure Step"
+                              Property="FailureJunction"
+                              Title="Failure Junction"
                               Width="150px" />
         <RadzenDataGridColumn TItem="Metadata"
                               Property="FailureReason"
