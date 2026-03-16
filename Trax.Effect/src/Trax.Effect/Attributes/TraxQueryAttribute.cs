@@ -32,4 +32,11 @@ public class TraxQueryAttribute : Attribute
     /// Clients see a deprecation warning during introspection.
     /// </summary>
     public string? DeprecationReason { get; init; }
+
+    /// <summary>
+    /// Groups this field under a sub-namespace in the GraphQL schema.
+    /// When set, the field appears under <c>discover { namespace { field } }</c>
+    /// instead of directly under <c>discover { field }</c>.
+    /// </summary>
+    public string? Namespace { get; init; }
 }

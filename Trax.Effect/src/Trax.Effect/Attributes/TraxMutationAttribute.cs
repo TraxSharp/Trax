@@ -74,6 +74,13 @@ public class TraxMutationAttribute : Attribute
     /// Clients see a deprecation warning during introspection.
     /// </summary>
     public string? DeprecationReason { get; init; }
+
+    /// <summary>
+    /// Groups this field under a sub-namespace in the GraphQL schema.
+    /// When set, the field appears under <c>dispatch { namespace { field } }</c>
+    /// instead of directly under <c>dispatch { field }</c>.
+    /// </summary>
+    public string? Namespace { get; init; }
 }
 
 /// <summary>
