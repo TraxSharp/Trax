@@ -2,7 +2,7 @@ namespace Trax.Scheduler.Configuration;
 
 /// <summary>
 /// Internal registry that maps train names to specific job submitter types.
-/// Used by <see cref="Trax.Scheduler.Trains.JobDispatcher.Steps.DispatchJobsStep"/> to route
+/// Used by <see cref="Trax.Scheduler.Trains.JobDispatcher.Junctions.DispatchJobsJunction"/> to route
 /// jobs to the correct submitter based on the train being dispatched.
 /// </summary>
 internal class JobSubmitterRoutingConfiguration

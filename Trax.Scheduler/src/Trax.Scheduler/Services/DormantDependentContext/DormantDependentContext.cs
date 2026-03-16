@@ -20,7 +20,7 @@ namespace Trax.Scheduler.Services.DormantDependentContext;
 /// <remarks>
 /// Registered as Scoped so that each Hangfire job execution gets its own instance.
 /// Must be initialized via <see cref="Initialize"/> before use — this is done automatically
-/// by <c>RunScheduledTrainStep</c> in the JobRunner pipeline.
+/// by <c>RunScheduledTrainJunction</c> in the JobRunner pipeline.
 /// </remarks>
 internal class DormantDependentContext(
     IDataContextProviderFactory dataContextFactory,
@@ -32,7 +32,7 @@ internal class DormantDependentContext(
 
     /// <summary>
     /// Binds this context to the currently executing parent manifest.
-    /// Called by <c>RunScheduledTrainStep</c> before the user's train runs.
+    /// Called by <c>RunScheduledTrainJunction</c> before the user's train runs.
     /// </summary>
     /// <param name="parentManifestId">The database ID of the parent manifest.</param>
     internal void Initialize(long parentManifestId)

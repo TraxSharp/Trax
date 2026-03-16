@@ -1,6 +1,6 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Scheduler.Trains.ManifestManager.Steps;
+using Trax.Scheduler.Trains.ManifestManager.Junctions;
 
 namespace Trax.Scheduler.Trains.ManifestManager;
 
@@ -11,11 +11,11 @@ public class ManifestManagerTrain : ServiceTrain<Unit, Unit>, IManifestManagerTr
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
         Activate(input)
-            .Chain<LoadManifestsStep>()
-            .Chain<CancelTimedOutJobsStep>()
-            .Chain<ReapStalePendingMetadataStep>()
-            .Chain<ReapFailedJobsStep>()
-            .Chain<DetermineJobsToQueueStep>()
-            .Chain<CreateWorkQueueEntriesStep>()
+            .Chain<LoadManifestsJunction>()
+            .Chain<CancelTimedOutJobsJunction>()
+            .Chain<ReapStalePendingMetadataJunction>()
+            .Chain<ReapFailedJobsJunction>()
+            .Chain<DetermineJobsToQueueJunction>()
+            .Chain<CreateWorkQueueEntriesJunction>()
             .Resolve();
 }

@@ -2,11 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 
-namespace Trax.Scheduler.Trains.ManifestManager.Steps;
+namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 
 /// <summary>
 /// Cancels running jobs that have exceeded their configured timeout.
@@ -17,18 +17,18 @@ namespace Trax.Scheduler.Trains.ManifestManager.Steps;
 /// CancellationRequested=true in the database and attempts same-server instant cancellation
 /// via ICancellationRegistry.
 ///
-/// Cancelled jobs transition to TrainState.Cancelled at the next step boundary
+/// Cancelled jobs transition to TrainState.Cancelled at the next junction boundary
 /// (via CancellationCheckProvider) or immediately (via CTS). Cancelled jobs are
 /// NOT retried and do NOT create dead letters.
 ///
-/// This step runs before ReapFailedJobsStep in the ManifestManagerTrain chain.
+/// This junction runs before ReapFailedJobsJunction in the ManifestManagerTrain chain.
 /// </remarks>
-internal class CancelTimedOutJobsStep(
+internal class CancelTimedOutJobsJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     ICancellationRegistry cancellationRegistry,
-    ILogger<CancelTimedOutJobsStep> logger
-) : EffectStep<List<ManifestDispatchView>, List<ManifestDispatchView>>
+    ILogger<CancelTimedOutJobsJunction> logger
+) : EffectJunction<List<ManifestDispatchView>, List<ManifestDispatchView>>
 {
     public override async Task<List<ManifestDispatchView>> Run(List<ManifestDispatchView> views)
     {
@@ -39,7 +39,7 @@ internal class CancelTimedOutJobsStep(
 
         if (manifestIdsWithActiveJobs.Count == 0)
         {
-            logger.LogDebug("CancelTimedOutJobsStep: no active executions to check");
+            logger.LogDebug("CancelTimedOutJobsJunction: no active executions to check");
             return views;
         }
 
@@ -85,7 +85,7 @@ internal class CancelTimedOutJobsStep(
 
         if (metadataIdsToCancel.Count == 0)
         {
-            logger.LogDebug("CancelTimedOutJobsStep: no timed-out jobs found");
+            logger.LogDebug("CancelTimedOutJobsJunction: no timed-out jobs found");
             return views;
         }
 
@@ -107,7 +107,7 @@ internal class CancelTimedOutJobsStep(
         }
 
         logger.LogInformation(
-            "CancelTimedOutJobsStep completed: {CancelledCount} timed-out job(s) cancelled",
+            "CancelTimedOutJobsJunction completed: {CancelledCount} timed-out job(s) cancelled",
             metadataIdsToCancel.Count
         );
 

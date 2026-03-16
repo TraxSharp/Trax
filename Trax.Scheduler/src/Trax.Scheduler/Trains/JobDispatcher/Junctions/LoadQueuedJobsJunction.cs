@@ -3,16 +3,17 @@ using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 
-namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
+namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 
 /// <summary>
 /// Loads all queued work queue entries, ordered by group priority (highest first),
 /// then entry priority, then creation time (FIFO).
 /// Filters out entries whose ManifestGroup is disabled.
 /// </summary>
-internal class LoadQueuedJobsStep(IDataContext dataContext) : EffectStep<Unit, List<WorkQueue>>
+internal class LoadQueuedJobsJunction(IDataContext dataContext)
+    : EffectJunction<Unit, List<WorkQueue>>
 {
     public override async Task<List<WorkQueue>> Run(Unit input) =>
         await dataContext

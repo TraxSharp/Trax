@@ -12,6 +12,7 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.ManifestGroup;
@@ -21,7 +22,6 @@ using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Effect.Utils;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
@@ -73,7 +73,7 @@ public class ManifestGroupMaxActiveJobsTests
                             .UsePostgres(connectionString)
                             .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
                             .AddJson()
-                            .AddStepLogger(serializeStepData: true)
+                            .AddJunctionLogger(serializeJunctionData: true)
                     )
                     .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
                     .AddScheduler(scheduler =>
@@ -382,7 +382,7 @@ public class ManifestGroupMaxActiveJobsTests
         // Act
         await _train.Run(Unit.Default);
 
-        // Assert - Entry should remain queued (LoadQueuedJobsStep filters disabled groups)
+        // Assert - Entry should remain queued (LoadQueuedJobsJunction filters disabled groups)
         _dataContext.Reset();
         var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
         updated

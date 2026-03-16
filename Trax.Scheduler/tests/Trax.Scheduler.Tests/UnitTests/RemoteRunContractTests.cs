@@ -67,7 +67,7 @@ public class RemoteRunContractTests
         deserialized.IsError.Should().BeFalse();
         deserialized.ErrorMessage.Should().BeNull();
         deserialized.ExceptionType.Should().BeNull();
-        deserialized.FailureStep.Should().BeNull();
+        deserialized.FailureJunction.Should().BeNull();
         deserialized.StackTrace.Should().BeNull();
     }
 
@@ -99,8 +99,8 @@ public class RemoteRunContractTests
             IsError: true,
             ErrorMessage: "Validation failed",
             ExceptionType: "InvalidOperationException",
-            FailureStep: "ValidateInputStep",
-            StackTrace: "at MyApp.ValidateInputStep.Run() in Step.cs:line 42"
+            FailureJunction: "ValidateInputJunction",
+            StackTrace: "at MyApp.ValidateInputJunction.Run() in Junction.cs:line 42"
         );
 
         var json = JsonSerializer.Serialize(response);
@@ -111,8 +111,8 @@ public class RemoteRunContractTests
         deserialized.IsError.Should().BeTrue();
         deserialized.ErrorMessage.Should().Be("Validation failed");
         deserialized.ExceptionType.Should().Be("InvalidOperationException");
-        deserialized.FailureStep.Should().Be("ValidateInputStep");
-        deserialized.StackTrace.Should().Contain("ValidateInputStep");
+        deserialized.FailureJunction.Should().Be("ValidateInputJunction");
+        deserialized.StackTrace.Should().Contain("ValidateInputJunction");
     }
 
     [Test]
@@ -123,7 +123,7 @@ public class RemoteRunContractTests
             IsError: true,
             ErrorMessage: "Generic error",
             ExceptionType: null,
-            FailureStep: null,
+            FailureJunction: null,
             StackTrace: null
         );
 
@@ -134,7 +134,7 @@ public class RemoteRunContractTests
         deserialized!.IsError.Should().BeTrue();
         deserialized.ErrorMessage.Should().Be("Generic error");
         deserialized.ExceptionType.Should().BeNull();
-        deserialized.FailureStep.Should().BeNull();
+        deserialized.FailureJunction.Should().BeNull();
         deserialized.StackTrace.Should().BeNull();
     }
 
@@ -163,7 +163,7 @@ public class RemoteRunContractTests
         response.IsError.Should().BeFalse();
         response.ErrorMessage.Should().BeNull();
         response.ExceptionType.Should().BeNull();
-        response.FailureStep.Should().BeNull();
+        response.FailureJunction.Should().BeNull();
         response.StackTrace.Should().BeNull();
     }
 
@@ -232,7 +232,7 @@ public class RemoteRunContractTests
             IsError: true,
             ErrorMessage: "Something went wrong",
             ExceptionType: "InvalidOperationException",
-            StackTrace: "at Step.Run() in Step.cs:line 10"
+            StackTrace: "at Junction.Run() in Junction.cs:line 10"
         );
 
         var json = JsonSerializer.Serialize(response);
@@ -243,7 +243,7 @@ public class RemoteRunContractTests
         deserialized.IsError.Should().BeTrue();
         deserialized.ErrorMessage.Should().Be("Something went wrong");
         deserialized.ExceptionType.Should().Be("InvalidOperationException");
-        deserialized.StackTrace.Should().Contain("Step.Run");
+        deserialized.StackTrace.Should().Contain("Junction.Run");
     }
 
     [Test]
@@ -299,8 +299,8 @@ public class RemoteRunContractTests
             IsError: true,
             ErrorMessage: "validation failed",
             ExceptionType: "TrainException",
-            FailureStep: "ValidateStep",
-            StackTrace: "at App.ValidateStep.Run()"
+            FailureJunction: "ValidateJunction",
+            StackTrace: "at App.ValidateJunction.Run()"
         );
 
         var responseJson = JsonSerializer.Serialize(response);
@@ -310,8 +310,8 @@ public class RemoteRunContractTests
         receivedResponse!.IsError.Should().BeTrue();
         receivedResponse.ErrorMessage.Should().Contain("validation failed");
         receivedResponse.ExceptionType.Should().Be("TrainException");
-        receivedResponse.FailureStep.Should().Be("ValidateStep");
-        receivedResponse.StackTrace.Should().Contain("ValidateStep");
+        receivedResponse.FailureJunction.Should().Be("ValidateJunction");
+        receivedResponse.StackTrace.Should().Contain("ValidateJunction");
     }
 
     #endregion

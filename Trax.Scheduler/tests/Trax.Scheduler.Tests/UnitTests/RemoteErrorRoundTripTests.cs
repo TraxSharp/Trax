@@ -29,7 +29,7 @@ public class RemoteErrorRoundTripTests
             TrainName = "My.Namespace.IMyTrain",
             TrainExternalId = "ext-abc",
             Type = "ArgumentException",
-            Step = "ValidateInputStep",
+            Junction = "ValidateInputJunction",
             Message = "Input 'email' was null",
         };
         var trainException = new TrainException(JsonSerializer.Serialize(originalData));
@@ -39,7 +39,7 @@ public class RemoteErrorRoundTripTests
 
         runnerResponse.IsError.Should().BeTrue();
         runnerResponse.ExceptionType.Should().Be("ArgumentException");
-        runnerResponse.FailureStep.Should().Be("ValidateInputStep");
+        runnerResponse.FailureJunction.Should().Be("ValidateInputJunction");
         runnerResponse.ErrorMessage.Should().Be("Input 'email' was null");
 
         // Step 3: Serialize across the wire (runner → API)
@@ -54,7 +54,7 @@ public class RemoteErrorRoundTripTests
             TrainName = "",
             TrainExternalId = "",
             Type = apiResponse!.ExceptionType!,
-            Step = apiResponse.FailureStep ?? "Unknown",
+            Junction = apiResponse.FailureJunction ?? "Unknown",
             Message = apiResponse.ErrorMessage ?? "Remote train execution failed",
         };
         var reconstructedJson = JsonSerializer.Serialize(reconstructedData);
@@ -72,7 +72,7 @@ public class RemoteErrorRoundTripTests
         metadata.AddException(reconstructedException);
 
         metadata.FailureException.Should().Be("ArgumentException");
-        metadata.FailureStep.Should().Be("ValidateInputStep");
+        metadata.FailureJunction.Should().Be("ValidateInputJunction");
         metadata.FailureReason.Should().Be("Input 'email' was null");
     }
 
@@ -88,7 +88,7 @@ public class RemoteErrorRoundTripTests
         runnerResponse.IsError.Should().BeTrue();
         runnerResponse.ExceptionType.Should().Be("InvalidOperationException");
         runnerResponse.ErrorMessage.Should().Be("Connection timed out");
-        runnerResponse.FailureStep.Should().BeNull();
+        runnerResponse.FailureJunction.Should().BeNull();
 
         // Step 3: Wire round-trip
         var wireJson = JsonSerializer.Serialize(runnerResponse);
@@ -100,7 +100,7 @@ public class RemoteErrorRoundTripTests
             TrainName = "",
             TrainExternalId = "",
             Type = apiResponse.ExceptionType!,
-            Step = apiResponse.FailureStep ?? "Unknown",
+            Junction = apiResponse.FailureJunction ?? "Unknown",
             Message = apiResponse.ErrorMessage ?? "Remote train execution failed",
         };
         var reconstructedJson = JsonSerializer.Serialize(reconstructedData);
@@ -119,7 +119,7 @@ public class RemoteErrorRoundTripTests
 
         metadata.FailureException.Should().Be("InvalidOperationException");
         metadata.FailureReason.Should().Be("Connection timed out");
-        metadata.FailureStep.Should().Be("Unknown");
+        metadata.FailureJunction.Should().Be("Unknown");
     }
 
     #endregion
@@ -180,8 +180,8 @@ public class RemoteErrorRoundTripTests
             IsError: true,
             ErrorMessage: "Null reference in step",
             ExceptionType: "NullReferenceException",
-            FailureStep: "LoadDataStep",
-            StackTrace: "at App.LoadDataStep.Run()"
+            FailureJunction: "LoadDataJunction",
+            StackTrace: "at App.LoadDataJunction.Run()"
         );
 
         // Reconstruct as HttpRunExecutor does
@@ -190,7 +190,7 @@ public class RemoteErrorRoundTripTests
             TrainName = "",
             TrainExternalId = "",
             Type = response.ExceptionType!,
-            Step = response.FailureStep ?? "Unknown",
+            Junction = response.FailureJunction ?? "Unknown",
             Message = response.ErrorMessage ?? "Remote train execution failed",
         };
         var exception = new TrainException(JsonSerializer.Serialize(data));
@@ -207,7 +207,7 @@ public class RemoteErrorRoundTripTests
         metadata.AddException(exception);
 
         metadata.FailureException.Should().Be("NullReferenceException");
-        metadata.FailureStep.Should().Be("LoadDataStep");
+        metadata.FailureJunction.Should().Be("LoadDataJunction");
         metadata.FailureReason.Should().Be("Null reference in step");
     }
 

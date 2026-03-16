@@ -2,30 +2,32 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Trains.ManifestManager;
 
-namespace Trax.Scheduler.Trains.ManifestManager.Steps;
+namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 
 /// <summary>
 /// Reaps failed jobs by creating DeadLetter records for manifests that exceed their retry limit.
 /// </summary>
 /// <remarks>
-/// This step receives manifests from LoadManifestsStep and identifies those that have
+/// This junction receives manifests from LoadManifestsJunction and identifies those that have
 /// exceeded their max_retries count, moving them into the dead letter queue for manual intervention.
 ///
 /// Dead letters are persisted immediately via SaveChanges() to ensure they survive
-/// even if later steps in the train fail.
+/// even if later junctions in the train fail.
 ///
 /// The returned List&lt;DeadLetter&gt; is stored in the train's Memory and made available
-/// to DetermineJobsToQueueStep so it can exclude just-dead-lettered manifests.
+/// to DetermineJobsToQueueJunction so it can exclude just-dead-lettered manifests.
 /// </remarks>
-internal class ReapFailedJobsStep(IDataContext dataContext, ILogger<ReapFailedJobsStep> logger)
-    : EffectStep<List<ManifestDispatchView>, List<DeadLetter>>
+internal class ReapFailedJobsJunction(
+    IDataContext dataContext,
+    ILogger<ReapFailedJobsJunction> logger
+) : EffectJunction<List<ManifestDispatchView>, List<DeadLetter>>
 {
     public override async Task<List<DeadLetter>> Run(List<ManifestDispatchView> views)
     {
-        logger.LogDebug("Starting ReapFailedJobsStep to identify and dead-letter failed jobs");
+        logger.LogDebug("Starting ReapFailedJobsJunction to identify and dead-letter failed jobs");
 
         var deadLettersCreated = new List<DeadLetter>();
 
@@ -74,7 +76,7 @@ internal class ReapFailedJobsStep(IDataContext dataContext, ILogger<ReapFailedJo
         await dataContext.SaveChanges(CancellationToken);
 
         logger.LogInformation(
-            "ReapFailedJobsStep completed: {DeadLettersCreated} dead letters created",
+            "ReapFailedJobsJunction completed: {DeadLettersCreated} dead letters created",
             deadLettersCreated.Count
         );
 

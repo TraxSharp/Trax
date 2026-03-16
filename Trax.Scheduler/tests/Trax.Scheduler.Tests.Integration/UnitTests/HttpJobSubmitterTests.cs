@@ -309,14 +309,14 @@ public class HttpJobSubmitterTests
     public async Task EnqueueAsync_WithInput_SuccessResponse_WithIsErrorTrue_ThrowsTrainExceptionWithDetails()
     {
         var (submitter, _) = CreateSubmitter(
-            responseBody: SerializeErrorResponse("Step failed", "TrainException")
+            responseBody: SerializeErrorResponse("Junction failed", "TrainException")
         );
         var input = new SchedulerTestInput { Value = "test" };
 
         var act = async () => await submitter.EnqueueAsync(42, input);
 
         var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
-        ex.Message.Should().Contain("Step failed");
+        ex.Message.Should().Contain("Junction failed");
     }
 
     #endregion

@@ -3,12 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 
-namespace Trax.Scheduler.Trains.MetadataCleanup.Steps;
+namespace Trax.Scheduler.Trains.MetadataCleanup.Junctions;
 
 /// <summary>
 /// Deletes expired metadata and associated work queue entries and log entries for whitelisted train types.
@@ -20,12 +20,12 @@ namespace Trax.Scheduler.Trains.MetadataCleanup.Steps;
 /// Only metadata in a terminal state (Completed or Failed) is eligible for deletion.
 /// Associated work queue entries and log entries are deleted first to avoid foreign key constraint violations.
 /// </remarks>
-internal class DeleteExpiredMetadataStep(
+internal class DeleteExpiredMetadataJunction(
     IDataContext dataContext,
     SchedulerConfiguration configuration,
-    ILogger<DeleteExpiredMetadataStep> logger,
+    ILogger<DeleteExpiredMetadataJunction> logger,
     ITrainDiscoveryService? discoveryService = null
-) : EffectStep<MetadataCleanupRequest, Unit>
+) : EffectJunction<MetadataCleanupRequest, Unit>
 {
     public override async Task<Unit> Run(MetadataCleanupRequest input)
     {

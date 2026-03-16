@@ -1,20 +1,20 @@
 using LanguageExt;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Models.Metadata;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Scheduler.Services.DormantDependentContext;
 
-namespace Trax.Scheduler.Trains.JobRunner.Steps;
+namespace Trax.Scheduler.Trains.JobRunner.Junctions;
 
 /// <summary>
 /// Executes the target train using the TrainBus with the resolved input.
 /// </summary>
-internal class RunScheduledTrainStep(
+internal class RunScheduledTrainJunction(
     ITrainBus trainBus,
     DormantDependentContext dormantDependentContext,
-    ILogger<RunScheduledTrainStep> logger
-) : EffectStep<(Metadata, ResolvedTrainInput), Unit>
+    ILogger<RunScheduledTrainJunction> logger
+) : EffectJunction<(Metadata, ResolvedTrainInput), Unit>
 {
     public override async Task<Unit> Run((Metadata, ResolvedTrainInput) input)
     {

@@ -1,6 +1,6 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Scheduler.Trains.JobRunner.Steps;
+using Trax.Scheduler.Trains.JobRunner.Junctions;
 
 namespace Trax.Scheduler.Trains.JobRunner;
 
@@ -18,10 +18,10 @@ public class JobRunnerTrain : ServiceTrain<RunJobRequest, Unit>, IJobRunnerTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(RunJobRequest input) =>
         Activate(input)
-            .Chain<LoadMetadataStep>()
-            .Chain<ValidateMetadataStateStep>()
-            .Chain<RunScheduledTrainStep>()
-            .Chain<UpdateManifestSuccessStep>()
-            .Chain<SaveDatabaseChangesStep>()
+            .Chain<LoadMetadataJunction>()
+            .Chain<ValidateMetadataStateJunction>()
+            .Chain<RunScheduledTrainJunction>()
+            .Chain<UpdateManifestSuccessJunction>()
+            .Chain<SaveDatabaseChangesJunction>()
             .Resolve();
 }

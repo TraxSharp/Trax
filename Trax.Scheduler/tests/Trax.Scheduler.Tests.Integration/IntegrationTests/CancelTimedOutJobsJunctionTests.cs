@@ -14,11 +14,11 @@ using Trax.Scheduler.Trains.ManifestManager;
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 /// <summary>
-/// Integration tests for CancelTimedOutJobsStep which runs in the ManifestManagerTrain chain
+/// Integration tests for CancelTimedOutJobsJunction which runs in the ManifestManagerTrain chain
 /// to actively cancel jobs that have exceeded their configured timeout.
 /// </summary>
 [TestFixture]
-public class CancelTimedOutJobsStepTests : TestSetup
+public class CancelTimedOutJobsJunctionTests : TestSetup
 {
     private IManifestManagerTrain _train = null!;
 
@@ -29,7 +29,7 @@ public class CancelTimedOutJobsStepTests : TestSetup
     }
 
     [TearDown]
-    public async Task CancelTimedOutJobsStepTestsTearDown()
+    public async Task CancelTimedOutJobsJunctionTestsTearDown()
     {
         if (_train is IDisposable disposable)
             disposable.Dispose();
@@ -122,7 +122,7 @@ public class CancelTimedOutJobsStepTests : TestSetup
             startTime: DateTime.UtcNow.AddSeconds(-120)
         );
 
-        // Set CancellationRequested to true before the step runs
+        // Set CancellationRequested to true before the junction runs
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(

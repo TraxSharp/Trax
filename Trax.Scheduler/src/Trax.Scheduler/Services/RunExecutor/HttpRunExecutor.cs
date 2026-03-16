@@ -87,9 +87,9 @@ public class HttpRunExecutor(
     /// <summary>
     /// Builds a <see cref="TrainException"/> from a <see cref="RemoteRunResponse"/> error.
     /// If the response includes structured error fields (<see cref="RemoteRunResponse.ExceptionType"/>
-    /// and <see cref="RemoteRunResponse.FailureStep"/>), reconstructs a <see cref="TrainExceptionData"/>
+    /// and <see cref="RemoteRunResponse.FailureJunction"/>), reconstructs a <see cref="TrainExceptionData"/>
     /// JSON message so that <c>Metadata.AddException()</c> on the API side correctly parses
-    /// the failure into structured fields (FailureException, FailureStep, FailureReason).
+    /// the failure into structured fields (FailureException, FailureJunction, FailureReason).
     /// </summary>
     private static TrainException BuildExceptionFromErrorResponse(RemoteRunResponse response)
     {
@@ -100,7 +100,7 @@ public class HttpRunExecutor(
                 TrainName = "",
                 TrainExternalId = "",
                 Type = response.ExceptionType,
-                Step = response.FailureStep ?? "Unknown",
+                Junction = response.FailureJunction ?? "Unknown",
                 Message = response.ErrorMessage ?? "Remote train execution failed",
             };
 

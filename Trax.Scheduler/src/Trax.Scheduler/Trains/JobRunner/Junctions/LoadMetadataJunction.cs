@@ -3,20 +3,20 @@ using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Metadata;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 
-namespace Trax.Scheduler.Trains.JobRunner.Steps;
+namespace Trax.Scheduler.Trains.JobRunner.Junctions;
 
 /// <summary>
 /// Loads the Metadata record from the database and uses the provided input.
 /// </summary>
 /// <remarks>
 /// All callers now provide the train input via the work queue dispatch pipeline.
-/// The Manifest is eagerly loaded so that UpdateManifestSuccessStep can persist
+/// The Manifest is eagerly loaded so that UpdateManifestSuccessJunction can persist
 /// LastSuccessfulRun via SaveChanges.
 /// </remarks>
-internal class LoadMetadataStep(IDataContext dataContext, ILogger<LoadMetadataStep> logger)
-    : EffectStep<RunJobRequest, (Metadata, ResolvedTrainInput)>
+internal class LoadMetadataJunction(IDataContext dataContext, ILogger<LoadMetadataJunction> logger)
+    : EffectJunction<RunJobRequest, (Metadata, ResolvedTrainInput)>
 {
     public override async Task<(Metadata, ResolvedTrainInput)> Run(RunJobRequest input)
     {
@@ -25,7 +25,7 @@ internal class LoadMetadataStep(IDataContext dataContext, ILogger<LoadMetadataSt
             input.MetadataId
         );
 
-        // Always load with Manifest included (tracked so UpdateManifestSuccessStep works)
+        // Always load with Manifest included (tracked so UpdateManifestSuccessJunction works)
         var metadata = await dataContext
             .Metadatas.Include(x => x.Manifest)
             .FirstOrDefaultAsync(x => x.Id == input.MetadataId, CancellationToken);

@@ -7,7 +7,7 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Scheduling;
 
 /// <summary>
-/// Helper utilities for scheduling logic in DetermineJobsToQueueStep.
+/// Helper utilities for scheduling logic in DetermineJobsToQueueJunction.
 /// </summary>
 internal static class SchedulingHelpers
 {
@@ -38,7 +38,7 @@ internal static class SchedulingHelpers
             ScheduleType.Interval => ShouldRunByInterval(manifest, now, config, logger),
             ScheduleType.Once => ShouldRunOnce(manifest, now, logger),
             ScheduleType.OnDemand => false, // OnDemand manifests are never auto-scheduled, only via BulkEnqueueAsync
-            ScheduleType.Dependent => false, // Dependent manifests are evaluated separately in DetermineJobsToQueueStep
+            ScheduleType.Dependent => false, // Dependent manifests are evaluated separately in DetermineJobsToQueueJunction
             _ => false,
         };
     }

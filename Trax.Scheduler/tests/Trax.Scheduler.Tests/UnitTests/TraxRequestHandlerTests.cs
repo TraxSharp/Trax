@@ -164,7 +164,7 @@ public class TraxRequestHandlerTests
         response.ErrorMessage.Should().Be("Something broke");
         response.ExceptionType.Should().Be("InvalidOperationException");
         response.StackTrace.Should().NotBeNull();
-        response.FailureStep.Should().BeNull();
+        response.FailureJunction.Should().BeNull();
         response.OutputJson.Should().BeNull();
     }
 
@@ -176,7 +176,7 @@ public class TraxRequestHandlerTests
             TrainName = "My.Namespace.IMyTrain",
             TrainExternalId = "ext-123",
             Type = "ArgumentException",
-            Step = "ValidateInputStep",
+            Junction = "ValidateInputJunction",
             Message = "Input was invalid",
         };
         var serializedData = JsonSerializer.Serialize(exceptionData);
@@ -195,7 +195,7 @@ public class TraxRequestHandlerTests
 
         response.IsError.Should().BeTrue();
         response.ExceptionType.Should().Be("ArgumentException");
-        response.FailureStep.Should().Be("ValidateInputStep");
+        response.FailureJunction.Should().Be("ValidateInputJunction");
         response.ErrorMessage.Should().Be("Input was invalid");
         response.StackTrace.Should().NotBeNull();
     }
@@ -252,7 +252,7 @@ public class TraxRequestHandlerTests
             TrainName = "My.Train",
             TrainExternalId = "ext-1",
             Type = "NullReferenceException",
-            Step = "LoadDataStep",
+            Junction = "LoadDataJunction",
             Message = "Object reference not set",
         };
         var ex = new TrainException(JsonSerializer.Serialize(data));
@@ -261,7 +261,7 @@ public class TraxRequestHandlerTests
 
         response.IsError.Should().BeTrue();
         response.ExceptionType.Should().Be("NullReferenceException");
-        response.FailureStep.Should().Be("LoadDataStep");
+        response.FailureJunction.Should().Be("LoadDataJunction");
         response.ErrorMessage.Should().Be("Object reference not set");
     }
 
@@ -275,7 +275,7 @@ public class TraxRequestHandlerTests
         response.IsError.Should().BeTrue();
         response.ExceptionType.Should().Be("ArgumentException");
         response.ErrorMessage.Should().Be("Bad value");
-        response.FailureStep.Should().BeNull();
+        response.FailureJunction.Should().BeNull();
     }
 
     [Test]

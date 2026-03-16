@@ -108,7 +108,7 @@ public class JobRunnerTrainTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        // Act - Should succeed (UpdateManifestSuccessStep gracefully handles null manifest)
+        // Act - Should succeed (UpdateManifestSuccessJunction gracefully handles null manifest)
         var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
         await act.Should().NotThrowAsync();
     }

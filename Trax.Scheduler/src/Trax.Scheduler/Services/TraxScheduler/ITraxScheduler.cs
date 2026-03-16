@@ -254,7 +254,7 @@ public interface ITraxScheduler
     /// <returns>The number of metadata records that had cancellation requested.</returns>
     /// <remarks>
     /// Sets <c>CancellationRequested = true</c> on all InProgress metadata for the manifest
-    /// (cross-server, picked up at next step boundary via CancellationCheckProvider) and also
+    /// (cross-server, picked up at next junction boundary via CancellationCheckProvider) and also
     /// attempts same-server instant cancellation via <see cref="ICancellationRegistry"/>.
     /// Cancelled trains transition to <see cref="TrainState.Cancelled"/> and are not retried.
     /// </remarks>

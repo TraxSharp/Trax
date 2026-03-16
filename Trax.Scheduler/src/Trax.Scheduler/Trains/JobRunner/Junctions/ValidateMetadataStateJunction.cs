@@ -3,15 +3,15 @@ using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 
-namespace Trax.Scheduler.Trains.JobRunner.Steps;
+namespace Trax.Scheduler.Trains.JobRunner.Junctions;
 
 /// <summary>
 /// Validates that the Metadata record is in the Pending state before execution.
 /// </summary>
-internal class ValidateMetadataStateStep(ILogger<ValidateMetadataStateStep> logger)
-    : EffectStep<Metadata, Unit>
+internal class ValidateMetadataStateJunction(ILogger<ValidateMetadataStateJunction> logger)
+    : EffectJunction<Metadata, Unit>
 {
     public override async Task<Unit> Run(Metadata input)
     {

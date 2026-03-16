@@ -107,7 +107,7 @@ public partial class SchedulerConfigurationBuilder
         _parentBuilder.ServiceCollection.AddScoped<ITraxScheduler, TraxScheduler>();
 
         // Register IDormantDependentContext with forwarding so both concrete type
-        // (for RunScheduledTrainStep.Initialize) and interface (for user steps)
+        // (for RunScheduledTrainJunction.Initialize) and interface (for user steps)
         // resolve to the same scoped instance
         _parentBuilder.ServiceCollection.AddScoped<DormantDependentContext>();
         _parentBuilder.ServiceCollection.AddScoped<IDormantDependentContext>(sp =>
@@ -163,7 +163,7 @@ public partial class SchedulerConfigurationBuilder
         // Register routed submitters (UseRemoteWorkers, UseSqsWorkers with ForTrain routing)
         RegisterRoutedSubmitters();
 
-        // Always register routing configuration (DispatchJobsStep requires it via constructor injection).
+        // Always register routing configuration (DispatchJobsJunction requires it via constructor injection).
         // An empty configuration with no routes is a no-op — GetSubmitterType returns null for all trains.
         _parentBuilder.ServiceCollection.AddSingleton(_routingConfiguration);
 

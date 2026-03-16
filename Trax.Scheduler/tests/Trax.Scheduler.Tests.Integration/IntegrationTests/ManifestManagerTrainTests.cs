@@ -22,11 +22,11 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 /// Integration tests for the ManifestManagerTrain which orchestrates the manifest-based job scheduling system.
 /// </summary>
 /// <remarks>
-/// The ManifestManagerTrain runs through the following steps:
-/// 1. LoadManifestsStep - Loads all enabled manifests with their Metadatas, DeadLetters, and WorkQueues
-/// 2. ReapFailedJobsStep - Creates DeadLetter records for manifests exceeding retry limits
-/// 3. DetermineJobsToQueueStep - Determines which manifests are due for execution
-/// 4. CreateWorkQueueEntriesStep - Creates WorkQueue entries for manifests that need to be dispatched
+/// The ManifestManagerTrain runs through the following junctions:
+/// 1. LoadManifestsJunction - Loads all enabled manifests with their Metadatas, DeadLetters, and WorkQueues
+/// 2. ReapFailedJobsJunction - Creates DeadLetter records for manifests exceeding retry limits
+/// 3. DetermineJobsToQueueJunction - Determines which manifests are due for execution
+/// 4. CreateWorkQueueEntriesJunction - Creates WorkQueue entries for manifests that need to be dispatched
 /// </remarks>
 [TestFixture]
 public class ManifestManagerTrainTests : TestSetup
@@ -46,7 +46,7 @@ public class ManifestManagerTrainTests : TestSetup
             disposable.Dispose();
     }
 
-    #region LoadManifestsStep Tests
+    #region LoadManifestsJunction Tests
 
     [Test]
     public async Task Run_WithEnabledManifest_LoadsManifest()
@@ -95,7 +95,7 @@ public class ManifestManagerTrainTests : TestSetup
 
     #endregion
 
-    #region ReapFailedJobsStep Tests
+    #region ReapFailedJobsJunction Tests
 
     [Test]
     public async Task Run_WhenManifestExceedsMaxRetries_CreatesDeadLetter()
@@ -184,7 +184,7 @@ public class ManifestManagerTrainTests : TestSetup
 
     #endregion
 
-    #region DetermineJobsToQueueStep Tests
+    #region DetermineJobsToQueueJunction Tests
 
     [Test]
     public async Task Run_WhenIntervalManifestIsDue_EnqueuesJob()
@@ -386,7 +386,7 @@ public class ManifestManagerTrainTests : TestSetup
 
     #endregion
 
-    #region CreateWorkQueueEntriesStep Tests
+    #region CreateWorkQueueEntriesJunction Tests
 
     [Test]
     public async Task Run_WhenManifestIsQueued_CreatesWorkQueueWithCorrectManifestId()
@@ -679,7 +679,7 @@ public class ManifestManagerTrainTests : TestSetup
 
     #endregion
 
-    #region DetermineJobsToQueueStep Dependent Tests
+    #region DetermineJobsToQueueJunction Dependent Tests
 
     [Test]
     public async Task Run_WhenDependentManifestParentSucceeded_EnqueuesDependent()

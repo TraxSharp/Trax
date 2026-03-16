@@ -8,10 +8,10 @@ using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Extensions;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Scheduler.Extensions;
@@ -58,7 +58,7 @@ public abstract class TestSetup
                             .UsePostgres(connectionString)
                             .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
                             .AddJson()
-                            .AddStepLogger(serializeStepData: true)
+                            .AddJunctionLogger(serializeJunctionData: true)
                     )
                     .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
                     .AddScheduler(scheduler => scheduler.UseInMemoryWorkers().AddMetadataCleanup())

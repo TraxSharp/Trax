@@ -84,7 +84,7 @@ internal class TraxRequestHandler(
     /// <summary>
     /// Builds a <see cref="RemoteRunResponse"/> with structured error fields from an exception.
     /// If the exception message is a serialized <see cref="TrainExceptionData"/>, extracts the
-    /// structured fields (type, step, message). Otherwise falls back to the raw exception details.
+    /// structured fields (type, junction, message). Otherwise falls back to the raw exception details.
     /// </summary>
     internal static RemoteRunResponse BuildErrorResponse(Exception ex)
     {
@@ -99,7 +99,7 @@ internal class TraxRequestHandler(
                     IsError: true,
                     ErrorMessage: data.Message,
                     ExceptionType: data.Type,
-                    FailureStep: data.Step,
+                    FailureJunction: data.Junction,
                     StackTrace: ex.StackTrace
                 );
             }

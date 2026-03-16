@@ -131,7 +131,7 @@ scheduler
     );
 
 // In a step, when you decide it's needed — signal the departure
-public class CheckDataStep(IDormantDependentContext dormants) : Step<ExtractInput, Unit>
+public class CheckDataJunction(IDormantDependentContext dormants) : Junction<ExtractInput, Unit>
 {
     public override async Task<Unit> Run(ExtractInput input)
     {
@@ -173,7 +173,7 @@ scheduler.AddMetadataCleanup(cleanup =>
 Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
 
 ```
-Trax.Core              pipelines, steps, railway error propagation
+Trax.Core              pipelines, junctions, railway error propagation
 └→ Trax.Effect         + execution logging, DI, pluggable storage
    └→ Trax.Mediator       + decoupled dispatch via TrainBus
       └→ Trax.Scheduler   ← you are here

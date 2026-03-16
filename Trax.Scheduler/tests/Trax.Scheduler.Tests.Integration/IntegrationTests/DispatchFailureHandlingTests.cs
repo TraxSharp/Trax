@@ -11,13 +11,13 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
@@ -30,7 +30,7 @@ using Trax.Scheduler.Trains.JobDispatcher;
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 /// <summary>
-/// Integration tests for DispatchJobsStep failure handling.
+/// Integration tests for DispatchJobsJunction failure handling.
 /// Uses a custom IJobSubmitter that throws on EnqueueAsync to verify
 /// that orphaned Pending metadata is immediately marked as Failed.
 /// </summary>
@@ -70,7 +70,7 @@ public class DispatchFailureHandlingTests
                             .UsePostgres(connectionString)
                             .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
                             .AddJson()
-                            .AddStepLogger(serializeStepData: true)
+                            .AddJunctionLogger(serializeJunctionData: true)
                     )
                     .AddMediator(
                         typeof(AssemblyMarker).Assembly,

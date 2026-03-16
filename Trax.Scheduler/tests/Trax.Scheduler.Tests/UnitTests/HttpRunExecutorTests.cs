@@ -95,8 +95,8 @@ public class HttpRunExecutorTests
             IsError: true,
             ErrorMessage: "Validation failed",
             ExceptionType: "InvalidOperationException",
-            FailureStep: "ValidateInputStep",
-            StackTrace: "at MyApp.ValidateInputStep.Run()"
+            FailureJunction: "ValidateInputJunction",
+            StackTrace: "at MyApp.ValidateInputJunction.Run()"
         );
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
@@ -115,19 +115,19 @@ public class HttpRunExecutorTests
         var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
         data.Should().NotBeNull();
         data!.Type.Should().Be("InvalidOperationException");
-        data.Step.Should().Be("ValidateInputStep");
+        data.Junction.Should().Be("ValidateInputJunction");
         data.Message.Should().Be("Validation failed");
     }
 
     [Test]
-    public async Task ExecuteAsync_ErrorResponse_WithExceptionTypeAndStep_PreservesInException()
+    public async Task ExecuteAsync_ErrorResponse_WithExceptionTypeAndJunction_PreservesInException()
     {
         var response = new RemoteRunResponse(
             MetadataId: 0,
             IsError: true,
             ErrorMessage: "Some error",
             ExceptionType: "ArgumentException",
-            FailureStep: "ProcessDataStep"
+            FailureJunction: "ProcessDataJunction"
         );
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
@@ -144,13 +144,14 @@ public class HttpRunExecutorTests
         var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
         data.Should().NotBeNull();
         data!.Type.Should().Be("ArgumentException");
-        data.Step.Should().Be("ProcessDataStep");
+        data.Junction.Should().Be("ProcessDataJunction");
     }
 
     [Test]
     public async Task ExecuteAsync_ErrorResponse_WithStackTrace_PreservesRemoteStackTrace()
     {
-        var remoteStack = "at MyApp.Step.Run() in Step.cs:line 42\nat MyApp.Train.Execute()";
+        var remoteStack =
+            "at MyApp.Junction.Run() in Junction.cs:line 42\nat MyApp.Train.Execute()";
         var response = new RemoteRunResponse(
             MetadataId: 0,
             IsError: true,

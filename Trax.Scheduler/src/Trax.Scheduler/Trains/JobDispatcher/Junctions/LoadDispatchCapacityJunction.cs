@@ -3,23 +3,23 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 
-namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
+namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 
 /// <summary>
 /// Loads dispatch capacity: global active count, per-group active counts, and per-group limits.
 /// Short-circuits with empty entries when there is nothing to dispatch or the global limit is reached.
 /// </summary>
-internal class LoadDispatchCapacityStep(
+internal class LoadDispatchCapacityJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
-    ILogger<LoadDispatchCapacityStep> logger,
+    ILogger<LoadDispatchCapacityJunction> logger,
     ITrainDiscoveryService? discoveryService = null
-) : EffectStep<List<WorkQueue>, DispatchContext>
+) : EffectJunction<List<WorkQueue>, DispatchContext>
 {
     private static readonly DispatchContext Empty = new([], 0, [], []);
 

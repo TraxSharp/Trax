@@ -5,11 +5,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
+using Trax.Effect.JunctionProvider.Progress.Services.CancellationCheckProvider;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.StepProvider.Progress.Services.CancellationCheckProvider;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
@@ -18,7 +18,7 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 /// <summary>
 /// Integration tests for the cancellation feature set:
-/// - <see cref="CancellationCheckProvider"/> — checks DB cancel flag before each step
+/// - <see cref="CancellationCheckProvider"/> — checks DB cancel flag before each junction
 /// - <see cref="CancellationRegistry"/> — same-server cancel via CTS
 /// - <see cref="TrainState.Cancelled"/> — terminal state for cancelled trains
 /// </summary>
@@ -65,10 +65,10 @@ public class CancellationIntegrationTests : TestSetup
 
     #endregion
 
-    #region StepProgress Column Tests
+    #region JunctionProgress Column Tests
 
     [Test]
-    public async Task StepProgress_DefaultsToNull_OnNewMetadata()
+    public async Task JunctionProgress_DefaultsToNull_OnNewMetadata()
     {
         // Arrange
         var metadata = await CreateTestMetadata();
@@ -77,24 +77,24 @@ public class CancellationIntegrationTests : TestSetup
         var loaded = await DataContext
             .Metadatas.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == metadata.Id);
-        loaded!.CurrentlyRunningStep.Should().BeNull();
-        loaded!.StepStartedAt.Should().BeNull();
+        loaded!.CurrentlyRunningJunction.Should().BeNull();
+        loaded!.JunctionStartedAt.Should().BeNull();
     }
 
     [Test]
-    public async Task StepProgress_CanBeSetAndCleared()
+    public async Task JunctionProgress_CanBeSetAndCleared()
     {
         // Arrange
         var metadata = await CreateTestMetadata();
-        var stepStartTime = DateTime.UtcNow;
+        var junctionStartTime = DateTime.UtcNow;
 
         // Act — set step progress
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
                 s =>
-                    s.SetProperty(m => m.CurrentlyRunningStep, "FetchDataStep")
-                        .SetProperty(m => m.StepStartedAt, stepStartTime),
+                    s.SetProperty(m => m.CurrentlyRunningJunction, "FetchDataJunction")
+                        .SetProperty(m => m.JunctionStartedAt, junctionStartTime),
                 CancellationToken.None
             );
         DataContext.Reset();
@@ -103,16 +103,18 @@ public class CancellationIntegrationTests : TestSetup
         var withProgress = await DataContext
             .Metadatas.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == metadata.Id);
-        withProgress!.CurrentlyRunningStep.Should().Be("FetchDataStep");
-        withProgress!.StepStartedAt.Should().BeCloseTo(stepStartTime, TimeSpan.FromSeconds(1));
+        withProgress!.CurrentlyRunningJunction.Should().Be("FetchDataJunction");
+        withProgress!
+            .JunctionStartedAt.Should()
+            .BeCloseTo(junctionStartTime, TimeSpan.FromSeconds(1));
 
         // Act — clear step progress
         await DataContext
             .Metadatas.Where(m => m.Id == metadata.Id)
             .ExecuteUpdateAsync(
                 s =>
-                    s.SetProperty(m => m.CurrentlyRunningStep, (string?)null)
-                        .SetProperty(m => m.StepStartedAt, (DateTime?)null),
+                    s.SetProperty(m => m.CurrentlyRunningJunction, (string?)null)
+                        .SetProperty(m => m.JunctionStartedAt, (DateTime?)null),
                 CancellationToken.None
             );
         DataContext.Reset();
@@ -121,8 +123,8 @@ public class CancellationIntegrationTests : TestSetup
         var cleared = await DataContext
             .Metadatas.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == metadata.Id);
-        cleared!.CurrentlyRunningStep.Should().BeNull();
-        cleared!.StepStartedAt.Should().BeNull();
+        cleared!.CurrentlyRunningJunction.Should().BeNull();
+        cleared!.JunctionStartedAt.Should().BeNull();
     }
 
     #endregion
@@ -138,10 +140,10 @@ public class CancellationIntegrationTests : TestSetup
         var provider = new CancellationCheckProvider(factory);
 
         var train = CreateTrainWithMetadata(metadata);
-        var step = new TestProgressStep();
+        var junction = new TestProgressJunction();
 
         // Act & Assert
-        var act = () => provider.BeforeStepExecution(step, train, CancellationToken.None);
+        var act = () => provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
         await act.Should().NotThrowAsync();
     }
 
@@ -169,10 +171,10 @@ public class CancellationIntegrationTests : TestSetup
             .FirstAsync(m => m.Id == metadata.Id);
 
         var train = CreateTrainWithMetadata(reloadedMetadata);
-        var step = new TestProgressStep();
+        var junction = new TestProgressJunction();
 
         // Act & Assert
-        var act = () => provider.BeforeStepExecution(step, train, CancellationToken.None);
+        var act = () => provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
         await act.Should()
             .ThrowAsync<OperationCanceledException>()
             .WithMessage("*cancellation requested*");
@@ -187,15 +189,15 @@ public class CancellationIntegrationTests : TestSetup
 
         var train = new TestProgressTrain();
         // Leave Metadata as null (default)
-        var step = new TestProgressStep();
+        var junction = new TestProgressJunction();
 
         // Act & Assert
-        var act = () => provider.BeforeStepExecution(step, train, CancellationToken.None);
+        var act = () => provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
         await act.Should().NotThrowAsync();
     }
 
     [Test]
-    public async Task CancellationCheckProvider_AfterStepExecution_IsNoOp()
+    public async Task CancellationCheckProvider_AfterJunctionExecution_IsNoOp()
     {
         // Arrange
         var metadata = await CreateTestMetadata();
@@ -203,10 +205,10 @@ public class CancellationIntegrationTests : TestSetup
         var provider = new CancellationCheckProvider(factory);
 
         var train = CreateTrainWithMetadata(metadata);
-        var step = new TestProgressStep();
+        var junction = new TestProgressJunction();
 
         // Act & Assert — should complete without doing anything
-        var act = () => provider.AfterStepExecution(step, train, CancellationToken.None);
+        var act = () => provider.AfterJunctionExecution(junction, train, CancellationToken.None);
         await act.Should().NotThrowAsync();
     }
 
@@ -331,7 +333,7 @@ public class CancellationIntegrationTests : TestSetup
             );
         DataContext.Reset();
 
-        // Act — query for terminal states (mirrors DeleteExpiredMetadataStep logic)
+        // Act — query for terminal states (mirrors DeleteExpiredMetadataJunction logic)
         var terminalCount = await DataContext
             .Metadatas.AsNoTracking()
             .CountAsync(m =>
@@ -393,9 +395,9 @@ public class TestProgressTrain : ServiceTrain<string, string>
 }
 
 /// <summary>
-/// Minimal concrete EffectStep for testing step effect providers.
+/// Minimal concrete EffectJunction for testing junction effect providers.
 /// </summary>
-public class TestProgressStep : EffectStep<string, string>
+public class TestProgressJunction : EffectJunction<string, string>
 {
     public override Task<string> Run(string input) => Task.FromResult(input);
 }

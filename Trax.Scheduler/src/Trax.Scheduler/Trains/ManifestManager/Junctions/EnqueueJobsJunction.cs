@@ -3,26 +3,26 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata.DTOs;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Services.JobSubmitter;
 
-namespace Trax.Scheduler.Trains.ManifestManager.Steps;
+namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 
 /// <summary>
 /// Enqueues manifest executions as background tasks.
 /// </summary>
 /// <remarks>
-/// This step creates Metadata records for each manifest due to run and enqueues them
+/// This junction creates Metadata records for each manifest due to run and enqueues them
 /// to the job submitter for execution. Each Metadata creation is persisted
 /// immediately to ensure durability before the background task is enqueued.
 ///
-/// The step returns a PollResult summarizing what was enqueued.
+/// The junction returns a PollResult summarizing what was enqueued.
 /// </remarks>
-internal class EnqueueJobsStep(
+internal class EnqueueJobsJunction(
     IDataContext dataContext,
     IJobSubmitter jobSubmitter,
-    ILogger<EnqueueJobsStep> logger
-) : EffectStep<List<Manifest>, Unit>
+    ILogger<EnqueueJobsJunction> logger
+) : EffectJunction<List<Manifest>, Unit>
 {
     public override async Task<Unit> Run(List<Manifest> manifests)
     {
@@ -30,7 +30,7 @@ internal class EnqueueJobsStep(
         var jobsEnqueued = 0;
 
         logger.LogDebug(
-            "Starting EnqueueJobsStep to enqueue {ManifestCount} manifests",
+            "Starting EnqueueJobsJunction to enqueue {ManifestCount} manifests",
             manifests.Count
         );
 
@@ -94,12 +94,12 @@ internal class EnqueueJobsStep(
 
         if (jobsEnqueued > 0)
             logger.LogInformation(
-                "EnqueueJobsStep completed: {JobsEnqueued} jobs enqueued in {Duration}ms",
+                "EnqueueJobsJunction completed: {JobsEnqueued} jobs enqueued in {Duration}ms",
                 jobsEnqueued,
                 duration.TotalMilliseconds
             );
         else
-            logger.LogDebug("EnqueueJobsStep completed: no jobs enqueued");
+            logger.LogDebug("EnqueueJobsJunction completed: no jobs enqueued");
 
         return Unit.Default;
     }

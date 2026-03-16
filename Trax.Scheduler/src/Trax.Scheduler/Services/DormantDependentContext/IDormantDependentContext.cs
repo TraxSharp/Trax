@@ -8,7 +8,7 @@ namespace Trax.Scheduler.Services.DormantDependentContext;
 /// Scoped service for activating dormant dependent manifests at runtime.
 /// </summary>
 /// <remarks>
-/// Injected into train steps that need to selectively fire dependent trains
+/// Injected into train junctions that need to selectively fire dependent trains
 /// with runtime-determined input. Only dormant dependents declared as children of
 /// the currently executing parent manifest can be activated.
 ///
@@ -18,8 +18,8 @@ namespace Trax.Scheduler.Services.DormantDependentContext;
 ///
 /// <example>
 /// <code>
-/// public class MyStep(IDormantDependentContext dormants)
-///     : Step&lt;MyInput, Unit&gt;
+/// public class MyJunction(IDormantDependentContext dormants)
+///     : Junction&lt;MyInput, Unit&gt;
 /// {
 ///     public override async Task&lt;Unit&gt; Run(MyInput input)
 ///     {

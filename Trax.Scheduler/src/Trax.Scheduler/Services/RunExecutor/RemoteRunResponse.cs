@@ -15,7 +15,7 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// <param name="IsError">Whether the train execution failed</param>
 /// <param name="ErrorMessage">Error message when <paramref name="IsError"/> is true</param>
 /// <param name="ExceptionType">The .NET exception type name (e.g., "InvalidOperationException") when <paramref name="IsError"/> is true</param>
-/// <param name="FailureStep">The train step where the failure occurred, extracted from <c>TrainExceptionData</c> if available</param>
+/// <param name="FailureJunction">The train junction where the failure occurred, extracted from <c>TrainExceptionData</c> if available</param>
 /// <param name="StackTrace">The remote stack trace when <paramref name="IsError"/> is true</param>
 public record RemoteRunResponse(
     long MetadataId,
@@ -25,6 +25,6 @@ public record RemoteRunResponse(
     bool IsError = false,
     string? ErrorMessage = null,
     string? ExceptionType = null,
-    string? FailureStep = null,
+    string? FailureJunction = null,
     string? StackTrace = null
 );

@@ -15,11 +15,11 @@ using Trax.Scheduler.Trains.ManifestManager;
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 /// <summary>
-/// Integration tests for ReapStalePendingMetadataStep which runs in the ManifestManagerTrain chain
+/// Integration tests for ReapStalePendingMetadataJunction which runs in the ManifestManagerTrain chain
 /// to automatically fail Pending metadata that has not been picked up within the configured timeout.
 /// </summary>
 [TestFixture]
-public class ReapStalePendingMetadataStepTests : TestSetup
+public class ReapStalePendingMetadataJunctionTests : TestSetup
 {
     private IManifestManagerTrain _train = null!;
     private SchedulerConfiguration _config = null!;
@@ -32,7 +32,7 @@ public class ReapStalePendingMetadataStepTests : TestSetup
     }
 
     [TearDown]
-    public async Task ReapStalePendingMetadataStepTestsTearDown()
+    public async Task ReapStalePendingMetadataJunctionTestsTearDown()
     {
         if (_train is IDisposable disposable)
             disposable.Dispose();
@@ -118,7 +118,7 @@ public class ReapStalePendingMetadataStepTests : TestSetup
             .TrainState.Should()
             .Be(
                 TrainState.InProgress,
-                "InProgress metadata is handled by CancelTimedOutJobsStep, not the stale pending reaper"
+                "InProgress metadata is handled by CancelTimedOutJobsJunction, not the stale pending reaper"
             );
     }
 
@@ -274,7 +274,7 @@ public class ReapStalePendingMetadataStepTests : TestSetup
     public async Task Run_StalePendingMetadata_FeedsIntoDeadLetterPipeline()
     {
         // Arrange — Manifest with maxRetries=0 and one stale Pending metadata.
-        // After the reaper marks it Failed, ReapFailedJobsStep should dead-letter it
+        // After the reaper marks it Failed, ReapFailedJobsJunction should dead-letter it
         // in the same ManifestManager cycle.
         _config.StalePendingTimeout = TimeSpan.FromMinutes(10);
 
@@ -300,7 +300,10 @@ public class ReapStalePendingMetadataStepTests : TestSetup
             .ToListAsync();
         deadLetters
             .Should()
-            .HaveCount(1, "ReapFailedJobsStep should dead-letter the manifest in the same cycle");
+            .HaveCount(
+                1,
+                "ReapFailedJobsJunction should dead-letter the manifest in the same cycle"
+            );
     }
 
     [Test]

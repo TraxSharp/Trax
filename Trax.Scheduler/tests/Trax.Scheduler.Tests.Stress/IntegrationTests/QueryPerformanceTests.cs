@@ -83,7 +83,7 @@ public class QueryPerformanceTests : TestSetup
         );
     }
 
-    #region Stale Job Detection (ReapStalePendingMetadataStep pattern)
+    #region Stale Job Detection (ReapStalePendingMetadataJunction pattern)
 
     [Test]
     public async Task FindStalePendingMetadata_With50KRows_CompletesWithinTimeout()
@@ -138,7 +138,7 @@ public class QueryPerformanceTests : TestSetup
 
     #endregion
 
-    #region Dispatch Capacity (LoadDispatchCapacityStep pattern)
+    #region Dispatch Capacity (LoadDispatchCapacityJunction pattern)
 
     [Test]
     public async Task LoadDispatchCapacity_With50KRows_CompletesWithinTimeout()
@@ -174,7 +174,7 @@ public class QueryPerformanceTests : TestSetup
 
     #endregion
 
-    #region Cancel Timed-Out Jobs (CancelTimedOutJobsStep pattern)
+    #region Cancel Timed-Out Jobs (CancelTimedOutJobsJunction pattern)
 
     [Test]
     public async Task FindTimedOutJobs_With50KRows_CompletesWithinTimeout()
@@ -254,12 +254,12 @@ public class QueryPerformanceTests : TestSetup
 
     #endregion
 
-    #region LoadManifestsStep Pattern (Subquery aggregation)
+    #region LoadManifestsJunction Pattern (Subquery aggregation)
 
     [Test]
     public async Task LoadManifestsWithAggregates_With50KMetadata_CompletesWithinTimeout()
     {
-        // LoadManifestsStep: SELECT manifests + COUNT/EXISTS subqueries on child tables
+        // LoadManifestsJunction: SELECT manifests + COUNT/EXISTS subqueries on child tables
         // With 500 manifests and 50K metadata, subqueries run 500 times.
         await SeedWorkQueues(_manifests.Take(50).ToList());
 
@@ -289,12 +289,12 @@ public class QueryPerformanceTests : TestSetup
 
     #endregion
 
-    #region Metadata Cleanup (DeleteExpiredMetadataStep pattern)
+    #region Metadata Cleanup (DeleteExpiredMetadataJunction pattern)
 
     [Test]
     public async Task DeleteExpiredMetadata_With50KRows_CompletesWithinTimeout()
     {
-        // DeleteExpiredMetadataStep: DELETE WHERE name IN (whitelist) AND start_time < cutoff
+        // DeleteExpiredMetadataJunction: DELETE WHERE name IN (whitelist) AND start_time < cutoff
         // AND train_state IN (completed, failed, cancelled). Uses subquery for cascade.
         var trainName = typeof(StressTestTrain).FullName!;
         var cutoff = DateTime.UtcNow.AddMinutes(-30);
@@ -617,8 +617,8 @@ public class QueryPerformanceTests : TestSetup
     [Test]
     public async Task BulkUpdateMetadataState_With50KRows_CompletesWithinTimeout()
     {
-        // ExecuteUpdateAsync on many rows — used by ReapStalePendingMetadataStep and
-        // CancelTimedOutJobsStep to transition state in bulk.
+        // ExecuteUpdateAsync on many rows — used by ReapStalePendingMetadataJunction and
+        // CancelTimedOutJobsJunction to transition state in bulk.
         var now = DateTime.UtcNow;
 
         var pendingIds = await DataContext

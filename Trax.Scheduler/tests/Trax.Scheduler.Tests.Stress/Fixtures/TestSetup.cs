@@ -10,6 +10,7 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Extensions;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Models.BackgroundJob.DTOs;
 using Trax.Effect.Models.DeadLetter;
@@ -23,7 +24,6 @@ using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Scheduler.Extensions;
@@ -73,7 +73,7 @@ public abstract class TestSetup
                             .SaveTrainParameters()
                             .UsePostgres(connectionString)
                             .AddJson()
-                            .AddStepLogger()
+                            .AddJunctionLogger()
                     )
                     .AddMediator(typeof(StressTestTrain).Assembly, typeof(JobRunnerTrain).Assembly)
                     .AddScheduler(scheduler => scheduler.UseInMemoryWorkers())

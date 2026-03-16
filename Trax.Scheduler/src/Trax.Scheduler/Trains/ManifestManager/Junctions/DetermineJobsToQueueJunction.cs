@@ -1,26 +1,26 @@
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Trains.ManifestManager;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
 
-namespace Trax.Scheduler.Trains.ManifestManager.Steps;
+namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 
 /// <summary>
 /// Determines which manifests are due for execution based on their scheduling rules.
 /// </summary>
 /// <remarks>
 /// MaxActiveJobs is NOT enforced here — that responsibility belongs to the JobDispatcher,
-/// which is the single gateway to the BackgroundTaskServer. This step freely identifies
+/// which is the single gateway to the BackgroundTaskServer. This junction freely identifies
 /// all manifests that are due, applying only per-manifest guards (dead letters, duplicate
 /// queue entries, active executions).
 /// </remarks>
-internal class DetermineJobsToQueueStep(
-    ILogger<DetermineJobsToQueueStep> logger,
+internal class DetermineJobsToQueueJunction(
+    ILogger<DetermineJobsToQueueJunction> logger,
     SchedulerConfiguration config
-) : EffectStep<(List<ManifestDispatchView>, List<DeadLetter>), List<ManifestDispatchView>>
+) : EffectJunction<(List<ManifestDispatchView>, List<DeadLetter>), List<ManifestDispatchView>>
 {
     public override async Task<List<ManifestDispatchView>> Run(
         (List<ManifestDispatchView>, List<DeadLetter>) input
@@ -29,7 +29,7 @@ internal class DetermineJobsToQueueStep(
         var (views, newlyCreatedDeadLetters) = input;
 
         logger.LogDebug(
-            "Starting DetermineJobsToQueueStep to identify manifests due for execution"
+            "Starting DetermineJobsToQueueJunction to identify manifests due for execution"
         );
 
         var now = DateTime.UtcNow;
@@ -131,11 +131,13 @@ internal class DetermineJobsToQueueStep(
 
         if (viewsToQueue.Count > 0)
             logger.LogInformation(
-                "DetermineJobsToQueueStep completed: {ManifestsToQueueCount} manifests are due for execution",
+                "DetermineJobsToQueueJunction completed: {ManifestsToQueueCount} manifests are due for execution",
                 viewsToQueue.Count
             );
         else
-            logger.LogDebug("DetermineJobsToQueueStep completed: no manifests due for execution");
+            logger.LogDebug(
+                "DetermineJobsToQueueJunction completed: no manifests due for execution"
+            );
 
         return viewsToQueue;
     }

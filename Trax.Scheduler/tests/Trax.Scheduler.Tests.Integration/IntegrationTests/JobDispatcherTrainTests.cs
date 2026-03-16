@@ -21,11 +21,11 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 /// and dispatches them as background tasks by creating Metadata records.
 /// </summary>
 /// <remarks>
-/// The JobDispatcherTrain runs through the following steps:
-/// 1. LoadQueuedJobsStep - Loads all WorkQueue entries with Status == Queued, ordered by group priority, entry priority, then CreatedAt
-/// 2. LoadDispatchCapacityStep - Loads global and per-group active counts and limits
-/// 3. ApplyCapacityLimitsStep - Filters entries respecting global and per-group capacity limits
-/// 4. DispatchJobsStep - For each entry: creates Metadata, updates status to Dispatched, enqueues to JobSubmitter
+/// The JobDispatcherTrain runs through the following junctions:
+/// 1. LoadQueuedJobsJunction - Loads all WorkQueue entries with Status == Queued, ordered by group priority, entry priority, then CreatedAt
+/// 2. LoadDispatchCapacityJunction - Loads global and per-group active counts and limits
+/// 3. ApplyCapacityLimitsJunction - Filters entries respecting global and per-group capacity limits
+/// 4. DispatchJobsJunction - For each entry: creates Metadata, updates status to Dispatched, enqueues to JobSubmitter
 /// </remarks>
 [TestFixture]
 public class JobDispatcherTrainTests : TestSetup
@@ -45,7 +45,7 @@ public class JobDispatcherTrainTests : TestSetup
             disposable.Dispose();
     }
 
-    #region LoadQueuedJobsStep Tests
+    #region LoadQueuedJobsJunction Tests
 
     [Test]
     public async Task Run_WithQueuedEntries_DispatchesThem()
@@ -122,7 +122,7 @@ public class JobDispatcherTrainTests : TestSetup
 
     #endregion
 
-    #region DispatchJobsStep Tests
+    #region DispatchJobsJunction Tests
 
     [Test]
     public async Task Run_CreatesMetadataForQueuedEntry()

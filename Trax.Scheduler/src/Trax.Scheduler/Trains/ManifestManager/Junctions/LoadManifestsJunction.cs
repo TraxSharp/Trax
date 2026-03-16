@@ -2,10 +2,10 @@ using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Trains.ManifestManager;
 
-namespace Trax.Scheduler.Trains.ManifestManager.Steps;
+namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 
 /// <summary>
 /// Projects all enabled manifests into lightweight <see cref="ManifestDispatchView"/> records
@@ -19,8 +19,8 @@ namespace Trax.Scheduler.Trains.ManifestManager.Steps;
 /// The projection pushes aggregation into the database via COUNT/EXISTS subqueries,
 /// keeping the query cost O(manifests) regardless of child table sizes.
 /// </remarks>
-internal class LoadManifestsStep(IDataContext dataContext)
-    : EffectStep<Unit, List<ManifestDispatchView>>
+internal class LoadManifestsJunction(IDataContext dataContext)
+    : EffectJunction<Unit, List<ManifestDispatchView>>
 {
     public override async Task<List<ManifestDispatchView>> Run(Unit input) =>
         await dataContext

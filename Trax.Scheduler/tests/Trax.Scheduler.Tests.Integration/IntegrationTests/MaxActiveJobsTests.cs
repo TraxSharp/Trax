@@ -11,6 +11,7 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.ManifestGroup;
@@ -20,7 +21,6 @@ using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Tests.ArrayLogger.Services.ArrayLoggingProvider;
@@ -77,7 +77,7 @@ public class MaxActiveJobsTests
                             .UsePostgres(connectionString)
                             .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
                             .AddJson()
-                            .AddStepLogger(serializeStepData: true)
+                            .AddJunctionLogger(serializeJunctionData: true)
                     )
                     .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
                     .AddScheduler(scheduler =>
@@ -736,7 +736,7 @@ public class MaxActiveJobsTests
                             .UsePostgres(connectionString)
                             .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
                             .AddJson()
-                            .AddStepLogger(serializeStepData: true)
+                            .AddJunctionLogger(serializeJunctionData: true)
                     )
                     .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
                     .AddScheduler(scheduler => scheduler.UseInMemoryWorkers().MaxActiveJobs(null))
@@ -879,7 +879,7 @@ public class MaxActiveJobsTests
                             .UsePostgres(connectionString)
                             .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
                             .AddJson()
-                            .AddStepLogger(serializeStepData: true)
+                            .AddJunctionLogger(serializeJunctionData: true)
                     )
                     .AddMediator(typeof(AssemblyMarker).Assembly, typeof(JobRunnerTrain).Assembly)
                     .AddScheduler(scheduler =>

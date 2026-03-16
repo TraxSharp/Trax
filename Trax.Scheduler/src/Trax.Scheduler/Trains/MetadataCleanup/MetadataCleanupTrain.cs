@@ -1,6 +1,6 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Scheduler.Trains.MetadataCleanup.Steps;
+using Trax.Scheduler.Trains.MetadataCleanup.Junctions;
 
 namespace Trax.Scheduler.Trains.MetadataCleanup;
 
@@ -13,5 +13,5 @@ public class MetadataCleanupTrain
 {
     protected override async Task<Either<Exception, Unit>> RunInternal(
         MetadataCleanupRequest input
-    ) => Activate(input).Chain<DeleteExpiredMetadataStep>().Resolve();
+    ) => Activate(input).Chain<DeleteExpiredMetadataJunction>().Resolve();
 }

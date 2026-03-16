@@ -53,7 +53,7 @@ public class SchedulerConfiguration
     /// JobDispatcher polling cycle.
     /// </summary>
     /// <remarks>
-    /// Controls how many entries <see cref="Trains.JobDispatcher.Steps.DispatchJobsStep"/>
+    /// Controls how many entries <see cref="Trains.JobDispatcher.Junctions.DispatchJobsJunction"/>
     /// processes in parallel. Useful when using <c>UseRemoteWorkers()</c> where each dispatch
     /// is an HTTP POST that blocks until the remote endpoint completes — without this, entries
     /// are dispatched sequentially, and cycle duration scales linearly with entry count.
@@ -153,10 +153,10 @@ public class SchedulerConfiguration
     /// </summary>
     /// <remarks>
     /// Acts as a safety net for dispatch failures — if a job remains in Pending state
-    /// longer than this duration, the ManifestManager's ReapStalePendingMetadataStep
+    /// longer than this duration, the ManifestManager's ReapStalePendingMetadataJunction
     /// will mark it as Failed. This catches cases where the job submitter failed to
     /// deliver the job (e.g. remote worker unreachable, Lambda timeout) and the
-    /// immediate failure handling in DispatchJobsStep also failed.
+    /// immediate failure handling in DispatchJobsJunction also failed.
     /// </remarks>
     public TimeSpan StalePendingTimeout { get; set; } = TimeSpan.FromMinutes(20);
 

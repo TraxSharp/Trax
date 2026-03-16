@@ -7,13 +7,13 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Utilities;
 
-namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
+namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 
 /// <summary>
 /// Creates Metadata records and enqueues each entry to the job submitter.
@@ -27,22 +27,22 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
 /// entries are dispatched in parallel using a <see cref="SemaphoreSlim"/> to bound concurrency.
 /// This is useful for <c>UseRemoteWorkers()</c> where each dispatch blocks on an HTTP POST.
 ///
-/// When <see cref="JobSubmitterRoutingConfiguration"/> is registered, the step resolves
+/// When <see cref="JobSubmitterRoutingConfiguration"/> is registered, the junction resolves
 /// the correct submitter per train based on builder routing or [TraxRemote] attributes.
 /// </remarks>
-internal class DispatchJobsStep(
+internal class DispatchJobsJunction(
     IServiceProvider serviceProvider,
-    ILogger<DispatchJobsStep> logger,
+    ILogger<DispatchJobsJunction> logger,
     JobSubmitterRoutingConfiguration routingConfiguration,
     SchedulerConfiguration schedulerConfiguration
-) : EffectStep<List<WorkQueue>, Unit>
+) : EffectJunction<List<WorkQueue>, Unit>
 {
     public override async Task<Unit> Run(List<WorkQueue> entries)
     {
         var dispatchStartTime = DateTime.UtcNow;
         var jobsDispatched = 0;
 
-        logger.LogDebug("Starting DispatchJobsStep for {EntryCount} entries", entries.Count);
+        logger.LogDebug("Starting DispatchJobsJunction for {EntryCount} entries", entries.Count);
 
         var maxConcurrent = schedulerConfiguration.MaxConcurrentDispatch;
 
@@ -104,12 +104,12 @@ internal class DispatchJobsStep(
 
         if (jobsDispatched > 0)
             logger.LogInformation(
-                "DispatchJobsStep completed: {JobsDispatched} jobs dispatched in {Duration}ms",
+                "DispatchJobsJunction completed: {JobsDispatched} jobs dispatched in {Duration}ms",
                 jobsDispatched,
                 duration.TotalMilliseconds
             );
         else
-            logger.LogDebug("DispatchJobsStep completed: no jobs dispatched");
+            logger.LogDebug("DispatchJobsJunction completed: no jobs dispatched");
 
         return Unit.Default;
     }
@@ -312,7 +312,7 @@ internal class DispatchJobsStep(
             logger.LogError(
                 ex,
                 "Failed to handle dispatch failure for work queue entry {WorkQueueId} "
-                    + "(Metadata: {MetadataId}). The ReapStalePendingMetadataStep will recover it "
+                    + "(Metadata: {MetadataId}). The ReapStalePendingMetadataJunction will recover it "
                     + "on the next ManifestManager cycle",
                 workQueueId,
                 metadataId

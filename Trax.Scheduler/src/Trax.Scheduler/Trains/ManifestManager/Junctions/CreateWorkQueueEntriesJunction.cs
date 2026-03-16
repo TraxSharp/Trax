@@ -3,25 +3,25 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Trains.ManifestManager;
 
-namespace Trax.Scheduler.Trains.ManifestManager.Steps;
+namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 
 /// <summary>
 /// Creates work queue entries for manifests that are due to run.
 /// </summary>
 /// <remarks>
-/// This step replaces the previous EnqueueJobsStep. Instead of directly creating Metadata
+/// This junction replaces the previous EnqueueJobsJunction. Instead of directly creating Metadata
 /// records and enqueueing to the background task server, it creates WorkQueue entries
 /// that will be picked up by the JobDispatcherTrain.
 /// </remarks>
-internal class CreateWorkQueueEntriesStep(
+internal class CreateWorkQueueEntriesJunction(
     IDataContext dataContext,
     SchedulerConfiguration schedulerConfiguration,
-    ILogger<CreateWorkQueueEntriesStep> logger
-) : EffectStep<List<ManifestDispatchView>, Unit>
+    ILogger<CreateWorkQueueEntriesJunction> logger
+) : EffectJunction<List<ManifestDispatchView>, Unit>
 {
     public override async Task<Unit> Run(List<ManifestDispatchView> views)
     {
@@ -29,7 +29,7 @@ internal class CreateWorkQueueEntriesStep(
         var entriesCreated = 0;
 
         logger.LogDebug(
-            "Starting CreateWorkQueueEntriesStep for {ManifestCount} manifests",
+            "Starting CreateWorkQueueEntriesJunction for {ManifestCount} manifests",
             views.Count
         );
 
@@ -81,12 +81,12 @@ internal class CreateWorkQueueEntriesStep(
 
         if (entriesCreated > 0)
             logger.LogInformation(
-                "CreateWorkQueueEntriesStep completed: {EntriesCreated} entries created in {Duration}ms",
+                "CreateWorkQueueEntriesJunction completed: {EntriesCreated} entries created in {Duration}ms",
                 entriesCreated,
                 duration.TotalMilliseconds
             );
         else
-            logger.LogDebug("CreateWorkQueueEntriesStep completed: no entries created");
+            logger.LogDebug("CreateWorkQueueEntriesJunction completed: no entries created");
 
         return Unit.Default;
     }

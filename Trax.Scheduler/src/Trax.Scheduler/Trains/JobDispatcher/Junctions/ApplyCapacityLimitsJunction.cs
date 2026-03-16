@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Models.WorkQueue;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
 
-namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
+namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 
 /// <summary>
 /// Filters queued entries against global and per-group capacity limits.
@@ -12,10 +12,10 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Steps;
 /// Per-group limits prevent starvation: when a high-priority group hits its cap, lower-priority
 /// groups can still dispatch (using <c>continue</c> instead of <c>break</c>).
 /// </remarks>
-internal class ApplyCapacityLimitsStep(
+internal class ApplyCapacityLimitsJunction(
     SchedulerConfiguration config,
-    ILogger<ApplyCapacityLimitsStep> logger
-) : EffectStep<DispatchContext, List<WorkQueue>>
+    ILogger<ApplyCapacityLimitsJunction> logger
+) : EffectJunction<DispatchContext, List<WorkQueue>>
 {
     public override Task<List<WorkQueue>> Run(DispatchContext context)
     {
