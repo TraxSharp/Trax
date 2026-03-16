@@ -49,7 +49,7 @@ public enum TrainState
     /// </summary>
     /// <remarks>
     /// This state indicates that the train has started but has not yet completed.
-    /// Trains in this state are actively processing their steps.
+    /// Trains in this state are actively processing their junctions.
     /// </remarks>
     InProgress,
 

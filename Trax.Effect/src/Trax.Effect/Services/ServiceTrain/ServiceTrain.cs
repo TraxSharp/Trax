@@ -11,8 +11,8 @@ using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.EffectRunner;
+using Trax.Effect.Services.JunctionEffectRunner;
 using Trax.Effect.Services.LifecycleHookRunner;
-using Trax.Effect.Services.StepEffectRunner;
 
 namespace Trax.Effect.Services.ServiceTrain;
 
@@ -48,7 +48,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
     [Inject]
     [JsonIgnore]
-    public IStepEffectRunner? StepEffectRunner { get; set; }
+    public IJunctionEffectRunner? JunctionEffectRunner { get; set; }
 
     [Inject]
     [JsonIgnore]
@@ -96,7 +96,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         CancellationToken = cancellationToken;
 
         EffectRunner.AssertLoaded();
-        StepEffectRunner.AssertLoaded();
+        JunctionEffectRunner.AssertLoaded();
         LifecycleHookRunner.AssertLoaded();
         ServiceProvider.AssertLoaded();
 
@@ -192,9 +192,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     protected abstract override Task<Either<Exception, TOut>> RunInternal(TIn input);
 
     /// <summary>
-    /// Creates a composable Monad helper with ServiceProvider for step DI.
+    /// Creates a composable Monad helper with ServiceProvider for junction DI.
     /// Overrides the base Train.Activate to inject the ServiceProvider, enabling
-    /// automatic dependency resolution for steps via the Chain API.
+    /// automatic dependency resolution for junctions via the Chain API.
     /// </summary>
     /// <param name="input">The primary input for the train</param>
     /// <param name="otherInputs">Additional objects to store in the Monad's Memory</param>
@@ -214,7 +214,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         }
 
         EffectRunner?.Dispose();
-        StepEffectRunner?.Dispose();
+        JunctionEffectRunner?.Dispose();
         LifecycleHookRunner?.Dispose();
         Metadata?.Dispose();
 

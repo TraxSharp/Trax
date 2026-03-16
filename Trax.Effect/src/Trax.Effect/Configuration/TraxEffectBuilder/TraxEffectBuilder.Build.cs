@@ -4,17 +4,17 @@ public partial class TraxEffectBuilder
 {
     internal TraxEffectConfiguration.TraxEffectConfiguration Build()
     {
-        if (StepProgressEnabled && !HasDataProvider)
+        if (JunctionProgressEnabled && !HasDataProvider)
         {
             throw new InvalidOperationException(
-                "AddStepProgress() requires a data provider (UsePostgres() or UseInMemory()). "
-                    + "Step progress tracking persists progress to metadata and checks for cancellation signals, "
+                "AddJunctionProgress() requires a data provider (UsePostgres() or UseInMemory()). "
+                    + "Junction progress tracking persists progress to metadata and checks for cancellation signals, "
                     + "which requires a data context.\n\n"
                     + "Add a data provider to your effects configuration:\n\n"
                     + "  services.AddTrax(trax => trax\n"
                     + "      .AddEffects(effects => effects\n"
                     + "          .UsePostgres(connectionString) // or .UseInMemory()\n"
-                    + "          .AddStepProgress()\n"
+                    + "          .AddJunctionProgress()\n"
                     + "      )\n"
                     + "  );\n"
             );
@@ -24,7 +24,7 @@ public partial class TraxEffectBuilder
         {
             SystemJsonSerializerOptions = TrainParameterJsonSerializerOptions,
             NewtonsoftJsonSerializerSettings = NewtonsoftJsonSerializerSettings,
-            SerializeStepData = SerializeStepData,
+            SerializeJunctionData = SerializeJunctionData,
             LogLevel = LogLevel,
         };
 

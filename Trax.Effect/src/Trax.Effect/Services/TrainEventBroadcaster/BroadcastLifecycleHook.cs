@@ -61,7 +61,7 @@ public class BroadcastLifecycleHook : ITrainLifecycleHook
             TrainName: metadata.Name,
             TrainState: metadata.TrainState.ToString(),
             Timestamp: metadata.EndTime ?? DateTime.UtcNow,
-            FailureStep: metadata.FailureStep,
+            FailureJunction: metadata.FailureJunction,
             FailureReason: metadata.FailureReason,
             EventType: eventType,
             Executor: LocalExecutor,

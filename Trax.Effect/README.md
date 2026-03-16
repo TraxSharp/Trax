@@ -45,7 +45,7 @@ Register station services in your `IServiceCollection`:
 ```csharp
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
-        effects.UsePostgres(connectionString).SaveTrainParameters().AddStepLogger(serializeStepData: true).AddStepProgress()
+        effects.UsePostgres(connectionString).SaveTrainParameters().AddJunctionLogger(serializeJunctionData: true).AddJunctionProgress()
     )
 );
 ```
@@ -71,19 +71,19 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 {
     protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
         => Activate(input)
-            .Chain<ValidateEmailStep>()
-            .Chain<CreateUserInDatabaseStep>()
-            .Chain<SendWelcomeEmailStep>()
+            .Chain<ValidateEmailJunction>()
+            .Chain<CreateUserInDatabaseJunction>()
+            .Chain<SendWelcomeEmailJunction>()
             .Resolve();
 }
 ```
 
 The route syntax is identical to `Train`. The difference is what happens around it — `ServiceTrain` automatically opens a journey log when the train departs, updates it when it arrives, persists effect data at each station, and records the derailment details if any stop fails.
 
-Steps work the same way, with full DI:
+Junctions work the same way, with full DI:
 
 ```csharp
-public class CreateUserInDatabaseStep(AppDbContext db) : Step<CreateUserRequest, User>
+public class CreateUserInDatabaseJunction(AppDbContext db) : Junction<CreateUserRequest, User>
 {
     public override async Task<User> Run(CreateUserRequest input)
     {
@@ -115,8 +115,8 @@ Think of it as: the train is boarding (`Pending`), in transit (`InProgress`), an
 | **InMemory** | `Trax.Effect.Data.InMemory` | In-memory store for tests and local dev |
 | **Json** | `Trax.Effect.Provider.Json` | Logs state transitions as JSON for debugging |
 | **Parameter** | `Trax.Effect.Provider.Parameter` | Serializes train cargo (inputs/outputs) into the journey log |
-| **StepLogger** | Built-in | Logs each stop's execution with optional cargo serialization |
-| **StepProgress** | Built-in | Tracks per-stop progress and checks for cancellation signals |
+| **JunctionLogger** | Built-in | Logs each junction's execution with optional cargo serialization |
+| **JunctionProgress** | Built-in | Tracks per-junction progress and checks for cancellation signals |
 
 Station services compose — enable as many as you need:
 
@@ -125,8 +125,8 @@ effects
     .UsePostgres(connectionString)
     .AddJson()
     .SaveTrainParameters()
-    .AddStepLogger(serializeStepData: true)
-    .AddStepProgress();
+    .AddJunctionLogger(serializeJunctionData: true)
+    .AddJunctionProgress();
 ```
 
 ## DI Registration Helpers
@@ -145,7 +145,7 @@ Or use `AddMediator` (from [Trax.Mediator](https://www.nuget.org/packages/Trax.M
 Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
 
 ```
-Trax.Core              pipelines, steps, railway error propagation
+Trax.Core              pipelines, junctions, railway error propagation
 └→ Trax.Effect         ← you are here
    └→ Trax.Mediator       + decoupled dispatch via TrainBus
       └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues

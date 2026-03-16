@@ -28,6 +28,6 @@
     <ProjectReference Include="../Trax.Effect.Tests.ArrayLogger/Trax.Effect.Tests.ArrayLogger.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
     <ProjectReference Include="../../src/Trax.Effect/Trax.Effect.csproj" />
-    <ProjectReference Include="../../src/Trax.Effect.StepProvider.Logging/Trax.Effect.StepProvider.Logging.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />
   </ItemGroup>
 </Project>

@@ -24,7 +24,7 @@ public class TraxEffectBuilderTests
         var config = provider.GetRequiredService<ITraxEffectConfiguration>();
         config.Should().NotBeNull();
         config.LogLevel.Should().Be(LogLevel.Debug);
-        config.SerializeStepData.Should().BeFalse();
+        config.SerializeJunctionData.Should().BeFalse();
     }
 
     [Test]

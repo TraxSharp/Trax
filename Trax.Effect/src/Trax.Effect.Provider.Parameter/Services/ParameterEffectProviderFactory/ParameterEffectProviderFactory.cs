@@ -52,7 +52,7 @@ public class ParameterEffectProviderFactory(
     /// This method creates a new instance of ParameterEffect, which is an implementation of
     /// IEffectProvider that serializes train input and output parameters to JSON format.
     ///
-    /// The method performs the following steps:
+    /// The method performs the following operations:
     /// 1. Creates a new instance of ParameterEffect with the JSON serialization options from the configuration
     /// 2. Adds the new provider to the list of providers maintained by the factory
     /// 3. Returns the new provider as an IEffectProvider

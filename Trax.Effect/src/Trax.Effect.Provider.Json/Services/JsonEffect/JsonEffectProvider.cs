@@ -53,7 +53,7 @@ public class JsonEffectProvider(
     /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation</param>
     /// <returns>A task representing the asynchronous operation</returns>
     /// <remarks>
-    /// This method performs the following steps:
+    /// This method performs the following operations:
     /// 1. Gets the JSON serialization options from the configuration
     /// 2. Iterates through all tracked models
     /// 3. Serializes each model to JSON format

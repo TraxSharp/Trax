@@ -236,7 +236,7 @@ public class InMemoryProviderTests : TestSetup
         train.Metadata.TrainState.Should().Be(TrainState.Completed);
         train.Metadata.FailureException.Should().BeNullOrEmpty();
         train.Metadata.FailureReason.Should().BeNullOrEmpty();
-        train.Metadata.FailureStep.Should().BeNullOrEmpty();
+        train.Metadata.FailureJunction.Should().BeNullOrEmpty();
         train.Metadata.Id.Should().BeGreaterThan(0);
         train.Metadata.StartTime.Should().NotBe(default);
         train.Metadata.EndTime.Should().NotBeNull();

@@ -10,7 +10,7 @@ namespace Trax.Effect.Configuration.TraxEffectConfiguration;
 /// The overwhelming majority of the solution uses System.Text.Json for Serialization as it is
 /// much faster, and provides more granularity when it comes to serialization/deserialization.
 ///
-/// The only current use case of Newtonsoft is Serializing arbitrary output objects in steps
+/// The only current use case of Newtonsoft is Serializing arbitrary output objects in junctions
 /// due to its' ability to handle IDisposable objects and Circular Dependencies much better.
 /// </summary>
 public interface ITraxEffectConfiguration
@@ -25,7 +25,7 @@ public interface ITraxEffectConfiguration
     /// </summary>
     public JsonSerializerSettings NewtonsoftJsonSerializerSettings { get; }
 
-    public bool SerializeStepData { get; }
+    public bool SerializeJunctionData { get; }
 
     public LogLevel LogLevel { get; }
 }

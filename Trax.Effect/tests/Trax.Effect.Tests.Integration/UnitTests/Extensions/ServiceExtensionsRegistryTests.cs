@@ -1,11 +1,11 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerFactory;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Json.Services.JsonEffectFactory;
 using Trax.Effect.Services.EffectRegistry;
-using Trax.Effect.StepProvider.Logging.Extensions;
-using Trax.Effect.StepProvider.Logging.Services.StepLoggerFactory;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Extensions;
 
@@ -51,22 +51,22 @@ public class ServiceExtensionsRegistryTests
     }
 
     [Test]
-    public void AddStepEffect_DefaultToggleable_RegistersInRegistry()
+    public void AddJunctionEffect_DefaultToggleable_RegistersInRegistry()
     {
         // Arrange
         var services = new ServiceCollection();
         services.AddLogging();
 
-        // Act - AddStepLogger calls AddStepEffect<StepLoggerFactory>() with default toggleable=true
-        services.AddTrax(trax => trax.AddEffects(effects => effects.AddStepLogger()));
+        // Act - AddJunctionLogger calls AddJunctionEffect<JunctionLoggerFactory>() with default toggleable=true
+        services.AddTrax(trax => trax.AddEffects(effects => effects.AddJunctionLogger()));
         using var provider = services.BuildServiceProvider();
 
         // Assert
         var registry = provider.GetRequiredService<IEffectRegistry>();
         var all = registry.GetAll();
 
-        all.Should().ContainKey(typeof(StepLoggerFactory));
-        all[typeof(StepLoggerFactory)].Should().BeTrue();
+        all.Should().ContainKey(typeof(JunctionLoggerFactory));
+        all[typeof(JunctionLoggerFactory)].Should().BeTrue();
     }
 
     [Test]
@@ -110,7 +110,7 @@ public class ServiceExtensionsRegistryTests
         services.AddLogging();
 
         // Act
-        services.AddTrax(trax => trax.AddEffects(effects => effects.AddJson().AddStepLogger()));
+        services.AddTrax(trax => trax.AddEffects(effects => effects.AddJson().AddJunctionLogger()));
         using var provider = services.BuildServiceProvider();
 
         // Assert
@@ -119,6 +119,6 @@ public class ServiceExtensionsRegistryTests
 
         all.Should().HaveCount(2);
         all.Should().ContainKey(typeof(JsonEffectProviderFactory));
-        all.Should().ContainKey(typeof(StepLoggerFactory));
+        all.Should().ContainKey(typeof(JunctionLoggerFactory));
     }
 }

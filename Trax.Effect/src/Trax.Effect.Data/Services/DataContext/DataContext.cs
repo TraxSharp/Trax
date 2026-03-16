@@ -61,7 +61,7 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     /// This property provides access to the Log table, which stores detailed log entries
     /// generated during train execution.
     ///
-    /// The Logs DbSet allows for fine-grained tracking of train execution steps
+    /// The Logs DbSet allows for fine-grained tracking of train execution junctions
     /// and is particularly useful for debugging and auditing.
     /// </remarks>
     public DbSet<Log> Logs { get; set; }

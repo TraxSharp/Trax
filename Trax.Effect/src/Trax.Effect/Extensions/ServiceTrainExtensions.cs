@@ -119,8 +119,8 @@ internal static class ServiceTrainExtensions
         );
         serviceTrain.Metadata.TrainState = resultState;
         serviceTrain.Metadata.EndTime = DateTime.UtcNow;
-        serviceTrain.Metadata.CurrentlyRunningStep = null;
-        serviceTrain.Metadata.StepStartedAt = null;
+        serviceTrain.Metadata.CurrentlyRunningJunction = null;
+        serviceTrain.Metadata.JunctionStartedAt = null;
 
         if (failureReason != null)
             serviceTrain.Metadata.AddException(failureReason);

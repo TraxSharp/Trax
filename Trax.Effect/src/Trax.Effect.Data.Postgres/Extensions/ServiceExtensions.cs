@@ -66,7 +66,7 @@ public static class ServiceExtensions
     /// <returns>The configuration builder for method chaining</returns>
     /// <remarks>
     /// This method configures the Trax.Effect system to use PostgreSQL for train metadata persistence.
-    /// It performs the following steps:
+    /// It performs the following operations:
     ///
     /// 1. Migrates the database schema to the latest version using the DatabaseMigrator
     /// 2. Creates a data source with the necessary enum mappings

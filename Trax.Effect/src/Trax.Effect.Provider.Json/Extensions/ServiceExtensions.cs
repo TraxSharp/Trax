@@ -32,7 +32,7 @@ public static class ServiceExtensions
     /// tracking and logging model changes. It registers the necessary services with the
     /// dependency injection container.
     ///
-    /// The method performs the following steps:
+    /// The method performs the following operations:
     /// 1. Registers the JsonEffectProvider as a transient service
     /// 2. Registers the JsonEffectProviderFactory as an IEffectProviderFactory
     ///

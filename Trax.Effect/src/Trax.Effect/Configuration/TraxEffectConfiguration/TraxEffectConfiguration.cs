@@ -16,7 +16,7 @@ public class TraxEffectConfiguration : ITraxEffectConfiguration
     public static JsonSerializerOptions StaticSystemJsonSerializerOptions { get; set; } =
         JsonSerializerOptions.Default;
 
-    public bool SerializeStepData { get; set; } = false;
+    public bool SerializeJunctionData { get; set; } = false;
 
     public LogLevel LogLevel { get; set; } = LogLevel.Debug;
 }

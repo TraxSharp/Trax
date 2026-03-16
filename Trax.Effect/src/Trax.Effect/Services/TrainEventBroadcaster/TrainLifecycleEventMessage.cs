@@ -12,7 +12,7 @@ public record TrainLifecycleEventMessage(
     [property: JsonPropertyName("trainName")] string TrainName,
     [property: JsonPropertyName("trainState")] string TrainState,
     [property: JsonPropertyName("timestamp")] DateTime Timestamp,
-    [property: JsonPropertyName("failureStep")] string? FailureStep,
+    [property: JsonPropertyName("failureJunction")] string? FailureJunction,
     [property: JsonPropertyName("failureReason")] string? FailureReason,
     [property: JsonPropertyName("eventType")] string EventType,
     [property: JsonPropertyName("executor")] string? Executor,

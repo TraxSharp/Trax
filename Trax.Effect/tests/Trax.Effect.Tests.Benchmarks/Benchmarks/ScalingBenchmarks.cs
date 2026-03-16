@@ -7,8 +7,8 @@ using Trax.Effect.Tests.Benchmarks.Trains;
 namespace Trax.Effect.Tests.Benchmarks.Benchmarks;
 
 /// <summary>
-/// Measures how overhead scales with step count.
-/// Compares Serial vs Base Train vs EffectTrain (no effects) at 1, 3, 5, and 10 steps.
+/// Measures how overhead scales with junction count.
+/// Compares Serial vs Base Train vs EffectTrain (no effects) at 1, 3, 5, and 10 junctions.
 /// </summary>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 10)]
@@ -17,7 +17,7 @@ public class ScalingBenchmarks
     private ServiceProvider _provider = null!;
 
     [Params(1, 3, 5, 10)]
-    public int StepCount { get; set; }
+    public int JunctionCount { get; set; }
 
     [GlobalSetup]
     public void Setup()
@@ -35,11 +35,11 @@ public class ScalingBenchmarks
     public void Cleanup() => _provider.Dispose();
 
     [Benchmark(Baseline = true, Description = "Serial")]
-    public Task<int> Serial() => SerialOperations.AddNSerial(0, StepCount);
+    public Task<int> Serial() => SerialOperations.AddNSerial(0, JunctionCount);
 
     [Benchmark(Description = "BaseTrain")]
     public Task<int> BaseTrain() =>
-        StepCount switch
+        JunctionCount switch
         {
             1 => new AddOneX1Train().Run(0),
             3 => new AddOneX3Train().Run(0),
@@ -52,7 +52,7 @@ public class ScalingBenchmarks
     public async Task<int> EffectTrain_NoEffects()
     {
         using var scope = _provider.CreateScope();
-        return StepCount switch
+        return JunctionCount switch
         {
             1 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX1Train>().Run(0),
             3 => await scope.ServiceProvider.GetRequiredService<IEffectAddOneX3Train>().Run(0),

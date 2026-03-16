@@ -7,9 +7,9 @@ using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.EffectRunner;
+using Trax.Effect.Services.JunctionEffectProviderFactory;
+using Trax.Effect.Services.JunctionEffectRunner;
 using Trax.Effect.Services.LifecycleHookRunner;
-using Trax.Effect.Services.StepEffectProviderFactory;
-using Trax.Effect.Services.StepEffectRunner;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
 
 namespace Trax.Effect.Extensions;
@@ -75,12 +75,12 @@ public static class ServiceExtensions
             .AddSingleton<IEffectRegistry>(registry)
             .AddSingleton<ITraxEffectConfiguration>(effectConfig)
             .AddTransient<IEffectRunner, EffectRunner>()
-            .AddTransient<IStepEffectRunner, StepEffectRunner>()
+            .AddTransient<IJunctionEffectRunner, JunctionEffectRunner>()
             .AddTransient<ILifecycleHookRunner, LifecycleHookRunner>();
     }
 
     /// <summary>
-    /// Configures the Trax effect system (data providers, step providers, lifecycle hooks).
+    /// Configures the Trax effect system (data providers, junction providers, lifecycle hooks).
     /// </summary>
     /// <remarks>
     /// The configure function receives a <see cref="TraxEffectBuilder"/> and returns the
@@ -90,7 +90,7 @@ public static class ServiceExtensions
     /// unlocking additional methods like <c>AddDataContextLogging()</c>.
     ///
     /// If no data provider is configured, features that require one (such as <c>AddScheduler()</c>
-    /// or <c>AddStepProgress()</c>) will throw at build time with a helpful error message.
+    /// or <c>AddJunctionProgress()</c>) will throw at build time with a helpful error message.
     ///
     /// <code>
     /// services.AddTrax(trax => trax
@@ -123,7 +123,7 @@ public static class ServiceExtensions
     /// </summary>
     /// <remarks>
     /// This overload does not register a data provider. If you need data persistence
-    /// (required by <c>AddScheduler()</c>, <c>AddStepProgress()</c>, etc.), use
+    /// (required by <c>AddScheduler()</c>, <c>AddJunctionProgress()</c>, etc.), use
     /// the overload that accepts a configure function and call <c>UsePostgres()</c>
     /// or <c>UseInMemory()</c>.
     /// </remarks>
@@ -293,36 +293,40 @@ public static class ServiceExtensions
 
     #endregion
 
-    #region StepEffect
+    #region JunctionEffect
 
     /// <summary>
-    /// Registers a step-level effect provider with both its interface and implementation type,
-    /// using an existing factory instance. Step effects run before/after each individual step.
+    /// Registers a junction-level effect provider with both its interface and implementation type,
+    /// using an existing factory instance. Junction effects run before/after each individual junction.
     /// </summary>
-    /// <typeparam name="TIStepEffectProviderFactory">The step effect provider factory interface.</typeparam>
-    /// <typeparam name="TStepEffectProviderFactory">The concrete step effect provider factory type.</typeparam>
+    /// <typeparam name="TIJunctionEffectProviderFactory">The junction effect provider factory interface.</typeparam>
+    /// <typeparam name="TJunctionEffectProviderFactory">The concrete junction effect provider factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
     /// <param name="factory">The factory instance to register.</param>
     /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
     /// <returns>The effect builder for chaining.</returns>
-    public static TraxEffectBuilder AddStepEffect<
-        TIStepEffectProviderFactory,
-        TStepEffectProviderFactory
-    >(this TraxEffectBuilder builder, TStepEffectProviderFactory factory, bool toggleable = true)
-        where TIStepEffectProviderFactory : class, IStepEffectProviderFactory
-        where TStepEffectProviderFactory : class, TIStepEffectProviderFactory
+    public static TraxEffectBuilder AddJunctionEffect<
+        TIJunctionEffectProviderFactory,
+        TJunctionEffectProviderFactory
+    >(
+        this TraxEffectBuilder builder,
+        TJunctionEffectProviderFactory factory,
+        bool toggleable = true
+    )
+        where TIJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
+        where TJunctionEffectProviderFactory : class, TIJunctionEffectProviderFactory
     {
         builder
-            .ServiceCollection.AddSingleton<TStepEffectProviderFactory>(factory)
-            .AddSingleton<IStepEffectProviderFactory>(sp =>
-                sp.GetRequiredService<TStepEffectProviderFactory>()
+            .ServiceCollection.AddSingleton<TJunctionEffectProviderFactory>(factory)
+            .AddSingleton<IJunctionEffectProviderFactory>(sp =>
+                sp.GetRequiredService<TJunctionEffectProviderFactory>()
             )
-            .AddSingleton<TIStepEffectProviderFactory>(sp =>
-                sp.GetRequiredService<TStepEffectProviderFactory>()
+            .AddSingleton<TIJunctionEffectProviderFactory>(sp =>
+                sp.GetRequiredService<TJunctionEffectProviderFactory>()
             );
 
         builder.EffectRegistry?.Register(
-            typeof(TStepEffectProviderFactory),
+            typeof(TJunctionEffectProviderFactory),
             toggleable: toggleable
         );
 
@@ -330,27 +334,27 @@ public static class ServiceExtensions
     }
 
     /// <summary>
-    /// Registers a step-level effect provider resolved from DI.
-    /// Step effects run before/after each individual step.
+    /// Registers a junction-level effect provider resolved from DI.
+    /// Junction effects run before/after each individual junction.
     /// </summary>
-    /// <typeparam name="TStepEffectProviderFactory">The concrete step effect provider factory type.</typeparam>
+    /// <typeparam name="TJunctionEffectProviderFactory">The concrete junction effect provider factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
     /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
     /// <returns>The effect builder for chaining.</returns>
-    public static TraxEffectBuilder AddStepEffect<TStepEffectProviderFactory>(
+    public static TraxEffectBuilder AddJunctionEffect<TJunctionEffectProviderFactory>(
         this TraxEffectBuilder builder,
         bool toggleable = true
     )
-        where TStepEffectProviderFactory : class, IStepEffectProviderFactory
+        where TJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
     {
         builder
-            .ServiceCollection.AddSingleton<TStepEffectProviderFactory>()
-            .AddSingleton<IStepEffectProviderFactory>(sp =>
-                sp.GetRequiredService<TStepEffectProviderFactory>()
+            .ServiceCollection.AddSingleton<TJunctionEffectProviderFactory>()
+            .AddSingleton<IJunctionEffectProviderFactory>(sp =>
+                sp.GetRequiredService<TJunctionEffectProviderFactory>()
             );
 
         builder.EffectRegistry?.Register(
-            typeof(TStepEffectProviderFactory),
+            typeof(TJunctionEffectProviderFactory),
             toggleable: toggleable
         );
 
@@ -358,25 +362,25 @@ public static class ServiceExtensions
     }
 
     /// <summary>
-    /// Registers a step-level effect provider using an existing factory instance.
-    /// Step effects run before/after each individual step.
+    /// Registers a junction-level effect provider using an existing factory instance.
+    /// Junction effects run before/after each individual junction.
     /// </summary>
-    /// <typeparam name="TStepEffectProviderFactory">The concrete step effect provider factory type.</typeparam>
+    /// <typeparam name="TJunctionEffectProviderFactory">The concrete junction effect provider factory type.</typeparam>
     /// <param name="builder">The effect builder.</param>
     /// <param name="factory">The factory instance to register.</param>
     /// <param name="toggleable">Whether this effect can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
     /// <returns>The effect builder for chaining.</returns>
-    public static TraxEffectBuilder AddStepEffect<TStepEffectProviderFactory>(
+    public static TraxEffectBuilder AddJunctionEffect<TJunctionEffectProviderFactory>(
         this TraxEffectBuilder builder,
-        TStepEffectProviderFactory factory,
+        TJunctionEffectProviderFactory factory,
         bool toggleable = true
     )
-        where TStepEffectProviderFactory : class, IStepEffectProviderFactory
+        where TJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
     {
-        builder.ServiceCollection.AddSingleton<IStepEffectProviderFactory>(factory);
+        builder.ServiceCollection.AddSingleton<IJunctionEffectProviderFactory>(factory);
 
         builder.EffectRegistry?.Register(
-            typeof(TStepEffectProviderFactory),
+            typeof(TJunctionEffectProviderFactory),
             toggleable: toggleable
         );
 
@@ -469,15 +473,15 @@ public static class ServiceExtensions
 
     #endregion
 
-    #region StepInjection
+    #region JunctionInjection
 
     /// <summary>
-    /// Registers a Trax step with scoped lifetime. The step's <c>CanonicalName</c> is set to
+    /// Registers a Trax junction with scoped lifetime. The junction's <c>CanonicalName</c> is set to
     /// <typeparamref name="TService"/>'s FullName, and <see cref="InjectAttribute"/> properties are populated.
     /// </summary>
-    /// <typeparam name="TService">The step interface type (used as the canonical name).</typeparam>
-    /// <typeparam name="TImplementation">The concrete step implementation.</typeparam>
-    public static IServiceCollection AddScopedTraxStep<TService, TImplementation>(
+    /// <typeparam name="TService">The junction interface type (used as the canonical name).</typeparam>
+    /// <typeparam name="TImplementation">The concrete junction implementation.</typeparam>
+    public static IServiceCollection AddScopedTraxJunction<TService, TImplementation>(
         this IServiceCollection services
     )
         where TService : class
@@ -485,24 +489,24 @@ public static class ServiceExtensions
         services.AddScopedTraxRoute<TService, TImplementation>();
 
     /// <summary>
-    /// Registers a Trax step with scoped lifetime using runtime types.
+    /// Registers a Trax junction with scoped lifetime using runtime types.
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="serviceInterface">The step interface type (used as the canonical name).</param>
-    /// <param name="serviceImplementation">The concrete step implementation type.</param>
-    public static IServiceCollection AddScopedTraxStep(
+    /// <param name="serviceInterface">The junction interface type (used as the canonical name).</param>
+    /// <param name="serviceImplementation">The concrete junction implementation type.</param>
+    public static IServiceCollection AddScopedTraxJunction(
         this IServiceCollection services,
         Type serviceInterface,
         Type serviceImplementation
     ) => services.AddScopedTraxRoute(serviceInterface, serviceImplementation);
 
     /// <summary>
-    /// Registers a Trax step with transient lifetime. The step's <c>CanonicalName</c> is set to
+    /// Registers a Trax junction with transient lifetime. The junction's <c>CanonicalName</c> is set to
     /// <typeparamref name="TService"/>'s FullName, and <see cref="InjectAttribute"/> properties are populated.
     /// </summary>
-    /// <typeparam name="TService">The step interface type (used as the canonical name).</typeparam>
-    /// <typeparam name="TImplementation">The concrete step implementation.</typeparam>
-    public static IServiceCollection AddTransientTraxStep<TService, TImplementation>(
+    /// <typeparam name="TService">The junction interface type (used as the canonical name).</typeparam>
+    /// <typeparam name="TImplementation">The concrete junction implementation.</typeparam>
+    public static IServiceCollection AddTransientTraxJunction<TService, TImplementation>(
         this IServiceCollection services
     )
         where TService : class
@@ -510,24 +514,24 @@ public static class ServiceExtensions
         services.AddTransientTraxRoute<TService, TImplementation>();
 
     /// <summary>
-    /// Registers a Trax step with transient lifetime using runtime types.
+    /// Registers a Trax junction with transient lifetime using runtime types.
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="serviceInterface">The step interface type (used as the canonical name).</param>
-    /// <param name="serviceImplementation">The concrete step implementation type.</param>
-    public static IServiceCollection AddTransientTraxStep(
+    /// <param name="serviceInterface">The junction interface type (used as the canonical name).</param>
+    /// <param name="serviceImplementation">The concrete junction implementation type.</param>
+    public static IServiceCollection AddTransientTraxJunction(
         this IServiceCollection services,
         Type serviceInterface,
         Type serviceImplementation
     ) => services.AddTransientTraxRoute(serviceInterface, serviceImplementation);
 
     /// <summary>
-    /// Registers a Trax step with singleton lifetime. The step's <c>CanonicalName</c> is set to
+    /// Registers a Trax junction with singleton lifetime. The junction's <c>CanonicalName</c> is set to
     /// <typeparamref name="TService"/>'s FullName, and <see cref="InjectAttribute"/> properties are populated.
     /// </summary>
-    /// <typeparam name="TService">The step interface type (used as the canonical name).</typeparam>
-    /// <typeparam name="TImplementation">The concrete step implementation.</typeparam>
-    public static IServiceCollection AddSingletonTraxStep<TService, TImplementation>(
+    /// <typeparam name="TService">The junction interface type (used as the canonical name).</typeparam>
+    /// <typeparam name="TImplementation">The concrete junction implementation.</typeparam>
+    public static IServiceCollection AddSingletonTraxJunction<TService, TImplementation>(
         this IServiceCollection services
     )
         where TService : class
@@ -535,12 +539,12 @@ public static class ServiceExtensions
         services.AddSingletonTraxRoute<TService, TImplementation>();
 
     /// <summary>
-    /// Registers a Trax step with singleton lifetime using runtime types.
+    /// Registers a Trax junction with singleton lifetime using runtime types.
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="serviceInterface">The step interface type (used as the canonical name).</param>
-    /// <param name="serviceImplementation">The concrete step implementation type.</param>
-    public static IServiceCollection AddSingletonTraxStep(
+    /// <param name="serviceInterface">The junction interface type (used as the canonical name).</param>
+    /// <param name="serviceImplementation">The concrete junction implementation type.</param>
+    public static IServiceCollection AddSingletonTraxJunction(
         this IServiceCollection services,
         Type serviceInterface,
         Type serviceImplementation
@@ -551,7 +555,7 @@ public static class ServiceExtensions
     #region RouteInjection
 
     /// <summary>
-    /// Registers a Trax route (train or step) with scoped lifetime. Sets <c>CanonicalName</c> to
+    /// Registers a Trax route (train or junction) with scoped lifetime. Sets <c>CanonicalName</c> to
     /// <typeparamref name="TService"/>'s FullName and injects <see cref="InjectAttribute"/> properties.
     /// </summary>
     /// <typeparam name="TService">The route interface type (used as the canonical name).</typeparam>

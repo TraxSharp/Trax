@@ -6,7 +6,7 @@ namespace Trax.Effect.Extensions;
 public static class TraxEffectBuilderExtensions
 {
     /// <summary>
-    /// Sets the minimum log level for effect-related logging (e.g., data context operations, step effects).
+    /// Sets the minimum log level for effect-related logging (e.g., data context operations, junction effects).
     /// Defaults to <see cref="LogLevel.Debug"/>.
     /// </summary>
     /// <typeparam name="TBuilder">The builder type (supports chaining through promoted builders).</typeparam>

@@ -50,7 +50,7 @@ public class TrainOverheadBenchmarks
         _inMemoryProvider.Dispose();
     }
 
-    // ===== Arithmetic: Add 1 (single step) =====
+    // ===== Arithmetic: Add 1 (single junction) =====
 
     [Benchmark(Baseline = true, Description = "Serial_Add1")]
     public Task<int> Serial_AddOne() => SerialOperations.AddOneSerial(0);

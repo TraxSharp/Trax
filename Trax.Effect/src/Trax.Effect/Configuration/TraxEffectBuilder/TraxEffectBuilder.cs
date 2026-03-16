@@ -10,7 +10,7 @@ using Trax.Effect.Utils;
 namespace Trax.Effect.Configuration.TraxEffectBuilder;
 
 /// <summary>
-/// Builder for configuring the Trax effect system (data providers, step providers, lifecycle hooks).
+/// Builder for configuring the Trax effect system (data providers, junction providers, lifecycle hooks).
 /// </summary>
 /// <remarks>
 /// After calling a data provider method (<c>UsePostgres()</c> or <c>UseInMemory()</c>), the builder
@@ -37,9 +37,9 @@ public partial class TraxEffectBuilder
         // Copy builder-level state so the promoted instance carries forward
         // any configuration set before promotion.
         MigrationsDisabled = source.MigrationsDisabled;
-        StepProgressEnabled = source.StepProgressEnabled;
+        JunctionProgressEnabled = source.JunctionProgressEnabled;
         DataContextLoggingEffectEnabled = source.DataContextLoggingEffectEnabled;
-        SerializeStepData = source.SerializeStepData;
+        SerializeJunctionData = source.SerializeJunctionData;
         LogLevel = source.LogLevel;
         TrainParameterJsonSerializerOptions = source.TrainParameterJsonSerializerOptions;
         NewtonsoftJsonSerializerSettings = source.NewtonsoftJsonSerializerSettings;
@@ -88,13 +88,13 @@ public partial class TraxEffectBuilder
     public bool MigrationsDisabled { get; set; }
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public bool StepProgressEnabled { get; set; }
+    public bool JunctionProgressEnabled { get; set; }
 
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool DataContextLoggingEffectEnabled { get; set; } = false;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public bool SerializeStepData { get; set; } = false;
+    public bool SerializeJunctionData { get; set; } = false;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
     public LogLevel LogLevel { get; set; } = LogLevel.Debug;

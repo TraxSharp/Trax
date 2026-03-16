@@ -7,11 +7,11 @@ using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Extensions;
+using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.Services.EffectRegistry;
-using Trax.Effect.StepProvider.Logging.Extensions;
-using Trax.Effect.StepProvider.Progress.Extensions;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Configuration;
 
@@ -145,7 +145,7 @@ public class SaneDefaultsTests
     }
 
     [Test]
-    public void AddStepProgress_PreservesTraxEffectBuilderWithData()
+    public void AddJunctionProgress_PreservesTraxEffectBuilderWithData()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -155,7 +155,7 @@ public class SaneDefaultsTests
         services.AddTrax(trax =>
             trax.AddEffects(effects =>
             {
-                var result = effects.UseInMemory().AddStepProgress();
+                var result = effects.UseInMemory().AddJunctionProgress();
                 capturedBuilder = result;
                 return result;
             })
@@ -165,7 +165,7 @@ public class SaneDefaultsTests
     }
 
     [Test]
-    public void AddStepLogger_PreservesTraxEffectBuilderWithData()
+    public void AddJunctionLogger_PreservesTraxEffectBuilderWithData()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -175,7 +175,7 @@ public class SaneDefaultsTests
         services.AddTrax(trax =>
             trax.AddEffects(effects =>
             {
-                var result = effects.UseInMemory().AddStepLogger();
+                var result = effects.UseInMemory().AddJunctionLogger();
                 capturedBuilder = result;
                 return result;
             })
@@ -218,8 +218,8 @@ public class SaneDefaultsTests
                     .UseInMemory()
                     .AddJson()
                     .SaveTrainParameters()
-                    .AddStepProgress()
-                    .AddStepLogger()
+                    .AddJunctionProgress()
+                    .AddJunctionLogger()
                     .SetEffectLogLevel(LogLevel.Trace);
                 capturedBuilder = result;
                 return result;
@@ -353,40 +353,40 @@ public class SaneDefaultsTests
 
     #endregion
 
-    #region AddStepProgress Build-Time Validation
+    #region AddJunctionProgress Build-Time Validation
 
     [Test]
-    public void AddStepProgress_WithoutDataProvider_ThrowsWithHelpfulMessage()
+    public void AddJunctionProgress_WithoutDataProvider_ThrowsWithHelpfulMessage()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
         var act = () =>
-            services.AddTrax(trax => trax.AddEffects(effects => effects.AddStepProgress()));
+            services.AddTrax(trax => trax.AddEffects(effects => effects.AddJunctionProgress()));
 
         act.Should()
             .Throw<InvalidOperationException>()
-            .WithMessage("*AddStepProgress()*")
+            .WithMessage("*AddJunctionProgress()*")
             .WithMessage("*UsePostgres*")
             .WithMessage("*UseInMemory*");
     }
 
     [Test]
-    public void AddStepProgress_WithInMemory_DoesNotThrow()
+    public void AddJunctionProgress_WithInMemory_DoesNotThrow()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
         var act = () =>
             services.AddTrax(trax =>
-                trax.AddEffects(effects => effects.UseInMemory().AddStepProgress())
+                trax.AddEffects(effects => effects.UseInMemory().AddJunctionProgress())
             );
 
         act.Should().NotThrow();
     }
 
     [Test]
-    public void AddStepProgress_BeforeDataProvider_StillPasses()
+    public void AddJunctionProgress_BeforeDataProvider_StillPasses()
     {
         // Validation runs at Build() time, after the lambda returns,
         // so ordering within the lambda doesn't matter.
@@ -397,7 +397,7 @@ public class SaneDefaultsTests
             services.AddTrax(trax =>
                 trax.AddEffects(effects =>
                 {
-                    effects.AddStepProgress();
+                    effects.AddJunctionProgress();
                     return effects.UseInMemory();
                 })
             );
@@ -406,13 +406,13 @@ public class SaneDefaultsTests
     }
 
     [Test]
-    public void AddStepProgress_ErrorMessage_ContainsCodeExample()
+    public void AddJunctionProgress_ErrorMessage_ContainsCodeExample()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
         var act = () =>
-            services.AddTrax(trax => trax.AddEffects(effects => effects.AddStepProgress()));
+            services.AddTrax(trax => trax.AddEffects(effects => effects.AddJunctionProgress()));
 
         act.Should()
             .Throw<InvalidOperationException>()

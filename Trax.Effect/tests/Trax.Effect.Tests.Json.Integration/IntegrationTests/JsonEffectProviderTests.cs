@@ -30,7 +30,7 @@ public class JsonEffectProviderTests : TestSetup
         train.Metadata.Name.Should().Be(typeof(ITestTrain).FullName);
         train.Metadata.FailureException.Should().BeNullOrEmpty();
         train.Metadata.FailureReason.Should().BeNullOrEmpty();
-        train.Metadata.FailureStep.Should().BeNullOrEmpty();
+        train.Metadata.FailureJunction.Should().BeNullOrEmpty();
         train.Metadata.TrainState.Should().Be(TrainState.Completed);
         arrayProvider.Loggers.Should().NotBeNullOrEmpty();
         arrayProvider.Loggers.Should().HaveCount(6);

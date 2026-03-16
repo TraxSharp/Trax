@@ -1,7 +1,7 @@
 using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.Tests.Benchmarks.Junctions;
 using Trax.Effect.Tests.Benchmarks.Models;
-using Trax.Effect.Tests.Benchmarks.Steps;
 
 namespace Trax.Effect.Tests.Benchmarks.Trains;
 
@@ -28,21 +28,25 @@ public interface IEffectAddOneX10Train : IServiceTrain<int, int>;
 public class EffectAddOneTrain : ServiceTrain<int, int>, IEffectAddOneTrain
 {
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
-        Task.FromResult(Activate(input).Chain<AddOneStep>().Resolve());
+        Task.FromResult(Activate(input).Chain<AddOneJunction>().Resolve());
 }
 
 public class EffectAddThreeTrain : ServiceTrain<int, int>, IEffectAddThreeTrain
 {
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(
-            Activate(input).Chain<AddOneStep>().Chain<AddOneStep>().Chain<AddOneStep>().Resolve()
+            Activate(input)
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Resolve()
         );
 }
 
 public class EffectTransformTrain : ServiceTrain<PersonDto, PersonEntity>, IEffectTransformTrain
 {
     protected override Task<Either<Exception, PersonEntity>> RunInternal(PersonDto input) =>
-        Task.FromResult(Activate(input).Chain<TransformStep>().Resolve());
+        Task.FromResult(Activate(input).Chain<TransformJunction>().Resolve());
 }
 
 public class EffectSimulatedIoTrain : ServiceTrain<int, int>, IEffectSimulatedIoTrain
@@ -50,9 +54,9 @@ public class EffectSimulatedIoTrain : ServiceTrain<int, int>, IEffectSimulatedIo
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(
             Activate(input)
-                .Chain<SimulatedIoStep>()
-                .Chain<SimulatedIoStep>()
-                .Chain<SimulatedIoStep>()
+                .Chain<SimulatedIoJunction>()
+                .Chain<SimulatedIoJunction>()
+                .Chain<SimulatedIoJunction>()
                 .Resolve()
         );
 }
@@ -62,14 +66,18 @@ public class EffectSimulatedIoTrain : ServiceTrain<int, int>, IEffectSimulatedIo
 public class EffectAddOneX1Train : ServiceTrain<int, int>, IEffectAddOneX1Train
 {
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
-        Task.FromResult(Activate(input).Chain<AddOneStep>().Resolve());
+        Task.FromResult(Activate(input).Chain<AddOneJunction>().Resolve());
 }
 
 public class EffectAddOneX3Train : ServiceTrain<int, int>, IEffectAddOneX3Train
 {
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(
-            Activate(input).Chain<AddOneStep>().Chain<AddOneStep>().Chain<AddOneStep>().Resolve()
+            Activate(input)
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Resolve()
         );
 }
 
@@ -78,11 +86,11 @@ public class EffectAddOneX5Train : ServiceTrain<int, int>, IEffectAddOneX5Train
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(
             Activate(input)
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
                 .Resolve()
         );
 }
@@ -92,16 +100,16 @@ public class EffectAddOneX10Train : ServiceTrain<int, int>, IEffectAddOneX10Trai
     protected override Task<Either<Exception, int>> RunInternal(int input) =>
         Task.FromResult(
             Activate(input)
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
-                .Chain<AddOneStep>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
+                .Chain<AddOneJunction>()
                 .Resolve()
         );
 }

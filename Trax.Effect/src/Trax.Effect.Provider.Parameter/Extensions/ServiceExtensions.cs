@@ -35,7 +35,7 @@ public static class ServiceExtensions
     /// parameters to JSON format. It registers the necessary services with the dependency
     /// injection container and configures the JSON serialization options.
     ///
-    /// The method performs the following steps:
+    /// The method performs the following operations:
     /// 1. Sets the JSON serializer options to use for parameter serialization
     /// 2. Registers the ParameterEffectProviderFactory as an IEffectProviderFactory
     ///

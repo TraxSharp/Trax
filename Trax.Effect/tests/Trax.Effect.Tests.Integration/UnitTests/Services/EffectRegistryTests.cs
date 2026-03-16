@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
-using Trax.Effect.Services.StepEffectProviderFactory;
+using Trax.Effect.Services.JunctionEffectProviderFactory;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 

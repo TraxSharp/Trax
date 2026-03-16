@@ -13,8 +13,8 @@
   <Folder Name="/src/providers/">
     <Project Path="src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
     <Project Path="src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
-    <Project Path="src/Trax.Effect.StepProvider.Logging/Trax.Effect.StepProvider.Logging.csproj" />
-    <Project Path="src/Trax.Effect.StepProvider.Progress/Trax.Effect.StepProvider.Progress.csproj" />
+    <Project Path="src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />
+    <Project Path="src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Effect.Tests.ArrayLogger/Trax.Effect.Tests.ArrayLogger.csproj" />

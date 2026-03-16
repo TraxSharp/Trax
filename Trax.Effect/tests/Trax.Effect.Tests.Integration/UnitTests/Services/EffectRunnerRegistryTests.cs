@@ -1,14 +1,14 @@
 using FluentAssertions;
 using Trax.Effect.Models;
+using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.EffectProvider;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.EffectRunner;
-using Trax.Effect.Services.EffectStep;
+using Trax.Effect.Services.JunctionEffectProvider;
+using Trax.Effect.Services.JunctionEffectProviderFactory;
+using Trax.Effect.Services.JunctionEffectRunner;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.Services.StepEffectProvider;
-using Trax.Effect.Services.StepEffectProviderFactory;
-using Trax.Effect.Services.StepEffectRunner;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 
@@ -173,66 +173,66 @@ public class EffectRunnerRegistryTests
 
     #endregion
 
-    #region StepEffectRunner
+    #region JunctionEffectRunner
 
     [Test]
-    public void StepEffectRunner_DisabledFactory_SkipsCreateCall()
+    public void JunctionEffectRunner_DisabledFactory_SkipsCreateCall()
     {
         // Arrange
         var registry = new EffectRegistry();
-        var factory = new DisabledStepEffectFactory();
-        registry.Register(typeof(DisabledStepEffectFactory), enabled: false);
+        var factory = new DisabledJunctionEffectFactory();
+        registry.Register(typeof(DisabledJunctionEffectFactory), enabled: false);
 
         // Act
-        using var runner = new StepEffectRunner([factory], registry);
+        using var runner = new JunctionEffectRunner([factory], registry);
 
         // Assert
         factory.CreateCalled.Should().BeFalse();
     }
 
     [Test]
-    public void StepEffectRunner_EnabledFactory_CallsCreate()
+    public void JunctionEffectRunner_EnabledFactory_CallsCreate()
     {
         // Arrange
         var registry = new EffectRegistry();
-        var factory = new EnabledStepEffectFactory();
-        registry.Register(typeof(EnabledStepEffectFactory), enabled: true);
+        var factory = new EnabledJunctionEffectFactory();
+        registry.Register(typeof(EnabledJunctionEffectFactory), enabled: true);
 
         // Act
-        using var runner = new StepEffectRunner([factory], registry);
+        using var runner = new JunctionEffectRunner([factory], registry);
 
         // Assert
         factory.CreateCalled.Should().BeTrue();
     }
 
     [Test]
-    public void StepEffectRunner_UntrackedFactory_CallsCreate()
+    public void JunctionEffectRunner_UntrackedFactory_CallsCreate()
     {
         // Arrange - factory type not registered in registry (infrastructure effect)
         var registry = new EffectRegistry();
-        var factory = new EnabledStepEffectFactory();
+        var factory = new EnabledJunctionEffectFactory();
         // Intentionally NOT registering the factory type
 
         // Act
-        using var runner = new StepEffectRunner([factory], registry);
+        using var runner = new JunctionEffectRunner([factory], registry);
 
         // Assert
         factory.CreateCalled.Should().BeTrue();
     }
 
     [Test]
-    public void StepEffectRunner_MixOfEnabledAndDisabled_OnlyCreatesEnabled()
+    public void JunctionEffectRunner_MixOfEnabledAndDisabled_OnlyCreatesEnabled()
     {
         // Arrange - use concrete stub types so GetType() returns distinct types
         var registry = new EffectRegistry();
-        var enabledFactory = new EnabledStepEffectFactory();
-        var disabledFactory = new DisabledStepEffectFactory();
+        var enabledFactory = new EnabledJunctionEffectFactory();
+        var disabledFactory = new DisabledJunctionEffectFactory();
 
-        registry.Register(typeof(EnabledStepEffectFactory), enabled: true);
-        registry.Register(typeof(DisabledStepEffectFactory), enabled: false);
+        registry.Register(typeof(EnabledJunctionEffectFactory), enabled: true);
+        registry.Register(typeof(DisabledJunctionEffectFactory), enabled: false);
 
         // Act
-        using var runner = new StepEffectRunner([enabledFactory, disabledFactory], registry);
+        using var runner = new JunctionEffectRunner([enabledFactory, disabledFactory], registry);
 
         // Assert
         enabledFactory.CreateCalled.Should().BeTrue();
@@ -240,18 +240,18 @@ public class EffectRunnerRegistryTests
     }
 
     [Test]
-    public void StepEffectRunner_NonToggleableFactory_CannotBeDisabled()
+    public void JunctionEffectRunner_NonToggleableFactory_CannotBeDisabled()
     {
         // Arrange - register as non-toggleable, then try to disable
         var registry = new EffectRegistry();
-        var factory = new EnabledStepEffectFactory();
-        registry.Register(typeof(EnabledStepEffectFactory), enabled: true, toggleable: false);
+        var factory = new EnabledJunctionEffectFactory();
+        registry.Register(typeof(EnabledJunctionEffectFactory), enabled: true, toggleable: false);
 
         // Attempt to disable should be a no-op
-        registry.Disable(typeof(EnabledStepEffectFactory));
+        registry.Disable(typeof(EnabledJunctionEffectFactory));
 
         // Act
-        using var runner = new StepEffectRunner([factory], registry);
+        using var runner = new JunctionEffectRunner([factory], registry);
 
         // Assert - factory should still run because it can't be disabled
         factory.CreateCalled.Should().BeTrue();
@@ -259,18 +259,18 @@ public class EffectRunnerRegistryTests
 
     #endregion
 
-    #region StepEffectRunner Behavior
+    #region JunctionEffectRunner Behavior
 
     [Test]
-    public void StepEffectRunner_Dispose_HandlesProviderDisposalFailure()
+    public void JunctionEffectRunner_Dispose_HandlesProviderDisposalFailure()
     {
         var registry = new EffectRegistry();
-        var throwingFactory = new ThrowingDisposeStepEffectFactory();
-        var normalFactory = new EnabledStepEffectFactory();
-        registry.Register(typeof(ThrowingDisposeStepEffectFactory), enabled: true);
-        registry.Register(typeof(EnabledStepEffectFactory), enabled: true);
+        var throwingFactory = new ThrowingDisposeJunctionEffectFactory();
+        var normalFactory = new EnabledJunctionEffectFactory();
+        registry.Register(typeof(ThrowingDisposeJunctionEffectFactory), enabled: true);
+        registry.Register(typeof(EnabledJunctionEffectFactory), enabled: true);
 
-        var runner = new StepEffectRunner([throwingFactory, normalFactory], registry);
+        var runner = new JunctionEffectRunner([throwingFactory, normalFactory], registry);
 
         var act = () => runner.Dispose();
         act.Should().NotThrow();
@@ -315,16 +315,16 @@ public class EffectRunnerRegistryTests
         }
     }
 
-    private class StubStepEffectProvider : IStepEffectProvider
+    private class StubJunctionEffectProvider : IJunctionEffectProvider
     {
-        public Task BeforeStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
-            EffectStep<TIn, TOut> effectStep,
+        public Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(
+            EffectJunction<TIn, TOut> effectJunction,
             ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
             CancellationToken cancellationToken
         ) => Task.CompletedTask;
 
-        public Task AfterStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
-            EffectStep<TIn, TOut> effectStep,
+        public Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(
+            EffectJunction<TIn, TOut> effectJunction,
             ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
             CancellationToken cancellationToken
         ) => Task.CompletedTask;
@@ -332,25 +332,25 @@ public class EffectRunnerRegistryTests
         public void Dispose() { }
     }
 
-    private class EnabledStepEffectFactory : IStepEffectProviderFactory
+    private class EnabledJunctionEffectFactory : IJunctionEffectProviderFactory
     {
         public bool CreateCalled { get; private set; }
 
-        public IStepEffectProvider Create()
+        public IJunctionEffectProvider Create()
         {
             CreateCalled = true;
-            return new StubStepEffectProvider();
+            return new StubJunctionEffectProvider();
         }
     }
 
-    private class DisabledStepEffectFactory : IStepEffectProviderFactory
+    private class DisabledJunctionEffectFactory : IJunctionEffectProviderFactory
     {
         public bool CreateCalled { get; private set; }
 
-        public IStepEffectProvider Create()
+        public IJunctionEffectProvider Create()
         {
             CreateCalled = true;
-            return new StubStepEffectProvider();
+            return new StubJunctionEffectProvider();
         }
     }
 
@@ -430,18 +430,18 @@ public class EffectRunnerRegistryTests
         public IEffectProvider Create() => Provider;
     }
 
-    private class ThrowingDisposeStepEffectProvider : IStepEffectProvider
+    private class ThrowingDisposeJunctionEffectProvider : IJunctionEffectProvider
     {
         public bool DisposeCalled { get; private set; }
 
-        public Task BeforeStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
-            EffectStep<TIn, TOut> effectStep,
+        public Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(
+            EffectJunction<TIn, TOut> effectJunction,
             ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
             CancellationToken cancellationToken
         ) => Task.CompletedTask;
 
-        public Task AfterStepExecution<TIn, TOut, TTrainIn, TTrainOut>(
-            EffectStep<TIn, TOut> effectStep,
+        public Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(
+            EffectJunction<TIn, TOut> effectJunction,
             ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
             CancellationToken cancellationToken
         ) => Task.CompletedTask;
@@ -453,11 +453,11 @@ public class EffectRunnerRegistryTests
         }
     }
 
-    private class ThrowingDisposeStepEffectFactory : IStepEffectProviderFactory
+    private class ThrowingDisposeJunctionEffectFactory : IJunctionEffectProviderFactory
     {
-        public ThrowingDisposeStepEffectProvider Provider { get; } = new();
+        public ThrowingDisposeJunctionEffectProvider Provider { get; } = new();
 
-        public IStepEffectProvider Create() => Provider;
+        public IJunctionEffectProvider Create() => Provider;
     }
 
     #endregion

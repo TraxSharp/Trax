@@ -253,7 +253,7 @@ public class DataContextChangeTrackingTests
     [Test]
     public async Task CrossContext_EntitySavedInOneContext_CanBeTrackedByAnother()
     {
-        // Simulates the scheduler flow where metadata is loaded by LoadMetadataStep's
+        // Simulates the scheduler flow where metadata is loaded by LoadMetadataJunction's
         // context, then passed to the inner train's EffectRunner context.
         var dbName = nameof(CrossContext_EntitySavedInOneContext_CanBeTrackedByAnother);
 
@@ -264,7 +264,7 @@ public class DataContextChangeTrackingTests
         await contextA.SaveChanges(CancellationToken.None);
         var savedId = metadata.Id;
 
-        // Load from DB in context A (like LoadMetadataStep)
+        // Load from DB in context A (like LoadMetadataJunction)
         contextA.Reset();
         var loaded = await contextA.Metadatas.FirstAsync(x => x.Id == savedId);
 

@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
-using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 
 namespace Trax.Effect.Tests.Json.Integration.Fixtures;
@@ -32,7 +32,7 @@ public abstract class TestSetup
                     effects
                         .SetEffectLogLevel(LogLevel.Information)
                         .AddJson()
-                        .AddStepLogger(serializeStepData: true)
+                        .AddJunctionLogger(serializeJunctionData: true)
                 )
             );
 

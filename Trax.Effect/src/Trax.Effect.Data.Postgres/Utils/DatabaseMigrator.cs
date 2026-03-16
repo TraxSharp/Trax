@@ -56,7 +56,7 @@ public class DatabaseMigrator
     /// <returns>A task representing the asynchronous operation</returns>
     /// <exception cref="Exception">Thrown if the migration fails</exception>
     /// <remarks>
-    /// This method performs the following steps:
+    /// This method performs the following operations:
     /// 1. Creates the "trax" schema if it doesn't exist
     /// 2. Reloads PostgreSQL types to ensure enum mappings are up-to-date
     /// 3. Creates a DbUp upgrade engine using the CreateEngineWithEmbeddedScripts method

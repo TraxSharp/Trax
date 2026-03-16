@@ -25,7 +25,7 @@ namespace Trax.Effect.Models.Metadata;
 /// 2. Basic train information (Name, Executor)
 /// 3. State and timing (TrainState, StartTime, EndTime)
 /// 4. Input and output data (Input, Output, InputObject, OutputObject)
-/// 5. Error information (FailureStep, FailureException, FailureReason, StackTrace)
+/// 5. Error information (FailureJunction, FailureException, FailureReason, StackTrace)
 /// 6. Relationships to other entities (Parent, Children, Logs)
 ///
 /// This class is designed to be persisted to a database and serves as the
@@ -105,14 +105,14 @@ public class Metadata : IModel, IDisposable
     public TrainState TrainState { get; set; }
 
     /// <summary>
-    /// Gets the name of the step where the train failed, if applicable.
+    /// Gets the name of the junction where the train failed, if applicable.
     /// </summary>
     /// <remarks>
-    /// When a train fails, this property identifies the specific step
+    /// When a train fails, this property identifies the specific junction
     /// that encountered the error, making it easier to diagnose issues.
     /// </remarks>
-    [Column("failure_step")]
-    public string? FailureStep { get; private set; }
+    [Column("failure_junction")]
+    public string? FailureJunction { get; private set; }
 
     /// <summary>
     /// Gets the type of exception that caused the train to fail, if applicable.
@@ -209,11 +209,11 @@ public class Metadata : IModel, IDisposable
     [Column("cancel_requested")]
     public bool CancellationRequested { get; set; }
 
-    [Column("step_started_at")]
-    public DateTime? StepStartedAt { get; set; }
+    [Column("junction_started_at")]
+    public DateTime? JunctionStartedAt { get; set; }
 
-    [Column("currently_running_step")]
-    public string? CurrentlyRunningStep { get; set; }
+    [Column("currently_running_junction")]
+    public string? CurrentlyRunningJunction { get; set; }
 
     /// <summary>
     /// Gets or sets the hostname of the machine where the train executed.
@@ -392,7 +392,7 @@ public class Metadata : IModel, IDisposable
     /// The method sets:
     /// 1. FailureException - The type of the exception
     /// 2. FailureReason - The error message
-    /// 3. FailureStep - The step where the failure occurred
+    /// 3. FailureJunction - The junction where the failure occurred
     /// 4. StackTrace - The stack trace of the exception
     ///
     /// This information is valuable for diagnosing and analyzing train failures.
@@ -409,14 +409,14 @@ public class Metadata : IModel, IDisposable
             {
                 FailureException = trainException.GetType().Name;
                 FailureReason = trainException.Message;
-                FailureStep = "TrainException";
+                FailureJunction = "TrainException";
                 StackTrace = trainException.StackTrace;
             }
             else
             {
                 FailureException = deserializedException.Type;
                 FailureReason = deserializedException.Message;
-                FailureStep = deserializedException.Step;
+                FailureJunction = deserializedException.Junction;
                 StackTrace = trainException.StackTrace;
             }
 
@@ -426,7 +426,7 @@ public class Metadata : IModel, IDisposable
         {
             FailureException = trainException.GetType().Name;
             FailureReason = trainException.Message;
-            FailureStep = "TrainException";
+            FailureJunction = "TrainException";
             StackTrace = trainException.StackTrace;
         }
 

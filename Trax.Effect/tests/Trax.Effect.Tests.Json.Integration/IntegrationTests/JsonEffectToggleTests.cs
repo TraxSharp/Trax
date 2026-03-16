@@ -4,11 +4,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Json.Services.JsonEffectFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.StepProvider.Logging.Extensions;
 using Trax.Effect.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 
 namespace Trax.Effect.Tests.Json.Integration.IntegrationTests;
@@ -36,7 +36,7 @@ public class JsonEffectToggleTests
                     effects
                         .SetEffectLogLevel(LogLevel.Information)
                         .AddJson()
-                        .AddStepLogger(serializeStepData: true)
+                        .AddJunctionLogger(serializeJunctionData: true)
                 )
             )
             .AddTransientTraxRoute<IToggleTestTrain, ToggleTestTrain>();

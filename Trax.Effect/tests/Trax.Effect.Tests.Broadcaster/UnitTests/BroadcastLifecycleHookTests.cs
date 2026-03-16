@@ -25,7 +25,7 @@ public class BroadcastLifecycleHookTests
     private static Metadata CreateMetadata(
         TrainState state = TrainState.Pending,
         string name = "TestTrain",
-        string? failureStep = null,
+        string? failureJunction = null,
         string? failureReason = null
     )
     {
@@ -199,7 +199,7 @@ public class BroadcastLifecycleHookTests
             CancellationToken.None
         );
 
-        captured!.FailureStep.Should().NotBeNull();
+        captured!.FailureJunction.Should().NotBeNull();
         captured.FailureReason.Should().Be("something broke");
     }
 

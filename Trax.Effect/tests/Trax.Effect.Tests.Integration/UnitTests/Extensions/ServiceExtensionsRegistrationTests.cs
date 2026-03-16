@@ -1,8 +1,8 @@
 using FluentAssertions;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Junction;
 using Trax.Core.Route;
-using Trax.Core.Step;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 
@@ -12,51 +12,51 @@ namespace Trax.Effect.Tests.Integration.UnitTests.Extensions;
 public class ServiceExtensionsRegistrationTests
 {
     [Test]
-    public void AddScopedTraxStep_Resolves_ViaInterface()
+    public void AddScopedTraxJunction_Resolves_ViaInterface()
     {
         // Arrange
         var services = new ServiceCollection();
-        services.AddScopedTraxStep<IFakeStep, FakeStep>();
+        services.AddScopedTraxJunction<IFakeJunction, FakeJunction>();
         using var provider = services.BuildServiceProvider();
 
         // Act
-        var step = provider.GetService<IFakeStep>();
+        var junction = provider.GetService<IFakeJunction>();
 
         // Assert
-        step.Should().NotBeNull();
-        step.Should().BeOfType<FakeStep>();
+        junction.Should().NotBeNull();
+        junction.Should().BeOfType<FakeJunction>();
     }
 
     [Test]
-    public void AddTransientTraxStep_Resolves_ViaInterface()
+    public void AddTransientTraxJunction_Resolves_ViaInterface()
     {
         // Arrange
         var services = new ServiceCollection();
-        services.AddTransientTraxStep<IFakeStep, FakeStep>();
+        services.AddTransientTraxJunction<IFakeJunction, FakeJunction>();
         using var provider = services.BuildServiceProvider();
 
         // Act
-        var step = provider.GetService<IFakeStep>();
+        var junction = provider.GetService<IFakeJunction>();
 
         // Assert
-        step.Should().NotBeNull();
-        step.Should().BeOfType<FakeStep>();
+        junction.Should().NotBeNull();
+        junction.Should().BeOfType<FakeJunction>();
     }
 
     [Test]
-    public void AddSingletonTraxStep_Resolves_ViaInterface()
+    public void AddSingletonTraxJunction_Resolves_ViaInterface()
     {
         // Arrange
         var services = new ServiceCollection();
-        services.AddSingletonTraxStep<IFakeStep, FakeStep>();
+        services.AddSingletonTraxJunction<IFakeJunction, FakeJunction>();
         using var provider = services.BuildServiceProvider();
 
         // Act
-        var step = provider.GetService<IFakeStep>();
+        var junction = provider.GetService<IFakeJunction>();
 
         // Assert
-        step.Should().NotBeNull();
-        step.Should().BeOfType<FakeStep>();
+        junction.Should().NotBeNull();
+        junction.Should().BeOfType<FakeJunction>();
     }
 
     [Test]
@@ -164,26 +164,26 @@ public class ServiceExtensionsRegistrationTests
     }
 
     [Test]
-    public void AddScopedTraxStep_DoesNotSetCanonicalName()
+    public void AddScopedTraxJunction_DoesNotSetCanonicalName()
     {
         var services = new ServiceCollection();
-        services.AddScopedTraxStep<IFakeStep, FakeStep>();
+        services.AddScopedTraxJunction<IFakeJunction, FakeJunction>();
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        var step = scope.ServiceProvider.GetService<IFakeStep>() as FakeStep;
+        var junction = scope.ServiceProvider.GetService<IFakeJunction>() as FakeJunction;
 
-        step.Should().NotBeNull();
-        step!.GetType().GetProperty("CanonicalName").Should().BeNull();
+        junction.Should().NotBeNull();
+        junction!.GetType().GetProperty("CanonicalName").Should().BeNull();
     }
 
     #endregion
 
     #region Test helpers
 
-    public interface IFakeStep : IStep<string, int> { }
+    public interface IFakeJunction : IJunction<string, int> { }
 
-    public class FakeStep : Step<string, int>, IFakeStep
+    public class FakeJunction : Junction<string, int>, IFakeJunction
     {
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
     }

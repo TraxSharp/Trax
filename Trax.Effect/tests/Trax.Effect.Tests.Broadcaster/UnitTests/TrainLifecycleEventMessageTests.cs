@@ -16,7 +16,7 @@ public class TrainLifecycleEventMessageTests
             TrainName: "MyTrain",
             TrainState: "Completed",
             Timestamp: new DateTime(2026, 3, 6, 12, 0, 0, DateTimeKind.Utc),
-            FailureStep: null,
+            FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",
             Executor: "TestWorker",
@@ -33,7 +33,7 @@ public class TrainLifecycleEventMessageTests
         deserialized.TrainState.Should().Be("Completed");
         deserialized.EventType.Should().Be("Completed");
         deserialized.Executor.Should().Be("TestWorker");
-        deserialized.FailureStep.Should().BeNull();
+        deserialized.FailureJunction.Should().BeNull();
         deserialized.FailureReason.Should().BeNull();
         deserialized.Output.Should().Be("{\"result\":\"success\"}");
     }
@@ -47,7 +47,7 @@ public class TrainLifecycleEventMessageTests
             TrainName: "FailingTrain",
             TrainState: "Failed",
             Timestamp: DateTime.UtcNow,
-            FailureStep: "StepA",
+            FailureJunction: "JunctionA",
             FailureReason: "Something went wrong",
             EventType: "Failed",
             Executor: "Worker1",
@@ -57,7 +57,7 @@ public class TrainLifecycleEventMessageTests
         var json = JsonSerializer.Serialize(message);
         var deserialized = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json);
 
-        deserialized!.FailureStep.Should().Be("StepA");
+        deserialized!.FailureJunction.Should().Be("JunctionA");
         deserialized.FailureReason.Should().Be("Something went wrong");
     }
 
@@ -70,7 +70,7 @@ public class TrainLifecycleEventMessageTests
             TrainName: "OrphanTrain",
             TrainState: "Completed",
             Timestamp: DateTime.UtcNow,
-            FailureStep: null,
+            FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",
             Executor: null,
@@ -92,7 +92,7 @@ public class TrainLifecycleEventMessageTests
             TrainName: "Train",
             TrainState: "Completed",
             Timestamp: DateTime.UtcNow,
-            FailureStep: null,
+            FailureJunction: null,
             FailureReason: null,
             EventType: "Completed",
             Executor: "Worker",

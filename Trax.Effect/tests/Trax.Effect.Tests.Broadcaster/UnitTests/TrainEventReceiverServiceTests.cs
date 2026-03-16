@@ -50,7 +50,7 @@ public class TrainEventReceiverServiceTests
             TrainName: "TestTrain",
             TrainState: "Completed",
             Timestamp: DateTime.UtcNow,
-            FailureStep: null,
+            FailureJunction: null,
             FailureReason: null,
             EventType: eventType,
             Executor: executor,
