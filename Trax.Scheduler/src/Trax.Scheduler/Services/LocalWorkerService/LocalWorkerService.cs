@@ -20,9 +20,9 @@ namespace Trax.Scheduler.Services.LocalWorkerService;
 /// <remarks>
 /// Workers use PostgreSQL's <c>FOR UPDATE SKIP LOCKED</c> for atomic, lock-free dequeue
 /// across multiple workers and processes. Each worker:
-/// 1. Claims a job by setting <c>fetched_at</c> within a transaction
-/// 2. Executes the train via <see cref="IJobRunnerTrain"/>
-/// 3. Deletes the job row on completion (success or failure)
+/// 1. Claims up to <see cref="LocalWorkerOptions.BatchSize"/> jobs by setting <c>fetched_at</c> within a transaction
+/// 2. Executes each train via <see cref="IJobRunnerTrain"/>
+/// 3. Deletes each job row on completion (success or failure)
 ///
 /// Crash recovery: if a worker dies mid-execution, the <c>fetched_at</c> timestamp becomes
 /// stale and the job is re-eligible for claim after <see cref="LocalWorkerOptions.VisibilityTimeout"/>.
@@ -37,9 +37,10 @@ internal class LocalWorkerService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation(
-            "LocalWorkerService starting with {WorkerCount} workers, polling every {PollingInterval}",
+            "LocalWorkerService starting with {WorkerCount} workers, polling every {PollingInterval}, batch size {BatchSize}",
             options.WorkerCount,
-            options.PollingInterval
+            options.PollingInterval,
+            options.BatchSize
         );
 
         var workers = Enumerable
@@ -60,9 +61,9 @@ internal class LocalWorkerService(
         {
             try
             {
-                var claimed = await TryClaimAndExecuteAsync(workerId, stoppingToken);
+                var claimedCount = await TryClaimAndExecuteAsync(workerId, stoppingToken);
 
-                if (!claimed)
+                if (claimedCount == 0)
                 {
                     await Task.Delay(options.PollingInterval, stoppingToken);
                 }
@@ -81,60 +82,83 @@ internal class LocalWorkerService(
         logger.LogDebug("Worker {WorkerId} stopped", workerId);
     }
 
-    private async Task<bool> TryClaimAndExecuteAsync(int workerId, CancellationToken stoppingToken)
+    private async Task<int> TryClaimAndExecuteAsync(int workerId, CancellationToken stoppingToken)
     {
-        // Phase 1: Claim a job atomically
-        long jobId;
-        long metadataId;
-        string? inputJson;
-        string? inputType;
+        // Phase 1: Claim jobs atomically
+        List<ClaimedJob> claimedJobs;
 
         using (var claimScope = serviceProvider.CreateScope())
         {
             var dataContext = claimScope.ServiceProvider.GetRequiredService<IDataContext>();
 
             var visibilitySeconds = (int)options.VisibilityTimeout.TotalSeconds;
+            var batchSize = Math.Max(1, options.BatchSize);
 
             using var transaction = await dataContext.BeginTransaction(stoppingToken);
 
-            var job = await dataContext
+            var jobs = await dataContext
                 .BackgroundJobs.FromSqlRaw(
                     """
                     SELECT * FROM trax.background_job
                     WHERE fetched_at IS NULL
                        OR fetched_at < NOW() - make_interval(secs => {0})
                     ORDER BY created_at ASC
-                    LIMIT 1
+                    LIMIT {1}
                     FOR UPDATE SKIP LOCKED
                     """,
-                    visibilitySeconds
+                    visibilitySeconds,
+                    batchSize
                 )
-                .FirstOrDefaultAsync(stoppingToken);
+                .ToListAsync(stoppingToken);
 
-            if (job is null)
+            if (jobs.Count == 0)
             {
                 await dataContext.RollbackTransaction();
-                return false;
+                return 0;
             }
 
-            // Claim the job
-            job.FetchedAt = DateTime.UtcNow;
+            // Claim all jobs in the batch
+            foreach (var job in jobs)
+                job.FetchedAt = DateTime.UtcNow;
+
             await dataContext.SaveChanges(stoppingToken);
             await dataContext.CommitTransaction();
 
-            jobId = job.Id;
-            metadataId = job.MetadataId;
-            inputJson = job.Input;
-            inputType = job.InputType;
+            claimedJobs = jobs.Select(j => new ClaimedJob(j.Id, j.MetadataId, j.Input, j.InputType))
+                .ToList();
 
             logger.LogDebug(
-                "Worker {WorkerId} claimed job {JobId} (Metadata: {MetadataId})",
+                "Worker {WorkerId} claimed {Count} job(s)",
                 workerId,
-                jobId,
-                metadataId
+                claimedJobs.Count
             );
         }
 
+        // Phase 2 + 3: Execute and clean up each job sequentially
+        foreach (var job in claimedJobs)
+        {
+            await ExecuteAndCleanupAsync(
+                workerId,
+                job.Id,
+                job.MetadataId,
+                job.InputJson,
+                job.InputType,
+                stoppingToken
+            );
+        }
+
+        return claimedJobs.Count;
+    }
+
+    private async Task ExecuteAndCleanupAsync(
+        int workerId,
+        long jobId,
+        long metadataId,
+        string? inputJson,
+        string? inputType,
+        CancellationToken stoppingToken
+    )
+    {
         // Phase 2: Execute the train in a fresh scope
         try
         {
@@ -217,7 +241,12 @@ internal class LocalWorkerService(
                 jobId
             );
         }
-
-        return true;
     }
+
+    private sealed record ClaimedJob(
+        long Id,
+        long MetadataId,
+        string? InputJson,
+        string? InputType
+    );
 }

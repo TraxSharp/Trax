@@ -2,6 +2,7 @@ using FluentAssertions;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -154,18 +155,39 @@ public class DormantDependentContextTests : TestSetup
     #region Validation Error Tests
 
     [Test]
-    public async Task ActivateAsync_WhenNotInitialized_ThrowsInvalidOperation()
+    public async Task ActivateAsync_WhenNotInitialized_SkipsWithoutError()
     {
-        // Act & Assert — context not initialized, should throw
-        var act = () =>
-            _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-                "any-id",
-                new SchedulerTestInput { Value = "test" }
-            );
+        // Act — context not initialized, should no-op (not throw)
+        await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+            "any-id",
+            new SchedulerTestInput { Value = "test" }
+        );
 
-        await act.Should()
-            .ThrowAsync<InvalidOperationException>()
-            .WithMessage("*has not been initialized*");
+        // Assert — no work queue entries created
+        DataContext.Reset();
+        var entries = await DataContext.WorkQueues.ToListAsync();
+        entries.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task ActivateManyAsync_WhenNotInitialized_SkipsWithoutError()
+    {
+        // Arrange
+        var activations = new[]
+        {
+            ("dormant-1", new SchedulerTestInput { Value = "Input1" }),
+            ("dormant-2", new SchedulerTestInput { Value = "Input2" }),
+        };
+
+        // Act — context not initialized, should no-op (not throw)
+        await _context.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+            activations
+        );
+
+        // Assert — no work queue entries created
+        DataContext.Reset();
+        var entries = await DataContext.WorkQueues.ToListAsync();
+        entries.Should().BeEmpty();
     }
 
     [Test]
@@ -328,6 +350,121 @@ public class DormantDependentContextTests : TestSetup
         await _context.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
             dormant.ExternalId,
             new SchedulerTestInput { Value = "ShouldBeSkipped" }
+        );
+
+        // Assert — no work queue entry created
+        DataContext.Reset();
+        var entries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == dormant.Id)
+            .ToListAsync();
+
+        entries.Should().BeEmpty();
+    }
+
+    #endregion
+
+    #region Cross-Scope Tests (AsyncLocal Regression)
+
+    [Test]
+    public async Task ActivateAsync_WhenInitializedInParentScope_WorksFromChildScope()
+    {
+        // Regression test: DormantDependentContext.Initialize is called in the JobRunner's
+        // DI scope, but TrainBus.RunAsync creates a child scope for the user train. Junctions
+        // in that child scope resolve a NEW DormantDependentContext instance. Without AsyncLocal,
+        // that instance would be uninitialized and throw/skip.
+        //
+        // This test reproduces the exact scope topology:
+        //   Parent scope: Initialize(parentManifestId)
+        //   Child scope:  IDormantDependentContext.ActivateAsync(...)
+
+        // Arrange
+        var (parent, dormant) = await CreateParentAndDormantDependent();
+
+        // Initialize in the PARENT scope (like RunScheduledTrainJunction does)
+        _context.Initialize(parent.Id);
+
+        // Act — resolve from a CHILD scope (like TrainBus.RunAsync does)
+        using var childScope = Scope.ServiceProvider.CreateScope();
+        var childContext =
+            childScope.ServiceProvider.GetRequiredService<IDormantDependentContext>();
+
+        // The child instance should NOT be the same object as the parent instance
+        childContext.Should().NotBeSameAs(_context);
+
+        await childContext.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+            dormant.ExternalId,
+            new SchedulerTestInput { Value = "CrossScopeValue" }
+        );
+
+        // Assert — work queue entry created successfully from the child scope
+        DataContext.Reset();
+        var entries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == dormant.Id)
+            .ToListAsync();
+
+        entries.Should().HaveCount(1);
+        entries[0].Input.Should().Contain("CrossScopeValue");
+    }
+
+    [Test]
+    public async Task ActivateManyAsync_WhenInitializedInParentScope_WorksFromChildScope()
+    {
+        // Same regression test as above, but for the batch activation path.
+
+        // Arrange
+        var group = await CreateAndSaveManifestGroup(
+            DataContext,
+            name: $"group-{Guid.NewGuid():N}"
+        );
+        var parent = await CreateAndSaveManifest(group, ScheduleType.Interval, intervalSeconds: 60);
+        var dormant1 = await CreateAndSaveDormantDependent(group, parent, "cross-scope-1");
+        var dormant2 = await CreateAndSaveDormantDependent(group, parent, "cross-scope-2");
+
+        // Initialize in parent scope
+        _context.Initialize(parent.Id);
+
+        // Act — activate from child scope
+        using var childScope = Scope.ServiceProvider.CreateScope();
+        var childContext =
+            childScope.ServiceProvider.GetRequiredService<IDormantDependentContext>();
+
+        await childContext.ActivateManyAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+            new[]
+            {
+                (dormant1.ExternalId, new SchedulerTestInput { Value = "Batch1" }),
+                (dormant2.ExternalId, new SchedulerTestInput { Value = "Batch2" }),
+            }
+        );
+
+        // Assert
+        DataContext.Reset();
+        var entries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == dormant1.Id || q.ManifestId == dormant2.Id)
+            .ToListAsync();
+
+        entries.Should().HaveCount(2);
+    }
+
+    [Test]
+    public async Task ActivateAsync_AfterReset_SkipsWithoutError()
+    {
+        // Verify that Reset() clears the AsyncLocal, preventing stale manifest IDs
+        // from leaking into subsequent job executions on the same worker task.
+        // This is what RunScheduledTrainJunction does in its finally block.
+
+        // Arrange
+        var (parent, dormant) = await CreateParentAndDormantDependent();
+        _context.Initialize(parent.Id);
+        _context.Reset();
+
+        // Act — after Reset, activation should be a no-op (not initialized)
+        using var childScope = Scope.ServiceProvider.CreateScope();
+        var childContext =
+            childScope.ServiceProvider.GetRequiredService<IDormantDependentContext>();
+
+        await childContext.ActivateAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+            dormant.ExternalId,
+            new SchedulerTestInput { Value = "ShouldNotActivate" }
         );
 
         // Assert — no work queue entry created

@@ -18,9 +18,11 @@ namespace Trax.Scheduler.Services.DormantDependentContext;
 /// entries for dormant dependent manifests with runtime-provided input.
 /// </summary>
 /// <remarks>
-/// Registered as Scoped so that each Hangfire job execution gets its own instance.
-/// Must be initialized via <see cref="Initialize"/> before use — this is done automatically
-/// by <c>RunScheduledTrainJunction</c> in the JobRunner pipeline.
+/// Registered as Scoped so that each job execution gets its own instance for scoped
+/// dependencies (IDataContextProviderFactory, etc.). The parent manifest ID is stored
+/// in a static <see cref="AsyncLocal{T}"/> so it flows from the JobRunner scope (where
+/// <c>RunScheduledTrainJunction</c> calls <see cref="Initialize"/>) into the child scope
+/// created by <see cref="Trax.Mediator.Services.TrainBus.TrainBus"/> for the user's train.
 /// </remarks>
 internal class DormantDependentContext(
     IDataContextProviderFactory dataContextFactory,
@@ -28,16 +30,30 @@ internal class DormantDependentContext(
     ILogger<DormantDependentContext> logger
 ) : IDormantDependentContext
 {
-    private long? _parentManifestId;
+    private static readonly AsyncLocal<long?> ParentManifestIdLocal = new();
+
+    private long? ParentManifestId => ParentManifestIdLocal.Value;
 
     /// <summary>
     /// Binds this context to the currently executing parent manifest.
     /// Called by <c>RunScheduledTrainJunction</c> before the user's train runs.
+    /// The value is stored in an <see cref="AsyncLocal{T}"/> so it flows across DI scopes
+    /// on the same async call stack (e.g., into the TrainBus's child scope).
     /// </summary>
     /// <param name="parentManifestId">The database ID of the parent manifest.</param>
     internal void Initialize(long parentManifestId)
     {
-        _parentManifestId = parentManifestId;
+        ParentManifestIdLocal.Value = parentManifestId;
+    }
+
+    /// <summary>
+    /// Clears the parent manifest ID from the async-local context.
+    /// Called by <c>RunScheduledTrainJunction</c> after the user's train completes
+    /// to prevent stale values from leaking into subsequent job executions on the same worker.
+    /// </summary>
+    internal void Reset()
+    {
+        ParentManifestIdLocal.Value = null;
     }
 
     /// <inheritdoc />
@@ -49,7 +65,17 @@ internal class DormantDependentContext(
         where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
-        EnsureInitialized();
+        if (!IsInitialized)
+        {
+            logger.LogWarning(
+                "IDormantDependentContext.ActivateAsync('{ExternalId}') called outside of a "
+                    + "scheduled execution — no parent manifest context. "
+                    + "Activation skipped. This happens when the train is invoked directly "
+                    + "(e.g. via GraphQL mutation or ITrainBus) instead of through the scheduler",
+                externalId
+            );
+            return;
+        }
 
         await using var context = CreateContext();
         await ActivateSingleAsync<TInput>(context, externalId, input, ct);
@@ -64,7 +90,16 @@ internal class DormantDependentContext(
         where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
-        EnsureInitialized();
+        if (!IsInitialized)
+        {
+            logger.LogWarning(
+                "IDormantDependentContext.ActivateManyAsync called outside of a "
+                    + "scheduled execution — no parent manifest context. "
+                    + "Activation skipped. This happens when the train is invoked directly "
+                    + "(e.g. via GraphQL mutation or ITrainBus) instead of through the scheduler"
+            );
+            return;
+        }
 
         var activationList = activations.ToList();
         if (activationList.Count == 0)
@@ -84,7 +119,7 @@ internal class DormantDependentContext(
             logger.LogInformation(
                 "Activated {Count} dormant dependents for parent manifest {ParentManifestId}",
                 activationList.Count,
-                _parentManifestId
+                ParentManifestId
             );
         }
         catch
@@ -127,10 +162,10 @@ internal class DormantDependentContext(
             );
 
         // Validate parent relationship
-        if (manifest.DependsOnManifestId != _parentManifestId)
+        if (manifest.DependsOnManifestId != ParentManifestId)
             throw new InvalidOperationException(
                 $"Manifest '{externalId}' depends on manifest {manifest.DependsOnManifestId}, "
-                    + $"but the current parent is {_parentManifestId}. "
+                    + $"but the current parent is {ParentManifestId}. "
                     + "A dormant dependent can only be activated by its declared parent."
             );
 
@@ -202,15 +237,7 @@ internal class DormantDependentContext(
         );
     }
 
-    private void EnsureInitialized()
-    {
-        if (_parentManifestId is null)
-            throw new InvalidOperationException(
-                "DormantDependentContext has not been initialized. "
-                    + "This service can only be used within a scheduled train execution. "
-                    + "Ensure the train is running via the scheduler, not invoked directly."
-            );
-    }
+    private bool IsInitialized => ParentManifestId is not null;
 
     private IDataContext CreateContext() =>
         dataContextFactory.Create() as IDataContext

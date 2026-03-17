@@ -94,6 +94,22 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
+    /// Sets the maximum number of queued work queue entries loaded per JobDispatcher cycle.
+    /// </summary>
+    /// <param name="limit">The maximum entries to load (default: 100, null = unlimited, minimum: 1)</param>
+    /// <returns>The builder for method chaining</returns>
+    /// <remarks>
+    /// Prevents the dispatcher from loading unbounded queued entries into memory. The default
+    /// of 100 provides headroom beyond <see cref="MaxActiveJobs"/> for per-group limit skipping.
+    /// Set to null to disable the limit.
+    /// </remarks>
+    public SchedulerConfigurationBuilder MaxQueuedJobsPerCycle(int? limit)
+    {
+        _configuration.MaxQueuedJobsPerCycle = limit.HasValue ? Math.Max(1, limit.Value) : null;
+        return this;
+    }
+
+    /// <summary>
     /// Excludes a train type from the MaxActiveJobs count.
     /// </summary>
     /// <typeparam name="TTrain">The train class type to exclude</typeparam>

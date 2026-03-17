@@ -223,6 +223,60 @@ public class SchedulerConfigurationBuilderSettingsTests
 
     #endregion
 
+    #region MaxQueuedJobsPerCycle
+
+    [Test]
+    public void MaxQueuedJobsPerCycle_Default_Is100()
+    {
+        // Act
+        var config = ResolveConfiguration(_ => { });
+
+        // Assert
+        config.MaxQueuedJobsPerCycle.Should().Be(100);
+    }
+
+    [Test]
+    public void MaxQueuedJobsPerCycle_SetsValue()
+    {
+        // Act
+        var config = ResolveConfiguration(b => b.MaxQueuedJobsPerCycle(200));
+
+        // Assert
+        config.MaxQueuedJobsPerCycle.Should().Be(200);
+    }
+
+    [Test]
+    public void MaxQueuedJobsPerCycle_Null_DisablesLimit()
+    {
+        // Act
+        var config = ResolveConfiguration(b => b.MaxQueuedJobsPerCycle(null));
+
+        // Assert
+        config.MaxQueuedJobsPerCycle.Should().BeNull();
+    }
+
+    [Test]
+    public void MaxQueuedJobsPerCycle_Zero_ClampsToOne()
+    {
+        // Act
+        var config = ResolveConfiguration(b => b.MaxQueuedJobsPerCycle(0));
+
+        // Assert
+        config.MaxQueuedJobsPerCycle.Should().Be(1);
+    }
+
+    [Test]
+    public void MaxQueuedJobsPerCycle_Negative_ClampsToOne()
+    {
+        // Act
+        var config = ResolveConfiguration(b => b.MaxQueuedJobsPerCycle(-5));
+
+        // Assert
+        config.MaxQueuedJobsPerCycle.Should().Be(1);
+    }
+
+    #endregion
+
     #region ExcludeFromMaxActiveJobs
 
     [Test]

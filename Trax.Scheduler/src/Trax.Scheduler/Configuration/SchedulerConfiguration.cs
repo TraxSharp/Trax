@@ -210,6 +210,18 @@ public class SchedulerConfiguration
     public MetadataCleanupConfiguration? MetadataCleanup { get; set; }
 
     /// <summary>
+    /// The maximum number of queued work queue entries loaded per JobDispatcher cycle.
+    /// </summary>
+    /// <remarks>
+    /// Limits how many entries <see cref="Trains.JobDispatcher.Junctions.LoadQueuedJobsJunction"/>
+    /// fetches from the database each cycle. Since <see cref="MaxActiveJobs"/> caps how many
+    /// can actually be dispatched, loading significantly more than that wastes memory and query time.
+    /// The default of 100 provides headroom for per-group limit skipping in ApplyCapacityLimitsJunction.
+    /// Set to null to disable the limit (load all queued entries).
+    /// </remarks>
+    public int? MaxQueuedJobsPerCycle { get; set; } = 100;
+
+    /// <summary>
     /// Whether to automatically prune manifests from the database that are no longer
     /// defined in the startup configuration.
     /// </summary>

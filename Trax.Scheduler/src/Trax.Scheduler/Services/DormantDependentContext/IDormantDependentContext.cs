@@ -14,7 +14,9 @@ namespace Trax.Scheduler.Services.DormantDependentContext;
 ///
 /// The context is automatically initialized by the JobRunner before the
 /// user's train runs. If called outside of a scheduled execution (no manifest
-/// context), all calls will throw <see cref="InvalidOperationException"/>.
+/// context), all calls are silently skipped with a warning log — this allows
+/// trains that use dormant dependents to also run via GraphQL mutations or
+/// <see cref="Trax.Mediator.Services.TrainBus.ITrainBus"/> without throwing.
 ///
 /// <example>
 /// <code>
@@ -51,12 +53,16 @@ public interface IDormantDependentContext
     /// <exception cref="InvalidOperationException">
     /// Thrown when:
     /// <list type="bullet">
-    /// <item>The context has not been initialized (not running inside a scheduled execution)</item>
     /// <item>No manifest with the specified external ID exists</item>
     /// <item>The target manifest is not a DormantDependent</item>
     /// <item>The target manifest does not depend on the current parent manifest</item>
     /// </list>
     /// </exception>
+    /// <remarks>
+    /// When called outside of a scheduled execution (no manifest context), the call
+    /// is silently skipped and a warning is logged. This allows trains to be safely
+    /// invoked both through the scheduler and directly via GraphQL or ITrainBus.
+    /// </remarks>
     Task ActivateAsync<TTrain, TInput, TOutput>(
         string externalId,
         TInput input,

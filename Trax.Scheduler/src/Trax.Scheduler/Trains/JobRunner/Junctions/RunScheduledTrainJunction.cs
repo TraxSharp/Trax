@@ -20,25 +20,35 @@ internal class RunScheduledTrainJunction(
     {
         var (metadata, resolvedInput) = input;
 
-        // Initialize the dormant dependent context so user train steps
-        // can activate dormant dependents of this parent manifest
+        // Initialize the dormant dependent context so user train junctions
+        // can activate dormant dependents of this parent manifest.
+        // Uses AsyncLocal to flow across the DI scope boundary created by TrainBus.RunAsync.
         if (metadata.ManifestId.HasValue)
             dormantDependentContext.Initialize(metadata.ManifestId.Value);
 
-        logger.LogDebug(
-            "Executing train {TrainName} for Metadata {MetadataId}",
-            metadata.Name,
-            metadata.Id
-        );
+        try
+        {
+            logger.LogDebug(
+                "Executing train {TrainName} for Metadata {MetadataId}",
+                metadata.Name,
+                metadata.Id
+            );
 
-        await trainBus.RunAsync(resolvedInput.Value, CancellationToken, metadata);
+            await trainBus.RunAsync(resolvedInput.Value, CancellationToken, metadata);
 
-        logger.LogDebug(
-            "Successfully executed train {TrainName} for Metadata {MetadataId}",
-            metadata.Name,
-            metadata.Id
-        );
+            logger.LogDebug(
+                "Successfully executed train {TrainName} for Metadata {MetadataId}",
+                metadata.Name,
+                metadata.Id
+            );
 
-        return Unit.Default;
+            return Unit.Default;
+        }
+        finally
+        {
+            // Clear the AsyncLocal to prevent stale manifest IDs from leaking
+            // into subsequent job executions on the same worker task.
+            dormantDependentContext.Reset();
+        }
     }
 }

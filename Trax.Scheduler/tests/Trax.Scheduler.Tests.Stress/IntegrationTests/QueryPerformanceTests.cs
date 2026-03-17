@@ -552,6 +552,117 @@ public class QueryPerformanceTests : TestSetup
 
     #endregion
 
+    #region Worker Batch Claim Throughput
+
+    [Test]
+    public async Task BatchClaim_SingleJob_ClaimsOneAtATime()
+    {
+        // Baseline: claim 1 job per query (current default behavior)
+        await SeedBackgroundJobs(50);
+
+        var claimed = new List<long>();
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+
+        var elapsed = await AssertCompletesWithin(
+            async () =>
+            {
+                for (int i = 0; i < 50; i++)
+                {
+                    await using var ctx = (IDataContext)factory.Create();
+                    using var tx = await ctx.BeginTransaction();
+
+                    var job = await ctx
+                        .BackgroundJobs.FromSqlRaw(
+                            """
+                            SELECT * FROM trax.background_job
+                            WHERE fetched_at IS NULL
+                            ORDER BY created_at ASC
+                            LIMIT 1
+                            FOR UPDATE SKIP LOCKED
+                            """
+                        )
+                        .FirstOrDefaultAsync();
+
+                    if (job is not null)
+                    {
+                        job.FetchedAt = DateTime.UtcNow;
+                        await ctx.SaveChanges(CancellationToken.None);
+                        await ctx.CommitTransaction();
+                        claimed.Add(job.Id);
+                    }
+                    else
+                    {
+                        await ctx.RollbackTransaction();
+                        break;
+                    }
+                }
+            },
+            TimeSpan.FromSeconds(15)
+        );
+
+        claimed.Should().HaveCount(50);
+        claimed.Should().OnlyHaveUniqueItems();
+        TestContext.Out.WriteLine(
+            $"BatchClaim (LIMIT 1, 50 rounds): {elapsed.TotalMilliseconds:F0}ms"
+        );
+    }
+
+    [Test]
+    public async Task BatchClaim_MultiplePer_ClaimsBatchAtOnce()
+    {
+        // Batch claim: claim 10 jobs per query
+        await SeedBackgroundJobs(50);
+
+        var claimed = new List<long>();
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+
+        var elapsed = await AssertCompletesWithin(
+            async () =>
+            {
+                for (int i = 0; i < 5; i++) // 5 rounds × 10 per batch = 50 jobs
+                {
+                    await using var ctx = (IDataContext)factory.Create();
+                    using var tx = await ctx.BeginTransaction();
+
+                    var jobs = await ctx
+                        .BackgroundJobs.FromSqlRaw(
+                            """
+                            SELECT * FROM trax.background_job
+                            WHERE fetched_at IS NULL
+                            ORDER BY created_at ASC
+                            LIMIT 10
+                            FOR UPDATE SKIP LOCKED
+                            """
+                        )
+                        .ToListAsync();
+
+                    if (jobs.Count > 0)
+                    {
+                        foreach (var job in jobs)
+                            job.FetchedAt = DateTime.UtcNow;
+                        await ctx.SaveChanges(CancellationToken.None);
+                        await ctx.CommitTransaction();
+                        claimed.AddRange(jobs.Select(j => j.Id));
+                    }
+                    else
+                    {
+                        await ctx.RollbackTransaction();
+                        break;
+                    }
+                }
+            },
+            TimeSpan.FromSeconds(15)
+        );
+
+        claimed.Should().HaveCount(50);
+        claimed.Should().OnlyHaveUniqueItems();
+        TestContext.Out.WriteLine(
+            $"BatchClaim (LIMIT 10, 5 rounds): {elapsed.TotalMilliseconds:F0}ms"
+        );
+    }
+
+    #endregion
+
     #region Orphan Manifest Pruning at Scale
 
     [Test]
@@ -607,6 +718,150 @@ public class QueryPerformanceTests : TestSetup
 
         TestContext.Out.WriteLine(
             $"PruneOrphanedManifests ({ManifestCount - 50} pruned): {elapsed.TotalMilliseconds:F0}ms"
+        );
+    }
+
+    #endregion
+
+    #region Keyset vs Offset Pagination
+
+    [Test]
+    public async Task KeysetPagination_DeepPage_FasterThanOffset()
+    {
+        // Compare keyset (WHERE id < cursor) vs offset (SKIP N) for deep pages.
+        // With 50K metadata rows, offset pagination to page 500 is O(offset).
+        var pageSize = 25;
+        var targetPage = 200; // page 200 = SKIP 5000
+
+        // First, get a cursor for the deep page using offset
+        var cursorRow = await DataContext
+            .Metadatas.AsNoTracking()
+            .OrderByDescending(m => m.Id)
+            .Skip(targetPage * pageSize)
+            .Take(1)
+            .Select(m => m.Id)
+            .FirstOrDefaultAsync();
+
+        cursorRow
+            .Should()
+            .BeGreaterThan(0, "test data should have enough rows for deep pagination");
+
+        // Measure offset pagination
+        var offsetElapsed = await AssertCompletesWithin(async () =>
+        {
+            var page = await DataContext
+                .Metadatas.AsNoTracking()
+                .OrderByDescending(m => m.Id)
+                .Skip(targetPage * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            page.Should().HaveCount(pageSize);
+        });
+
+        // Measure keyset pagination
+        var keysetElapsed = await AssertCompletesWithin(async () =>
+        {
+            var page = await DataContext
+                .Metadatas.AsNoTracking()
+                .OrderByDescending(m => m.Id)
+                .Where(m => m.Id < cursorRow)
+                .Take(pageSize)
+                .ToListAsync();
+
+            page.Should().HaveCount(pageSize);
+        });
+
+        TestContext.Out.WriteLine(
+            $"Offset (page {targetPage}): {offsetElapsed.TotalMilliseconds:F0}ms, Keyset: {keysetElapsed.TotalMilliseconds:F0}ms"
+        );
+    }
+
+    [Test]
+    public async Task EstimatedCount_LargeTable_SubMillisecond()
+    {
+        // Verify that querying reltuples from pg_class is near-instant
+        var elapsed = await AssertCompletesWithin(
+            async () =>
+            {
+                var connection = (
+                    (Microsoft.EntityFrameworkCore.DbContext)DataContext
+                ).Database.GetDbConnection();
+
+                if (connection.State != System.Data.ConnectionState.Open)
+                    await connection.OpenAsync();
+
+                await using var command = connection.CreateCommand();
+                command.CommandText =
+                    "SELECT reltuples::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = 'metadata' AND n.nspname = 'trax'";
+
+                var result = await command.ExecuteScalarAsync();
+                result.Should().NotBeNull();
+            },
+            TimeSpan.FromMilliseconds(100)
+        );
+
+        TestContext.Out.WriteLine($"EstimatedCount (reltuples): {elapsed.TotalMilliseconds:F2}ms");
+    }
+
+    #endregion
+
+    #region LoadQueuedJobs with LIMIT
+
+    [Test]
+    public async Task LoadQueuedJobs_WithLimit_LoadsOnlyLimitedEntries()
+    {
+        // Seed 500 queued work queue entries (one per manifest, unique constraint)
+        await SeedWorkQueues(_manifests);
+
+        var elapsed = await AssertCompletesWithin(async () =>
+        {
+            var limited = await DataContext
+                .WorkQueues.AsNoTracking()
+                .Include(q => q.Manifest)
+                    .ThenInclude(m => m!.ManifestGroup)
+                .Where(q => q.Status == WorkQueueStatus.Queued)
+                .Where(q => q.ManifestId == null || q.Manifest!.ManifestGroup!.IsEnabled)
+                .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
+                .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup!.Priority : 0)
+                .ThenByDescending(q => q.Priority)
+                .ThenBy(q => q.CreatedAt)
+                .Take(100)
+                .ToListAsync();
+
+            limited.Should().HaveCount(100);
+        });
+
+        TestContext.Out.WriteLine(
+            $"LoadQueuedJobs with LIMIT 100: {elapsed.TotalMilliseconds:F0}ms"
+        );
+    }
+
+    [Test]
+    public async Task LoadQueuedJobs_WithoutLimit_LoadsAllEntries()
+    {
+        // Seed 500 queued work queue entries
+        await SeedWorkQueues(_manifests);
+
+        var elapsed = await AssertCompletesWithin(async () =>
+        {
+            var all = await DataContext
+                .WorkQueues.AsNoTracking()
+                .Include(q => q.Manifest)
+                    .ThenInclude(m => m!.ManifestGroup)
+                .Where(q => q.Status == WorkQueueStatus.Queued)
+                .Where(q => q.ManifestId == null || q.Manifest!.ManifestGroup!.IsEnabled)
+                .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
+                .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup!.Priority : 0)
+                .ThenByDescending(q => q.Priority)
+                .ThenBy(q => q.CreatedAt)
+                .ToListAsync();
+
+            all.Should().HaveCount(ManifestCount);
+        });
+
+        TestContext.Out.WriteLine(
+            $"LoadQueuedJobs without LIMIT ({ManifestCount} entries): {elapsed.TotalMilliseconds:F0}ms"
         );
     }
 

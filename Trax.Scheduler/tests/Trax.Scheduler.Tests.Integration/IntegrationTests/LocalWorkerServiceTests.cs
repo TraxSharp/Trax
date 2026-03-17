@@ -440,6 +440,147 @@ public class LocalWorkerServiceTests : TestSetup
 
     #endregion
 
+    #region Batch Claim Tests
+
+    [Test]
+    public async Task Worker_BatchSize1_ClaimsOneJobPerRound()
+    {
+        // Arrange - Create 5 jobs
+        for (var i = 0; i < 5; i++)
+        {
+            var metadata = await CreateMetadataForTestTrain();
+            var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+            await DataContext.Track(job);
+        }
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Act - Start single worker with BatchSize=1 (default)
+        using var cts = new CancellationTokenSource();
+        var options = new LocalWorkerOptions
+        {
+            WorkerCount = 1,
+            PollingInterval = TimeSpan.FromMilliseconds(100),
+            BatchSize = 1,
+        };
+
+        var workerService = new LocalWorkerService(
+            Scope.ServiceProvider,
+            options,
+            new CancellationRegistry(),
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
+        );
+
+        var workerTask = workerService.StartAsync(cts.Token);
+        await Task.Delay(3000);
+        cts.Cancel();
+
+        try
+        {
+            await workerTask;
+        }
+        catch (OperationCanceledException) { }
+
+        // Assert - All 5 jobs should have been processed
+        DataContext.Reset();
+        var remaining = await DataContext.BackgroundJobs.CountAsync();
+        remaining.Should().Be(0, "all jobs should be processed with BatchSize=1");
+    }
+
+    [Test]
+    public async Task Worker_BatchSize5_ClaimsMultipleJobsPerRound()
+    {
+        // Arrange - Create 10 jobs
+        for (var i = 0; i < 10; i++)
+        {
+            var metadata = await CreateMetadataForTestTrain();
+            var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+            await DataContext.Track(job);
+        }
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Act - Start single worker with BatchSize=5
+        using var cts = new CancellationTokenSource();
+        var options = new LocalWorkerOptions
+        {
+            WorkerCount = 1,
+            PollingInterval = TimeSpan.FromMilliseconds(100),
+            BatchSize = 5,
+        };
+
+        var workerService = new LocalWorkerService(
+            Scope.ServiceProvider,
+            options,
+            new CancellationRegistry(),
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
+        );
+
+        var workerTask = workerService.StartAsync(cts.Token);
+        await Task.Delay(3000);
+        cts.Cancel();
+
+        try
+        {
+            await workerTask;
+        }
+        catch (OperationCanceledException) { }
+
+        // Assert - All 10 jobs should have been processed
+        DataContext.Reset();
+        var remaining = await DataContext.BackgroundJobs.CountAsync();
+        remaining.Should().Be(0, "all jobs should be processed with BatchSize=5");
+    }
+
+    [Test]
+    public async Task Worker_BatchSize_LargerThanAvailable_ClaimsAllAvailable()
+    {
+        // Arrange - Create only 3 jobs but set BatchSize=10
+        for (var i = 0; i < 3; i++)
+        {
+            var metadata = await CreateMetadataForTestTrain();
+            var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+            await DataContext.Track(job);
+        }
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Act
+        using var cts = new CancellationTokenSource();
+        var options = new LocalWorkerOptions
+        {
+            WorkerCount = 1,
+            PollingInterval = TimeSpan.FromMilliseconds(100),
+            BatchSize = 10,
+        };
+
+        var workerService = new LocalWorkerService(
+            Scope.ServiceProvider,
+            options,
+            new CancellationRegistry(),
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
+        );
+
+        var workerTask = workerService.StartAsync(cts.Token);
+        await Task.Delay(2000);
+        cts.Cancel();
+
+        try
+        {
+            await workerTask;
+        }
+        catch (OperationCanceledException) { }
+
+        // Assert - All 3 available jobs should be processed
+        DataContext.Reset();
+        var remaining = await DataContext.BackgroundJobs.CountAsync();
+        remaining
+            .Should()
+            .Be(0, "all available jobs should be claimed even when BatchSize > available");
+    }
+
+    #endregion
+
     #region Input Deserialization Tests
 
     [Test]
