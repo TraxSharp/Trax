@@ -1,11 +1,10 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
-using JsonConverter = System.Text.Json.Serialization.JsonConverter;
-using JsonSerializer = System.Text.Json.JsonSerializer;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider;
 
@@ -46,9 +45,9 @@ public class JunctionLoggerProvider(
                     return;
 
                 effectJunction.Metadata.OutputJson = configuration.SerializeJunctionData
-                    ? JsonConvert.SerializeObject(
+                    ? JsonSerializer.Serialize<object>(
                         resultOut,
-                        configuration.NewtonsoftJsonSerializerSettings
+                        TraxJsonSerializationOptions.JunctionLogging
                     )
                     : null;
             },

@@ -12,8 +12,4 @@
   <ItemGroup>
     <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-  </ItemGroup>
 </Project>

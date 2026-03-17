@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Utils;
@@ -42,7 +41,6 @@ public partial class TraxEffectBuilder
         SerializeJunctionData = source.SerializeJunctionData;
         LogLevel = source.LogLevel;
         TrainParameterJsonSerializerOptions = source.TrainParameterJsonSerializerOptions;
-        NewtonsoftJsonSerializerSettings = source.NewtonsoftJsonSerializerSettings;
     }
 
     /// <summary>
@@ -102,8 +100,4 @@ public partial class TraxEffectBuilder
     [EditorBrowsable(EditorBrowsableState.Never)]
     public JsonSerializerOptions TrainParameterJsonSerializerOptions { get; set; } =
         TraxJsonSerializationOptions.Default;
-
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public JsonSerializerSettings NewtonsoftJsonSerializerSettings { get; set; } =
-        TraxJsonSerializationOptions.NewtonsoftDefault;
 }

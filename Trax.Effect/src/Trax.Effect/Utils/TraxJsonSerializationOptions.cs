@@ -2,7 +2,6 @@ using System.Linq.Expressions;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Newtonsoft.Json;
 
 namespace Trax.Effect.Utils;
 
@@ -89,10 +88,16 @@ public static class TraxJsonSerializationOptions
             },
         };
 
-    public static JsonSerializerSettings NewtonsoftDefault { get; set; } =
+    public static JsonSerializerOptions JunctionLogging { get; set; } =
         new()
         {
-            ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-            Converters = [new Newtonsoft.Json.Converters.StringEnumConverter()],
+            WriteIndented = false,
+            IncludeFields = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            ReferenceHandler = ReferenceHandler.IgnoreCycles,
+            MaxDepth = 8,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
+            Converters = { new JsonStringEnumConverter(), new DisposableConverter() },
         };
 }

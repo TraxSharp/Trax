@@ -23,7 +23,6 @@ public partial class TraxEffectBuilder
         var configuration = new TraxEffectConfiguration.TraxEffectConfiguration
         {
             SystemJsonSerializerOptions = TrainParameterJsonSerializerOptions,
-            NewtonsoftJsonSerializerSettings = NewtonsoftJsonSerializerSettings,
             SerializeJunctionData = SerializeJunctionData,
             LogLevel = LogLevel,
         };
