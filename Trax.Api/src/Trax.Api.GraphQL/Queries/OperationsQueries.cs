@@ -45,16 +45,31 @@ public class OperationsQueries
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
         int skip = 0,
-        int take = 25
+        int take = 25,
+        long? afterId = null
     )
     {
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
-        var query = db.Manifests.AsNoTracking().OrderByDescending(m => m.Id);
-        var totalCount = await query.CountAsync(ct);
+        var baseQuery = db.Manifests.AsNoTracking().OrderByDescending(m => m.Id);
+
+        // Count: use estimate for unfiltered queries, exact for cursor-filtered
+        var (totalCount, isEstimate) = afterId.HasValue
+            ? (await baseQuery.CountAsync(ct), false)
+            : await CountEstimator.EstimateOrCountAsync(
+                db,
+                "manifest",
+                () => baseQuery.CountAsync(ct),
+                ct
+            );
+
+        // Keyset cursor: skip to items after the cursor instead of using OFFSET
+        var query = afterId.HasValue ? baseQuery.Where(m => m.Id < afterId.Value) : baseQuery;
+
+        if (!afterId.HasValue && skip > 0)
+            query = query.Skip(skip);
 
         var items = await query
-            .Skip(skip)
             .Take(take)
             .Select(m => new ManifestSummary(
                 m.Id,
@@ -73,7 +88,16 @@ public class OperationsQueries
             ))
             .ToListAsync(ct);
 
-        return new PagedResult<ManifestSummary>(items, totalCount, skip, take);
+        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
+
+        return new PagedResult<ManifestSummary>(
+            items,
+            totalCount,
+            afterId.HasValue ? 0 : skip,
+            take,
+            isEstimate,
+            nextCursor
+        );
     }
 
     public async Task<ManifestSummary?> GetManifest(
@@ -109,16 +133,29 @@ public class OperationsQueries
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
         int skip = 0,
-        int take = 25
+        int take = 25,
+        long? afterId = null
     )
     {
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
-        var query = db.ManifestGroups.AsNoTracking().OrderByDescending(g => g.Id);
-        var totalCount = await query.CountAsync(ct);
+        var baseQuery = db.ManifestGroups.AsNoTracking().OrderByDescending(g => g.Id);
+
+        var (totalCount, isEstimate) = afterId.HasValue
+            ? (await baseQuery.CountAsync(ct), false)
+            : await CountEstimator.EstimateOrCountAsync(
+                db,
+                "manifest_group",
+                () => baseQuery.CountAsync(ct),
+                ct
+            );
+
+        var query = afterId.HasValue ? baseQuery.Where(g => g.Id < afterId.Value) : baseQuery;
+
+        if (!afterId.HasValue && skip > 0)
+            query = query.Skip(skip);
 
         var items = await query
-            .Skip(skip)
             .Take(take)
             .Select(g => new ManifestGroupSummary(
                 g.Id,
@@ -131,23 +168,47 @@ public class OperationsQueries
             ))
             .ToListAsync(ct);
 
-        return new PagedResult<ManifestGroupSummary>(items, totalCount, skip, take);
+        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
+
+        return new PagedResult<ManifestGroupSummary>(
+            items,
+            totalCount,
+            afterId.HasValue ? 0 : skip,
+            take,
+            isEstimate,
+            nextCursor
+        );
     }
 
     public async Task<PagedResult<ExecutionSummary>> GetExecutions(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
         int skip = 0,
-        int take = 25
+        int take = 25,
+        long? afterId = null
     )
     {
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
-        var query = db.Metadatas.AsNoTracking().OrderByDescending(m => m.StartTime);
-        var totalCount = await query.CountAsync(ct);
+        // Executions are ordered by StartTime DESC, but keyset cursor uses Id
+        // since it's monotonically increasing and indexed.
+        var baseQuery = db.Metadatas.AsNoTracking().OrderByDescending(m => m.Id);
+
+        var (totalCount, isEstimate) = afterId.HasValue
+            ? (await baseQuery.CountAsync(ct), false)
+            : await CountEstimator.EstimateOrCountAsync(
+                db,
+                "metadata",
+                () => baseQuery.CountAsync(ct),
+                ct
+            );
+
+        var query = afterId.HasValue ? baseQuery.Where(m => m.Id < afterId.Value) : baseQuery;
+
+        if (!afterId.HasValue && skip > 0)
+            query = query.Skip(skip);
 
         var items = await query
-            .Skip(skip)
             .Take(take)
             .Select(m => new ExecutionSummary(
                 m.Id,
@@ -166,7 +227,16 @@ public class OperationsQueries
             ))
             .ToListAsync(ct);
 
-        return new PagedResult<ExecutionSummary>(items, totalCount, skip, take);
+        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
+
+        return new PagedResult<ExecutionSummary>(
+            items,
+            totalCount,
+            afterId.HasValue ? 0 : skip,
+            take,
+            isEstimate,
+            nextCursor
+        );
     }
 
     public async Task<ExecutionSummary?> GetExecution(
