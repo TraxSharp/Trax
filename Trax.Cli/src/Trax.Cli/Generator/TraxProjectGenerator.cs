@@ -20,27 +20,34 @@ public class TraxProjectGenerator
 
         Directory.CreateDirectory(outputDir);
 
-        // 1. Scaffold the API project via dotnet new
-        var apiProjectName = $"{projectName}.Api";
-        var apiDir = Path.Combine(outputDir, apiProjectName);
-        RunDotnetNew(apiProjectName, apiDir);
+        // 1. Scaffold the hub project via dotnet new
+        var hubProjectName = $"{projectName}.Hub";
+        var hubDir = Path.Combine(outputDir, hubProjectName);
+        RunDotnetNew(hubProjectName, hubDir);
 
         // 2. Create the trains library
         var trainsProjectName = $"{projectName}.Trains";
         var trainsDir = Path.Combine(outputDir, trainsProjectName);
         GenerateTrainsLibrary(schema, trainsDir, projectName);
 
-        // 3. Add ProjectReference from API to trains library
-        AddProjectReference(apiDir, apiProjectName, trainsProjectName);
+        // 3. Add ProjectReference from hub to trains library
+        AddProjectReference(hubDir, hubProjectName, trainsProjectName);
 
-        // 4. Patch API Program.cs to scan the trains assembly
-        PatchProgramCs(apiDir, projectName);
+        // 4. Patch hub Program.cs to scan the trains assembly
+        PatchProgramCs(hubDir, projectName);
     }
 
     internal void GenerateTrainsLibrary(ApiSchema schema, string trainsDir, string projectName)
     {
         var trainsProjectName = $"{projectName}.Trains";
         Directory.CreateDirectory(trainsDir);
+
+        // If the schema has shared types or enums, set the models namespace
+        // so generated code includes the correct using directive
+        var hasSharedTypes =
+            schema.Types.Any(t => !t.IsBuiltIn && t.Fields.Count > 0) || schema.Enums.Count > 0;
+        if (hasSharedTypes)
+            _renderer.SetModelsNamespace($"{projectName}.Trains.Models");
 
         // Write trains csproj
         WriteFile(
@@ -143,18 +150,18 @@ public class TraxProjectGenerator
         File.WriteAllText(csprojPath, content);
     }
 
-    internal static void PatchProgramCs(string apiDir, string projectName)
+    internal static void PatchProgramCs(string hubDir, string projectName)
     {
-        var programPath = Path.Combine(apiDir, "Program.cs");
+        var programPath = Path.Combine(hubDir, "Program.cs");
         if (!File.Exists(programPath))
             return;
 
         var content = File.ReadAllText(programPath);
 
-        // Replace typeof(Program).Assembly with typeof(ManifestNames).Assembly
+        // Add the trains assembly alongside Program's assembly so both get scanned
         content = content.Replace(
             "typeof(Program).Assembly",
-            $"typeof({projectName}.Trains.ManifestNames).Assembly"
+            $"typeof(Program).Assembly, typeof({projectName}.Trains.ManifestNames).Assembly"
         );
 
         // Add using for the trains namespace if not already present
@@ -180,7 +187,7 @@ public class TraxProjectGenerator
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { "new", "trax-api", "-n", name, "-o", outputDir },
+            ArgumentList = { "new", "trax-hub", "-n", name, "-o", outputDir },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -200,7 +207,7 @@ public class TraxProjectGenerator
                 "No templates or subcommands found",
                 StringComparison.Ordinal
             )
-                ? "The 'trax-api' template is not installed. Run: dotnet new install Trax.Samples"
+                ? "The 'trax-hub' template is not installed. Run: dotnet new install Trax.Samples"
                 : $"dotnet new failed (exit code {process.ExitCode}): {stderr}";
             throw new InvalidOperationException(message);
         }

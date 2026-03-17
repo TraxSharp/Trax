@@ -1,6 +1,9 @@
 {{- if InputIsUnit || OutputIsUnit }}
 using LanguageExt;
 {{- end }}
+{{- if ModelsUsing }}
+using {{ ModelsUsing }};
+{{- end }}
 using Trax.Effect.Services.ServiceTrain;
 
 namespace {{ Namespace }};

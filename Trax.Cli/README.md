@@ -7,7 +7,7 @@ CLI tool for [Trax](https://www.nuget.org/packages/Trax.Effect/) — generate Tr
 
 ## What This Does
 
-Takes an existing API schema and scaffolds a Trax project with two parts: an API project (from the `trax-api` template) and a shared trains library with trains, junctions, input/output records, and models. The trains library follows the same structure as the DistributedWorkers sample — it can be referenced by an API, scheduler, or standalone workers.
+Takes an existing API schema and scaffolds a Trax project with two parts: a hub project (from the `trax-hub` template — API + Scheduler + Dashboard in one process) and a shared trains library with trains, junctions, input/output records, and models. The trains library follows the same structure as the DistributedWorkers sample — it can be referenced by an API, scheduler, or standalone workers.
 
 Supports two schema formats:
 
@@ -18,7 +18,7 @@ Supports two schema formats:
 
 ## Prerequisites
 
-The `trax-api` template must be installed:
+The `trax-hub` template must be installed:
 
 ```bash
 dotnet new install Trax.Samples
@@ -62,8 +62,8 @@ Given a schema with `createPlayer` and `getPlayer` operations:
 
 ```
 MyProject/
-├── MyProject.Api/                    # From dotnet new trax-api
-│   ├── MyProject.Api.csproj          # + ProjectReference to trains library
+├── MyProject.Hub/                    # From dotnet new trax-hub
+│   ├── MyProject.Hub.csproj          # + ProjectReference to trains library
 │   ├── Program.cs                    # Patched: AddMediator scans trains assembly
 │   ├── appsettings.json
 │   └── Trains/                       # Template sample trains (kept as examples)
@@ -98,11 +98,12 @@ Each junction contains a `throw new NotImplementedException()` with a TODO comme
 ## After Generating
 
 ```bash
-cd MyProject/MyProject.Api
+cd MyProject/MyProject.Hub
 dotnet restore
 # Fill in junction implementations in MyProject.Trains/ (search for TODO)
 dotnet run
-# Open http://localhost:5002/trax/graphql
+# Open http://localhost:5000/trax/graphql for GraphQL IDE
+# Open http://localhost:5000/trax for Dashboard
 ```
 
 ## Part of Trax

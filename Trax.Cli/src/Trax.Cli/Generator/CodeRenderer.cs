@@ -8,11 +8,18 @@ namespace Trax.Cli.Generator;
 public class CodeRenderer
 {
     private readonly Dictionary<string, Template> _templates = new();
+    private string? _modelsNamespace;
 
     public CodeRenderer()
     {
         LoadTemplates();
     }
+
+    /// <summary>
+    /// Sets the models namespace to include as a using directive in generated files.
+    /// Call this when the schema has shared model types (non-built-in types or enums).
+    /// </summary>
+    public void SetModelsNamespace(string modelsNamespace) => _modelsNamespace = modelsNamespace;
 
     public string RenderTrainInterface(ApiOperation operation, string projectName)
     {
@@ -30,6 +37,7 @@ public class CodeRenderer
                 OutputTypeName = isUnit ? "Unit" : operation.OutputType.Name,
                 OutputIsUnit = isUnit,
                 InputIsUnit = operation.InputType.Fields.Count == 0,
+                ModelsUsing = _modelsNamespace,
             }
         );
     }
@@ -53,6 +61,7 @@ public class CodeRenderer
                 InputIsUnit = operation.InputType.Fields.Count == 0,
                 Attribute = attribute,
                 Description = operation.Description ?? $"{operation.Name} operation",
+                ModelsUsing = _modelsNamespace,
             }
         );
     }
@@ -83,6 +92,7 @@ public class CodeRenderer
                 TypeName = operation.OutputType.Name,
                 Fields = operation.OutputType.Fields.Select(MapField).ToList(),
                 HasFields = operation.OutputType.Fields.Count > 0,
+                ModelsUsing = _modelsNamespace,
             }
         );
     }
@@ -105,6 +115,7 @@ public class CodeRenderer
                 InputIsUnit = operation.InputType.Fields.Count == 0,
                 HttpMethod = operation.HttpMethod,
                 HttpPath = operation.HttpPath,
+                ModelsUsing = _modelsNamespace,
             }
         );
     }

@@ -1,7 +1,11 @@
 {{- if OutputIsUnit }}
 using LanguageExt;
 {{- end }}
-using Trax.Core.Models;
+{{- if ModelsUsing }}
+using {{ ModelsUsing }};
+{{- end }}
+using Microsoft.Extensions.Logging;
+using Trax.Core.Junction;
 
 namespace {{ Namespace }}.Junctions;
 

@@ -1,3 +1,7 @@
+{{- if ModelsUsing }}
+using {{ ModelsUsing }};
+{{- end }}
+
 namespace {{ Namespace }};
 
 public record {{ TypeName }}

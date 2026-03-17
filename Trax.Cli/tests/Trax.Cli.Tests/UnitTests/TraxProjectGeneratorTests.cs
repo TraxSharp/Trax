@@ -296,7 +296,7 @@ public class TraxProjectGeneratorTests
     #region PatchProgramCs
 
     [Test]
-    public void PatchProgramCs_ReplacesTypeoOfProgramWithManifestNames()
+    public void PatchProgramCs_AddTrainsAssemblyAlongsideProgram()
     {
         Directory.CreateDirectory(_tempDir);
         var programPath = Path.Combine(_tempDir, "Program.cs");
@@ -306,7 +306,7 @@ public class TraxProjectGeneratorTests
             using Trax.Mediator.Extensions;
 
             builder.Services.AddTrax(trax =>
-                trax.AddEffects(effects => effects.UsePostgres(connectionString))
+                trax.AddEffects(effects => effects.UseInMemory())
                     .AddMediator(typeof(Program).Assembly)
             );
             """
@@ -315,8 +315,9 @@ public class TraxProjectGeneratorTests
         TraxProjectGenerator.PatchProgramCs(_tempDir, "TestProject");
 
         var content = File.ReadAllText(programPath);
-        content.Should().Contain("typeof(TestProject.Trains.ManifestNames).Assembly");
-        content.Should().NotContain("typeof(Program).Assembly");
+        content
+            .Should()
+            .Contain("typeof(Program).Assembly, typeof(TestProject.Trains.ManifestNames).Assembly");
         content.Should().Contain("using TestProject.Trains;");
     }
 

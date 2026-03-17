@@ -116,11 +116,11 @@ public static class GenerateCommand
         generator.Generate(apiSchema, output.FullName, name, force);
 
         Console.WriteLine($"Generated Trax project at: {output.FullName}");
-        Console.WriteLine($"  {name}.Api/     — API project (from trax-api template)");
+        Console.WriteLine($"  {name}.Hub/     — Hub project (API + Scheduler + Dashboard)");
         Console.WriteLine($"  {name}.Trains/  — Trains library (generated from schema)");
         Console.WriteLine();
         Console.WriteLine("Next steps:");
-        Console.WriteLine($"  cd {output.FullName}/{name}.Api");
+        Console.WriteLine($"  cd {output.FullName}/{name}.Hub");
         Console.WriteLine("  dotnet restore");
         Console.WriteLine("  # Fill in junction implementations (search for TODO)");
         Console.WriteLine("  dotnet run");

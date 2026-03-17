@@ -1,6 +1,9 @@
 using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
+{{- if ModelsUsing }}
+using {{ ModelsUsing }};
+{{- end }}
 using {{ Namespace }}.Junctions;
 
 namespace {{ Namespace }};
