@@ -10,12 +10,20 @@ nav_order: 1
 
 Adds PostgreSQL database support for persisting train metadata, logs, manifests, and dead letters. Automatically migrates the database schema on startup.
 
-## Signature
+## Signatures
 
 ```csharp
+// Basic — uses default Npgsql data source settings
 public static TraxEffectBuilderWithData UsePostgres(
     this TraxEffectBuilder effectBuilder,
     string connectionString
+)
+
+// With data source configuration — tune pool size, timeouts, multiplexing, etc.
+public static TraxEffectBuilderWithData UsePostgres(
+    this TraxEffectBuilder effectBuilder,
+    string connectionString,
+    Action<NpgsqlDataSourceBuilder> configureDataSource
 )
 ```
 
@@ -24,18 +32,36 @@ public static TraxEffectBuilderWithData UsePostgres(
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `connectionString` | `string` | Yes | PostgreSQL connection string (e.g., `"Host=localhost;Database=trax;Username=postgres;Password=password"`) |
+| `configureDataSource` | `Action<NpgsqlDataSourceBuilder>` | No | Callback to configure the Npgsql data source builder. Invoked after Trax registers its enum mappings but before `Build()`. Use this to tune connection pool settings, enable multiplexing, or configure other `NpgsqlDataSourceBuilder` options. |
 
 ## Returns
 
 `TraxEffectBuilderWithData` — a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %}). This provides compile-time safety: methods that require a data provider are only available on the returned type.
 
-## Example
+## Examples
+
+Basic usage with default settings:
 
 ```csharp
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres("Host=localhost;Database=trax;Username=postgres;Password=password")
         .AddDataContextLogging()
+    )
+);
+```
+
+Tuning the connection pool for high-throughput deployments:
+
+```csharp
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString, dataSource =>
+        {
+            dataSource.ConnectionStringBuilder.MaxPoolSize = 50;
+            dataSource.ConnectionStringBuilder.MinPoolSize = 5;
+            dataSource.ConnectionStringBuilder.ConnectionIdleLifetime = 300;
+        })
     )
 );
 ```

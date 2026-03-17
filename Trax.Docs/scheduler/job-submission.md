@@ -79,6 +79,7 @@ No connection string parameter needed — local workers use the same `IDataConte
     options.PollingInterval = TimeSpan.FromSeconds(2);         // default: 1 second
     options.VisibilityTimeout = TimeSpan.FromMinutes(30);      // default: 30 minutes
     options.ShutdownTimeout = TimeSpan.FromSeconds(30);        // default: 30 seconds
+    options.BatchSize = 5;                                     // default: 1
 })
 ```
 
@@ -88,6 +89,7 @@ No connection string parameter needed — local workers use the same `IDataConte
 | `PollingInterval` | 1 second | How often idle workers poll for new jobs |
 | `VisibilityTimeout` | 30 minutes | How long a claimed job stays invisible before crash recovery reclaims it |
 | `ShutdownTimeout` | 30 seconds | Grace period for in-flight jobs during application shutdown. When the host signals shutdown, in-flight trains receive the cancellation token after this delay — giving them time to finish cleanly. See [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %}#background-services-and-shutdown). |
+| `BatchSize` | 1 | Number of jobs each worker claims per poll. Higher values reduce database round-trips when there is a backlog. Claimed jobs are processed sequentially within the worker task. If a worker crashes mid-batch, uncompleted jobs wait for `VisibilityTimeout` before being reclaimed. |
 
 ### Worker Lifecycle
 

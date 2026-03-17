@@ -20,13 +20,19 @@ LoadQueuedJobsJunction → LoadDispatchCapacityJunction → ApplyCapacityLimitsJ
 
 ### LoadQueuedJobsJunction
 
-Loads all `WorkQueue` entries with `Status = Queued`, filtering out entries whose `ManifestGroup` has `IsEnabled = false`. The results are ordered by three keys:
+Loads `WorkQueue` entries with `Status = Queued`, filtering out entries whose `ManifestGroup` has `IsEnabled = false` and entries whose `ScheduledAt` is in the future. The results are ordered by three keys:
 
 1. **ManifestGroup.Priority** (descending) — higher priority groups are dispatched first.
 2. **WorkQueue.Priority** (descending) — within a group, higher priority entries come first.
 3. **CreatedAt** (ascending) — FIFO tiebreaker within the same priority.
 
-This replaces the previous dependent-first ordering with a fully configurable priority system.
+The number of entries loaded per cycle is bounded by `MaxQueuedJobsPerCycle` (default: 100). This prevents unbounded memory usage when the queue has a large backlog. The default of 100 provides 10x headroom over the default `MaxActiveJobs = 10` to account for per-group limit skipping in `ApplyCapacityLimitsJunction`. Set to `null` to load all queued entries (previous behavior).
+
+```csharp
+.AddScheduler(scheduler => scheduler
+    .MaxQueuedJobsPerCycle(200)  // load up to 200 entries per cycle
+)
+```
 
 ### DispatchJobsJunction
 
