@@ -2,7 +2,7 @@ using LanguageExt;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Junction;
 
-namespace Trax.Samples.Api.Trains.HelloWorld.Junctions;
+namespace Trax.Samples.Hub.Trains.HelloWorld.Junctions;
 
 public class LogGreetingJunction(ILogger<LogGreetingJunction> logger)
     : Junction<HelloWorldInput, Unit>

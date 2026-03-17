@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
   </PropertyGroup>
 
@@ -12,7 +13,10 @@
     <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.*" />
     <PackageReference Include="Trax.Mediator" Version="1.*" />
+    <PackageReference Include="Trax.Scheduler" Version="1.*" />
+    <PackageReference Include="Trax.Dashboard" Version="1.*" />
     <PackageReference Include="Trax.Api" Version="1.*" />
     <PackageReference Include="Trax.Api.GraphQL" Version="1.*" />
   </ItemGroup>

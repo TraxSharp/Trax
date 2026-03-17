@@ -144,6 +144,7 @@ BenchmarkDotNet.Artifacts/
 # Semantic Release version file
 .release-version
 
-# Node.js (React chat client)
+# Node.js (React clients)
 node_modules/
+dist/
 tsconfig.tsbuildinfo

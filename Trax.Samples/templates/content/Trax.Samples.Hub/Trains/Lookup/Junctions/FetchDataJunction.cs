@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Trax.Core.Junction;
 
-namespace Trax.Samples.Api.Trains.Lookup.Junctions;
+namespace Trax.Samples.Hub.Trains.Lookup.Junctions;
 
 public class FetchDataJunction(ILogger<FetchDataJunction> logger)
     : Junction<LookupInput, LookupOutput>

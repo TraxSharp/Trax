@@ -1,19 +1,26 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Trax Scheduler with Dashboard
 //
-// Runs scheduled trains on a configurable interval using PostgreSQL as the
-// task server. Includes a Blazor dashboard for monitoring at /trax.
+// Runs scheduled trains on a configurable interval. Includes a Blazor
+// dashboard for monitoring at /trax. Uses an in-memory data provider by
+// default so you can run it immediately without any external dependencies.
 //
-// Prerequisites:
-//   1. Start PostgreSQL (e.g. docker compose up -d)
-//   2. Run this project: dotnet run
+// To switch to PostgreSQL, replace UseInMemory() with UsePostgres(connectionString)
+// and swap the Trax.Effect.Data.InMemory package for Trax.Effect.Data.Postgres.
 //
 // Try it:
+//   dotnet run
 //   Open http://localhost:5001/trax in a browser for the Trax Dashboard
+//
+// Third-party packages used by this project (via Trax dependencies):
+//   Radzen.Blazor   — Dashboard UI components (MIT, https://github.com/radzenhq/radzen-blazor)
+//   LanguageExt     — Functional programming primitives (MIT, https://github.com/louthy/language-ext)
+//   Cronos          — Cron expression parser (MIT, https://github.com/HangfireIO/Cronos)
+//   EF Core InMemory — In-memory database provider (MIT, https://github.com/dotnet/efcore)
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Trax.Dashboard.Extensions;
-using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -25,24 +32,11 @@ using Trax.Scheduler.Services.Scheduling;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString =
-    builder.Configuration.GetConnectionString("TraxDatabase")
-    ?? throw new InvalidOperationException("Connection string 'TraxDatabase' not found.");
-
 builder.Services.AddLogging(logging => logging.AddConsole());
-
-// ── Dashboard ───────────────────────────────────────────────────────────
-builder.AddTraxDashboard();
 
 // ── Register Trax Effect + Scheduler ────────────────────────────────────
 builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects =>
-            effects
-                .UsePostgres(connectionString)
-                .AddJson()
-                .SaveTrainParameters()
-                .AddJunctionProgress()
-        )
+    trax.AddEffects(effects => effects.UseInMemory())
         .AddMediator(typeof(Program).Assembly)
         .AddScheduler(scheduler =>
             scheduler
@@ -55,6 +49,9 @@ builder.Services.AddTrax(trax =>
             )
         )
 );
+
+// ── Dashboard ───────────────────────────────────────────────────────────
+builder.AddTraxDashboard();
 
 var app = builder.Build();
 

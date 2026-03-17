@@ -1,5 +1,6 @@
 using LanguageExt;
-using Trax.Core.Models;
+using Microsoft.Extensions.Logging;
+using Trax.Core.Junction;
 
 namespace Trax.Samples.Scheduler.Trains.HelloWorld.Junctions;
 
