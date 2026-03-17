@@ -2,7 +2,6 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Provider.Json.Services.JsonEffect;
@@ -413,9 +412,6 @@ public class CrossComponentMemoryTests
 public class MockTraxEffectConfiguration(JsonSerializerOptions options) : ITraxEffectConfiguration
 {
     public JsonSerializerOptions SystemJsonSerializerOptions { get; } = options;
-
-    public JsonSerializerSettings NewtonsoftJsonSerializerSettings { get; } =
-        new() { ReferenceLoopHandling = ReferenceLoopHandling.Ignore };
 
     public bool SerializeJunctionData { get; } = true;
     public LogLevel LogLevel { get; } = LogLevel.Debug;

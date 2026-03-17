@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Newtonsoft.Json;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Provider.Json.Services.JsonEffect;
@@ -445,7 +444,6 @@ public class JsonEffectProviderMemoryTests
     private class StubEffectConfiguration : ITraxEffectConfiguration
     {
         public System.Text.Json.JsonSerializerOptions SystemJsonSerializerOptions { get; } = new();
-        public JsonSerializerSettings NewtonsoftJsonSerializerSettings { get; } = new();
         public bool SerializeJunctionData { get; } = false;
         public LogLevel LogLevel { get; } = LogLevel.Information;
     }
