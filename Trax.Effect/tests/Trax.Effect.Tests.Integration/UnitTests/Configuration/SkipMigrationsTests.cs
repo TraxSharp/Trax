@@ -137,4 +137,66 @@ public class SkipMigrationsTests
     }
 
     #endregion
+
+    #region UsePostgres with ConfigureDataSource
+
+    [Test]
+    public void UsePostgres_WithConfigureAction_DoesNotThrow()
+    {
+        var act = () =>
+            new ServiceCollection().AddTrax(trax =>
+                trax.AddEffects(effects =>
+                    effects
+                        .SkipMigrations()
+                        .UsePostgres(
+                            UnreachableConnectionString,
+                            dataSource => dataSource.ConnectionStringBuilder.MaxPoolSize = 50
+                        )
+                )
+            );
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void UsePostgres_WithConfigureAction_StillRegistersDbContextFactory()
+    {
+        var services = new ServiceCollection();
+
+        services.AddTrax(trax =>
+            trax.AddEffects(effects =>
+                effects
+                    .SkipMigrations()
+                    .UsePostgres(
+                        UnreachableConnectionString,
+                        dataSource => dataSource.ConnectionStringBuilder.MaxPoolSize = 50
+                    )
+            )
+        );
+
+        services
+            .Should()
+            .Contain(sd =>
+                sd.ServiceType.IsGenericType
+                && sd.ServiceType.GetGenericTypeDefinition()
+                    == typeof(Microsoft.EntityFrameworkCore.IDbContextFactory<>)
+            );
+    }
+
+    [Test]
+    public void UsePostgres_WithNullConfigureAction_BehavesLikeDefault()
+    {
+        var act = () =>
+            new ServiceCollection().AddTrax(trax =>
+                trax.AddEffects(effects =>
+                    effects
+                        .SkipMigrations()
+                        .UsePostgres(UnreachableConnectionString, configureDataSource: null)
+                )
+            );
+
+        act.Should().NotThrow();
+    }
+
+    #endregion
 }

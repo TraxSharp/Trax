@@ -87,6 +87,25 @@ public static class ServiceExtensions
     public static TraxEffectBuilderWithData UsePostgres(
         this TraxEffectBuilder configurationBuilder,
         string connectionString
+    ) => configurationBuilder.UsePostgres(connectionString, configureDataSource: null);
+
+    /// <summary>
+    /// Adds PostgreSQL database support to the Trax.Effect system with custom data source configuration.
+    /// </summary>
+    /// <param name="configurationBuilder">The Trax.Core effect configuration builder</param>
+    /// <param name="connectionString">The connection string to the PostgreSQL database</param>
+    /// <param name="configureDataSource">Optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>
+    /// after enum mappings. Use this to tune connection pool settings, enable multiplexing, or add custom type mappings.
+    /// <code>
+    /// effects.UsePostgres(connectionString, dataSource =>
+    ///     dataSource.ConnectionStringBuilder.MaxPoolSize = 50);
+    /// </code>
+    /// </param>
+    /// <returns>The configuration builder for method chaining</returns>
+    public static TraxEffectBuilderWithData UsePostgres(
+        this TraxEffectBuilder configurationBuilder,
+        string connectionString,
+        Action<NpgsqlDataSourceBuilder>? configureDataSource
     )
     {
         // Migrate the database schema to the latest version (unless explicitly skipped)
@@ -94,7 +113,10 @@ public static class ServiceExtensions
             DatabaseMigrator.Migrate(connectionString).Wait();
 
         // Create a data source with enum mappings and register for disposal on shutdown
-        var dataSource = ModelBuilderExtensions.BuildDataSource(connectionString);
+        var dataSource = ModelBuilderExtensions.BuildDataSource(
+            connectionString,
+            configureDataSource
+        );
         configurationBuilder.ServiceCollection.AddSingleton(dataSource);
 
         // Register the DbContextFactory

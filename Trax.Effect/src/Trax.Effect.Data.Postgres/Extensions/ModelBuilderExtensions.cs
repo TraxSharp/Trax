@@ -67,7 +67,20 @@ public static class ModelBuilderExtensions
     /// This method is typically called when setting up the DbContextFactory in the
     /// AddPostgresEffect extension method.
     /// </remarks>
-    public static NpgsqlDataSource BuildDataSource(string connectionString)
+    public static NpgsqlDataSource BuildDataSource(string connectionString) =>
+        BuildDataSource(connectionString, configure: null);
+
+    /// <summary>
+    /// Builds a PostgreSQL data source with enum mappings and optional custom configuration.
+    /// </summary>
+    /// <param name="connectionString">The connection string to use</param>
+    /// <param name="configure">Optional action to configure the data source builder after enum mappings
+    /// (e.g., set <c>ConnectionStringBuilder.MaxPoolSize</c> or enable multiplexing)</param>
+    /// <returns>A configured NpgsqlDataSource</returns>
+    public static NpgsqlDataSource BuildDataSource(
+        string connectionString,
+        Action<NpgsqlDataSourceBuilder>? configure
+    )
     {
         var npgsqlDataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
 
@@ -77,6 +90,8 @@ public static class ModelBuilderExtensions
         npgsqlDataSourceBuilder.MapEnum<DeadLetterStatus>("trax.dead_letter_status");
         npgsqlDataSourceBuilder.MapEnum<WorkQueueStatus>("trax.work_queue_status");
         npgsqlDataSourceBuilder.MapEnum<MisfirePolicy>("trax.misfire_policy");
+
+        configure?.Invoke(npgsqlDataSourceBuilder);
 
         return npgsqlDataSourceBuilder.Build();
     }
