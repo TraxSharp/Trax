@@ -108,12 +108,14 @@ builder.Services.AddTrax(trax =>
                     Every.Hours(1)
                 )
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                // 4. BATCH SCHEDULING + DORMANT DEPENDENTS
+                // 4. BATCH SCHEDULING + DORMANT DEPENDENTS + VARIANCE
                 //    ScheduleMany creates one ProcessMatchResult per region.
                 //    IncludeMany creates dormant DetectCheatPattern dependents —
                 //    they only fire when CheckForAnomaliesJunction activates them.
+                //    WithVariance adds up to 2 minutes of random jitter to stagger
+                //    region processing and avoid thundering-herd API calls.
                 //
-                //    process-match-{region} (every 5 min, priority 24, max 5 concurrent)
+                //    process-match-{region} (every 5 min ± 2 min, priority 24, max 5)
                 //      └── detect-cheat-{region} (Dormant — activated on anomalies)
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                 .ScheduleMany<IProcessMatchResultTrain>(
@@ -130,7 +132,7 @@ builder.Services.AddTrax(trax =>
                             LoserScore = 10,
                         }
                     )),
-                    Every.Minutes(5),
+                    Every.Minutes(5).WithVariance(TimeSpan.FromMinutes(2)),
                     o => o.Priority(24).Group(group => group.MaxActiveJobs(5))
                 )
                 .IncludeMany<IDetectCheatPatternTrain>(
@@ -204,6 +206,30 @@ builder.Services.AddTrax(trax =>
                             .Exclude(
                                 Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00"))
                             )
+                )
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 9. SCHEDULE VARIANCE (JITTER)
+                //    Adds random delay [0, variance] after each successful run.
+                //    Useful for scrapers and API polling to avoid thundering herd
+                //    and make access patterns less predictable.
+                //
+                //    Two examples:
+                //    - Interval: every 30s + up to 15s jitter (fires between 30–45s)
+                //    - Cron: daily at 3am + up to 30min jitter (fires 3:00–3:30am)
+                //
+                //    Check NextScheduledRun in the dashboard to see the pre-computed
+                //    next fire time after each run.
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                .Schedule<IRecalculateLeaderboardTrain>(
+                    ManifestNames.VarianceInterval,
+                    new RecalculateLeaderboardInput { Region = "Variance: Interval" },
+                    Every.Seconds(30).WithVariance(TimeSpan.FromSeconds(15))
+                )
+                .Schedule<IRecalculateLeaderboardTrain>(
+                    ManifestNames.VarianceCron,
+                    new RecalculateLeaderboardInput { Region = "Variance: Cron" },
+                    Cron.Daily(hour: 3),
+                    o => o.Variance(TimeSpan.FromMinutes(30))
                 )
         )
 );

@@ -30,6 +30,10 @@ public static class ManifestNames
     // ── One-Off Jobs ───────────────────────────────────────────────────
     public const string WelcomeBonus = "welcome-bonus";
 
+    // ── Schedule Variance ──────────────────────────────────────────────
+    public const string VarianceInterval = "variance-interval";
+    public const string VarianceCron = "variance-cron";
+
     // ── Exclusion Windows ──────────────────────────────────────────────
     public const string WeekdayLeaderboard = "weekday-leaderboard";
 

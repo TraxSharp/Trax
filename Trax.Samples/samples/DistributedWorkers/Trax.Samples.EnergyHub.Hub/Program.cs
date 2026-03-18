@@ -106,17 +106,18 @@ builder.Services.AddTrax(trax =>
                     cleanup.AddTrainType<IGenerateSustainabilityReportTrain>();
                 })
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                // 1. INTERVAL + DEPENDENCY CHAIN
-                //    Monitor solar PV array output every 5 minutes, then manage
-                //    battery storage based on the latest solar production data.
+                // 1. INTERVAL + DEPENDENCY CHAIN + VARIANCE
+                //    Monitor solar PV array output every 5 minutes with up to
+                //    1 minute of jitter to stagger sensor reads across arrays.
+                //    Battery storage management triggers after each solar read.
                 //
-                //    monitor-solar-production (every 5 min)
+                //    monitor-solar-production (every 5 min ± 1 min)
                 //      └── manage-battery-storage (ThenInclude — depends on solar)
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                 .Schedule<IMonitorSolarProductionTrain>(
                     ManifestNames.MonitorSolarProduction,
                     new MonitorSolarProductionInput { ArrayId = "SPA-001", Region = "somerset" },
-                    Every.Minutes(5)
+                    Every.Minutes(5).WithVariance(TimeSpan.FromMinutes(1))
                 )
                 .ThenInclude<IManageBatteryStorageTrain>(
                     ManifestNames.ManageBatteryStorage,
@@ -127,9 +128,9 @@ builder.Services.AddTrax(trax =>
                     }
                 )
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                // 2. BATCH SCHEDULING — EV CHARGING PER ZONE
+                // 2. BATCH SCHEDULING — EV CHARGING PER ZONE + VARIANCE
                 //    Process charging sessions per zone (plaza, data-center, parking)
-                //    every 2 minutes. Each zone has its own manifest.
+                //    every 2 minutes with up to 30s of jitter to stagger zone polling.
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                 .ScheduleMany<IProcessChargingSessionTrain>(
                     ManifestNames.ProcessChargingSession,
@@ -141,7 +142,7 @@ builder.Services.AddTrax(trax =>
                             SessionType = zone == "parking" ? "Wireless" : "Wired",
                         }
                     )),
-                    Every.Minutes(2),
+                    Every.Minutes(2).WithVariance(TimeSpan.FromSeconds(30)),
                     o => o.Group(group => group.MaxActiveJobs(3))
                 )
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
