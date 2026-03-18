@@ -73,7 +73,7 @@ Task<Manifest> ScheduleAsync<TTrain, TInput, TOutput>(
 |-----------|------|----------|---------|-------------|
 | `externalId` | `string` | Yes | — | A unique identifier for this scheduled job. Used for upsert semantics — if a manifest with this ID exists, it will be updated; otherwise a new one is created. Also used to reference this job in dependent scheduling (`ThenInclude`, `Include`). |
 | `input` | `IManifestProperties` (inferred) / `TInput` (explicit) | Yes | — | The input data that will be passed to the train on each execution. Serialized and stored in the manifest. With the inferred API, the concrete type is validated against the train's expected input type at configuration time. |
-| `schedule` | `Schedule` | Yes | — | The schedule definition — either interval-based or cron-based. Cron schedules support both 5-field (minute) and 6-field (second) granularity. Use [Every]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) or [Cron]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) helpers to create one. |
+| `schedule` | `Schedule` | Yes | — | The schedule definition — either interval-based or cron-based. Cron schedules support both 5-field (minute) and 6-field (second) granularity. Use [Every]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) or [Cron]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) helpers to create one. Supports `.WithVariance(TimeSpan)` to add random jitter. |
 | `options` | `Action<ScheduleOptions>?` | No | `null` | Optional callback to configure all scheduling options via a fluent builder. Includes manifest-level settings (`Priority`, `Enabled`, `MaxRetries`, `Timeout`), group-level settings (`.Group(...)` with `MaxActiveJobs`, `Priority`, `Enabled`), and batch settings (`PrunePrefix`). See [ScheduleOptions](#scheduleoptions) below. |
 | `ct` | `CancellationToken` | No | `default` | Cancellation token (runtime API only). |
 
@@ -91,6 +91,7 @@ The `ScheduleOptions` fluent builder consolidates all optional scheduling parame
 | `.Timeout(TimeSpan)` | Job execution timeout. `null` uses global default. |
 | `.OnMisfire(MisfirePolicy)` | Misfire policy for missed runs. `FireOnceNow` (default) fires immediately; `DoNothing` skips and waits for the next natural occurrence. Only applies to Cron and Interval types. |
 | `.MisfireThreshold(TimeSpan)` | Grace period before the misfire policy takes effect. Overrides the global `DefaultMisfireThreshold`. |
+| `.Variance(TimeSpan)` | Adds random jitter to the schedule. After each successful run, the next execution is delayed by `[0, variance]` seconds. Only supported on `Interval` and `Cron` types. If `Schedule.WithVariance()` is also set, the schedule-level value takes precedence. See [Schedule Variance]({{ site.baseurl }}{% link scheduler/scheduling-options.md %}#schedule-variance). |
 | `.Exclude(Exclusion)` | Adds an exclusion window. The manifest is skipped when any exclusion matches the current time. Multiple can be combined. Use `Exclude.DaysOfWeek(...)`, `Exclude.Dates(...)`, `Exclude.DateRange(...)`, or `Exclude.TimeWindow(...)` factories. See [Exclusion Windows]({{ site.baseurl }}{% link scheduler/exclusions.md %}). |
 
 ### Group-level methods
@@ -149,6 +150,33 @@ public class MyService(ITraxScheduler scheduler)
             options => options.Priority(15));
     }
 }
+```
+
+## Schedule Record
+
+The `Schedule` record defines the timing for a scheduled manifest. Create instances via `Every.*`, `Cron.*`, or `Schedule.FromInterval()` / `Schedule.FromCron()`.
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Type` | `ScheduleType` | `Interval` or `Cron`. |
+| `Interval` | `TimeSpan?` | The interval between runs (Interval type only). |
+| `CronExpression` | `string?` | The cron expression (Cron type only). |
+| `Variance` | `TimeSpan?` | Optional random jitter added after each successful run. |
+
+### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `WithVariance(TimeSpan variance)` | `Schedule` | Returns a new `Schedule` with the specified variance. The next run after each success is delayed by a random `[0, variance]` duration. Only valid on `Interval` and `Cron` types — applying it to other types throws `InvalidOperationException` at manifest creation time. |
+
+```csharp
+// Interval with 2-minute jitter
+var schedule = Every.Minutes(5).WithVariance(TimeSpan.FromMinutes(2));
+
+// Cron with 30-minute jitter
+var schedule = Cron.Daily(3).WithVariance(TimeSpan.FromMinutes(30));
 ```
 
 ## Remarks

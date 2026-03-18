@@ -224,6 +224,59 @@ See [Exclusion Windows](exclusions.md) for full details, examples, and misfire i
 
 *SDK Reference: [ScheduleOptions — Exclude()]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*
 
+## Schedule Variance
+
+Schedule variance (jitter) adds a random delay to recurring schedules, preventing thundering-herd problems when many jobs share the same interval or cron expression. After each successful run, the next execution is delayed by a random value in the range `[0, variance]` seconds — jobs never fire earlier than their base schedule.
+
+The computed next run time is stored in the database (`NextScheduledRun` column on the manifest), so it remains stable across polling cycles and is visible via SQL for debugging.
+
+### Configuration
+
+Variance can be set in two ways. On the schedule directly via `WithVariance()`:
+
+```csharp
+scheduler.Schedule<IScraperTrain>(
+    "scraper",
+    new ScraperInput(),
+    Every.Minutes(5).WithVariance(TimeSpan.FromMinutes(2)));
+```
+
+Or via the `ScheduleOptions` fluent builder:
+
+```csharp
+scheduler.Schedule<IScraperTrain>(
+    "scraper",
+    new ScraperInput(),
+    Cron.Daily(3),
+    o => o.Variance(TimeSpan.FromMinutes(30)));
+```
+
+If both are specified, `Schedule.WithVariance()` takes precedence over `ScheduleOptions.Variance()`.
+
+### How It Works
+
+1. A manifest completes successfully — `LastSuccessfulRun` is set to now
+2. `ComputeNextScheduledRun` calculates: base next time + random `[0, variance]` seconds
+   - **Interval**: base = `LastSuccessfulRun + IntervalSeconds`
+   - **Cron**: base = next cron occurrence after `LastSuccessfulRun`
+3. The result is persisted to `NextScheduledRun` in the database
+4. On each polling cycle, `ShouldRunNow` checks `NextScheduledRun` — if it's in the past, the job fires; if in the future, it waits
+
+When `NextScheduledRun` is null (first run, or variance not configured), the scheduler falls back to standard interval/cron evaluation.
+
+### Constraints
+
+- Variance is only supported on `Interval` and `Cron` schedule types. Applying it to `Dependent`, `Once`, or other types throws `InvalidOperationException` at configuration time.
+- Variance must be non-negative.
+- Variance can exceed the interval (e.g., 5-minute variance on a 1-minute interval) — this is allowed but means runs may be delayed well past the next base interval.
+
+### Interaction with Other Features
+
+- **Exclusion windows**: Exclusions are checked after `NextScheduledRun` is due — if the current time falls in an exclusion window, the job is skipped even if `NextScheduledRun` is in the past.
+- **Misfire policies**: Work the same as without variance. If a job with `DoNothing` policy misses its `NextScheduledRun` by more than the misfire threshold, it's skipped. `FireOnceNow` fires immediately regardless.
+
+*SDK Reference: [Schedule — WithVariance]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#schedule-record), [ScheduleOptions — Variance()]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*
+
 ## Misfire Policies
 
 A **misfire** occurs when a scheduled job was supposed to fire but couldn't — the scheduler was down, or the job was blocked by an active execution or dead letter. When the scheduler recovers, the misfire policy determines what happens.
