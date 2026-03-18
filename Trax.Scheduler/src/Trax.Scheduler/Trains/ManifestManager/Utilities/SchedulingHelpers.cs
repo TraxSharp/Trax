@@ -143,7 +143,11 @@ internal static class SchedulingHelpers
         if (manifest.LastSuccessfulRun is null)
             return true;
 
-        var scheduledTime = manifest.LastSuccessfulRun.Value.AddSeconds(intervalSeconds);
+        // Use pre-computed next run time if available (variance-aware),
+        // otherwise fall back to deterministic calculation.
+        var scheduledTime =
+            manifest.NextScheduledRun
+            ?? manifest.LastSuccessfulRun.Value.AddSeconds(intervalSeconds);
 
         // Not yet due
         if (scheduledTime > now)
@@ -192,24 +196,37 @@ internal static class SchedulingHelpers
         if (manifest.LastSuccessfulRun is null)
             return true;
 
-        var parsed = CronParser.TryParse(manifest.CronExpression!);
-        if (parsed is null)
+        // Use pre-computed next run time if available (variance-aware)
+        DateTime nextDueValue;
+        if (manifest.NextScheduledRun.HasValue)
         {
-            logger.LogWarning(
-                "Manifest {ManifestId}: could not parse cron expression '{Expression}'",
-                manifest.Id,
-                manifest.CronExpression
+            nextDueValue = manifest.NextScheduledRun.Value;
+        }
+        else
+        {
+            var parsed = CronParser.TryParse(manifest.CronExpression!);
+            if (parsed is null)
+            {
+                logger.LogWarning(
+                    "Manifest {ManifestId}: could not parse cron expression '{Expression}'",
+                    manifest.Id,
+                    manifest.CronExpression
+                );
+                return false;
+            }
+
+            var nextDue = parsed.GetNextOccurrence(
+                manifest.LastSuccessfulRun.Value,
+                TimeZoneInfo.Utc
             );
-            return false;
+            if (nextDue is null)
+                return false;
+
+            nextDueValue = nextDue.Value;
         }
 
-        // Find the next occurrence after the last successful run
-        var nextDue = parsed.GetNextOccurrence(manifest.LastSuccessfulRun.Value, TimeZoneInfo.Utc);
-        if (nextDue is null)
-            return false;
-
         // Not yet due
-        if (nextDue.Value > now)
+        if (nextDueValue > now)
             return false;
 
         // Resolve effective misfire policy and threshold
@@ -217,7 +234,7 @@ internal static class SchedulingHelpers
         var thresholdSeconds =
             manifest.MisfireThresholdSeconds ?? (int)config.DefaultMisfireThreshold.TotalSeconds;
 
-        var overdueSeconds = (now - nextDue.Value).TotalSeconds;
+        var overdueSeconds = (now - nextDueValue).TotalSeconds;
 
         // Within threshold: fire normally
         if (overdueSeconds <= thresholdSeconds)
@@ -227,9 +244,14 @@ internal static class SchedulingHelpers
         if (policy == MisfirePolicy.FireOnceNow)
             return true;
 
-        // DoNothing: find the most recent cron occurrence before now and check threshold
+        // DoNothing: find the most recent cron occurrence before now and check threshold.
+        // When NextScheduledRun was used, we need to re-parse the cron expression for boundary evaluation.
+        var cronParsed = CronParser.TryParse(manifest.CronExpression!);
+        if (cronParsed is null)
+            return false;
+
         return EvaluateCronBoundary(
-            parsed,
+            cronParsed,
             manifest,
             now,
             thresholdSeconds,
@@ -385,6 +407,50 @@ internal static class SchedulingHelpers
 
         var nextScheduledTime = lastSuccessfulRun.Value.AddSeconds(intervalSeconds);
         return nextScheduledTime <= now;
+    }
+
+    /// <summary>
+    /// Computes the next scheduled run time with variance (jitter) applied.
+    /// Called after each successful execution to pre-compute a deterministic next-run time.
+    /// </summary>
+    /// <param name="manifest">The manifest that just completed successfully</param>
+    /// <returns>
+    /// The next scheduled run time with jitter applied, or null if variance is not configured
+    /// or the schedule type doesn't support variance.
+    /// </returns>
+    internal static DateTime? ComputeNextScheduledRun(Manifest manifest)
+    {
+        if (manifest.VarianceSeconds is null or <= 0)
+            return null;
+
+        if (manifest.LastSuccessfulRun is null)
+            return null;
+
+        var lastRun = manifest.LastSuccessfulRun.Value;
+        DateTime baseNextRun;
+
+        if (manifest.ScheduleType == ScheduleType.Interval && manifest.IntervalSeconds is > 0)
+        {
+            baseNextRun = lastRun.AddSeconds(manifest.IntervalSeconds.Value);
+        }
+        else if (
+            manifest.ScheduleType == ScheduleType.Cron
+            && !string.IsNullOrEmpty(manifest.CronExpression)
+        )
+        {
+            var parsed = CronParser.TryParse(manifest.CronExpression);
+            var next = parsed?.GetNextOccurrence(lastRun, TimeZoneInfo.Utc);
+            if (next is null)
+                return null;
+            baseNextRun = next.Value;
+        }
+        else
+        {
+            return null;
+        }
+
+        var jitterSeconds = Random.Shared.Next(0, manifest.VarianceSeconds.Value + 1);
+        return baseNextRun.AddSeconds(jitterSeconds);
     }
 
     /// <summary>

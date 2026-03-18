@@ -889,6 +889,7 @@ public class TraxScheduler(
             Timeout = baseOptions.Timeout,
             IsDormant = baseOptions.IsDormant,
             Exclusions = baseOptions.Exclusions,
+            Variance = baseOptions.Variance,
         };
 
     private static async Task<Manifest> GetManifestByExternalIdAsync(

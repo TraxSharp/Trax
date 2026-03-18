@@ -98,4 +98,14 @@ public class ManifestOptions
     /// Empty list means no exclusions.
     /// </remarks>
     public List<Exclusion> Exclusions { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the maximum random delay added to each scheduled run.
+    /// </summary>
+    /// <remarks>
+    /// When set, after each successful execution the scheduler adds a random delay
+    /// of <c>[0, Variance]</c> to the next scheduled time. Only applies to Cron and
+    /// Interval schedule types. Null means no variance (deterministic scheduling).
+    /// </remarks>
+    public TimeSpan? Variance { get; set; }
 }

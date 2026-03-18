@@ -33,6 +33,7 @@ public class ScheduleOptions
     internal MisfirePolicy? _misfirePolicy;
     internal TimeSpan? _misfireThreshold;
     internal List<Exclusion> _exclusions = [];
+    internal TimeSpan? _variance;
 
     // Group-level state
     internal string? _groupId;
@@ -138,6 +139,21 @@ public class ScheduleOptions
         return this;
     }
 
+    /// <summary>
+    /// Sets the maximum random delay added to each scheduled run (jitter).
+    /// </summary>
+    /// <remarks>
+    /// After each successful execution, the scheduler adds a random delay of
+    /// <c>[0, variance]</c> to the next scheduled time. This prevents thundering-herd
+    /// problems and makes scheduling patterns less predictable. Only meaningful for
+    /// Cron and Interval schedule types.
+    /// </remarks>
+    public ScheduleOptions Variance(TimeSpan variance)
+    {
+        _variance = variance;
+        return this;
+    }
+
     // ── Group-level fluent methods ────────────────────────────────────
 
     /// <summary>
@@ -195,5 +211,6 @@ public class ScheduleOptions
             MisfirePolicy = _misfirePolicy,
             MisfireThreshold = _misfireThreshold,
             Exclusions = _exclusions,
+            Variance = _variance,
         };
 }

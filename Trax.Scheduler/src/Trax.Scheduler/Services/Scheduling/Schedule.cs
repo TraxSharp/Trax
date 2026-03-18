@@ -36,6 +36,17 @@ public record Schedule
     public string? CronExpression { get; init; }
 
     /// <summary>
+    /// Gets the maximum random delay added to each scheduled run.
+    /// </summary>
+    /// <remarks>
+    /// When set, after each successful execution the scheduler adds a random delay
+    /// of <c>[0, Variance]</c> to the next scheduled time. This prevents thundering-herd
+    /// problems and makes scheduling patterns less predictable. Only applies to
+    /// <see cref="ScheduleType.Interval"/> and <see cref="ScheduleType.Cron"/> schedules.
+    /// </remarks>
+    public TimeSpan? Variance { get; init; }
+
+    /// <summary>
     /// Creates a schedule from a time interval.
     /// </summary>
     /// <param name="interval">The interval between job executions</param>
@@ -61,6 +72,19 @@ public record Schedule
     /// </example>
     public static Schedule FromCron(string expression) =>
         new() { Type = ScheduleType.Cron, CronExpression = expression };
+
+    /// <summary>
+    /// Returns a copy of this schedule with the specified variance (jitter).
+    /// </summary>
+    /// <param name="variance">The maximum random delay added after each scheduled run</param>
+    /// <returns>A new Schedule with the variance applied</returns>
+    /// <example>
+    /// <code>
+    /// var schedule = Every.Minutes(5).WithVariance(TimeSpan.FromMinutes(2));
+    /// // Runs every 5–7 minutes (base interval + 0–2 min random delay)
+    /// </code>
+    /// </example>
+    public Schedule WithVariance(TimeSpan variance) => this with { Variance = variance };
 
     /// <summary>
     /// Converts the schedule to a cron expression.

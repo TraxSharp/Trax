@@ -1184,6 +1184,109 @@ public class ManifestManagerTrainTests : TestSetup
 
     #endregion
 
+    #region Schedule Variance Tests
+
+    [Test]
+    public async Task Run_WithVarianceAndNextScheduledRunInFuture_DoesNotEnqueueJob()
+    {
+        // Arrange - Create an interval manifest with NextScheduledRun in the future.
+        // Use raw SQL to set columns directly since CreateAndSaveManifest detaches entities.
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 300,
+            inputValue: "VarianceFuture"
+        );
+
+        await DataContext
+            .Manifests.Where(m => m.Id == manifest.Id)
+            .ExecuteUpdateAsync(s =>
+                s.SetProperty(m => m.LastSuccessfulRun, DateTime.UtcNow.AddMinutes(-3))
+                    .SetProperty(m => m.VarianceSeconds, 120)
+                    .SetProperty(m => m.NextScheduledRun, DateTime.UtcNow.AddMinutes(5))
+            );
+        DataContext.Reset();
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Should NOT be queued because NextScheduledRun is in the future
+        DataContext.Reset();
+        var entries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == manifest.Id)
+            .ToListAsync();
+
+        entries
+            .Should()
+            .BeEmpty("manifest should not be queued when NextScheduledRun is in the future");
+    }
+
+    [Test]
+    public async Task Run_WithVarianceAndNextScheduledRunInPast_EnqueuesJob()
+    {
+        // Arrange - Create an interval manifest with NextScheduledRun in the past.
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 300,
+            inputValue: "VariancePast"
+        );
+
+        await DataContext
+            .Manifests.Where(m => m.Id == manifest.Id)
+            .ExecuteUpdateAsync(s =>
+                s.SetProperty(m => m.LastSuccessfulRun, DateTime.UtcNow.AddMinutes(-10))
+                    .SetProperty(m => m.VarianceSeconds, 120)
+                    .SetProperty(m => m.NextScheduledRun, DateTime.UtcNow.AddMinutes(-2))
+            );
+        DataContext.Reset();
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Should be queued because NextScheduledRun has passed
+        DataContext.Reset();
+        var entries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == manifest.Id)
+            .ToListAsync();
+
+        entries
+            .Should()
+            .NotBeEmpty("manifest should be queued when NextScheduledRun is in the past");
+    }
+
+    [Test]
+    public async Task Run_WithVarianceAndNoNextScheduledRun_FallsBackToInterval()
+    {
+        // Arrange - Create an interval manifest that has never run (LastSuccessfulRun=null).
+        // Variance is set but NextScheduledRun is null — should fall back to immediate fire.
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 60,
+            inputValue: "VarianceFallback"
+        );
+
+        await DataContext
+            .Manifests.Where(m => m.Id == manifest.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.VarianceSeconds, 30));
+        DataContext.Reset();
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Should be queued because never ran (fallback: lastRun is null → fire immediately)
+        DataContext.Reset();
+        var entries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == manifest.Id)
+            .ToListAsync();
+
+        entries
+            .Should()
+            .NotBeEmpty(
+                "manifest with no LastSuccessfulRun should fire immediately regardless of variance"
+            );
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private async Task<Manifest> CreateAndSaveManifest(

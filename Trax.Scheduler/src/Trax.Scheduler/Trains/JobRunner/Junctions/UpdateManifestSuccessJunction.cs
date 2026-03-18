@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectJunction;
+using Trax.Scheduler.Trains.ManifestManager.Utilities;
 
 namespace Trax.Scheduler.Trains.JobRunner.Junctions;
 
@@ -24,6 +25,7 @@ internal class UpdateManifestSuccessJunction(ILogger<UpdateManifestSuccessJuncti
         }
 
         input.Manifest.LastSuccessfulRun = DateTime.UtcNow;
+        input.Manifest.NextScheduledRun = SchedulingHelpers.ComputeNextScheduledRun(input.Manifest);
 
         if (input.Manifest.ScheduleType == ScheduleType.Once)
         {

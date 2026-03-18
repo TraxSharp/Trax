@@ -130,6 +130,7 @@ public static class DataContextExtensions
             existing.ManifestGroupId = manifestGroupId;
             existing.Priority = options.Priority;
             ApplySchedule(existing, schedule);
+            ApplyVariance(existing, schedule, options);
             ApplyMisfireOptions(existing, options);
             ApplyExclusions(existing, options);
 
@@ -151,6 +152,7 @@ public static class DataContextExtensions
         };
         manifest.SetProperties(input);
         ApplySchedule(manifest, schedule);
+        ApplyVariance(manifest, schedule, options);
         ApplyMisfireOptions(manifest, options);
         ApplyExclusions(manifest, options);
 
@@ -381,6 +383,49 @@ public static class DataContextExtensions
         manifest.IntervalSeconds = schedule.Interval.HasValue
             ? (int)schedule.Interval.Value.TotalSeconds
             : null;
+
+        // Clear pre-computed next run on schedule change so it gets recomputed
+        // after the next successful execution.
+        manifest.NextScheduledRun = null;
+    }
+
+    /// <summary>
+    /// Applies variance configuration to a manifest, merging from both Schedule and ManifestOptions.
+    /// Schedule.Variance takes precedence over ManifestOptions.Variance.
+    /// </summary>
+    private static void ApplyVariance(
+        Manifest manifest,
+        Schedule? schedule,
+        ManifestOptions options
+    )
+    {
+        var variance = schedule?.Variance ?? options.Variance;
+        if (variance is null)
+        {
+            manifest.VarianceSeconds = null;
+            return;
+        }
+
+        if (variance.Value < TimeSpan.Zero)
+        {
+            throw new InvalidOperationException(
+                "Schedule variance must be non-negative. "
+                    + $"Got: {variance.Value}. "
+                    + "Use a positive TimeSpan for the maximum random delay.\n\n"
+                    + "  .Variance(TimeSpan.FromMinutes(2)) // correct\n"
+            );
+        }
+
+        if (manifest.ScheduleType is not ScheduleType.Interval and not ScheduleType.Cron)
+        {
+            throw new InvalidOperationException(
+                "Schedule variance is only supported for Interval and Cron schedule types. "
+                    + $"Manifest has ScheduleType={manifest.ScheduleType}.\n\n"
+                    + "Remove the .Variance() call or change the schedule type to Interval or Cron.\n"
+            );
+        }
+
+        manifest.VarianceSeconds = (int)variance.Value.TotalSeconds;
     }
 
     /// <summary>
