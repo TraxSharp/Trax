@@ -196,6 +196,32 @@ public class Manifest : IModel
     [Column("exclusions")]
     public string? Exclusions { get; set; }
 
+    /// <summary>
+    /// Gets or sets the maximum random delay in seconds added to each scheduled run.
+    /// </summary>
+    /// <remarks>
+    /// When set, after each successful execution the scheduler computes the next run time
+    /// as <c>baseSchedule + Random(0, VarianceSeconds)</c> and stores it in
+    /// <see cref="NextScheduledRun"/>. This prevents thundering-herd problems and makes
+    /// scraping patterns less detectable. Only applies to Cron and Interval schedule types.
+    /// Null means no variance (deterministic scheduling).
+    /// </remarks>
+    [Column("variance_seconds")]
+    public int? VarianceSeconds { get; set; }
+
+    /// <summary>
+    /// Gets or sets the pre-computed next execution time including any applied variance.
+    /// </summary>
+    /// <remarks>
+    /// Set automatically by the scheduler after each successful run when
+    /// <see cref="VarianceSeconds"/> is configured. The ManifestManager uses this value
+    /// instead of computing the next run time on-the-fly, ensuring deterministic behavior
+    /// across polling cycles. Null means the scheduler computes the next run time from
+    /// <see cref="LastSuccessfulRun"/> and the schedule definition.
+    /// </remarks>
+    [Column("next_scheduled_run")]
+    public DateTime? NextScheduledRun { get; set; }
+
     #endregion
 
     #endregion
@@ -288,6 +314,7 @@ public class Manifest : IModel
             MisfireThresholdSeconds = manifest.MisfireThresholdSeconds,
             ScheduledAt = manifest.ScheduledAt,
             Exclusions = manifest.Exclusions,
+            VarianceSeconds = manifest.VarianceSeconds,
         };
 
         if (manifest.Properties != null)

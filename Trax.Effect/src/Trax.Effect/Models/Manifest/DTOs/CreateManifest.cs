@@ -81,5 +81,11 @@ public class CreateManifest
     /// </summary>
     public string? Exclusions { get; set; }
 
+    /// <summary>
+    /// Maximum random delay in seconds added to each scheduled run.
+    /// Null means no variance (deterministic scheduling).
+    /// </summary>
+    public int? VarianceSeconds { get; set; }
+
     #endregion
 }
