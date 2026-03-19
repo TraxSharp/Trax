@@ -61,10 +61,27 @@ public class TraxProjectGenerator
             _renderer.RenderManifestNames(schema.Operations, projectName)
         );
 
+        // Write GraphQLNamespaces.cs
+        var groups = schema
+            .Operations.Select(o => o.Group)
+            .Where(g => g != null)
+            .Cast<string>()
+            .Distinct()
+            .OrderBy(g => g)
+            .ToList();
+
+        if (groups.Count > 0)
+        {
+            WriteFile(
+                Path.Combine(trainsDir, "GraphQLNamespaces.cs"),
+                _renderer.RenderGraphQLNamespaces(groups, projectName)
+            );
+        }
+
         // Write shared types in Models/
         foreach (var apiType in schema.Types)
         {
-            if (apiType.IsBuiltIn || apiType.Fields.Count == 0)
+            if (apiType.IsBuiltIn || apiType.Name == "Unit" || apiType.Fields.Count == 0)
                 continue;
 
             var modelsDir = Path.Combine(trainsDir, "Models");
@@ -104,13 +121,10 @@ public class TraxProjectGenerator
                 _renderer.RenderTrainImplementation(operation, projectName)
             );
 
-            if (operation.InputType.Fields.Count > 0)
-            {
-                WriteFile(
-                    Path.Combine(trainDir, $"{operation.InputType.Name}.cs"),
-                    _renderer.RenderInput(operation, projectName)
-                );
-            }
+            WriteFile(
+                Path.Combine(trainDir, $"{operation.InputType.Name}.cs"),
+                _renderer.RenderInput(operation, projectName)
+            );
 
             if (!operation.OutputType.IsBuiltIn && operation.OutputType.Fields.Count > 0)
             {

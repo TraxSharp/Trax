@@ -1,0 +1,40 @@
+type Query {
+  """Get all chat threads"""
+  allChats(pageSize: Int! = 50): AllChats!
+  """Get chat history entries"""
+  chatHistories(chatId: ID!): ChatHistories!
+  """Get a single player by ID"""
+  getPlayer(id: ID!): Player
+}
+
+type Mutation {
+  """Create a new chat"""
+  createChat(name: String!): Chat!
+}
+
+type AllChats {
+  items: [Chat!]!
+  totalCount: Int!
+}
+
+type ChatHistories {
+  entries: [ChatEntry!]!
+  hasMore: Boolean!
+}
+
+type Chat {
+  id: ID!
+  name: String!
+  createdAt: DateTime!
+}
+
+type ChatEntry {
+  id: ID!
+  message: String!
+  timestamp: DateTime!
+}
+
+type Player {
+  id: ID!
+  name: String!
+}

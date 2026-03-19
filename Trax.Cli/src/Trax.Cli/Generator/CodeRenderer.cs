@@ -25,18 +25,17 @@ public class CodeRenderer
     {
         var isUnit = IsUnitOutput(operation.OutputType);
         var ns = $"{projectName}.Trains.{operation.Group}.{operation.Name}";
+        var outputName = isUnit ? "Unit" : QualifyIfCollides(operation.OutputType.Name, operation);
         return Render(
             "TrainInterface",
             new
             {
                 Namespace = ns,
                 TrainName = operation.Name,
-                InputTypeName = operation.InputType.Fields.Count > 0
-                    ? operation.InputType.Name
-                    : "Unit",
-                OutputTypeName = isUnit ? "Unit" : operation.OutputType.Name,
+                OutputTypeName = outputName,
                 OutputIsUnit = isUnit,
-                InputIsUnit = operation.InputType.Fields.Count == 0,
+                InputTypeName = operation.InputType.Name,
+                InputIsUnit = false,
                 ModelsUsing = _modelsNamespace,
             }
         );
@@ -47,21 +46,24 @@ public class CodeRenderer
         var isUnit = IsUnitOutput(operation.OutputType);
         var ns = $"{projectName}.Trains.{operation.Group}.{operation.Name}";
         var attribute = operation.Kind == OperationKind.Query ? "TraxQuery" : "TraxMutation";
+        var outputName = isUnit ? "Unit" : QualifyIfCollides(operation.OutputType.Name, operation);
         return Render(
             "TrainImplementation",
             new
             {
                 Namespace = ns,
                 TrainName = operation.Name,
-                InputTypeName = operation.InputType.Fields.Count > 0
-                    ? operation.InputType.Name
-                    : "Unit",
-                OutputTypeName = isUnit ? "Unit" : operation.OutputType.Name,
+                InputTypeName = operation.InputType.Name,
+                OutputTypeName = outputName,
                 OutputIsUnit = isUnit,
-                InputIsUnit = operation.InputType.Fields.Count == 0,
+                InputIsUnit = false,
                 Attribute = attribute,
-                Description = operation.Description ?? $"{operation.Name} operation",
+                Description = SanitizeDescription(
+                    operation.Description ?? $"{operation.Name} operation"
+                ),
                 ModelsUsing = _modelsNamespace,
+                GraphQLNamespace = operation.Group,
+                TrainsNamespace = $"{projectName}.Trains",
             }
         );
     }
@@ -77,6 +79,7 @@ public class CodeRenderer
                 TypeName = operation.InputType.Name,
                 Fields = operation.InputType.Fields.Select(MapField).ToList(),
                 HasFields = operation.InputType.Fields.Count > 0,
+                ModelsUsing = _modelsNamespace,
             }
         );
     }
@@ -101,18 +104,17 @@ public class CodeRenderer
     {
         var isUnit = IsUnitOutput(operation.OutputType);
         var ns = $"{projectName}.Trains.{operation.Group}.{operation.Name}";
+        var outputName = isUnit ? "Unit" : QualifyIfCollides(operation.OutputType.Name, operation);
         return Render(
             "Junction",
             new
             {
                 Namespace = ns,
                 TrainName = operation.Name,
-                InputTypeName = operation.InputType.Fields.Count > 0
-                    ? operation.InputType.Name
-                    : "Unit",
-                OutputTypeName = isUnit ? "Unit" : operation.OutputType.Name,
+                InputTypeName = operation.InputType.Name,
+                OutputTypeName = outputName,
                 OutputIsUnit = isUnit,
-                InputIsUnit = operation.InputType.Fields.Count == 0,
+                InputIsUnit = false,
                 HttpMethod = operation.HttpMethod,
                 HttpPath = operation.HttpPath,
                 ModelsUsing = _modelsNamespace,
@@ -155,6 +157,33 @@ public class CodeRenderer
         return Render("TrainsCsproj", new { });
     }
 
+    public string RenderGraphQLNamespaces(IEnumerable<string> groups, string projectName)
+    {
+        var scriptObject = new ScriptObject();
+        scriptObject["Namespace"] = $"{projectName}.Trains";
+
+        var groupList = new ScriptArray();
+        foreach (var group in groups)
+        {
+            var obj = new ScriptObject
+            {
+                ["name"] = group,
+                ["value"] = NamingConventions.ToCamelCase(group),
+            };
+            groupList.Add(obj);
+        }
+
+        scriptObject["Groups"] = groupList;
+
+        if (!_templates.TryGetValue("GraphQLNamespaces", out var template))
+            throw new InvalidOperationException("Template 'GraphQLNamespaces' not found.");
+
+        var context = new TemplateContext();
+        context.PushGlobal(scriptObject);
+
+        return template.Render(context);
+    }
+
     public string RenderManifestNames(List<ApiOperation> operations, string projectName)
     {
         var scriptObject = new ScriptObject();
@@ -192,11 +221,37 @@ public class CodeRenderer
             ["TypeName"] = field.TypeName,
             ["IsRequired"] = field.IsRequired,
             ["IsNullable"] = field.IsNullable,
-            ["Description"] = field.Description,
+            ["Description"] =
+                field.Description != null ? SanitizeDescription(field.Description) : null,
             ["RequiredKeyword"] = field.IsRequired ? "required " : "",
             ["NullableMarker"] = field.IsNullable && !field.TypeName.EndsWith('?') ? "?" : "",
         };
         return obj;
+    }
+
+    private static string SanitizeDescription(string description) =>
+        description.ReplaceLineEndings(" ").Replace("\"", "\\\"");
+
+    /// <summary>
+    /// Qualifies a type name with the full models namespace if it collides with
+    /// any segment of the operation's namespace (group or operation name).
+    /// This prevents CS0118 where C# resolves the name to the namespace instead of the type.
+    /// </summary>
+    private string QualifyIfCollides(string typeName, ApiOperation operation)
+    {
+        if (_modelsNamespace == null)
+            return typeName;
+
+        // Check if the type name matches the group or operation name (namespace segments)
+        if (
+            string.Equals(typeName, operation.Group, StringComparison.Ordinal)
+            || string.Equals(typeName, operation.Name, StringComparison.Ordinal)
+        )
+        {
+            return $"global::{_modelsNamespace}.{typeName}";
+        }
+
+        return typeName;
     }
 
     private static bool IsUnitOutput(ApiType outputType) =>

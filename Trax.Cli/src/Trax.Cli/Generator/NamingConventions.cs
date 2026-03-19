@@ -105,6 +105,8 @@ public static partial class NamingConventions
         "post",
     };
 
+    private static readonly string[] HttpVerbPrefixes = ["Get", "Post", "Put", "Patch", "Delete"];
+
     public static string ToPascalCase(string name)
     {
         if (string.IsNullOrEmpty(name))
@@ -189,6 +191,41 @@ public static partial class NamingConventions
         return noun + "s";
     }
 
-    [GeneratedRegex(@"[_\-\s]+|(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")]
+    /// <summary>
+    /// Extracts the short type name from a potentially fully-qualified .NET type name.
+    /// For example, "AdvocacyDay.CVLegacy.Domain.Bills.DTOs.GetBillDto" becomes "GetBillDto".
+    /// Names without dots are returned unchanged.
+    /// </summary>
+    public static string SimplifySchemaName(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return name;
+
+        var lastDot = name.LastIndexOf('.');
+        return lastDot >= 0 ? name[(lastDot + 1)..] : name;
+    }
+
+    /// <summary>
+    /// Strips HTTP verb prefixes (Get, Post, Put, Patch, Delete) from a PascalCase name.
+    /// Returns the original name if stripping would leave it empty.
+    /// </summary>
+    public static string StripHttpVerbPrefix(string name)
+    {
+        foreach (var prefix in HttpVerbPrefixes)
+        {
+            if (
+                name.StartsWith(prefix, StringComparison.Ordinal)
+                && name.Length > prefix.Length
+                && char.IsUpper(name[prefix.Length])
+            )
+            {
+                return name[prefix.Length..];
+            }
+        }
+
+        return name;
+    }
+
+    [GeneratedRegex(@"[_\-\s.,]+|(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")]
     private static partial Regex SplitPattern();
 }

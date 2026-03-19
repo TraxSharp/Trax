@@ -57,13 +57,13 @@ public class OpenApiEndToEndTests
             .Should()
             .BeTrue();
 
-        // GetPet
+        // GetPet (prefix kept — "Pet" collides with Pet model type)
         var getPetDir = Path.Combine(_outputDir, "Trains", "Pets", "GetPet");
         File.Exists(Path.Combine(getPetDir, "IGetPetTrain.cs")).Should().BeTrue();
         File.Exists(Path.Combine(getPetDir, "GetPetTrain.cs")).Should().BeTrue();
         File.Exists(Path.Combine(getPetDir, "Junctions", "GetPetJunction.cs")).Should().BeTrue();
 
-        // DeletePet
+        // DeletePet (prefix kept — "Pet" collides with Pet model type)
         var deletePetDir = Path.Combine(_outputDir, "Trains", "Pets", "DeletePet");
         File.Exists(Path.Combine(deletePetDir, "IDeletePetTrain.cs")).Should().BeTrue();
         File.Exists(Path.Combine(deletePetDir, "DeletePetTrain.cs")).Should().BeTrue();
@@ -117,6 +117,36 @@ public class OpenApiEndToEndTests
 
     #endregion
 
+    #region GraphQLNamespaces
+
+    [Test]
+    public void GenerateTrainsLibrary_Petstore_GraphQLNamespacesFileGenerated()
+    {
+        var schema = _parser.Parse(FixturePath("petstore.json"));
+        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+
+        var namespacesFile = Path.Combine(_outputDir, "GraphQLNamespaces.cs");
+        File.Exists(namespacesFile).Should().BeTrue();
+
+        var content = File.ReadAllText(namespacesFile);
+        content.Should().Contain("public static class GraphQLNamespaces");
+        content.Should().Contain("Pets");
+        content.Should().Contain("\"pets\"");
+    }
+
+    [Test]
+    public void GenerateTrainsLibrary_Petstore_TrainImplementationReferencesNamespace()
+    {
+        var schema = _parser.Parse(FixturePath("petstore.json"));
+        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+
+        var trainFile = Path.Combine(_outputDir, "Trains", "Pets", "ListPets", "ListPetsTrain.cs");
+        var content = File.ReadAllText(trainFile);
+        content.Should().Contain("Namespace = GraphQLNamespaces.Pets");
+    }
+
+    #endregion
+
     #region ComplexOpenApi
 
     [Test]
@@ -141,17 +171,17 @@ public class OpenApiEndToEndTests
             .Should()
             .BeTrue();
 
-        // GetUser
+        // GetUser (prefix kept — "User" collides with User model type)
         var getUserDir = Path.Combine(_outputDir, "Trains", "Users", "GetUser");
         File.Exists(Path.Combine(getUserDir, "IGetUserTrain.cs")).Should().BeTrue();
         File.Exists(Path.Combine(getUserDir, "GetUserTrain.cs")).Should().BeTrue();
         File.Exists(Path.Combine(getUserDir, "Junctions", "GetUserJunction.cs")).Should().BeTrue();
 
-        // Health check
-        var healthDir = Path.Combine(_outputDir, "Trains", "Health", "GetHealth");
-        File.Exists(Path.Combine(healthDir, "IGetHealthTrain.cs")).Should().BeTrue();
-        File.Exists(Path.Combine(healthDir, "GetHealthTrain.cs")).Should().BeTrue();
-        File.Exists(Path.Combine(healthDir, "Junctions", "GetHealthJunction.cs")).Should().BeTrue();
+        // Health check (synthesized from path only)
+        var healthDir = Path.Combine(_outputDir, "Trains", "Health", "Health");
+        File.Exists(Path.Combine(healthDir, "IHealthTrain.cs")).Should().BeTrue();
+        File.Exists(Path.Combine(healthDir, "HealthTrain.cs")).Should().BeTrue();
+        File.Exists(Path.Combine(healthDir, "Junctions", "HealthJunction.cs")).Should().BeTrue();
     }
 
     [Test]

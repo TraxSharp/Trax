@@ -4,6 +4,9 @@ using Trax.Effect.Services.ServiceTrain;
 {{- if ModelsUsing }}
 using {{ ModelsUsing }};
 {{- end }}
+{{- if GraphQLNamespace }}
+using {{ TrainsNamespace }};
+{{- end }}
 using {{ Namespace }}.Junctions;
 
 namespace {{ Namespace }};
@@ -11,7 +14,7 @@ namespace {{ Namespace }};
 /// <summary>
 /// {{ Description }}
 /// </summary>
-[{{ Attribute }}(Description = "{{ Description }}")]
+[{{ Attribute }}({{ if GraphQLNamespace }}Namespace = GraphQLNamespaces.{{ GraphQLNamespace }}, {{ end }}Description = "{{ Description }}")]
 public class {{ TrainName }}Train
     : ServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>,
         I{{ TrainName }}Train

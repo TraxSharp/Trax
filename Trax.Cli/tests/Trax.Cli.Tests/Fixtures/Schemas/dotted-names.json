@@ -1,0 +1,217 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "DottedNames",
+    "version": "v1"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "List users",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyApp.Domain.Users.DTOs.UserListDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Users"],
+        "summary": "Create user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MyApp.Domain.Users.Commands.CreateUserCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyApp.Domain.Users.DTOs.UserDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/calendar.ics": {
+      "get": {
+        "tags": ["Events"],
+        "summary": "Get calendar feed",
+        "responses": {
+          "200": {
+            "description": "ICS calendar"
+          }
+        }
+      }
+    },
+    "/items/{itemId}/tags/{update_value}": {
+      "post": {
+        "tags": ["Items"],
+        "summary": "Update item tag",
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "updateValue",
+            "in": "query",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "update_value",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Updated"
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "tags": ["Search"],
+        "summary": "Search with filters",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "filters",
+            "in": "query",
+            "schema": { "$ref": "#/components/schemas/MyApp.Domain.Shared.EmptyResponse" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/reports": {
+      "get": {
+        "tags": ["Meetings,Reports"],
+        "summary": "List reports",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyApp.Domain.Reports.DTOs.ReportListDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notes": {
+      "post": {
+        "tags": ["Notes"],
+        "summary": "Create note.\nExpects a Bearer Token.\nReturns the created note.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "body": { "type": "string" }
+                },
+                "required": ["title"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "MyApp.Domain.Users.DTOs.UserDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64" },
+          "name": { "type": "string" },
+          "email": { "type": "string" }
+        },
+        "required": ["id", "name", "email"]
+      },
+      "MyApp.Domain.Users.DTOs.UserListDto": {
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyApp.Domain.Users.DTOs.UserDto"
+            }
+          },
+          "total": { "type": "integer" }
+        }
+      },
+      "MyApp.Domain.Users.Commands.CreateUserCommand": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "email": { "type": "string" }
+        },
+        "required": ["name", "email"]
+      },
+      "MyApp.Domain.Reports.DTOs.ReportListDto": {
+        "type": "object",
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": { "type": "object" }
+          }
+        }
+      },
+      "MyApp.Domain.Shared.EmptyResponse": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  }
+}

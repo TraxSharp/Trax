@@ -164,9 +164,27 @@ public class GraphQLSchemaParser : ISchemaParser
         if (rootType.Fields == null)
             return;
 
+        // Collect all known type names to detect namespace/type collisions (CS0118).
+        // When an operation name matches a type name, the generated namespace segment
+        // shadows the type reference — e.g. Flowthru.Trains.Group.AllChats.AllChats
+        var knownTypeNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var name in typeDefinitions.Keys)
+            knownTypeNames.Add(NamingConventions.ToPascalCase(name));
+        foreach (var name in inputDefinitions.Keys)
+            knownTypeNames.Add(NamingConventions.ToPascalCase(name));
+        foreach (var name in enumDefinitions.Keys)
+            knownTypeNames.Add(NamingConventions.ToPascalCase(name));
+
         foreach (var field in rootType.Fields)
         {
             var operationName = NamingConventions.ToPascalCase(field.Name.StringValue);
+
+            // Disambiguate if the operation name collides with a known type name
+            if (knownTypeNames.Contains(operationName))
+            {
+                var suffix = kind == OperationKind.Query ? "Query" : "Mutation";
+                operationName = $"{operationName}{suffix}";
+            }
 
             // Build input type from arguments
             var inputType = BuildInputTypeFromArguments(

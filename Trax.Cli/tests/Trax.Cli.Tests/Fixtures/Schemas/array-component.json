@@ -1,0 +1,88 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Array Component API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/votes/tally": {
+      "get": {
+        "operationId": "getVoteTally",
+        "summary": "Get vote tally",
+        "tags": ["Votes"],
+        "parameters": [
+          {
+            "name": "voteId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vote tally results",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VoteTallyResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scores": {
+      "get": {
+        "operationId": "getScoreboard",
+        "summary": "Get scoreboard",
+        "tags": ["Scores"],
+        "responses": {
+          "200": {
+            "description": "Scoreboard entries",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Scoreboard" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "VoteTallyResponse": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "rep_id": {
+              "type": "integer",
+              "description": "Legislator ID"
+            },
+            "leg_voted": {
+              "type": "string",
+              "enum": ["Y", "N", "O"],
+              "description": "How the legislator voted"
+            },
+            "name": {
+              "type": "string",
+              "description": "Legislator's full name"
+            }
+          }
+        }
+      },
+      "ScoreEntry": {
+        "type": "object",
+        "required": ["player", "score"],
+        "properties": {
+          "player": { "type": "string" },
+          "score": { "type": "integer" }
+        }
+      },
+      "Scoreboard": {
+        "type": "array",
+        "items": { "$ref": "#/components/schemas/ScoreEntry" }
+      }
+    }
+  }
+}

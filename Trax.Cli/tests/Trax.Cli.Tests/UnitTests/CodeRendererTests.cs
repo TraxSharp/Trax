@@ -235,6 +235,74 @@ public class CodeRendererTests
 
     #endregion
 
+    #region RenderGraphQLNamespaces
+
+    [Test]
+    public void RenderGraphQLNamespaces_ProducesStaticClassWithConstants()
+    {
+        var groups = new[] { "Players", "Matches", "Leaderboard" };
+
+        var result = _renderer.RenderGraphQLNamespaces(groups, "MyApi");
+
+        result.Should().Contain("namespace MyApi.Trains;");
+        result.Should().Contain("public static class GraphQLNamespaces");
+        result.Should().Contain("Players");
+        result.Should().Contain("\"players\"");
+        result.Should().Contain("Matches");
+        result.Should().Contain("\"matches\"");
+        result.Should().Contain("Leaderboard");
+        result.Should().Contain("\"leaderboard\"");
+    }
+
+    [Test]
+    public void RenderGraphQLNamespaces_EmptyGroups_ProducesEmptyClass()
+    {
+        var groups = Array.Empty<string>();
+
+        var result = _renderer.RenderGraphQLNamespaces(groups, "MyApi");
+
+        result.Should().Contain("public static class GraphQLNamespaces");
+        result.Should().NotContain("public const string");
+    }
+
+    [Test]
+    public void RenderGraphQLNamespaces_SingleGroup_ProducesSingleConstant()
+    {
+        var groups = new[] { "Users" };
+
+        var result = _renderer.RenderGraphQLNamespaces(groups, "MyApi");
+
+        result.Should().Contain("Users");
+        result.Should().Contain("\"users\"");
+    }
+
+    #endregion
+
+    #region RenderTrainImplementation_Namespace
+
+    [Test]
+    public void RenderTrainImplementation_WithGroup_ContainsNamespaceAttribute()
+    {
+        var op = MakeOperation("LookupPlayer", OperationKind.Query, group: "Players");
+
+        var result = _renderer.RenderTrainImplementation(op, "MyApi");
+
+        result.Should().Contain("Namespace = GraphQLNamespaces.Players");
+        result.Should().Contain("using MyApi.Trains;");
+    }
+
+    [Test]
+    public void RenderTrainImplementation_MutationWithGroup_ContainsNamespaceAttribute()
+    {
+        var op = MakeOperation("BanPlayer", OperationKind.Mutation, group: "Players");
+
+        var result = _renderer.RenderTrainImplementation(op, "MyApi");
+
+        result.Should().Contain("[TraxMutation(Namespace = GraphQLNamespaces.Players");
+    }
+
+    #endregion
+
     #region RenderTypeRecord
 
     [Test]

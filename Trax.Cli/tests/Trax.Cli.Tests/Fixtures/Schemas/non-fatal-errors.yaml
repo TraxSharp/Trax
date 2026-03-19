@@ -1,0 +1,58 @@
+openapi: 3.0.3
+info:
+  title: Non-Fatal Errors API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      operationId: listItems
+      summary: List items
+      tags: [Items]
+      responses:
+        '200':
+          description: Item list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Item'
+  /issues:
+    get:
+      operationId: listIssues
+      summary: List issues
+      tags: [Issues]
+      responses:
+        '200':
+          description: Issue list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Issue'
+components:
+  schemas:
+    Item:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+    Issue:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        nested_data:
+          type: array
+          items:
+            type: array
+            items:
+              - type: string
+                description: Date
+              - type: integer
+                description: Count

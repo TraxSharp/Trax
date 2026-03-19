@@ -139,4 +139,155 @@ public class NamingConventionsTests
     }
 
     #endregion
+
+    #region StripHttpVerbPrefix
+
+    [Test]
+    public void StripHttpVerbPrefix_GetPlayer_ReturnsPlayer()
+    {
+        NamingConventions.StripHttpVerbPrefix("GetPlayer").Should().Be("Player");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_PostLogin_ReturnsLogin()
+    {
+        NamingConventions.StripHttpVerbPrefix("PostLogin").Should().Be("Login");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_PutSettings_ReturnsSettings()
+    {
+        NamingConventions.StripHttpVerbPrefix("PutSettings").Should().Be("Settings");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_PatchProfile_ReturnsProfile()
+    {
+        NamingConventions.StripHttpVerbPrefix("PatchProfile").Should().Be("Profile");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_DeleteUser_ReturnsUser()
+    {
+        NamingConventions.StripHttpVerbPrefix("DeleteUser").Should().Be("User");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_ListItems_ReturnsListItems()
+    {
+        // "List" is not an HTTP verb — should be left alone
+        NamingConventions.StripHttpVerbPrefix("ListItems").Should().Be("ListItems");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_CreateUser_ReturnsCreateUser()
+    {
+        // "Create" is not an HTTP verb — should be left alone
+        NamingConventions.StripHttpVerbPrefix("CreateUser").Should().Be("CreateUser");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_SearchItems_ReturnsSearchItems()
+    {
+        NamingConventions.StripHttpVerbPrefix("SearchItems").Should().Be("SearchItems");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_Get_ReturnsGet()
+    {
+        // "Get" alone with nothing after — should not be stripped
+        NamingConventions.StripHttpVerbPrefix("Get").Should().Be("Get");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_Getting_ReturnsGetting()
+    {
+        // "Getting" — next char is lowercase, not a PascalCase boundary
+        NamingConventions.StripHttpVerbPrefix("Getting").Should().Be("Getting");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_Postman_ReturnsPostman()
+    {
+        // "Postman" — next char after "Post" is lowercase
+        NamingConventions.StripHttpVerbPrefix("Postman").Should().Be("Postman");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_EmptyString_ReturnsEmpty()
+    {
+        NamingConventions.StripHttpVerbPrefix("").Should().Be("");
+    }
+
+    [Test]
+    public void StripHttpVerbPrefix_NoPrefixMatch_ReturnsOriginal()
+    {
+        NamingConventions.StripHttpVerbPrefix("FetchData").Should().Be("FetchData");
+    }
+
+    #endregion
+
+    #region SimplifySchemaName
+
+    [Test]
+    public void SimplifySchemaName_FullyQualifiedDotNetType_ReturnsLastSegment()
+    {
+        NamingConventions
+            .SimplifySchemaName("MyApp.Domain.Users.DTOs.UserDto")
+            .Should()
+            .Be("UserDto");
+    }
+
+    [Test]
+    public void SimplifySchemaName_DeeplyNested_ReturnsLastSegment()
+    {
+        NamingConventions
+            .SimplifySchemaName(
+                "AdvocacyDay.CVLegacy.Domain.Bills.GetBill.DTOs.GetBillBillVotesTopicsDto"
+            )
+            .Should()
+            .Be("GetBillBillVotesTopicsDto");
+    }
+
+    [Test]
+    public void SimplifySchemaName_NoDots_ReturnsUnchanged()
+    {
+        NamingConventions.SimplifySchemaName("UserDto").Should().Be("UserDto");
+    }
+
+    [Test]
+    public void SimplifySchemaName_EmptyString_ReturnsEmpty()
+    {
+        NamingConventions.SimplifySchemaName("").Should().Be("");
+    }
+
+    [Test]
+    public void SimplifySchemaName_SingleDot_ReturnsAfterDot()
+    {
+        NamingConventions.SimplifySchemaName("Namespace.Type").Should().Be("Type");
+    }
+
+    #endregion
+
+    #region ToPascalCase_SpecialCharacters
+
+    [Test]
+    public void ToPascalCase_DottedName_SplitsOnDots()
+    {
+        NamingConventions.ToPascalCase("calendar.ics").Should().Be("CalendarIcs");
+    }
+
+    [Test]
+    public void ToPascalCase_CommaInName_SplitsOnCommas()
+    {
+        NamingConventions.ToPascalCase("meetings,intents").Should().Be("MeetingsIntents");
+    }
+
+    [Test]
+    public void ToPascalCase_MultipleSeparators_SplitsAll()
+    {
+        NamingConventions.ToPascalCase("a.b,c-d_e f").Should().Be("ABCDEF");
+    }
+
+    #endregion
 }

@@ -1,5 +1,10 @@
+{{- if ModelsUsing }}
+using {{ ModelsUsing }};
+{{- end }}
+
 namespace {{ Namespace }};
 
+{{- if HasFields }}
 public record {{ TypeName }}
 {
 {{- for field in Fields }}
@@ -11,3 +16,6 @@ public record {{ TypeName }}
     public {{ field.RequiredKeyword }}{{ field.TypeName }}{{ field.NullableMarker }} {{ field.SanitizedName }} { get; init; }
 {{- end }}
 }
+{{- else }}
+public record {{ TypeName }};
+{{- end }}

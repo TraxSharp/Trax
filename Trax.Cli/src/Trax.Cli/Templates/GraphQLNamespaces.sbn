@@ -1,0 +1,8 @@
+namespace {{ Namespace }};
+
+public static class GraphQLNamespaces
+{
+{{- for group in Groups }}
+    public const string {{ group.name }} = "{{ group.value }}";
+{{- end }}
+}

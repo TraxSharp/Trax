@@ -182,8 +182,8 @@ public class OpenApiSchemaParserTests
         var healthOp = schema.Operations.SingleOrDefault(o => o.HttpPath == "/health");
         healthOp.Should().NotBeNull();
         healthOp!.Name.Should().NotBeNullOrWhiteSpace();
-        // No operationId in the schema, so the name is synthesized from method + path
-        healthOp.Name.Should().Be("GetHealth");
+        // No operationId in the schema, so the name is synthesized from path segments
+        healthOp.Name.Should().Be("Health");
     }
 
     [Test]

@@ -150,6 +150,157 @@ public class GraphQLSchemaParserTests
 
     #endregion
 
+    #region TypeCollision
+
+    [Test]
+    public void Parse_TypeCollision_AllChatsQueryIsDisambiguated()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+
+        schema.Operations.Should().Contain(o => o.Name == "AllChatsQuery");
+    }
+
+    [Test]
+    public void Parse_TypeCollision_ChatHistoriesQueryIsDisambiguated()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+
+        schema.Operations.Should().Contain(o => o.Name == "ChatHistoriesQuery");
+    }
+
+    [Test]
+    public void Parse_TypeCollision_NonCollidingOperationNamesUnchanged()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+
+        // GetPlayer doesn't collide with any type name
+        schema.Operations.Should().Contain(o => o.Name == "GetPlayer");
+        // CreateChat doesn't collide with Chat (different name)
+        schema.Operations.Should().Contain(o => o.Name == "CreateChat");
+    }
+
+    [Test]
+    public void Parse_TypeCollision_DisambiguatedOperationOutputTypePreserved()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+
+        var allChats = schema.Operations.First(o => o.Name == "AllChatsQuery");
+        // Output references the AllChats type (built-in ref since it's a known object type)
+        allChats.OutputType.Name.Should().Be("AllChats");
+        allChats.OutputType.IsBuiltIn.Should().BeTrue();
+    }
+
+    [Test]
+    public void Parse_TypeCollision_MutationCollidingWithTypeGetsMutationSuffix()
+    {
+        // Create a schema where a mutation name collides with a type
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(
+                tempFile,
+                """
+                type Query {
+                  getItem(id: ID!): Item
+                }
+                type Mutation {
+                  item(name: String!): Item
+                }
+                type Item {
+                  id: ID!
+                  name: String!
+                }
+                """
+            );
+            var schema = _parser.Parse(tempFile);
+
+            schema.Operations.Should().Contain(o => o.Name == "ItemMutation");
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Test]
+    public void Parse_TypeCollision_CollidingWithEnumTypeIsDisambiguated()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(
+                tempFile,
+                """
+                type Query {
+                  status: StatusResult!
+                }
+                type Mutation {
+                  status(value: Status!): StatusResult!
+                }
+                type StatusResult {
+                  ok: Boolean!
+                }
+                enum Status {
+                  ACTIVE
+                  INACTIVE
+                }
+                """
+            );
+            var schema = _parser.Parse(tempFile);
+
+            // "Status" collides with the Status enum
+            schema.Operations.Should().Contain(o => o.Name == "StatusMutation");
+            // The query "status" also collides with the Status enum
+            schema.Operations.Should().Contain(o => o.Name == "StatusQuery");
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Test]
+    public void Parse_TypeCollision_CollidingWithInputTypeIsDisambiguated()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(
+                tempFile,
+                """
+                type Query {
+                  filterInput(text: String): SearchResult
+                }
+                type SearchResult {
+                  items: [String!]!
+                }
+                input FilterInput {
+                  field: String
+                  value: String
+                }
+                """
+            );
+            var schema = _parser.Parse(tempFile);
+
+            // "FilterInput" collides with the FilterInput input type
+            schema.Operations.Should().Contain(o => o.Name == "FilterInputQuery");
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Test]
+    public void Parse_TypeCollision_HasCorrectTotalOperationCount()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+
+        schema.Operations.Should().HaveCount(4);
+    }
+
+    #endregion
+
     #region EmptySchema
 
     [Test]

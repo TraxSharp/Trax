@@ -148,6 +148,126 @@ public class GraphQLEndToEndTests
 
     #endregion
 
+    #region TypeCollision
+
+    [Test]
+    public void GenerateTrainsLibrary_TypeCollision_DisambiguatedOperationDirsExist()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+
+        // AllChats query collides with AllChats type → AllChatsQuery
+        var allChatsDir = Path.Combine(_outputDir, "Trains", "AllChats", "AllChatsQuery");
+        Directory.Exists(allChatsDir).Should().BeTrue();
+        File.Exists(Path.Combine(allChatsDir, "IAllChatsQueryTrain.cs")).Should().BeTrue();
+
+        // ChatHistories query collides with ChatHistories type → ChatHistoriesQuery
+        var chatHistDir = Path.Combine(_outputDir, "Trains", "ChatHistories", "ChatHistoriesQuery");
+        Directory.Exists(chatHistDir).Should().BeTrue();
+        File.Exists(Path.Combine(chatHistDir, "IChatHistoriesQueryTrain.cs")).Should().BeTrue();
+    }
+
+    [Test]
+    public void GenerateTrainsLibrary_TypeCollision_NonCollidingOperationDirsUnchanged()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+
+        // GetPlayer doesn't collide
+        var getPlayerDir = Path.Combine(_outputDir, "Trains", "Players", "GetPlayer");
+        Directory.Exists(getPlayerDir).Should().BeTrue();
+
+        // CreateChat doesn't collide
+        var createChatDir = Path.Combine(_outputDir, "Trains", "Chats", "CreateChat");
+        Directory.Exists(createChatDir).Should().BeTrue();
+    }
+
+    [Test]
+    public void GenerateTrainsLibrary_TypeCollision_OutputTypeRefUsesGlobalQualification()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+
+        var interfaceFile = Path.Combine(
+            _outputDir,
+            "Trains",
+            "AllChats",
+            "AllChatsQuery",
+            "IAllChatsQueryTrain.cs"
+        );
+        var content = File.ReadAllText(interfaceFile);
+
+        // Should use global:: qualification to avoid CS0118
+        content.Should().Contain("global::TestProject.Trains.Models.AllChats");
+    }
+
+    [Test]
+    public void GenerateTrainsLibrary_TypeCollision_TrainImplUsesGlobalQualification()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+
+        var trainFile = Path.Combine(
+            _outputDir,
+            "Trains",
+            "AllChats",
+            "AllChatsQuery",
+            "AllChatsQueryTrain.cs"
+        );
+        var content = File.ReadAllText(trainFile);
+
+        content.Should().Contain("global::TestProject.Trains.Models.AllChats");
+    }
+
+    [Test]
+    public void GenerateTrainsLibrary_TypeCollision_JunctionUsesGlobalQualification()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+
+        var junctionFile = Path.Combine(
+            _outputDir,
+            "Trains",
+            "AllChats",
+            "AllChatsQuery",
+            "Junctions",
+            "AllChatsQueryJunction.cs"
+        );
+        var content = File.ReadAllText(junctionFile);
+
+        content.Should().Contain("global::TestProject.Trains.Models.AllChats");
+    }
+
+    [Test]
+    public void GenerateTrainsLibrary_TypeCollision_ManifestNamesUseDisambiguatedNames()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+
+        var content = File.ReadAllText(Path.Combine(_outputDir, "ManifestNames.cs"));
+
+        content.Should().Contain("AllChatsQuery");
+        content.Should().Contain("ChatHistoriesQuery");
+        content.Should().Contain("\"all-chats-query\"");
+        content.Should().Contain("\"chat-histories-query\"");
+    }
+
+    [Test]
+    public void GenerateTrainsLibrary_TypeCollision_ModelFilesStillGenerated()
+    {
+        var schema = _parser.Parse(FixturePath("type-collision.graphql"));
+        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+
+        var modelsDir = Path.Combine(_outputDir, "Models");
+        File.Exists(Path.Combine(modelsDir, "AllChats.cs")).Should().BeTrue();
+        File.Exists(Path.Combine(modelsDir, "ChatHistories.cs")).Should().BeTrue();
+        File.Exists(Path.Combine(modelsDir, "Chat.cs")).Should().BeTrue();
+        File.Exists(Path.Combine(modelsDir, "ChatEntry.cs")).Should().BeTrue();
+        File.Exists(Path.Combine(modelsDir, "Player.cs")).Should().BeTrue();
+    }
+
+    #endregion
+
     #region Nullable
 
     [Test]
