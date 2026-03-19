@@ -222,6 +222,153 @@ public class InMemoryProviderTests : TestSetup
 
     #endregion
 
+    #region Transaction Tests
+
+    [Test]
+    public async Task BeginTransaction_DoesNotThrow()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        var act = async () =>
+        {
+            var transaction = await context.BeginTransaction();
+            transaction.Dispose();
+        };
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task BeginTransaction_CommitTransaction_DoesNotThrow()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        var act = async () =>
+        {
+            var transaction = await context.BeginTransaction();
+            await context.CommitTransaction();
+            transaction.Dispose();
+        };
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task BeginTransaction_RollbackTransaction_DoesNotThrow()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        var act = async () =>
+        {
+            var transaction = await context.BeginTransaction();
+            await context.RollbackTransaction();
+            transaction.Dispose();
+        };
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task BeginTransaction_WithCancellationToken_DoesNotThrow()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        var act = async () =>
+        {
+            var transaction = await context.BeginTransaction(CancellationToken.None);
+            transaction.Dispose();
+        };
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task Transaction_TrackAndCommit_PersistsEntity()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "TransactionCommitTest",
+                Input = Unit.Default,
+                ExternalId = Guid.NewGuid().ToString("N"),
+            }
+        );
+
+        var transaction = await context.BeginTransaction();
+        await context.Track(metadata);
+        await context.SaveChanges(CancellationToken.None);
+        await context.CommitTransaction();
+        transaction.Dispose();
+
+        context.Reset();
+        var found = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
+        found.Should().NotBeNull();
+        found!.Name.Should().Be("TransactionCommitTest");
+    }
+
+    [Test]
+    public async Task Transaction_ScheduleManyPattern_DoesNotThrow()
+    {
+        // Simulates the exact pattern used by TraxScheduler.ScheduleManyAsync:
+        // BeginTransaction → Track multiple entities → SaveChanges → CommitTransaction
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        var metadata1 = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "ScheduleMany1",
+                Input = Unit.Default,
+                ExternalId = Guid.NewGuid().ToString("N"),
+            }
+        );
+
+        var metadata2 = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "ScheduleMany2",
+                Input = Unit.Default,
+                ExternalId = Guid.NewGuid().ToString("N"),
+            }
+        );
+
+        var transaction = await context.BeginTransaction();
+
+        try
+        {
+            await context.Track(metadata1);
+            await context.Track(metadata2);
+            await context.SaveChanges(CancellationToken.None);
+            await context.CommitTransaction();
+        }
+        catch
+        {
+            await context.RollbackTransaction();
+            throw;
+        }
+        finally
+        {
+            transaction.Dispose();
+        }
+
+        context.Reset();
+        var found1 = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata1.Id);
+        var found2 = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata2.Id);
+        found1.Should().NotBeNull();
+        found1!.Name.Should().Be("ScheduleMany1");
+        found2.Should().NotBeNull();
+        found2!.Name.Should().Be("ScheduleMany2");
+    }
+
+    #endregion
+
     #region ServiceTrain Integration Tests
 
     [Test]

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectProvider;
@@ -53,6 +54,7 @@ public class InMemoryContextProviderFactory : IDataContextProviderFactory
         new InMemoryContext.InMemoryContext(
             new DbContextOptionsBuilder<InMemoryContext.InMemoryContext>()
                 .UseInMemoryDatabase("InMemoryDb")
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                 .Options
         );
 
