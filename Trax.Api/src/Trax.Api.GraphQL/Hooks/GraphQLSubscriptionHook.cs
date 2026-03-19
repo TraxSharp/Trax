@@ -1,10 +1,8 @@
 using HotChocolate.Subscriptions;
-using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.TrainLifecycleHook;
-using Trax.Effect.Services.TrainLifecycleHookFactory;
 using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Api.GraphQL.Hooks;
@@ -103,14 +101,4 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
             FailureReason: metadata.FailureReason,
             Output: metadata.Output
         );
-}
-
-/// <summary>
-/// Factory that creates <see cref="GraphQLSubscriptionHook"/> instances via DI.
-/// </summary>
-public class GraphQLSubscriptionHookFactory(IServiceProvider serviceProvider)
-    : ITrainLifecycleHookFactory
-{
-    public ITrainLifecycleHook Create() =>
-        serviceProvider.GetRequiredService<GraphQLSubscriptionHook>();
 }

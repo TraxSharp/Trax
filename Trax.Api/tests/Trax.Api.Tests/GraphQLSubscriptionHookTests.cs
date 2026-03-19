@@ -9,6 +9,7 @@ using Trax.Api.GraphQL.Subscriptions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
+using Trax.Effect.Services.TrainLifecycleHookFactory;
 using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Api.Tests;
@@ -436,7 +437,7 @@ public class GraphQLSubscriptionHookTests
     #region Factory
 
     [Test]
-    public void GraphQLSubscriptionHookFactory_CreatesHookFromDI()
+    public void LifecycleHookFactory_CreatesHookFromDI()
     {
         var services = new ServiceCollection();
         var sender = new RecordingTopicEventSender();
@@ -447,7 +448,7 @@ public class GraphQLSubscriptionHookTests
         services.AddTransient<GraphQLSubscriptionHook>();
         using var provider = services.BuildServiceProvider();
 
-        var factory = new GraphQLSubscriptionHookFactory(provider);
+        var factory = new LifecycleHookFactory<GraphQLSubscriptionHook>(provider);
         var hook = factory.Create();
 
         hook.Should().NotBeNull();

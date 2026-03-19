@@ -52,9 +52,9 @@ public static class GraphQLServiceExtensions
         services.AddSingleton<TrainTypeModule>();
         services.AddTransient<GraphQLSubscriptionHook>();
         services
-            .AddSingleton<GraphQLSubscriptionHookFactory>()
+            .AddSingleton<LifecycleHookFactory<GraphQLSubscriptionHook>>()
             .AddSingleton<ITrainLifecycleHookFactory>(sp =>
-                sp.GetRequiredService<GraphQLSubscriptionHookFactory>()
+                sp.GetRequiredService<LifecycleHookFactory<GraphQLSubscriptionHook>>()
             );
 
         var graphqlBuilder = services
