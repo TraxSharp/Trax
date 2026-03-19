@@ -486,65 +486,6 @@ public class QueryModelTypeModuleTests
 
     #region Stubs
 
-    [TraxQueryModel(Description = "Test players")]
-    public class TestPlayer
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = "";
-    }
-
-    public class TestIgnored
-    {
-        public int Id { get; set; }
-        public string Value { get; set; } = "";
-    }
-
-    [TraxQueryModel(Filtering = false, Sorting = false)]
-    public class ToggleEntity
-    {
-        public int Id { get; set; }
-    }
-
-    [TraxQueryModel(Description = "Test items")]
-    public class TestItem
-    {
-        public int Id { get; set; }
-        public string ItemName { get; set; } = "";
-    }
-
-    public class TestDbContext : DbContext
-    {
-        public DbSet<TestPlayer> Players { get; set; } = null!;
-
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-            optionsBuilder.UseInMemoryDatabase("TestDb_" + Guid.NewGuid());
-    }
-
-    public class MixedDbContext : DbContext
-    {
-        public DbSet<TestPlayer> Players { get; set; } = null!;
-        public DbSet<TestIgnored> Ignored { get; set; } = null!;
-
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-            optionsBuilder.UseInMemoryDatabase("MixedDb_" + Guid.NewGuid());
-    }
-
-    public class ToggleDbContext : DbContext
-    {
-        public DbSet<ToggleEntity> Toggles { get; set; } = null!;
-
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-            optionsBuilder.UseInMemoryDatabase("ToggleDb_" + Guid.NewGuid());
-    }
-
-    public class SecondDbContext : DbContext
-    {
-        public DbSet<TestItem> Items { get; set; } = null!;
-
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-            optionsBuilder.UseInMemoryDatabase("SecondDb_" + Guid.NewGuid());
-    }
-
     private class StubDiscoveryService(
         IReadOnlyList<Trax.Mediator.Services.TrainDiscovery.TrainRegistration> registrations
     ) : Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService
@@ -557,15 +498,78 @@ public class QueryModelTypeModuleTests
 
     private class StubTrain;
 
-    public record StubInput
-    {
-        public string Value { get; init; } = "";
-    }
-
-    public record StubOutput
-    {
-        public string Result { get; init; } = "";
-    }
-
     #endregion
 }
+
+#region Test Entities and DbContexts
+
+[TraxQueryModel(Description = "Test players")]
+public class TestPlayer
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+}
+
+public class TestIgnored
+{
+    public int Id { get; set; }
+    public string Value { get; set; } = "";
+}
+
+[TraxQueryModel(Filtering = false, Sorting = false)]
+public class ToggleEntity
+{
+    public int Id { get; set; }
+}
+
+[TraxQueryModel(Description = "Test items")]
+public class TestItem
+{
+    public int Id { get; set; }
+    public string ItemName { get; set; } = "";
+}
+
+public class TestDbContext : DbContext
+{
+    public DbSet<TestPlayer> Players { get; set; } = null!;
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        optionsBuilder.UseInMemoryDatabase("TestDb_" + Guid.NewGuid());
+}
+
+public class MixedDbContext : DbContext
+{
+    public DbSet<TestPlayer> Players { get; set; } = null!;
+    public DbSet<TestIgnored> Ignored { get; set; } = null!;
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        optionsBuilder.UseInMemoryDatabase("MixedDb_" + Guid.NewGuid());
+}
+
+public class ToggleDbContext : DbContext
+{
+    public DbSet<ToggleEntity> Toggles { get; set; } = null!;
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        optionsBuilder.UseInMemoryDatabase("ToggleDb_" + Guid.NewGuid());
+}
+
+public class SecondDbContext : DbContext
+{
+    public DbSet<TestItem> Items { get; set; } = null!;
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        optionsBuilder.UseInMemoryDatabase("SecondDb_" + Guid.NewGuid());
+}
+
+public record StubInput
+{
+    public string Value { get; init; } = "";
+}
+
+public record StubOutput
+{
+    public string Result { get; init; } = "";
+}
+
+#endregion
