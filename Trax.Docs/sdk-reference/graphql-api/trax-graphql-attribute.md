@@ -80,6 +80,31 @@ public enum GraphQLOperation
 
 When no operations are passed to the `TraxMutationAttribute` constructor, both `Run` and `Queue` are enabled — the generated mutation accepts an optional `mode: ExecutionMode` parameter (default `RUN`) and an optional `priority: Int`. To restrict a mutation to only one execution mode, pass just `GraphQLOperation.Run` or `GraphQLOperation.Queue` to the constructor.
 
+## Input Type Requirements
+
+Every train annotated with `[TraxQuery]` or `[TraxMutation]` must have a dedicated input record — `LanguageExt.Unit` is not allowed as an input type. Attempting to register a Unit-input train will throw `InvalidOperationException` at startup.
+
+This requirement exists because:
+
+1. The mediator bus routes by input type (`input.GetType()`), so `Unit` inputs would collide across trains
+2. HotChocolate cannot create an `InputObjectType` for types with no properties
+
+Empty records are valid — they provide a unique type for routing while the GraphQL layer skips the `input` argument:
+
+```csharp
+// Valid: empty record gives this train a unique input type
+public record RefreshCacheInput;
+
+[TraxMutation(GraphQLOperation.Run)]
+public class RefreshCacheTrain : ServiceTrain<RefreshCacheInput, Unit>, IRefreshCacheTrain
+{
+    protected override async Task<Either<Exception, Unit>> RunInternal(RefreshCacheInput input) =>
+        Activate(input).Chain<RefreshCacheJunction>().Resolve();
+}
+```
+
+When using `trax-cli` to generate trains from OpenAPI or GraphQL schemas, operations with no input parameters automatically get an empty input record.
+
 ## Naming Convention
 
 When `Name` is null (the default), the field name is derived from the train's service interface:
