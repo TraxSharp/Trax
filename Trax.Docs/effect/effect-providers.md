@@ -138,7 +138,7 @@ See [Junction Progress](effect-providers/junction-progress.md) for the dual-path
 ```csharp
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
-        .AddLifecycleHook<SlackNotificationHookFactory>()
+        .AddLifecycleHook<SlackNotificationHook>()
     )
 );
 ```

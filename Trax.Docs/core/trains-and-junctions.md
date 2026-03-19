@@ -214,3 +214,29 @@ Trains/
 ```
 
 Shared junctions should be truly generic. If you find yourself adding conditionals to handle different trains, that's a sign the junction should be duplicated and specialized instead.
+
+## Train Lifecycle Hooks
+
+`ServiceTrain` provides `protected virtual` methods you can override to react to your train's own lifecycle events — no global hook registration needed:
+
+```csharp
+public class CreateUserTrain(ISlackClient slack)
+    : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
+{
+    protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input) =>
+        Activate(input)
+            .Chain<ValidateEmailJunction>()
+            .Chain<CreateUserJunction>()
+            .Resolve();
+
+    protected override async Task OnFailed(
+        Metadata metadata, Exception exception, CancellationToken ct)
+    {
+        await slack.PostAsync($"User creation failed: {exception.Message}", ct);
+    }
+}
+```
+
+Available overrides: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. All default to no-op. Exceptions in overrides are caught and logged — they never cause the train to fail.
+
+These work alongside [global lifecycle hooks]({{ site.baseurl }}{% link sdk-reference/configuration/add-lifecycle-hook.md %}) — global hooks fire first, then per-train overrides.

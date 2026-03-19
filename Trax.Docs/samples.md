@@ -192,7 +192,7 @@ The key innovation is the `ChatLifecycleHook`, a custom `ITrainLifecycleHook` th
 
 This approach works because:
 - Chat mutation trains are decorated with `[TraxBroadcast]`, which causes lifecycle hooks to fire
-- The hook is registered via `AddLifecycleHook<ChatLifecycleHookFactory>()` on the effect builder
+- The hook is registered via `AddLifecycleHook<ChatLifecycleHook>()` on the effect builder
 - A custom `ChatSubscriptions` type extends the "trax" GraphQL schema with `onChatEvent(chatRoomId: "...")` alongside the standard Trax lifecycle subscriptions
 
 The sample also includes its own EF Core data layer in a separate project (`ChatService.Data`) with `ChatRoom`, `ChatParticipant`, and `ChatMessage` entities. The `ChatDbContext` uses the `chat` schema to coexist with Trax's `trax` schema in the same database.

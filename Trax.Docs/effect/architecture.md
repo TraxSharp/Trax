@@ -71,8 +71,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         this.InitializeServiceTrain();
         await EffectRunner.SaveChanges(CancellationToken);
 
-        // 2. Fire lifecycle hooks
+        // 2. Fire global lifecycle hooks, then train-level overrides
         await LifecycleHookRunner.OnStarted();
+        await OnStarted(Metadata, CancellationToken);  // per-train override
         Metadata.SetInputObject(input);
 
         try
@@ -91,6 +92,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             this.FinishServiceTrain(result);
             await EffectRunner.SaveChanges(CancellationToken);
             await LifecycleHookRunner.OnCompleted();
+            await OnCompleted(Metadata, CancellationToken);  // per-train override
 
             return result.Match<TOut>(Right: x => x, Left: ex => throw ex);
         }
@@ -100,6 +102,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             this.FinishServiceTrain(Either<Exception, TOut>.Left(ex));
             await EffectRunner.SaveChanges(CancellationToken);
             await LifecycleHookRunner.OnFailed();
+            await OnFailed(Metadata, ex, CancellationToken);  // per-train override
             throw;
         }
     }
