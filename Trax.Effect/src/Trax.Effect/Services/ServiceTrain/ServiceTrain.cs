@@ -86,6 +86,37 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         ?? throw new TrainException($"Could not find FullName for ({GetType().Name})");
 
     /// <summary>
+    /// Called after the train's metadata is initialized and persisted, before RunInternal executes.
+    /// Override to add per-train startup logic. Exceptions are caught and logged — they will not
+    /// prevent the train from running.
+    /// </summary>
+    protected virtual Task OnStarted(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
+    /// Called after a successful run, after output is persisted and global hooks have fired.
+    /// Override to add per-train completion logic (e.g., notifications, cache invalidation).
+    /// Exceptions are caught and logged — they will not cause the train to report failure.
+    /// </summary>
+    protected virtual Task OnCompleted(Metadata metadata, CancellationToken ct) =>
+        Task.CompletedTask;
+
+    /// <summary>
+    /// Called after a failed run (non-cancellation exception), after failure state is persisted
+    /// and global hooks have fired. Override to add per-train failure handling (e.g., alerting).
+    /// Exceptions are caught and logged — they will not mask the original failure.
+    /// </summary>
+    protected virtual Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct) =>
+        Task.CompletedTask;
+
+    /// <summary>
+    /// Called after cancellation (OperationCanceledException), after cancellation state is persisted
+    /// and global hooks have fired. Override to add per-train cancellation handling.
+    /// Exceptions are caught and logged.
+    /// </summary>
+    protected virtual Task OnCancelled(Metadata metadata, CancellationToken ct) =>
+        Task.CompletedTask;
+
+    /// <summary>
     /// Overrides the base Train Run method to add database tracking and logging capabilities.
     /// </summary>
     /// <param name="input">The input data for the train</param>
@@ -110,6 +141,19 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         try
         {
+            await OnStarted(Metadata, CancellationToken);
+        }
+        catch (Exception hookEx)
+        {
+            Logger?.LogError(
+                hookEx,
+                "Train-level OnStarted hook threw for train ({TrainName}).",
+                TrainName
+            );
+        }
+
+        try
+        {
             Logger?.LogTrace("Running Train: ({TrainName})", TrainName);
             Metadata.SetInputObject(input);
             var result = await RunInternal(input);
@@ -126,9 +170,39 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                 await EffectRunner.SaveChanges(CancellationToken);
 
                 if (exception is OperationCanceledException)
+                {
                     await LifecycleHookRunner.OnCancelled(Metadata, CancellationToken);
+
+                    try
+                    {
+                        await OnCancelled(Metadata, CancellationToken);
+                    }
+                    catch (Exception hookEx)
+                    {
+                        Logger?.LogError(
+                            hookEx,
+                            "Train-level OnCancelled hook threw for train ({TrainName}).",
+                            TrainName
+                        );
+                    }
+                }
                 else
+                {
                     await LifecycleHookRunner.OnFailed(Metadata, exception, CancellationToken);
+
+                    try
+                    {
+                        await OnFailed(Metadata, exception, CancellationToken);
+                    }
+                    catch (Exception hookEx)
+                    {
+                        Logger?.LogError(
+                            hookEx,
+                            "Train-level OnFailed hook threw for train ({TrainName}).",
+                            TrainName
+                        );
+                    }
+                }
 
                 exception.Rethrow();
             }
@@ -142,6 +216,19 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             await EffectRunner.SaveChanges(CancellationToken);
 
             await LifecycleHookRunner.OnCompleted(Metadata, CancellationToken);
+
+            try
+            {
+                await OnCompleted(Metadata, CancellationToken);
+            }
+            catch (Exception hookEx)
+            {
+                Logger?.LogError(
+                    hookEx,
+                    "Train-level OnCompleted hook threw for train ({TrainName}).",
+                    TrainName
+                );
+            }
 
             return output;
         }
@@ -157,9 +244,39 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             await EffectRunner.SaveChanges(CancellationToken);
 
             if (e is OperationCanceledException)
+            {
                 await LifecycleHookRunner.OnCancelled(Metadata, CancellationToken);
+
+                try
+                {
+                    await OnCancelled(Metadata, CancellationToken);
+                }
+                catch (Exception hookEx)
+                {
+                    Logger?.LogError(
+                        hookEx,
+                        "Train-level OnCancelled hook threw for train ({TrainName}).",
+                        TrainName
+                    );
+                }
+            }
             else
+            {
                 await LifecycleHookRunner.OnFailed(Metadata, e, CancellationToken);
+
+                try
+                {
+                    await OnFailed(Metadata, e, CancellationToken);
+                }
+                catch (Exception hookEx)
+                {
+                    Logger?.LogError(
+                        hookEx,
+                        "Train-level OnFailed hook threw for train ({TrainName}).",
+                        TrainName
+                    );
+                }
+            }
 
             throw;
         }

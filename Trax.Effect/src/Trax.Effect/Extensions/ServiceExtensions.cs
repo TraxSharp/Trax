@@ -10,6 +10,7 @@ using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.Services.JunctionEffectProviderFactory;
 using Trax.Effect.Services.JunctionEffectRunner;
 using Trax.Effect.Services.LifecycleHookRunner;
+using Trax.Effect.Services.TrainLifecycleHook;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
 
 namespace Trax.Effect.Extensions;
@@ -392,6 +393,63 @@ public static class ServiceExtensions
     #region LifecycleHook
 
     /// <summary>
+    /// Registers a train lifecycle hook or hook factory.
+    /// <para>
+    /// If <typeparamref name="T"/> implements <see cref="ITrainLifecycleHook"/>, a factory is
+    /// created internally — no need to write a separate factory class. The hook is resolved from DI
+    /// on each train execution, so constructor-injected dependencies work.
+    /// </para>
+    /// <para>
+    /// If <typeparamref name="T"/> implements <see cref="ITrainLifecycleHookFactory"/>, the factory
+    /// is registered directly (advanced usage).
+    /// </para>
+    /// </summary>
+    /// <typeparam name="T">
+    /// Either a concrete <see cref="ITrainLifecycleHook"/> type or an <see cref="ITrainLifecycleHookFactory"/> type.
+    /// </typeparam>
+    /// <param name="builder">The effect builder.</param>
+    /// <param name="toggleable">Whether this hook can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
+    /// <returns>The effect builder for chaining.</returns>
+    public static TraxEffectBuilder AddLifecycleHook<T>(
+        this TraxEffectBuilder builder,
+        bool toggleable = true
+    )
+        where T : class
+    {
+        if (typeof(ITrainLifecycleHookFactory).IsAssignableFrom(typeof(T)))
+        {
+            builder
+                .ServiceCollection.AddSingleton(typeof(T))
+                .AddSingleton<ITrainLifecycleHookFactory>(sp =>
+                    (ITrainLifecycleHookFactory)sp.GetRequiredService(typeof(T))
+                );
+
+            builder.EffectRegistry?.Register(typeof(T), toggleable: toggleable);
+        }
+        else if (typeof(ITrainLifecycleHook).IsAssignableFrom(typeof(T)))
+        {
+            builder.ServiceCollection.AddTransient(typeof(T));
+
+            var factoryType = typeof(LifecycleHookFactory<>).MakeGenericType(typeof(T));
+            builder.ServiceCollection.AddSingleton(factoryType);
+            builder.ServiceCollection.AddSingleton<ITrainLifecycleHookFactory>(sp =>
+                (ITrainLifecycleHookFactory)sp.GetRequiredService(factoryType)
+            );
+
+            builder.EffectRegistry?.Register(factoryType, toggleable: toggleable);
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"AddLifecycleHook<{typeof(T).Name}>() requires a type that implements "
+                    + $"ITrainLifecycleHook or ITrainLifecycleHookFactory."
+            );
+        }
+
+        return builder;
+    }
+
+    /// <summary>
     /// Registers a train lifecycle hook with both its interface and implementation type,
     /// using an existing factory instance. Lifecycle hooks run at train start/completion/failure boundaries.
     /// </summary>
@@ -415,31 +473,6 @@ public static class ServiceExtensions
                 sp.GetRequiredService<TLifecycleHookFactory>()
             )
             .AddSingleton<TILifecycleHookFactory>(sp =>
-                sp.GetRequiredService<TLifecycleHookFactory>()
-            );
-
-        builder.EffectRegistry?.Register(typeof(TLifecycleHookFactory), toggleable: toggleable);
-
-        return builder;
-    }
-
-    /// <summary>
-    /// Registers a train lifecycle hook resolved from DI.
-    /// Lifecycle hooks run at train start/completion/failure boundaries.
-    /// </summary>
-    /// <typeparam name="TLifecycleHookFactory">The concrete lifecycle hook factory type.</typeparam>
-    /// <param name="builder">The effect builder.</param>
-    /// <param name="toggleable">Whether this hook can be toggled on/off at runtime. Defaults to <c>true</c>.</param>
-    /// <returns>The effect builder for chaining.</returns>
-    public static TraxEffectBuilder AddLifecycleHook<TLifecycleHookFactory>(
-        this TraxEffectBuilder builder,
-        bool toggleable = true
-    )
-        where TLifecycleHookFactory : class, ITrainLifecycleHookFactory
-    {
-        builder
-            .ServiceCollection.AddSingleton<TLifecycleHookFactory>()
-            .AddSingleton<ITrainLifecycleHookFactory>(sp =>
                 sp.GetRequiredService<TLifecycleHookFactory>()
             );
 

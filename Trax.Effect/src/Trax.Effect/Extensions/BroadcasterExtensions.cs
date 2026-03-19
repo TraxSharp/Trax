@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.BroadcasterBuilder;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Services.TrainEventBroadcaster;
-using Trax.Effect.Services.TrainLifecycleHookFactory;
 
 namespace Trax.Effect.Extensions;
 
@@ -31,14 +30,7 @@ public static class BroadcasterExtensions
         var broadcasterBuilder = new BroadcasterBuilder(builder);
         configure(broadcasterBuilder);
 
-        builder.ServiceCollection.AddTransient<BroadcastLifecycleHook>();
-        builder
-            .ServiceCollection.AddSingleton<BroadcastLifecycleHookFactory>()
-            .AddSingleton<ITrainLifecycleHookFactory>(sp =>
-                sp.GetRequiredService<BroadcastLifecycleHookFactory>()
-            );
-
-        builder.EffectRegistry?.Register(typeof(BroadcastLifecycleHookFactory), toggleable: false);
+        builder.AddLifecycleHook<BroadcastLifecycleHook>(toggleable: false);
 
         builder.ServiceCollection.AddHostedService<TrainEventReceiverService>();
 

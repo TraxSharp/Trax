@@ -115,7 +115,7 @@ public class BroadcasterRegistrationTests
         );
 
         // The broadcast hook should be registered and enabled (non-toggleable)
-        registry.IsEnabled(typeof(BroadcastLifecycleHookFactory)).Should().BeTrue();
+        registry.IsEnabled(typeof(LifecycleHookFactory<BroadcastLifecycleHook>)).Should().BeTrue();
     }
 
     [Test]
