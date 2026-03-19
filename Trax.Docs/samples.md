@@ -100,7 +100,7 @@ Different executables add different capabilities on top of the same trains. That
 
 ## Deployment Models
 
-The four sample directories show four deployment topologies, each built on the same pattern.
+The sample directories show six deployment topologies, each built on the same pattern.
 
 ### Model 1: Standalone Scheduler
 
@@ -201,18 +201,45 @@ A React + TypeScript frontend (`ChatService.Client`) demonstrates the full clien
 
 Good for: real-time applications, chat systems, collaboration tools, notification feeds — anywhere you need domain-specific subscriptions driven by train completion events.
 
+### Model 6: Hub with Built-In Subscriptions
+
+**Sample:** `TestRunner/`
+
+```
+Trax.Samples.TestRunner/              ← library (trains, NUnit.Engine integration)
+Trax.Samples.TestRunner.Hub/         ← executable (API + scheduler + local workers)
+Trax.Samples.TestRunner.Client/      ← React + TypeScript frontend (Apollo Client, graphql-ws)
+```
+
+A single-process hub that runs NUnit tests across the Trax monorepo on demand. This sample demonstrates the simplest way to get real-time feedback from queued trains — using `[TraxBroadcast]` with the built-in `onTrainCompleted` subscription, with no custom lifecycle hook needed.
+
+The `RunTestsTrain` is decorated with `[TraxMutation(GraphQLOperation.Queue)]` and `[TraxBroadcast]`. When a user clicks "Run" in the React frontend, a queue mutation returns an `externalId` immediately. Local workers pick up the job and execute two junctions:
+
+1. **`BuildProjectJunction`** — runs `dotnet build` via `Process.Start` to compile the test project
+2. **`ExecuteTestsJunction`** — uses NUnit.Engine (`TestEngineActivator.CreateInstance()`) to load the built DLL and run tests **in-process**, returning structured XML results parsed into a `TestResult` model
+
+When the train completes, `[TraxBroadcast]` triggers the built-in `GraphQLSubscriptionHook`, which publishes a `TrainLifecycleEvent` to the `onTrainCompleted` subscription topic. The React frontend subscribes to this topic, filters events by train name (the interface FullName), and displays pass/fail counts, durations, and error details.
+
+This differs from ChatService (Model 5) in a key way: ChatService uses a **custom** `ITrainLifecycleHook` to publish domain-specific events to custom subscription topics. TestRunner uses **no custom hook at all** — the standard `[TraxBroadcast]` attribute and built-in `onTrainCompleted` subscription handle everything. The frontend parses the train's serialized `output` from the subscription event to extract test results.
+
+A `TestProjectRegistry` singleton service scans the monorepo for `.csproj` files containing NUnit package references, exposed through a `DiscoverTestProjectsTrain` query that populates the UI.
+
+The Hub uses `ConfigureLocalWorkers(w => w.WorkerCount = 4)` for parallel test execution and `DefaultJobTimeout(TimeSpan.FromMinutes(30))` to accommodate longer-running test suites.
+
+Good for: developer tools, CI dashboards, any scenario where queued train results need to reach the frontend without writing custom subscription infrastructure.
+
 ## Comparing the Models
 
-| Capability | Standalone | Separate API | Distributed | Ephemeral | Chat (Real-Time) |
-|-----------|-----------|-------------|------------|-----------|-----------------|
-| Processes | 1 | 2 | 2+ | 2 | 1 |
-| Scheduler | In-process | In-process (scheduler) | Hub (scheduling only) | API (dispatch only) | None |
-| Execution | In-process | In-process (scheduler) | Workers (polling) | Runner (HTTP push) | In-process |
-| API | None | Separate process | Hub | In-process | In-process |
-| Dashboard | In-process | In scheduler | In hub | In API | None |
-| Job table | `background_job` | `background_job` | `background_job` | None (direct HTTP) | None |
-| Horizontal scaling | No | No | Workers scale independently | Runner auto-scales | No |
-| Custom subscriptions | No | No | No | No | Lifecycle hook → topics |
+| Capability | Standalone | Separate API | Distributed | Ephemeral | Chat (Real-Time) | TestRunner (Hub) |
+|-----------|-----------|-------------|------------|-----------|-----------------|-----------------|
+| Processes | 1 | 2 | 2+ | 2 | 1 | 1 |
+| Scheduler | In-process | In-process (scheduler) | Hub (scheduling only) | API (dispatch only) | None | In-process |
+| Execution | In-process | In-process (scheduler) | Workers (polling) | Runner (HTTP push) | In-process | In-process (local workers) |
+| API | None | Separate process | Hub | In-process | In-process | In-process |
+| Dashboard | In-process | In scheduler | In hub | In API | None | None |
+| Job table | `background_job` | `background_job` | `background_job` | None (direct HTTP) | None | `background_job` |
+| Horizontal scaling | No | No | Workers scale independently | Runner auto-scales | No | No |
+| Subscriptions | No | No | No | No | Custom lifecycle hook | Built-in `[TraxBroadcast]` |
 
 In all models, the trains library is identical. Only the `Program.cs` files differ.
 
@@ -284,7 +311,7 @@ GraphQL IDE at `http://localhost:5210/trax/graphql`. React client at `http://loc
 Authentication uses `X-Api-Key` header with three users: `alice-key`, `bob-key`, `charlie-key`.
 The React client provides a user switcher dropdown — open multiple browser tabs to simulate different users chatting in real time.
 
-**Quick walkthrough:**
+**Quick walkthrough (ChatService):**
 
 ```graphql
 # 1. Create a room (as Alice)
@@ -301,4 +328,35 @@ mutation { dispatch { sendMessage(input: { chatRoomId: "<id>", senderUserId: "al
 
 # 5. Query chat history
 { discover { getChatHistory(input: { chatRoomId: "<id>" }) { messages { senderDisplayName content sentAt } } } }
+```
+
+### TestRunner (Hub with Built-In Subscriptions)
+
+```bash
+# Terminal 1 — Hub (API + scheduler + local workers)
+dotnet run --project samples/TestRunner/Trax.Samples.TestRunner.Hub
+
+# Terminal 2 — React client
+cd samples/TestRunner/Trax.Samples.TestRunner.Client
+npm install && npm run dev
+```
+
+GraphQL IDE at `http://localhost:5220/trax/graphql`. React client at `http://localhost:5173`.
+
+No authentication required — this is a developer tool.
+
+**Quick walkthrough (TestRunner):**
+
+```graphql
+# 1. Discover all test projects in the monorepo
+{ discover { discoverTestProjects(input: {}) { projects { name repoName projectPath requiresPostgres } } } }
+
+# 2. Subscribe to train completion events (in a second tab)
+subscription { onTrainCompleted { externalId trainName output } }
+
+# 3. Queue a test run — returns immediately with an externalId
+mutation { dispatch { runTests(input: { projectName: "Trax.Core.Tests.Unit", projectPath: "/home/user/Repos/Trax/Trax.Core/tests/Trax.Core.Tests.Unit/Trax.Core.Tests.Unit.csproj" }) { externalId workQueueId } } }
+
+# The subscription tab receives the result when the train completes,
+# with test results in the output field (Total, Passed, Failed, FailedTests, etc.)
 ```
