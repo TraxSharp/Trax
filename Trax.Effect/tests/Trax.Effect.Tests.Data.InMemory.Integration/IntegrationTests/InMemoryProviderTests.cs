@@ -215,9 +215,12 @@ public class InMemoryProviderTests : TestSetup
         await context.SaveChanges(CancellationToken.None);
 
         context.Reset();
-        var all = await context.Metadatas.ToListAsync();
-        all.Should().HaveCount(2);
-        all.Select(x => x.Name).Should().Contain(["Multi1", "Multi2"]);
+        var found1 = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata1.Id);
+        var found2 = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata2.Id);
+        found1.Should().NotBeNull();
+        found1!.Name.Should().Be("Multi1");
+        found2.Should().NotBeNull();
+        found2!.Name.Should().Be("Multi2");
     }
 
     #endregion
@@ -365,6 +368,39 @@ public class InMemoryProviderTests : TestSetup
         found1!.Name.Should().Be("ScheduleMany1");
         found2.Should().NotBeNull();
         found2!.Name.Should().Be("ScheduleMany2");
+    }
+
+    [Test]
+    public async Task FactoryContext_And_ScopedContext_ShareSameDatabase()
+    {
+        // This reproduces the scheduler bug: TraxScheduler creates contexts via
+        // IDataContextProviderFactory (factory path), while polling services resolve
+        // IDataContext from DI (scoped path). Both must see the same data.
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var factoryContext = (IDataContext)factory.Create();
+
+        var externalId = Guid.NewGuid().ToString("N");
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "SharedRootTest",
+                Input = Unit.Default,
+                ExternalId = externalId,
+            }
+        );
+
+        // Write via factory context (scheduler path)
+        await factoryContext.Track(metadata);
+        await factoryContext.SaveChanges(CancellationToken.None);
+
+        // Read via scoped context (polling path)
+        var scopedContext = Scope.ServiceProvider.GetRequiredService<IDataContext>();
+        var found = await scopedContext.Metadatas.FirstOrDefaultAsync(x =>
+            x.ExternalId == externalId
+        );
+
+        found.Should().NotBeNull("factory and scoped contexts must share the same database root");
+        found!.Name.Should().Be("SharedRootTest");
     }
 
     #endregion

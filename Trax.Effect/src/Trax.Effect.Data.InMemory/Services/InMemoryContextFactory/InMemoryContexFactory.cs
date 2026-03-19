@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectProvider;
@@ -17,8 +18,8 @@ namespace Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 /// that use Entity Framework Core's in-memory database provider.
 ///
 /// This factory:
-/// 1. Creates InMemoryContext instances with a default in-memory database name
-/// 2. Requires no external configuration or dependencies
+/// 1. Creates InMemoryContext instances with a shared in-memory database root
+/// 2. Guarantees all contexts see the same data regardless of options differences
 /// 3. Provides a simple implementation suitable for testing and development
 ///
 /// Unlike production database factories, this implementation doesn't require connection strings
@@ -26,37 +27,43 @@ namespace Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 /// where database setup should be minimal.
 ///
 /// The factory is typically registered with the dependency injection container using
-/// the AddInMemoryEffect extension method in ServiceExtensions.
+/// the UseInMemory extension method in ServiceExtensions.
 ///
 /// Example usage:
 /// ```csharp
 /// services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
 /// ```
 /// </remarks>
-public class InMemoryContextProviderFactory : IDataContextProviderFactory
+public class InMemoryContextProviderFactory(InMemoryDatabaseRoot databaseRoot)
+    : IDataContextProviderFactory
 {
+    internal const string DatabaseName = "InMemoryDb";
+
+    /// <summary>
+    /// Builds DbContextOptions configured with the shared database root and suppressed transaction warnings.
+    /// </summary>
+    internal static DbContextOptions<InMemoryContext.InMemoryContext> BuildOptions(
+        InMemoryDatabaseRoot root
+    ) =>
+        new DbContextOptionsBuilder<InMemoryContext.InMemoryContext>()
+            .UseInMemoryDatabase(DatabaseName, root)
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+
     /// <summary>
     /// Creates a new in-memory database context.
     /// </summary>
     /// <returns>A new in-memory database context</returns>
     /// <remarks>
     /// This method creates a new InMemoryContext instance configured to use
-    /// Entity Framework Core's in-memory database provider with a default
-    /// database name ("InMemoryDb").
-    ///
-    /// The context is created with minimal configuration, making it suitable
-    /// for testing and development scenarios where database setup should be simple.
+    /// Entity Framework Core's in-memory database provider with a shared
+    /// database root, ensuring all contexts created by this factory and
+    /// the scoped IDataContext registration see the same data.
     ///
     /// This method is called by the EffectRunner when it needs to create
     /// a new effect provider for tracking train metadata.
     /// </remarks>
-    public IDataContext Create() =>
-        new InMemoryContext.InMemoryContext(
-            new DbContextOptionsBuilder<InMemoryContext.InMemoryContext>()
-                .UseInMemoryDatabase("InMemoryDb")
-                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-                .Options
-        );
+    public IDataContext Create() => new InMemoryContext.InMemoryContext(BuildOptions(databaseRoot));
 
     /// <summary>
     /// Creates a new in-memory database context asynchronously.
