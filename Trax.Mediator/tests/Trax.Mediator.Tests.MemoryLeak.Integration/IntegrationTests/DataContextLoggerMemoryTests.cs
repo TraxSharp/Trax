@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
@@ -18,7 +19,7 @@ public class DataContextLoggerMemoryTests
     [Test]
     public async Task DataContextLogger_ShouldNotLeakMemory_WithHighVolumeLogging()
     {
-        var factory = new InMemoryContextProviderFactory();
+        var factory = new InMemoryContextProviderFactory(new InMemoryDatabaseRoot());
         var config = new DataContextLoggingProviderConfiguration
         {
             MinimumLogLevel = LogLevel.Information,
@@ -53,7 +54,7 @@ public class DataContextLoggerMemoryTests
     [Test]
     public void DataContextLogger_ShouldNotBlock_OnHighVolume()
     {
-        var factory = new InMemoryContextProviderFactory();
+        var factory = new InMemoryContextProviderFactory(new InMemoryDatabaseRoot());
         var config = new DataContextLoggingProviderConfiguration
         {
             MinimumLogLevel = LogLevel.Information,
@@ -116,7 +117,7 @@ public class DataContextLoggerMemoryTests
     [Test]
     public async Task DataContextLoggingProvider_Dispose_ShouldNotThrow()
     {
-        var factory = new InMemoryContextProviderFactory();
+        var factory = new InMemoryContextProviderFactory(new InMemoryDatabaseRoot());
         var config = new DataContextLoggingProviderConfiguration
         {
             MinimumLogLevel = LogLevel.Information,
