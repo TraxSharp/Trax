@@ -1054,6 +1054,398 @@ public class TrainTypeModuleTests
 
     #endregion
 
+    #region Empty Output Type — ObjectType skipped for types with no properties
+
+    [Test]
+    public async Task CreateTypesAsync_EmptyOutputType_DoesNotRegisterOutputObjectType()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "EmptyOut",
+                typeof(EmptyOutput),
+                name: "EmptyOut",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // EmptyOutput has no properties, so ObjectType<EmptyOutput> should NOT be registered
+        GetGenericObjectTypes(types).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_EmptyOutputType_StillCreatesResponseType()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "EmptyOut",
+                typeof(EmptyOutput),
+                name: "EmptyOut",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // Mutation response type is always created (externalId, metadataId, workQueueId)
+        GetNonGenericObjectTypes(types).Should().HaveCount(1);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_EmptyOutputType_StillCreatesExtensions()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "EmptyOut",
+                typeof(EmptyOutput),
+                name: "EmptyOut",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_MixedEmptyAndTypedOutput_OnlyTypedOutputRegistered()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "EmptyOut",
+                typeof(EmptyOutput),
+                name: "EmptyOut",
+                serviceTypeName: "EmptyOut",
+                operations: GraphQLOperation.Run
+            ),
+            CreateRegistration<TypedInput2>(
+                "TypedOut",
+                typeof(TypedOutput),
+                name: "TypedOut",
+                serviceTypeName: "TypedOut",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        var outputTypes = GetGenericObjectTypes(types);
+        outputTypes.Should().HaveCount(1);
+        outputTypes[0].GetType().GetGenericArguments()[0].Should().Be(typeof(TypedOutput));
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_EmptyOutputQueryTrain_ReturnsGenericResponse()
+    {
+        // Query train with empty output should still generate (uses RunTrainResponse)
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(EmptyOutput),
+                name: "Lookup",
+                isQuery: true,
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // No ObjectType<EmptyOutput> should be registered
+        GetGenericObjectTypes(types).Should().BeEmpty();
+        // Should still have DiscoverQueries and extensions
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_AllObjectPropertiesOutput_DoesNotRegisterOutputObjectType()
+    {
+        // Output type has properties, but they're all System.Object — HotChocolate ignores them
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "HitTrain",
+                typeof(ObjectOnlyOutput),
+                name: "HitTrain",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        GetGenericObjectTypes(types).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_AllObjectPropertiesOutput_StillCreatesResponseType()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "HitTrain",
+                typeof(ObjectOnlyOutput),
+                name: "HitTrain",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        GetNonGenericObjectTypes(types).Should().HaveCount(1);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_MixedObjectAndTypedProperties_RegistersOutputType()
+    {
+        // Output type has both object and non-object properties — should be registered
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "MixedTrain",
+                typeof(MixedOutput),
+                name: "MixedTrain",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        GetGenericObjectTypes(types).Should().HaveCount(1);
+        GetGenericObjectTypes(types)[0]
+            .GetType()
+            .GetGenericArguments()[0]
+            .Should()
+            .Be(typeof(MixedOutput));
+    }
+
+    #endregion
+
+    #region Unit Input — hard error at startup
+
+    [Test]
+    public void CreateTypesAsync_UnitInputMutationTrain_ThrowsInvalidOperationException()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<Unit>(
+                "RefreshCache",
+                typeof(Unit),
+                name: "RefreshCache",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var act = async () => await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Unit input*[TraxMutation]*");
+    }
+
+    [Test]
+    public void CreateTypesAsync_UnitInputQueryTrain_ThrowsInvalidOperationException()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<Unit>(
+                "GetStatus",
+                typeof(TypedOutput),
+                name: "GetStatus",
+                isQuery: true,
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var act = async () => await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Unit input*[TraxQuery]*");
+    }
+
+    [Test]
+    public void CreateTypesAsync_UnitInputTrain_ErrorMessageContainsTrainName()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<Unit>(
+                "RefreshCache",
+                typeof(Unit),
+                name: "RefreshCache",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var act = async () => await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*dedicated input record*");
+    }
+
+    [Test]
+    public void CreateTypesAsync_UnitInputAmongTypedTrains_StillThrows()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "CreatePlayer",
+                typeof(TypedOutput),
+                name: "CreatePlayer",
+                serviceTypeName: "CreatePlayer",
+                operations: GraphQLOperation.Run
+            ),
+            CreateRegistration<Unit>(
+                "RefreshCache",
+                typeof(Unit),
+                name: "RefreshCache",
+                serviceTypeName: "RefreshCache",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var act = async () => await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    #endregion
+
+    #region Empty Record Input — no InputObjectType but allowed for routing
+
+    [Test]
+    public async Task CreateTypesAsync_EmptyRecordInput_DoesNotRegisterInputObjectType()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<EmptyInput>(
+                "RefreshCache",
+                typeof(Unit),
+                name: "RefreshCache",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        types
+            .Where(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(InputObjectType<>)
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_EmptyRecordInput_StillCreatesResponseType()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<EmptyInput>(
+                "RefreshCache",
+                typeof(Unit),
+                name: "RefreshCache",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        GetNonGenericObjectTypes(types).Should().HaveCount(1);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_EmptyRecordInput_StillCreatesExtensions()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<EmptyInput>(
+                "RefreshCache",
+                typeof(Unit),
+                name: "RefreshCache",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_EmptyRecordInputWithTypedOutput_RegistersOutputButNotInput()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<EmptyInput>(
+                "GetStatus",
+                typeof(TypedOutput),
+                name: "GetStatus",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        GetGenericObjectTypes(types).Should().HaveCount(1);
+        GetGenericObjectTypes(types)[0]
+            .GetType()
+            .GetGenericArguments()[0]
+            .Should()
+            .Be(typeof(TypedOutput));
+
+        types
+            .Where(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(InputObjectType<>)
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_MixedEmptyAndTypedInputTrains_OnlyRegistersTypedInputObjectType()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<EmptyInput>(
+                "RefreshCache",
+                typeof(Unit),
+                name: "RefreshCache",
+                serviceTypeName: "RefreshCache",
+                operations: GraphQLOperation.Run
+            ),
+            CreateRegistration<TypedInput>(
+                "CreatePlayer",
+                typeof(TypedOutput),
+                name: "CreatePlayer",
+                serviceTypeName: "CreatePlayer",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        var inputTypes = types
+            .Where(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(InputObjectType<>)
+            )
+            .ToList();
+
+        inputTypes.Should().HaveCount(1);
+        inputTypes[0].GetType().GetGenericArguments()[0].Should().Be(typeof(TypedInput));
+    }
+
+    #endregion
+
     #region Helpers
 
     private static List<ITypeSystemMember> GetNonGenericObjectTypes(
@@ -1166,6 +1558,22 @@ public class TrainTypeModuleTests
     public record TypedOutput2
     {
         public string Other { get; init; } = "";
+    }
+
+    public record EmptyInput;
+
+    public record EmptyOutput;
+
+    public record ObjectOnlyOutput
+    {
+        public object? Source { get; init; }
+        public object? Data { get; init; }
+    }
+
+    public record MixedOutput
+    {
+        public object? Source { get; init; }
+        public string Name { get; init; } = "";
     }
 
     #endregion

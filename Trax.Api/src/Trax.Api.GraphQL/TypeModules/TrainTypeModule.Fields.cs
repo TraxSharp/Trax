@@ -29,9 +29,10 @@ public partial class TrainTypeModule
         // Query fields use the derived name directly (no run/queue prefix)
         var fieldName = char.ToLowerInvariant(trainName[0]) + trainName[1..];
 
-        var field = descriptor
-            .Field(fieldName)
-            .Argument("input", a => a.Type(NonNullInputType(registration.InputType)));
+        var field = descriptor.Field(fieldName);
+
+        if (HasTypedInput(registration))
+            field.Argument("input", a => a.Type(NonNullInputType(registration.InputType)));
 
         ApplyDescriptionAndDeprecation(field, registration);
 
@@ -70,9 +71,10 @@ public partial class TrainTypeModule
     {
         var fieldName = char.ToLowerInvariant(trainName[0]) + trainName[1..];
 
-        var field = descriptor
-            .Field(fieldName)
-            .Argument("input", a => a.Type(NonNullInputType(registration.InputType)));
+        var field = descriptor.Field(fieldName);
+
+        if (HasTypedInput(registration))
+            field.Argument("input", a => a.Type(NonNullInputType(registration.InputType)));
 
         ApplyDescriptionAndDeprecation(field, registration);
 
@@ -162,10 +164,14 @@ public partial class TrainTypeModule
 
     /// <summary>
     /// Extracts the "input" argument and serializes it to JSON using the
-    /// Trax system serializer options.
+    /// Trax system serializer options. Returns "{}" for input types with no
+    /// GraphQL-representable properties (empty records used for routing uniqueness).
     /// </summary>
     private static string SerializeInput(IResolverContext ctx, Type inputType)
     {
+        if (!HasGraphQLRepresentableProperties(inputType))
+            return "{}";
+
         var input = ctx.ArgumentValue<object>("input");
         return JsonSerializer.Serialize(
             input,
