@@ -1,0 +1,355 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  background: #0f1117;
+  color: #e0e0e0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.app-header {
+  margin-bottom: 32px;
+}
+
+.app-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.app-subtitle {
+  color: #888;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.build-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #888;
+  cursor: pointer;
+}
+
+.build-toggle input[type="checkbox"] {
+  accent-color: #3d8b37;
+  cursor: pointer;
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.loading,
+.error {
+  padding: 16px;
+  font-size: 14px;
+}
+
+.error {
+  color: #f87171;
+}
+
+/* ── Project List ───────────────────────────────────────────────────────── */
+
+.project-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.project-list-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.project-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.project-table th {
+  text-align: left;
+  padding: 8px 12px;
+  color: #888;
+  font-weight: 500;
+  border-bottom: 1px solid #2a2d35;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.project-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #1e2028;
+}
+
+.project-table tr:hover {
+  background: #1a1d25;
+}
+
+.project-name {
+  font-weight: 500;
+  color: #e0e0e0;
+}
+
+.project-repo {
+  color: #888;
+}
+
+.postgres-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #422006;
+  color: #fbbf24;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.run-button {
+  padding: 4px 14px;
+  border: 1px solid #3d8b37;
+  border-radius: 4px;
+  background: transparent;
+  color: #3d8b37;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.run-button:hover:not(:disabled) {
+  background: #3d8b37;
+  color: #fff;
+}
+
+.run-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.run-all-button {
+  padding: 6px 18px;
+  border: none;
+  border-radius: 4px;
+  background: #3d8b37;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.run-all-button:hover:not(:disabled) {
+  background: #4a9e43;
+}
+
+.run-all-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Results Section ────────────────────────────────────────────────────── */
+
+.results-section h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 12px;
+}
+
+.results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Run Card ───────────────────────────────────────────────────────────── */
+
+.run-card {
+  background: #1a1d25;
+  border: 1px solid #2a2d35;
+  border-radius: 6px;
+  padding: 12px 16px;
+}
+
+.run-card-pass {
+  border-left: 3px solid #3d8b37;
+}
+
+.run-card-fail {
+  border-left: 3px solid #ef4444;
+}
+
+.run-card-error {
+  border-left: 3px solid #ef4444;
+}
+
+.run-card-pending {
+  border-left: 3px solid #6b7280;
+}
+
+.run-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.run-card-name {
+  font-weight: 500;
+  font-size: 13px;
+  color: #e0e0e0;
+}
+
+.run-card-status {
+  font-size: 12px;
+  color: #888;
+}
+
+.run-card-duration {
+  font-size: 12px;
+  color: #888;
+  margin-left: auto;
+}
+
+.run-card-stats {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.stat-passed {
+  color: #3d8b37;
+}
+
+.stat-failed {
+  color: #ef4444;
+}
+
+.stat-skipped {
+  color: #888;
+}
+
+/* ── Result Badge ───────────────────────────────────────────────────────── */
+
+.result-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badge-pass {
+  background: #052e16;
+  color: #4ade80;
+}
+
+.badge-fail {
+  background: #450a0a;
+  color: #f87171;
+}
+
+/* ── Failed Tests ───────────────────────────────────────────────────────── */
+
+.failed-tests {
+  margin-top: 8px;
+}
+
+.expand-button {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.expand-button:hover {
+  color: #e0e0e0;
+}
+
+.failed-test {
+  margin-top: 8px;
+  padding: 8px;
+  background: #12141a;
+  border-radius: 4px;
+  border: 1px solid #2a2d35;
+}
+
+.failed-test-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #f87171;
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.failed-test-error,
+.failed-test-stack {
+  font-size: 11px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  color: #888;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+
+.error-message {
+  font-size: 12px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  color: #f87171;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-top: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* ── Spinner ────────────────────────────────────────────────────────────── */
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #2a2d35;
+  border-top-color: #3d8b37;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-top: 8px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

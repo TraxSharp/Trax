@@ -23,8 +23,13 @@
     <Project Path="samples/ChatService/Trax.Samples.ChatService/Trax.Samples.ChatService.csproj" />
     <Project Path="samples/ChatService/Trax.Samples.ChatService.Api/Trax.Samples.ChatService.Api.csproj" />
   </Folder>
+  <Folder Name="/samples/TestRunner/">
+    <Project Path="samples/TestRunner/Trax.Samples.TestRunner/Trax.Samples.TestRunner.csproj" />
+    <Project Path="samples/TestRunner/Trax.Samples.TestRunner.Hub/Trax.Samples.TestRunner.Hub.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Samples.ChatService.Tests/Trax.Samples.ChatService.Tests.csproj" />
+    <Project Path="tests/Trax.Samples.TestRunner.Tests/Trax.Samples.TestRunner.Tests.csproj" />
   </Folder>
   <Folder Name="/templates/">
     <Project Path="templates/Trax.Samples.Templates.csproj" />
