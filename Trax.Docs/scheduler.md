@@ -12,6 +12,9 @@ Trax.Scheduler adds timetable management to trains. Define a manifest — like a
 
 This isn't a traditional cron scheduler. It supports cron expressions, but its design goal is controlled bulk job orchestration, for example—where you need visibility into every execution attempt.
 
+{: .sdk-references }
+> [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [TriggerAsync / ScheduleOnceAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers)
+
 ## When to Use the Scheduler
 
 A hosted service with a timer works fine for simple recurring tasks. The Scheduler is for when you need the audit trail: every execution recorded with inputs, outputs, timing, and failure details. Failed jobs retry automatically. Jobs that fail too many times go to a dead letter queue for manual review.
@@ -36,8 +39,6 @@ scheduler.ScheduleMany<ISyncTableTrain, SyncTableInput, string>(
     table => (table, new SyncTableInput { TableName = table }),
     Every.Minutes(5));
 ```
-
-*SDK Reference: [ScheduleAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}), [ScheduleMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %})*
 
 The scheduler creates the manifest, resolves the correct type names, and serializes the input automatically. Every call is an upsert—safe to run on every startup without duplicating jobs.
 
@@ -83,8 +84,6 @@ await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput>(
     TimeSpan.FromHours(24));
 ```
 
-*SDK Reference: [TriggerAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}#triggerasync), [ScheduleOnceAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}#scheduleonceasync)*
-
 ### Dependent Manifests
 
 A manifest can depend on another manifest — one train's arrival triggers another's departure. Instead of running on a timer, it fires when its parent's `LastSuccessfulRun` advances past the dependent's own. This is how you build ETL chains, post-processing junctions, or any train that should only run after another succeeds. See [Dependent Trains](scheduler/dependent-trains.md).
@@ -96,8 +95,6 @@ scheduler
     .Include<ILoadTrain, LoadInput>(
         "load", new LoadInput());
 ```
-
-*SDK Reference: [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}), [Include]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %})*
 
 ### Manifest Groups
 
@@ -175,15 +172,15 @@ See [Administrative Trains](scheduler/admin-trains.md) for detailed documentatio
 
 ## SDK Reference
 
-For complete method signatures, all parameters, and detailed usage examples for every scheduling function, see the [Scheduler SDK Reference]({{ site.baseurl }}{% link sdk-reference/scheduler-api.md %}):
+For complete method signatures, all parameters, and detailed usage examples for every scheduling function, see the [Scheduler SDK Reference](/docs/sdk-reference/scheduler-api):
 
-- [Schedule / ScheduleAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}) — single recurring train
-- [ScheduleMany / ScheduleManyAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %}) — batch scheduling with pruning
-- [Dependent Scheduling]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %}) — ThenInclude, ThenIncludeMany, Include, IncludeMany, ScheduleDependentAsync
-- [Manifest Management]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}) — DisableAsync, EnableAsync, TriggerAsync, ScheduleOnceAsync
-- [Scheduling Helpers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) — Every, Cron, Schedule record, ManifestOptions
+- [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) — single recurring train
+- [ScheduleMany / ScheduleManyAsync](/docs/sdk-reference/scheduler-api/schedule-many) — batch scheduling with pruning
+- [Dependent Scheduling](/docs/sdk-reference/scheduler-api/dependent-scheduling) — ThenInclude, ThenIncludeMany, Include, IncludeMany, ScheduleDependentAsync
+- [Manifest Management](/docs/sdk-reference/scheduler-api/manifest-management) — DisableAsync, EnableAsync, TriggerAsync, ScheduleOnceAsync
+- [Scheduling Helpers](/docs/sdk-reference/scheduler-api/scheduling-helpers) — Every, Cron, Schedule record, ManifestOptions
 
-The same scheduler operations are also available through the [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api/mutations.md %}) for remote access.
+The same scheduler operations are also available through the [GraphQL API](/docs/sdk-reference/graphql-api/mutations) for remote access.
 
 ## Sample Project
 

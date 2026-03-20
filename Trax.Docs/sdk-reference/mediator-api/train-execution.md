@@ -193,7 +193,7 @@ public class TrainController(
 
 `RunAsync` supports per-train and global concurrency limits to prevent overloading remote backends. When a limit is reached, additional requests wait in-process until a slot opens — no requests are rejected.
 
-See [Concurrency Limiting]({{ site.baseurl }}{% link sdk-reference/mediator-api/concurrency-limiting.md %}) for configuration details.
+See [Concurrency Limiting](/docs/sdk-reference/mediator-api/concurrency-limiting) for configuration details.
 
 ## Package
 

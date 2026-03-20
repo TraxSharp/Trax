@@ -7,6 +7,9 @@ nav_order: 1
 
 # Setup & Creating Scheduled Trains
 
+{: .sdk-references }
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers)
+
 ## Quick Setup
 
 ### Installation
@@ -68,8 +71,6 @@ var app = builder.Build();
 app.Run();
 ```
 
-*SDK Reference: [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}), [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}), [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %})*
-
 `AddScheduler` registers hosted services based on the configured data provider:
 
 | Service | PostgreSQL | InMemory |
@@ -81,7 +82,7 @@ app.Run();
 
 With InMemory, the `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that skips PostgreSQL-specific junctions (`CancelTimedOutJobs`, `ReapStalePending`) and dispatches jobs directly via `InMemoryJobSubmitter` — no work queue or JobDispatcher needed.
 
-When `UsePostgres()` is configured, the scheduler automatically starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed — it reuses the `IDataContext` from `UsePostgres()`. See [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %}) for architecture details.
+When `UsePostgres()` is configured, the scheduler automatically starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed — it reuses the `IDataContext` from `UsePostgres()`. See [Job Submission](/docs/scheduler/job-submission) for architecture details.
 
 All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()` — you only need to pass your own train assemblies to `AddMediator()`.
 
@@ -99,9 +100,9 @@ You can customize the local workers' worker count, polling interval, and timeout
 })
 ```
 
-See [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) for full parameter documentation.
+See [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) for full parameter documentation.
 
-> **Migrating from Hangfire?** See the [migration guide]({{ site.baseurl }}{% link scheduler/job-submission.md %}#migrating-from-hangfire).
+> **Migrating from Hangfire?** See the [migration guide](/docs/scheduler/job-submission#migrating-from-hangfire).
 
 ## Creating Scheduled Trains
 
@@ -196,8 +197,6 @@ The `Schedule` type defines when a job runs. Two static factory classes create `
 
 - **`Every`** — interval-based: `Every.Seconds(30)`, `Every.Minutes(5)`, `Every.Hours(1)`, `Every.Days(1)`
 - **`Cron`** — cron-based: `Cron.Minutely()`, `Cron.Daily(hour: 3)`, `Cron.Weekly(DayOfWeek.Sunday, hour: 2)`, `Cron.Expression("0 */6 * * *")`
-
-*SDK Reference: [Scheduling Helpers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) — all method signatures, cron expression format, and `ManifestOptions`.*
 
 ## Namespace Reference
 

@@ -7,6 +7,9 @@ nav_order: 4
 
 # Troubleshooting
 
+{: .sdk-references }
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)
+
 ## "No train found for input type X"
 
 The `TrainBus` couldn't find a train that accepts your input type.
@@ -23,8 +26,6 @@ services.AddTrax(trax => trax
     .AddMediator(typeof(YourTrain).Assembly)  // Ensure correct assembly
 );
 ```
-
-*SDK Reference: [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})*
 
 ## "AddTrax() must be called before AddTraxDashboard()" / "...before AddTraxGraphQL()"
 
@@ -97,7 +98,7 @@ Check `FailureException` and `FailureReason` in the metadata record for details.
 
 ## Junctions execute out of order or skip unexpectedly
 
-If you're using `ShortCircuit`, remember that throwing an exception means "continue" not "stop." See [ShortCircuit](short-circuit.md) for details or [SDK Reference: ShortCircuit]({{ site.baseurl }}{% link sdk-reference/train-methods/short-circuit.md %}) for all overloads.
+If you're using `ShortCircuit`, remember that throwing an exception means "continue" not "stop." See [ShortCircuit](short-circuit.md) for details or [SDK Reference: ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) for all overloads.
 
 ## Scheduled jobs don't execute (no errors)
 

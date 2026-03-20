@@ -8,9 +8,9 @@ nav_order: 6
 
 # TraxBroadcast Attribute
 
-The `[TraxBroadcast]` attribute opts a train into real-time GraphQL [subscription]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) events. Only trains decorated with this attribute will have their lifecycle transitions (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`) published to WebSocket subscribers.
+The `[TraxBroadcast]` attribute opts a train into real-time GraphQL [subscription](/docs/sdk-reference/graphql-api/subscriptions) events. Only trains decorated with this attribute will have their lifecycle transitions (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`) published to WebSocket subscribers.
 
-Trains without this attribute run normally but are silently skipped by both the local `GraphQLSubscriptionHook` and the remote `GraphQLTrainEventHandler` (used with [`UseBroadcaster()`]({{ site.baseurl }}{% link sdk-reference/configuration/use-broadcaster.md %})).
+Trains without this attribute run normally but are silently skipped by both the local `GraphQLSubscriptionHook` and the remote `GraphQLTrainEventHandler` (used with [`UseBroadcaster()`](/docs/sdk-reference/configuration/use-broadcaster)).
 
 ## Definition
 

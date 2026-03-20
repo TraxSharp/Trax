@@ -10,6 +10,9 @@ nav_order: 5
 
 The junction progress provider gives real-time visibility into which junction a train is currently executing and enables between-junction cancellation. It registers two junction-effect providers under a single call: **CancellationCheckProvider** and **JunctionProgressProvider**.
 
+{: .sdk-references }
+> [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress)
+
 ## Registration
 
 ```bash
@@ -23,8 +26,6 @@ services.AddTrax(trax => trax
     )
 );
 ```
-
-*SDK Reference: [AddJunctionProgress]({{ site.baseurl }}{% link sdk-reference/configuration/add-junction-progress.md %})*
 
 ## What It Registers
 
@@ -65,7 +66,7 @@ CancellationCheck runs **first**, before JunctionProgress sets the columns. This
 
 Both providers only fire on junctions that inherit from `EffectJunction<TIn, TOut>`. If your junctions use the base `Junction<TIn, TOut>`, neither provider has anything to hook into.
 
-See [Junctions: EffectJunction vs Junction]({{ site.baseurl }}{% link core/trains-and-junctions.md %}#effectjunction-vs-junction) for the difference between the two.
+See [Junctions: EffectJunction vs Junction](/docs/core/trains-and-junctions#effectjunction-vs-junction) for the difference between the two.
 
 ## Dual-Path Cancellation Architecture
 
@@ -80,6 +81,14 @@ The two paths are complementary. Same-server cancellation is faster but only wor
 ## Dashboard Integration
 
 When a train is `InProgress`, the dashboard detail page displays the current junction name and how long it has been running, drawn from the `CurrentlyRunningJunction` and `JunctionStartedAt` columns.
+
+## Performance Considerations
+
+Junction progress adds **2 database round-trips per junction** — one before (set `CurrentlyRunningJunction`) and one after (clear it). For a train with N junctions, that's 2N additional writes on top of the normal metadata saves.
+
+These writes reuse the existing EF `DbContext` and Npgsql connection pool — they don't open new connections. The overhead is the round-trip latency, not connection creation.
+
+For most trains (3-5 junctions), this is negligible. For high-frequency trains with many junctions (e.g., a 15-junction ETL running every 30 seconds), the extra writes add up. If you don't need real-time junction visibility or cross-server cancellation for a particular train, you can omit `AddJunctionProgress()` from that deployment's configuration.
 
 ## When to Use It
 

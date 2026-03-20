@@ -24,7 +24,7 @@ None.
 
 ## Returns
 
-`TraxEffectBuilderWithData` — a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %}). This provides compile-time safety: methods that require a data provider are only available on the returned type.
+`TraxEffectBuilderWithData` — a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging). This provides compile-time safety: methods that require a data provider are only available on the returned type.
 
 ## Example
 
@@ -42,7 +42,7 @@ services.AddTrax(trax => trax
 - Suitable for unit/integration testing and local development.
 - Data does not persist between application restarts.
 - Registers an `IDataContext` backed by an in-memory EF Core provider.
-- For production use, use [UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}) instead.
+- For production use, use [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) instead.
 
 ## Package
 

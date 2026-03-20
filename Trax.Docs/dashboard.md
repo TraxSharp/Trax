@@ -11,6 +11,9 @@ Trax.Dashboard is the operations control room — a web UI for inspecting regist
 
 The dashboard only requires `Trax.Effect`. As you add more Effect packages (Data, Scheduler, etc.), the dashboard gains access to more information. Start with train discovery, and add more as your setup grows.
 
+{: .sdk-references }
+> [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery)
+
 ## Quick Setup
 
 ### Installation
@@ -48,8 +51,6 @@ app.Run();
 ```
 
 `AddTraxDashboard()` requires `AddTrax()` to be called first. If it is missing, `AddTraxDashboard()` throws `InvalidOperationException` with a clear message directing you to add `AddTrax()`.
-
-*SDK Reference: [AddTraxDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/add-trax-dashboard.md %}), [UseTraxDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/use-trax-dashboard.md %})*
 
 Navigate to `/trax/trains` and you'll see every `IServiceTrain` registered in your application.
 
@@ -166,13 +167,11 @@ Per-group `MaxActiveJobs` prevents starvation — when a high-priority group hit
 
 ## How Discovery Works
 
-Train discovery is handled by `ITrainDiscoveryService` in `Trax.Mediator`. When you call `AddMediator()`, it registers the discovery service, captures the `IServiceCollection`, and makes it available to both the dashboard and the [REST/GraphQL API]({{ site.baseurl }}{% link api.md %}).
+Train discovery is handled by `ITrainDiscoveryService` in `Trax.Mediator`. When you call `AddMediator()`, it registers the discovery service, captures the `IServiceCollection`, and makes it available to both the dashboard and the [REST/GraphQL API](/docs/api).
 
 At request time, the discovery service scans the registered `ServiceDescriptor` entries for anything that implements `IServiceTrain<,>`, extracts the generic type arguments, and deduplicates by input type (preferring interface registrations over concrete types).
 
 If you register trains with `AddMediator` (which calls `AddScopedTraxRoute` under the hood), they show up automatically. Trains registered manually via `AddScoped<IMyTrain, MyTrain>()` will also appear as long as their interface extends `IServiceTrain<TIn, TOut>`.
-
-*SDK Reference: [TrainDiscovery]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-discovery.md %})*
 
 ## Options
 
@@ -182,8 +181,6 @@ builder.Services.AddTraxDashboard(options =>
     options.Title = "My App";  // Header text (default: "Trax")
 });
 ```
-
-*SDK Reference: [AddTraxDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/add-trax-dashboard.md %}), [DashboardOptions]({{ site.baseurl }}{% link sdk-reference/dashboard-api/dashboard-options.md %})*
 
 The route prefix is set in `UseTraxDashboard`:
 

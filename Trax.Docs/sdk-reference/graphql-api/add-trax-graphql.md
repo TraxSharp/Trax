@@ -24,7 +24,7 @@ public static IServiceCollection AddTraxGraphQL(
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `services` | `IServiceCollection` | Yes | The service collection |
-| `configure` | `Func<TraxGraphQLBuilder, TraxGraphQLBuilder>` | No | Optional builder for registering DbContext-based [query models]({{ site.baseurl }}{% link sdk-reference/graphql-api/query-models.md %}). |
+| `configure` | `Func<TraxGraphQLBuilder, TraxGraphQLBuilder>` | No | Optional builder for registering DbContext-based [query models](/docs/sdk-reference/graphql-api/query-models). |
 
 **Returns**: `IServiceCollection` for continued chaining.
 
@@ -53,7 +53,7 @@ public static WebApplication UseTraxGraphQL(
 
 **Returns**: `WebApplication` for continued chaining.
 
-`UseTraxGraphQL` calls `app.UseWebSockets()` internally to enable the WebSocket transport required for [GraphQL subscriptions]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}).
+`UseTraxGraphQL` calls `app.UseWebSockets()` internally to enable the WebSocket transport required for [GraphQL subscriptions](/docs/sdk-reference/graphql-api/subscriptions).
 
 ## What It Registers
 
@@ -62,11 +62,11 @@ public static WebApplication UseTraxGraphQL(
 - **Named GraphQL server** via `AddGraphQLServer("trax")` — uses a named schema so it coexists with your own HotChocolate schemas in the same application
 - **Query type**: `RootQuery` with grouped sub-types:
   - **`operations`** (`OperationsQueries`) — always present. Predefined operational queries: `health` status, registered `trains` discovery, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution`
-  - **`discover`** (`DiscoverQueries`) — present when trains annotated with [`[TraxQuery]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) are registered, or when entities annotated with [`[TraxQueryModel]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/query-models.md %}) are discovered via `AddDbContext<T>()`. Contains auto-generated typed query fields for each query train, and paginated/filterable/sortable fields for each query model.
+  - **`discover`** (`DiscoverQueries`) — present when trains annotated with [`[TraxQuery]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute) are registered, or when entities annotated with [`[TraxQueryModel]`](/docs/sdk-reference/graphql-api/query-models) are discovered via `AddDbContext<T>()`. Contains auto-generated typed query fields for each query train, and paginated/filterable/sortable fields for each query model.
 - **Mutation type**: `RootMutation` with grouped sub-types:
   - **`operations`** (`OperationsMutations`) — always present. `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
-  - **`dispatch`** (`DispatchMutations`) — only present when trains annotated with [`[TraxMutation]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) are registered. Auto-generated typed mutations with strongly-typed input objects derived from each train's input record. Each train gets a single mutation field (e.g. `banPlayer`) with an optional `mode: ExecutionMode` parameter when both Run and Queue operations are enabled (the default).
-- **Subscription type**: `LifecycleSubscriptions` — real-time [lifecycle events]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) via WebSocket (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`)
+  - **`dispatch`** (`DispatchMutations`) — only present when trains annotated with [`[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute) are registered. Auto-generated typed mutations with strongly-typed input objects derived from each train's input record. Each train gets a single mutation field (e.g. `banPlayer`) with an optional `mode: ExecutionMode` parameter when both Run and Queue operations are enabled (the default).
+- **Subscription type**: `LifecycleSubscriptions` — real-time [lifecycle events](/docs/sdk-reference/graphql-api/subscriptions) via WebSocket (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`)
 - **In-memory subscription transport** — HotChocolate's built-in pub/sub for delivering events to WebSocket clients
 - **Error filter**: `TraxErrorFilter` — exposes actual exception messages for train-related errors instead of HotChocolate's default "Unexpected Execution Error". Exposed types: `TrainException` (code: `TRAX_TRAIN_ERROR`), `TrainAuthorizationException` (code: `TRAX_AUTHORIZATION`), `InvalidOperationException` (code: `TRAX_INVALID_OPERATION`). All other exception types retain the default masked message.
 - **Lifecycle hook**: `GraphQLSubscriptionHook` — automatically registered to publish train state transitions to the subscription transport

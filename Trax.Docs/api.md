@@ -11,14 +11,17 @@ Trax.Api adds a programmatic interface to the scheduling and train execution sys
 
 The API is designed to run on a **separate machine** from the scheduler. The two share a database: the API writes work queue entries and manifest updates, the scheduler polls them and dispatches trains. This means the API server doesn't run polling services or background workers — it's a thin HTTP layer over the shared state.
 
+{: .sdk-references }
+> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
+
 ## Two Execution Modes
 
 | Mode | How It Works | When to Use |
 |------|-------------|-------------|
 | **Queue** (delegated) | Creates a `WorkQueue` entry in the database. The scheduler picks it up on its next poll cycle and dispatches it on the scheduler machine. | Heavy trains, recurring work, anything that should run on dedicated scheduler infrastructure. |
-| **Run** (direct) | Calls `ITrainBus.RunAsync` on the API machine (default) or offloads to a remote endpoint via [`UseRemoteRun()`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}). Either way, the call blocks until completion and returns the train output. | Lightweight on-demand trains where you need the result immediately. When using `UseRemoteRun()`, the API machine doesn't need to run the train code locally. |
+| **Run** (direct) | Calls `ITrainBus.RunAsync` on the API machine (default) or offloads to a remote endpoint via [`UseRemoteRun()`](/docs/sdk-reference/scheduler-api/use-remote-run). Either way, the call blocks until completion and returns the train output. | Lightweight on-demand trains where you need the result immediately. When using `UseRemoteRun()`, the API machine doesn't need to run the train code locally. |
 
-Trains opt into the GraphQL schema with the [`[TraxQuery]` or `[TraxMutation]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) attributes. Only annotated trains get typed fields generated. EF Core entities can also be exposed directly as paginated, filterable, sortable queries using [`[TraxQueryModel]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/query-models.md %}).
+Trains opt into the GraphQL schema with the [`[TraxQuery]` or `[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute) attributes. Only annotated trains get typed fields generated. EF Core entities can also be exposed directly as paginated, filterable, sortable queries using [`[TraxQueryModel]`](/docs/sdk-reference/graphql-api/query-models).
 
 ## Quick Setup
 
@@ -47,8 +50,6 @@ app.MapHealthChecks("/trax/health");
 
 app.Run();
 ```
-
-*SDK Reference: [AddTraxGraphQL]({{ site.baseurl }}{% link sdk-reference/graphql-api/add-trax-graphql.md %})*
 
 ## Packages
 
@@ -100,7 +101,7 @@ The API includes an ASP.NET Core `IHealthCheck` that queries the database and re
 
 In-progress and failed counts are batched into a single database query (via `GroupBy`) to minimize round-trips on each health check poll.
 
-Returns `Healthy` when everything looks normal, `Degraded` when dead letters exist or recent failures exceed a threshold. The same data is available as a [GraphQL query]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}#health) for consumers that prefer structured access over the standard health endpoint.
+Returns `Healthy` when everything looks normal, `Degraded` when dead letters exist or recent failures exceed a threshold. The same data is available as a [GraphQL query](/docs/sdk-reference/graphql-api/queries#health) for consumers that prefer structured access over the standard health endpoint.
 
 ```csharp
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
@@ -135,7 +136,7 @@ Endpoint-level auth answers "can this user access the API?" For finer control, d
 public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrain { ... }
 ```
 
-When the API receives a request to run or queue this train, it checks the current user against the policy before executing. Trains without `[TraxAuthorize]` have no per-train restriction. See the [Authorization]({{ site.baseurl }}{% link authorization.md %}) guide for details.
+When the API receives a request to run or queue this train, it checks the current user against the policy before executing. Trains without `[TraxAuthorize]` have no per-train restriction. See the [Authorization](/docs/authorization) guide for details.
 
 ## Named GraphQL Schema
 
@@ -149,16 +150,16 @@ The API is demonstrated in three samples, each using a different deployment topo
 - **DistributedWorkers (EnergyHub)** — API, scheduler, and dashboard in a single hub process. The hub schedules and serves GraphQL but offloads execution to separate worker processes. See `samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub`.
 - **EphemeralWorkers (ContentShield)** — API with `UseRemoteWorkers()` dispatches queued mutations directly to an ephemeral Runner via HTTP. No scheduled jobs, no `background_job` table — purely on-demand, serverless-style execution. See `samples/EphemeralWorkers/Trax.Samples.ContentShield.Api`.
 
-All follow the [trains library pattern]({{ site.baseurl }}{% link samples.md %}) — trains live in a shared library, executables are thin wrappers that pick which capabilities to enable.
+All follow the [trains library pattern](/docs/samples) — trains live in a shared library, executables are thin wrappers that pick which capabilities to enable.
 
 ## SDK Reference
 
 For complete endpoint documentation, request/response schemas, and method signatures:
 
-- [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api.md %}) — queries, mutations, subscriptions, HotChocolate setup
-- [Authorization]({{ site.baseurl }}{% link authorization.md %}) — per-train authorization with `[TraxAuthorize]`
-- [TrainDiscovery]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-discovery.md %}) — how train discovery works
-- [TrainExecution]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-execution.md %}) — queue and run services
+- [GraphQL API](/docs/sdk-reference/graphql-api) — queries, mutations, subscriptions, HotChocolate setup
+- [Authorization](/docs/authorization) — per-train authorization with `[TraxAuthorize]`
+- [TrainDiscovery](/docs/sdk-reference/mediator-api/train-discovery) — how train discovery works
+- [TrainExecution](/docs/sdk-reference/mediator-api/train-execution) — queue and run services
 
 ## Next Layer
 

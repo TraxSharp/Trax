@@ -143,7 +143,7 @@ Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TOutput
 |-----------|------|----------|-------------|
 | `externalId` | `string` | Yes | Unique identifier for this dependent job |
 | `input` | `IManifestProperties` (inferred) / `TInput` (explicit) | Yes | Input data passed to the train on each execution. Validated against the train's expected input type at configuration time. |
-| `options` | `Action<ScheduleOptions>?` | No | Optional callback to configure all scheduling options via a fluent builder. Includes manifest-level settings (`Priority`, `Enabled`, `MaxRetries`, `Timeout`) and group-level settings (`.Group(...)` with `MaxActiveJobs`, `Priority`, `Enabled`). See [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions). |
+| `options` | `Action<ScheduleOptions>?` | No | Optional callback to configure all scheduling options via a fluent builder. Includes manifest-level settings (`Priority`, `Enabled`, `MaxRetries`, `Timeout`) and group-level settings (`.Group(...)` with `MaxActiveJobs`, `Priority`, `Enabled`). See [ScheduleOptions](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions). |
 
 `ThenInclude` links to the **cursor** — the most recently declared manifest (the last `Schedule`, `ThenInclude`, or `Include`). Must be called after `Schedule()`, `Include()`, or another `ThenInclude()`.
 
@@ -166,12 +166,12 @@ Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TOutput
 | `externalId` | `string` | Yes | Unique identifier for this dependent job |
 | `input` | `TInput` | Yes | Input data passed to the train on each execution |
 | `dependsOnExternalId` | `string` | Yes | The `ExternalId` of the parent manifest this job depends on |
-| `options` | `Action<ScheduleOptions>?` | No | Optional callback to configure all scheduling options via a fluent builder. See [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions). |
+| `options` | `Action<ScheduleOptions>?` | No | Optional callback to configure all scheduling options via a fluent builder. See [ScheduleOptions](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions). |
 | `ct` | `CancellationToken` | No | Cancellation token |
 
 ### ScheduleManyDependentAsync (Runtime — Batch)
 
-Uses the legacy three-type-parameter API with `map` and `dependsOn` functions. See [ScheduleMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %}) for parameter details.
+Uses the legacy three-type-parameter API with `map` and `dependsOn` functions. See [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) for parameter details.
 
 ## Examples
 
@@ -392,5 +392,5 @@ public class SelectiveDispatchJunction(IDormantDependentContext dormants)
 - Dependent manifests have `ScheduleType.Dependent` and no interval/cron schedule of their own — they are triggered solely by their parent's successful completion. Dormant dependents have `ScheduleType.DormantDependent` and must be explicitly activated via `IDormantDependentContext`.
 - The dependency check compares `parent.LastSuccessfulRun > dependent.LastSuccessfulRun` during each polling cycle.
 - **Cursor vs. Root**: The builder tracks two pointers — the *cursor* (last declared manifest, used by `ThenInclude`) and the *root* (the last `Schedule()`, used by `Include`). `Schedule` sets both. `ThenInclude` and `Include` move the cursor but leave the root unchanged. `ScheduleMany` resets both to null.
-- **Priority boost**: When a dependent manifest's work queue entry is created, `DependentPriorityBoost` (default 16) is added to its base priority. This ensures dependent trains are dispatched before non-dependent trains by default. The boost is configurable via [`DependentPriorityBoost`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}) on the scheduler builder. The final priority is clamped to [0, 31].
-- **Cycle detection**: ManifestGroup dependencies must form a DAG. At startup, the builder derives group-level edges from all `Schedule`/`ThenInclude`/`Include`/`ScheduleMany`/`ThenIncludeMany`/`IncludeMany` calls and validates that no circular dependencies exist between groups. If a cycle is detected, `Build()` throws `InvalidOperationException` listing the groups involved. Within-group dependencies are allowed—only cross-group edges are validated. See [Dependent Trains — Cycle Detection]({{ site.baseurl }}{% link scheduler/dependent-trains.md %}#cycle-detection) for details.
+- **Priority boost**: When a dependent manifest's work queue entry is created, `DependentPriorityBoost` (default 16) is added to its base priority. This ensures dependent trains are dispatched before non-dependent trains by default. The boost is configurable via [`DependentPriorityBoost`](/docs/sdk-reference/scheduler-api/add-scheduler) on the scheduler builder. The final priority is clamped to [0, 31].
+- **Cycle detection**: ManifestGroup dependencies must form a DAG. At startup, the builder derives group-level edges from all `Schedule`/`ThenInclude`/`Include`/`ScheduleMany`/`ThenIncludeMany`/`IncludeMany` calls and validates that no circular dependencies exist between groups. If a cycle is detected, `Build()` throws `InvalidOperationException` listing the groups involved. Within-group dependencies are allowed—only cross-group edges are validated. See [Dependent Trains — Cycle Detection](/docs/scheduler/dependent-trains#cycle-detection) for details.

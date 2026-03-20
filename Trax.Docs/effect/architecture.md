@@ -43,10 +43,12 @@ Extends core trains with dependency injection, metadata tracking, and effect man
 
 ### ServiceTrain<TIn, TOut>
 
+`ServiceTrain` extends `Train` with framework-injected properties and a lifecycle that wraps `RunInternal`:
+
 ```csharp
 public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<TIn, TOut>
 {
-    // Internal framework properties (injected automatically)
+    // Injected automatically by the framework
     [Inject] public IEffectRunner? EffectRunner { get; set; }
     [Inject] public IJunctionEffectRunner? JunctionEffectRunner { get; set; }
     [Inject] public ILifecycleHookRunner? LifecycleHookRunner { get; set; }
@@ -54,100 +56,31 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     [Inject] public IServiceProvider? ServiceProvider { get; set; }
 
     public Metadata? Metadata { get; internal set; }
-
-    // The canonical (interface) name, set automatically during DI registration
     public string? CanonicalName { get; set; }
-
-    // Prefers CanonicalName (interface name) over the concrete type's FullName
-    public string TrainName =>
-        CanonicalName ?? GetType().FullName ?? GetType().Name;
-
-    // Parent metadata ID, set automatically for dependent trains
+    public string TrainName => CanonicalName ?? GetType().FullName ?? GetType().Name;
     public long? ParentId { get; internal set; }
-
-    public override async Task<TOut> Run(TIn input, CancellationToken cancellationToken = default)
-    {
-        // 1. Initialize metadata, save initial state
-        this.InitializeServiceTrain();
-        await EffectRunner.SaveChanges(CancellationToken);
-
-        // 2. Fire global lifecycle hooks, then train-level overrides
-        await LifecycleHookRunner.OnStarted();
-        await OnStarted(Metadata, CancellationToken);  // per-train override
-        Metadata.SetInputObject(input);
-
-        try
-        {
-            // 3. Execute the actual train logic
-            var result = await RunInternal(input);
-
-            // 4. Handle success or failure from Either result
-            result.Match(
-                Right: output => Metadata.SetOutputObject(output),
-                Left: _ => { }
-            );
-            await EffectRunner.Update(Metadata);
-
-            // 5. Finalize and save effects
-            this.FinishServiceTrain(result);
-            await EffectRunner.SaveChanges(CancellationToken);
-            await LifecycleHookRunner.OnCompleted();
-            await OnCompleted(Metadata, CancellationToken);  // per-train override
-
-            return result.Match<TOut>(Right: x => x, Left: ex => throw ex);
-        }
-        catch (Exception ex)
-        {
-            // 6. Handle failures and save error state
-            this.FinishServiceTrain(Either<Exception, TOut>.Left(ex));
-            await EffectRunner.SaveChanges(CancellationToken);
-            await LifecycleHookRunner.OnFailed();
-            await OnFailed(Metadata, ex, CancellationToken);  // per-train override
-            throw;
-        }
-    }
 
     protected abstract Task<Either<Exception, TOut>> RunInternal(TIn input);
 }
 ```
 
+The `Run` method wraps `RunInternal` with a lifecycle that follows these steps:
+
+1. **Initialize** — Create `Metadata`, set `TrainState.InProgress`, persist via `SaveChanges`
+2. **Hooks** — Fire `OnStarted` (global lifecycle hooks, then per-train override)
+3. **Execute** — Call `RunInternal(input)`, which returns `Either<Exception, TOut>`
+4. **Finalize** — Set output (right track) or exception details (left track), update `TrainState`
+5. **Persist** — `SaveChanges` on both tracks — metadata is always saved regardless of outcome
+6. **Post-hooks** — Fire `OnCompleted` or `OnFailed`/`OnCancelled` depending on the result
+
 ### EffectRunner
 
-```csharp
-public class EffectRunner : IEffectRunner
-{
-    private List<IEffectProvider> ActiveEffectProviders { get; init; }
+The `EffectRunner` coordinates all registered effect providers. It builds its provider list at construction time by querying `IEffectProviderFactory` instances filtered through the `IEffectRegistry`.
 
-    public EffectRunner(
-        IEnumerable<IEffectProviderFactory> effectProviderFactories,
-        IEffectRegistry effectRegistry,
-        ILogger<EffectRunner>? logger = null)
-    {
-        ActiveEffectProviders = [];
-        ActiveEffectProviders.AddRange(
-            effectProviderFactories
-                .Where(factory => effectRegistry.IsEnabled(factory.GetType()))
-                .RunAll(factory => factory.Create())
-        );
-    }
-
-    public async Task Track(IModel model)
-    {
-        ActiveEffectProviders.RunAll(provider => provider.Track(model));
-    }
-
-    public async Task SaveChanges(CancellationToken cancellationToken)
-    {
-        await ActiveEffectProviders.RunAllAsync(
-            provider => provider.SaveChanges(cancellationToken)
-        );
-    }
-
-    public void Dispose() => DeactivateProviders();
-}
-```
-
-This layer adds metadata tracking, effect coordination, and handles the train lifecycle (create metadata -> run junctions -> save effects).
+It exposes three operations that fan out to every active provider:
+- **`Track(model)`** — Register a new model for tracking (e.g., add `Metadata` to the EF change tracker)
+- **`Update(model)`** — Notify providers of an in-memory mutation (e.g., re-serialize parameters after output is set)
+- **`SaveChanges(ct)`** — Persist all accumulated changes across all providers
 
 ### Canonical Train Naming
 
@@ -185,7 +118,7 @@ public interface IEffectProvider : IDisposable
 
 ## Execution Flow
 
-The full lifecycle of a `ServiceTrain` execution, corresponding to the `Run` method shown above:
+The full lifecycle of a `ServiceTrain` execution:
 
 ```
 [Client Request]
@@ -236,42 +169,21 @@ Junctions execute inside the "Execute Train Chain" box. Each mutation to the tra
 
 ## Data Layer
 
-### DataContext<TDbContext>
+### DataContext
 
-```csharp
-public class DataContext<TDbContext> : DbContext, IDataContext
-    where TDbContext : DbContext
-{
-    public DbSet<Metadata> Metadatas { get; set; }
-    public DbSet<Log> Logs { get; set; }
-    public DbSet<Manifest> Manifests { get; set; }
-    public DbSet<DeadLetter> DeadLetters { get; set; }
-    public DbSet<WorkQueue> WorkQueues { get; set; }
-    public DbSet<ManifestGroup> ManifestGroups { get; set; }
-    public DbSet<BackgroundJob> BackgroundJobs { get; set; }
+`DataContext<TDbContext>` extends EF Core's `DbContext` and implements both `IDataContext` and `IEffectProvider`. It maps `Track` → `Add`, `Update` → EF `Update`, and `SaveChanges` → `SaveChangesAsync`, delegating persistence to EF Core's change tracker. It also provides transaction support via `BeginTransaction`, `CommitTransaction`, and `RollbackTransaction`.
 
-    // IEffectProvider implementation
-    public async Task SaveChanges(CancellationToken cancellationToken)
-    {
-        await base.SaveChangesAsync(cancellationToken);
-    }
+**DbSets:**
 
-    public async Task Track(IModel model)
-    {
-        Add(model);
-    }
-
-    public async Task Update(IModel model)
-    {
-        base.Update(model);
-    }
-
-    // Transaction support
-    public async Task<IDataContextTransaction> BeginTransaction() { }
-    public async Task CommitTransaction() { }
-    public async Task RollbackTransaction() { }
-}
-```
+| DbSet | Entity |
+|-------|--------|
+| Metadatas | `Metadata` |
+| Logs | `Log` |
+| Manifests | `Manifest` |
+| DeadLetters | `DeadLetter` |
+| WorkQueues | `WorkQueue` |
+| ManifestGroups | `ManifestGroup` |
+| BackgroundJobs | `BackgroundJob` |
 
 ### Data Model Structure
 

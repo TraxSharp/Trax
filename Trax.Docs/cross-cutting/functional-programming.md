@@ -9,6 +9,9 @@ nav_order: 5
 
 Trax.Core borrows a few ideas from functional programming. You don't need an FP background to use it, but knowing where these types come from makes the API click faster.
 
+{: .sdk-references }
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger)
+
 ## LanguageExt
 
 Trax.Core depends on [LanguageExt](https://github.com/louthy/language-ext), a functional programming library for C#. You'll interact with two of its types: `Either` and `Unit`.
@@ -72,11 +75,11 @@ public class ValidateEmailJunction : Junction<CreateUserRequest, Unit>
 
 In functional programming, an *effect* is a side effect — anything that reaches outside the function boundary. Database writes, HTTP calls, logging, file I/O: these are all effects. A pure function takes input and returns output without touching the outside world. Obviously, a train that does nothing observable isn't very useful, so the question becomes: how do you manage side effects without scattering them through every junction?
 
-In Trax, effects are operations that happen as the train passes through its route. Junctions don't write directly to a database or logger. Instead, the train tracks models (like `Metadata`) during the journey, and **effect providers** handle the actual work at the end. If the train reaches the right track (success), all providers run their `SaveChanges` and effects are applied atomically. If any junction switches the train to the left track (failure), nothing is saved.
+In Trax, effects are operations that happen as the train passes through its route. Junctions don't write directly to a database or logger. Instead, the train tracks models (like `Metadata`) during the journey, and **effect providers** handle the actual work at the end. On both tracks, effect providers run `SaveChanges` — metadata (state, timing, errors) is always persisted. If the train reaches the right track (success), output is recorded alongside the metadata. If any junction switches the train to the left track (failure), the exception and failure details are recorded, but user-tracked models added via custom effect providers are not committed.
 
 This gives you two things:
 
-1. **Atomicity** — A left-track result means no effects are applied. No half-written database records, no orphaned log entries.
+1. **Full audit trails** — Every run produces a metadata record regardless of outcome. Failures capture exception details, timing, and which junction failed.
 2. **Modularity** — Each effect provider is an independent plugin. Adding Postgres persistence doesn't change your train code. Removing the JSON logger doesn't either.
 
 ```csharp

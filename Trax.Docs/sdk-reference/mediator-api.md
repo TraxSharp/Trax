@@ -22,8 +22,8 @@ This decouples callers from specific train implementations and enables train com
 
 | Page | Description |
 |------|-------------|
-| [TrainBus]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %}) | `ITrainBus` interface — `RunAsync`, `InitializeTrain` |
-| [AddMediator]({{ site.baseurl }}{% link sdk-reference/mediator-api/add-service-train-bus.md %}) | Registration and assembly scanning configuration |
-| [TrainDiscovery]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-discovery.md %}) | `ITrainDiscoveryService` — discover registered trains and their input/output types |
-| [TrainExecution]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-execution.md %}) | `ITrainExecutionService` — queue or run trains programmatically with JSON input |
-| [Concurrency Limiting]({{ site.baseurl }}{% link sdk-reference/mediator-api/concurrency-limiting.md %}) | Per-train and global concurrency limits for RUN executions |
+| [TrainBus](/docs/sdk-reference/mediator-api/train-bus) | `ITrainBus` interface — `RunAsync`, `InitializeTrain` |
+| [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | Registration and assembly scanning configuration |
+| [TrainDiscovery](/docs/sdk-reference/mediator-api/train-discovery) | `ITrainDiscoveryService` — discover registered trains and their input/output types |
+| [TrainExecution](/docs/sdk-reference/mediator-api/train-execution) | `ITrainExecutionService` — queue or run trains programmatically with JSON input |
+| [Concurrency Limiting](/docs/sdk-reference/mediator-api/concurrency-limiting) | Per-train and global concurrency limits for RUN executions |

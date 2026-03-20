@@ -11,6 +11,9 @@ The Trax samples demonstrate a consistent architectural pattern: **put your trai
 
 This mirrors the ladder philosophy. You only add the packages you need, and you only build the executables you need. The trains don't change.
 
+{: .sdk-references }
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [TraxBroadcast](/docs/sdk-reference/graphql-api/trax-broadcast-attribute)
+
 ## The Trains Library Pattern
 
 Every sample follows the same two-layer split:

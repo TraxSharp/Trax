@@ -7,6 +7,9 @@ nav_order: 2
 
 # Common Patterns
 
+{: .sdk-references }
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
+
 ## Error Handling Patterns
 
 ### Train-Level Error Handling
@@ -39,8 +42,6 @@ public class RobustTrain : ServiceTrain<ProcessOrderRequest, ProcessOrderResult>
     }
 }
 ```
-
-*SDK Reference: [Activate]({{ site.baseurl }}{% link sdk-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link sdk-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %})*
 
 ### Junction-Level Error Handling
 
@@ -118,4 +119,4 @@ public class BatchProcessJunction : Junction<BatchInput, BatchResult>
 }
 ```
 
-*Full details: [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %})*
+*Full details: [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens)*

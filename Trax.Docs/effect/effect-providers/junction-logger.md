@@ -10,6 +10,9 @@ nav_order: 4
 
 The junction logger fires before and after each junction in a train, logging structured `JunctionMetadata` entries. This gives you per-junction observability: which junction is running, how long it took, what its Railway state was, and optionally what it returned.
 
+{: .sdk-references }
+> [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger)
+
 ## Registration
 
 ```bash
@@ -23,8 +26,6 @@ services.AddTrax(trax => trax
     )
 );
 ```
-
-*SDK Reference: [AddJunctionLogger]({{ site.baseurl }}{% link sdk-reference/configuration/add-junction-logger.md %})*
 
 ## The `serializeJunctionData` Option
 
@@ -61,7 +62,7 @@ The completed `JunctionMetadata` is logged at the configured log level via `ILog
 
 The junction logger only fires on junctions that inherit from `EffectJunction<TIn, TOut>`. If your junctions use the base `Junction<TIn, TOut>`, the logger has nothing to hook into and won't produce any output.
 
-See [Junctions: EffectJunction vs Junction]({{ site.baseurl }}{% link core/trains-and-junctions.md %}#effectjunction-vs-junction) for the difference between the two.
+See [Junctions: EffectJunction vs Junction](/docs/core/trains-and-junctions#effectjunction-vs-junction) for the difference between the two.
 
 ## When to Use It
 

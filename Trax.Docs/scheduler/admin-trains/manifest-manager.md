@@ -10,6 +10,9 @@ nav_order: 1
 
 The ManifestManager is the first half of each polling cycle. It figures out which manifests are due for execution and writes them to the work queue. It doesn't dispatch anything—that's the [JobDispatcher's](job-dispatcher.md) job.
 
+{: .sdk-references }
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
+
 ## Chain
 
 ```

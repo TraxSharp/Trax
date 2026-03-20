@@ -14,6 +14,9 @@ Trax supports two levels of authorization for the API layer:
 
 Endpoint-level auth answers "can this user access the Trax API at all?" Per-train auth answers "can this user execute *this particular* train?"
 
+{: .sdk-references }
+> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)
+
 ## Per-Train Authorization
 
 Decorate any train class with `[TraxAuthorize]` to declare authorization requirements:
@@ -151,7 +154,7 @@ The interface is defined in `Trax.Mediator`, so your implementation doesn't need
 
 ## SDK Reference
 
-- [TrainRegistration]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-discovery.md %}) — discovered auth metadata
-- [TrainExecution]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-execution.md %}) — where the auth check happens
-- [GraphQL API]({{ site.baseurl }}{% link sdk-reference/graphql-api.md %}) — endpoint-level auth via `configure` callback
-- [TraxQuery & TraxMutation Attributes]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) — opt trains into the GraphQL schema
+- [TrainRegistration](/docs/sdk-reference/mediator-api/train-discovery) — discovered auth metadata
+- [TrainExecution](/docs/sdk-reference/mediator-api/train-execution) — where the auth check happens
+- [GraphQL API](/docs/sdk-reference/graphql-api) — endpoint-level auth via `configure` callback
+- [TraxQuery & TraxMutation Attributes](/docs/sdk-reference/graphql-api/trax-graphql-attribute) — opt trains into the GraphQL schema

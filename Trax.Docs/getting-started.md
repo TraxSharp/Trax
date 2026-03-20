@@ -12,9 +12,12 @@ Trax requires `net10.0`:
 <TargetFramework>net10.0</TargetFramework>
 ```
 
-If you're migrating from ChainSharp, see [Migration Guide]({{ site.baseurl }}{% link reference/migration.md %}).
+If you're migrating from ChainSharp, see [Migration Guide](/docs/reference/migration).
 
 Pick the track that matches what you need:
+
+{: .sdk-references }
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [Run / RunEither](/docs/sdk-reference/train-methods/run) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)
 
 ---
 
@@ -79,7 +82,7 @@ result.Match(
 );
 ```
 
-**Next:** [Core docs]({{ site.baseurl }}{% link core.md %}) for Memory, the Analyzer, chain methods, and IDE extensions.
+**Next:** [Core docs](/docs/core) for Memory, the Analyzer, chain methods, and IDE extensions.
 
 ---
 
@@ -132,7 +135,7 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 
 The `RunInternal` code is identical to Core — `ServiceTrain` adds the execution logging and DI around it.
 
-**Next:** [Effect docs]({{ site.baseurl }}{% link effect.md %}) for metadata, effect providers, and the ServiceTrain lifecycle.
+**Next:** [Effect docs](/docs/effect) for metadata, effect providers, and the ServiceTrain lifecycle.
 
 ---
 
@@ -174,9 +177,9 @@ app.Run();
 ```
 
 **Next:**
-- [Mediator]({{ site.baseurl }}{% link mediator.md %}) — decoupled dispatch with TrainBus
-- [Scheduling]({{ site.baseurl }}{% link scheduler.md %}) — cron jobs, retries, dead letters
-- [Dashboard]({{ site.baseurl }}{% link dashboard.md %}) — monitoring UI
-- [API]({{ site.baseurl }}{% link api.md %}) — GraphQL interface
-- [Project Template]({{ site.baseurl }}{% link reference/templates.md %}) — full template reference
-- [Samples & Deployment]({{ site.baseurl }}{% link samples.md %}) — the trains library pattern and deployment topologies
+- [Mediator](/docs/mediator) — decoupled dispatch with TrainBus
+- [Scheduling](/docs/scheduler) — cron jobs, retries, dead letters
+- [Dashboard](/docs/dashboard) — monitoring UI
+- [API](/docs/api) — GraphQL interface
+- [Project Template](/docs/reference/templates) — full template reference
+- [Samples & Deployment](/docs/samples) — the trains library pattern and deployment topologies

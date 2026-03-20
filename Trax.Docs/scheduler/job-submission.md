@@ -9,6 +9,9 @@ nav_order: 2
 
 The job submitter is the execution backend for the scheduler. When the JobDispatcher creates a Metadata record and calls `IJobSubmitter.EnqueueAsync()`, the job submitter is responsible for picking up that job and running the train.
 
+{: .sdk-references }
+> [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)
+
 ## Built-in Local Workers (PostgreSQL)
 
 The recommended backend uses Trax.Core's own `trax.background_job` table for job queuing. No external dependencies — it shares the same PostgreSQL database already used by Trax.Core's data layer.
@@ -88,7 +91,7 @@ No connection string parameter needed — local workers use the same `IDataConte
 | `WorkerCount` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs |
 | `PollingInterval` | 1 second | How often idle workers poll for new jobs |
 | `VisibilityTimeout` | 30 minutes | How long a claimed job stays invisible before crash recovery reclaims it |
-| `ShutdownTimeout` | 30 seconds | Grace period for in-flight jobs during application shutdown. When the host signals shutdown, in-flight trains receive the cancellation token after this delay — giving them time to finish cleanly. See [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %}#background-services-and-shutdown). |
+| `ShutdownTimeout` | 30 seconds | Grace period for in-flight jobs during application shutdown. When the host signals shutdown, in-flight trains receive the cancellation token after this delay — giving them time to finish cleanly. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens#background-services-and-shutdown). |
 | `BatchSize` | 1 | Number of jobs each worker claims per poll. Higher values reduce database round-trips when there is a backlog. Claimed jobs are processed sequentially within the worker task. If a worker crashes mid-batch, uncompleted jobs wait for `VisibilityTimeout` before being reclaimed. |
 
 ### Worker Lifecycle
@@ -150,9 +153,9 @@ This is the same pattern Hangfire uses with its `InvisibilityTimeout` — a well
 | **Migration** | Hangfire manages its own schema | DbUp migration alongside other Trax.Core tables |
 | **Crash recovery** | InvisibilityTimeout | VisibilityTimeout (same pattern) |
 
-## Hangfire (Deprecated)
+## Hangfire (Removed)
 
-> **Deprecated**: Local workers are now the default with Postgres. Remove any `UseHangfire()` call. The `Trax.Scheduler.Hangfire` package will be removed in a future version.
+> **Removed**: Local workers are now the default with Postgres. The `UseHangfire()` method and `Trax.Scheduler.Hangfire` package have been removed. If migrating from an older version, see below.
 
 The Hangfire backend wraps Hangfire's `IBackgroundJobClient.Enqueue()` to dispatch jobs. It brings 3 NuGet packages and creates its own database tables, but Trax.Core only uses a tiny fraction of Hangfire's capabilities:
 
@@ -228,7 +231,7 @@ builder.Services.AddTraxWorker(opts => opts.WorkerCount = 4);
 
 Best for dedicated worker servers that run continuously and scale independently.
 
-Both models connect to the same Postgres database. See [Remote Execution]({{ site.baseurl }}{% link scheduler/remote-execution.md %}) for full architecture details, deployment diagrams, and guidance on which model to choose.
+Both models connect to the same Postgres database. See [Remote Execution](/docs/scheduler/remote-execution) for full architecture details, deployment diagrams, and guidance on which model to choose.
 
 ## Custom Job Submitter
 

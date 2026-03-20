@@ -9,6 +9,9 @@ nav_order: 1
 
 Trax.Core threads `CancellationToken` through the entire pipeline — from the initial `Run` call, through every junction, down to EF Core queries and background service shutdown. This enables graceful cancellation of trains in response to HTTP request aborts, application shutdown, or explicit user cancellation.
 
+{: .sdk-references }
+> [Run / RunEither](/docs/sdk-reference/train-methods/run) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [CancelAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers)
+
 ## How It Works
 
 CancellationToken propagation is **property-based**, not parameter-based. The token is stored as a property on `Train` and `Junction`, so the `Junction.Run(TIn input)` signature stays unchanged:
@@ -51,8 +54,6 @@ await train.RunEither(input, serviceProvider, cancellationToken);
 ```
 
 If you call `Run(input)` without a token, `CancellationToken` defaults to `CancellationToken.None` — all existing code works unchanged.
-
-*SDK Reference: [Run / RunEither]({{ site.baseurl }}{% link sdk-reference/train-methods/run.md %})*
 
 ## Using the Token Inside Junctions
 
@@ -201,8 +202,6 @@ Task<TOut> RunAsync<TOut>(object input, CancellationToken ct, Metadata? metadata
 Task RunAsync(object input, CancellationToken ct, Metadata? metadata = null);
 ```
 
-*SDK Reference: [TrainBus]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %})*
-
 ## Background Services and Shutdown
 
 All Trax.Core background services propagate their `stoppingToken` to train executions. This means when your application shuts down (e.g., `Ctrl+C`, SIGTERM, or `IHostApplicationLifetime.StopApplication()`), in-flight trains receive a cancellation signal.
@@ -257,7 +256,7 @@ Configure the grace period:
 })
 ```
 
-*See also: [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %})*
+*See also: [Job Submission](/docs/scheduler/job-submission)*
 
 ## ServiceTrain Token Propagation
 
@@ -307,7 +306,7 @@ services.AddTrax(trax => trax
 );
 ```
 
-*See also: [Junction Progress]({{ site.baseurl }}{% link effect/effect-providers/junction-progress.md %})*
+*See also: [Junction Progress](/docs/effect/effect-providers/junction-progress)*
 
 ## Programmatic Cancellation API
 
@@ -326,8 +325,6 @@ Both methods use dual-layer cancellation:
 2. **Same-server instant cancel** (`ICancellationRegistry.TryCancel()`) — immediately fires the `CancellationTokenSource` if the job is running on the same server
 
 Cancelled trains transition to `TrainState.Cancelled`, are **not retried**, and **do not create dead letters**.
-
-*SDK Reference: [CancelAsync / CancelGroupAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %})*
 
 ## Automatic Timeout Cancellation
 
@@ -433,7 +430,7 @@ public async Task Train_CancelDuringJunction_PropagatesCancellation()
 }
 ```
 
-*See also: [Testing]({{ site.baseurl }}{% link cross-cutting/testing.md %})*
+*See also: [Testing](/docs/cross-cutting/testing)*
 
 ## Summary
 

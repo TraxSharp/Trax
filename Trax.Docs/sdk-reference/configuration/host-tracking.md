@@ -76,6 +76,6 @@ services.AddTrax(trax => trax
 ## Remarks
 
 - Host identity is detected once at startup and applied to all train executions in the process.
-- Auto-detection probes environment variables for Lambda, ECS, Kubernetes, and Azure App Service. See [Host Tracking]({{ site.baseurl }}{% link effect/host-tracking.md %}) for the full detection table.
+- Auto-detection probes environment variables for Lambda, ECS, Kubernetes, and Azure App Service. See [Host Tracking](/docs/effect/host-tracking) for the full detection table.
 - Duplicate label keys use last-write-wins semantics.
 - When a remote worker executes a train, host fields are overwritten in `StartServiceTrain()` so the metadata reflects the actual execution host, not the dispatcher.

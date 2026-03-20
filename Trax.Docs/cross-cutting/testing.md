@@ -7,6 +7,9 @@ nav_order: 3
 
 # Testing
 
+{: .sdk-references }
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
+
 ## Unit Testing Junctions
 
 Junctions are easy to test because they're just classes with a `Run` method. Create simple fake implementations of your dependencies:
@@ -102,8 +105,6 @@ public async Task CreateUserTrain_CreatesUser()
 }
 ```
 
-*SDK Reference: [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %}), [TrainBus.RunAsync]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %})*
-
 ## Integration Testing with InMemory Provider
 
 For integration tests, use the InMemory data provider to avoid database dependencies:
@@ -135,8 +136,6 @@ public async Task Train_PersistsMetadata()
     Assert.Equal(TrainState.Completed, metadata.TrainState);
 }
 ```
-
-*SDK Reference: [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %}), [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %})*
 
 ## Testing Cancellation
 
@@ -171,4 +170,4 @@ public async Task Junction_UsesToken_ForAsyncOperations()
 }
 ```
 
-*Full details: [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %}#testing-with-cancellation-tokens)*
+*Full details: [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens#testing-with-cancellation-tokens)*

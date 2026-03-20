@@ -36,7 +36,7 @@ public static TraxEffectBuilderWithData UsePostgres(
 
 ## Returns
 
-`TraxEffectBuilderWithData` — a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %}). This provides compile-time safety: methods that require a data provider are only available on the returned type.
+`TraxEffectBuilderWithData` — a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging). This provides compile-time safety: methods that require a data provider are only available on the returned type.
 
 ## Examples
 
@@ -68,18 +68,18 @@ services.AddTrax(trax => trax
 
 ## What It Registers
 
-1. Migrates the database schema to the latest version via `DatabaseMigrator` (unless [SkipMigrations]({{ site.baseurl }}{% link sdk-reference/configuration/skip-migrations.md %}) was called)
+1. Migrates the database schema to the latest version via `DatabaseMigrator` (unless [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) was called)
 2. Creates an `NpgsqlDataSource` with enum mappings (`TrainState`, `LogLevel`, `ScheduleType`, `DeadLetterStatus`, `WorkQueueStatus`, `MisfirePolicy`)
 3. Registers `IDbContextFactory<PostgresContext>` for creating database contexts
 4. Registers `IDataContext` (scoped) for direct database access
-5. Enables data context logging support (for [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %}))
+5. Enables data context logging support (for [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging))
 6. Registers `PostgresContextProviderFactory` as a **non-toggleable** effect
 
 ## Remarks
 
 - Returns `TraxEffectBuilderWithData`, which makes `AddDataContextLogging()` available at compile time. Methods that don't require a data provider (like `AddJson()`, `SaveTrainParameters()`) use generic self-type preservation and work on both `TraxEffectBuilder` and `TraxEffectBuilderWithData`.
-- The database migration runs synchronously on startup. Ensure the database server is accessible at application start time. To skip migration (e.g., in Lambda runners), call [SkipMigrations]({{ site.baseurl }}{% link sdk-reference/configuration/skip-migrations.md %}) before `UsePostgres()`.
-- For testing/development without a database, use [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %}) instead.
+- The database migration runs synchronously on startup. Ensure the database server is accessible at application start time. To skip migration (e.g., in Lambda runners), call [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) before `UsePostgres()`.
+- For testing/development without a database, use [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) instead.
 
 ## Package
 

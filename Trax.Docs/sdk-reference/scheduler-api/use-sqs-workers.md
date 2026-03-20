@@ -223,12 +223,12 @@ The API process needs `sqs:SendMessage`. The Lambda function needs `sqs:ReceiveM
 ## Limitations
 
 - **Message size limit:** SQS messages are limited to 256 KB. If your serialized train input exceeds this, the send will fail. For large inputs, store the data externally and pass a reference.
-- **No synchronous return:** SQS is fire-and-forget. For mutations that need a return value, continue using [`UseRemoteRun()`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}) alongside `UseSqsWorkers()`.
+- **No synchronous return:** SQS is fire-and-forget. For mutations that need a return value, continue using [`UseRemoteRun()`](/docs/sdk-reference/scheduler-api/use-remote-run) alongside `UseSqsWorkers()`.
 - **Cancellation is process-local:** Same limitation as other remote execution models — dashboard "Cancel" only affects trains on the same process.
 
 ## See Also
 
-- [Remote Execution]({{ site.baseurl }}{% link scheduler/remote-execution.md %}) — architecture overview and deployment models
-- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — HTTP-based per-train remote dispatch (alternative transport)
-- [AddTraxJobRunner]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-job-runner.md %}) — setting up the remote receiver
-- [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) — customizing the local (default) execution backend
+- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — HTTP-based per-train remote dispatch (alternative transport)
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — setting up the remote receiver
+- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) — customizing the local (default) execution backend

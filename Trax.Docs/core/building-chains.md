@@ -9,6 +9,9 @@ nav_order: 2
 
 Every train's `RunInternal` method is a chain: `Activate` seeds Memory, `.Chain<T>()` adds junctions, and `.Resolve()` returns the result.
 
+{: .sdk-references }
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) | [Extract](/docs/sdk-reference/train-methods/extract) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [Resolve](/docs/sdk-reference/train-methods/resolve)
+
 ## Chain
 
 `.Chain<TJunction>()` is the primary way to add a junction to a train's route. It resolves the junction, pulls its input from [Memory](memory.md), runs it, and stores the output back in Memory.
@@ -21,9 +24,7 @@ Activate(input)
     .Resolve();
 ```
 
-*SDK Reference: [Activate]({{ site.baseurl }}{% link sdk-reference/train-methods/activate.md %}), [Chain]({{ site.baseurl }}{% link sdk-reference/train-methods/chain.md %}), [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %})*
-
-For all overloads, type parameter constraints, and junction-wiring behavior, see [SDK Reference: Chain]({{ site.baseurl }}{% link sdk-reference/train-methods/chain.md %}). The [Analyzer](analyzer.md) catches missing types at compile time, so you'll see these errors in your IDE before you ever run the code.
+For all overloads, type parameter constraints, and junction-wiring behavior, see [SDK Reference: Chain](/docs/sdk-reference/train-methods/chain). The [Analyzer](analyzer.md) catches missing types at compile time, so you'll see these errors in your IDE before you ever run the code.
 
 ### Railway Behavior
 
@@ -50,7 +51,7 @@ protected override async Task<Either<Exception, User>> RunInternal(CreateUserReq
         .Resolve();
 ```
 
-`Resolve` checks for a captured exception, then a [ShortCircuit](#shortcircuit) value, then looks up `TReturn` in [Memory](memory.md) — in that order. See [SDK Reference: Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %}) for the full resolution priority and error behavior.
+`Resolve` checks for a captured exception, then a [ShortCircuit](#shortcircuit) value, then looks up `TReturn` in [Memory](memory.md) — in that order. See [SDK Reference: Resolve](/docs/sdk-reference/train-methods/resolve) for the full resolution priority and error behavior.
 
 The [Analyzer](analyzer.md) catches missing return types at compile time with **CHAIN002**.
 
@@ -100,7 +101,7 @@ public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderResult>
 
 > **This behavior is intentionally inverted from Chain.** A `Chain` junction that throws switches the train to the left track with an error. A `ShortCircuit` junction that throws means "no short-circuit available, keep going." The exception is swallowed, not propagated.
 
-See [SDK Reference: ShortCircuit]({{ site.baseurl }}{% link sdk-reference/train-methods/short-circuit.md %}) for all overloads, the junction signature, and a full example.
+See [SDK Reference: ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) for all overloads, the junction signature, and a full example.
 
 **When to use it:**
 - **Caching** — return a cached result if available, otherwise compute it
@@ -119,7 +120,7 @@ Activate(input)
     .Resolve();
 ```
 
-`Extract` uses reflection to find a property or field on `TSource` whose type matches `TTarget` and stores it in Memory. See [SDK Reference: Extract]({{ site.baseurl }}{% link sdk-reference/train-methods/extract.md %}) for the full search order and failure behavior.
+`Extract` uses reflection to find a property or field on `TSource` whose type matches `TTarget` and stores it in Memory. See [SDK Reference: Extract](/docs/sdk-reference/train-methods/extract) for the full search order and failure behavior.
 
 `Extract` is a convenience for avoiding a junction that exists solely to pull a property off an object. Without it, you'd write:
 
@@ -152,6 +153,6 @@ protected override async Task<Either<Exception, User>> RunInternal(CreateUserReq
 }
 ```
 
-Each type argument is stored in Memory with the corresponding instance. See [SDK Reference: AddServices]({{ site.baseurl }}{% link sdk-reference/train-methods/add-services.md %}) for all overloads and interface-type storage behavior.
+Each type argument is stored in Memory with the corresponding instance. See [SDK Reference: AddServices](/docs/sdk-reference/train-methods/add-services) for all overloads and interface-type storage behavior.
 
 Use `AddServices` when you need to inject runtime-created instances into the chain — objects that aren't available through the DI container or that need to be created per-execution. For standard dependencies, prefer constructor injection in your junctions instead.

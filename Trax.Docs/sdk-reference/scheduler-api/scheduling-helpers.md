@@ -151,7 +151,7 @@ Converts the schedule to a cron expression (5-field or 6-field). For cron-type s
 | `OnDemand` | Batch operations triggered programmatically |
 | `Dependent` | Runs after a parent manifest completes successfully |
 | `DormantDependent` | A dependent that must be explicitly activated at runtime via `IDormantDependentContext`. Never auto-fires. |
-| `Once` | Fires once at `ScheduledAt`, then auto-disables on success. Created by [ScheduleOnceAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}#scheduleonceasync). See [Delayed / One-Off Jobs]({{ site.baseurl }}{% link scheduler/delayed-jobs.md %}). |
+| `Once` | Fires once at `ScheduledAt`, then auto-disables on success. Created by [ScheduleOnceAsync](/docs/sdk-reference/scheduler-api/manifest-management#scheduleonceasync). See [Delayed / One-Off Jobs](/docs/scheduler/delayed-jobs). |
 
 ### MisfirePolicy Enum
 
@@ -162,7 +162,7 @@ Determines behavior when a scheduled run is missed.
 | `FireOnceNow` | Fire once immediately if overdue. Default behavior. |
 | `DoNothing` | If overdue beyond the misfire threshold, skip and wait for the next natural occurrence. |
 
-See [Misfire Policies]({{ site.baseurl }}{% link scheduler/scheduling-options.md %}#misfire-policies) for detailed behavior and examples.
+See [Misfire Policies](/docs/scheduler/scheduling-options#misfire-policies) for detailed behavior and examples.
 
 ### ExclusionType Enum
 
@@ -175,7 +175,7 @@ Defines the kind of exclusion window for a manifest schedule. Used inside the JS
 | `DateRange` | Exclude a contiguous date range (start–end inclusive) |
 | `TimeWindow` | Exclude a daily time window (supports midnight crossover) |
 
-See [Exclusion Windows]({{ site.baseurl }}{% link scheduler/exclusions.md %}) for usage patterns and examples.
+See [Exclusion Windows](/docs/scheduler/exclusions) for usage patterns and examples.
 
 ---
 
@@ -193,9 +193,9 @@ public class ManifestOptions
 | `MaxRetries` | `int` | `3` | Maximum retry attempts before the job is dead-lettered. Each retry creates a new Metadata record. |
 | `Timeout` | `TimeSpan?` | `null` | Per-job timeout override. `null` falls back to the global `DefaultJobTimeout`. If a job exceeds this duration, it may be considered stuck. |
 | `Priority` | `int` | `0` | Manifest-level priority stored on the manifest record. Note: dispatch ordering is primarily determined by **ManifestGroup.Priority** (set from the dashboard). This manifest-level priority is used as the work queue entry's priority when the manifest is queued. For dependent manifests, `DependentPriorityBoost` (default 16) is added on top at dispatch time. Can also be set via the `priority` parameter on scheduling methods. |
-| `MisfirePolicy` | `MisfirePolicy?` | `null` | Per-manifest misfire policy override. `null` uses the global `DefaultMisfirePolicy`. Only applies to Cron and Interval schedule types. See [Misfire Policies]({{ site.baseurl }}{% link scheduler/scheduling-options.md %}#misfire-policies). |
+| `MisfirePolicy` | `MisfirePolicy?` | `null` | Per-manifest misfire policy override. `null` uses the global `DefaultMisfirePolicy`. Only applies to Cron and Interval schedule types. See [Misfire Policies](/docs/scheduler/scheduling-options#misfire-policies). |
 | `MisfireThreshold` | `TimeSpan?` | `null` | Per-manifest misfire threshold override. `null` uses the global `DefaultMisfireThreshold` (60 seconds). |
-| `Exclusions` | `List<Exclusion>` | `[]` | Exclusion windows for this manifest. When any exclusion matches the current time, the manifest is skipped. Excluded periods are "intentionally skipped", not misfires. See [Exclusion Windows]({{ site.baseurl }}{% link scheduler/exclusions.md %}). |
+| `Exclusions` | `List<Exclusion>` | `[]` | Exclusion windows for this manifest. When any exclusion matches the current time, the manifest is skipped. Excluded periods are "intentionally skipped", not misfires. See [Exclusion Windows](/docs/scheduler/exclusions). |
 
 ### Example
 

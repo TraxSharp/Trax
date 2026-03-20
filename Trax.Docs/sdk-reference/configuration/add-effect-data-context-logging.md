@@ -46,6 +46,6 @@ services.AddTrax(trax => trax
 
 ## Remarks
 
-- **Requires** a data provider ([UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}) or [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})). This is enforced at compile time — `AddDataContextLogging` is only available on `TraxEffectBuilderWithData`, which is returned by the data provider methods. If you try to call it without a data provider, the code will not compile.
+- **Requires** a data provider ([UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) or [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)). This is enforced at compile time — `AddDataContextLogging` is only available on `TraxEffectBuilderWithData`, which is returned by the data provider methods. If you try to call it without a data provider, the code will not compile.
 - Registers `DataContextLoggingProvider` as an `ILoggerProvider`.
 - Log levels can be changed at runtime via the Dashboard's Server Settings page.

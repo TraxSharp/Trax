@@ -9,6 +9,9 @@ nav_order: 4
 
 When you remove a schedule definition from your startup configuration (e.g., delete a `.Schedule(...)` call from `Program.cs`), the scheduler automatically deletes the corresponding manifest and all its related data from the database on the next startup. This prevents stale manifests from continuing to fire after their code has been removed.
 
+{: .sdk-references }
+> [PruneOrphanedManifests](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule)
+
 ## How It Works
 
 ```
@@ -100,7 +103,7 @@ services.AddTrax(trax => trax
 
 ### Interaction with ScheduleMany PrunePrefix
 
-Orphan manifest cleanup and [ScheduleMany's PrunePrefix]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %}#with-pruning-automatic-stale-cleanup) are complementary:
+Orphan manifest cleanup and [ScheduleMany's PrunePrefix](/docs/sdk-reference/scheduler-api/schedule-many#with-pruning-automatic-stale-cleanup) are complementary:
 
 - **PrunePrefix** operates within a single `ScheduleMany` batch during seeding, removing items that were in a previous deployment but not in the current batch. It runs in a separate database context after the main seeding transaction commits — a prune failure does not roll back the upserted manifests.
 - **Orphan manifest cleanup** operates globally after all seeding is complete, removing any manifest not in the configured set — including entire `Schedule` definitions that were removed.

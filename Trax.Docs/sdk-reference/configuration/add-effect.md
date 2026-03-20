@@ -121,11 +121,11 @@ services.AddTrax(trax => trax
 );
 ```
 
-Configurable factories appear with a settings button on the dashboard's [Effects page]({{ site.baseurl }}{% link dashboard.md %}#effects-page), where their configuration properties can be modified at runtime.
+Configurable factories appear with a settings button on the dashboard's [Effects page](/docs/dashboard#effects-page), where their configuration properties can be modified at runtime.
 
 ## Remarks
 
 - **Train-level effects** (`AddEffect`): Implement `IEffectProviderFactory`. Called at train start and end. Used for cross-cutting concerns like data persistence, audit logging, etc.
 - **Junction-level effects** (`AddJunctionEffect`): Implement `IJunctionEffectProviderFactory`. Called before and after each junction. Used for junction-level logging, metrics, etc.
 - The interface+implementation overloads register the factory under both the interface type and `IEffectProviderFactory`, enabling resolution by either type.
-- See [Effect Providers]({{ site.baseurl }}{% link effect/effect-providers.md %}) for conceptual background on the effect system.
+- See [Effect Providers](/docs/effect/effect-providers) for conceptual background on the effect system.

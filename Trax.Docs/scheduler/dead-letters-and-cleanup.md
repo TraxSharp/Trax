@@ -7,6 +7,9 @@ nav_order: 3
 
 # Dead Letters, Monitoring & Cleanup
 
+{: .sdk-references }
+> [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
+
 ## Handling Dead Letters
 
 When a job exceeds `MaxRetries`, it enters the dead letter queue with status `AwaitingIntervention`. The ManifestManager will skip these manifests until they're resolved.
@@ -87,9 +90,7 @@ Deletion uses EF Core's `ExecuteDeleteAsync` for efficient single-statement SQLâ
 
 ### Enabling Cleanup
 
-Add `.AddMetadataCleanup()` to your scheduler configuration. By default this cleans up `ManifestManagerTrain`, `JobDispatcherTrain`, and `MetadataCleanupTrain` metadata older than 1 hour, checking every minute.
-
-*SDK Reference: [AddMetadataCleanup]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-metadata-cleanup.md %}) â€” all configuration options including `RetentionPeriod`, `CleanupInterval`, and adding custom train types to the whitelist.*
+Add `.AddMetadataCleanup()` to your scheduler configuration. By default this cleans up `ManifestManagerTrain` and `MetadataCleanupTrain` metadata older than 30 minutes, checking every minute.
 
 See [MetadataCleanup](admin-trains/metadata-cleanup.md) for details on how the cleanup train operates internally.
 

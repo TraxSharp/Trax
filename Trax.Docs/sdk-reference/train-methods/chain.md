@@ -66,7 +66,7 @@ return Activate(input)
 
 - Junctions are created and injected with DI services from Memory via `InitializeJunction`. Constructor parameters are resolved from Memory by type.
 - `TIn`/`TOut` are discovered via reflection from the junction's `IJunction<,>` interface at runtime.
-- See [Memory]({{ site.baseurl }}{% link core/memory.md %}) for how type-based lookup works, including tuple handling.
+- See [Memory](/docs/core/memory) for how type-based lookup works, including tuple handling.
 
 ## SynchronizationContext Safety
 

@@ -7,6 +7,9 @@ nav_order: 3
 
 # Delayed / One-Off Jobs
 
+{: .sdk-references }
+> [TriggerAsync / ScheduleOnceAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [Schedule](/docs/sdk-reference/scheduler-api/schedule)
+
 ## The Problem
 
 Some work doesn't fit a recurring schedule. You need to send a reminder email in 30 minutes, process a refund after a 24-hour cooling period, or run a one-time data migration 5 minutes from now. These are fire-once jobs with a delay — not periodic, not dependent on another manifest, just "run this once, later."
@@ -102,4 +105,3 @@ await scheduler.ScheduleOnceAsync<ICleanupTrain, CleanupInput>(
         .Group("maintenance"));
 ```
 
-*SDK Reference: [TriggerAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}#triggerasync), [ScheduleOnceAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}#scheduleonceasync), [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*

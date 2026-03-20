@@ -60,7 +60,7 @@ public sealed record ManifestItem(
 |----------|------|-------------|
 | `Id` | `string` | The item's identifier. In name-based overloads, this becomes the suffix (full external ID = `"{name}-{Id}"`). In unnamed overloads, this is the full external ID. |
 | `Input` | `IManifestProperties` | The train input for this item. Must match the expected input type of `TTrain`. |
-| `DependsOn` | `string?` | The external ID of the parent manifest this item depends on. Used by `IncludeMany` and `ThenIncludeMany`. See [Dependent Scheduling]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %}). |
+| `DependsOn` | `string?` | The external ID of the parent manifest this item depends on. Used by `IncludeMany` and `ThenIncludeMany`. See [Dependent Scheduling](/docs/sdk-reference/scheduler-api/dependent-scheduling). |
 
 ### Startup: Explicit Type Parameters (Legacy)
 
@@ -131,8 +131,8 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource
 |-----------|------|----------|---------|-------------|
 | `name` | `string` | Yes (name-based) | — | The batch name. Automatically derives `groupId` = `name`, `prunePrefix` = `"{name}-"`, and each external ID = `"{name}-{item.Id}"`. |
 | `items` | `IEnumerable<ManifestItem>` | Yes | — | The collection of items to create manifests from. Each item becomes one scheduled manifest. |
-| `schedule` | `Schedule` | Yes | — | The schedule definition applied to **all** manifests in the batch. Use [Every]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) or [Cron]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) helpers. |
-| `options` | `Action<ScheduleOptions>?` | No | `null` | Optional callback to configure all scheduling options. The name-based overload pre-sets `Group(name)` and `PrunePrefix("{name}-")` before invoking your callback. See [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions). |
+| `schedule` | `Schedule` | Yes | — | The schedule definition applied to **all** manifests in the batch. Use [Every](/docs/sdk-reference/scheduler-api/scheduling-helpers) or [Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers) helpers. |
+| `options` | `Action<ScheduleOptions>?` | No | `null` | Optional callback to configure all scheduling options. The name-based overload pre-sets `Group(name)` and `PrunePrefix("{name}-")` before invoking your callback. See [ScheduleOptions](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions). |
 
 ### Legacy API Parameters
 
@@ -142,7 +142,7 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource
 | `sources` | `IEnumerable<TSource>` | Yes | — | The collection of items to create manifests from. Each item becomes one scheduled manifest. |
 | `map` | `Func<TSource, (string, TInput)>` | Yes | — | A function that transforms each source item into an ID/suffix and input pair. |
 | `schedule` | `Schedule` | Yes | — | The schedule definition applied to **all** manifests in the batch. |
-| `options` | `Action<ScheduleOptions>?` | No | `null` | Optional callback to configure all scheduling options. See [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions). |
+| `options` | `Action<ScheduleOptions>?` | No | `null` | Optional callback to configure all scheduling options. See [ScheduleOptions](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions). |
 | `configureEach` | `Action<TSource, ManifestOptions>?` | No | `null` | Optional callback to set per-item manifest options. Receives both the source item and options, allowing per-item overrides of the base options set via `options`. |
 | `ct` | `CancellationToken` | No | `default` | Cancellation token (runtime API only). |
 
@@ -271,5 +271,5 @@ public class TenantSyncService(ITraxScheduler scheduler)
 - Pruning runs in a **separate database context** after the main transaction commits. A prune failure does not roll back the upserted manifests — the failure is logged as a warning and retried on the next cycle.
 - The `configureEach` callback receives `Action<TSource, ManifestOptions>` (not `Action<ManifestOptions>` like `Schedule`) — this lets you customize options based on the source item. It applies per-item overrides on top of the base options from `ScheduleOptions`.
 - The source collection is materialized (`.ToList()`) internally to avoid multiple enumeration.
-- The group is configured via `.Group(...)` on `ScheduleOptions`. Per-group settings (MaxActiveJobs, Priority, IsEnabled) can be set from code or adjusted at runtime from the dashboard. See [Per-Group Dispatch Controls]({{ site.baseurl }}{% link scheduler/scheduling-options.md %}#per-group-dispatch-controls).
-- `ScheduleMany` cannot be followed by `.ThenInclude()` — use [IncludeMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %}) (with `dependsOn`) instead for batch dependent scheduling.
+- The group is configured via `.Group(...)` on `ScheduleOptions`. Per-group settings (MaxActiveJobs, Priority, IsEnabled) can be set from code or adjusted at runtime from the dashboard. See [Per-Group Dispatch Controls](/docs/scheduler/scheduling-options#per-group-dispatch-controls).
+- `ScheduleMany` cannot be followed by `.ThenInclude()` — use [IncludeMany](/docs/sdk-reference/scheduler-api/dependent-scheduling) (with `dependsOn`) instead for batch dependent scheduling.

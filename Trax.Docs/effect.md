@@ -15,6 +15,9 @@ dotnet add package Trax.Effect
 dotnet add package Trax.Effect.Data.Postgres  # or Trax.Effect.Data.InMemory
 ```
 
+{: .sdk-references }
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)
+
 ## What It Adds
 
 Everything in [Core](core.md), plus:
@@ -24,7 +27,7 @@ Everything in [Core](core.md), plus:
 - **Dependency injection** — junctions resolved from your DI container
 - **Effect providers** — pluggable providers for persistence, logging, and serialization
 - **Lifecycle hooks** — fire on train state transitions (started, completed, failed, cancelled) for notifications, metrics, or real-time updates
-- **Atomic side effects** — all providers save together on success; nothing is saved on failure
+- **Atomic side effects** — all providers save together; metadata (state, timing, errors) is always persisted regardless of outcome
 
 ## Train vs ServiceTrain
 
@@ -53,10 +56,11 @@ The code inside `RunInternal` is identical — `ServiceTrain` adds the infrastru
 
 Effects are operations that happen as the train passes through its route — provided by pluggable effect providers. Junctions don't write directly to a database or logger. Instead, the train tracks models during the journey, and effect providers handle the actual work at the end:
 
-- If the train reaches the right track (success), all providers run `SaveChanges` and effects are applied atomically
-- If any junction takes the left track (failure), nothing is saved
+- On both tracks, effect providers run `SaveChanges` — metadata (state, timing, errors) is always persisted
+- If the train reaches the right track (success), output is recorded alongside the metadata
+- If any junction takes the left track (failure), the exception and failure details are recorded. User-tracked models added via custom effect providers are not committed.
 
-This gives you atomicity (no half-written records) and modularity (add/remove providers without changing train code).
+This gives you full audit trails on every outcome and modularity (add/remove providers without changing train code).
 
 ## Setup
 

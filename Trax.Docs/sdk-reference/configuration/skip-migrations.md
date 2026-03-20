@@ -8,7 +8,7 @@ nav_order: 2
 
 # SkipMigrations
 
-Disables the automatic database migration that normally runs inside [UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}). When called before `UsePostgres()`, the schema migration step is skipped entirely.
+Disables the automatic database migration that normally runs inside [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect). When called before `UsePostgres()`, the schema migration step is skipped entirely.
 
 ## Signature
 

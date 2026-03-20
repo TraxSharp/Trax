@@ -7,6 +7,9 @@ nav_order: 1
 
 # Trains & Junctions
 
+{: .sdk-references }
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve)
+
 ## Junctions
 
 Junctions are the points along a train's route — each one does one thing:
@@ -61,7 +64,7 @@ public class FetchUserJunction(IHttpClientFactory httpFactory) : Junction<UserId
 
 The token comes from the caller: `train.Run(input, cancellationToken)`. If no token is provided, `CancellationToken` defaults to `CancellationToken.None`. Before each junction executes, cancellation is checked — if the token is already cancelled, the junction is skipped and `OperationCanceledException` propagates.
 
-*Full details: [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %})*
+*Full details: [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens)*
 
 ## EffectJunction vs Junction
 
@@ -98,8 +101,6 @@ public class ValidateEmailJunction(IUserRepository repo) : EffectJunction<Create
 The implementation is identical — just swap the base class. `EffectJunction` only adds metadata when running inside a `ServiceTrain`. If you use `EffectJunction` inside a plain `Train`, it throws at runtime.
 
 Use `EffectJunction` when you want junction-level observability (timing, logging via `AddJunctionLogger`). Use `Junction` when you don't need it.
-
-*SDK Reference: [AddJunctionLogger]({{ site.baseurl }}{% link sdk-reference/configuration/add-junction-logger.md %})*
 
 ## Dependency Injection in Junctions
 
@@ -239,4 +240,4 @@ public class CreateUserTrain(ISlackClient slack)
 
 Available overrides: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. All default to no-op. Exceptions in overrides are caught and logged — they never cause the train to fail.
 
-These work alongside [global lifecycle hooks]({{ site.baseurl }}{% link sdk-reference/configuration/add-lifecycle-hook.md %}) — global hooks fire first, then per-train overrides.
+These work alongside [global lifecycle hooks](/docs/sdk-reference/configuration/add-lifecycle-hook) — global hooks fire first, then per-train overrides.

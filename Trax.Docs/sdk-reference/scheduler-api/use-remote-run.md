@@ -35,7 +35,7 @@ public SchedulerConfigurationBuilder UseRemoteRun(
 | `BaseUrl` | `string` | _(required)_ | The URL of the remote endpoint that receives run requests (e.g., `https://my-runner.example.com/trax/run`) |
 | `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` — add auth headers, custom timeouts, or any other HTTP configuration |
 | `Timeout` | `TimeSpan` | 5 minutes | HTTP request timeout. Longer default than `UseRemoteWorkers` (30s) because run requests block until the train completes |
-| `Retry` | `HttpRetryOptions` | _(see below)_ | Retry options for transient HTTP failures (429, 502, 503). Same configuration as [`RemoteWorkerOptions.Retry`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}#httpretryoptions) |
+| `Retry` | `HttpRetryOptions` | _(see below)_ | Retry options for transient HTTP failures (429, 502, 503). Same configuration as [`RemoteWorkerOptions.Retry`](/docs/sdk-reference/scheduler-api/use-remote-workers#httpretryoptions) |
 
 ## Examples
 
@@ -152,6 +152,6 @@ dotnet add package Trax.Scheduler
 
 ## See Also
 
-- [Remote Execution]({{ site.baseurl }}{% link scheduler/remote-execution.md %}) — architecture overview and deployment models
-- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — remote dispatch for queued trains
-- [AddTraxJobRunner]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-job-runner.md %}) — remote receiver setup (includes `UseTraxRunEndpoint`)
+- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — remote dispatch for queued trains
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — remote receiver setup (includes `UseTraxRunEndpoint`)

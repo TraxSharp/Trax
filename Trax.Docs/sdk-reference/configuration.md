@@ -175,15 +175,15 @@ These properties can be set directly on the `TraxEffectBuilder`:
 
 | Method | Description |
 |--------|-------------|
-| [SkipMigrations]({{ site.baseurl }}{% link sdk-reference/configuration/skip-migrations.md %}) | Disables automatic database migration in `UsePostgres()` for Lambda/serverless environments |
-| [UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}) | Adds PostgreSQL database support for metadata persistence |
-| [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %}) | Adds in-memory database support for testing/development |
-| [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %}) | Enables logging for database operations |
-| [AddJson]({{ site.baseurl }}{% link sdk-reference/configuration/add-json-effect.md %}) | Adds JSON change detection for tracking model mutations |
-| [SaveTrainParameters]({{ site.baseurl }}{% link sdk-reference/configuration/save-train-parameters.md %}) | Serializes train input/output to JSON for persistence (optionally configurable) |
-| [AddJunctionLogger]({{ site.baseurl }}{% link sdk-reference/configuration/add-junction-logger.md %}) | Adds per-junction execution logging |
-| [AddJunctionProgress]({{ site.baseurl }}{% link sdk-reference/configuration/add-junction-progress.md %}) | Adds junction progress tracking and cross-server cancellation checking |
-| [AddMediator]({{ site.baseurl }}{% link sdk-reference/configuration/add-service-train-bus.md %}) | Registers the TrainBus and discovers trains via assembly scanning. Accepts `params Assembly[]` shorthand or `Func<TraxMediatorBuilder, TraxMediatorBuilder>` for full control (custom lifetime, multiple assemblies). Called on `TraxBuilderWithEffects`, returns `TraxBuilderWithMediator` |
-| [AddEffect / AddJunctionEffect]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect.md %}) | Registers custom effect provider factories |
-| [AddLifecycleHook]({{ site.baseurl }}{% link sdk-reference/configuration/add-lifecycle-hook.md %}) | Registers lifecycle hooks that fire on train state transitions |
-| [SetEffectLogLevel]({{ site.baseurl }}{% link sdk-reference/configuration/set-effect-log-level.md %}) | Sets the minimum log level for effect logging |
+| [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) | Disables automatic database migration in `UsePostgres()` for Lambda/serverless environments |
+| [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | Adds PostgreSQL database support for metadata persistence |
+| [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | Adds in-memory database support for testing/development |
+| [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging) | Enables logging for database operations |
+| [AddJson](/docs/sdk-reference/configuration/add-json-effect) | Adds JSON change detection for tracking model mutations |
+| [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | Serializes train input/output to JSON for persistence (optionally configurable) |
+| [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | Adds per-junction execution logging |
+| [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | Adds junction progress tracking and cross-server cancellation checking |
+| [AddMediator](/docs/sdk-reference/configuration/add-service-train-bus) | Registers the TrainBus and discovers trains via assembly scanning. Accepts `params Assembly[]` shorthand or `Func<TraxMediatorBuilder, TraxMediatorBuilder>` for full control (custom lifetime, multiple assemblies). Called on `TraxBuilderWithEffects`, returns `TraxBuilderWithMediator` |
+| [AddEffect / AddJunctionEffect](/docs/sdk-reference/configuration/add-effect) | Registers custom effect provider factories |
+| [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | Registers lifecycle hooks that fire on train state transitions |
+| [SetEffectLogLevel](/docs/sdk-reference/configuration/set-effect-log-level) | Sets the minimum log level for effect logging |

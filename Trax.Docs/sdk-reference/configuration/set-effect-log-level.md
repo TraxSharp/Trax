@@ -46,4 +46,4 @@ services.AddTrax(trax => trax
 ## Remarks
 
 - The default log level is `LogLevel.Debug`.
-- This controls the log level for the Trax.Core effect system's own logging, not for the data context logging (which is controlled by [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %})).
+- This controls the log level for the Trax.Core effect system's own logging, not for the data context logging (which is controlled by [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging)).

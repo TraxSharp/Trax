@@ -60,6 +60,10 @@ All methods have default implementations that return `Task.CompletedTask`. Overr
 | `OnFailed` | After a failed run (exception that is not `OperationCanceledException`), after failure is persisted |
 | `OnCancelled` | After cancellation (`OperationCanceledException`), after cancellation is persisted |
 
+### Accessing Train Output
+
+`metadata.Output` is always available as serialized JSON in `OnCompleted` hooks, regardless of whether [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save-train-parameters) is configured. When `SaveTrainParameters()` is not configured, the output is serialized in-memory before hooks fire but is not persisted to the database. This means GraphQL subscriptions and custom hooks can always read `metadata.Output` without requiring `SaveTrainParameters()`.
+
 ## ITrainLifecycleHookFactory (Advanced)
 
 ```csharp
@@ -103,8 +107,8 @@ No factory class needed — Trax creates one internally and resolves your hook's
 
 | Hook | Package | Description |
 |------|---------|-------------|
-| `GraphQLSubscriptionHook` | `Trax.Api.GraphQL` | Publishes lifecycle events to GraphQL [subscriptions]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}). Automatically registered by `AddTraxGraphQL()`. |
-| `BroadcastLifecycleHook` | `Trax.Effect` | Publishes lifecycle events to a message bus for cross-process delivery. Automatically registered by [`UseBroadcaster()`]({{ site.baseurl }}{% link sdk-reference/configuration/use-broadcaster.md %}). |
+| `GraphQLSubscriptionHook` | `Trax.Api.GraphQL` | Publishes lifecycle events to GraphQL [subscriptions](/docs/sdk-reference/graphql-api/subscriptions). Automatically registered by `AddTraxGraphQL()`. |
+| `BroadcastLifecycleHook` | `Trax.Effect` | Publishes lifecycle events to a message bus for cross-process delivery. Automatically registered by [`UseBroadcaster()`](/docs/sdk-reference/configuration/use-broadcaster). |
 
 ## Per-Train Lifecycle Hooks
 

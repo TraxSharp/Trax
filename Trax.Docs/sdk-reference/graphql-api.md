@@ -33,12 +33,12 @@ Navigate to the endpoint URL in a browser to open [Banana Cake Pop](https://chil
 
 | Page | Description |
 |------|-------------|
-| [AddTraxGraphQL]({{ site.baseurl }}{% link sdk-reference/graphql-api/add-trax-graphql.md %}) | Registration and endpoint mapping |
-| [TraxQuery & TraxMutation Attributes]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %}) | Opt trains into the typed GraphQL schema with `[TraxQuery]` or `[TraxMutation]` |
-| [Queries]({{ site.baseurl }}{% link sdk-reference/graphql-api/queries.md %}) | `health`, `trains`, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution` |
-| [Mutations]({{ site.baseurl }}{% link sdk-reference/graphql-api/mutations.md %}) | Grouped into `dispatch` (auto-generated train mutations) and `operations` (scheduler control mutations) |
-| [Subscriptions]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) | Real-time WebSocket events for train lifecycle transitions (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`) |
-| [TraxBroadcast Attribute]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-subscription-attribute.md %}) | Opt trains into subscription events with `[TraxBroadcast]` |
+| [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | Registration and endpoint mapping |
+| [TraxQuery & TraxMutation Attributes](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | Opt trains into the typed GraphQL schema with `[TraxQuery]` or `[TraxMutation]` |
+| [Queries](/docs/sdk-reference/graphql-api/queries) | `health`, `trains`, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution` |
+| [Mutations](/docs/sdk-reference/graphql-api/mutations) | Grouped into `dispatch` (auto-generated train mutations) and `operations` (scheduler control mutations) |
+| [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions) | Real-time WebSocket events for train lifecycle transitions (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`) |
+| [TraxBroadcast Attribute](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) | Opt trains into subscription events with `[TraxBroadcast]` |
 
 ## Package
 

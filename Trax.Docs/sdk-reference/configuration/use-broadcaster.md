@@ -8,7 +8,7 @@ nav_order: 12
 
 # UseBroadcaster
 
-Enables cross-process lifecycle event broadcasting. When trains execute on a remote worker process, their lifecycle events (started, completed, failed, cancelled) are published to a message bus and delivered to hub processes — where [GraphQL subscriptions]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) forward them to connected clients.
+Enables cross-process lifecycle event broadcasting. When trains execute on a remote worker process, their lifecycle events (started, completed, failed, cancelled) are published to a message bus and delivered to hub processes — where [GraphQL subscriptions](/docs/sdk-reference/graphql-api/subscriptions) forward them to connected clients.
 
 Without `UseBroadcaster()`, subscriptions only fire for trains that execute in the same process as the GraphQL API. With it, subscriptions work regardless of which process executes the train.
 

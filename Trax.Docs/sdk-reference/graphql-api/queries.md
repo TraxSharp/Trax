@@ -17,7 +17,7 @@ type Query {
 }
 ```
 
-- **`discover`** — auto-generated typed query fields for trains annotated with [`[TraxQuery]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-graphql-attribute.md %})
+- **`discover`** — auto-generated typed query fields for trains annotated with [`[TraxQuery]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
 - **`operations`** — predefined operational queries: health status, registered trains, manifests, manifest groups, and execution history
 
 ## Discover Queries (Auto-Generated)

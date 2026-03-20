@@ -9,6 +9,9 @@ nav_order: 9
 
 By default, the scheduler schedules, dispatches, and executes trains all within the same process. Remote execution lets you separate **where trains are scheduled** from **where they run** — offloading execution to dedicated worker servers, AWS Lambda, ECS tasks, or any other compute.
 
+{: .sdk-references }
+> [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxJobRunner / UseTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)
+
 ## Key Concept
 
 Postgres is always the source of truth. Every deployment model — local, remote, or standalone — connects to the same Postgres database for metadata, manifests, and state. The only thing that changes is **where the train code runs**.
@@ -35,7 +38,7 @@ Two abstraction boundaries control where trains execute:
 |----------------|-------------|
 | `PostgresJobSubmitter` | Inserts into `background_job` table (default when Postgres is configured) |
 | `HttpJobSubmitter` | POSTs to a remote HTTP endpoint (used by `UseRemoteWorkers`) |
-| `SqsJobSubmitter` | Sends to an SQS queue for Lambda consumption (used by [`UseSqsWorkers`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}), requires `Trax.Scheduler.Sqs`) |
+| `SqsJobSubmitter` | Sends to an SQS queue for Lambda consumption (used by [`UseSqsWorkers`](/docs/sdk-reference/scheduler-api/use-sqs-workers), requires `Trax.Scheduler.Sqs`) |
 | `InMemoryJobSubmitter` | Runs inline, synchronously (automatic default when no database provider is configured) |
 | Custom | Implement `IJobSubmitter` and register via `OverrideSubmitter()` |
 
@@ -44,7 +47,7 @@ Two abstraction boundaries control where trains execute:
 | Implementation | What it does |
 |----------------|-------------|
 | `LocalRunExecutor` | Executes in-process via `ITrainBus.RunAsync` (default) |
-| `HttpRunExecutor` | POSTs to a remote HTTP endpoint, blocks until complete (used by [`UseRemoteRun`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %})) |
+| `HttpRunExecutor` | POSTs to a remote HTTP endpoint, blocks until complete (used by [`UseRemoteRun`](/docs/sdk-reference/scheduler-api/use-remote-run)) |
 
 ## Deployment Models
 
@@ -137,7 +140,7 @@ app.UseTraxRunEndpoint("/trax/run");    // synchronous run path
 app.Run();
 ```
 
-The `UseBroadcaster()` call is essential for cross-process subscriptions — without it, the API process has no way to receive lifecycle events from the remote worker. See [UseBroadcaster]({{ site.baseurl }}{% link sdk-reference/configuration/use-broadcaster.md %}) for details.
+The `UseBroadcaster()` call is essential for cross-process subscriptions — without it, the API process has no way to receive lifecycle events from the remote worker. See [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) for details.
 
 **Remote side (AWS Lambda with `Trax.Runner.Lambda`):**
 
@@ -165,7 +168,7 @@ public class Function : TraxLambdaFunction
 }
 ```
 
-The `TraxLambdaFunction` base class handles service provider lifecycle, request routing (`/trax/execute` and `/trax/run`), cancellation from Lambda's remaining time, and error handling. See the [TraxLambdaFunction API reference]({{ site.baseurl }}{% link sdk-reference/scheduler-api/trax-lambda-function.md %}) for details.
+The `TraxLambdaFunction` base class handles service provider lifecycle, request routing (`/trax/execute` and `/trax/run`), cancellation from Lambda's remaining time, and error handling. See the [TraxLambdaFunction API reference](/docs/sdk-reference/scheduler-api/trax-lambda-function) for details.
 
 ```
 ┌──── Scheduler Process ────┐         ┌──── Remote Process ────────────┐
@@ -400,7 +403,7 @@ This keeps Trax focused on scheduling and execution while letting you use whatev
 
 Every metadata record automatically captures which host executed the train — hostname, environment type (Lambda, ECS, Kubernetes, etc.), and instance ID. This works across all deployment models with zero configuration. You can also add custom labels (region, service, team) via the builder API.
 
-See [Host Tracking]({{ site.baseurl }}{% link effect/host-tracking.md %}) for details on auto-detection, custom labels, and querying by host.
+See [Host Tracking](/docs/effect/host-tracking) for details on auto-detection, custom labels, and querying by host.
 
 ## Shared Requirements
 
@@ -550,10 +553,10 @@ When a remote job fails, check these in order:
 
 ## See Also
 
-- [Job Submission]({{ site.baseurl }}{% link scheduler/job-submission.md %}) — architecture of the job submission pipeline
-- [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) — API reference for local worker configuration
-- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — API reference for remote workers (HTTP)
-- [UseSqsWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}) — API reference for SQS workers (Lambda)
-- [UseRemoteRun]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}) — API reference for remote run execution
-- [AddTraxJobRunner]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-job-runner.md %}) — API reference for remote receiver setup
-- [AddTraxWorker]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-worker.md %}) — API reference for standalone worker setup
+- [Job Submission](/docs/scheduler/job-submission) — architecture of the job submission pipeline
+- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) — API reference for local worker configuration
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — API reference for remote workers (HTTP)
+- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) — API reference for SQS workers (Lambda)
+- [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) — API reference for remote run execution
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — API reference for remote receiver setup
+- [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) — API reference for standalone worker setup

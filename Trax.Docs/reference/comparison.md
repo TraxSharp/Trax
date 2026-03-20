@@ -13,7 +13,7 @@ All three run background work in .NET. They solve different problems.
 
 **Hangfire** is a background job processor. Its strength is simplicity — pass a lambda expression, and the method runs in the background with automatic retries, persistence, and a rich monitoring dashboard. Fire-and-forget, delayed, recurring, and continuation jobs are all one-liners.
 
-**Trax** is a layered workflow framework where each package builds on the one below it. You can use just the pipeline engine ([Core]({{ site.baseurl }}{% link core.md %})), add execution logging and DI ([Effect]({{ site.baseurl }}{% link effect.md %})), add decoupled dispatch ([Mediator]({{ site.baseurl }}{% link mediator.md %})), and then add scheduling ([Scheduler]({{ site.baseurl }}{% link scheduler.md %})), an [API]({{ site.baseurl }}{% link api.md %}), or a [Dashboard]({{ site.baseurl }}{% link dashboard.md %})) — stopping at whatever layer solves your problem. Its strength is composable, multi-junction trains with typed inputs, railway error handling, dependency chains between scheduled jobs, and automatic execution tracking. The scheduler is one layer, not the whole system.
+**Trax** is a layered workflow framework where each package builds on the one below it. You can use just the pipeline engine ([Core](/docs/core)), add execution logging and DI ([Effect](/docs/effect)), add decoupled dispatch ([Mediator](/docs/mediator)), and then add scheduling ([Scheduler](/docs/scheduler)), an [API](/docs/api), or a [Dashboard](/docs/dashboard)) — stopping at whatever layer solves your problem. Its strength is composable, multi-junction trains with typed inputs, railway error handling, dependency chains between scheduled jobs, and automatic execution tracking. The scheduler is one layer, not the whole system.
 
 ## Feature Comparison
 
@@ -162,7 +162,7 @@ Hangfire wins on ceremony. You can go from zero to a running background job in f
 
 ## They're Not Mutually Exclusive
 
-Trax can use Hangfire as its execution backend via the [Trax.Scheduler.Hangfire](https://www.nuget.org/packages/Trax.Scheduler.Hangfire/) package. In this configuration, Trax handles manifest management, dependency resolution, and capacity control while Hangfire handles the actual job queuing and worker management. This gives you Hangfire's mature processing infrastructure with Trax's orchestration layer on top.
+Trax uses PostgreSQL-backed local workers by default. The scheduler handles manifest management, dependency resolution, capacity control, and job execution using `FOR UPDATE SKIP LOCKED` for multi-server coordination.
 
 ```csharp
 services.AddTrax(trax => trax
@@ -171,6 +171,5 @@ services.AddTrax(trax => trax
     )
     .AddMediator(assemblies)
     .AddScheduler(scheduler => scheduler
-        .UseHangfire()
         .Schedule<ISyncTrain, SyncInput>("sync", new SyncInput(), Every.Hours(1))));
 ```

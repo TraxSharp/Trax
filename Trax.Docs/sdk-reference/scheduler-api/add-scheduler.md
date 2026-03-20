@@ -80,11 +80,10 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 
 | Method | Description |
 |--------|-------------|
-| [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) | Customizes the built-in PostgreSQL local workers (enabled by default with Postgres) |
-| [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) | Routes specific trains to a remote HTTP endpoint for execution |
-| [UseSqsWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}) | Routes specific trains to an Amazon SQS queue for execution (`Trax.Scheduler.Sqs`) |
-| [UseRemoteRun]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}) | Offloads synchronous `run` execution to a remote endpoint (blocks until complete) |
-| [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire as the execution backend (deprecated) |
+| [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | Customizes the built-in PostgreSQL local workers (enabled by default with Postgres) |
+| [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | Routes specific trains to a remote HTTP endpoint for execution |
+| [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | Routes specific trains to an Amazon SQS queue for execution (`Trax.Scheduler.Sqs`) |
+| [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | Offloads synchronous `run` execution to a remote endpoint (blocks until complete) |
 | `OverrideSubmitter(Action<IServiceCollection>)` | Registers a custom job submitter implementation |
 
 ### Global Options
@@ -94,8 +93,8 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `PollingInterval(TimeSpan)` | interval | 5 seconds | Shorthand — sets both `ManifestManagerPollingInterval` and `JobDispatcherPollingInterval` to the same value |
 | `ManifestManagerPollingInterval(TimeSpan)` | interval | 5 seconds | How often the ManifestManager evaluates manifests and writes to the work queue |
 | `JobDispatcherPollingInterval(TimeSpan)` | interval | 2 seconds | How often the JobDispatcher reads from the work queue and dispatches to the job submitter |
-| `MaxConcurrentDispatch(int)` | maxConcurrent | 1 | Max entries dispatched concurrently per polling cycle. Increase when using `UseRemoteWorkers` to avoid sequential HTTP blocking. See [Parallel Dispatch]({{ site.baseurl }}{% link scheduler/admin-trains/job-dispatcher.md %}#parallel-dispatch) |
-| `MaxDispatchAttempts(int)` | maxAttempts | 5 | Max dispatch attempts before permanently failing a work queue entry. When dispatch fails, the entry is requeued for the next cycle. Set to 0 to disable requeuing (fail immediately). See [Failure Handling]({{ site.baseurl }}{% link scheduler/remote-execution.md %}#failure-handling) |
+| `MaxConcurrentDispatch(int)` | maxConcurrent | 1 | Max entries dispatched concurrently per polling cycle. Increase when using `UseRemoteWorkers` to avoid sequential HTTP blocking. See [Parallel Dispatch](/docs/scheduler/admin-trains/job-dispatcher#parallel-dispatch) |
+| `MaxDispatchAttempts(int)` | maxAttempts | 5 | Max dispatch attempts before permanently failing a work queue entry. When dispatch fails, the entry is requeued for the next cycle. Set to 0 to disable requeuing (fail immediately). See [Failure Handling](/docs/scheduler/remote-execution#failure-handling) |
 | `MaxActiveJobs(int?)` | maxJobs | 10 | Max concurrent active jobs (Pending + InProgress) globally. `null` = unlimited. Per-group limits can also be set from the dashboard on each ManifestGroup |
 | `MaxQueuedJobsPerCycle(int?)` | limit | 100 | Max queued work queue entries loaded per JobDispatcher cycle. Prevents unbounded memory usage when the queue is large. `null` = unlimited. Provides headroom beyond `MaxActiveJobs` for per-group limit skipping |
 | `ExcludeFromMaxActiveJobs<TTrain>()` | — | — | Excludes a train type from the MaxActiveJobs count |
@@ -104,21 +103,21 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `RetryBackoffMultiplier(double)` | multiplier | 2.0 | Exponential backoff multiplier. Set to 1.0 for constant delay |
 | `MaxRetryDelay(TimeSpan)` | maxDelay | 1 hour | Caps retry delay to prevent unbounded growth |
 | `DefaultJobTimeout(TimeSpan)` | timeout | 20 minutes | Timeout after which a running job is considered stuck |
-| `DefaultMisfirePolicy(MisfirePolicy)` | policy | `FireOnceNow` | Default [misfire policy]({{ site.baseurl }}{% link scheduler/scheduling-options.md %}#misfire-policies) for manifests that don't specify one |
+| `DefaultMisfirePolicy(MisfirePolicy)` | policy | `FireOnceNow` | Default [misfire policy](/docs/scheduler/scheduling-options#misfire-policies) for manifests that don't specify one |
 | `DefaultMisfireThreshold(TimeSpan)` | threshold | 60 seconds | Grace period before misfire policies take effect. If a manifest is overdue by less than this, it fires normally |
 | `RecoverStuckJobsOnStartup(bool)` | recover | `true` | Whether to auto-recover stuck jobs on startup |
 | `StalePendingTimeout(TimeSpan)` | timeout | 20 minutes | Timeout after which a Pending job that was never picked up is automatically failed |
-| `PruneOrphanedManifests(bool)` | prune | `true` | Whether to [delete manifests]({{ site.baseurl }}{% link scheduler/orphan-manifest-cleanup.md %}) from the database that are no longer defined in the startup configuration. Disable if you create manifests dynamically at runtime via `ITraxScheduler` |
+| `PruneOrphanedManifests(bool)` | prune | `true` | Whether to [delete manifests](/docs/scheduler/orphan-manifest-cleanup) from the database that are no longer defined in the startup configuration. Disable if you create manifests dynamically at runtime via `ITraxScheduler` |
 | `DependentPriorityBoost(int)` | boost | 16 | Priority boost added to dependent train work queue entries at dispatch time. Range: 0-31. Ensures dependent trains are dispatched before non-dependent ones by default |
 
 ### Startup Schedules
 
 | Method | Description |
 |--------|-------------|
-| [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}) | Schedules a single recurring train (seeded on startup) |
-| [ScheduleMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %}) | Batch-schedules manifests from a collection |
-| [Then / ThenMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %}) | Schedules dependent trains |
-| [AddMetadataCleanup]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-metadata-cleanup.md %}) | Enables automatic metadata purging |
+| [Schedule](/docs/sdk-reference/scheduler-api/schedule) | Schedules a single recurring train (seeded on startup) |
+| [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | Batch-schedules manifests from a collection |
+| [Then / ThenMany](/docs/sdk-reference/scheduler-api/dependent-scheduling) | Schedules dependent trains |
+| [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Enables automatic metadata purging |
 
 ## Remarks
 
@@ -128,4 +127,4 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 - With `UseInMemory()`, `JobDispatcherPollingService` and `MetadataCleanupPollingService` are not registered. The `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that dispatches jobs inline via `InMemoryJobSubmitter`.
 - Manifests declared via `Schedule`/`ScheduleMany` are not created immediately — they are seeded on application startup by the `SchedulerStartupService`.
 - Manifests declared via `Schedule`/`ThenInclude`/`Include` get a ManifestGroup based on their `groupId` parameter (defaults to externalId). Per-group dispatch controls (MaxActiveJobs, Priority, IsEnabled) are configured from the dashboard.
-- At build time, the scheduler validates that ManifestGroup dependencies form a DAG (no circular dependencies). If a cycle is detected, `AddScheduler` throws `InvalidOperationException` with the groups involved. See [Dependent Trains — Cycle Detection]({{ site.baseurl }}{% link scheduler/dependent-trains.md %}#cycle-detection).
+- At build time, the scheduler validates that ManifestGroup dependencies form a DAG (no circular dependencies). If a cycle is detected, `AddScheduler` throws `InvalidOperationException` with the groups involved. See [Dependent Trains — Cycle Detection](/docs/scheduler/dependent-trains#cycle-detection).

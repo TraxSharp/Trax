@@ -160,7 +160,7 @@ This dispatches up to 10 entries concurrently within a single polling cycle, bou
 
 Keep `MaxConcurrentDispatch` well below your database connection pool size (default Npgsql pool: 100), since each concurrent dispatch opens its own DI scope and database connection.
 
-See [Parallel Dispatch]({{ site.baseurl }}{% link scheduler/admin-trains/job-dispatcher.md %}#parallel-dispatch) for details.
+See [Parallel Dispatch](/docs/scheduler/admin-trains/job-dispatcher#parallel-dispatch) for details.
 
 ## Routing Precedence
 
@@ -197,7 +197,7 @@ dotnet add package Trax.Scheduler
 
 ## See Also
 
-- [Remote Execution]({{ site.baseurl }}{% link scheduler/remote-execution.md %}) — architecture overview and deployment models
-- [AddTraxJobRunner]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-job-runner.md %}) — setting up the remote receiver endpoint
-- [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) — customizing the local (default) execution backend
-- [UseSqsWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}) — SQS-based per-train dispatch
+- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — setting up the remote receiver endpoint
+- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) — customizing the local (default) execution backend
+- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) — SQS-based per-train dispatch

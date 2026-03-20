@@ -8,9 +8,12 @@ nav_order: 1
 
 # Data Persistence
 
-The data persistence effect stores a `Metadata` record for every train execution. Each record captures the train name, state, timing, inputs/outputs, and failure details. See [Metadata]({{ site.baseurl }}{% link effect/metadata.md %}) for the full field breakdown.
+The data persistence effect stores a `Metadata` record for every train execution. Each record captures the train name, state, timing, inputs/outputs, and failure details. See [Metadata](/docs/effect/metadata) for the full field breakdown.
 
 Two backends are available: PostgreSQL for production and InMemory for testing. Both implement the same `IDataContext` interface, so your train code doesn't change between them.
+
+{: .sdk-references }
+> [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging)
 
 ## PostgreSQL
 
@@ -25,8 +28,6 @@ services.AddTrax(trax => trax
     )
 );
 ```
-
-*SDK Reference: [UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %})*
 
 On first startup, the Postgres provider runs automatic migrations to create the `trax` schema and its tables (`metadata`, `logs`, `manifests`, `dead_letters`). Subsequent startups apply any pending migrations.
 
@@ -46,7 +47,7 @@ Every `ServiceTrain` execution creates a `Metadata` row:
 | `FailureException` | Exception type |
 | `FailureReason` | Error message |
 | `StackTrace` | Full stack trace on failure |
-| `ParentId` | Links to parent train for [nested trains]({{ site.baseurl }}{% link mediator.md %}#nested-trains) |
+| `ParentId` | Links to parent train for [nested trains](/docs/mediator#nested-trains) |
 | `ManifestId` | Links to scheduling manifest |
 
 Without the [Parameter Effect](parameter-effect.md), the `Input` and `Output` columns are null — metadata is still persisted, but without the serialized request/response data.
@@ -64,8 +65,6 @@ services.AddTrax(trax => trax
     )
 );
 ```
-
-*SDK Reference: [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})*
 
 Uses Entity Framework Core's in-memory provider. No connection string, no migrations, no external dependencies. Data is lost when the process exits.
 
@@ -112,4 +111,3 @@ Log levels can also be changed at runtime via the Dashboard's Server Settings pa
 
 Blacklist entries support exact matches and wildcard patterns.
 
-*SDK Reference: [AddDataContextLogging]({{ site.baseurl }}{% link sdk-reference/configuration/add-effect-data-context-logging.md %})*

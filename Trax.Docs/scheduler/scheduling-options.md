@@ -7,13 +7,14 @@ nav_order: 2
 
 # Scheduling Options
 
+{: .sdk-references }
+> [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [TriggerAsync / DisableAsync / EnableAsync / CancelAsync](/docs/sdk-reference/scheduler-api/manifest-management)
+
 ## Bulk Scheduling
 
 ### Startup Configuration: ScheduleMany
 
 For static bulk jobs, use the builder-time `ScheduleMany` during DI configuration. No async startup code or service resolution needed. The **name-based overload** derives `groupId`, `prunePrefix`, and the external ID prefix from a single `name` parameter. The **explicit overload** gives full control over each independently.
-
-*SDK Reference: [ScheduleMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %}) — all overloads, parameter tables, and examples including pruning.*
 
 The builder captures the manifests and seeds them when the `BackgroundService` starts—same upsert semantics as `Schedule`.
 
@@ -49,15 +50,11 @@ services.AddTrax(trax => trax
 );
 ```
 
-*SDK Reference: [Schedule]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}), [ScheduleMany]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %})*
-
 The dashboard's **Manifest Groups** page shows each group's settings and aggregate execution stats, which is useful when a logical operation is split across many manifests (e.g., syncing 1000 table slices).
 
 ### Runtime: ScheduleManyAsync
 
 Use `ScheduleManyAsync` when the set of jobs is determined at runtime (loaded from a database, config file, or external API). It creates multiple manifests in a single transaction—if any fails, the entire batch rolls back. Both startup and runtime variants accept the same `ScheduleOptions` builder and use upsert semantics.
-
-*SDK Reference: [ScheduleManyAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %})*
 
 ### Configuration Per Item
 
@@ -81,8 +78,6 @@ foreach (var config in tableConfigs)
         options => options.MaxRetries(config.Retries));
 }
 ```
-
-*SDK Reference: [ScheduleAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}), [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*
 
 ### Multi-Dimensional Bulk Jobs
 
@@ -109,15 +104,11 @@ await scheduler.ScheduleManyAsync<ISyncTableTrain, SyncTableInput, (string Table
     Every.Minutes(5));
 ```
 
-*SDK Reference: [ScheduleManyAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %})*
-
 ### Pruning Stale Manifests
 
 When the source collection shrinks between deployments—tables removed, slices reduced—old manifests stick around in the database. The name-based overload handles this automatically (`prunePrefix: "{name}-"`). With the explicit overload, specify `prunePrefix` manually. After upserting the batch, any existing manifests whose `ExternalId` starts with the prefix but weren't in the current batch are deleted—keeping the manifest table in sync with your source data.
 
 Pruning runs in a **separate database context** after the main transaction commits. This means a prune failure (e.g., a transient database error) does not roll back successfully upserted manifests. The failure is logged as a warning and retried on the next startup or scheduling cycle.
-
-*SDK Reference: [ScheduleMany — prunePrefix]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %})*
 
 ## Per-Group Dispatch Controls
 
@@ -156,8 +147,6 @@ scheduler.Schedule<IMyTrain>(
 
 `TriggerAsync` accepts an optional `TimeSpan delay` parameter to schedule a delayed execution of an existing manifest. `ScheduleOnceAsync` creates a new one-off manifest with `ScheduleType.Once` that fires after a delay and auto-disables on success. See [Delayed / One-Off Jobs](delayed-jobs.md) for usage patterns.
 
-*SDK Reference: [DisableAsync / EnableAsync / TriggerAsync / CancelAsync / CancelGroupAsync / ScheduleOnceAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}), [ScheduleDependentAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %})*
-
 ## Manifest Options
 
 Configure per-job settings via the `ScheduleOptions` fluent builder:
@@ -185,8 +174,6 @@ scheduler
 ```
 
 See [Dormant Dependents](dependent-trains.md#dormant-dependents) for full details on registration and runtime activation.
-
-*SDK Reference: [ScheduleAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}), [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*
 
 ## Schedule Types
 
@@ -221,8 +208,6 @@ Multiple exclusions can be combined — if ANY matches, the manifest is skipped.
 Four built-in exclusion types: `DaysOfWeek`, `Dates`, `DateRange`, `TimeWindow` (supports midnight crossover).
 
 See [Exclusion Windows](exclusions.md) for full details, examples, and misfire interaction.
-
-*SDK Reference: [ScheduleOptions — Exclude()]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*
 
 ## Schedule Variance
 
@@ -274,8 +259,6 @@ When `NextScheduledRun` is null (first run, or variance not configured), the sch
 
 - **Exclusion windows**: Exclusions are checked after `NextScheduledRun` is due — if the current time falls in an exclusion window, the job is skipped even if `NextScheduledRun` is in the past.
 - **Misfire policies**: Work the same as without variance. If a job with `DoNothing` policy misses its `NextScheduledRun` by more than the misfire threshold, it's skipped. `FireOnceNow` fires immediately regardless.
-
-*SDK Reference: [Schedule — WithVariance]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#schedule-record), [ScheduleOptions — Variance()]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*
 
 ## Misfire Policies
 
@@ -336,8 +319,6 @@ For cron-based schedules, the scheduler uses precise next-occurrence calculation
 
 Misfire policies only apply to `Cron` and `Interval` schedule types. Dependent manifests fire based on parent completion, not time — misfire policies are ignored for them.
 
-*SDK Reference: [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}), [ScheduleOptions]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}#scheduleoptions)*
-
 ## Timeout Enforcement
 
 The ManifestManager actively cancels jobs that exceed their configured timeout. Each polling cycle, the `CancelTimedOutJobsJunction` checks all InProgress metadata and cancels any where the elapsed time exceeds the manifest's `TimeoutSeconds` (or the global `DefaultJobTimeout`).
@@ -359,7 +340,7 @@ await scheduler.ScheduleAsync<IMyTrain, MyInput, Unit>(
 
 Timed-out jobs are cancelled using the same dual-layer mechanism as manual cancellation: `CancellationRequested = true` in the database (cross-server) plus `ICancellationRegistry.TryCancel()` for same-server instant cancel. The job transitions to `TrainState.Cancelled` — it is **not retried** and does **not create a dead letter**. This is distinct from dead-lettering, which handles jobs that have failed repeatedly.
 
-*See also: [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %})*
+*See also: [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens)*
 
 ## Configuration Options
 
@@ -372,4 +353,3 @@ Key options to know:
 - **`DefaultMisfirePolicy`** (default: `FireOnceNow`) — how missed runs are handled
 - **`DefaultMisfireThreshold`** (default: 60 seconds) — grace period for misfire detection
 
-*SDK Reference: [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}) — full options table with all defaults including retry backoff, timeouts, and stuck job recovery.*

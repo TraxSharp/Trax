@@ -35,6 +35,7 @@ public SchedulerConfigurationBuilder ConfigureLocalWorkers(
 | `WorkerCount` | `int` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs |
 | `PollingInterval` | `TimeSpan` | 1 second | How often idle workers poll for new jobs |
 | `VisibilityTimeout` | `TimeSpan` | 30 minutes | How long a claimed job stays invisible before another worker can reclaim it (crash recovery) |
+| `BatchSize` | `int` | `1` | Number of jobs each worker claims per poll cycle |
 | `ShutdownTimeout` | `TimeSpan` | 30 seconds | Grace period for in-flight jobs during shutdown |
 
 ## Examples
@@ -132,6 +133,6 @@ dotnet add package Trax.Scheduler
 
 ## See Also
 
-- [Job Submission Architecture]({{ site.baseurl }}{% link scheduler/job-submission.md %}) — detailed architecture, crash recovery, comparison with Hangfire
-- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — per-train HTTP remote dispatch
-- [UseSqsWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}) — per-train SQS dispatch
+- [Job Submission Architecture](/docs/scheduler/job-submission) — detailed architecture, crash recovery, comparison with Hangfire
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — per-train HTTP remote dispatch
+- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) — per-train SQS dispatch

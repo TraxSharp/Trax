@@ -14,6 +14,9 @@ section: Packages
 dotnet add package Trax.Core
 ```
 
+{: .sdk-references }
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [Run / RunEither](/docs/sdk-reference/train-methods/run)
+
 ## What You Get
 
 - **Trains** — typed pipelines that carry data through a sequence of junctions

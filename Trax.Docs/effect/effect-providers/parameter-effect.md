@@ -10,6 +10,9 @@ nav_order: 3
 
 The parameter effect serializes train inputs and outputs to JSON and stores them on the `Metadata` record. Without this provider, the `Metadata.Input` and `Metadata.Output` columns are null — you'll know a train ran and whether it succeeded, but not what data it processed.
 
+{: .sdk-references }
+> [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters)
+
 ## Registration
 
 ```bash
@@ -24,8 +27,6 @@ services.AddTrax(trax => trax
     )
 );
 ```
-
-*SDK Reference: [SaveTrainParameters]({{ site.baseurl }}{% link sdk-reference/configuration/save-train-parameters.md %})*
 
 You can pass custom serialization options:
 
@@ -62,7 +63,7 @@ By default, both inputs and outputs are serialized. You can control this with th
 | `SaveInputs` | `bool` | `true` | Whether to serialize train input parameters to `Metadata.Input` |
 | `SaveOutputs` | `bool` | `true` | Whether to serialize train output parameters to `Metadata.Output` |
 
-The configuration is registered as a singleton and can be modified at runtime via the [Dashboard Effects page]({{ site.baseurl }}{% link dashboard.md %}#effects-page). Changes take effect on the next train execution scope.
+The configuration is registered as a singleton and can be modified at runtime via the [Dashboard Effects page](/docs/dashboard#effects-page). Changes take effect on the next train execution scope.
 
 ## How It Works
 
@@ -72,7 +73,7 @@ The parameter effect only cares about `Metadata` objects — it ignores other tr
 2. If `SaveInputs` is enabled, it calls `metadata.GetInputObject()`, serializes it to JSON, and assigns it to `metadata.Input`.
 3. If `SaveOutputs` is enabled, it calls `metadata.GetOutputObject()`, serializes it to JSON, and assigns it to `metadata.Output`.
 
-These fields are then persisted by whatever data provider you have registered (Postgres or InMemory). When you later inspect train executions — through the [Dashboard]({{ site.baseurl }}{% link dashboard.md %}), direct database queries, or the metadata API — you can see exactly what went in and what came out.
+These fields are then persisted by whatever data provider you have registered (Postgres or InMemory). When you later inspect train executions — through the [Dashboard](/docs/dashboard), direct database queries, or the metadata API — you can see exactly what went in and what came out.
 
 On disposal, the provider clears the input/output object references from metadata to release memory.
 
@@ -84,4 +85,4 @@ This effect populates fields on `Metadata`, but it doesn't persist the metadata 
 
 - **Production** — When you need to query or debug train executions after the fact. "What input caused this failure?"
 - **Audit trails** — The serialized input/output gives you a record of what data each train processed.
-- **Dashboard** — The [Dashboard]({{ site.baseurl }}{% link dashboard.md %}) displays `Input` and `Output` in its metadata detail view. Without this provider, those fields show as empty.
+- **Dashboard** — The [Dashboard](/docs/dashboard) displays `Input` and `Output` in its metadata detail view. Without this provider, those fields show as empty.

@@ -10,6 +10,9 @@ nav_order: 2
 
 The JobDispatcher is the single gateway between the work queue and the job submitter. It reads `Queued` entries, enforces both global and per-group `MaxActiveJobs` limits, creates Metadata records, and enqueues to the configured `IJobSubmitter` implementation.
 
+{: .sdk-references }
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
+
 ## Chain
 
 ```
@@ -89,8 +92,6 @@ When `MaxConcurrentDispatch > 1`, the junction uses a `SemaphoreSlim` to bound c
 - Priority ordering within a cycle is best-effort when dispatching in parallel — entries are *started* in priority order, but complete in arbitrary order. This matches the existing behavior in multi-server deployments.
 - Error handling is per-entry: if one dispatch fails (HTTP timeout, network error), the others continue. Failed dispatches mark their Metadata as `Failed` immediately, same as the sequential path.
 
-*SDK Reference: [AddScheduler — MaxConcurrentDispatch]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %})*
-
 ## MaxActiveJobs Enforcement
 
 Capacity is enforced at two independent levels: global and per-group.
@@ -109,8 +110,6 @@ Setting `MaxActiveJobs` to `null` disables the global check entirely—all queue
     .ExcludeFromMaxActiveJobs<IMyInternalTrain>() // don't count these
 )
 ```
-
-*SDK Reference: [AddScheduler — MaxActiveJobs]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %})*
 
 ### Per-Group MaxActiveJobs
 

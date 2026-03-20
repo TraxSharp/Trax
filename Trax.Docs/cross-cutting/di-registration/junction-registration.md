@@ -8,7 +8,10 @@ nav_order: 2
 
 # Junction Registration
 
-Extension methods for registering Trax.Core junctions with `[Inject]` property injection support. These are **aliases** for the corresponding [Train Registration]({{ site.baseurl }}{% link cross-cutting/di-registration/train-registration.md %}) methods — the injection behavior is identical.
+Extension methods for registering Trax.Core junctions with `[Inject]` property injection support. These are **aliases** for the corresponding [Train Registration](/docs/cross-cutting/di-registration/train-registration) methods — the injection behavior is identical.
+
+{: .sdk-references }
+> [Chain](/docs/sdk-reference/train-methods/chain)
 
 ## Signatures
 

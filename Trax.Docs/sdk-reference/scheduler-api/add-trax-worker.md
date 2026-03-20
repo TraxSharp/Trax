@@ -34,7 +34,7 @@ public static IServiceCollection AddTraxWorker(
 | `VisibilityTimeout` | `TimeSpan` | 30 minutes | How long a claimed job stays invisible before another worker can reclaim it (crash recovery) |
 | `ShutdownTimeout` | `TimeSpan` | 30 seconds | Grace period for in-flight jobs during shutdown |
 
-These are the same options used by [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}).
+These are the same options used by [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers).
 
 ## Examples
 
@@ -122,6 +122,6 @@ dotnet add package Trax.Scheduler
 
 ## See Also
 
-- [Remote Execution]({{ site.baseurl }}{% link scheduler/remote-execution.md %}) — architecture overview and deployment models
-- [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) — customizing local workers within the scheduler process
-- [AddTraxJobRunner]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-job-runner.md %}) — push-based alternative (HTTP endpoint)
+- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
+- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) — customizing local workers within the scheduler process
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — push-based alternative (HTTP endpoint)

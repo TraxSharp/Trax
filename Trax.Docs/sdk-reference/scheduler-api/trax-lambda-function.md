@@ -170,6 +170,6 @@ To minimize cold start time:
 
 ## See Also
 
-- [Remote Execution]({{ site.baseurl }}{% link scheduler/remote-execution.md %}) — architecture overview and deployment models
-- [AddTraxJobRunner]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-job-runner.md %}) — what `AddTraxJobRunner()` registers (called automatically by the base class)
-- [UseSqsWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-sqs-workers.md %}) — alternative: SQS-triggered Lambda (uses `SqsJobRunnerHandler` instead)
+- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — what `AddTraxJobRunner()` registers (called automatically by the base class)
+- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) — alternative: SQS-triggered Lambda (uses `SqsJobRunnerHandler` instead)

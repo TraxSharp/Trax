@@ -10,6 +10,9 @@ has_children: true
 
 The scheduler runs four internal trains to manage the job lifecycle. They're registered automatically when you call `AddScheduler`—you never instantiate them yourself. They're excluded from `MaxActiveJobs` counts and filtered out of dashboard statistics by default.
 
+{: .sdk-references }
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup)
+
 ```
 AdminTrains.Types:
   - ManifestManagerTrain
@@ -75,4 +78,3 @@ Administrative trains are excluded from the active job count by default. If you 
 )
 ```
 
-*SDK Reference: [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}), [AddMetadataCleanup]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-metadata-cleanup.md %})*

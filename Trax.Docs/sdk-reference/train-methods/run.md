@@ -93,5 +93,5 @@ During junction execution, the train's `CancellationToken` is automatically prop
 ## Remarks
 
 - `RunEither` is useful when you want functional-style error handling without try/catch. It pairs naturally with LanguageExt's `Match`, `Map`, `Bind`, etc.
-- In most applications, trains are executed through `ITrainBus.RunAsync` (which calls `Run` internally) rather than calling `Run` directly. See [TrainBus]({{ site.baseurl }}{% link sdk-reference/mediator-api/train-bus.md %}).
-- The `cancellationToken` parameter stores the token before calling `RunInternal`. All junctions in the chain then receive the token automatically. See [Cancellation Tokens]({{ site.baseurl }}{% link cross-cutting/cancellation-tokens.md %}) for details on how cancellation propagates through the pipeline.
+- In most applications, trains are executed through `ITrainBus.RunAsync` (which calls `Run` internally) rather than calling `Run` directly. See [TrainBus](/docs/sdk-reference/mediator-api/train-bus).
+- The `cancellationToken` parameter stores the token before calling `RunInternal`. All junctions in the chain then receive the token automatically. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) for details on how cancellation propagates through the pipeline.

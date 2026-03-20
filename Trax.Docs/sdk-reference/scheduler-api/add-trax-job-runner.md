@@ -139,7 +139,7 @@ public class Function : TraxLambdaFunction
 }
 ```
 
-See the [TraxLambdaFunction API reference]({{ site.baseurl }}{% link sdk-reference/scheduler-api/trax-lambda-function.md %}) for details.
+See the [TraxLambdaFunction API reference](/docs/sdk-reference/scheduler-api/trax-lambda-function) for details.
 
 ## What It Registers
 
@@ -171,7 +171,7 @@ Maps a `POST` endpoint at the specified route that:
 
 ### UseTraxRunEndpoint
 
-Maps a `POST` endpoint at the specified route that handles synchronous run requests from [`UseRemoteRun()`]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}):
+Maps a `POST` endpoint at the specified route that handles synchronous run requests from [`UseRemoteRun()`](/docs/sdk-reference/scheduler-api/use-remote-run):
 
 1. Reads a `RemoteRunRequest` from the request body (contains train name and input JSON)
 2. Resolves `ITrainExecutionService` and calls `RunAsync(trainName, inputJson)`
@@ -195,7 +195,7 @@ dotnet add package Trax.Scheduler
 
 ## See Also
 
-- [Remote Execution]({{ site.baseurl }}{% link scheduler/remote-execution.md %}) — architecture overview and deployment models
-- [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) — scheduler-side configuration for HTTP dispatch (queue path)
-- [UseRemoteRun]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-run.md %}) — scheduler-side configuration for remote run execution
-- [AddTraxWorker]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-trax-worker.md %}) — standalone worker (poll-based alternative)
+- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — scheduler-side configuration for HTTP dispatch (queue path)
+- [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) — scheduler-side configuration for remote run execution
+- [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) — standalone worker (poll-based alternative)

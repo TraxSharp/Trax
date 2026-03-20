@@ -12,6 +12,9 @@ The JSON effect tracks model changes by comparing JSON snapshots. When a train c
 
 This is a development debugging tool. It doesn't persist anything — it writes to your configured `ILogger`.
 
+{: .sdk-references }
+> [AddJson](/docs/sdk-reference/configuration/add-json-effect)
+
 ## Registration
 
 ```bash
@@ -25,8 +28,6 @@ services.AddTrax(trax => trax
     )
 );
 ```
-
-*SDK Reference: [AddJson]({{ site.baseurl }}{% link sdk-reference/configuration/add-json-effect.md %})*
 
 No configuration required. The provider uses the JSON serialization options from `ITraxEffectConfiguration` and logs at the level configured there.
 

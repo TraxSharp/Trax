@@ -8,7 +8,10 @@ has_children: true
 
 # Configuring Effect Providers
 
-Effect providers handle side effects as a train runs — database writes, logging, serialization. Each provider is independent: add or remove any of them without changing your train code. For the conceptual background, see [Effect overview]({{ site.baseurl }}{% link effect.md %}).
+Effect providers handle side effects as a train runs — database writes, logging, serialization. Each provider is independent: add or remove any of them without changing your train code. For the conceptual background, see [Effect overview](/docs/effect).
+
+{: .sdk-references }
+> [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
 
 ## Database Persistence (Postgres or InMemory)
 
@@ -29,8 +32,6 @@ services.AddTrax(trax => trax
     )
 );
 ```
-
-*SDK Reference: [UsePostgres]({{ site.baseurl }}{% link sdk-reference/configuration/add-postgres-effect.md %}), [UseInMemory]({{ site.baseurl }}{% link sdk-reference/configuration/add-in-memory-effect.md %})*
 
 This persists a `Metadata` record for each train execution containing:
 - Train name and state (Pending -> InProgress -> Completed/Failed)
@@ -53,8 +54,6 @@ services.AddTrax(trax => trax
 );
 ```
 
-*SDK Reference: [AddJson]({{ site.baseurl }}{% link sdk-reference/configuration/add-json-effect.md %})*
-
 This doesn't persist anything — it just logs. Useful for seeing what's happening without setting up a database.
 
 See [JSON Effect](effect-providers/json-effect.md) for how change detection works.
@@ -72,8 +71,6 @@ services.AddTrax(trax => trax
 );
 ```
 
-*SDK Reference: [SaveTrainParameters]({{ site.baseurl }}{% link sdk-reference/configuration/save-train-parameters.md %})*
-
 Without this, the `Input` and `Output` columns in `Metadata` are null. With it, they contain JSON-serialized versions of your request and response objects. You can control which parameters are saved:
 
 ```csharp
@@ -84,7 +81,7 @@ Without this, the `Input` and `Output` columns in `Metadata` are null. With it, 
 })
 ```
 
-This configuration can also be changed at runtime from the dashboard's [Effects page]({{ site.baseurl }}{% link dashboard.md %}#effects-page).
+This configuration can also be changed at runtime from the dashboard's [Effects page](/docs/dashboard#effects-page).
 
 See [Parameter Effect](effect-providers/parameter-effect.md) for details, custom serialization options, and configuration properties.
 
@@ -100,11 +97,9 @@ services.AddTrax(trax => trax
 );
 ```
 
-*SDK Reference: [AddJunctionLogger]({{ site.baseurl }}{% link sdk-reference/configuration/add-junction-logger.md %})*
-
 This hooks into `EffectJunction` (not base `Junction`) lifecycle events. Before and after each junction runs, it logs structured `JunctionMetadata` containing the junction name, input/output types, timing, and Railway state (`Right`/`Left`). When `serializeJunctionData` is `true`, the junction's output is also serialized to JSON in the log entry.
 
-Requires junctions to inherit from `EffectJunction<TIn, TOut>` instead of `Junction<TIn, TOut>`. See [EffectJunction vs Junction]({{ site.baseurl }}{% link core/trains-and-junctions.md %}#effectjunction-vs-junction).
+Requires junctions to inherit from `EffectJunction<TIn, TOut>` instead of `Junction<TIn, TOut>`. See [EffectJunction vs Junction](/docs/core/trains-and-junctions#effectjunction-vs-junction).
 
 See [Junction Logger](effect-providers/junction-logger.md) for the full JunctionMetadata field reference.
 
@@ -119,8 +114,6 @@ services.AddTrax(trax => trax
     )
 );
 ```
-
-*SDK Reference: [AddJunctionProgress]({{ site.baseurl }}{% link sdk-reference/configuration/add-junction-progress.md %})*
 
 This registers two junction-level effect providers:
 
@@ -143,11 +136,9 @@ services.AddTrax(trax => trax
 );
 ```
 
-*SDK Reference: [AddLifecycleHook]({{ site.baseurl }}{% link sdk-reference/configuration/add-lifecycle-hook.md %})*
-
 Lifecycle hooks implement `ITrainLifecycleHook` and fire at four points: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. Unlike effect providers, hook exceptions are **caught and logged, never propagated** — a failing Slack webhook will never cause a train to fail.
 
-The `Trax.Api.GraphQL` package includes a built-in hook (`GraphQLSubscriptionHook`) that publishes lifecycle events to [GraphQL subscriptions]({{ site.baseurl }}{% link sdk-reference/graphql-api/subscriptions.md %}) over WebSocket. It's automatically registered by `AddTraxGraphQL()`. Only trains decorated with [`[TraxBroadcast]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-subscription-attribute.md %}) have their events published.
+The `Trax.Api.GraphQL` package includes a built-in hook (`GraphQLSubscriptionHook`) that publishes lifecycle events to [GraphQL subscriptions](/docs/sdk-reference/graphql-api/subscriptions) over WebSocket. It's automatically registered by `AddTraxGraphQL()`. Only trains decorated with [`[TraxBroadcast]`](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) have their events published.
 
 ## Combining Providers
 

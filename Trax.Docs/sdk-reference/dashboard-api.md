@@ -29,6 +29,6 @@ app.UseTraxDashboard();
 
 | Page | Description |
 |------|-------------|
-| [AddTraxDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/add-trax-dashboard.md %}) | Registers dashboard services (Blazor, Radzen, train discovery) |
-| [UseTraxDashboard]({{ site.baseurl }}{% link sdk-reference/dashboard-api/use-trax-dashboard.md %}) | Maps the dashboard Blazor components at a route prefix |
-| [DashboardOptions]({{ site.baseurl }}{% link sdk-reference/dashboard-api/dashboard-options.md %}) | Configuration options for route prefix, title, and environment |
+| [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | Registers dashboard services (Blazor, Radzen, train discovery) |
+| [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | Maps the dashboard Blazor components at a route prefix |
+| [DashboardOptions](/docs/sdk-reference/dashboard-api/dashboard-options) | Configuration options for route prefix, title, and environment |

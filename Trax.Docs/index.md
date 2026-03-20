@@ -8,7 +8,7 @@ nav_order: 1
 
 Trax is a .NET framework for structuring business logic as typed pipelines. Each pipeline is a sequence of junctions where every junction has one job, typed input and output, and errors short-circuit automatically. Your configuration lives in `Program.cs`, your logic lives in pipelines.
 
-New here? Start with the [Getting Started]({{ site.baseurl }}{% link getting-started.md %}) guide.
+New here? Start with the [Getting Started](/docs/getting-started) guide.
 
 ## The vocabulary
 
@@ -32,15 +32,15 @@ Each package adds one layer of capability. Stop at whatever layer solves your pr
 
 | Layer | What it adds |
 |-------|-------------|
-| [**Core**]({{ site.baseurl }}{% link core.md %}) | Typed pipelines, error propagation, compile-time analyzer |
-| [**Effect**]({{ site.baseurl }}{% link effect.md %}) | Execution metadata, dependency injection, pluggable effect providers |
-| [**Mediator**]({{ site.baseurl }}{% link mediator.md %}) | Decoupled dispatch — route by input type instead of direct injection |
-| [**Scheduling**]({{ site.baseurl }}{% link scheduler.md %}) | Cron/interval scheduling, retries, dead-letter handling, job dependencies |
-| [**API**]({{ site.baseurl }}{% link api.md %}) | Auto-generated GraphQL via HotChocolate |
-| [**Dashboard**]({{ site.baseurl }}{% link dashboard.md %}) | Blazor monitoring UI that mounts into your existing app |
+| [**Core**](/docs/core) | Typed pipelines, error propagation, compile-time analyzer |
+| [**Effect**](/docs/effect) | Execution metadata, dependency injection, pluggable effect providers |
+| [**Mediator**](/docs/mediator) | Decoupled dispatch — route by input type instead of direct injection |
+| [**Scheduling**](/docs/scheduler) | Cron/interval scheduling, retries, dead-letter handling, job dependencies |
+| [**API**](/docs/api) | Auto-generated GraphQL via HotChocolate |
+| [**Dashboard**](/docs/dashboard) | Blazor monitoring UI that mounts into your existing app |
 
 ## Where to go
 
-- [**Getting Started**]({{ site.baseurl }}{% link getting-started.md %}) — hands-on code from Core-only to full stack
-- [**Samples & Deployment**]({{ site.baseurl }}{% link samples.md %}) — project structure and deployment topologies
-- [**SDK Reference**]({{ site.baseurl }}{% link sdk-reference.md %}) — method-level documentation for every public API
+- [**Getting Started**](/docs/getting-started) — hands-on code from Core-only to full stack
+- [**Samples & Deployment**](/docs/samples) — project structure and deployment topologies
+- [**SDK Reference**](/docs/sdk-reference) — method-level documentation for every public API

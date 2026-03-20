@@ -14,6 +14,9 @@ section: Packages
 dotnet add package Trax.Mediator
 ```
 
+{: .sdk-references }
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
+
 ## The Problem
 
 Without the mediator, controllers inject each train directly:
@@ -63,7 +66,7 @@ builder.Services.AddTrax(trax => trax
 );
 ```
 
-Each input type must map to exactly one train — duplicates cause a startup exception.
+Each input type maps to exactly one train. If two trains accept the same `TIn`, the first registration wins — the duplicate is silently skipped. This means `TrainBus.RunAsync` always resolves to a single train for a given input type. If you need multiple trains that share an input type, inject them directly by interface instead of dispatching through the bus.
 
 ## Nested Trains
 

@@ -48,7 +48,6 @@ public SchedulerConfigurationBuilder AddMetadataCleanup(
 
 ```csharp
 .AddScheduler(scheduler => scheduler
-    .UseHangfire(connectionString)
     .AddMetadataCleanup()  // Cleans ManifestManager + MetadataCleanup metadata
 )
 ```
@@ -57,7 +56,6 @@ public SchedulerConfigurationBuilder AddMetadataCleanup(
 
 ```csharp
 .AddScheduler(scheduler => scheduler
-    .UseHangfire(connectionString)
     .AddMetadataCleanup(cleanup =>
     {
         cleanup.RetentionPeriod = TimeSpan.FromHours(2);
@@ -70,7 +68,7 @@ public SchedulerConfigurationBuilder AddMetadataCleanup(
 
 ## Remarks
 
-- Only metadata in a **terminal state** (`Completed` or `Failed`) older than `RetentionPeriod` is deleted. `Pending` and `InProgress` metadata is never cleaned up.
+- Only metadata in a **terminal state** (`Completed`, `Failed`, or `Cancelled`) older than `RetentionPeriod` is deleted. `Pending` and `InProgress` metadata is never cleaned up.
 - The cleanup service runs as an `IHostedService` on the configured `CleanupInterval`.
 - `ManifestManagerTrain` and `MetadataCleanupTrain` are always included in the cleanup whitelist by default — you don't need to add them manually.
-- Train type names are matched against the `name` column in the metadata table (which stores `GetType().FullName`).
+- Train type names are matched against the `name` column in the metadata table (which stores the interface FullName — the canonical train name).

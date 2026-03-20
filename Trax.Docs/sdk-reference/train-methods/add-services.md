@@ -75,5 +75,5 @@ public class ProcessOrderTrain(
 ## Remarks
 
 - Use interface types as the generic parameters — `AddServices<IMyService>(myService)`, not `AddServices<MyService>(myService)`.
-- Junctions resolve services from Memory by their interface type during construction. See [Junctions]({{ site.baseurl }}{% link core/trains-and-junctions.md %}) for how constructor injection works.
+- Junctions resolve services from Memory by their interface type during construction. See [Junctions](/docs/core/trains-and-junctions) for how constructor injection works.
 - For more than 7 services, split across multiple `AddServices` calls.

@@ -12,6 +12,9 @@ Helper extension methods for registering Trax trains and junctions with the .NET
 
 Use these instead of raw DI registration when your train or junction class uses `[Inject]` properties.
 
+{: .sdk-references }
+> [Train Registration](/docs/cross-cutting/di-registration/train-registration) | [Junction Registration](/docs/cross-cutting/di-registration/junction-registration)
+
 ```csharp
 services.AddTransientTraxRoute<IMyTrain, MyTrain>();
 services.AddScopedTraxJunction<IMyJunction, MyJunction>();
@@ -19,5 +22,5 @@ services.AddScopedTraxJunction<IMyJunction, MyJunction>();
 
 | Page | Description |
 |------|-------------|
-| [Train Registration]({{ site.baseurl }}{% link cross-cutting/di-registration/train-registration.md %}) | `AddScoped/Transient/SingletonTraxRoute` methods |
-| [Junction Registration]({{ site.baseurl }}{% link cross-cutting/di-registration/junction-registration.md %}) | `AddScoped/Transient/SingletonTraxJunction` methods |
+| [Train Registration](/docs/cross-cutting/di-registration/train-registration) | `AddScoped/Transient/SingletonTraxRoute` methods |
+| [Junction Registration](/docs/cross-cutting/di-registration/junction-registration) | `AddScoped/Transient/SingletonTraxJunction` methods |

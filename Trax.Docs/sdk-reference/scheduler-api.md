@@ -21,29 +21,27 @@ Both share the same concepts: external IDs for upsert semantics, `Schedule` obje
 
 | Method | Description |
 |--------|-------------|
-| [AddScheduler]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-scheduler.md %}) | Adds the scheduler subsystem and configures global options (polling, retries, timeouts) |
-| [ConfigureLocalWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-local-workers.md %}) | Customizes the built-in PostgreSQL local workers (enabled by default) |
-| [UseRemoteWorkers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-remote-workers.md %}) | Routes specific trains to a remote HTTP endpoint |
-| [TraxLambdaFunction]({{ site.baseurl }}{% link sdk-reference/scheduler-api/trax-lambda-function.md %}) | AWS Lambda base class for remote runners (`Trax.Runner.Lambda` package) |
-| [UseHangfire]({{ site.baseurl }}{% link sdk-reference/scheduler-api/use-hangfire.md %}) | Configures Hangfire as the execution backend (deprecated) |
-
+| [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | Adds the scheduler subsystem and configures global options (polling, retries, timeouts) |
+| [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | Customizes the built-in PostgreSQL local workers (enabled by default) |
+| [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | Routes specific trains to a remote HTTP endpoint |
+| [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | AWS Lambda base class for remote runners (`Trax.Runner.Lambda` package) |
 ### Scheduling Methods
 
 | Method | Context | Description |
 |--------|---------|-------------|
-| [Schedule / ScheduleAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule.md %}) | Startup / Runtime | Schedules a single recurring train |
-| [ScheduleMany / ScheduleManyAsync]({{ site.baseurl }}{% link sdk-reference/scheduler-api/schedule-many.md %}) | Startup / Runtime | Batch-schedules manifests from a collection with optional pruning |
-| [Dependent Scheduling]({{ site.baseurl }}{% link sdk-reference/scheduler-api/dependent-scheduling.md %}) | Both | Schedules trains that run after a parent completes (`ThenInclude`, `ThenIncludeMany`, `Include`, `IncludeMany`, `ScheduleDependentAsync`, `ScheduleManyDependentAsync`) |
+| [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) | Startup / Runtime | Schedules a single recurring train |
+| [ScheduleMany / ScheduleManyAsync](/docs/sdk-reference/scheduler-api/schedule-many) | Startup / Runtime | Batch-schedules manifests from a collection with optional pruning |
+| [Dependent Scheduling](/docs/sdk-reference/scheduler-api/dependent-scheduling) | Both | Schedules trains that run after a parent completes (`ThenInclude`, `ThenIncludeMany`, `Include`, `IncludeMany`, `ScheduleDependentAsync`, `ScheduleManyDependentAsync`) |
 
 ### Management
 
 | Method | Description |
 |--------|-------------|
-| [Manifest Management]({{ site.baseurl }}{% link sdk-reference/scheduler-api/manifest-management.md %}) | `DisableAsync`, `EnableAsync`, `TriggerAsync` — runtime control of scheduled jobs |
-| [AddMetadataCleanup]({{ site.baseurl }}{% link sdk-reference/scheduler-api/add-metadata-cleanup.md %}) | Enables automatic purging of old metadata for high-frequency trains |
+| [Manifest Management](/docs/sdk-reference/scheduler-api/manifest-management) | `DisableAsync`, `EnableAsync`, `TriggerAsync` — runtime control of scheduled jobs |
+| [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Enables automatic purging of old metadata for high-frequency trains |
 
 ### Helpers
 
 | Page | Description |
 |------|-------------|
-| [Scheduling Helpers]({{ site.baseurl }}{% link sdk-reference/scheduler-api/scheduling-helpers.md %}) | `Every`, `Cron`, `Schedule` record, and `ManifestOptions` — the building blocks for defining when and how jobs run |
+| [Scheduling Helpers](/docs/sdk-reference/scheduler-api/scheduling-helpers) | `Every`, `Cron`, `Schedule` record, and `ManifestOptions` — the building blocks for defining when and how jobs run |

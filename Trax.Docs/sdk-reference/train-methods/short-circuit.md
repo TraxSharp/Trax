@@ -8,7 +8,7 @@ nav_order: 4
 
 # ShortCircuit
 
-Executes a junction that can **return early** from the train. If the junction succeeds and returns a value of type `TReturn`, that value is captured as the short-circuit result — when [Resolve]({{ site.baseurl }}{% link sdk-reference/train-methods/resolve.md %}) is called, it returns this value instead of looking in Memory.
+Executes a junction that can **return early** from the train. If the junction succeeds and returns a value of type `TReturn`, that value is captured as the short-circuit result — when [Resolve](/docs/sdk-reference/train-methods/resolve) is called, it returns this value instead of looking in Memory.
 
 If the junction **fails** (returns Left), the failure is **ignored** — no exception is set, the train continues normally.
 

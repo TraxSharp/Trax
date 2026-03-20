@@ -38,7 +38,7 @@ When using this overload, you must manually call `builder.WebHost.UseStaticWebAs
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `configure` | `Action<DashboardOptions>?` | No | `null` | Optional callback to configure [DashboardOptions]({{ site.baseurl }}{% link sdk-reference/dashboard-api/dashboard-options.md %}) |
+| `configure` | `Action<DashboardOptions>?` | No | `null` | Optional callback to configure [DashboardOptions](/docs/sdk-reference/dashboard-api/dashboard-options) |
 
 ## Returns
 

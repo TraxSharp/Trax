@@ -74,7 +74,7 @@ services.AddTrax(trax => trax
 
 ## Interaction with HTTP retry
 
-Concurrency limiting and [HTTP retry]({{ site.baseurl }}{% link scheduler/remote-execution.md %}#http-retry) are complementary:
+Concurrency limiting and [HTTP retry](/docs/scheduler/remote-execution#http-retry) are complementary:
 
 - **Concurrency limiting** prevents oversubscription proactively — fewer requests hit the backend simultaneously
 - **HTTP retry** handles transient failures reactively — catches 429/502/503 that slip through

@@ -12,7 +12,7 @@ Trax provides real-time GraphQL subscriptions for train lifecycle events. Client
 
 Subscriptions are powered by HotChocolate's built-in subscription infrastructure with an in-memory pub/sub transport. They are automatically enabled when you call `AddTraxGraphQL()`.
 
-**Only trains decorated with [`[TraxBroadcast]`]({{ site.baseurl }}{% link sdk-reference/graphql-api/trax-subscription-attribute.md %}) emit subscription events.** Trains without the attribute are silently skipped.
+**Only trains decorated with [`[TraxBroadcast]`](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) emit subscription events.** Trains without the attribute are silently skipped.
 
 ## Subscription Fields
 
@@ -110,7 +110,7 @@ For programmatic clients, use any GraphQL client that supports the `graphql-ws` 
 
 ## Architecture
 
-Subscriptions are powered by the [lifecycle hooks]({{ site.baseurl }}{% link sdk-reference/configuration/add-lifecycle-hook.md %}) system. The `GraphQLSubscriptionHook` is automatically registered by `AddTraxGraphQL()` and publishes lifecycle events to HotChocolate's in-memory subscription transport.
+Subscriptions are powered by the [lifecycle hooks](/docs/sdk-reference/configuration/add-lifecycle-hook) system. The `GraphQLSubscriptionHook` is automatically registered by `AddTraxGraphQL()` and publishes lifecycle events to HotChocolate's in-memory subscription transport.
 
 At startup, the hook builds a set of canonical train names (using `ServiceType.FullName` — the interface name) from registrations that have `[TraxBroadcast]`. On each lifecycle event, it checks the train's metadata name against this set and only publishes if the train is opted in.
 
@@ -126,7 +126,7 @@ ServiceTrain.Run()
 
 ## Cross-Process Subscriptions
 
-By default, subscriptions only fire for trains that execute in the same process as the GraphQL API. In distributed deployments where trains are queued and executed by separate worker processes, use [`UseBroadcaster()`]({{ site.baseurl }}{% link sdk-reference/configuration/use-broadcaster.md %}) to bridge the gap:
+By default, subscriptions only fire for trains that execute in the same process as the GraphQL API. In distributed deployments where trains are queued and executed by separate worker processes, use [`UseBroadcaster()`](/docs/sdk-reference/configuration/use-broadcaster) to bridge the gap:
 
 ```csharp
 // Both hub and worker:
@@ -135,7 +135,7 @@ effects.UseBroadcaster(b => b.UseRabbitMq("amqp://guest:guest@localhost:5672"))
 
 When a broadcaster is configured, `AddTraxGraphQL()` automatically registers a `GraphQLTrainEventHandler` that receives remote lifecycle events from the message bus and forwards them to HotChocolate's subscription transport. Like the local `GraphQLSubscriptionHook`, the remote handler filters by `[TraxBroadcast]` using canonical train names (`ServiceType.FullName`) — only trains with the attribute produce subscription events, regardless of which process executes them. Events from the local process are de-duplicated automatically.
 
-See [UseBroadcaster]({{ site.baseurl }}{% link sdk-reference/configuration/use-broadcaster.md %}) for full details.
+See [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) for full details.
 
 ## Package
 
