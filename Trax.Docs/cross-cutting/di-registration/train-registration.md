@@ -10,8 +10,6 @@ nav_order: 1
 
 Extension methods for registering Trax.Core trains with the .NET DI container. These methods wrap standard `AddScoped`/`AddTransient`/`AddSingleton` and add `[Inject]` property injection support.
 
-> [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
-
 ## Signatures
 
 ### Generic Overloads
@@ -96,3 +94,7 @@ Without `AddTraxRoute`, these properties would remain `null` after DI resolution
 - If your trains are discovered via [AddMediator](/docs/sdk-reference/configuration/add-service-train-bus), you don't need to register them manually — the bus handles registration automatically.
 - These methods are primarily useful for trains registered outside of assembly scanning, or when you need explicit control over the DI lifetime.
 - The non-generic overloads accept `Type` parameters for dynamic/reflection-based registration scenarios.
+
+## SDK Reference
+
+> [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)

@@ -9,8 +9,6 @@ nav_order: 4
 
 When you remove a schedule definition from your startup configuration (e.g., delete a `.Schedule(...)` call from `Program.cs`), the scheduler automatically deletes the corresponding manifest and all its related data from the database on the next startup. This prevents stale manifests from continuing to fire after their code has been removed.
 
-> [PruneOrphanedManifests](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule)
-
 ## How It Works
 
 ```
@@ -115,3 +113,7 @@ Both features compose correctly. PrunePrefix may delete some manifests during se
 - Both single manifests (`.Schedule(...)`) and batch manifests (`.ScheduleMany(...)`) are tracked. The scheduler knows the full set of ExternalIds that each builder call will create, including all items in a batch.
 - Deletion follows FK-safe ordering: self-referencing `DependsOnManifestId` is cleared first, then WorkQueue, DeadLetter, and Metadata records, and finally the manifest itself.
 - When all schedules are removed from code (empty configuration), all manifests in the database are pruned. This is the expected behavior — the code is the source of truth.
+
+## SDK Reference
+
+> [PruneOrphanedManifests](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule)

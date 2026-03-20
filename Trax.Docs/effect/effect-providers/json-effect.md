@@ -12,8 +12,6 @@ The JSON effect tracks model changes by comparing JSON snapshots. When a train c
 
 This is a development debugging tool. It doesn't persist anything — it writes to your configured `ILogger`.
 
-> [AddJson](/docs/sdk-reference/configuration/add-json-effect)
-
 ## Registration
 
 ```bash
@@ -45,3 +43,7 @@ This gives you a log of what changed during train execution without needing a da
 - **Lightweight setups** — Pair it with `UseInMemory()` for a no-infrastructure development environment.
 
 In production, you'll typically replace this with (or supplement it by) the [Data Persistence](data-persistence.md) provider.
+
+## SDK Reference
+
+> [AddJson](/docs/sdk-reference/configuration/add-json-effect)

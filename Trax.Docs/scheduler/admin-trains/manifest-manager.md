@@ -10,8 +10,6 @@ nav_order: 1
 
 The ManifestManager is the first half of each polling cycle. It figures out which manifests are due for execution and writes them to the work queue. It doesn't dispatch anything—that's the [JobDispatcher's](job-dispatcher.md) job.
 
-> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
-
 ## Chain
 
 ```
@@ -120,3 +118,7 @@ See [Multi-Server Concurrency](../concurrency.md) for the full cross-service con
 Previously, this train had an `EnqueueJobsJunction` as its final junction. That junction would directly create Metadata records and enqueue to the job submitter (Hangfire). `MaxActiveJobs` was enforced there, meaning the ManifestManager was both the scheduler and the dispatcher.
 
 Now those responsibilities are split. The ManifestManager writes intent to the work queue. The [JobDispatcher](job-dispatcher.md) reads from it and handles the actual dispatch. This means `TriggerAsync`, dashboard re-runs, and scheduled manifests all converge on the same dispatch path.
+
+## SDK Reference
+
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)

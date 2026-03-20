@@ -9,8 +9,6 @@ nav_order: 9
 
 By default, the scheduler schedules, dispatches, and executes trains all within the same process. Remote execution lets you separate **where trains are scheduled** from **where they run** — offloading execution to dedicated worker servers, AWS Lambda, ECS tasks, or any other compute.
 
-> [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxJobRunner / UseTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)
-
 ## Key Concept
 
 Postgres is always the source of truth. Every deployment model — local, remote, or standalone — connects to the same Postgres database for metadata, manifests, and state. The only thing that changes is **where the train code runs**.
@@ -559,3 +557,7 @@ When a remote job fails, check these in order:
 - [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) — API reference for remote run execution
 - [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — API reference for remote receiver setup
 - [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) — API reference for standalone worker setup
+
+## SDK Reference
+
+> [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxJobRunner / UseTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)

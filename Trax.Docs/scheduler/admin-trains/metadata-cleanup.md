@@ -10,8 +10,6 @@ nav_order: 4
 
 The MetadataCleanup train deletes old metadata rows for high-frequency internal trains. Without it, trains like ManifestManager (which runs every 5 seconds by default) would generate hundreds of thousands of metadata rows per day.
 
-> [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup)
-
 ## Chain
 
 ```
@@ -96,3 +94,7 @@ With no arguments, this cleans up `ManifestManagerTrain` and `MetadataCleanupTra
 | `CleanupInterval` | 1 minute | How often the cleanup service runs |
 | `RetentionPeriod` | 30 minutes | Age threshold for deletion eligibility |
 | `TrainTypeWhitelist` | ManifestManager, MetadataCleanup | Train names whose metadata can be deleted |
+
+## SDK Reference
+
+> [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup)

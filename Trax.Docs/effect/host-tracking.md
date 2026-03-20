@@ -9,8 +9,6 @@ nav_order: 2
 
 When trains run across distributed infrastructure — Lambda functions, ECS tasks, Kubernetes pods, multiple servers — every metadata record captures WHERE the train executed. Since all hosts share the same Postgres database, you can query exactly which machine ran any given train.
 
-> [Host Tracking](/docs/sdk-reference/configuration/host-tracking) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
-
 ## How It Works
 
 At startup, `AddTrax()` auto-detects the host environment and stores it as a process-wide singleton (`TraxHostInfo.Current`). Every `Metadata` record is stamped with this identity when the train starts executing.
@@ -102,3 +100,7 @@ Host fields are available on both queries and subscriptions:
 ## Dashboard
 
 The metadata detail page shows an "Execution Host" card with hostname, environment, instance ID, and labels. The metadata list page includes optional (hidden by default) `Host Env` and `Host` columns that can be enabled via the column picker.
+
+## SDK Reference
+
+> [Host Tracking](/docs/sdk-reference/configuration/host-tracking) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)

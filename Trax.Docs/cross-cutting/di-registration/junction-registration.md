@@ -10,8 +10,6 @@ nav_order: 2
 
 Extension methods for registering Trax.Core junctions with `[Inject]` property injection support. These are **aliases** for the corresponding [Train Registration](/docs/cross-cutting/di-registration/train-registration) methods — the injection behavior is identical.
 
-> [Chain](/docs/sdk-reference/train-methods/chain)
-
 ## Signatures
 
 ### Generic Overloads
@@ -57,3 +55,7 @@ services.AddTransientTraxJunction<IProcessPaymentJunction, ProcessPaymentJunctio
 
 - These methods delegate directly to the train registration equivalents. They exist for semantic clarity — `AddTraxJunction` communicates intent better than `AddTraxRoute` when registering junctions.
 - Junctions typically don't need manual DI registration unless they use `[Inject]` properties. Most junctions are created by the train's `Chain<TJunction>()` method using Memory-based constructor injection.
+
+## SDK Reference
+
+> [Chain](/docs/sdk-reference/train-methods/chain)

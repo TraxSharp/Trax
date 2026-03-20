@@ -11,8 +11,6 @@ Trax.Core's scheduler is safe to run across multiple server instances sharing th
 
 This page documents the concurrency model, the guarantees it provides, and the implications for multi-server deployments.
 
-> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers)
-
 ## Overview
 
 | Service | Strategy | Parallelism | Guarantee |
@@ -220,3 +218,7 @@ These are `Debug`-level messages. In production, set the log level to `Informati
 | A server crashes mid-ManifestManager cycle | Transaction rolls back, lock released, no partial state | Transaction-scoped advisory lock |
 | A server crashes mid-dispatch of a WorkQueue entry | Transaction rolls back, entry remains `Queued` for next cycle | Per-entry transaction |
 | A worker crashes mid-execution of a BackgroundJob | Visibility timeout expires, job reclaimed by another worker | `fetched_at` timestamp |
+
+## SDK Reference
+
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers)

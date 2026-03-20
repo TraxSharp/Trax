@@ -10,8 +10,6 @@ nav_order: 5
 
 The junction progress provider gives real-time visibility into which junction a train is currently executing and enables between-junction cancellation. It registers two junction-effect providers under a single call: **CancellationCheckProvider** and **JunctionProgressProvider**.
 
-> [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress)
-
 ## Registration
 
 ```bash
@@ -94,3 +92,7 @@ For most trains (3-5 junctions), this is negligible. For high-frequency trains w
 - **Production environments** — Where trains may need to be cancelled from the dashboard by operators.
 - **Multi-server deployments** — Where the server requesting cancellation may not be the server executing the train.
 - **Junction-level visibility** — When operators need to see which junction a long-running train is currently on.
+
+## SDK Reference
+
+> [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress)

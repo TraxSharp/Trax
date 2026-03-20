@@ -9,8 +9,6 @@ nav_order: 4
 
 Trax.Core includes a Roslyn analyzer that validates your train's route at compile time — like a route planner that checks every junction has the cargo it needs before the train ever departs. When you chain junctions via `.Chain<TJunction>()`, the analyzer simulates the runtime Memory dictionary to verify that each junction's input type is available before that junction executes.
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) | [Extract](/docs/sdk-reference/train-methods/extract) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [Resolve](/docs/sdk-reference/train-methods/resolve)
-
 ## The Problem
 
 Consider this train:
@@ -132,3 +130,7 @@ Or suppress at the project level in your `.csproj`:
     <NoWarn>$(NoWarn);CHAIN001</NoWarn>
 </PropertyGroup>
 ```
+
+## SDK Reference
+
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) | [Extract](/docs/sdk-reference/train-methods/extract) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [Resolve](/docs/sdk-reference/train-methods/resolve)

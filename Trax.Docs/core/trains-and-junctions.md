@@ -7,8 +7,6 @@ nav_order: 1
 
 # Trains & Junctions
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve)
-
 ## Junctions
 
 Junctions are the points along a train's route — each one does one thing:
@@ -240,3 +238,7 @@ public class CreateUserTrain(ISlackClient slack)
 Available overrides: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. All default to no-op. Exceptions in overrides are caught and logged — they never cause the train to fail.
 
 These work alongside [global lifecycle hooks](/docs/sdk-reference/configuration/add-lifecycle-hook) — global hooks fire first, then per-train overrides.
+
+## SDK Reference
+
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve)

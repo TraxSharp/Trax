@@ -9,8 +9,6 @@ nav_order: 2
 
 Every train's `RunInternal` method is a chain: `Activate` seeds Memory, `.Chain<T>()` adds junctions, and `.Resolve()` returns the result.
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) | [Extract](/docs/sdk-reference/train-methods/extract) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [Resolve](/docs/sdk-reference/train-methods/resolve)
-
 ## Chain
 
 `.Chain<TJunction>()` is the primary way to add a junction to a train's route. It resolves the junction, pulls its input from [Memory](memory.md), runs it, and stores the output back in Memory.
@@ -155,3 +153,7 @@ protected override async Task<Either<Exception, User>> RunInternal(CreateUserReq
 Each type argument is stored in Memory with the corresponding instance. See [SDK Reference: AddServices](/docs/sdk-reference/train-methods/add-services) for all overloads and interface-type storage behavior.
 
 Use `AddServices` when you need to inject runtime-created instances into the chain — objects that aren't available through the DI container or that need to be created per-execution. For standard dependencies, prefer constructor injection in your junctions instead.
+
+## SDK Reference
+
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) | [Extract](/docs/sdk-reference/train-methods/extract) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [Resolve](/docs/sdk-reference/train-methods/resolve)

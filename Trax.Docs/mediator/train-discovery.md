@@ -9,8 +9,6 @@ nav_order: 1
 
 This page covers the internal implementation of train discovery and routing. For the user-facing explanation of how to use the `TrainBus`, see [Mediator overview](/docs/mediator).
 
-> [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)
-
 ## TrainRegistry
 
 The `TrainRegistry` scans the specified assemblies at startup for all types implementing `IServiceTrain<TIn, TOut>`. For each discovered train, it extracts the `TIn` type and builds a `Dictionary<Type, Type>` mapping input types to train types. Duplicate input types are silently skipped via `TryAdd` — the first registration wins.
@@ -46,3 +44,7 @@ The canonical name is the preferred identifier. It is stable across implementati
 2. **Must implement IServiceTrain<,>**
 3. **Must have parameterless constructor or be registered in DI**
 4. **Should implement a non-generic interface** for better DI integration
+
+## SDK Reference
+
+> [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)

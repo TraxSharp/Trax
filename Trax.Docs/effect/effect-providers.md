@@ -10,8 +10,6 @@ has_children: true
 
 Effect providers handle side effects as a train runs — database writes, logging, serialization. Each provider is independent: add or remove any of them without changing your train code. For the conceptual background, see [Effect overview](/docs/effect).
 
-> [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
-
 ## Database Persistence (Postgres or InMemory)
 
 **Use when:** You need to query train history, audit execution, or debug production issues.
@@ -167,3 +165,7 @@ services.AddTrax(trax => trax
     .AddMediator(assemblies)
 );
 ```
+
+## SDK Reference
+
+> [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)

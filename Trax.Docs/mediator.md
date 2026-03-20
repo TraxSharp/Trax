@@ -14,8 +14,6 @@ section: Packages
 dotnet add package Trax.Mediator
 ```
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
-
 ## The Problem
 
 Without the mediator, controllers inject each train directly:
@@ -105,3 +103,7 @@ public class UpdateUserMutation(IUpdateUserTrain updateUserTrain)
 - When you want to decouple callers from train implementations
 
 When you need recurring background jobs, add [Trax.Scheduler](scheduler.md).
+
+## SDK Reference
+
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)

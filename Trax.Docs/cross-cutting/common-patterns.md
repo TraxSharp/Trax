@@ -7,8 +7,6 @@ nav_order: 2
 
 # Common Patterns
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
-
 ## Error Handling Patterns
 
 ### Train-Level Error Handling
@@ -119,3 +117,7 @@ public class BatchProcessJunction : Junction<BatchInput, BatchResult>
 ```
 
 *Full details: [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens)*
+
+## SDK Reference
+
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)

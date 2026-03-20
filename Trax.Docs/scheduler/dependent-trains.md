@@ -7,8 +7,6 @@ nav_order: 5
 
 # Dependent Trains
 
-> [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many)
-
 ## The Problem
 
 Some jobs only make sense after another job finishes. An ETL pipeline extracts data first, then transforms and loads it. A notification train runs after a report completes. You could schedule both on the same interval and hope the timing works out, but that's fragile—if the parent runs slow or retries, the dependent kicks off against stale data.
@@ -216,11 +214,6 @@ Each call creates a `WorkQueue` entry with the runtime-supplied input. The `Depe
 
 If a dormant dependent already has a queued `WorkQueue` entry or an active execution (`Pending`/`InProgress` metadata), the activation is silently skipped with a warning log. This prevents duplicate work when the parent runs faster than its children can complete.
 
-### SDK Reference
-
-- [`IDormantDependentContext`](/docs/sdk-reference/scheduler-api/dependent-scheduling#idormantdependentcontext) — `ActivateAsync` and `ActivateManyAsync` signatures
-- [`.Dormant()`](/docs/sdk-reference/scheduler-api/dependent-scheduling#dormant-option) — `ScheduleOptions` builder method
-
 ## Under the Hood
 
 ### Database
@@ -266,3 +259,7 @@ Each link in the chain is independent. The scheduler doesn't have a concept of "
 | Parent succeeds, dormant dependent exists | Dormant dependent **not** queued (requires explicit activation) |
 | Parent activates dormant dependent via `IDormantDependentContext` | WorkQueue entry created with runtime input |
 | Parent activates dormant dependent that is already queued/active | Activation silently skipped |
+
+## SDK Reference
+
+> [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | [IDormantDependentContext](/docs/sdk-reference/scheduler-api/dependent-scheduling#idormantdependentcontext) | [.Dormant()](/docs/sdk-reference/scheduler-api/dependent-scheduling#dormant-option)

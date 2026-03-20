@@ -7,8 +7,6 @@ nav_order: 3
 
 # Testing
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
-
 ## Unit Testing Junctions
 
 Junctions are easy to test because they're just classes with a `Run` method. Create simple fake implementations of your dependencies:
@@ -170,3 +168,7 @@ public async Task Junction_UsesToken_ForAsyncOperations()
 ```
 
 *Full details: [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens#testing-with-cancellation-tokens)*
+
+## SDK Reference
+
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)

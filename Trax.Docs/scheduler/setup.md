@@ -7,8 +7,6 @@ nav_order: 1
 
 # Setup & Creating Scheduled Trains
 
-> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers)
-
 ## Quick Setup
 
 ### Installation
@@ -212,3 +210,7 @@ The scheduler spans multiple packages. This table lists every public type you're
 | `ITraxScheduler` | `Trax.Scheduler.Services.TraxScheduler` | `Trax.Scheduler` |
 | `ManifestOptions` | `Trax.Scheduler.Configuration` | `Trax.Scheduler` |
 | `IDormantDependentContext` | `Trax.Scheduler.Services.DormantDependentContext` | `Trax.Scheduler` |
+
+## SDK Reference
+
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers)

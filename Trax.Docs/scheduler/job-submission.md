@@ -9,8 +9,6 @@ nav_order: 2
 
 The job submitter is the execution backend for the scheduler. When the JobDispatcher creates a Metadata record and calls `IJobSubmitter.EnqueueAsync()`, the job submitter is responsible for picking up that job and running the train.
 
-> [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)
-
 ## Built-in Local Workers (PostgreSQL)
 
 The recommended backend uses Trax.Core's own `trax.background_job` table for job queuing. No external dependencies — it shares the same PostgreSQL database already used by Trax.Core's data layer.
@@ -299,3 +297,7 @@ After confirming the migration works, you can drop the Hangfire schema:
 ```sql
 DROP SCHEMA IF EXISTS hangfire CASCADE;
 ```
+
+## SDK Reference
+
+> [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)

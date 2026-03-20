@@ -10,8 +10,6 @@ nav_order: 3
 
 The JobRunner is what actually runs your train. It executes on job submitter workers and handles the bookkeeping around each execution: loading the metadata, validating state, invoking the train, and recording success.
 
-> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner)
-
 ## Chain
 
 ```
@@ -74,3 +72,7 @@ See [Multi-Server Concurrency](../concurrency.md) for the full cross-service con
 ## Registration
 
 All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()`, `AddTraxWorker()`, or `AddTraxJobRunner()`. Local workers (the implicit default when `UsePostgres()` is configured) register `JobRunnerTrain` as a scoped train route so that local workers can resolve and execute it. You do **not** need to include the `Trax.Scheduler` assembly in `AddMediator()` — only pass your own train assemblies.
+
+## SDK Reference
+
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner)

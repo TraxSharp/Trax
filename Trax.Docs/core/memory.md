@@ -9,8 +9,6 @@ nav_order: 3
 
 Memory is how junctions communicate in a train. Think of it as the cargo the train carries between junctions — a type-keyed dictionary that accumulates as the train executes. Each junction pulls its input from Memory and pushes its output back in.
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain)
-
 ## How It Works
 
 When you call `Activate(input)`, Memory is seeded with two entries: your input type and `Unit`. As each junction runs, its output is stored in Memory under that output's type:
@@ -116,3 +114,7 @@ public class CheckoutTrain : ServiceTrain<CheckoutRequest, Receipt>
             .Resolve();
 }
 ```
+
+## SDK Reference
+
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain)

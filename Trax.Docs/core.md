@@ -14,8 +14,6 @@ section: Packages
 dotnet add package Trax.Core
 ```
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [Run / RunEither](/docs/sdk-reference/train-methods/run)
-
 ## What You Get
 
 - **Trains** — typed pipelines that carry data through a sequence of junctions
@@ -73,3 +71,7 @@ result.Match(
 - Prototyping trains before adding persistence
 
 When you need execution logging, DI, or persistent metadata, add [Trax.Effect](effect.md).
+
+## SDK Reference
+
+> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [Run / RunEither](/docs/sdk-reference/train-methods/run)

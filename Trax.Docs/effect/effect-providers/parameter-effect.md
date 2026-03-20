@@ -10,8 +10,6 @@ nav_order: 3
 
 The parameter effect serializes train inputs and outputs to JSON and stores them on the `Metadata` record. Without this provider, the `Metadata.Input` and `Metadata.Output` columns are null — you'll know a train ran and whether it succeeded, but not what data it processed.
 
-> [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters)
-
 ## Registration
 
 ```bash
@@ -85,3 +83,7 @@ This effect populates fields on `Metadata`, but it doesn't persist the metadata 
 - **Production** — When you need to query or debug train executions after the fact. "What input caused this failure?"
 - **Audit trails** — The serialized input/output gives you a record of what data each train processed.
 - **Dashboard** — The [Dashboard](/docs/dashboard) displays `Input` and `Output` in its metadata detail view. Without this provider, those fields show as empty.
+
+## SDK Reference
+
+> [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters)

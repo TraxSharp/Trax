@@ -11,8 +11,6 @@ Trax.Api adds a programmatic interface to the scheduling and train execution sys
 
 The API is designed to run on a **separate machine** from the scheduler. The two share a database: the API writes work queue entries and manifest updates, the scheduler polls them and dispatches trains. This means the API server doesn't run polling services or background workers — it's a thin HTTP layer over the shared state.
 
-> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
-
 ## Two Execution Modes
 
 | Mode | How It Works | When to Use |
@@ -153,12 +151,7 @@ All follow the [trains library pattern](/docs/samples) — trains live in a shar
 
 ## SDK Reference
 
-For complete endpoint documentation, request/response schemas, and method signatures:
-
-- [GraphQL API](/docs/sdk-reference/graphql-api) — queries, mutations, subscriptions, HotChocolate setup
-- [Authorization](/docs/authorization) — per-train authorization with `[TraxAuthorize]`
-- [TrainDiscovery](/docs/sdk-reference/mediator-api/train-discovery) — how train discovery works
-- [TrainExecution](/docs/sdk-reference/mediator-api/train-execution) — queue and run services
+> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)
 
 ## Next Layer
 

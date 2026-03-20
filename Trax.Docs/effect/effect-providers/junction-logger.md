@@ -10,8 +10,6 @@ nav_order: 4
 
 The junction logger fires before and after each junction in a train, logging structured `JunctionMetadata` entries. This gives you per-junction observability: which junction is running, how long it took, what its Railway state was, and optionally what it returned.
 
-> [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger)
-
 ## Registration
 
 ```bash
@@ -68,3 +66,7 @@ See [Junctions: EffectJunction vs Junction](/docs/core/trains-and-junctions#effe
 - **Debugging slow trains** — The timing data shows which junction is the bottleneck.
 - **Tracing failures** — The Railway state tells you exactly where and why a train switched to the left track.
 - **Development** — Pair with `serializeJunctionData: true` to see junction-by-junction data flow through the chain.
+
+## SDK Reference
+
+> [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger)

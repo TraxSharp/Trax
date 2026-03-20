@@ -11,8 +11,6 @@ Trax.Dashboard is the operations control room — a web UI for inspecting regist
 
 The dashboard only requires `Trax.Effect`. As you add more Effect packages (Data, Scheduler, etc.), the dashboard gains access to more information. Start with train discovery, and add more as your setup grows.
 
-> [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery)
-
 ## Quick Setup
 
 ### Installation
@@ -266,3 +264,7 @@ Trax.Effect
 ```
 
 It depends only on `Trax.Effect`—no transitive dependency on Data, Mediator, Scheduler, or any database provider. The dashboard discovers what's available in your DI container and adapts accordingly.
+
+## SDK Reference
+
+> [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery)

@@ -10,8 +10,6 @@ nav_order: 2
 
 The JobDispatcher is the single gateway between the work queue and the job submitter. It reads `Queued` entries, enforces both global and per-group `MaxActiveJobs` limits, creates Metadata records, and enqueues to the configured `IJobSubmitter` implementation.
 
-> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
-
 ## Chain
 
 ```
@@ -158,3 +156,7 @@ Before the JobDispatcher existed, the ManifestManager handled dispatch directly.
 But other sources exist: `TriggerAsync` for manual triggers, the dashboard for re-runs. Each of those had to independently create Metadata and enqueue to Hangfire, bypassing the ManifestManager's capacity check entirely.
 
 The work queue + JobDispatcher pattern fixes this. All sources write to the same queue. The JobDispatcher is the only thing that reads from it. Capacity enforcement happens exactly once, in one place.
+
+## SDK Reference
+
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)

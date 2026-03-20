@@ -12,8 +12,6 @@ Trax.Scheduler adds timetable management to trains. Define a manifest — like a
 
 This isn't a traditional cron scheduler. It supports cron expressions, but its design goal is controlled bulk job orchestration, for example—where you need visibility into every execution attempt.
 
-> [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [TriggerAsync / ScheduleOnceAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers)
-
 ## When to Use the Scheduler
 
 A hosted service with a timer works fine for simple recurring tasks. The Scheduler is for when you need the audit trail: every execution recorded with inputs, outputs, timing, and failure details. Failed jobs retry automatically. Jobs that fail too many times go to a dead letter queue for manual review.
@@ -171,15 +169,7 @@ See [Administrative Trains](scheduler/admin-trains.md) for detailed documentatio
 
 ## SDK Reference
 
-For complete method signatures, all parameters, and detailed usage examples for every scheduling function, see the [Scheduler SDK Reference](/docs/sdk-reference/scheduler-api):
-
-- [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) — single recurring train
-- [ScheduleMany / ScheduleManyAsync](/docs/sdk-reference/scheduler-api/schedule-many) — batch scheduling with pruning
-- [Dependent Scheduling](/docs/sdk-reference/scheduler-api/dependent-scheduling) — ThenInclude, ThenIncludeMany, Include, IncludeMany, ScheduleDependentAsync
-- [Manifest Management](/docs/sdk-reference/scheduler-api/manifest-management) — DisableAsync, EnableAsync, TriggerAsync, ScheduleOnceAsync
-- [Scheduling Helpers](/docs/sdk-reference/scheduler-api/scheduling-helpers) — Every, Cron, Schedule record, ManifestOptions
-
-The same scheduler operations are also available through the [GraphQL API](/docs/sdk-reference/graphql-api/mutations) for remote access.
+> [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [TriggerAsync / ScheduleOnceAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers)
 
 ## Sample Project
 

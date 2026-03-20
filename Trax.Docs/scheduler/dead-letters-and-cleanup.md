@@ -7,8 +7,6 @@ nav_order: 3
 
 # Dead Letters, Monitoring & Cleanup
 
-> [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
-
 ## Handling Dead Letters
 
 When a job exceeds `MaxRetries`, it enters the dead letter queue with status `AwaitingIntervention`. The ManifestManager will skip these manifests until they're resolved.
@@ -118,3 +116,7 @@ services.AddTrax(trax => trax
 ```
 
 Jobs execute inline, so tests are fast and don't need database infrastructure.
+
+## SDK Reference
+
+> [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
