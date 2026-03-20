@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +22,7 @@ public class TrainLifecycleOverrideTests : TestSetup
             .AddScopedTraxRoute<IThrowingOnCancelledHookTrain, ThrowingOnCancelledHookTrain>()
             .AddScopedTraxRoute<IPartialOverrideTrain, PartialOverrideTrain>()
             .AddScopedTraxRoute<INoOverrideTrain, NoOverrideTrain>()
+            .AddScopedTraxRoute<IOutputRecordingTrain, OutputRecordingTrain>()
             .BuildServiceProvider();
 
     #region OnStarted
@@ -241,6 +243,51 @@ public class TrainLifecycleOverrideTests : TestSetup
 
     #endregion
 
+    #region OutputSerialization
+
+    [Test]
+    public async Task Run_WithoutSaveTrainParameters_OnCompletedHasSerializedOutput()
+    {
+        var train = (OutputRecordingTrain)
+            Scope.ServiceProvider.GetRequiredService<IOutputRecordingTrain>();
+
+        await train.Run("test-input");
+
+        train.CompletedCalled.Should().BeTrue();
+        train.CapturedOutput.Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task Run_WithoutSaveTrainParameters_OutputContainsCorrectData()
+    {
+        var train = (OutputRecordingTrain)
+            Scope.ServiceProvider.GetRequiredService<IOutputRecordingTrain>();
+
+        await train.Run("test-input");
+
+        var deserialized = JsonSerializer.Deserialize<TestOutputDto>(train.CapturedOutput!);
+        deserialized.Should().NotBeNull();
+        deserialized!.Value.Should().Be("processed:test-input");
+        deserialized.Count.Should().Be(42);
+    }
+
+    [Test]
+    public async Task Run_WithoutSaveTrainParameters_GetOutputObjectStillAvailable()
+    {
+        var train = (OutputRecordingTrain)
+            Scope.ServiceProvider.GetRequiredService<IOutputRecordingTrain>();
+
+        await train.Run("test-input");
+
+        object? outputObj = train.CapturedOutputObject;
+        outputObj.Should().NotBeNull();
+        var outputDto = outputObj as TestOutputDto;
+        outputDto.Should().NotBeNull();
+        outputDto!.Value.Should().Be("processed:test-input");
+    }
+
+    #endregion
+
     #region Test Trains
 
     private interface IRecordingTrain : IServiceTrain<Unit, Unit> { }
@@ -436,6 +483,31 @@ public class TrainLifecycleOverrideTests : TestSetup
     {
         protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
             Activate(input).Resolve();
+    }
+
+    private record TestOutputDto(
+        [property: System.Text.Json.Serialization.JsonPropertyName("value")] string Value,
+        [property: System.Text.Json.Serialization.JsonPropertyName("count")] int Count
+    );
+
+    private interface IOutputRecordingTrain : IServiceTrain<string, TestOutputDto> { }
+
+    private class OutputRecordingTrain : ServiceTrain<string, TestOutputDto>, IOutputRecordingTrain
+    {
+        public bool CompletedCalled { get; private set; }
+        public string? CapturedOutput { get; private set; }
+        public dynamic? CapturedOutputObject { get; private set; }
+
+        protected override async Task<Either<Exception, TestOutputDto>> RunInternal(string input) =>
+            new TestOutputDto($"processed:{input}", 42);
+
+        protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
+        {
+            CompletedCalled = true;
+            CapturedOutput = metadata.Output;
+            CapturedOutputObject = metadata.GetOutputObject();
+            return Task.CompletedTask;
+        }
     }
 
     #endregion

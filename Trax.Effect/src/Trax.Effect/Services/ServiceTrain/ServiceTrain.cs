@@ -215,6 +215,35 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             await this.FinishServiceTrain(result);
             await EffectRunner.SaveChanges(CancellationToken);
 
+            // Ensure output is available as serialized JSON for lifecycle hooks,
+            // even when SaveTrainParameters() is not configured. Runs AFTER
+            // SaveChanges() so it is NOT persisted to the database.
+            if (Metadata.Output is null)
+            {
+                var outputObject = Metadata.GetOutputObject();
+                if (outputObject is not null)
+                {
+                    try
+                    {
+                        Metadata.Output = System.Text.Json.JsonSerializer.Serialize(
+                            (object)outputObject,
+                            Configuration
+                                .TraxEffectConfiguration
+                                .TraxEffectConfiguration
+                                .StaticSystemJsonSerializerOptions
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.LogDebug(
+                            ex,
+                            "Failed to serialize output for lifecycle hooks in train ({TrainName}).",
+                            TrainName
+                        );
+                    }
+                }
+            }
+
             await LifecycleHookRunner.OnCompleted(Metadata, CancellationToken);
 
             try
