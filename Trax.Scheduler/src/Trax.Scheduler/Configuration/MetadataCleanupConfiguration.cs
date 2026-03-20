@@ -34,7 +34,7 @@ public class MetadataCleanupConfiguration
     /// </summary>
     /// <remarks>
     /// Names are matched against the <c>name</c> column in the metadata table,
-    /// which stores <c>GetType().FullName</c> of the train class.
+    /// which stores the interface FullName (the canonical train name).
     /// </remarks>
     internal List<string> TrainTypeWhitelist { get; } = [];
 
