@@ -10,7 +10,6 @@ nav_order: 1
 
 Extension methods for registering Trax.Core trains with the .NET DI container. These methods wrap standard `AddScoped`/`AddTransient`/`AddSingleton` and add `[Inject]` property injection support.
 
-{: .sdk-references }
 > [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
 
 ## Signatures

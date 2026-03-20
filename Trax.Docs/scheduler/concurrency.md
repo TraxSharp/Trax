@@ -11,7 +11,6 @@ Trax.Core's scheduler is safe to run across multiple server instances sharing th
 
 This page documents the concurrency model, the guarantees it provides, and the implications for multi-server deployments.
 
-{: .sdk-references }
 > [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers)
 
 ## Overview

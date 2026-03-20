@@ -7,7 +7,6 @@ nav_order: 2
 
 # Common Patterns
 
-{: .sdk-references }
 > [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
 
 ## Error Handling Patterns

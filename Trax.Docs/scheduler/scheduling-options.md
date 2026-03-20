@@ -7,7 +7,6 @@ nav_order: 2
 
 # Scheduling Options
 
-{: .sdk-references }
 > [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [TriggerAsync / DisableAsync / EnableAsync / CancelAsync](/docs/sdk-reference/scheduler-api/manifest-management)
 
 ## Bulk Scheduling

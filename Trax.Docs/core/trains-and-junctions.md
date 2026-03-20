@@ -7,7 +7,6 @@ nav_order: 1
 
 # Trains & Junctions
 
-{: .sdk-references }
 > [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve)
 
 ## Junctions

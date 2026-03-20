@@ -7,7 +7,6 @@ nav_order: 8
 
 # Exclusion Windows
 
-{: .sdk-references }
 > [Schedule](/docs/sdk-reference/scheduler-api/schedule)
 
 Exclusion windows let you skip execution during specific periods — weekends, holidays, maintenance windows, or daily time ranges. When any exclusion matches the current time, the manifest is skipped. Excluded periods are treated as **intentionally skipped**, not as misfires.

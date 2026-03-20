@@ -10,7 +10,6 @@ nav_order: 2
 
 The JobDispatcher is the single gateway between the work queue and the job submitter. It reads `Queued` entries, enforces both global and per-group `MaxActiveJobs` limits, creates Metadata records, and enqueues to the configured `IJobSubmitter` implementation.
 
-{: .sdk-references }
 > [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
 
 ## Chain

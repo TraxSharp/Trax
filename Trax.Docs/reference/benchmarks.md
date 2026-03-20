@@ -128,5 +128,4 @@ dotnet run -c Release -- --filter '*Scaling*'
 dotnet run -c Release -- --list flat
 ```
 
-{: .note }
 Results will vary by hardware. The relative ratios between serial, base, and effect trains are more meaningful than the absolute numbers.

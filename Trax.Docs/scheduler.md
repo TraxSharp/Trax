@@ -12,7 +12,6 @@ Trax.Scheduler adds timetable management to trains. Define a manifest — like a
 
 This isn't a traditional cron scheduler. It supports cron expressions, but its design goal is controlled bulk job orchestration, for example—where you need visibility into every execution attempt.
 
-{: .sdk-references }
 > [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [TriggerAsync / ScheduleOnceAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers)
 
 ## When to Use the Scheduler

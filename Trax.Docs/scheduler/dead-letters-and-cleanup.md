@@ -7,7 +7,6 @@ nav_order: 3
 
 # Dead Letters, Monitoring & Cleanup
 
-{: .sdk-references }
 > [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
 
 ## Handling Dead Letters
@@ -104,7 +103,6 @@ A metadata row is deleted when **all** of these conditions are true:
 
 Any work queue entries and log entries associated with deleted metadata are also removed.
 
-{: .note }
 Cancelled trains are treated as terminal — they are eligible for cleanup but are **not retried** and **do not create dead letters**. Cancellation is an explicit operator action, not a transient failure.
 
 ## Testing

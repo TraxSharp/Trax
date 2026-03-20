@@ -14,7 +14,6 @@ Trax ships two `dotnet new` templates that scaffold working projects with Postgr
 
 They're designed to work together against a shared PostgreSQL database — the API handles lightweight operations directly and queues heavy work for the scheduler.
 
-{: .sdk-references }
 > [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
 
 ## Installation

@@ -9,7 +9,6 @@ nav_order: 2
 
 Every train's `RunInternal` method is a chain: `Activate` seeds Memory, `.Chain<T>()` adds junctions, and `.Resolve()` returns the result.
 
-{: .sdk-references }
 > [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) | [Extract](/docs/sdk-reference/train-methods/extract) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [Resolve](/docs/sdk-reference/train-methods/resolve)
 
 ## Chain

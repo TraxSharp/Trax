@@ -10,7 +10,6 @@ nav_order: 3
 
 The JobRunner is what actually runs your train. It executes on job submitter workers and handles the bookkeeping around each execution: loading the metadata, validating state, invoking the train, and recording success.
 
-{: .sdk-references }
 > [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner)
 
 ## Chain

@@ -10,7 +10,6 @@ nav_order: 5
 
 The junction progress provider gives real-time visibility into which junction a train is currently executing and enables between-junction cancellation. It registers two junction-effect providers under a single call: **CancellationCheckProvider** and **JunctionProgressProvider**.
 
-{: .sdk-references }
 > [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress)
 
 ## Registration

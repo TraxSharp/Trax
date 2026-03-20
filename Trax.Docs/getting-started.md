@@ -16,7 +16,6 @@ If you're migrating from ChainSharp, see [Migration Guide](/docs/reference/migra
 
 Pick the track that matches what you need:
 
-{: .sdk-references }
 > [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [Run / RunEither](/docs/sdk-reference/train-methods/run) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)
 
 ---

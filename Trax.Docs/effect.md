@@ -15,7 +15,6 @@ dotnet add package Trax.Effect
 dotnet add package Trax.Effect.Data.Postgres  # or Trax.Effect.Data.InMemory
 ```
 
-{: .sdk-references }
 > [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)
 
 ## What It Adds

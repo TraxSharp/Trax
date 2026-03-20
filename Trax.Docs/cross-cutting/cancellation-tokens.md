@@ -9,7 +9,6 @@ nav_order: 1
 
 Trax.Core threads `CancellationToken` through the entire pipeline — from the initial `Run` call, through every junction, down to EF Core queries and background service shutdown. This enables graceful cancellation of trains in response to HTTP request aborts, application shutdown, or explicit user cancellation.
 
-{: .sdk-references }
 > [Run / RunEither](/docs/sdk-reference/train-methods/run) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [CancelAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers)
 
 ## How It Works

@@ -14,7 +14,6 @@ section: Packages
 dotnet add package Trax.Mediator
 ```
 
-{: .sdk-references }
 > [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
 
 ## The Problem

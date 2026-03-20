@@ -9,7 +9,6 @@ nav_order: 9
 
 By default, the scheduler schedules, dispatches, and executes trains all within the same process. Remote execution lets you separate **where trains are scheduled** from **where they run** — offloading execution to dedicated worker servers, AWS Lambda, ECS tasks, or any other compute.
 
-{: .sdk-references }
 > [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxJobRunner / UseTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)
 
 ## Key Concept

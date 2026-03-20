@@ -12,7 +12,6 @@ Helper extension methods for registering Trax trains and junctions with the .NET
 
 Use these instead of raw DI registration when your train or junction class uses `[Inject]` properties.
 
-{: .sdk-references }
 > [Train Registration](/docs/cross-cutting/di-registration/train-registration) | [Junction Registration](/docs/cross-cutting/di-registration/junction-registration)
 
 ```csharp

@@ -9,7 +9,6 @@ nav_order: 2
 
 When trains run across distributed infrastructure — Lambda functions, ECS tasks, Kubernetes pods, multiple servers — every metadata record captures WHERE the train executed. Since all hosts share the same Postgres database, you can query exactly which machine ran any given train.
 
-{: .sdk-references }
 > [Host Tracking](/docs/sdk-reference/configuration/host-tracking) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
 
 ## How It Works

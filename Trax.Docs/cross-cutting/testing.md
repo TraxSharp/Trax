@@ -7,7 +7,6 @@ nav_order: 3
 
 # Testing
 
-{: .sdk-references }
 > [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
 
 ## Unit Testing Junctions

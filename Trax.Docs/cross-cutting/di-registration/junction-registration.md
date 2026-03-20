@@ -10,7 +10,6 @@ nav_order: 2
 
 Extension methods for registering Trax.Core junctions with `[Inject]` property injection support. These are **aliases** for the corresponding [Train Registration](/docs/cross-cutting/di-registration/train-registration) methods — the injection behavior is identical.
 
-{: .sdk-references }
 > [Chain](/docs/sdk-reference/train-methods/chain)
 
 ## Signatures

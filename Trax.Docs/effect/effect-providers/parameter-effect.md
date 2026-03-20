@@ -10,7 +10,6 @@ nav_order: 3
 
 The parameter effect serializes train inputs and outputs to JSON and stores them on the `Metadata` record. Without this provider, the `Metadata.Input` and `Metadata.Output` columns are null — you'll know a train ran and whether it succeeded, but not what data it processed.
 
-{: .sdk-references }
 > [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters)
 
 ## Registration

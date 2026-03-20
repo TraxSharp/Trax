@@ -11,7 +11,6 @@ Trax.Api adds a programmatic interface to the scheduling and train execution sys
 
 The API is designed to run on a **separate machine** from the scheduler. The two share a database: the API writes work queue entries and manifest updates, the scheduler polls them and dispatches trains. This means the API server doesn't run polling services or background workers — it's a thin HTTP layer over the shared state.
 
-{: .sdk-references }
 > [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
 
 ## Two Execution Modes

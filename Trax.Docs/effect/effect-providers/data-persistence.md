@@ -12,7 +12,6 @@ The data persistence effect stores a `Metadata` record for every train execution
 
 Two backends are available: PostgreSQL for production and InMemory for testing. Both implement the same `IDataContext` interface, so your train code doesn't change between them.
 
-{: .sdk-references }
 > [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging)
 
 ## PostgreSQL

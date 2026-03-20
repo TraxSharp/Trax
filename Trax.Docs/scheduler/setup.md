@@ -7,7 +7,6 @@ nav_order: 1
 
 # Setup & Creating Scheduled Trains
 
-{: .sdk-references }
 > [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers)
 
 ## Quick Setup

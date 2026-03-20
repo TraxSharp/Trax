@@ -7,7 +7,6 @@ nav_order: 3
 
 # Delayed / One-Off Jobs
 
-{: .sdk-references }
 > [TriggerAsync / ScheduleOnceAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [Schedule](/docs/sdk-reference/scheduler-api/schedule)
 
 ## The Problem

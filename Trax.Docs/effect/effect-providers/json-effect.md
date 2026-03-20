@@ -12,7 +12,6 @@ The JSON effect tracks model changes by comparing JSON snapshots. When a train c
 
 This is a development debugging tool. It doesn't persist anything — it writes to your configured `ILogger`.
 
-{: .sdk-references }
 > [AddJson](/docs/sdk-reference/configuration/add-json-effect)
 
 ## Registration

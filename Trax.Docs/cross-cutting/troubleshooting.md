@@ -7,7 +7,6 @@ nav_order: 4
 
 # Troubleshooting
 
-{: .sdk-references }
 > [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)
 
 ## "No train found for input type X"

@@ -14,7 +14,6 @@ Trax supports two levels of authorization for the API layer:
 
 Endpoint-level auth answers "can this user access the Trax API at all?" Per-train auth answers "can this user execute *this particular* train?"
 
-{: .sdk-references }
 > [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)
 
 ## Per-Train Authorization

@@ -7,7 +7,6 @@ nav_order: 5
 
 # Dependent Trains
 
-{: .sdk-references }
 > [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many)
 
 ## The Problem

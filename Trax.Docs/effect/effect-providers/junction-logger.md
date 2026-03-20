@@ -10,7 +10,6 @@ nav_order: 4
 
 The junction logger fires before and after each junction in a train, logging structured `JunctionMetadata` entries. This gives you per-junction observability: which junction is running, how long it took, what its Railway state was, and optionally what it returned.
 
-{: .sdk-references }
 > [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger)
 
 ## Registration

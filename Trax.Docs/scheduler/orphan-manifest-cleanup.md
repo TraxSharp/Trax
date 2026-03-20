@@ -9,7 +9,6 @@ nav_order: 4
 
 When you remove a schedule definition from your startup configuration (e.g., delete a `.Schedule(...)` call from `Program.cs`), the scheduler automatically deletes the corresponding manifest and all its related data from the database on the next startup. This prevents stale manifests from continuing to fire after their code has been removed.
 
-{: .sdk-references }
 > [PruneOrphanedManifests](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule)
 
 ## How It Works
