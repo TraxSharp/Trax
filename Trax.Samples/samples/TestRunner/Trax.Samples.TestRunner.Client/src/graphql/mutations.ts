@@ -5,7 +5,6 @@ export const RUN_TESTS = gql`
     dispatch {
       runTests(input: $input) {
         externalId
-        workQueueId
       }
     }
   }

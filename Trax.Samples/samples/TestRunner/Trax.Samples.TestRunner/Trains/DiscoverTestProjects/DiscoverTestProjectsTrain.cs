@@ -5,12 +5,12 @@ using Trax.Samples.TestRunner.Trains.DiscoverTestProjects.Junctions;
 
 namespace Trax.Samples.TestRunner.Trains.DiscoverTestProjects;
 
-[TraxQuery(Description = "Lists all test projects in the Trax monorepo")]
+[TraxQuery(Description = "Lists all discoverable NUnit test projects")]
 public class DiscoverTestProjectsTrain
     : ServiceTrain<DiscoverTestProjectsInput, DiscoverTestProjectsOutput>,
         IDiscoverTestProjectsTrain
 {
     protected override async Task<Either<Exception, DiscoverTestProjectsOutput>> RunInternal(
         DiscoverTestProjectsInput input
-    ) => Activate(input).Chain<ScanMonorepoJunction>().Resolve();
+    ) => Activate(input).Chain<ScanProjectsJunction>().Resolve();
 }

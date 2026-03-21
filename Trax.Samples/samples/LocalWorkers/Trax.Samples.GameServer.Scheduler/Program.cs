@@ -27,6 +27,7 @@ using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.GameServer;
+using Trax.Samples.GameServer.Hooks;
 using Trax.Samples.GameServer.Trains.Leaderboard.GenerateSeasonReport;
 using Trax.Samples.GameServer.Trains.Leaderboard.RecalculateLeaderboard;
 using Trax.Samples.GameServer.Trains.Maintenance.CorruptedDataRepair;
@@ -56,6 +57,7 @@ builder.Services.AddTrax(trax =>
                 .AddJson()
                 .SaveTrainParameters()
                 .AddJunctionProgress()
+                .AddLifecycleHook<AuditLogHook>()
         )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>

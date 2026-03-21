@@ -4,6 +4,4 @@ public record TestProject
 {
     public required string Name { get; init; }
     public required string ProjectPath { get; init; }
-    public required string RepoName { get; init; }
-    public bool RequiresPostgres { get; init; }
 }

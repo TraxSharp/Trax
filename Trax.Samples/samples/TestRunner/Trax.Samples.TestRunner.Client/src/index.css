@@ -117,20 +117,6 @@ body {
   color: #e0e0e0;
 }
 
-.project-repo {
-  color: #888;
-}
-
-.postgres-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  background: #422006;
-  color: #fbbf24;
-}
-
 /* ── Buttons ────────────────────────────────────────────────────────────── */
 
 .run-button {

@@ -7,8 +7,6 @@ export const DISCOVER_TEST_PROJECTS = gql`
         projects {
           name
           projectPath
-          repoName
-          requiresPostgres
         }
       }
     }

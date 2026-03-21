@@ -1,8 +1,6 @@
 export interface TestProject {
   name: string;
   projectPath: string;
-  repoName: string;
-  requiresPostgres: boolean;
 }
 
 export interface TestCaseResult {

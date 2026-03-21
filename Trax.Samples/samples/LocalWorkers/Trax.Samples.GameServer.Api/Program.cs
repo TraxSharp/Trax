@@ -68,6 +68,7 @@ using Trax.Samples.GameServer;
 using Trax.Samples.GameServer.Auth;
 using Trax.Samples.GameServer.Data;
 using Trax.Samples.GameServer.Data.Models;
+using Trax.Samples.GameServer.Hooks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -77,7 +78,7 @@ var connectionString =
 
 builder.Services.AddLogging(logging => logging.AddConsole());
 
-// ── CORS — allow the Trax website (local dev) to connect ──────────────
+// ── CORS — allow any local dev to connect ──────────────
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
@@ -107,6 +108,7 @@ builder.Services.AddTrax(trax =>
                 .AddDataContextLogging()
                 .AddJson()
                 .SaveTrainParameters()
+                .AddLifecycleHook<AuditLogHook>()
         )
         .AddMediator(typeof(ManifestNames).Assembly)
 );

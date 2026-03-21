@@ -7,14 +7,6 @@ namespace Trax.Samples.TestRunner.Services;
 
 public class TestProjectRegistry
 {
-    private static readonly HashSet<string> PostgresProjects =
-    [
-        "Trax.Effect.Tests.Integration",
-        "Trax.Mediator.Tests.Postgres.Integration",
-        "Trax.Scheduler.Tests.Integration",
-        "Trax.Scheduler.Tests.Stress",
-    ];
-
     private static readonly HashSet<string> ExcludedSuffixes = ["ArrayLogger", "Benchmarks"];
 
     private readonly Lazy<IReadOnlyList<TestProject>> _projects;
@@ -36,7 +28,6 @@ public class TestProjectRegistry
     private static List<TestProject> ScanProjects(string root, ILogger logger)
     {
         var projects = new List<TestProject>();
-        var repoName = Path.GetFileName(root);
         var testsDir = Path.Combine(root, "tests");
 
         if (!Directory.Exists(testsDir))
@@ -59,15 +50,7 @@ public class TestProjectRegistry
             if (!IsNUnitProject(csprojPath))
                 continue;
 
-            projects.Add(
-                new TestProject
-                {
-                    Name = projectName,
-                    ProjectPath = csprojPath,
-                    RepoName = repoName,
-                    RequiresPostgres = PostgresProjects.Contains(projectName),
-                }
-            );
+            projects.Add(new TestProject { Name = projectName, ProjectPath = csprojPath });
 
             logger.LogDebug("Discovered test project {Name}", projectName);
         }
