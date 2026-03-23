@@ -19,4 +19,9 @@ public class CreateBackgroundJob
     /// Fully qualified type name of the input, for deserialization.
     /// </summary>
     public string? InputType { get; set; }
+
+    /// <summary>
+    /// Job priority. Higher values are dequeued first. Defaults to 0.
+    /// </summary>
+    public int Priority { get; set; }
 }

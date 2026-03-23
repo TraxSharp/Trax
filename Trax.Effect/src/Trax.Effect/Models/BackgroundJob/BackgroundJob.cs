@@ -49,6 +49,13 @@ public class BackgroundJob : IModel
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
+    /// Job priority. Higher values are dequeued first by workers.
+    /// Inherited from the WorkQueue entry's priority at dispatch time.
+    /// </summary>
+    [Column("priority")]
+    public int Priority { get; set; }
+
+    /// <summary>
     /// When a worker claimed this job. NULL means available for dequeue.
     /// A stale value (older than VisibilityTimeout) makes the job eligible for re-claim.
     /// </summary>
@@ -69,6 +76,7 @@ public class BackgroundJob : IModel
             MetadataId = dto.MetadataId,
             Input = dto.Input,
             InputType = dto.InputType,
+            Priority = dto.Priority,
             CreatedAt = DateTime.UtcNow,
         };
     }
