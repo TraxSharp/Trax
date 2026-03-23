@@ -1537,6 +1537,433 @@ public class ManifestManagerTrainTests : TestSetup
 
     #endregion
 
+    #region Dead Letter Retry Starvation Tests
+
+    [Test]
+    public async Task Run_WhenDeadLetterRetried_DoesNotImmediatelyReDeadLetter()
+    {
+        // Arrange - manifest with 3 old failures (at maxRetries), dead letter resolved via retry
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 1,
+            maxRetries: 3
+        );
+
+        var oldTime = DateTime.UtcNow.AddHours(-2);
+        await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-3));
+        await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-2));
+        await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-1));
+
+        // Dead letter was created and then retried (resolved)
+        await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.Retried, resolvedAt: oldTime);
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - no new dead letter should be created (old failures are "forgiven")
+        DataContext.Reset();
+        var deadLetters = await DataContext
+            .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
+            .ToListAsync();
+        deadLetters
+            .Count(dl => dl.Status == DeadLetterStatus.AwaitingIntervention)
+            .Should()
+            .Be(0, "resolved dead letter should reset the failure count");
+    }
+
+    [Test]
+    public async Task Run_WhenDeadLetterRetriedAndRetryFails_CountsOnlyPostResolutionFailures()
+    {
+        // Arrange - 3 old failures, resolved dead letter, 1 new failure (below maxRetries=2)
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 1,
+            maxRetries: 2
+        );
+
+        var resolutionTime = DateTime.UtcNow.AddHours(-1);
+        // Old failures before resolution
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(-30)
+        );
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(-20)
+        );
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(-10)
+        );
+
+        await CreateAndSaveDeadLetter(
+            manifest,
+            DeadLetterStatus.Retried,
+            resolvedAt: resolutionTime
+        );
+
+        // 1 new failure after resolution (below maxRetries=2)
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(5)
+        );
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - only 1 post-resolution failure, below maxRetries=2
+        DataContext.Reset();
+        var deadLetters = await DataContext
+            .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
+            .ToListAsync();
+        deadLetters
+            .Count(dl => dl.Status == DeadLetterStatus.AwaitingIntervention)
+            .Should()
+            .Be(0, "only 1 post-resolution failure which is below maxRetries=2");
+    }
+
+    [Test]
+    public async Task Run_WhenDeadLetterRetriedAndNewFailuresExceedMaxRetries_CreatesNewDeadLetter()
+    {
+        // Arrange - old failures, resolved dead letter, 2 new failures (= maxRetries=2)
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 1,
+            maxRetries: 2
+        );
+
+        var resolutionTime = DateTime.UtcNow.AddHours(-1);
+        // Old failures
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(-30)
+        );
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(-20)
+        );
+
+        await CreateAndSaveDeadLetter(
+            manifest,
+            DeadLetterStatus.Retried,
+            resolvedAt: resolutionTime
+        );
+
+        // 2 new failures after resolution (meets maxRetries=2)
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(5)
+        );
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(10)
+        );
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - 2 post-resolution failures >= maxRetries=2, new dead letter created
+        DataContext.Reset();
+        var deadLetters = await DataContext
+            .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
+            .ToListAsync();
+        deadLetters
+            .Count(dl => dl.Status == DeadLetterStatus.AwaitingIntervention)
+            .Should()
+            .Be(1, "2 post-resolution failures should trigger a new dead letter");
+    }
+
+    [Test]
+    public async Task Run_WhenMultipleDeadLettersResolved_CountsFailuresAfterMostRecent()
+    {
+        // Arrange - two resolved dead letters at different times, 1 failure after the second
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 1,
+            maxRetries: 2
+        );
+
+        var dl1Time = DateTime.UtcNow.AddHours(-3);
+        var dl2Time = DateTime.UtcNow.AddHours(-1);
+
+        // Old failures before DL1
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: dl1Time.AddMinutes(-20)
+        );
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: dl1Time.AddMinutes(-10)
+        );
+
+        await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.Retried, resolvedAt: dl1Time);
+
+        // Mid failures between DL1 and DL2
+        await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: dl1Time.AddMinutes(10));
+        await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: dl1Time.AddMinutes(20));
+
+        await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.Retried, resolvedAt: dl2Time);
+
+        // 1 failure after DL2 (below maxRetries=2)
+        await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: dl2Time.AddMinutes(5));
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - only 1 failure after most recent resolution, below threshold
+        DataContext.Reset();
+        var deadLetters = await DataContext
+            .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
+            .ToListAsync();
+        deadLetters
+            .Count(dl => dl.Status == DeadLetterStatus.AwaitingIntervention)
+            .Should()
+            .Be(0, "only 1 failure after the most recent dead letter resolution");
+    }
+
+    [Test]
+    public async Task Run_WhenDeadLetterAcknowledged_AlsoResetsFailureCount()
+    {
+        // Arrange - acknowledged dead letter should also reset the failure count
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 1,
+            maxRetries: 3
+        );
+
+        var oldTime = DateTime.UtcNow.AddHours(-2);
+        await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-3));
+        await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-2));
+        await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: oldTime.AddMinutes(-1));
+
+        await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.Acknowledged, resolvedAt: oldTime);
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - acknowledged dead letter resets count just like retried
+        DataContext.Reset();
+        var deadLetters = await DataContext
+            .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
+            .ToListAsync();
+        deadLetters
+            .Count(dl => dl.Status == DeadLetterStatus.AwaitingIntervention)
+            .Should()
+            .Be(0, "acknowledged dead letter should also reset the failure count");
+    }
+
+    [Test]
+    public async Task Run_WhenNoResolvedDeadLetters_CountsAllFailures()
+    {
+        // Arrange - no dead letters at all, 3 failures exceed maxRetries=2 (regression test)
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 1,
+            maxRetries: 2
+        );
+
+        await CreateAndSaveMetadata(manifest, TrainState.Failed);
+        await CreateAndSaveMetadata(manifest, TrainState.Failed);
+        await CreateAndSaveMetadata(manifest, TrainState.Failed);
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - backward compatible: all failures counted, dead letter created
+        DataContext.Reset();
+        var deadLetters = await DataContext
+            .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
+            .ToListAsync();
+        deadLetters
+            .Count(dl => dl.Status == DeadLetterStatus.AwaitingIntervention)
+            .Should()
+            .Be(1, "without any resolved dead letters, all failures should count");
+    }
+
+    [Test]
+    public async Task Run_WhenAwaitingInterventionDeadLetterExists_SkipsManifestEntirely()
+    {
+        // Arrange - unresolved dead letter blocks the manifest regardless of failure count
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 1,
+            maxRetries: 2
+        );
+
+        await CreateAndSaveMetadata(manifest, TrainState.Failed);
+        await CreateAndSaveMetadata(manifest, TrainState.Failed);
+        await CreateAndSaveMetadata(manifest, TrainState.Failed);
+        await CreateAndSaveMetadata(manifest, TrainState.Failed);
+        await CreateAndSaveMetadata(manifest, TrainState.Failed);
+
+        await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.AwaitingIntervention);
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - only the original dead letter exists (no duplicate)
+        DataContext.Reset();
+        var deadLetters = await DataContext
+            .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
+            .ToListAsync();
+        deadLetters.Should().HaveCount(1, "should not create duplicate dead letters");
+        deadLetters[0].Status.Should().Be(DeadLetterStatus.AwaitingIntervention);
+    }
+
+    [Test]
+    public async Task Run_WhenDeadLetterRetriedAndRetrySucceedsThenFailsAgain_CountsCorrectly()
+    {
+        // Arrange - resolved DL, 1 success + 1 failure after resolution
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 1,
+            maxRetries: 2
+        );
+
+        var resolutionTime = DateTime.UtcNow.AddHours(-1);
+        // Old failures
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(-10)
+        );
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(-5)
+        );
+
+        await CreateAndSaveDeadLetter(
+            manifest,
+            DeadLetterStatus.Retried,
+            resolvedAt: resolutionTime
+        );
+
+        // Retry succeeded, then failed again (1 success + 1 failure post-resolution)
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Completed,
+            startTime: resolutionTime.AddMinutes(5)
+        );
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(10)
+        );
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - only 1 post-resolution failure, below maxRetries=2
+        DataContext.Reset();
+        var deadLetters = await DataContext
+            .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
+            .ToListAsync();
+        deadLetters
+            .Count(dl => dl.Status == DeadLetterStatus.AwaitingIntervention)
+            .Should()
+            .Be(0, "only 1 post-resolution failure, below maxRetries=2");
+    }
+
+    [Test]
+    public async Task Run_WhenDeadLetterResolvedAtNull_TreatedAsUnresolved()
+    {
+        // Arrange - malformed dead letter with Retried status but no ResolvedAt
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 1,
+            maxRetries: 2
+        );
+
+        await CreateAndSaveMetadata(manifest, TrainState.Failed);
+        await CreateAndSaveMetadata(manifest, TrainState.Failed);
+        await CreateAndSaveMetadata(manifest, TrainState.Failed);
+
+        // Dead letter with Retried status but null ResolvedAt (malformed data)
+        await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.Retried, resolvedAt: null);
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - null ResolvedAt means the NOT EXISTS subquery doesn't match,
+        // so all failures count. A new dead letter should be created.
+        DataContext.Reset();
+        var deadLetters = await DataContext
+            .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
+            .ToListAsync();
+        deadLetters
+            .Count(dl => dl.Status == DeadLetterStatus.AwaitingIntervention)
+            .Should()
+            .Be(1, "null ResolvedAt should not reset failure count — fail safe");
+    }
+
+    [Test]
+    public async Task Run_MultipleRetryCycles_EachResolutionResetsCount()
+    {
+        // Arrange - manifest goes through multiple dead letter → retry → fail cycles
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 1,
+            maxRetries: 2
+        );
+
+        // Cycle 1: 2 failures → dead letter → resolved
+        var dl1Time = DateTime.UtcNow.AddHours(-4);
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: dl1Time.AddMinutes(-20)
+        );
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: dl1Time.AddMinutes(-10)
+        );
+        await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.Retried, resolvedAt: dl1Time);
+
+        // Cycle 2: 2 more failures → dead letter → resolved
+        var dl2Time = DateTime.UtcNow.AddHours(-2);
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: dl2Time.AddMinutes(-20)
+        );
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: dl2Time.AddMinutes(-10)
+        );
+        await CreateAndSaveDeadLetter(manifest, DeadLetterStatus.Retried, resolvedAt: dl2Time);
+
+        // Cycle 3: only 1 failure so far (below threshold)
+        await CreateAndSaveMetadata(manifest, TrainState.Failed, startTime: dl2Time.AddMinutes(5));
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - only 1 failure after most recent resolution, below maxRetries=2
+        DataContext.Reset();
+        var deadLetters = await DataContext
+            .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
+            .ToListAsync();
+        deadLetters
+            .Count(dl => dl.Status == DeadLetterStatus.AwaitingIntervention)
+            .Should()
+            .Be(0, "each resolution resets the count; only 1 failure after DL2");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private async Task<Manifest> CreateAndSaveManifest(
@@ -1618,7 +2045,11 @@ public class ManifestManagerTrainTests : TestSetup
         return manifest;
     }
 
-    private async Task<Metadata> CreateAndSaveMetadata(Manifest manifest, TrainState state)
+    private async Task<Metadata> CreateAndSaveMetadata(
+        Manifest manifest,
+        TrainState state,
+        DateTime? startTime = null
+    )
     {
         var metadata = Metadata.Create(
             new CreateMetadata
@@ -1632,6 +2063,9 @@ public class ManifestManagerTrainTests : TestSetup
 
         metadata.TrainState = state;
 
+        if (startTime.HasValue)
+            metadata.StartTime = startTime.Value;
+
         await DataContext.Track(metadata);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
@@ -1641,7 +2075,8 @@ public class ManifestManagerTrainTests : TestSetup
 
     private async Task<DeadLetter> CreateAndSaveDeadLetter(
         Manifest manifest,
-        DeadLetterStatus status
+        DeadLetterStatus status,
+        DateTime? resolvedAt = null
     )
     {
         // Reload the manifest from the current DataContext to avoid EF tracking issues
@@ -1657,6 +2092,9 @@ public class ManifestManagerTrainTests : TestSetup
         );
 
         deadLetter.Status = status;
+
+        if (resolvedAt.HasValue)
+            deadLetter.ResolvedAt = resolvedAt.Value;
 
         await DataContext.Track(deadLetter);
         await DataContext.SaveChanges(CancellationToken.None);

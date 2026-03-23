@@ -102,7 +102,7 @@ internal class LocalWorkerService(
                     SELECT * FROM trax.background_job
                     WHERE fetched_at IS NULL
                        OR fetched_at < NOW() - make_interval(secs => {0})
-                    ORDER BY created_at ASC
+                    ORDER BY priority DESC, created_at ASC
                     LIMIT {1}
                     FOR UPDATE SKIP LOCKED
                     """,

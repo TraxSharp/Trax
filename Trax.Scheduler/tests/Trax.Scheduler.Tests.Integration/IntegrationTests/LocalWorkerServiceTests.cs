@@ -644,6 +644,329 @@ public class LocalWorkerServiceTests : TestSetup
 
     #endregion
 
+    #region Priority Ordering Tests
+
+    [Test]
+    public async Task Worker_ClaimsHighPriorityJobs_BeforeLowPriority()
+    {
+        // Arrange - Create jobs with priorities 0, 15, 31 in order low→high
+        // so created_at favors low priority (created first)
+        var group = await CreateAndSaveManifestGroup(DataContext);
+        var manifest = await CreateAndSaveManifest(group);
+
+        var input = new SchedulerTestInput { Value = "priority-test" };
+        var inputJson = JsonSerializer.Serialize(
+            input,
+            input.GetType(),
+            TraxJsonSerializationOptions.ManifestProperties
+        );
+
+        var metaLow = await CreateMetadataForManifest(manifest);
+        var jobLow = BackgroundJob.Create(
+            new CreateBackgroundJob
+            {
+                MetadataId = metaLow.Id,
+                Priority = 0,
+                Input = inputJson,
+                InputType = typeof(SchedulerTestInput).FullName,
+            }
+        );
+        await DataContext.Track(jobLow);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        await Task.Delay(50); // ensure distinct created_at
+
+        var metaMed = await CreateMetadataForManifest(manifest);
+        var jobMed = BackgroundJob.Create(
+            new CreateBackgroundJob
+            {
+                MetadataId = metaMed.Id,
+                Priority = 15,
+                Input = inputJson,
+                InputType = typeof(SchedulerTestInput).FullName,
+            }
+        );
+        await DataContext.Track(jobMed);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        await Task.Delay(50);
+
+        var metaHigh = await CreateMetadataForManifest(manifest);
+        var jobHigh = BackgroundJob.Create(
+            new CreateBackgroundJob
+            {
+                MetadataId = metaHigh.Id,
+                Priority = 31,
+                Input = inputJson,
+                InputType = typeof(SchedulerTestInput).FullName,
+            }
+        );
+        await DataContext.Track(jobHigh);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Act - Single worker with BatchSize=3 claims all at once
+        using var cts = new CancellationTokenSource();
+        var options = new LocalWorkerOptions
+        {
+            WorkerCount = 1,
+            PollingInterval = TimeSpan.FromMilliseconds(100),
+            BatchSize = 3,
+        };
+
+        var workerService = new LocalWorkerService(
+            Scope.ServiceProvider,
+            options,
+            new CancellationRegistry(),
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
+        );
+
+        var workerTask = workerService.StartAsync(cts.Token);
+        await Task.Delay(3000);
+        cts.Cancel();
+
+        try
+        {
+            await workerTask;
+        }
+        catch (OperationCanceledException) { }
+
+        // Assert - All jobs processed; high-priority should complete first (sequential in batch)
+        DataContext.Reset();
+        var remaining = await DataContext.BackgroundJobs.CountAsync();
+        remaining.Should().Be(0, "all jobs should be processed");
+
+        // Verify execution order via metadata EndTime — single worker executes sequentially
+        // so earlier EndTime means processed first
+        var metadatas = await DataContext
+            .Metadatas.Where(m => m.Id == metaLow.Id || m.Id == metaMed.Id || m.Id == metaHigh.Id)
+            .ToListAsync();
+
+        var highMeta = metadatas.First(m => m.Id == metaHigh.Id);
+        var medMeta = metadatas.First(m => m.Id == metaMed.Id);
+        var lowMeta = metadatas.First(m => m.Id == metaLow.Id);
+
+        highMeta
+            .EndTime.Should()
+            .NotBeNull("high-priority job should have completed")
+            .And.BeBefore(
+                medMeta.EndTime!.Value,
+                "high-priority job should complete before medium"
+            );
+        medMeta
+            .EndTime.Should()
+            .BeBefore(lowMeta.EndTime!.Value, "medium-priority job should complete before low");
+    }
+
+    [Test]
+    public async Task Worker_ClaimsFIFO_WithinSamePriority()
+    {
+        // Arrange - 3 jobs all with priority 10, created at different times
+        var group = await CreateAndSaveManifestGroup(DataContext);
+        var manifest = await CreateAndSaveManifest(group);
+
+        var input = new SchedulerTestInput { Value = "fifo-test" };
+        var inputJson = JsonSerializer.Serialize(
+            input,
+            input.GetType(),
+            TraxJsonSerializationOptions.ManifestProperties
+        );
+
+        var meta1 = await CreateMetadataForManifest(manifest);
+        var job1 = BackgroundJob.Create(
+            new CreateBackgroundJob
+            {
+                MetadataId = meta1.Id,
+                Priority = 10,
+                Input = inputJson,
+                InputType = typeof(SchedulerTestInput).FullName,
+            }
+        );
+        await DataContext.Track(job1);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        await Task.Delay(50);
+
+        var meta2 = await CreateMetadataForManifest(manifest);
+        var job2 = BackgroundJob.Create(
+            new CreateBackgroundJob
+            {
+                MetadataId = meta2.Id,
+                Priority = 10,
+                Input = inputJson,
+                InputType = typeof(SchedulerTestInput).FullName,
+            }
+        );
+        await DataContext.Track(job2);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        await Task.Delay(50);
+
+        var meta3 = await CreateMetadataForManifest(manifest);
+        var job3 = BackgroundJob.Create(
+            new CreateBackgroundJob
+            {
+                MetadataId = meta3.Id,
+                Priority = 10,
+                Input = inputJson,
+                InputType = typeof(SchedulerTestInput).FullName,
+            }
+        );
+        await DataContext.Track(job3);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Act
+        using var cts = new CancellationTokenSource();
+        var options = new LocalWorkerOptions
+        {
+            WorkerCount = 1,
+            PollingInterval = TimeSpan.FromMilliseconds(100),
+            BatchSize = 3,
+        };
+
+        var workerService = new LocalWorkerService(
+            Scope.ServiceProvider,
+            options,
+            new CancellationRegistry(),
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
+        );
+
+        var workerTask = workerService.StartAsync(cts.Token);
+        await Task.Delay(3000);
+        cts.Cancel();
+
+        try
+        {
+            await workerTask;
+        }
+        catch (OperationCanceledException) { }
+
+        // Assert - FIFO within same priority: job1 completes before job2 before job3
+        DataContext.Reset();
+        var metadatas = await DataContext
+            .Metadatas.Where(m => m.Id == meta1.Id || m.Id == meta2.Id || m.Id == meta3.Id)
+            .ToListAsync();
+
+        var m1 = metadatas.First(m => m.Id == meta1.Id);
+        var m2 = metadatas.First(m => m.Id == meta2.Id);
+        var m3 = metadatas.First(m => m.Id == meta3.Id);
+
+        m1.EndTime.Should()
+            .NotBeNull()
+            .And.BeOnOrBefore(m2.EndTime!.Value, "FIFO: job1 should complete before job2");
+        m2.EndTime.Should()
+            .BeOnOrBefore(m3.EndTime!.Value, "FIFO: job2 should complete before job3");
+    }
+
+    [Test]
+    public async Task Worker_DefaultPriority_IsZero()
+    {
+        // Arrange - Create a background job without explicit priority
+        var metadata = await CreateMetadataForTestTrain();
+        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+
+        await DataContext.Track(job);
+        await DataContext.SaveChanges(CancellationToken.None);
+        var jobId = job.Id;
+        DataContext.Reset();
+
+        // Assert - Priority should default to 0
+        var savedJob = await DataContext.BackgroundJobs.FirstAsync(j => j.Id == jobId);
+        savedJob.Priority.Should().Be(0, "default priority should be 0");
+    }
+
+    [Test]
+    public async Task Worker_MixedPriorities_HighPriorityProcessedFirst_EvenIfCreatedLater()
+    {
+        // Arrange - Low priority created first, high priority created 100ms later
+        var group = await CreateAndSaveManifestGroup(DataContext);
+        var manifest = await CreateAndSaveManifest(group);
+
+        var input = new SchedulerTestInput { Value = "mixed-priority-test" };
+        var inputJson = JsonSerializer.Serialize(
+            input,
+            input.GetType(),
+            TraxJsonSerializationOptions.ManifestProperties
+        );
+
+        var metaLow = await CreateMetadataForManifest(manifest);
+        var jobLow = BackgroundJob.Create(
+            new CreateBackgroundJob
+            {
+                MetadataId = metaLow.Id,
+                Priority = 0,
+                Input = inputJson,
+                InputType = typeof(SchedulerTestInput).FullName,
+            }
+        );
+        await DataContext.Track(jobLow);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        await Task.Delay(100);
+
+        var metaHigh = await CreateMetadataForManifest(manifest);
+        var jobHigh = BackgroundJob.Create(
+            new CreateBackgroundJob
+            {
+                MetadataId = metaHigh.Id,
+                Priority = 31,
+                Input = inputJson,
+                InputType = typeof(SchedulerTestInput).FullName,
+            }
+        );
+        await DataContext.Track(jobHigh);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Act
+        using var cts = new CancellationTokenSource();
+        var options = new LocalWorkerOptions
+        {
+            WorkerCount = 1,
+            PollingInterval = TimeSpan.FromMilliseconds(100),
+            BatchSize = 2,
+        };
+
+        var workerService = new LocalWorkerService(
+            Scope.ServiceProvider,
+            options,
+            new CancellationRegistry(),
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>()
+        );
+
+        var workerTask = workerService.StartAsync(cts.Token);
+        await Task.Delay(3000);
+        cts.Cancel();
+
+        try
+        {
+            await workerTask;
+        }
+        catch (OperationCanceledException) { }
+
+        // Assert - High priority job should complete first despite being created later
+        DataContext.Reset();
+        var highMeta = await DataContext.Metadatas.FirstAsync(m => m.Id == metaHigh.Id);
+        var lowMeta = await DataContext.Metadatas.FirstAsync(m => m.Id == metaLow.Id);
+
+        highMeta.EndTime.Should().NotBeNull("high-priority job should have completed");
+        lowMeta.EndTime.Should().NotBeNull("low-priority job should have completed");
+        highMeta
+            .EndTime!.Value.Should()
+            .BeBefore(
+                lowMeta.EndTime!.Value,
+                "high-priority job should execute before low-priority despite being created later"
+            );
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private async Task<Metadata> CreateMetadataForTestTrain()

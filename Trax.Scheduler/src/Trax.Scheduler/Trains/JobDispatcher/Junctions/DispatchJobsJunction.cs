@@ -201,10 +201,15 @@ internal class DispatchJobsJunction(
                 backgroundTaskId = await jobSubmitter.EnqueueAsync(
                     metadata.Id,
                     deserializedInput,
+                    claimed.Priority,
                     CancellationToken
                 );
             else
-                backgroundTaskId = await jobSubmitter.EnqueueAsync(metadata.Id, CancellationToken);
+                backgroundTaskId = await jobSubmitter.EnqueueAsync(
+                    metadata.Id,
+                    claimed.Priority,
+                    CancellationToken
+                );
 
             logger.LogDebug(
                 "Dispatched work queue entry {WorkQueueId} as background task {BackgroundTaskId} (Metadata: {MetadataId})",

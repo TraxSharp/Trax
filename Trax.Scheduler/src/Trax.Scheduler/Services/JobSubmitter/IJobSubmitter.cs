@@ -55,4 +55,25 @@ public interface IJobSubmitter
     /// </summary>
     Task<string> EnqueueAsync(long metadataId, object input, CancellationToken cancellationToken) =>
         EnqueueAsync(metadataId, input);
+
+    /// <summary>
+    /// Enqueues a job with a dispatch priority. Higher values are dequeued first by workers.
+    /// </summary>
+    /// <remarks>
+    /// The default implementation falls back to the non-priority overload, so existing
+    /// custom implementations continue to work without modification (priority is ignored).
+    /// Only <see cref="PostgresJobSubmitter"/> stores the priority in the background_job table.
+    /// </remarks>
+    Task<string> EnqueueAsync(long metadataId, int priority, CancellationToken cancellationToken) =>
+        EnqueueAsync(metadataId, cancellationToken);
+
+    /// <summary>
+    /// Enqueues a job with input and a dispatch priority. Higher values are dequeued first by workers.
+    /// </summary>
+    Task<string> EnqueueAsync(
+        long metadataId,
+        object input,
+        int priority,
+        CancellationToken cancellationToken
+    ) => EnqueueAsync(metadataId, input, cancellationToken);
 }

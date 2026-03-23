@@ -479,6 +479,64 @@ public class JobDispatcherTrainTests : TestSetup
 
     #endregion
 
+    #region Priority Flow Tests
+
+    // Note: Priority flow from WorkQueue → BackgroundJob is tested in PostgresJobSubmitterTests
+    // because the test setup uses InMemoryJobSubmitter (which doesn't create BackgroundJob records).
+    // The DispatchJobsJunction change passes claimed.Priority to IJobSubmitter.EnqueueAsync,
+    // and PostgresJobSubmitter stores it in the background_job table.
+
+    [Test]
+    public async Task Dispatch_HighPriorityEntry_DispatchedSuccessfully()
+    {
+        // Arrange - entry with high priority dispatches normally
+        var manifest = await CreateAndSaveManifest();
+        var entry = await CreateAndSaveWorkQueueEntry(manifest, priority: 25);
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - entry should be dispatched (priority doesn't affect dispatch eligibility)
+        DataContext.Reset();
+        var updatedEntry = await DataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+        updatedEntry.Status.Should().Be(WorkQueueStatus.Dispatched);
+        updatedEntry.Priority.Should().Be(25, "priority should be preserved on the entry");
+    }
+
+    [Test]
+    public async Task Dispatch_ManualEntryWithPriority_DispatchedSuccessfully()
+    {
+        // Arrange - manual entry (no manifest) with priority
+        var entry = await CreateAndSaveManualWorkQueueEntry(priority: 15);
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert
+        DataContext.Reset();
+        var updatedEntry = await DataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+        updatedEntry.Status.Should().Be(WorkQueueStatus.Dispatched);
+        updatedEntry.Priority.Should().Be(15, "manual entry priority should be preserved");
+    }
+
+    [Test]
+    public async Task Dispatch_DefaultPriority_DispatchedSuccessfully()
+    {
+        // Arrange - entry with default priority (0)
+        var manifest = await CreateAndSaveManifest();
+        var entry = await CreateAndSaveWorkQueueEntry(manifest, priority: 0);
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert
+        DataContext.Reset();
+        var updatedEntry = await DataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+        updatedEntry.Status.Should().Be(WorkQueueStatus.Dispatched);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private async Task<Manifest> CreateAndSaveManifest(string inputValue = "TestValue")

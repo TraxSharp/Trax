@@ -2,6 +2,7 @@ using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Trains.ManifestManager;
 
@@ -29,7 +30,17 @@ internal class LoadManifestsJunction(IDataContext dataContext)
             {
                 Manifest = m,
                 ManifestGroup = m.ManifestGroup,
-                FailedCount = m.Metadatas.Count(md => md.TrainState == TrainState.Failed),
+                FailedCount = m.Metadatas.Count(md =>
+                    md.TrainState == TrainState.Failed
+                    && !m.DeadLetters.Any(dl =>
+                        (
+                            dl.Status == DeadLetterStatus.Retried
+                            || dl.Status == DeadLetterStatus.Acknowledged
+                        )
+                        && dl.ResolvedAt != null
+                        && md.StartTime <= dl.ResolvedAt
+                    )
+                ),
                 HasAwaitingDeadLetter = m.DeadLetters.Any(dl =>
                     dl.Status == DeadLetterStatus.AwaitingIntervention
                 ),

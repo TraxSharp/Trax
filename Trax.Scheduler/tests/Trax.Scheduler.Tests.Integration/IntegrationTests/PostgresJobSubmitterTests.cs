@@ -245,4 +245,76 @@ public class PostgresJobSubmitterTests : TestSetup
     }
 
     #endregion
+
+    #region Priority Tests
+
+    [Test]
+    public async Task EnqueueAsync_WithPriority_SetsBackgroundJobPriority()
+    {
+        // Arrange
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
+
+        // Act
+        var jobId = await jobSubmitter.EnqueueAsync(
+            metadataId: 70,
+            priority: 20,
+            cancellationToken: CancellationToken.None
+        );
+
+        // Assert
+        DataContext.Reset();
+        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
+            j.Id == long.Parse(jobId)
+        );
+        job.Should().NotBeNull();
+        job!.Priority.Should().Be(20, "priority should be stored in the background job");
+    }
+
+    [Test]
+    public async Task EnqueueAsync_WithInputAndPriority_SetsBackgroundJobPriority()
+    {
+        // Arrange
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
+        var input = new { Value = "test-input" };
+
+        // Act
+        var jobId = await jobSubmitter.EnqueueAsync(
+            metadataId: 71,
+            input: input,
+            priority: 15,
+            cancellationToken: CancellationToken.None
+        );
+
+        // Assert
+        DataContext.Reset();
+        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
+            j.Id == long.Parse(jobId)
+        );
+        job.Should().NotBeNull();
+        job!.Priority.Should().Be(15, "priority should be stored with input");
+        job.Input.Should().NotBeNull("input should also be stored");
+    }
+
+    [Test]
+    public async Task EnqueueAsync_WithoutPriority_DefaultsToZero()
+    {
+        // Arrange
+        var jobSubmitter = new PostgresJobSubmitter(DataContext);
+
+        // Act - use the non-priority overload
+        var jobId = await jobSubmitter.EnqueueAsync(
+            metadataId: 72,
+            cancellationToken: CancellationToken.None
+        );
+
+        // Assert
+        DataContext.Reset();
+        var job = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j =>
+            j.Id == long.Parse(jobId)
+        );
+        job.Should().NotBeNull();
+        job!.Priority.Should().Be(0, "non-priority overload should default to 0");
+    }
+
+    #endregion
 }
