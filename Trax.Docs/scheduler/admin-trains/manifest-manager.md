@@ -30,6 +30,8 @@ Scans loaded manifests for any whose failure count meets or exceeds `MaxRetries`
 
 A manifest is only reaped if it doesn't already have an unresolved dead letter. This prevents duplicate dead letters from accumulating when the same manifest fails across multiple polling cycles.
 
+`FailedCount` only counts failures that occurred **after** the most recent dead letter resolution. When a dead letter is resolved (retried or acknowledged), the failure counter effectively resets — only new failures contribute toward the next `MaxRetries` threshold. This prevents retried manifests from being immediately re-dead-lettered due to historical failures that were already addressed.
+
 The junction returns the list of newly created dead letters so `DetermineJobsToQueueJunction` can skip those manifests without re-querying the database.
 
 ### DetermineJobsToQueueJunction

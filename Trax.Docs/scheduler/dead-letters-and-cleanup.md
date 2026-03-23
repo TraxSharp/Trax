@@ -22,6 +22,8 @@ Two actions are available while the dead letter is in `AwaitingIntervention` sta
 - **Re-queue** — Creates a new WorkQueue entry from the manifest's properties and marks the dead letter as `Retried`
 - **Acknowledge** — Prompts for a resolution note and marks the dead letter as `Acknowledged`
 
+Resolving a dead letter (either action) resets the manifest's failure counter. The ManifestManager only counts failures that occurred **after** the most recent resolution when comparing against `MaxRetries`. This means a retried manifest starts fresh — it won't be immediately re-dead-lettered based on the same failures that triggered the original dead letter.
+
 ### Via Code
 
 ```csharp

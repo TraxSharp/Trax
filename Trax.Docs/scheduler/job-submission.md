@@ -32,12 +32,12 @@ The JobDispatcher commits the Metadata creation and WorkQueue status update in a
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                   background_job table                           │
-│  ┌────┬─────────────┬───────┬────────────┬────────────┐         │
-│  │ id │ metadata_id │ input │ created_at │ fetched_at │         │
-│  ├────┼─────────────┼───────┼────────────┼────────────┤         │
-│  │ 1  │     42      │ null  │ 10:00:00   │   null     │ ← available
-│  │ 2  │     43      │ {...} │ 10:00:01   │ 10:00:05   │ ← claimed
-│  └────┴─────────────┴───────┴────────────┴────────────┘         │
+│  ┌────┬─────────────┬──────────┬───────┬────────────┬────────────┐│
+│  │ id │ metadata_id │ priority │ input │ created_at │ fetched_at ││
+│  ├────┼─────────────┼──────────┼───────┼────────────┼────────────┤│
+│  │ 1  │     42      │    20    │ null  │ 10:00:00   │   null     ││ ← available
+│  │ 2  │     43      │    5     │ {...} │ 10:00:01   │ 10:00:05   ││ ← claimed
+│  └────┴─────────────┴──────────┴───────┴────────────┴────────────┘│
 └──────────────────────────────┬──────────────────────────────────┘
                                │
                                ▼
@@ -101,7 +101,7 @@ Each worker runs a three-phase loop:
 SELECT * FROM trax.background_job
 WHERE fetched_at IS NULL
    OR fetched_at < NOW() - make_interval(secs => :visibility_timeout)
-ORDER BY created_at ASC
+ORDER BY priority DESC, created_at ASC
 LIMIT 1
 FOR UPDATE SKIP LOCKED
 ```
@@ -109,7 +109,7 @@ FOR UPDATE SKIP LOCKED
 The `FOR UPDATE SKIP LOCKED` clause ensures:
 - Each job is claimed by exactly one worker (no duplicates)
 - Workers don't block each other (SKIP LOCKED, not WAIT)
-- Oldest jobs are processed first (ORDER BY created_at ASC)
+- Highest-priority jobs are processed first, with FIFO ordering within the same priority
 
 On claim, the worker sets `fetched_at = NOW()` and commits the transaction.
 
@@ -232,13 +232,16 @@ Both models connect to the same Postgres database. See [Remote Execution](/docs/
 
 ## Custom Job Submitter
 
-Implement `IJobSubmitter` and register it via `OverrideSubmitter()`:
+Implement `IJobSubmitter` and register it via `OverrideSubmitter()`. The interface includes priority-aware overloads with default implementations that fall back to the non-priority versions, so custom implementations work without modification:
 
 ```csharp
 public class MyJobSubmitter : IJobSubmitter
 {
     public Task<string> EnqueueAsync(long metadataId) { /* ... */ }
     public Task<string> EnqueueAsync(long metadataId, object input) { /* ... */ }
+
+    // Optional: override to support priority in your backend
+    // public Task<string> EnqueueAsync(long metadataId, int priority, CancellationToken ct) { /* ... */ }
 }
 
 // Registration

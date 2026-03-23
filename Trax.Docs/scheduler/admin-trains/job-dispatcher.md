@@ -72,7 +72,7 @@ For each successfully claimed entry, the dispatcher:
 
 4. **Commits the transaction**: the Metadata creation and WorkQueue status update are committed as a single atomic unit. This makes the Metadata visible to the job submitter before enqueue.
 
-5. **Enqueues to the job submitter**: calls `IJobSubmitter.EnqueueAsync` with the metadata ID and deserialized input. This happens after commit because the `InMemoryJobSubmitter` executes the train synchronously and needs to read the committed Metadata.
+5. **Enqueues to the job submitter**: calls `IJobSubmitter.EnqueueAsync` with the metadata ID, deserialized input, and the work queue entry's **priority**. The priority flows from the WorkQueue entry to the `background_job` table, where `LocalWorkerService` dequeues by `priority DESC, created_at ASC`. This ensures high-priority jobs are executed before low-priority ones. This happens after commit because the `InMemoryJobSubmitter` executes the train synchronously and needs to read the committed Metadata.
 
 Each entry is processed in its own DI scope with a fresh `IDataContext`. If any individual entry fails (type resolution, serialization, database error), its transaction is rolled back, the error is logged, and the loop continues to the next entry. One bad entry doesn't affect the rest of the queue.
 
