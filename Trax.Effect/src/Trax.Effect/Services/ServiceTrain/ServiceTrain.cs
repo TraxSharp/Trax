@@ -332,10 +332,26 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     }
 
     /// <summary>
-    /// Abstract method that must be implemented by concrete train classes.
-    /// This method contains the core business logic.
+    /// The core implementation method that executes the train's logic.
+    /// Override this for full control over the railway pipeline (advanced).
+    /// If not overridden, the default implementation calls Junctions().
     /// </summary>
-    protected abstract override Task<Either<Exception, TOut>> RunInternal(TIn input);
+    protected override Task<Either<Exception, TOut>> RunInternal(TIn input)
+    {
+        TrainMonad = new Monad<TIn, TOut>(this, ServiceProvider!, CancellationToken).Activate(
+            input
+        );
+
+        try
+        {
+            TOut result = Junctions();
+            return Task.FromResult<Either<Exception, TOut>>(result);
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult<Either<Exception, TOut>>(ex);
+        }
+    }
 
     /// <summary>
     /// Creates a composable Monad helper with ServiceProvider for junction DI.
