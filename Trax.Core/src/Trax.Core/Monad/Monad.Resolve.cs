@@ -39,4 +39,27 @@ public partial class Monad<TInput, TReturn>
 
         return (TReturn)result;
     }
+
+    /// <summary>
+    /// Resolves the chain by extracting the result from Memory, throwing on failure.
+    /// Used by the implicit conversion operator to support the Junctions() API.
+    /// </summary>
+    /// <returns>The chain's result</returns>
+    /// <exception cref="Exception">The captured exception if any junction failed</exception>
+    /// <exception cref="TrainException">If the result type cannot be found in Memory</exception>
+    internal TReturn ResolveOrThrow()
+    {
+        if (Exception is not null)
+            throw Exception;
+
+        if (ShortCircuitValueSet)
+            return ShortCircuitValue;
+
+        var result = this.ExtractTypeFromMemory<TReturn, TInput, TReturn>();
+
+        if (result is null)
+            throw new TrainException($"Could not find type: ({typeof(TReturn)}).");
+
+        return (TReturn)result;
+    }
 }

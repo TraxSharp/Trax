@@ -46,6 +46,13 @@ public partial class Monad<TInput, TReturn>
     private bool ShortCircuitValueSet { get; set; }
 
     /// <summary>
+    /// Implicit conversion from Monad to TReturn.
+    /// Enables the Junctions() API where the chain result is returned directly as TReturn
+    /// without requiring an explicit Resolve() call.
+    /// </summary>
+    public static implicit operator TReturn(Monad<TInput, TReturn> monad) => monad.ResolveOrThrow();
+
+    /// <summary>
     /// Creates a Monad for a pure Train (no ServiceProvider).
     /// </summary>
     internal Monad(Train<TInput, TReturn> train, CancellationToken cancellationToken)
