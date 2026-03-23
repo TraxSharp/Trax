@@ -20,19 +20,33 @@ LoadQueuedJobsJunction → LoadDispatchCapacityJunction → ApplyCapacityLimitsJ
 
 ### LoadQueuedJobsJunction
 
-Loads `WorkQueue` entries with `Status = Queued`, filtering out entries whose `ManifestGroup` has `IsEnabled = false` and entries whose `ScheduledAt` is in the future. The results are ordered by three keys:
+Loads `WorkQueue` entries with `Status = Queued`, filtering out entries whose `ManifestGroup` has `IsEnabled = false` and entries whose `ScheduledAt` is in the future.
+
+#### Group-Fair Batching
+
+When `MaxQueuedJobsPerCycle` is set (default: 100), the junction uses a window function (`ROW_NUMBER() OVER (PARTITION BY manifest_group_id)`) to load up to that many entries **per manifest group**. This ensures every group with queued work is represented in the loaded batch, preventing a single high-priority group from monopolizing the batch and starving lower-priority groups.
+
+Without group-fair batching, if a high-priority group floods the queue (e.g., 841 entries from a `ScheduleMany` call), a flat `ORDER BY priority LIMIT 100` would load only that group's entries. `ApplyCapacityLimitsJunction` would cap the group and skip the rest — but entries from other groups would never be loaded, even when they have available capacity.
+
+Manual entries (no manifest) are always included regardless of the per-group limit.
+
+Set `MaxQueuedJobsPerCycle` to `null` to disable the limit and load all queued entries without group-fair batching.
+
+```csharp
+.AddScheduler(scheduler => scheduler
+    .MaxQueuedJobsPerCycle(200)  // load up to 200 entries per group per cycle
+)
+```
+
+#### Ordering
+
+After loading, entries are sorted by three keys:
 
 1. **ManifestGroup.Priority** (descending) — higher priority groups are dispatched first.
 2. **WorkQueue.Priority** (descending) — within a group, higher priority entries come first.
 3. **CreatedAt** (ascending) — FIFO tiebreaker within the same priority.
 
-The number of entries loaded per cycle is bounded by `MaxQueuedJobsPerCycle` (default: 100). This prevents unbounded memory usage when the queue has a large backlog. The default of 100 provides 10x headroom over the default `MaxActiveJobs = 10` to account for per-group limit skipping in `ApplyCapacityLimitsJunction`. Set to `null` to load all queued entries (previous behavior).
-
-```csharp
-.AddScheduler(scheduler => scheduler
-    .MaxQueuedJobsPerCycle(200)  // load up to 200 entries per cycle
-)
-```
+This ordering is applied in-memory after the database query returns, since EF Core wraps `FromSqlRaw` in a subquery when navigation properties are included and Postgres does not guarantee `ORDER BY` preservation through subqueries.
 
 ### DispatchJobsJunction
 

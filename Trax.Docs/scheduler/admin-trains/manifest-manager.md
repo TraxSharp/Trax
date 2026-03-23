@@ -20,7 +20,7 @@ LoadManifestsJunction → ReapFailedJobsJunction → DetermineJobsToQueueJunctio
 
 ### LoadManifestsJunction
 
-Projects all enabled manifests into lightweight `ManifestDispatchView` records using a single database query with pre-computed aggregate flags (`FailedCount`, `HasAwaitingDeadLetter`, `HasQueuedWork`, `HasActiveExecution`). These flags are computed via COUNT/EXISTS subqueries pushed into the database, keeping query cost O(manifests) regardless of how large the child tables (`Metadatas`, `DeadLetters`, `WorkQueues`) grow.
+Projects all enabled manifests into lightweight `ManifestDispatchView` records using a single database query with pre-computed aggregate flags (`FailedCount`, `HasAwaitingDeadLetter`, `HasQueuedWork`, `HasActiveExecution`, `HasSuccessfulMetadata`). These flags are computed via COUNT/EXISTS subqueries pushed into the database, keeping query cost O(manifests) regardless of how large the child tables (`Metadatas`, `DeadLetters`, `WorkQueues`) grow.
 
 The projection uses `AsNoTracking()` — the results are read-only snapshots used for scheduling decisions only. No unbounded child collections are loaded into memory.
 
@@ -38,7 +38,7 @@ The decision junction. It runs two passes over the loaded manifests:
 
 **Pass 1: Time-based manifests** (Cron and Interval). For each, it checks whether the manifest is due using `SchedulingHelpers.ShouldRunNow()`, which dispatches to either cron parsing or interval arithmetic based on the schedule type.
 
-**Pass 2: Dependent manifests**. For each manifest with `ScheduleType.Dependent`, it finds the parent in the loaded set and checks whether `parent.LastSuccessfulRun > dependent.LastSuccessfulRun`. See [Dependent Trains](../dependent-trains.md).
+**Pass 2: Dependent manifests**. For each manifest with `ScheduleType.Dependent`, it finds the parent in the loaded set and checks whether `parent.LastSuccessfulRun > dependent.LastSuccessfulRun`. Before comparing timestamps, the junction verifies that the parent has at least one `Completed` metadata record (`HasSuccessfulMetadata`). If the parent has a `LastSuccessfulRun` timestamp but no successful metadata to back it up (e.g., metadata was truncated or pruned), the timestamp is considered stale and the dependent is not queued. See [Dependent Trains](../dependent-trains.md).
 
 Manifests with `ScheduleType.DormantDependent` are excluded from **both** passes. They are never auto-queued by the ManifestManager—dormant dependents must be explicitly activated at runtime by the parent train via [`IDormantDependentContext`](../dependent-trains.md#dormant-dependents).
 
