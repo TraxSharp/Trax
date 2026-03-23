@@ -697,6 +697,9 @@ public class ManifestManagerTrainTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
+        // Create a successful metadata record to back up the timestamp
+        await CreateAndSaveMetadata(parent, TrainState.Completed);
+
         // Create a dependent manifest that has never run
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
 
@@ -729,6 +732,9 @@ public class ManifestManagerTrainTests : TestSetup
         trackedParent.LastSuccessfulRun = DateTime.UtcNow.AddMinutes(-10);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
+
+        // Create a successful metadata record to back up the timestamp
+        await CreateAndSaveMetadata(parent, TrainState.Completed);
 
         // Dependent ran 5 minutes ago (after parent)
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
@@ -788,6 +794,9 @@ public class ManifestManagerTrainTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
+        // Create a successful metadata record to back up the timestamp
+        await CreateAndSaveMetadata(parent, TrainState.Completed);
+
         // Dependent has a dead letter
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
         await CreateAndSaveDeadLetter(dependent, DeadLetterStatus.AwaitingIntervention);
@@ -818,6 +827,9 @@ public class ManifestManagerTrainTests : TestSetup
         trackedParent.LastSuccessfulRun = DateTime.UtcNow;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
+
+        // Create a successful metadata record to back up the timestamp
+        await CreateAndSaveMetadata(parent, TrainState.Completed);
 
         // Dependent has a pending execution
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
@@ -850,6 +862,9 @@ public class ManifestManagerTrainTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
+        // Create a successful metadata record to back up the timestamp
+        await CreateAndSaveMetadata(parent, TrainState.Completed);
+
         // Dependent has never run, but already has a queued entry from a prior cycle
         var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
         await CreateAndSaveWorkQueueEntry(dependent);
@@ -881,6 +896,9 @@ public class ManifestManagerTrainTests : TestSetup
         trackedA.LastSuccessfulRun = DateTime.UtcNow;
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
+
+        // Create a successful metadata record to back up the timestamp
+        await CreateAndSaveMetadata(manifestA, TrainState.Completed);
 
         var manifestB = await CreateAndSaveDependentManifest(manifestA, inputValue: "B");
         var manifestC = await CreateAndSaveDependentManifest(manifestB, inputValue: "C");
@@ -950,6 +968,9 @@ public class ManifestManagerTrainTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
+        // Create a successful metadata record to back up the timestamp
+        await CreateAndSaveMetadata(parent, TrainState.Completed);
+
         // Create a dormant dependent (unlike normal Dependent, should NOT auto-fire)
         var dormant = await CreateAndSaveDormantDependentManifest(
             parent,
@@ -984,6 +1005,235 @@ public class ManifestManagerTrainTests : TestSetup
             .Should()
             .BeEmpty(
                 "dormant dependents must be explicitly activated via IDormantDependentContext"
+            );
+    }
+
+    #endregion
+
+    #region Stale LastSuccessfulRun Guard Tests
+
+    [Test]
+    public async Task Run_WhenDependentManifestParentHasStaleLastSuccessfulRun_DoesNotEnqueueDependent()
+    {
+        // Arrange - Parent has LastSuccessfulRun set but NO metadata records at all.
+        // This simulates metadata being truncated/pruned while the manifest retains a stale timestamp.
+        var parent = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 3600,
+            inputValue: "Parent"
+        );
+
+        var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
+        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Deliberately NOT creating any metadata — timestamp is orphaned
+
+        var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Dependent should NOT be queued because parent has no successful metadata
+        DataContext.Reset();
+        var workQueueEntries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == dependent.Id)
+            .ToListAsync();
+
+        workQueueEntries
+            .Should()
+            .BeEmpty(
+                "parent has LastSuccessfulRun but no successful metadata to back it up — timestamp is stale"
+            );
+    }
+
+    [Test]
+    public async Task Run_WhenDependentManifestParentHasValidLastSuccessfulRun_EnqueuesDependent()
+    {
+        // Arrange - Parent has both LastSuccessfulRun AND a Completed metadata record
+        var parent = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 3600,
+            inputValue: "Parent"
+        );
+
+        var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
+        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        await CreateAndSaveMetadata(parent, TrainState.Completed);
+
+        var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Dependent should be queued (timestamp backed by real metadata)
+        DataContext.Reset();
+        var workQueueEntries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == dependent.Id)
+            .ToListAsync();
+
+        workQueueEntries
+            .Should()
+            .HaveCount(1, "parent has LastSuccessfulRun backed by a Completed metadata record");
+    }
+
+    [Test]
+    public async Task Run_WhenDependentManifestParentHasOnlyFailedMetadata_DoesNotEnqueueDependent()
+    {
+        // Arrange - Parent has LastSuccessfulRun but only Failed metadata (no Completed).
+        // This can happen when a prior success was pruned and new failures accumulated.
+        var parent = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 3600,
+            inputValue: "Parent"
+        );
+
+        var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
+        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Only failed metadata — no Completed record
+        await CreateAndSaveMetadata(parent, TrainState.Failed);
+        await CreateAndSaveMetadata(parent, TrainState.Failed);
+
+        var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Dependent should NOT be queued
+        DataContext.Reset();
+        var workQueueEntries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == dependent.Id)
+            .ToListAsync();
+
+        workQueueEntries
+            .Should()
+            .BeEmpty(
+                "parent has only Failed metadata — no Completed record to verify the timestamp"
+            );
+    }
+
+    [Test]
+    public async Task Run_WhenDependentManifestParentHasOnlyInProgressMetadata_DoesNotEnqueueDependent()
+    {
+        // Arrange - Parent has LastSuccessfulRun but only InProgress/Pending metadata.
+        // Parent is currently running but hasn't completed yet in this cycle.
+        var parent = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 3600,
+            inputValue: "Parent"
+        );
+
+        var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
+        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Only in-progress metadata — no Completed record
+        await CreateAndSaveMetadata(parent, TrainState.Pending);
+        await CreateAndSaveMetadata(parent, TrainState.InProgress);
+
+        var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Dependent should NOT be queued
+        DataContext.Reset();
+        var workQueueEntries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == dependent.Id)
+            .ToListAsync();
+
+        workQueueEntries
+            .Should()
+            .BeEmpty(
+                "parent has only Pending/InProgress metadata — no Completed record to verify the timestamp"
+            );
+    }
+
+    [Test]
+    public async Task Run_DependentChain_ParentHasStaleTimestamp_NeitherDependentQueued()
+    {
+        // Arrange - Chain: A → B → C
+        // A has LastSuccessfulRun set but no Completed metadata (stale timestamp)
+        var manifestA = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 3600,
+            inputValue: "A"
+        );
+
+        var trackedA = await DataContext.Manifests.FirstAsync(m => m.Id == manifestA.Id);
+        trackedA.LastSuccessfulRun = DateTime.UtcNow;
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Deliberately NOT creating metadata for A — timestamp is stale
+
+        var manifestB = await CreateAndSaveDependentManifest(manifestA, inputValue: "B");
+        var manifestC = await CreateAndSaveDependentManifest(manifestB, inputValue: "C");
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Neither B nor C should be queued
+        DataContext.Reset();
+
+        var bEntries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == manifestB.Id)
+            .ToListAsync();
+        bEntries
+            .Should()
+            .BeEmpty("B should not be queued because A has stale LastSuccessfulRun (no metadata)");
+
+        var cEntries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == manifestC.Id)
+            .ToListAsync();
+        cEntries.Should().BeEmpty("C should not be queued because B hasn't succeeded");
+    }
+
+    [Test]
+    public async Task Run_WhenDependentManifestParentHasCompletedAndFailedMetadata_EnqueuesDependent()
+    {
+        // Arrange - Parent has both Completed AND Failed metadata.
+        // As long as at least one Completed exists, the guard should pass.
+        var parent = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 3600,
+            inputValue: "Parent"
+        );
+
+        var trackedParent = await DataContext.Manifests.FirstAsync(m => m.Id == parent.Id);
+        trackedParent.LastSuccessfulRun = DateTime.UtcNow;
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // Mix of Completed and Failed metadata
+        await CreateAndSaveMetadata(parent, TrainState.Completed);
+        await CreateAndSaveMetadata(parent, TrainState.Failed);
+        await CreateAndSaveMetadata(parent, TrainState.Failed);
+
+        var dependent = await CreateAndSaveDependentManifest(parent, inputValue: "Dependent");
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Dependent should be queued (at least one Completed metadata exists)
+        DataContext.Reset();
+        var workQueueEntries = await DataContext
+            .WorkQueues.Where(q => q.ManifestId == dependent.Id)
+            .ToListAsync();
+
+        workQueueEntries
+            .Should()
+            .HaveCount(
+                1,
+                "parent has at least one Completed metadata record despite also having failures"
             );
     }
 

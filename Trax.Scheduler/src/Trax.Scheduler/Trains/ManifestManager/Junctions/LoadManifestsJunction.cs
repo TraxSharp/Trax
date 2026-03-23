@@ -37,6 +37,9 @@ internal class LoadManifestsJunction(IDataContext dataContext)
                 HasActiveExecution = m.Metadatas.Any(md =>
                     md.TrainState == TrainState.Pending || md.TrainState == TrainState.InProgress
                 ),
+                HasSuccessfulMetadata = m.Metadatas.Any(md =>
+                    md.TrainState == TrainState.Completed
+                ),
             })
             .AsNoTracking()
             .ToListAsync(CancellationToken);

@@ -494,6 +494,387 @@ public class ManifestGroupMaxActiveJobsTests
 
     #endregion
 
+    #region Loading Phase Fairness Tests
+
+    [Test]
+    public async Task Run_HighPriorityGroupFloodsQueue_LowerPriorityGroupStillDispatched()
+    {
+        // Arrange - Group A floods the queue with 150 entries (exceeds MaxQueuedJobsPerCycle=100).
+        // Without group-fair loading, the flat ORDER BY would load all 100 from Group A,
+        // and Group B's 5 entries would never enter the batch.
+        var groupA = await CreateAndSaveManifestGroup(
+            "flood-group-a",
+            maxActiveJobs: 5,
+            priority: 20
+        );
+        var groupB = await CreateAndSaveManifestGroup(
+            "flood-group-b",
+            maxActiveJobs: 5,
+            priority: 10
+        );
+
+        // Queue 150 entries for high-priority group A
+        for (var i = 0; i < 150; i++)
+        {
+            var manifest = await CreateAndSaveManifest(groupA, inputValue: $"A_{i}");
+            await CreateAndSaveWorkQueueEntry(manifest);
+        }
+
+        // Queue 5 entries for lower-priority group B
+        var groupBEntries = new List<WorkQueue>();
+        for (var i = 0; i < 5; i++)
+        {
+            var manifest = await CreateAndSaveManifest(groupB, inputValue: $"B_{i}");
+            groupBEntries.Add(await CreateAndSaveWorkQueueEntry(manifest));
+        }
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Group B entries should be dispatched (up to cap), not starved by Group A
+        _dataContext.Reset();
+
+        var groupBDispatched = 0;
+        foreach (var entry in groupBEntries)
+        {
+            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            if (updated.Status == WorkQueueStatus.Dispatched)
+                groupBDispatched++;
+        }
+
+        groupBDispatched
+            .Should()
+            .Be(5, "group B should not be starved by group A flooding the queue");
+
+        // Group A should also dispatch up to its cap
+        var groupADispatchedCount = await _dataContext.WorkQueues.CountAsync(q =>
+            q.Manifest != null
+            && q.Manifest.ManifestGroupId == groupA.Id
+            && q.Status == WorkQueueStatus.Dispatched
+        );
+
+        groupADispatchedCount
+            .Should()
+            .Be(5, "group A should dispatch up to its per-group MaxActiveJobs limit of 5");
+    }
+
+    [Test]
+    public async Task Run_MultipleGroupsFloodQueue_AllGroupsRepresented()
+    {
+        // Arrange - 3 groups, each with 100+ queued entries and different priorities.
+        // All should get dispatched up to their caps.
+        var groupA = await CreateAndSaveManifestGroup(
+            "multi-flood-a",
+            maxActiveJobs: 2,
+            priority: 20
+        );
+        var groupB = await CreateAndSaveManifestGroup(
+            "multi-flood-b",
+            maxActiveJobs: 2,
+            priority: 10
+        );
+        var groupC = await CreateAndSaveManifestGroup(
+            "multi-flood-c",
+            maxActiveJobs: 2,
+            priority: 5
+        );
+
+        for (var i = 0; i < 120; i++)
+        {
+            var mA = await CreateAndSaveManifest(groupA, inputValue: $"A_{i}");
+            await CreateAndSaveWorkQueueEntry(mA);
+            var mB = await CreateAndSaveManifest(groupB, inputValue: $"B_{i}");
+            await CreateAndSaveWorkQueueEntry(mB);
+            var mC = await CreateAndSaveManifest(groupC, inputValue: $"C_{i}");
+            await CreateAndSaveWorkQueueEntry(mC);
+        }
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - All 3 groups dispatch up to their caps
+        _dataContext.Reset();
+
+        var aDispatched = await _dataContext.WorkQueues.CountAsync(q =>
+            q.Manifest != null
+            && q.Manifest.ManifestGroupId == groupA.Id
+            && q.Status == WorkQueueStatus.Dispatched
+        );
+        var bDispatched = await _dataContext.WorkQueues.CountAsync(q =>
+            q.Manifest != null
+            && q.Manifest.ManifestGroupId == groupB.Id
+            && q.Status == WorkQueueStatus.Dispatched
+        );
+        var cDispatched = await _dataContext.WorkQueues.CountAsync(q =>
+            q.Manifest != null
+            && q.Manifest.ManifestGroupId == groupC.Id
+            && q.Status == WorkQueueStatus.Dispatched
+        );
+
+        aDispatched.Should().Be(2, "group A should dispatch up to its cap");
+        bDispatched.Should().Be(2, "group B should dispatch up to its cap");
+        cDispatched.Should().Be(2, "group C should dispatch up to its cap");
+    }
+
+    [Test]
+    public async Task Run_ManualEntriesAlwaysLoadedWhenGroupFloodsQueue()
+    {
+        // Arrange - A high-priority group floods the queue + manual entries exist.
+        // Manual entries should always be dispatched.
+        var floodGroup = await CreateAndSaveManifestGroup(
+            "manual-flood-group",
+            maxActiveJobs: 3,
+            priority: 31
+        );
+
+        for (var i = 0; i < 150; i++)
+        {
+            var manifest = await CreateAndSaveManifest(floodGroup, inputValue: $"Flood_{i}");
+            await CreateAndSaveWorkQueueEntry(manifest);
+        }
+
+        var manualEntries = new List<WorkQueue>();
+        for (var i = 0; i < 3; i++)
+            manualEntries.Add(await CreateAndSaveManualWorkQueueEntry($"Manual_{i}"));
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Manual entries should be dispatched
+        _dataContext.Reset();
+        foreach (var entry in manualEntries)
+        {
+            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            updated
+                .Status.Should()
+                .Be(
+                    WorkQueueStatus.Dispatched,
+                    "manual entries should not be starved by group flooding"
+                );
+        }
+    }
+
+    [Test]
+    public async Task Run_SingleGroupWithEntries_StillWorksWithGroupFairLoading()
+    {
+        // Arrange - Only 1 group with entries. Should work normally with window function.
+        var group = await CreateAndSaveManifestGroup(
+            "single-group",
+            maxActiveJobs: 5,
+            priority: 10
+        );
+
+        var entries = new List<WorkQueue>();
+        for (var i = 0; i < 10; i++)
+        {
+            var manifest = await CreateAndSaveManifest(group, inputValue: $"Single_{i}");
+            entries.Add(await CreateAndSaveWorkQueueEntry(manifest));
+        }
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - 5 dispatched (per-group limit)
+        _dataContext.Reset();
+        var dispatchedCount = 0;
+        foreach (var entry in entries)
+        {
+            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            if (updated.Status == WorkQueueStatus.Dispatched)
+                dispatchedCount++;
+        }
+
+        dispatchedCount
+            .Should()
+            .Be(5, "single group should dispatch up to its MaxActiveJobs limit");
+    }
+
+    [Test]
+    public async Task Run_EmptyQueue_NoEntriesLoaded()
+    {
+        // Arrange - No entries in work_queue. Raw SQL path should handle this gracefully.
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - No errors, no dispatches
+        _dataContext.Reset();
+        var dispatched = await _dataContext.WorkQueues.CountAsync(q =>
+            q.Status == WorkQueueStatus.Dispatched
+        );
+        dispatched.Should().Be(0, "empty queue should produce no dispatches");
+    }
+
+    [Test]
+    public async Task Run_FutureScheduledAt_NotLoadedByGroupFairQuery()
+    {
+        // Arrange - Entries with future ScheduledAt should not be loaded
+        var group = await CreateAndSaveManifestGroup(
+            "future-group",
+            maxActiveJobs: 10,
+            priority: 10
+        );
+
+        // 5 entries with future ScheduledAt
+        for (var i = 0; i < 5; i++)
+        {
+            var manifest = await CreateAndSaveManifest(group, inputValue: $"Future_{i}");
+            var entry = await CreateAndSaveWorkQueueEntry(manifest);
+            await _dataContext
+                .WorkQueues.Where(q => q.Id == entry.Id)
+                .ExecuteUpdateAsync(s =>
+                    s.SetProperty(q => q.ScheduledAt, DateTime.UtcNow.AddHours(1))
+                );
+            _dataContext.Reset();
+        }
+
+        // 5 entries with null ScheduledAt (immediate)
+        var immediateEntries = new List<WorkQueue>();
+        for (var i = 0; i < 5; i++)
+        {
+            var manifest = await CreateAndSaveManifest(group, inputValue: $"Immediate_{i}");
+            immediateEntries.Add(await CreateAndSaveWorkQueueEntry(manifest));
+        }
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Only the 5 immediate entries should be dispatched
+        _dataContext.Reset();
+        var dispatchedCount = 0;
+        foreach (var entry in immediateEntries)
+        {
+            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            if (updated.Status == WorkQueueStatus.Dispatched)
+                dispatchedCount++;
+        }
+
+        dispatchedCount
+            .Should()
+            .Be(5, "only entries without future ScheduledAt should be dispatched");
+
+        var futureDispatched = await _dataContext.WorkQueues.CountAsync(q =>
+            q.ScheduledAt > DateTime.UtcNow && q.Status == WorkQueueStatus.Dispatched
+        );
+        futureDispatched.Should().Be(0, "future-scheduled entries should not be dispatched");
+    }
+
+    [Test]
+    public async Task Run_DisabledGroupEntries_NotLoadedByGroupFairQuery()
+    {
+        // Arrange - Disabled group with entries should not be loaded by raw SQL
+        var disabledGroup = await CreateAndSaveManifestGroup(
+            "disabled-fair-group",
+            maxActiveJobs: 5,
+            priority: 31,
+            isEnabled: false
+        );
+        var enabledGroup = await CreateAndSaveManifestGroup(
+            "enabled-fair-group",
+            maxActiveJobs: 5,
+            priority: 0
+        );
+
+        for (var i = 0; i < 50; i++)
+        {
+            var manifest = await CreateAndSaveManifest(disabledGroup, inputValue: $"Disabled_{i}");
+            await CreateAndSaveWorkQueueEntry(manifest);
+        }
+
+        var enabledEntries = new List<WorkQueue>();
+        for (var i = 0; i < 5; i++)
+        {
+            var manifest = await CreateAndSaveManifest(enabledGroup, inputValue: $"Enabled_{i}");
+            enabledEntries.Add(await CreateAndSaveWorkQueueEntry(manifest));
+        }
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - Disabled group entries stay queued, enabled group dispatched
+        _dataContext.Reset();
+        foreach (var entry in enabledEntries)
+        {
+            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            updated.Status.Should().Be(WorkQueueStatus.Dispatched);
+        }
+
+        var disabledDispatched = await _dataContext.WorkQueues.CountAsync(q =>
+            q.Manifest != null
+            && q.Manifest.ManifestGroupId == disabledGroup.Id
+            && q.Status == WorkQueueStatus.Dispatched
+        );
+        disabledDispatched
+            .Should()
+            .Be(0, "disabled group entries should not be loaded by the group-fair query");
+    }
+
+    [Test]
+    public async Task Run_GroupFairLoading_PreservesWithinGroupPriorityOrder()
+    {
+        // Arrange - Group with entries at varying priorities. Highest-priority entries
+        // should be dispatched first within the group.
+        var group = await CreateAndSaveManifestGroup(
+            "priority-order-group",
+            maxActiveJobs: 3,
+            priority: 10
+        );
+
+        var lowPriorityEntries = new List<WorkQueue>();
+        var highPriorityEntries = new List<WorkQueue>();
+
+        // Create low-priority entries first (earlier CreatedAt)
+        for (var i = 0; i < 5; i++)
+        {
+            var manifest = await CreateAndSaveManifest(group, inputValue: $"Low_{i}");
+            lowPriorityEntries.Add(await CreateAndSaveWorkQueueEntry(manifest, priority: 0));
+        }
+
+        await Task.Delay(50);
+
+        // Create high-priority entries second (later CreatedAt, but higher priority)
+        for (var i = 0; i < 5; i++)
+        {
+            var manifest = await CreateAndSaveManifest(group, inputValue: $"High_{i}");
+            highPriorityEntries.Add(await CreateAndSaveWorkQueueEntry(manifest, priority: 31));
+        }
+
+        // Act
+        await _train.Run(Unit.Default);
+
+        // Assert - The 3 dispatched should be the high-priority ones (priority trumps FIFO)
+        _dataContext.Reset();
+
+        var highDispatched = 0;
+        foreach (var entry in highPriorityEntries)
+        {
+            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            if (updated.Status == WorkQueueStatus.Dispatched)
+                highDispatched++;
+        }
+
+        highDispatched
+            .Should()
+            .Be(3, "the 3 dispatched entries should be high-priority ones (priority > FIFO)");
+
+        var lowDispatched = 0;
+        foreach (var entry in lowPriorityEntries)
+        {
+            var updated = await _dataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+            if (updated.Status == WorkQueueStatus.Dispatched)
+                lowDispatched++;
+        }
+
+        lowDispatched
+            .Should()
+            .Be(
+                0,
+                "low-priority entries should not be dispatched when group cap is already reached"
+            );
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private async Task<ManifestGroup> CreateAndSaveManifestGroup(

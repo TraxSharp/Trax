@@ -108,6 +108,21 @@ internal class DetermineJobsToQueueJunction(
                     continue;
                 }
 
+                // Guard: if parent has a LastSuccessfulRun timestamp but no successful metadata
+                // record to back it up, the timestamp is stale (e.g. metadata was truncated/pruned).
+                // Skip the dependent to avoid firing it based on orphaned state.
+                if (parent.Manifest.LastSuccessfulRun != null && !parent.HasSuccessfulMetadata)
+                {
+                    logger.LogWarning(
+                        "Parent manifest {ParentId} (name: {ParentName}) has LastSuccessfulRun={LastRun} but no successful metadata — skipping dependent {DependentId}",
+                        parent.Manifest.Id,
+                        parent.Manifest.Name,
+                        parent.Manifest.LastSuccessfulRun,
+                        dependent.Manifest.Id
+                    );
+                    continue;
+                }
+
                 // Queue if parent's LastSuccessfulRun is newer than dependent's LastSuccessfulRun
                 if (
                     parent.Manifest.LastSuccessfulRun != null

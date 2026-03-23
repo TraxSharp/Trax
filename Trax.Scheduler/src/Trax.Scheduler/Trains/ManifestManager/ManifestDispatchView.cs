@@ -15,4 +15,5 @@ internal record ManifestDispatchView
     public required bool HasAwaitingDeadLetter { get; init; }
     public required bool HasQueuedWork { get; init; }
     public required bool HasActiveExecution { get; init; }
+    public required bool HasSuccessfulMetadata { get; init; }
 }
