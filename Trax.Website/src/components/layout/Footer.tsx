@@ -50,12 +50,6 @@ export default function Footer() {
               >
                 NuGet
               </a>
-              <Link
-                href="/about"
-                className="block text-text-muted hover:text-text-secondary"
-              >
-                About
-              </Link>
             </div>
           </div>
         </div>

@@ -14,13 +14,10 @@ if (shipment == null)
 
 return new OrderReceipt(payment, shipment);`;
 
-const solutionCode = `protected override async Task<Either<Exception, OrderReceipt>>
-    RunInternal(OrderRequest input)
-    => Activate(input)
-        .Chain<CheckInventoryJunction>()
+const solutionCode = `protected override OrderReceipt Junctions() =>
+    Chain<CheckInventoryJunction>()
         .Chain<ChargePaymentJunction>()
-        .Chain<CreateShipmentJunction>()
-        .Resolve();`;
+        .Chain<CreateShipmentJunction>();`;
 
 export default async function ProblemSolution() {
   const [problemHtml, solutionHtml] = await Promise.all([
