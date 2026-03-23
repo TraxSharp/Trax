@@ -1,4 +1,3 @@
-using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.GameServer.Trains.Players.LookupPlayer.Junctions;
@@ -13,7 +12,5 @@ namespace Trax.Samples.GameServer.Trains.Players.LookupPlayer;
 [TraxBroadcast]
 public class LookupPlayerTrain : ServiceTrain<LookupPlayerInput, PlayerProfile>, ILookupPlayerTrain
 {
-    protected override async Task<Either<Exception, PlayerProfile>> RunInternal(
-        LookupPlayerInput input
-    ) => Activate(input).Chain<FetchPlayerJunction>().Resolve();
+    protected override PlayerProfile Junctions() => Chain<FetchPlayerJunction>();
 }

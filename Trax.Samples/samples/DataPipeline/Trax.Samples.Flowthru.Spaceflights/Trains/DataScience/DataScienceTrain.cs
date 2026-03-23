@@ -10,7 +10,5 @@ namespace Trax.Samples.Flowthru.Spaceflights.Trains.DataScience;
 /// </summary>
 public class DataScienceTrain : ServiceTrain<DataSciencePipelineInput, Unit>, IDataScienceTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(
-        DataSciencePipelineInput input
-    ) => Activate(input).Chain<ExecuteDataScienceJunction>().Resolve();
+    protected override Unit Junctions() => Chain<ExecuteDataScienceJunction>();
 }

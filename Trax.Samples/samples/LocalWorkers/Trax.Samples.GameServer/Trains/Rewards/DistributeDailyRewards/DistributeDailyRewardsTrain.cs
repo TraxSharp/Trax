@@ -12,7 +12,6 @@ public class DistributeDailyRewardsTrain
     : ServiceTrain<DistributeDailyRewardsInput, Unit>,
         IDistributeDailyRewardsTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(
-        DistributeDailyRewardsInput input
-    ) => Activate(input).Chain<CalculateRewardsJunction>().Chain<CreditPlayersJunction>().Resolve();
+    protected override Unit Junctions() =>
+        Chain<CalculateRewardsJunction>().Chain<CreditPlayersJunction>();
 }

@@ -1,4 +1,3 @@
-using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.GameServer.Trains.Matches.ProcessMatchResult.Junctions;
@@ -24,12 +23,8 @@ public class ProcessMatchResultTrain
     : ServiceTrain<ProcessMatchResultInput, ProcessMatchResultOutput>,
         IProcessMatchResultTrain
 {
-    protected override async Task<Either<Exception, ProcessMatchResultOutput>> RunInternal(
-        ProcessMatchResultInput input
-    ) =>
-        Activate(input)
-            .Chain<ValidateMatchJunction>()
+    protected override ProcessMatchResultOutput Junctions() =>
+        Chain<ValidateMatchJunction>()
             .Chain<UpdatePlayerStatsJunction>()
-            .Chain<CheckForAnomaliesJunction>()
-            .Resolve();
+            .Chain<CheckForAnomaliesJunction>();
 }

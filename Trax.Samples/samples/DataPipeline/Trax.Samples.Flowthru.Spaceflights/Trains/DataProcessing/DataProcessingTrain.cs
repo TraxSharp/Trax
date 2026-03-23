@@ -12,7 +12,5 @@ public class DataProcessingTrain
     : ServiceTrain<DataProcessingPipelineInput, Unit>,
         IDataProcessingTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(
-        DataProcessingPipelineInput input
-    ) => Activate(input).Chain<ExecuteDataProcessingJunction>().Resolve();
+    protected override Unit Junctions() => Chain<ExecuteDataProcessingJunction>();
 }

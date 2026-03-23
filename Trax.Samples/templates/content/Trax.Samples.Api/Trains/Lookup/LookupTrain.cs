@@ -1,4 +1,3 @@
-using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.Api.Trains.Lookup.Junctions;
@@ -12,6 +11,5 @@ namespace Trax.Samples.Api.Trains.Lookup;
 [TraxQuery(Description = "Looks up a record by ID")]
 public class LookupTrain : ServiceTrain<LookupInput, LookupOutput>, ILookupTrain
 {
-    protected override async Task<Either<Exception, LookupOutput>> RunInternal(LookupInput input) =>
-        Activate(input).Chain<FetchDataJunction>().Resolve();
+    protected override LookupOutput Junctions() => Chain<FetchDataJunction>();
 }

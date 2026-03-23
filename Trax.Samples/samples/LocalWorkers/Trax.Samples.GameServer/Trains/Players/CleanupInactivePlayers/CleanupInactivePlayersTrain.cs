@@ -12,8 +12,6 @@ public class CleanupInactivePlayersTrain
     : ServiceTrain<CleanupInactivePlayersInput, Unit>,
         ICleanupInactivePlayersTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(
-        CleanupInactivePlayersInput input
-    ) =>
-        Activate(input).Chain<IdentifyInactiveJunction>().Chain<ArchivePlayersJunction>().Resolve();
+    protected override Unit Junctions() =>
+        Chain<IdentifyInactiveJunction>().Chain<ArchivePlayersJunction>();
 }

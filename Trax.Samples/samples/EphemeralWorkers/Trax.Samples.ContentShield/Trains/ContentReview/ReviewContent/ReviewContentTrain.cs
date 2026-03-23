@@ -1,4 +1,3 @@
-using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.ContentShield.Trains.ContentReview.ReviewContent.Junctions;
@@ -23,12 +22,6 @@ public class ReviewContentTrain
     : ServiceTrain<ReviewContentInput, ReviewContentOutput>,
         IReviewContentTrain
 {
-    protected override async Task<Either<Exception, ReviewContentOutput>> RunInternal(
-        ReviewContentInput input
-    ) =>
-        Activate(input)
-            .Chain<ClassifyContentJunction>()
-            .Chain<ScoreContentJunction>()
-            .Chain<FlagContentJunction>()
-            .Resolve();
+    protected override ReviewContentOutput Junctions() =>
+        Chain<ClassifyContentJunction>().Chain<ScoreContentJunction>().Chain<FlagContentJunction>();
 }

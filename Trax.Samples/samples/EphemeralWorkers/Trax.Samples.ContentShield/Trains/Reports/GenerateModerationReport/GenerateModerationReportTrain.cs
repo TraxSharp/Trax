@@ -1,4 +1,3 @@
-using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.ContentShield.Trains.Reports.GenerateModerationReport.Junctions;
@@ -16,7 +15,6 @@ public class GenerateModerationReportTrain
     : ServiceTrain<GenerateModerationReportInput, GenerateModerationReportOutput>,
         IGenerateModerationReportTrain
 {
-    protected override async Task<Either<Exception, GenerateModerationReportOutput>> RunInternal(
-        GenerateModerationReportInput input
-    ) => Activate(input).Chain<AggregateMetricsJunction>().Chain<FormatReportJunction>().Resolve();
+    protected override GenerateModerationReportOutput Junctions() =>
+        Chain<AggregateMetricsJunction>().Chain<FormatReportJunction>();
 }

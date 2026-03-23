@@ -9,6 +9,5 @@ namespace Trax.Samples.Scheduler.Trains.HelloWorld;
 /// </summary>
 public class HelloWorldTrain : ServiceTrain<HelloWorldInput, Unit>, IHelloWorldTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(HelloWorldInput input) =>
-        Activate(input).Chain<LogGreetingJunction>().Resolve();
+    protected override Unit Junctions() => Chain<LogGreetingJunction>();
 }
