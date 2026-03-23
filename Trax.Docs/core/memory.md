@@ -11,14 +11,14 @@ Memory is how junctions communicate in a train. Think of it as the cargo the tra
 
 ## How It Works
 
-When you call `Activate(input)`, Memory is seeded with two entries: your input type and `Unit`. As each junction runs, its output is stored in Memory under that output's type:
+When a train starts, Memory is seeded with two entries: the input type and `Unit`. As each junction runs, its output is stored in Memory under that output's type:
 
 ```csharp
-Activate(request)                  // Memory: { CreateUserRequest, Unit }
-    .Chain<ValidateEmailJunction>()    // Takes CreateUserRequest, returns Unit -> Memory unchanged
+// Memory starts with: { CreateUserRequest, Unit }
+Chain<ValidateEmailJunction>()         // Takes CreateUserRequest, returns Unit -> Memory unchanged
     .Chain<CreateUserJunction>()       // Takes CreateUserRequest, returns User -> Memory: { CreateUserRequest, Unit, User }
-    .Chain<SendEmailJunction>()        // Takes User from Memory
-    .Resolve();                    // Resolves User from Memory
+    .Chain<SendEmailJunction>();       // Takes User from Memory
+// User is resolved from Memory automatically
 ```
 
 Each junction declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the junction, and stores `TOut` back. If `TIn` isn't in Memory, the train fails at runtime — though the [Analyzer](analyzer.md) catches this at compile time.
@@ -58,12 +58,10 @@ public class EnrichUserJunction : Junction<User, Unit>
 This means you don't need to "pass through" a type just to keep it in Memory. If a junction receives a `User` and modifies it in place, return `Unit`. The next junction that needs `User` will get the same (now modified) reference:
 
 ```csharp
-Activate(input)
-    .Chain<CreateUserJunction>()       // Returns User -> stored in Memory
+Chain<CreateUserJunction>()            // Returns User -> stored in Memory
     .Chain<ValidateUserJunction>()     // Takes User, returns Unit (validation only)
     .Chain<EnrichUserJunction>()       // Takes User, returns Unit (modifies in place)
     .Chain<SendNotificationJunction>() // Takes User — sees all modifications
-    .Resolve();
 ```
 
 Only return a type from a junction when you're producing something **new** for Memory. If you're just reading or mutating an existing object, return `Unit`.
@@ -105,16 +103,14 @@ This lets you load multiple entities in one junction and consume them individual
 ```csharp
 public class CheckoutTrain : ServiceTrain<CheckoutRequest, Receipt>
 {
-    protected override async Task<Either<Exception, Receipt>> RunInternal(CheckoutRequest input)
-        => Activate(input)
-            .Chain<LoadEntitiesJunction>()     // Returns (User, Order, Payment) — deconstructed into Memory
+    protected override Receipt Junctions() =>
+        Chain<LoadEntitiesJunction>()          // Returns (User, Order, Payment) — deconstructed into Memory
             .Chain<ValidateUserJunction>()     // Takes User from Memory
             .Chain<ValidateOrderJunction>()    // Takes Order from Memory
-            .Chain<ProcessCheckoutJunction>()  // Takes (User, Order, Payment) — reconstructed from Memory
-            .Resolve();
+            .Chain<ProcessCheckoutJunction>(); // Takes (User, Order, Payment) — reconstructed from Memory
 }
 ```
 
 ## SDK Reference
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain)

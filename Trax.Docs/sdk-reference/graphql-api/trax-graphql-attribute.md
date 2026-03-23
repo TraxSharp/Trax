@@ -98,8 +98,7 @@ public record RefreshCacheInput;
 [TraxMutation(GraphQLOperation.Run)]
 public class RefreshCacheTrain : ServiceTrain<RefreshCacheInput, Unit>, IRefreshCacheTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(RefreshCacheInput input) =>
-        Activate(input).Chain<RefreshCacheJunction>().Resolve();
+    protected override Unit Junctions() => Chain<RefreshCacheJunction>();
 }
 ```
 
@@ -167,9 +166,7 @@ Trains without `Namespace` remain at the root level of `discover` or `dispatch`.
 public class LookupPlayerTrain
     : ServiceTrain<LookupPlayerInput, LookupPlayerOutput>, ILookupPlayerTrain
 {
-    protected override async Task<Either<Exception, LookupPlayerOutput>> RunInternal(
-        LookupPlayerInput input
-    ) => Activate(input).Chain<FetchPlayerJunction>().Resolve();
+    protected override LookupPlayerOutput Junctions() => Chain<FetchPlayerJunction>();
 }
 ```
 
@@ -196,8 +193,7 @@ query {
 [TraxMutation(Description = "Bans a player (admin only)")]
 public class BanPlayerTrain : ServiceTrain<BanPlayerInput, Unit>, IBanPlayerTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(BanPlayerInput input) =>
-        Activate(input).Chain<ApplyBanJunction>().Resolve();
+    protected override Unit Junctions() => Chain<ApplyBanJunction>();
 }
 ```
 
@@ -235,8 +231,7 @@ mutation {
 [TraxMutation(GraphQLOperation.Run, Description = "Pings the server")]
 public class PingTrain : ServiceTrain<PingInput, PongOutput>, IPingTrain
 {
-    protected override async Task<Either<Exception, PongOutput>> RunInternal(PingInput input) =>
-        Activate(input).Resolve();
+    protected override PongOutput Junctions() => Chain<PingJunction>();
 }
 ```
 
@@ -249,9 +244,8 @@ Generates only `ping` under `dispatch`. No `mode` or `priority` parameters.
 public class RecalculateLeaderboardTrain
     : ServiceTrain<RecalculateLeaderboardInput, Unit>, IRecalculateLeaderboardTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(
-        RecalculateLeaderboardInput input
-    ) => Activate(input).Chain<AggregateScoresJunction>().Chain<RankPlayersJunction>().Resolve();
+    protected override Unit Junctions() =>
+        Chain<AggregateScoresJunction>().Chain<RankPlayersJunction>();
 }
 ```
 

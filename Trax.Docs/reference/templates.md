@@ -173,9 +173,7 @@ The API can queue trains for the scheduler via `{trainName}(mode: QUEUE)` mutati
 public class GetCustomerTrain
     : ServiceTrain<GetCustomerInput, CustomerOutput>, IGetCustomerTrain
 {
-    protected override async Task<Either<Exception, CustomerOutput>> RunInternal(
-        GetCustomerInput input
-    ) => Activate(input).Chain<FetchCustomerJunction>().Resolve();
+    protected override CustomerOutput Junctions() => Chain<FetchCustomerJunction>();
 }
 ```
 
@@ -189,11 +187,9 @@ public record SyncCustomersInput : IManifestProperties
 
 public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, Unit>, ISyncCustomersTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(SyncCustomersInput input) =>
-        Activate(input)
-            .Chain<FetchCustomersJunction>()
-            .Chain<UpsertCustomersJunction>()
-            .Resolve();
+    protected override Unit Junctions() =>
+        Chain<FetchCustomersJunction>()
+            .Chain<UpsertCustomersJunction>();
 }
 ```
 

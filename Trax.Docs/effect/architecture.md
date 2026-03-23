@@ -31,7 +31,8 @@ public interface IJunction<TIn, TOut>
 }
 
 // Chaining is done via methods on Train<TIn, TOut> itself
-// e.g. Activate(input).Chain<MyJunction>().Chain<MyOtherJunction>().Resolve()
+// Primary:  override Junctions() => Chain<MyJunction>().Chain<MyOtherJunction>();
+// Advanced: override RunInternal(input) => Activate(input).Chain<...>().Resolve();
 // See SDK Reference > Train Methods for all overloads
 ```
 
@@ -43,7 +44,7 @@ Extends core trains with dependency injection, metadata tracking, and effect man
 
 ### ServiceTrain<TIn, TOut>
 
-`ServiceTrain` extends `Train` with framework-injected properties and a lifecycle that wraps `RunInternal`:
+`ServiceTrain` extends `Train` with framework-injected properties and a lifecycle that wraps `Junctions()` (or `RunInternal`):
 
 ```csharp
 public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<TIn, TOut>
@@ -60,15 +61,16 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public string TrainName => CanonicalName ?? GetType().FullName ?? GetType().Name;
     public long? ParentId { get; internal set; }
 
-    protected abstract Task<Either<Exception, TOut>> RunInternal(TIn input);
+    protected virtual TOut Junctions() => ...;     // Override for standard pattern
+    protected virtual Task<Either<Exception, TOut>> RunInternal(TIn input) => ...; // Override for advanced cases
 }
 ```
 
-The `Run` method wraps `RunInternal` with a lifecycle that follows these steps:
+The `Run` method wraps the user-defined method (`Junctions()` or `RunInternal`) with a lifecycle that follows these steps:
 
 1. **Initialize** — Create `Metadata`, set `TrainState.InProgress`, persist via `SaveChanges`
 2. **Hooks** — Fire `OnStarted` (global lifecycle hooks, then per-train override)
-3. **Execute** — Call `RunInternal(input)`, which returns `Either<Exception, TOut>`
+3. **Execute** — Call the train's route definition, producing `Either<Exception, TOut>`
 4. **Finalize** — Set output (right track) or exception details (left track), update `TrainState`
 5. **Persist** — `SaveChanges` on both tracks — metadata is always saved regardless of outcome
 6. **Post-hooks** — Fire `OnCompleted` or `OnFailed`/`OnCancelled` depending on the result

@@ -11,6 +11,8 @@ nav_order: 2
 
 ### Train-Level Error Handling
 
+For custom error handling, use `RunInternal` — this is one of the cases where it's more appropriate than `Junctions()`:
+
 ```csharp
 public class RobustTrain : ServiceTrain<ProcessOrderRequest, ProcessOrderResult>
 {
@@ -18,7 +20,7 @@ public class RobustTrain : ServiceTrain<ProcessOrderRequest, ProcessOrderResult>
     {
         try
         {
-            return await Activate(input)
+            return Activate(input)
                 .Chain<ValidateOrderJunction>()
                 .Chain<ProcessPaymentJunction>()
                 .Chain<FulfillOrderJunction>()
@@ -26,14 +28,12 @@ public class RobustTrain : ServiceTrain<ProcessOrderRequest, ProcessOrderResult>
         }
         catch (PaymentException ex)
         {
-            // Handle payment-specific errors
             Logger?.LogWarning("Payment failed for order {OrderId}: {Error}",
                 input.OrderId, ex.Message);
             return new OrderProcessingException("Payment processing failed", ex);
         }
         catch (InventoryException ex)
         {
-            // Handle inventory-specific errors
             return new OrderProcessingException("Insufficient inventory", ex);
         }
     }
@@ -120,4 +120,4 @@ public class BatchProcessJunction : Junction<BatchInput, BatchResult>
 
 ## SDK Reference
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [Activate](/docs/sdk-reference/train-methods/activate) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)

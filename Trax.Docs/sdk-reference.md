@@ -16,9 +16,9 @@ For conceptual explanations and tutorials, see [Core](/docs/core), [Effect](/doc
 
 ### [Train Methods](/docs/sdk-reference/train-methods) (Core)
 
-Methods available inside `RunInternal` on `Train<TInput, TReturn>` — the core building blocks for composing junctions into a pipeline.
+Methods available on `Train<TInput, TReturn>` for composing junctions. Override `Junctions()` for the standard pattern, or `RunInternal` for advanced cases.
 
-Includes: `Activate`, `Chain`, `ShortCircuit`, `Extract`, `AddServices`, `Resolve`, `Run` / `RunEither`.
+Includes: `Junctions`, `Chain`, `ShortCircuit`, `Extract`, `AddServices`, `Activate`, `Resolve`, `Run` / `RunEither`.
 
 ### [Configuration](/docs/sdk-reference/configuration) (Effect)
 

@@ -17,17 +17,15 @@ Trax.Core depends on [LanguageExt](https://github.com/louthy/language-ext), a fu
 
 `Either<L, R>` represents a value that is one of two things: `Left` or `Right`. By convention, `Left` is the failure case and `Right` is the success case.
 
-Trax.Core uses `Either<Exception, T>` as the return type for trains. A train either fails with an exception or succeeds with a result:
+Trax.Core uses `Either<Exception, T>` internally to represent train results. A train either fails with an exception or succeeds with a result:
 
 ```csharp
-protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
-    => Activate(input)
-        .Chain<ValidateEmailJunction>()
-        .Chain<CreateUserJunction>()
-        .Resolve();
+protected override User Junctions() =>
+    Chain<ValidateEmailJunction>()
+        .Chain<CreateUserJunction>();
 ```
 
-You'll see `Either<Exception, T>` in every `RunInternal` signature. The chain handles the wrapping—if a junction throws, the chain catches it and returns `Left(exception)`. If everything succeeds, you get `Right(result)`.
+Under the hood, the chain handles the wrapping — if a junction throws, the chain catches it and returns `Left(exception)`. If everything succeeds, you get `Right(result)`. When using `Junctions()`, this is invisible to you. When using `RunInternal`, you work with `Either` directly.
 
 To inspect the result:
 
@@ -113,4 +111,4 @@ Both methods use `[CallerArgumentExpression]` to include the source expression i
 
 ## SDK Reference
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger)

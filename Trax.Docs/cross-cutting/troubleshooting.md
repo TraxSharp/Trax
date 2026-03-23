@@ -76,13 +76,12 @@ The chain couldn't find a type in Memory to pass to your junction.
 - A previous junction didn't return or add the expected type to Memory
 - Type mismatch between junction output and next junction's input
 
-**Fix:** Check the chain flow. Each junction's input type must exist in Memory (either from `Activate()` or a previous junction's output):
+**Fix:** Check the chain flow. Each junction's input type must exist in Memory (seeded automatically from the train input, or from a previous junction's output):
 ```csharp
-Activate(input)                    // Memory: CreateUserRequest
-    .Chain<ValidateJunction>()         // Takes CreateUserRequest, returns Unit
+// Memory starts with: { CreateUserRequest, Unit }
+Chain<ValidateJunction>()              // Takes CreateUserRequest, returns Unit
     .Chain<CreateUserJunction>()       // Takes CreateUserRequest, returns User
-    .Chain<SendEmailJunction>()        // Takes User (from previous junction)
-    .Resolve();
+    .Chain<SendEmailJunction>();       // Takes User (from previous junction)
 ```
 
 The [Analyzer](../core/analyzer.md) catches most of these issues at compile time—if you see CHAIN001, the message tells you exactly which type is missing and what's available.

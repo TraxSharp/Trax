@@ -8,7 +8,9 @@ nav_order: 1
 
 # Activate
 
-Stores the train input (and optional extra objects) into Memory. Typically the **first** method called in `RunInternal`. After activation, the input is available to subsequent junctions via Memory's type-based lookup.
+Stores the train input (and optional extra objects) into Memory. Used in the `RunInternal` path as the **first** method call. After activation, the input is available to subsequent junctions via Memory's type-based lookup.
+
+> **Note:** When using `Junctions()`, activation happens automatically — you do not call `Activate` yourself. This method is only needed when overriding `RunInternal`.
 
 ## Signature
 
@@ -33,27 +35,25 @@ public new Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs)
 
 ## Examples
 
-### Basic Activation
+### Basic Activation (RunInternal path)
 
 ```csharp
-protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderInput input)
-{
-    return Activate(input)
+protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderInput input) =>
+    Activate(input)
         .Chain<ValidateOrder>()
         .Chain<ProcessPayment>()
         .Resolve();
-}
 ```
 
 ### With Extra Inputs
 
+Pass additional objects into Memory via the `otherInputs` parameter. This is only available in the `RunInternal` path — it's one of the reasons to use `RunInternal` over `Junctions()`:
+
 ```csharp
-protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderInput input)
-{
-    return Activate(input, _configService, _logger)
+protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderInput input) =>
+    Activate(input, _configService, _logger)
         .Chain<ValidateOrder>()
         .Resolve();
-}
 ```
 
 ## Behavior Details

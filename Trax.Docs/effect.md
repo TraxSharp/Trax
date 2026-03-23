@@ -39,15 +39,13 @@ Everything in [Core](core.md), plus:
 ```csharp
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
-    protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
-        => Activate(input)
-            .Chain<ValidateUserJunction>()
-            .Chain<CreateUserJunction>()
-            .Resolve();
+    protected override User Junctions() =>
+        Chain<ValidateUserJunction>()
+            .Chain<CreateUserJunction>();
 }
 ```
 
-The code inside `RunInternal` is identical — `ServiceTrain` adds the infrastructure around it.
+The code inside `Junctions()` is identical — `ServiceTrain` adds the infrastructure around it.
 
 ## The Effect Pattern
 

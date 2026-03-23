@@ -7,37 +7,36 @@ nav_order: 2
 
 # Building Chains
 
-Every train's `RunInternal` method is a chain: `Activate` seeds Memory, `.Chain<T>()` adds junctions, and `.Resolve()` returns the result.
+A train's route is a chain of junctions. Override `Junctions()` to define it — `.Chain<T>()` adds junctions, and the framework handles activation and resolution automatically.
 
 ## Chain
 
 `.Chain<TJunction>()` is the primary way to add a junction to a train's route. It resolves the junction, pulls its input from [Memory](memory.md), runs it, and stores the output back in Memory.
 
 ```csharp
-Activate(input)
-    .Chain<ValidateEmailJunction>()
-    .Chain<CreateUserJunction>()
-    .Chain<SendEmailJunction>()
-    .Resolve();
+protected override User Junctions() =>
+    Chain<ValidateEmailJunction>()
+        .Chain<CreateUserJunction>()
+        .Chain<SendEmailJunction>();
 ```
 
 For all overloads, type parameter constraints, and junction-wiring behavior, see [SDK Reference: Chain](/docs/sdk-reference/train-methods/chain). The [Analyzer](analyzer.md) catches missing types at compile time, so you'll see these errors in your IDE before you ever run the code.
 
 ### Railway Behavior
 
-If a previous junction switched the train to the left track, `.Chain<TJunction>()` is skipped entirely. The exception propagates through the chain until it reaches `.Resolve()`, which returns it as `Left(exception)`.
+If a previous junction switched the train to the left track, `.Chain<TJunction>()` is skipped entirely. The exception propagates through the chain and is returned to the caller.
 
 ```csharp
-Activate(input)
-    .Chain<ValidateEmailJunction>()    // Throws ValidationException
-    .Chain<CreateUserJunction>()       // Skipped
-    .Chain<SendEmailJunction>()        // Skipped
-    .Resolve();                    // Returns Left(ValidationException)
+Chain<ValidateEmailJunction>()    // Throws ValidationException
+    .Chain<CreateUserJunction>()  // Skipped
+    .Chain<SendEmailJunction>();  // Skipped — caller receives the ValidationException
 ```
 
 ## Resolve
 
-`.Resolve()` terminates the chain and returns `Either<Exception, TReturn>`. Every train's `RunInternal` ends with a call to `Resolve`.
+When using `Junctions()`, resolution happens automatically — the last value in Memory matching `TReturn` is returned. You don't call `Resolve()` yourself.
+
+When using `RunInternal`, `.Resolve()` terminates the chain and returns `Either<Exception, TReturn>`:
 
 ```csharp
 protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
@@ -54,7 +53,7 @@ The [Analyzer](analyzer.md) catches missing return types at compile time with **
 
 ### The Parameterized Overload
 
-There's a second overload that takes an `Either<Exception, TReturn>` directly:
+There's a second overload that takes an `Either<Exception, TReturn>` directly. This is only available in the `RunInternal` path:
 
 ```csharp
 protected override async Task<Either<Exception, ParentResult>> RunInternal(ParentRequest input)
@@ -85,14 +84,12 @@ This skips the Memory lookup — you're providing the result directly. If an exc
 ```csharp
 public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderResult>
 {
-    protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderRequest input)
-        => Activate(input)
-            .Chain<ValidateOrderJunction>()
+    protected override OrderResult Junctions() =>
+        Chain<ValidateOrderJunction>()
             .ShortCircuit<CheckCacheJunction>()  // If cached, capture result for Resolve
             .Chain<CalculatePricingJunction>()   // Still executes (short-circuit only affects Resolve)
             .Chain<ProcessPaymentJunction>()     // Still executes (short-circuit only affects Resolve)
-            .Chain<SaveOrderJunction>()
-            .Resolve();
+            .Chain<SaveOrderJunction>();
 }
 ```
 
@@ -110,11 +107,9 @@ See [SDK Reference: ShortCircuit](/docs/sdk-reference/train-methods/short-circui
 `.Extract<TSource, TTarget>()` pulls a nested value out of an object in [Memory](memory.md). It finds the `TSource` object, looks for a property or field of type `TTarget`, and stores that value in Memory under the `TTarget` type.
 
 ```csharp
-Activate(input)
-    .Chain<LoadUserJunction>()              // Returns User, stored in Memory
-    .Extract<User, EmailAddress>()      // Finds EmailAddress property on User, stores it
-    .Chain<ValidateEmailJunction>()         // Takes EmailAddress from Memory
-    .Resolve();
+Chain<LoadUserJunction>()                   // Returns User, stored in Memory
+    .Extract<User, EmailAddress>()          // Finds EmailAddress property on User, stores it
+    .Chain<ValidateEmailJunction>();         // Takes EmailAddress from Memory
 ```
 
 `Extract` uses reflection to find a property or field on `TSource` whose type matches `TTarget` and stores it in Memory. See [SDK Reference: Extract](/docs/sdk-reference/train-methods/extract) for the full search order and failure behavior.
@@ -136,17 +131,15 @@ public class GetUserEmailJunction : Junction<User, EmailAddress>
 `.AddServices()` puts service instances directly into [Memory](memory.md), making them available to subsequent junctions. This bypasses the DI container — the instances you pass are stored as-is.
 
 ```csharp
-protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
+protected override User Junctions()
 {
     var validator = new CustomValidator();
     var notifier = new SlackNotifier();
 
-    return Activate(input)
-        .AddServices<IValidator, INotifier>(validator, notifier)
+    return AddServices<IValidator, INotifier>(validator, notifier)
         .Chain<ValidateJunction>()     // Can take IValidator from Memory
         .Chain<CreateUserJunction>()
-        .Chain<NotifyJunction>()       // Can take INotifier from Memory
-        .Resolve();
+        .Chain<NotifyJunction>();      // Can take INotifier from Memory
 }
 ```
 
@@ -154,6 +147,8 @@ Each type argument is stored in Memory with the corresponding instance. See [SDK
 
 Use `AddServices` when you need to inject runtime-created instances into the chain — objects that aren't available through the DI container or that need to be created per-execution. For standard dependencies, prefer constructor injection in your junctions instead.
 
+> **Note:** `AddServices` is one of the cases where `Junctions()` works well, but if you need to do more complex setup (async calls, try/catch, combining results from nested trains), use `RunInternal` instead.
+
 ## SDK Reference
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) | [Extract](/docs/sdk-reference/train-methods/extract) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [Resolve](/docs/sdk-reference/train-methods/resolve)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) | [Extract](/docs/sdk-reference/train-methods/extract) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [Activate](/docs/sdk-reference/train-methods/activate) | [Resolve](/docs/sdk-reference/train-methods/resolve)

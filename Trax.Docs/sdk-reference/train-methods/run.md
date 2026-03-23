@@ -10,7 +10,7 @@ nav_order: 8
 
 Executes the train from the outside. `Run` throws on failure; `RunEither` returns an `Either<Exception, TReturn>` for Railway-oriented error handling.
 
-These are called by **consumers** of the train, not inside `RunInternal`.
+These are called by **consumers** of the train, not inside `Junctions()` or `RunInternal`.
 
 ## Signatures
 
@@ -84,7 +84,7 @@ public async Task<IActionResult> ProcessOrder(
 
 1. If a `CancellationToken` is provided, stores it on the `Train.CancellationToken` property.
 2. Initializes `Memory` with `Unit.Default`.
-3. Calls `RunInternal(input)` — the user-implemented method.
+3. Calls the user-implemented method (`Junctions()` or `RunInternal(input)`).
 4. **`Run`**: Unwraps the `Either` result. If `Left`, rethrows the exception. If `Right`, returns the value.
 5. **`RunEither`**: Returns the `Either` directly without unwrapping.
 
@@ -94,4 +94,4 @@ During junction execution, the train's `CancellationToken` is automatically prop
 
 - `RunEither` is useful when you want functional-style error handling without try/catch. It pairs naturally with LanguageExt's `Match`, `Map`, `Bind`, etc.
 - In most applications, trains are executed through `ITrainBus.RunAsync` (which calls `Run` internally) rather than calling `Run` directly. See [TrainBus](/docs/sdk-reference/mediator-api/train-bus).
-- The `cancellationToken` parameter stores the token before calling `RunInternal`. All junctions in the chain then receive the token automatically. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) for details on how cancellation propagates through the pipeline.
+- The `cancellationToken` parameter stores the token before calling the train's route definition. All junctions in the chain then receive the token automatically. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) for details on how cancellation propagates through the pipeline.

@@ -130,12 +130,10 @@ public interface ISyncCustomersTrain : IServiceTrain<SyncCustomersInput, Unit> {
 
 public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, Unit>, ISyncCustomersTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(SyncCustomersInput input)
-        => Activate(input)
-            .Chain<FetchCustomersJunction>()
+    protected override Unit Junctions() =>
+        Chain<FetchCustomersJunction>()
             .Chain<TransformDataJunction>()
-            .Chain<WriteToDestinationJunction>()
-            .Resolve();
+            .Chain<WriteToDestinationJunction>();
 }
 ```
 
@@ -147,12 +145,10 @@ public interface ISyncCustomersTrain : IServiceTrain<SyncCustomersInput, SyncRes
 
 public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, SyncResult>, ISyncCustomersTrain
 {
-    protected override async Task<Either<Exception, SyncResult>> RunInternal(SyncCustomersInput input)
-        => Activate(input)
-            .Chain<FetchCustomersJunction>()
+    protected override SyncResult Junctions() =>
+        Chain<FetchCustomersJunction>()
             .Chain<TransformDataJunction>()
-            .Chain<WriteToDestinationJunction>()
-            .Resolve();
+            .Chain<WriteToDestinationJunction>();
 }
 ```
 

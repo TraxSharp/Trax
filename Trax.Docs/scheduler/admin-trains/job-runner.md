@@ -37,7 +37,7 @@ Checks that the loaded metadata is in `TrainState.Pending`. If it's already `InP
 
 ### RunScheduledTrainJunction
 
-Resolves the target train via `ITrainBus` using the deserialized input and invokes it. The train name stored in the metadata record is the canonical interface name (set via `CanonicalName` during DI registration), which `ITrainBus` uses for resolution. This is where your train's `RunInternal` method gets called. The train runs as a nested train under the JobRunner's own metadata, maintaining the parent-child relationship in the metadata tree.
+Resolves the target train via `ITrainBus` using the deserialized input and invokes it. The train name stored in the metadata record is the canonical interface name (set via `CanonicalName` during DI registration), which `ITrainBus` uses for resolution. This is where your train's `Junctions()` (or `RunInternal`) method gets called. The train runs as a nested train under the JobRunner's own metadata, maintaining the parent-child relationship in the metadata tree.
 
 ### UpdateManifestSuccessJunction
 

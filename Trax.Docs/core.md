@@ -38,12 +38,10 @@ Trax.Core uses `Either<Exception, T>` from [LanguageExt](https://github.com/lout
 ```csharp
 public class CreateUserTrain : Train<CreateUserRequest, User>
 {
-    protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
-        => Activate(input)
-            .Chain<ValidateUserJunction>()    // If this fails, skip remaining junctions
+    protected override User Junctions() =>
+        Chain<ValidateUserJunction>()         // If this fails, skip remaining junctions
             .Chain<CreateUserJunction>()      // Only runs if validation succeeded
-            .Chain<SendEmailJunction>()       // Only runs if creation succeeded
-            .Resolve();                   // Return Either<Exception, User>
+            .Chain<SendEmailJunction>();      // Only runs if creation succeeded
 }
 ```
 
@@ -74,4 +72,4 @@ When you need execution logging, DI, or persistent metadata, add [Trax.Effect](e
 
 ## SDK Reference
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [Run / RunEither](/docs/sdk-reference/train-methods/run)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [Run / RunEither](/docs/sdk-reference/train-methods/run)

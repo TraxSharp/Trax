@@ -55,7 +55,7 @@ All methods have default implementations that return `Task.CompletedTask`. Overr
 
 | Method | When it fires |
 |--------|---------------|
-| `OnStarted` | After the train's metadata is persisted and before `RunInternal` executes |
+| `OnStarted` | After the train's metadata is persisted and before the train's junctions execute |
 | `OnCompleted` | After a successful run, after output is persisted |
 | `OnFailed` | After a failed run (exception that is not `OperationCanceledException`), after failure is persisted |
 | `OnCancelled` | After cancellation (`OperationCanceledException`), after cancellation is persisted |
@@ -118,8 +118,7 @@ In addition to global hooks registered via `AddLifecycleHook<T>()`, individual t
 public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
     : ServiceTrain<BanPlayerInput, Unit>, IBanPlayerTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(BanPlayerInput input) =>
-        Activate(input).Chain<ApplyBanJunction>().Resolve();
+    protected override Unit Junctions() => Chain<ApplyBanJunction>();
 
     protected override Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {

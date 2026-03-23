@@ -25,23 +25,20 @@ using Trax.Effect.Attributes;
 [TraxAuthorize("Admin")]
 public class DeleteUserTrain : ServiceTrain<DeleteUserInput, Unit>, IDeleteUserTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(DeleteUserInput input) =>
-        Activate(input).Chain<DeleteUserJunction>().Resolve();
+    protected override Unit Junctions() => Chain<DeleteUserJunction>();
 }
 
 // Requires the user to have at least one of the listed roles
 [TraxAuthorize(Roles = "Manager,Admin")]
 public class GenerateReportTrain : ServiceTrain<ReportInput, ReportOutput>, IGenerateReportTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(ReportInput input) =>
-        Activate(input).Chain<GenerateReportJunction>().Resolve();
+    protected override ReportOutput Junctions() => Chain<GenerateReportJunction>();
 }
 
 // No attribute — no per-train auth check
 public class PingTrain : ServiceTrain<PingInput, PongOutput>, IPingTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(PingInput input) =>
-        Activate(input).Resolve();
+    protected override PongOutput Junctions() => Chain<PingJunction>();
 }
 ```
 

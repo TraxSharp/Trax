@@ -213,6 +213,38 @@ Trains/
 
 Shared junctions should be truly generic. If you find yourself adding conditionals to handle different trains, that's a sign the junction should be duplicated and specialized instead.
 
+## Defining a Train
+
+Override `Junctions()` to define the route — the sequence of junctions the train passes through:
+
+```csharp
+public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
+{
+    protected override User Junctions() =>
+        Chain<ValidateEmailJunction>()
+            .Chain<CreateUserJunction>();
+}
+```
+
+`Junctions()` returns `TReturn` directly. There is no `Either`, no `async Task`, no `Activate`, no `Resolve` — the framework handles all of that. Chain methods (`Chain`, `ShortCircuit`, `Extract`, `AddServices`) are available as protected methods on the train itself.
+
+### When to use RunInternal
+
+For advanced cases — custom logic before/after the chain, manual `Either` construction, or passing extra objects into Memory — override `RunInternal` instead:
+
+```csharp
+public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
+{
+    protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input) =>
+        Activate(input)
+            .Chain<ValidateEmailJunction>()
+            .Chain<CreateUserJunction>()
+            .Resolve();
+}
+```
+
+`RunInternal` gives you full control: `Activate(input)` seeds Memory, `.Chain<T>()` adds junctions, and `.Resolve()` extracts the result as `Either<Exception, TReturn>`. Use it when `Junctions()` isn't expressive enough.
+
 ## Train Lifecycle Hooks
 
 `ServiceTrain` provides `protected virtual` methods you can override to react to your train's own lifecycle events — no global hook registration needed:
@@ -221,11 +253,9 @@ Shared junctions should be truly generic. If you find yourself adding conditiona
 public class CreateUserTrain(ISlackClient slack)
     : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
-    protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input) =>
-        Activate(input)
-            .Chain<ValidateEmailJunction>()
-            .Chain<CreateUserJunction>()
-            .Resolve();
+    protected override User Junctions() =>
+        Chain<ValidateEmailJunction>()
+            .Chain<CreateUserJunction>();
 
     protected override async Task OnFailed(
         Metadata metadata, Exception exception, CancellationToken ct)
@@ -241,4 +271,4 @@ These work alongside [global lifecycle hooks](/docs/sdk-reference/configuration/
 
 ## SDK Reference
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve)

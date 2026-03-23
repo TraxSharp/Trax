@@ -51,13 +51,9 @@ public Monad<TInput, TReturn> Extract<TIn, TOut>(TIn input)
 public record OrderInput(string CustomerId, OrderDetails Details);
 public record OrderDetails(string ItemId, int Quantity);
 
-protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderInput input)
-{
-    return Activate(input)
-        .Extract<OrderInput, OrderDetails>()  // Pulls OrderDetails out of OrderInput
-        .Chain<ProcessOrder>()                // ProcessOrder receives OrderDetails from Memory
-        .Resolve();
-}
+protected override OrderResult Junctions() =>
+    Extract<OrderInput, OrderDetails>()       // Pulls OrderDetails out of OrderInput
+        .Chain<ProcessOrder>();               // ProcessOrder receives OrderDetails from Memory
 ```
 
 ## Behavior

@@ -47,16 +47,12 @@ public class ProcessOrderTrain(
     INotificationService notificationService
 ) : ServiceTrain<OrderInput, OrderResult>
 {
-    protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderInput input)
-    {
-        return Activate(input)
-            .AddServices<IPaymentGateway, IInventoryService, INotificationService>(
+    protected override OrderResult Junctions() =>
+        AddServices<IPaymentGateway, IInventoryService, INotificationService>(
                 paymentGateway, inventoryService, notificationService)
             .Chain<ValidateInventory>()    // Can access IInventoryService from Memory
             .Chain<ChargePayment>()        // Can access IPaymentGateway from Memory
-            .Chain<SendReceipt>()          // Can access INotificationService from Memory
-            .Resolve();
-    }
+            .Chain<SendReceipt>();         // Can access INotificationService from Memory
 }
 ```
 

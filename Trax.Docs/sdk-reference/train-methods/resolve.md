@@ -8,7 +8,9 @@ nav_order: 7
 
 # Resolve
 
-Extracts the final `TReturn` result from the train. Typically the **last** method called in `RunInternal`. Follows a priority chain: exception > short-circuit value > Memory lookup.
+Extracts the final `TReturn` result from the train. Used in the `RunInternal` path as the **last** method call. Follows a priority chain: exception > short-circuit value > Memory lookup.
+
+> **Note:** When using `Junctions()`, resolution happens automatically via an implicit conversion — you do not call `Resolve` yourself. This method is only needed when overriding `RunInternal`.
 
 ## Signatures
 
@@ -38,16 +40,14 @@ public Either<Exception, TReturn> Resolve(Either<Exception, TReturn> returnType)
 
 ## Examples
 
-### Standard Usage
+### Standard Usage (RunInternal path)
 
 ```csharp
-protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderInput input)
-{
-    return Activate(input)
+protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderInput input) =>
+    Activate(input)
         .Chain<ValidateOrder>()
         .Chain<ProcessPayment>()     // Stores OrderResult in Memory
         .Resolve();                  // Extracts OrderResult from Memory
-}
 ```
 
 ### With Explicit Result

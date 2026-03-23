@@ -14,12 +14,10 @@ Inlay hint extensions for **VSCode** and **Rider/ReSharper**. Both show `TIn -> 
 Given a train chain:
 
 ```csharp
-protected override async Task<Either<Exception, OrderReceipt>> RunInternal(OrderRequest input)
-    => Activate(input)
-        .Chain<CheckInventoryJunction>()
+protected override OrderReceipt Junctions() =>
+    Chain<CheckInventoryJunction>()
         .Chain<ChargePaymentJunction>()
-        .Chain<CreateShipmentJunction>()
-        .Resolve();
+        .Chain<CreateShipmentJunction>();
 ```
 
 The extensions annotate each junction with its resolved types:

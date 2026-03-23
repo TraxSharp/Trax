@@ -54,11 +54,9 @@ public class FormatNameJunction : Junction<CreateUserRequest, FullName>
 ```csharp
 public class CreateUserTrain : Train<CreateUserRequest, FullName>
 {
-    protected override async Task<Either<Exception, FullName>> RunInternal(CreateUserRequest input)
-        => Activate(input)
-            .Chain<ValidateEmailJunction>()
-            .Chain<FormatNameJunction>()
-            .Resolve();
+    protected override FullName Junctions() =>
+        Chain<ValidateEmailJunction>()
+            .Chain<FormatNameJunction>();
 }
 ```
 
@@ -121,16 +119,14 @@ public interface ICreateUserTrain : IServiceTrain<CreateUserRequest, User>;
 
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
-    protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
-        => Activate(input)
-            .Chain<ValidateEmailJunction>()
+    protected override User Junctions() =>
+        Chain<ValidateEmailJunction>()
             .Chain<CreateUserInDatabaseJunction>()
-            .Chain<SendWelcomeEmailJunction>()
-            .Resolve();
+            .Chain<SendWelcomeEmailJunction>();
 }
 ```
 
-The `RunInternal` code is identical to Core — `ServiceTrain` adds the execution logging and DI around it.
+The `Junctions()` code is identical to Core — `ServiceTrain` adds the execution logging and DI around it.
 
 **Next:** [Effect docs](/docs/effect) for metadata, effect providers, and the ServiceTrain lifecycle.
 
@@ -183,4 +179,4 @@ app.Run();
 
 ## SDK Reference
 
-> [Activate](/docs/sdk-reference/train-methods/activate) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [Run / RunEither](/docs/sdk-reference/train-methods/run) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [Run / RunEither](/docs/sdk-reference/train-methods/run) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)
