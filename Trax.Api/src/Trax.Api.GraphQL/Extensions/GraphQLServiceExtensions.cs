@@ -1,4 +1,6 @@
+using System.Reflection;
 using HotChocolate.Data;
+using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +23,20 @@ namespace Trax.Api.GraphQL.Extensions;
 public static class GraphQLServiceExtensions
 {
     private const string SchemaName = "trax";
+
+    /// <summary>
+    /// Cached open-generic <c>SchemaRequestExecutorBuilderExtensions.AddTypeModule&lt;T&gt;</c>
+    /// method for registering consumer-provided TypeModules at runtime.
+    /// </summary>
+    private static readonly MethodInfo AddTypeModuleMethod =
+        typeof(SchemaRequestExecutorBuilderExtensions)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Single(m =>
+                m.Name == "AddTypeModule"
+                && m.IsGenericMethodDefinition
+                && m.GetParameters().Length == 1
+                && m.GetParameters()[0].ParameterType == typeof(IRequestExecutorBuilder)
+            );
 
     /// <summary>
     /// Registers the Trax GraphQL schema on a named HotChocolate server ("trax")
@@ -95,6 +111,20 @@ public static class GraphQLServiceExtensions
 
             if (config.ModelRegistrations.Any(r => r.Attribute.Projection))
                 graphqlBuilder.AddProjections();
+        }
+
+        // Register additional TypeModules provided by consumers via AddTypeModule<T>().
+        foreach (var typeModuleType in config.AdditionalTypeModules)
+        {
+            services.AddSingleton(typeModuleType);
+            AddTypeModuleMethod.MakeGenericMethod(typeModuleType).Invoke(null, [graphqlBuilder]);
+        }
+
+        // Apply consumer-provided schema configuration callbacks last,
+        // so they can override any standard Trax configuration.
+        foreach (var schemaConfiguration in config.SchemaConfigurations)
+        {
+            schemaConfiguration(graphqlBuilder);
         }
 
         // If a broadcaster receiver is registered (via UseBroadcaster()),

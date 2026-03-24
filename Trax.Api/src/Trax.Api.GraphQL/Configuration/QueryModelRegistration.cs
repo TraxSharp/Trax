@@ -9,5 +9,7 @@ namespace Trax.Api.GraphQL.Configuration;
 public record QueryModelRegistration(
     Type EntityType,
     Type DbContextType,
-    TraxQueryModelAttribute Attribute
+    TraxQueryModelAttribute Attribute,
+    Type? FilterInputType = null,
+    Type? SortInputType = null
 );

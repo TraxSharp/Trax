@@ -130,18 +130,17 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
 
         // Delegate to a generic method so HotChocolate gets properly typed
         // delegates for projection, filtering, sorting, and the resolver.
-        ConfigureFieldMethod
-            .MakeGenericMethod(reg.EntityType)
-            .Invoke(null, [field, reg.DbContextType, reg.Attribute]);
+        ConfigureFieldMethod.MakeGenericMethod(reg.EntityType).Invoke(null, [field, reg]);
     }
 
     private static void ConfigureField<TEntity>(
         IObjectFieldDescriptor field,
-        Type dbContextType,
-        TraxQueryModelAttribute attr
+        QueryModelRegistration reg
     )
         where TEntity : class
     {
+        var attr = reg.Attribute;
+
         // Apply features in the correct middleware pipeline order:
         // Paging > Projection > Filtering > Sorting
         if (attr.Paging)
@@ -155,14 +154,24 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
             field.UseProjection<TEntity>();
 
         if (attr.Filtering)
-            field.UseFiltering<TEntity>();
+        {
+            if (reg.FilterInputType is not null)
+                field.UseFiltering(reg.FilterInputType);
+            else
+                field.UseFiltering<TEntity>();
+        }
 
         if (attr.Sorting)
-            field.UseSorting<TEntity>();
+        {
+            if (reg.SortInputType is not null)
+                field.UseSorting(reg.SortInputType);
+            else
+                field.UseSorting<TEntity>();
+        }
 
         field.Resolve(ctx =>
         {
-            var dbContext = (DbContext)ctx.Services.GetRequiredService(dbContextType);
+            var dbContext = (DbContext)ctx.Services.GetRequiredService(reg.DbContextType);
             return dbContext.Set<TEntity>();
         });
     }

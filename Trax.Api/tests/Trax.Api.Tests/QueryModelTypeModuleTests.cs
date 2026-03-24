@@ -196,7 +196,7 @@ public class QueryModelTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_NoRegistrations_ReturnsEmpty()
     {
-        var config = new GraphQLConfiguration([]);
+        var config = new GraphQLConfiguration([], [], []);
         var module = new QueryModelTypeModule(config);
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
@@ -207,13 +207,17 @@ public class QueryModelTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_WithRegistrations_CreatesObjectTypeAndExtension()
     {
-        var config = new GraphQLConfiguration([
-            new QueryModelRegistration(
-                typeof(TestPlayer),
-                typeof(TestDbContext),
-                new TraxQueryModelAttribute { Description = "Test players" }
-            ),
-        ]);
+        var config = new GraphQLConfiguration(
+            [
+                new QueryModelRegistration(
+                    typeof(TestPlayer),
+                    typeof(TestDbContext),
+                    new TraxQueryModelAttribute { Description = "Test players" }
+                ),
+            ],
+            [],
+            []
+        );
         var module = new QueryModelTypeModule(config);
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
@@ -235,18 +239,22 @@ public class QueryModelTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_DuplicateEntityTypes_RegistersTypeOnce()
     {
-        var config = new GraphQLConfiguration([
-            new QueryModelRegistration(
-                typeof(TestPlayer),
-                typeof(TestDbContext),
-                new TraxQueryModelAttribute { Name = "players1" }
-            ),
-            new QueryModelRegistration(
-                typeof(TestPlayer),
-                typeof(TestDbContext),
-                new TraxQueryModelAttribute { Name = "players2" }
-            ),
-        ]);
+        var config = new GraphQLConfiguration(
+            [
+                new QueryModelRegistration(
+                    typeof(TestPlayer),
+                    typeof(TestDbContext),
+                    new TraxQueryModelAttribute { Name = "players1" }
+                ),
+                new QueryModelRegistration(
+                    typeof(TestPlayer),
+                    typeof(TestDbContext),
+                    new TraxQueryModelAttribute { Name = "players2" }
+                ),
+            ],
+            [],
+            []
+        );
         var module = new QueryModelTypeModule(config);
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
@@ -291,13 +299,17 @@ public class QueryModelTypeModuleTests
             },
         ]);
 
-        var config = new GraphQLConfiguration([
-            new QueryModelRegistration(
-                typeof(TestPlayer),
-                typeof(TestDbContext),
-                new TraxQueryModelAttribute()
-            ),
-        ]);
+        var config = new GraphQLConfiguration(
+            [
+                new QueryModelRegistration(
+                    typeof(TestPlayer),
+                    typeof(TestDbContext),
+                    new TraxQueryModelAttribute()
+                ),
+            ],
+            [],
+            []
+        );
 
         var module = new Trax.Api.GraphQL.TypeModules.TrainTypeModule(discovery, config);
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
@@ -404,13 +416,17 @@ public class QueryModelTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_ModelWithNamespace_CreatesNamespaceTypeAndExtension()
     {
-        var config = new GraphQLConfiguration([
-            new QueryModelRegistration(
-                typeof(TestPlayer),
-                typeof(TestDbContext),
-                new TraxQueryModelAttribute { Description = "Test players", Namespace = "game" }
-            ),
-        ]);
+        var config = new GraphQLConfiguration(
+            [
+                new QueryModelRegistration(
+                    typeof(TestPlayer),
+                    typeof(TestDbContext),
+                    new TraxQueryModelAttribute { Description = "Test players", Namespace = "game" }
+                ),
+            ],
+            [],
+            []
+        );
         var module = new QueryModelTypeModule(config);
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
@@ -427,13 +443,17 @@ public class QueryModelTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_ModelWithoutNamespace_NoNamespaceTypesCreated()
     {
-        var config = new GraphQLConfiguration([
-            new QueryModelRegistration(
-                typeof(TestPlayer),
-                typeof(TestDbContext),
-                new TraxQueryModelAttribute { Description = "Test players" }
-            ),
-        ]);
+        var config = new GraphQLConfiguration(
+            [
+                new QueryModelRegistration(
+                    typeof(TestPlayer),
+                    typeof(TestDbContext),
+                    new TraxQueryModelAttribute { Description = "Test players" }
+                ),
+            ],
+            [],
+            []
+        );
         var module = new QueryModelTypeModule(config);
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
@@ -460,18 +480,22 @@ public class QueryModelTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_MixedNamespacedAndRootModels_BothGenerated()
     {
-        var config = new GraphQLConfiguration([
-            new QueryModelRegistration(
-                typeof(TestPlayer),
-                typeof(TestDbContext),
-                new TraxQueryModelAttribute { Namespace = "game" }
-            ),
-            new QueryModelRegistration(
-                typeof(TestItem),
-                typeof(SecondDbContext),
-                new TraxQueryModelAttribute()
-            ),
-        ]);
+        var config = new GraphQLConfiguration(
+            [
+                new QueryModelRegistration(
+                    typeof(TestPlayer),
+                    typeof(TestDbContext),
+                    new TraxQueryModelAttribute { Namespace = "game" }
+                ),
+                new QueryModelRegistration(
+                    typeof(TestItem),
+                    typeof(SecondDbContext),
+                    new TraxQueryModelAttribute()
+                ),
+            ],
+            [],
+            []
+        );
         var module = new QueryModelTypeModule(config);
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);

@@ -26,10 +26,25 @@ public partial class TraxGraphQLBuilder
                 if (attr is null)
                     continue;
 
-                modelRegistrations.Add(new QueryModelRegistration(entityType, dbContextType, attr));
+                FilterTypeOverrides.TryGetValue(entityType, out var filterType);
+                SortTypeOverrides.TryGetValue(entityType, out var sortType);
+
+                modelRegistrations.Add(
+                    new QueryModelRegistration(
+                        entityType,
+                        dbContextType,
+                        attr,
+                        filterType,
+                        sortType
+                    )
+                );
             }
         }
 
-        return new GraphQLConfiguration(modelRegistrations);
+        return new GraphQLConfiguration(
+            modelRegistrations,
+            AdditionalTypeModules,
+            SchemaConfigurations
+        );
     }
 }

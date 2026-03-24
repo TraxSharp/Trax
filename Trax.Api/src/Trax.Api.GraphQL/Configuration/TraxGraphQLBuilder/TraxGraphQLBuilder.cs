@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using HotChocolate.Execution.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
@@ -13,6 +14,14 @@ public partial class TraxGraphQLBuilder
     internal IServiceCollection Services { get; }
 
     internal List<Type> DbContextTypes { get; } = [];
+
+    internal List<Type> AdditionalTypeModules { get; } = [];
+
+    internal Dictionary<Type, Type> FilterTypeOverrides { get; } = [];
+
+    internal Dictionary<Type, Type> SortTypeOverrides { get; } = [];
+
+    internal List<Action<IRequestExecutorBuilder>> SchemaConfigurations { get; } = [];
 
     public TraxGraphQLBuilder(IServiceCollection services)
     {

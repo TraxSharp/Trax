@@ -811,7 +811,7 @@ public class TrainTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_MutationWithNamespace_CreatesNamespaceTypeAndExtension()
     {
-        var config = new GraphQLConfiguration([]);
+        var config = new GraphQLConfiguration([], [], []);
         var discovery = new StubDiscoveryService([
             CreateRegistration<UnitInput>(
                 "BanTrain",
@@ -838,7 +838,7 @@ public class TrainTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_QueryWithNamespace_CreatesNamespaceTypeAndExtension()
     {
-        var config = new GraphQLConfiguration([]);
+        var config = new GraphQLConfiguration([], [], []);
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
                 "LookupTrain",
@@ -865,7 +865,7 @@ public class TrainTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_MultipleTrainsInSameNamespace_ShareIntermediateType()
     {
-        var config = new GraphQLConfiguration([]);
+        var config = new GraphQLConfiguration([], [], []);
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
                 "LookupTrain",
@@ -900,7 +900,7 @@ public class TrainTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_DifferentNamespaces_CreatesSeparateTypes()
     {
-        var config = new GraphQLConfiguration([]);
+        var config = new GraphQLConfiguration([], [], []);
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
                 "LookupTrain",
@@ -932,7 +932,7 @@ public class TrainTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_MixedNamespacedAndRoot_BothGenerated()
     {
-        var config = new GraphQLConfiguration([]);
+        var config = new GraphQLConfiguration([], [], []);
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
                 "LookupTrain",
@@ -970,7 +970,7 @@ public class TrainTypeModuleTests
     public async Task CreateTypesAsync_NullNamespace_BackwardCompatible()
     {
         // Existing behavior: no namespace, fields go directly on DiscoverQueries
-        var config = new GraphQLConfiguration([]);
+        var config = new GraphQLConfiguration([], [], []);
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
                 "LookupTrain",
@@ -994,7 +994,7 @@ public class TrainTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_SameNamespaceOnQueryAndMutation_CreatesSeparateNamespaceTypes()
     {
-        var config = new GraphQLConfiguration([]);
+        var config = new GraphQLConfiguration([], [], []);
         var discovery = new StubDiscoveryService([
             CreateRegistration<TypedInput>(
                 "LookupTrain",
