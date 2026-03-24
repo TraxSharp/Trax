@@ -24,16 +24,35 @@ public static IServiceCollection AddTraxGraphQL(
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `services` | `IServiceCollection` | Yes | The service collection |
-| `configure` | `Func<TraxGraphQLBuilder, TraxGraphQLBuilder>` | No | Optional builder for registering DbContext-based [query models](/docs/sdk-reference/graphql-api/query-models). |
+| `configure` | `Func<TraxGraphQLBuilder, TraxGraphQLBuilder>` | No | Optional builder for registering DbContext-based [query models](/docs/sdk-reference/graphql-api/query-models), custom type modules, filter/sort overrides, and schema configuration. |
 
 **Returns**: `IServiceCollection` for continued chaining.
 
-The parameterless overload calls the builder overload with an identity function. Use the builder overload to register DbContexts whose entities are annotated with `[TraxQueryModel]`:
+The parameterless overload calls the builder overload with an identity function. Use the builder overload to configure the schema:
 
 ```csharp
 builder.Services.AddTraxGraphQL(graphql => graphql
-    .AddDbContext<GameDbContext>());
+    .AddDbContext<GameDbContext>()
+    .AddFilterType<Player, PlayerFilterInputType>()
+    .AddSortType<Player, PlayerSortInputType>()
+    .AddTypeModule<RelationshipTypeModule>()
+    .ConfigureSchema(schema => schema
+        .ModifyCostOptions(o => { o.MaxFieldCost = 50000; })
+    )
+);
 ```
+
+### Builder Methods
+
+| Method | Description |
+|--------|-------------|
+| `AddDbContext<TDbContext>()` | Registers a DbContext whose `DbSet<T>` entities marked with `[TraxQueryModel]` are exposed as GraphQL queries. See [query models](/docs/sdk-reference/graphql-api/query-models). |
+| `AddTypeModule<TTypeModule>()` | Registers an additional HotChocolate `TypeModule` on the Trax schema. Use this to add custom resolvers, DataLoader-backed relationship fields, or `ObjectTypeExtension`s on entities already registered by `[TraxQueryModel]`. The module is registered as a singleton in DI. |
+| `AddFilterType<TEntity, TFilter>()` | Overrides the auto-generated `FilterInputType` for a specific entity. `TFilter` must extend `FilterInputType<TEntity>`. See [custom filter and sort types](/docs/sdk-reference/graphql-api/query-models#custom-filter-and-sort-types). |
+| `AddSortType<TEntity, TSort>()` | Overrides the auto-generated `SortInputType` for a specific entity. `TSort` must extend `SortInputType<TEntity>`. See [custom filter and sort types](/docs/sdk-reference/graphql-api/query-models#custom-filter-and-sort-types). |
+| `ConfigureSchema(Action<IRequestExecutorBuilder>)` | Applies arbitrary configuration to the underlying HotChocolate `IRequestExecutorBuilder`. Use this for settings that Trax doesn't expose directly — cost analysis options, custom conventions, error handling, etc. Callbacks run after all standard Trax configuration. |
+
+All builder methods return the builder for fluent chaining.
 
 ### UseTraxGraphQL
 

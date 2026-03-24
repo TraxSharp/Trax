@@ -129,6 +129,44 @@ Override with `Name` for cases where the automatic pluralization is incorrect:
 public class Person { ... }
 ```
 
+## Custom Filter and Sort Types
+
+By default, HotChocolate generates `FilterInputType<TEntity>` and `SortInputType<TEntity>` based on all public properties of the entity. When you need to hide properties, rename filter fields, or customize the generated input types, register custom overrides via the builder:
+
+```csharp
+builder.Services.AddTraxGraphQL(graphql => graphql
+    .AddDbContext<GameDbContext>()
+    .AddFilterType<Player, PlayerFilterInputType>()
+    .AddSortType<Player, PlayerSortInputType>());
+```
+
+Create the custom types by extending `FilterInputType<TEntity>` or `SortInputType<TEntity>`:
+
+```csharp
+public class PlayerFilterInputType : FilterInputType<Player>
+{
+    protected override void Configure(IFilterInputTypeDescriptor<Player> descriptor)
+    {
+        // Hide internal properties from the schema
+        descriptor.Field(x => x.InternalMappedId).Ignore();
+
+        // Rename a property for the public API
+        descriptor.Field(x => x.MappedId).Name("playerId");
+    }
+}
+
+public class PlayerSortInputType : SortInputType<Player>
+{
+    protected override void Configure(ISortInputTypeDescriptor<Player> descriptor)
+    {
+        descriptor.Field(x => x.InternalMappedId).Ignore();
+        descriptor.Field(x => x.MappedId).Name("playerId");
+    }
+}
+```
+
+When an override is registered, it replaces the default for that entity only. Entities without overrides continue to use the auto-generated types.
+
 ## AddDbContext
 
 Register one or more DbContext types whose `DbSet<T>` properties contain attributed entities:
@@ -155,3 +193,7 @@ The DbContext must be registered in DI separately (via `AddDbContext`, `AddDbCon
 | **Schema location** | `discover { trainName(input: ...) }` | `discover { modelNames(first: ..., where: ...) }` |
 
 Both appear under the `discover` namespace in the GraphQL schema.
+
+## SDK Reference
+
+> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
