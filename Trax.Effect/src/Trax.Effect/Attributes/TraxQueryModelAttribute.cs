@@ -60,6 +60,15 @@ public class TraxQueryModelAttribute : Attribute
     public bool Projection { get; init; } = true;
 
     /// <summary>
+    /// Controls how fields are bound on the generated GraphQL ObjectType.
+    /// When <see cref="FieldBindingBehavior.Explicit"/>, only properties with
+    /// <see cref="System.ComponentModel.DataAnnotations.Schema.ColumnAttribute"/>
+    /// are exposed; <c>[NotMapped]</c> properties, methods, and other public members are excluded.
+    /// Defaults to <see cref="FieldBindingBehavior.Implicit"/> (all public properties exposed).
+    /// </summary>
+    public FieldBindingBehavior BindFields { get; init; } = FieldBindingBehavior.Implicit;
+
+    /// <summary>
     /// Groups this field under a sub-namespace in the GraphQL schema.
     /// When set, the field appears under <c>discover { namespace { field } }</c>
     /// instead of directly under <c>discover { field }</c>.
