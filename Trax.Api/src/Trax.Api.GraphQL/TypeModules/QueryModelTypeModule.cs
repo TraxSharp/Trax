@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Reflection;
 using HotChocolate.Data;
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Language;
@@ -42,7 +44,9 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
             if (usedEntityTypes.Add(reg.EntityType))
             {
                 var objectType = (ITypeSystemMember)
-                    Activator.CreateInstance(typeof(ObjectType<>).MakeGenericType(reg.EntityType))!;
+                    CreateObjectTypeMethod
+                        .MakeGenericMethod(reg.EntityType)
+                        .Invoke(null, [reg.Attribute])!;
                 types.Add(objectType);
             }
         }
@@ -107,10 +111,16 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
         return new(types);
     }
 
-    private static readonly System.Reflection.MethodInfo ConfigureFieldMethod =
+    private static readonly MethodInfo CreateObjectTypeMethod =
+        typeof(QueryModelTypeModule).GetMethod(
+            nameof(CreateObjectType),
+            BindingFlags.NonPublic | BindingFlags.Static
+        )!;
+
+    private static readonly MethodInfo ConfigureFieldMethod =
         typeof(QueryModelTypeModule).GetMethod(
             nameof(ConfigureField),
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
+            BindingFlags.NonPublic | BindingFlags.Static
         )!;
 
     private static void AddModelQueryField(
@@ -173,6 +183,28 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
         {
             var dbContext = (DbContext)ctx.Services.GetRequiredService(reg.DbContextType);
             return dbContext.Set<TEntity>();
+        });
+    }
+
+    private static ObjectType<TEntity> CreateObjectType<TEntity>(TraxQueryModelAttribute attr)
+        where TEntity : class
+    {
+        if (attr.BindFields != FieldBindingBehavior.Explicit)
+            return new ObjectType<TEntity>();
+
+        return new ObjectType<TEntity>(descriptor =>
+        {
+            descriptor.BindFieldsExplicitly();
+
+            foreach (
+                var prop in typeof(TEntity).GetProperties(
+                    BindingFlags.Public | BindingFlags.Instance
+                )
+            )
+            {
+                if (prop.GetCustomAttribute<ColumnAttribute>() is not null)
+                    descriptor.Field(prop);
+            }
         });
     }
 

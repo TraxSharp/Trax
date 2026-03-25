@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using HotChocolate.Types;
 using Microsoft.EntityFrameworkCore;
@@ -384,6 +385,7 @@ public class QueryModelTypeModuleTests
         attr.Filtering.Should().BeTrue();
         attr.Sorting.Should().BeTrue();
         attr.Projection.Should().BeTrue();
+        attr.BindFields.Should().Be(FieldBindingBehavior.Implicit);
     }
 
     [Test]
@@ -508,6 +510,90 @@ public class QueryModelTypeModuleTests
 
     #endregion
 
+    #region Explicit Field Binding
+
+    [Test]
+    public void TraxQueryModelAttribute_BindFields_SetsToExplicit()
+    {
+        var attr = new TraxQueryModelAttribute { BindFields = FieldBindingBehavior.Explicit };
+        attr.BindFields.Should().Be(FieldBindingBehavior.Explicit);
+    }
+
+    [Test]
+    public void Build_ExplicitBindingAttribute_PreservesBindFieldsSetting()
+    {
+        var builder = new TraxGraphQLBuilder(
+            new Microsoft.Extensions.DependencyInjection.ServiceCollection()
+        );
+        builder.AddDbContext<ExplicitDbContext>();
+        var config = builder.Build();
+
+        config.ModelRegistrations.Should().HaveCount(1);
+        config
+            .ModelRegistrations[0]
+            .Attribute.BindFields.Should()
+            .Be(FieldBindingBehavior.Explicit);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_ExplicitBinding_CreatesObjectTypeAndExtension()
+    {
+        var config = new GraphQLConfiguration(
+            [
+                new QueryModelRegistration(
+                    typeof(ExplicitEntity),
+                    typeof(ExplicitDbContext),
+                    new TraxQueryModelAttribute { BindFields = FieldBindingBehavior.Explicit }
+                ),
+            ],
+            [],
+            []
+        );
+        var module = new QueryModelTypeModule(config);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        types.Should().HaveCount(2);
+        types
+            .Should()
+            .ContainSingle(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(ObjectType<>)
+                && t.GetType().GetGenericArguments()[0] == typeof(ExplicitEntity)
+            );
+        types.OfType<ObjectTypeExtension>().Should().HaveCount(1);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_ImplicitBinding_CreatesDefaultObjectType()
+    {
+        var config = new GraphQLConfiguration(
+            [
+                new QueryModelRegistration(
+                    typeof(TestPlayer),
+                    typeof(TestDbContext),
+                    new TraxQueryModelAttribute()
+                ),
+            ],
+            [],
+            []
+        );
+        var module = new QueryModelTypeModule(config);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        types.Should().HaveCount(2);
+        types
+            .Should()
+            .ContainSingle(t =>
+                t.GetType().IsGenericType
+                && t.GetType().GetGenericTypeDefinition() == typeof(ObjectType<>)
+                && t.GetType().GetGenericArguments()[0] == typeof(TestPlayer)
+            );
+    }
+
+    #endregion
+
     #region Stubs
 
     private class StubDiscoveryService(
@@ -594,6 +680,31 @@ public record StubInput
 public record StubOutput
 {
     public string Result { get; init; } = "";
+}
+
+[TraxQueryModel(BindFields = FieldBindingBehavior.Explicit)]
+public class ExplicitEntity
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("display_name")]
+    public string DisplayName { get; set; } = "";
+
+    [NotMapped]
+    public string ComputedAlias => $"Entity-{Id}";
+
+    public string NonColumnProp { get; set; } = "";
+
+    public void AddToDbContext() { }
+}
+
+public class ExplicitDbContext : DbContext
+{
+    public DbSet<ExplicitEntity> Entities { get; set; } = null!;
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        optionsBuilder.UseInMemoryDatabase("ExplicitDb_" + Guid.NewGuid());
 }
 
 #endregion
