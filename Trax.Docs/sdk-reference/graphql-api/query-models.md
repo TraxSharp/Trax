@@ -79,6 +79,7 @@ public class TraxQueryModelAttribute : Attribute
     public bool Filtering { get; init; } = true;
     public bool Sorting { get; init; } = true;
     public bool Projection { get; init; } = true;
+    public FieldBindingBehavior BindFields { get; init; } = FieldBindingBehavior.Implicit;
 }
 ```
 
@@ -94,6 +95,7 @@ public class TraxQueryModelAttribute : Attribute
 | `Filtering` | `bool` | `true` | Enables filtering via a `where` argument. HotChocolate generates filter input types for all entity properties. |
 | `Sorting` | `bool` | `true` | Enables sorting via an `order` argument. HotChocolate generates sort input types for all entity properties. |
 | `Projection` | `bool` | `true` | Enables field projection — only the columns requested by the GraphQL client are selected from the database. |
+| `BindFields` | `FieldBindingBehavior` | `Implicit` | Controls how fields are bound on the generated GraphQL ObjectType. When `Explicit`, only properties with `[Column]` are exposed; `[NotMapped]`, methods, and non-column members are excluded. |
 
 ## Feature Configuration
 
@@ -114,6 +116,37 @@ public class StatusCode { ... }
 ```
 
 When `Paging = false`, the field returns a plain list (`[Entity!]!`) instead of a Connection type.
+
+## Field Binding
+
+By default, HotChocolate exposes all public properties on an entity as GraphQL fields. When your entity has `[NotMapped]` aliases, DataLoader methods, or infrastructure methods that should not appear in the schema, use explicit binding:
+
+```csharp
+[TraxQueryModel(BindFields = FieldBindingBehavior.Explicit)]
+[Table("players", Schema = "game")]
+public class Player
+{
+    [Column("id")]
+    public long Id { get; set; }
+
+    [Column("display_name")]
+    public string DisplayName { get; set; } = "";
+
+    [NotMapped]
+    public string Alias => $"Player-{Id}";      // excluded from schema
+
+    public void AddToDbContext(GameDb db) { }    // excluded from schema
+}
+```
+
+With `BindFields = FieldBindingBehavior.Explicit`, only `Id` and `DisplayName` appear in the GraphQL schema. The `Alias` property and `AddToDbContext` method are excluded.
+
+| Value | Behavior |
+|-------|----------|
+| `Implicit` (default) | All public properties exposed (standard HotChocolate behavior) |
+| `Explicit` | Only properties with `[Column]` are exposed |
+
+FK fields added via `ObjectTypeExtension` (from custom TypeModules registered with `AddTypeModule<T>()`) still work when using explicit binding, since extensions are separate from the base type's field set.
 
 ## Name Derivation
 
