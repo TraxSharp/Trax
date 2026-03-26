@@ -60,7 +60,68 @@ All methods have default implementations that return `Task.CompletedTask`. Overr
 | `OnFailed` | After a failed run (exception that is not `OperationCanceledException`), after failure is persisted |
 | `OnCancelled` | After cancellation (`OperationCanceledException`), after cancellation is persisted |
 
-### Accessing Train Output
+### Accessing Train Input and Output
+
+#### Availability by hook
+
+The input is set before junctions execute; the output is set only after a successful run. This determines which hooks can access each value:
+
+| Hook | `TrainInput` / `GetInput<T>()` | `TrainOutput` / `GetOutput<T>()` |
+|------|------|-------|
+| `OnStarted` | Yes | No — train hasn't run yet |
+| `OnCompleted` | Yes | Yes |
+| `OnFailed` | Yes | No — train failed before producing output |
+| `OnCancelled` | Yes | No — train was cancelled |
+
+When unavailable, both return `default` (`null` for reference types, zero for value types).
+
+#### Typed access via `Metadata`
+
+`Metadata` provides generic methods to retrieve the input and output as their original types:
+
+```csharp
+T? GetInput<T>()
+T? GetOutput<T>()
+```
+
+These return `default` if the object is null or not of the requested type. Useful in global lifecycle hooks (`ITrainLifecycleHook`) where you know the train's types:
+
+```csharp
+public class SlackNotificationHook(ISlackClient slack) : ITrainLifecycleHook
+{
+    public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
+    {
+        var input = metadata.GetInput<BanPlayerInput>();
+        await slack.PostAsync($"Ban failed for player {input?.PlayerId}: {exception.Message}", ct);
+    }
+}
+```
+
+#### Typed access via `TrainInput` / `TrainOutput`
+
+Per-train lifecycle hooks have an even simpler option. `ServiceTrain<TIn, TOut>` exposes typed properties that are automatically resolved from the metadata:
+
+```csharp
+protected TIn TrainInput   // available in all hooks
+protected TOut TrainOutput  // available in OnCompleted (default in OnFailed/OnCancelled)
+```
+
+No casting, no type parameters — the types come from the train's generic arguments:
+
+```csharp
+public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
+    : ServiceTrain<BanPlayerInput, Unit>, IBanPlayerTrain
+{
+    protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
+    {
+        logger.LogInformation("Banned player {PlayerId} for: {Reason}",
+            TrainInput?.PlayerId, TrainInput?.Reason);
+        return Task.CompletedTask;
+    }
+}
+```
+
+#### Serialized JSON output
 
 `metadata.Output` is always available as serialized JSON in `OnCompleted` hooks, regardless of whether [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save-train-parameters) is configured. When `SaveTrainParameters()` is not configured, the output is serialized in-memory before hooks fire but is not persisted to the database. This means GraphQL subscriptions and custom hooks can always read `metadata.Output` without requiring `SaveTrainParameters()`.
 
@@ -120,10 +181,17 @@ public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
 {
     protected override Unit Junctions() => Chain<ApplyBanJunction>();
 
+    protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
+    {
+        logger.LogInformation("Banned player {PlayerId} for: {Reason}",
+            TrainInput?.PlayerId, TrainInput?.Reason);
+        return Task.CompletedTask;
+    }
+
     protected override Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {
-        logger.LogWarning("Ban failed for train {TrainName}: {Message}",
-            metadata.Name, exception.Message);
+        logger.LogWarning("Failed to ban player {PlayerId}: {Message}",
+            TrainInput?.PlayerId, exception.Message);
         return Task.CompletedTask;
     }
 }
@@ -139,6 +207,8 @@ No registration needed — just `override` the method. The available methods mat
 | `OnCancelled` | `protected virtual Task OnCancelled(Metadata metadata, CancellationToken ct)` |
 
 All default to no-op (`Task.CompletedTask`). Override only the ones you need.
+
+In addition to the `metadata` parameter, per-train hooks can use the `TrainInput` and `TrainOutput` properties for typed access to the train's input and output without casting. See [Accessing Train Input and Output](#accessing-train-input-and-output) above.
 
 ### Global vs Per-Train Hooks
 
