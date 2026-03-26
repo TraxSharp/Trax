@@ -27,7 +27,9 @@ public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
     protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
     {
         logger.LogInformation(
-            "Player ban applied successfully (Train: {TrainName})",
+            "Player {PlayerId} banned for: {Reason} (Train: {TrainName})",
+            TrainInput?.PlayerId,
+            TrainInput?.Reason,
             metadata.Name
         );
         return Task.CompletedTask;
@@ -36,7 +38,8 @@ public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
     protected override Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {
         logger.LogWarning(
-            "Player ban failed (Train: {TrainName}): {Message}",
+            "Failed to ban player {PlayerId} (Train: {TrainName}): {Message}",
+            TrainInput?.PlayerId,
             metadata.Name,
             exception.Message
         );
