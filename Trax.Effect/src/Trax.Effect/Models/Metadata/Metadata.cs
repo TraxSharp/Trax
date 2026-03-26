@@ -492,6 +492,32 @@ public class Metadata : IModel, IDisposable
     /// </remarks>
     public dynamic? GetOutputObject() => _outputObject;
 
+    /// <summary>
+    /// Gets the deserialized input object cast to the specified type.
+    /// The input is set before the train's junctions execute, so it is available in all
+    /// lifecycle hooks (<c>OnStarted</c>, <c>OnCompleted</c>, <c>OnFailed</c>, <c>OnCancelled</c>).
+    /// Returns <c>default</c> if the input is null or not of type <typeparamref name="T"/>.
+    /// </summary>
+    /// <remarks>
+    /// For per-train lifecycle hooks, prefer the <c>TrainInput</c> property on
+    /// <c>ServiceTrain&lt;TIn, TOut&gt;</c> which provides the same value without
+    /// requiring a type parameter.
+    /// </remarks>
+    public T? GetInput<T>() => _inputObject is T typed ? typed : default;
+
+    /// <summary>
+    /// Gets the deserialized output object cast to the specified type.
+    /// The output is set after a successful run, so it is only meaningful in <c>OnCompleted</c>.
+    /// Returns <c>default</c> in <c>OnStarted</c>, <c>OnFailed</c>, and <c>OnCancelled</c>.
+    /// Returns <c>default</c> if the output is null or not of type <typeparamref name="T"/>.
+    /// </summary>
+    /// <remarks>
+    /// For per-train lifecycle hooks, prefer the <c>TrainOutput</c> property on
+    /// <c>ServiceTrain&lt;TIn, TOut&gt;</c> which provides the same value without
+    /// requiring a type parameter.
+    /// </remarks>
+    public T? GetOutput<T>() => _outputObject is T typed ? typed : default;
+
     #endregion
 
     /// <summary>

@@ -23,6 +23,8 @@ public class TrainLifecycleOverrideTests : TestSetup
             .AddScopedTraxRoute<IPartialOverrideTrain, PartialOverrideTrain>()
             .AddScopedTraxRoute<INoOverrideTrain, NoOverrideTrain>()
             .AddScopedTraxRoute<IOutputRecordingTrain, OutputRecordingTrain>()
+            .AddScopedTraxRoute<ITypedAccessTrain, TypedAccessTrain>()
+            .AddScopedTraxRoute<IFailingTypedAccessTrain, FailingTypedAccessTrain>()
             .BuildServiceProvider();
 
     #region OnStarted
@@ -288,6 +290,87 @@ public class TrainLifecycleOverrideTests : TestSetup
 
     #endregion
 
+    #region TypedAccess
+
+    [Test]
+    public async Task Run_OnCompleted_TrainInputIsTyped()
+    {
+        var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
+
+        await train.Run("hello");
+
+        train.CapturedInput.Should().Be("hello");
+    }
+
+    [Test]
+    public async Task Run_OnCompleted_TrainOutputIsTyped()
+    {
+        var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
+
+        await train.Run("hello");
+
+        train.CapturedOutput.Should().NotBeNull();
+        train.CapturedOutput!.Value.Should().Be("processed:hello");
+        train.CapturedOutput!.Count.Should().Be(42);
+    }
+
+    [Test]
+    public async Task Run_OnFailed_TrainInputIsTyped()
+    {
+        var train = (FailingTypedAccessTrain)
+            Scope.ServiceProvider.GetRequiredService<IFailingTypedAccessTrain>();
+
+        var act = async () => await train.Run("hello");
+        await act.Should().ThrowAsync<TrainException>();
+
+        train.CapturedInput.Should().Be("hello");
+    }
+
+    [Test]
+    public async Task Run_OnFailed_TrainOutputIsDefault()
+    {
+        var train = (FailingTypedAccessTrain)
+            Scope.ServiceProvider.GetRequiredService<IFailingTypedAccessTrain>();
+
+        var act = async () => await train.Run("hello");
+        await act.Should().ThrowAsync<TrainException>();
+
+        train.CapturedOutput.Should().BeNull();
+    }
+
+    [Test]
+    public async Task Run_MetadataGetInput_ReturnsTyped()
+    {
+        var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
+
+        await train.Run("hello");
+
+        train.CapturedMetadataInput.Should().Be("hello");
+    }
+
+    [Test]
+    public async Task Run_MetadataGetOutput_ReturnsTyped()
+    {
+        var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
+
+        await train.Run("hello");
+
+        train.CapturedMetadataOutput.Should().NotBeNull();
+        train.CapturedMetadataOutput!.Value.Should().Be("processed:hello");
+    }
+
+    [Test]
+    public async Task Run_MetadataGetInput_WrongType_ReturnsDefault()
+    {
+        var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
+
+        await train.Run("hello");
+
+        train.CapturedWrongTypeInput.Should().Be(0);
+    }
+
+    #endregion
+
     #region Test Trains
 
     private interface IRecordingTrain : IServiceTrain<Unit, Unit> { }
@@ -506,6 +589,54 @@ public class TrainLifecycleOverrideTests : TestSetup
             CompletedCalled = true;
             CapturedOutput = metadata.Output;
             CapturedOutputObject = metadata.GetOutputObject();
+            return Task.CompletedTask;
+        }
+    }
+
+    private interface ITypedAccessTrain : IServiceTrain<string, TestOutputDto> { }
+
+    private class TypedAccessTrain : ServiceTrain<string, TestOutputDto>, ITypedAccessTrain
+    {
+        public string? CapturedInput { get; private set; }
+        public TestOutputDto? CapturedOutput { get; private set; }
+        public string? CapturedMetadataInput { get; private set; }
+        public TestOutputDto? CapturedMetadataOutput { get; private set; }
+        public int CapturedWrongTypeInput { get; private set; }
+
+        protected override async Task<Either<Exception, TestOutputDto>> RunInternal(string input) =>
+            new TestOutputDto($"processed:{input}", 42);
+
+        protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
+        {
+            CapturedInput = TrainInput;
+            CapturedOutput = TrainOutput;
+            CapturedMetadataInput = metadata.GetInput<string>();
+            CapturedMetadataOutput = metadata.GetOutput<TestOutputDto>();
+            CapturedWrongTypeInput = metadata.GetInput<int>();
+            return Task.CompletedTask;
+        }
+    }
+
+    private interface IFailingTypedAccessTrain : IServiceTrain<string, TestOutputDto> { }
+
+    private class FailingTypedAccessTrain
+        : ServiceTrain<string, TestOutputDto>,
+            IFailingTypedAccessTrain
+    {
+        public string? CapturedInput { get; private set; }
+        public TestOutputDto? CapturedOutput { get; private set; }
+
+        protected override async Task<Either<Exception, TestOutputDto>> RunInternal(string input) =>
+            new TrainException("Intentional failure");
+
+        protected override Task OnFailed(
+            Metadata metadata,
+            Exception exception,
+            CancellationToken ct
+        )
+        {
+            CapturedInput = TrainInput;
+            CapturedOutput = TrainOutput;
             return Task.CompletedTask;
         }
     }

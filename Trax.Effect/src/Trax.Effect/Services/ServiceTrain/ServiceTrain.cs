@@ -76,6 +76,24 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public string? CanonicalName { get; set; }
 
     /// <summary>
+    /// Gets the typed input that was passed to this train. Set before <see cref="RunInternal"/>
+    /// executes, so it is available in all lifecycle hooks: <see cref="OnStarted"/>,
+    /// <see cref="OnCompleted"/>, <see cref="OnFailed"/>, and <see cref="OnCancelled"/>.
+    /// Returns <c>default</c> before the train has been run.
+    /// </summary>
+    protected TIn TrainInput =>
+        Metadata is not null && Metadata.GetInputObject() is TIn typed ? typed : default!;
+
+    /// <summary>
+    /// Gets the typed output produced by this train. Set after a successful run, so it is
+    /// only meaningful in <see cref="OnCompleted"/>. Returns <c>default</c> in
+    /// <see cref="OnStarted"/>, <see cref="OnFailed"/>, and <see cref="OnCancelled"/>
+    /// because the train either hasn't run yet, failed before producing output, or was cancelled.
+    /// </summary>
+    protected TOut TrainOutput =>
+        Metadata is not null && Metadata.GetOutputObject() is TOut typed ? typed : default!;
+
+    /// <summary>
     /// Gets the canonical train name. Prefers the interface name set at registration time
     /// via <c>AddScopedTraxRoute</c>, falling back to the concrete type's FullName for
     /// trains resolved outside of DI.
