@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Trax.Scheduler/Trax.Scheduler.csproj" />
     <Project Path="src/Trax.Scheduler.Sqs/Trax.Scheduler.Sqs.csproj" />
+    <Project Path="src/Trax.Scheduler.Lambda/Trax.Scheduler.Lambda.csproj" />
     <Project Path="src/Trax.Runner.Lambda/Trax.Runner.Lambda.csproj" />
   </Folder>
   <Folder Name="/tests/">

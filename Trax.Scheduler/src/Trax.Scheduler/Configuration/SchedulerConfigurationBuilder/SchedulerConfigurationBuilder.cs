@@ -80,6 +80,14 @@ public partial class SchedulerConfigurationBuilder
         _routedSubmitterRegistrations.Add(registration);
 
     /// <summary>
+    /// Sets the remote run executor registration. Used by extension methods (e.g., UseLambdaRun)
+    /// to override the default <c>LocalRunExecutor</c> with a remote implementation.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public void SetRemoteRunRegistration(Action<IServiceCollection> registration) =>
+        _remoteRunRegistration = registration;
+
+    /// <summary>
     /// Builds the scheduler configuration and registers all services.
     /// </summary>
     internal void Build()

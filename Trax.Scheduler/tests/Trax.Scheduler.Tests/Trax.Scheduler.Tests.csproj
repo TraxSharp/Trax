@@ -26,6 +26,9 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Scheduler/Trax.Scheduler.csproj" />
+    <ProjectReference Include="../../src/Trax.Scheduler.Lambda/Trax.Scheduler.Lambda.csproj" />
+    <ProjectReference Include="../../src/Trax.Runner.Lambda/Trax.Runner.Lambda.csproj" />
+    <PackageReference Include="Amazon.Lambda.Core" Version="2.*" />
     <PackageReference Include="Trax.Mediator" Version="1.*" />
   </ItemGroup>
 </Project>

@@ -35,6 +35,7 @@
     <PackageReference Include="Trax.Effect.JunctionProvider.Logging" Version="1.*" />
     <ProjectReference Include="../../src/Trax.Scheduler/Trax.Scheduler.csproj" />
     <ProjectReference Include="../../src/Trax.Scheduler.Sqs/Trax.Scheduler.Sqs.csproj" />
+    <ProjectReference Include="../../src/Trax.Scheduler.Lambda/Trax.Scheduler.Lambda.csproj" />
     <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.*" />
   </ItemGroup>
 

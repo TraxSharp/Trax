@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -8,26 +7,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.Lambda;
 using Trax.Scheduler.Services.RequestHandler;
 using Trax.Scheduler.Services.RunExecutor;
 
 namespace Trax.Runner.Lambda;
 
 /// <summary>
-/// Delegate for Lambda route handlers.
-/// </summary>
-/// <param name="body">The raw request body</param>
-/// <param name="services">The scoped service provider for this invocation</param>
-/// <param name="ct">Cancellation token derived from Lambda's remaining time</param>
-/// <returns>The API Gateway response</returns>
-public delegate Task<APIGatewayHttpApiV2ProxyResponse> LambdaRouteHandler(
-    string body,
-    IServiceProvider services,
-    CancellationToken ct
-);
-
-/// <summary>
-/// Base class for AWS Lambda functions that execute Trax trains via API Gateway HTTP API v2.
+/// Base class for AWS Lambda functions that execute Trax trains via direct SDK invocation.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -38,8 +25,9 @@ public delegate Task<APIGatewayHttpApiV2ProxyResponse> LambdaRouteHandler(
 /// </para>
 ///
 /// <para>
-/// By default, routes <c>/trax/execute</c> and <c>/trax/run</c> are registered.
-/// Override <see cref="ConfigureRoutes"/> to add custom routes or replace the defaults.
+/// The Lambda function receives a <see cref="LambdaEnvelope"/> payload directly — no API Gateway
+/// or Function URL is needed. The <see cref="LambdaEnvelope.Type"/> field determines whether
+/// the request is a fire-and-forget job execution or a synchronous train run.
 /// </para>
 ///
 /// <para>
@@ -79,14 +67,10 @@ public abstract class TraxLambdaFunction
     };
 
     private readonly Lazy<IServiceProvider> _serviceProvider;
-    private readonly Dictionary<string, LambdaRouteHandler> _routes = new(
-        StringComparer.OrdinalIgnoreCase
-    );
 
     protected TraxLambdaFunction()
     {
         _serviceProvider = new Lazy<IServiceProvider>(BuildServiceProvider);
-        ConfigureRoutes();
     }
 
     /// <summary>
@@ -110,50 +94,36 @@ public abstract class TraxLambdaFunction
     }
 
     /// <summary>
-    /// Override to add custom routes or replace the defaults. Called once during construction.
-    /// The default implementation registers <c>/trax/execute</c> and <c>/trax/run</c>.
-    /// </summary>
-    protected virtual void ConfigureRoutes()
-    {
-        MapRoute("/trax/execute", HandleExecute);
-        MapRoute("/trax/run", HandleRun);
-    }
-
-    /// <summary>
-    /// Registers a route handler for the given path.
-    /// </summary>
-    /// <param name="path">The URL path to match (e.g., "/trax/execute")</param>
-    /// <param name="handler">The handler to invoke when the path matches</param>
-    protected void MapRoute(string path, LambdaRouteHandler handler)
-    {
-        _routes[path.TrimEnd('/')] = handler;
-    }
-
-    /// <summary>
-    /// Lambda entry point for API Gateway HTTP API v2 (payload format 2.0).
+    /// Lambda entry point for direct SDK invocation.
+    /// Receives a <see cref="LambdaEnvelope"/> and dispatches to the appropriate handler
+    /// based on <see cref="LambdaEnvelope.Type"/>.
     /// Cancellation is derived from <see cref="ILambdaContext.RemainingTime"/>.
     /// </summary>
-    public async Task<APIGatewayHttpApiV2ProxyResponse> FunctionHandler(
-        APIGatewayHttpApiV2ProxyRequest request,
-        ILambdaContext context
-    )
+    public async Task<object?> FunctionHandler(LambdaEnvelope envelope, ILambdaContext context)
     {
         using var cts = new CancellationTokenSource(context.RemainingTime);
         using var scope = _serviceProvider.Value.CreateScope();
-        var sp = scope.ServiceProvider;
+        var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
 
-        var path = request.RawPath?.TrimEnd('/') ?? "";
-
-        if (_routes.TryGetValue(path, out var handler))
-            return await handler(request.Body, sp, cts.Token);
-
-        return JsonResponse(404, new { error = $"Unknown route: {path}" });
+        return envelope.Type switch
+        {
+            LambdaRequestType.Execute => await HandleExecute(
+                envelope.PayloadJson,
+                handler,
+                cts.Token
+            ),
+            LambdaRequestType.Run => await HandleRun(envelope.PayloadJson, handler, cts.Token),
+            _ => throw new InvalidOperationException(
+                $"Unknown Lambda request type: {envelope.Type}"
+            ),
+        };
     }
 
     /// <summary>
     /// Runs the Lambda function as a local Kestrel web server for development.
-    /// Maps all registered routes as POST endpoints. Use this in a <c>Program.cs</c>
-    /// entry point for local testing without AWS tooling.
+    /// Maps <c>POST /trax/execute</c> and <c>POST /trax/run</c> endpoints that wrap
+    /// incoming request bodies into <see cref="LambdaEnvelope"/> payloads and execute
+    /// them through the same handler logic as the Lambda entry point.
     /// </summary>
     /// <example>
     /// <code>
@@ -167,74 +137,79 @@ public abstract class TraxLambdaFunction
         var builder = WebApplication.CreateBuilder(args);
         var app = builder.Build();
 
-        foreach (var (path, handler) in _routes)
-        {
-            app.MapPost(
-                path,
-                async (HttpContext ctx) =>
-                {
-                    using var reader = new StreamReader(ctx.Request.Body);
-                    var body = await reader.ReadToEndAsync();
+        app.MapPost(
+            "/trax/execute",
+            async (HttpContext ctx) =>
+            {
+                using var reader = new StreamReader(ctx.Request.Body);
+                var body = await reader.ReadToEndAsync();
 
-                    using var scope = _serviceProvider.Value.CreateScope();
-                    var result = await handler(body, scope.ServiceProvider, ctx.RequestAborted);
+                using var scope = _serviceProvider.Value.CreateScope();
+                var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
+                var result = await HandleExecute(body, handler, ctx.RequestAborted);
 
-                    ctx.Response.StatusCode = result.StatusCode;
-                    ctx.Response.ContentType = "application/json";
-                    await ctx.Response.WriteAsync(result.Body);
-                }
-            );
-        }
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(JsonSerializer.Serialize(result));
+            }
+        );
+
+        app.MapPost(
+            "/trax/run",
+            async (HttpContext ctx) =>
+            {
+                using var reader = new StreamReader(ctx.Request.Body);
+                var body = await reader.ReadToEndAsync();
+
+                using var scope = _serviceProvider.Value.CreateScope();
+                var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
+                var result = await HandleRun(body, handler, ctx.RequestAborted);
+
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(JsonSerializer.Serialize(result));
+            }
+        );
 
         await app.RunAsync();
     }
 
-    /// <summary>
-    /// Creates a JSON response for the given status code and body.
-    /// </summary>
-    protected static APIGatewayHttpApiV2ProxyResponse JsonResponse(int statusCode, object body) =>
-        new()
-        {
-            StatusCode = statusCode,
-            Body = JsonSerializer.Serialize(body),
-            Headers = new Dictionary<string, string> { ["Content-Type"] = "application/json" },
-        };
-
-    private static async Task<APIGatewayHttpApiV2ProxyResponse> HandleExecute(
-        string body,
-        IServiceProvider sp,
-        CancellationToken ct
-    )
-    {
-        try
-        {
-            var request =
-                JsonSerializer.Deserialize<RemoteJobRequest>(body, CaseInsensitiveOptions)
-                ?? throw new InvalidOperationException("Failed to deserialize RemoteJobRequest.");
-
-            var handler = sp.GetRequiredService<ITraxRequestHandler>();
-            var result = await handler.ExecuteJobAsync(request, ct);
-            return JsonResponse(200, new { metadataId = result.MetadataId });
-        }
-        catch (Exception ex)
-        {
-            return JsonResponse(500, new { error = ex.Message });
-        }
-    }
-
-    private static async Task<APIGatewayHttpApiV2ProxyResponse> HandleRun(
-        string body,
-        IServiceProvider sp,
+    private static async Task<RemoteJobResponse> HandleExecute(
+        string payloadJson,
+        ITraxRequestHandler handler,
         CancellationToken ct
     )
     {
         var request =
-            JsonSerializer.Deserialize<RemoteRunRequest>(body, CaseInsensitiveOptions)
+            JsonSerializer.Deserialize<RemoteJobRequest>(payloadJson, CaseInsensitiveOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize RemoteJobRequest.");
+
+        try
+        {
+            var result = await handler.ExecuteJobAsync(request, ct);
+            return new RemoteJobResponse(result.MetadataId);
+        }
+        catch (Exception ex)
+        {
+            return new RemoteJobResponse(
+                request.MetadataId,
+                IsError: true,
+                ErrorMessage: ex.Message,
+                ExceptionType: ex.GetType().Name,
+                StackTrace: ex.StackTrace
+            );
+        }
+    }
+
+    private static async Task<RemoteRunResponse> HandleRun(
+        string payloadJson,
+        ITraxRequestHandler handler,
+        CancellationToken ct
+    )
+    {
+        var request =
+            JsonSerializer.Deserialize<RemoteRunRequest>(payloadJson, CaseInsensitiveOptions)
             ?? throw new InvalidOperationException("Failed to deserialize RemoteRunRequest.");
 
-        var handler = sp.GetRequiredService<ITraxRequestHandler>();
-        var response = await handler.RunTrainAsync(request, ct);
-        return JsonResponse(200, response);
+        return await handler.RunTrainAsync(request, ct);
     }
 
     private IServiceProvider BuildServiceProvider()

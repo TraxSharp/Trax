@@ -7,7 +7,7 @@ namespace Trax.Scheduler.Utilities;
 /// Used by <see cref="Extensions.JobRunnerExtensions"/> and <c>SqsJobRunnerHandler</c>
 /// to deserialize train inputs transmitted as JSON with their type name.
 /// </remarks>
-internal static class TypeResolver
+public static class TypeResolver
 {
     /// <summary>
     /// Resolves a <see cref="Type"/> by its fully-qualified name, searching all loaded assemblies.
