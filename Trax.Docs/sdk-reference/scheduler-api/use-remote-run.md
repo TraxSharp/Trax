@@ -154,4 +154,5 @@ dotnet add package Trax.Scheduler
 
 - [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
 - [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — remote dispatch for queued trains
+- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) — Lambda-based run execution (direct SDK, no public endpoint)
 - [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — remote receiver setup (includes `UseTraxRunEndpoint`)

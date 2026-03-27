@@ -21,10 +21,10 @@ Postgres is always the source of truth. Every deployment model — local, remote
 │  (schedules)      (job state)      (dispatch queue)   (failed jobs)     │
 └──────────────────────────────┬───────────────────────────────────────────┘
                                │
-              ┌────────────────┼────────────────┬────────────────┐
-              │                │                │                │
-        Local Workers    Remote Workers    SQS Workers    Standalone Workers
-        (same process)   (HTTP push)       (SQS + Lambda)  (separate process)
+              ┌──────────────┼───────────────┬────────────────┬────────────────┐
+              │              │               │                │                │
+        Local Workers  Remote Workers  Lambda Workers  SQS Workers    Standalone Workers
+        (same process) (HTTP push)     (direct SDK)    (SQS + Lambda)  (separate process)
 ```
 
 Two abstraction boundaries control where trains execute:
@@ -36,6 +36,7 @@ Two abstraction boundaries control where trains execute:
 | `PostgresJobSubmitter` | Inserts into `background_job` table (default when Postgres is configured) |
 | `HttpJobSubmitter` | POSTs to a remote HTTP endpoint (used by `UseRemoteWorkers`) |
 | `SqsJobSubmitter` | Sends to an SQS queue for Lambda consumption (used by [`UseSqsWorkers`](/docs/sdk-reference/scheduler-api/use-sqs-workers), requires `Trax.Scheduler.Sqs`) |
+| `LambdaJobSubmitter` | Invokes an AWS Lambda function directly via SDK (used by [`UseLambdaWorkers`](/docs/sdk-reference/scheduler-api/use-lambda-workers), requires `Trax.Scheduler.Lambda`) |
 | `InMemoryJobSubmitter` | Runs inline, synchronously (automatic default when no database provider is configured) |
 | Custom | Implement `IJobSubmitter` and register via `OverrideSubmitter()` |
 
@@ -45,6 +46,7 @@ Two abstraction boundaries control where trains execute:
 |----------------|-------------|
 | `LocalRunExecutor` | Executes in-process via `ITrainBus.RunAsync` (default) |
 | `HttpRunExecutor` | POSTs to a remote HTTP endpoint, blocks until complete (used by [`UseRemoteRun`](/docs/sdk-reference/scheduler-api/use-remote-run)) |
+| `LambdaRunExecutor` | Invokes an AWS Lambda function directly via SDK, blocks until complete (used by [`UseLambdaRun`](/docs/sdk-reference/scheduler-api/use-lambda-run), requires `Trax.Scheduler.Lambda`) |
 
 ## Deployment Models
 
@@ -141,31 +143,9 @@ The `UseBroadcaster()` call is essential for cross-process subscriptions — wit
 
 **Remote side (AWS Lambda with `Trax.Runner.Lambda`):**
 
-```csharp
-using Amazon.Lambda.Core;
-using Amazon.Lambda.Serialization.SystemTextJson;
-using Trax.Runner.Lambda;
+For Lambda deployments, consider using [Lambda Workers (Direct Invocation)](#model-2c-lambda-workers-direct-invocation) instead — it eliminates public endpoints entirely. The HTTP model shown here requires a Function URL or API Gateway, which creates a publicly-routable endpoint.
 
-[assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
-
-public class Function : TraxLambdaFunction
-{
-    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
-    {
-        var connString = configuration.GetConnectionString("TraxDatabase")!;
-        var rabbitMqConnString = configuration.GetConnectionString("RabbitMQ")!;
-
-        services.AddTrax(trax => trax
-            .AddEffects(effects => effects
-                .SkipMigrations() // Migrations run separately (API/CI) — skip for faster cold starts
-                .UsePostgres(connString)
-                .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnString)))
-            .AddMediator(typeof(MyTrain).Assembly));
-    }
-}
-```
-
-The `TraxLambdaFunction` base class handles service provider lifecycle, request routing (`/trax/execute` and `/trax/run`), cancellation from Lambda's remaining time, and error handling. See the [TraxLambdaFunction API reference](/docs/sdk-reference/scheduler-api/trax-lambda-function) for details.
+If you do use HTTP with Lambda, the `TraxLambdaFunction` base class handles service provider lifecycle, envelope-based dispatching, cancellation from Lambda's remaining time, and error handling. `RunLocalAsync()` exposes HTTP endpoints for local development. See the [TraxLambdaFunction API reference](/docs/sdk-reference/scheduler-api/trax-lambda-function) for details.
 
 ```
 ┌──── Scheduler Process ────┐         ┌──── Remote Process ────────────┐
@@ -257,7 +237,99 @@ public class Function
 - **Backpressure** — SQS buffers burst traffic; Lambda drains at a controlled rate
 - **High volume** — thousands of concurrent jobs without overwhelming endpoints
 
-**Sample:** The SQS transport is not yet production-ready. See the [Remote Workers](#model-2-remote-workers-push-based) model for the recommended Lambda deployment pattern using `TraxLambdaFunction`.
+**Sample:** The SQS transport is not yet production-ready. See the [Lambda Workers](#model-2c-lambda-workers-direct-invocation) model for the recommended Lambda deployment pattern.
+
+### Model 2c: Lambda Workers (Direct Invocation)
+
+Like Remote Workers but without any public endpoint. The scheduler invokes the Lambda function directly via the AWS SDK — no API Gateway, Function URLs, or HTTP endpoints. Access is controlled entirely by IAM policies.
+
+Requires the `Trax.Scheduler.Lambda` package.
+
+**Scheduler side:**
+
+```csharp
+using Trax.Scheduler.Lambda.Extensions;
+
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(assemblies)
+    .AddScheduler(scheduler => scheduler
+        .UseLambdaWorkers(
+            lambda => lambda.FunctionName = "content-shield-runner",
+            routing => routing
+                .ForTrain<IReviewContentTrain>()
+                .ForTrain<ISendViolationNoticeTrain>())
+        // Optional: also offload run* mutations to Lambda
+        .UseLambdaRun(lambda => lambda.FunctionName = "content-shield-runner")
+    )
+);
+```
+
+**Lambda function:**
+
+```csharp
+using Amazon.Lambda.Core;
+using Amazon.Lambda.Serialization.SystemTextJson;
+using Trax.Runner.Lambda;
+
+[assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
+
+public class Function : TraxLambdaFunction
+{
+    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
+    {
+        var connString = configuration.GetConnectionString("TraxDatabase")!;
+        var rabbitMqConnString = configuration.GetConnectionString("RabbitMQ")!;
+
+        services.AddTrax(trax => trax
+            .AddEffects(effects => effects
+                .SkipMigrations()
+                .UsePostgres(connString)
+                .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnString)))
+            .AddMediator(typeof(MyTrain).Assembly));
+    }
+}
+```
+
+The `TraxLambdaFunction` base class receives a `LambdaEnvelope` payload directly from the SDK — no HTTP routing is needed. The envelope's `Type` field determines whether the request is a fire-and-forget job execution (`Execute`) or a synchronous train run (`Run`). See the [TraxLambdaFunction API reference](/docs/sdk-reference/scheduler-api/trax-lambda-function) for details.
+
+```
+┌──── Scheduler Process ────┐         ┌──── AWS Lambda ─────────────────┐
+│                            │         │                                 │
+│  ManifestManager           │         │  LambdaEnvelope (Execute/Run)   │
+│  JobDispatcher             │         │       │                         │
+│       │                    │  SDK    │       ▼                         │
+│       ▼                    │ Invoke  │  TraxLambdaFunction             │
+│  LambdaJobSubmitter ───────┼────────→│  └─→ ITraxRequestHandler        │
+│                            │         │       └─→ Your Train            │
+└────────────────────────────┘         └─────────────────────────────────┘
+                                                │
+                                                ▼
+                                       Shared PostgreSQL
+```
+
+Two invocation modes:
+
+| Mode | `InvocationType` | Behavior |
+|------|-------------------|----------|
+| **Execute** (queued trains) | `Event` | Fire-and-forget — scheduler gets 202, Lambda runs async |
+| **Run** (synchronous trains) | `RequestResponse` | Scheduler blocks until Lambda completes and returns output |
+
+**When to use:**
+- **AWS Lambda** — direct SDK invocation, no public endpoints, access governed by IAM
+- **Security-sensitive workloads** — no Function URLs or API Gateway; the Lambda is never publicly reachable
+- **Simpler infrastructure** — fewer AWS resources to manage (no API Gateway, no Function URL configuration)
+- **Lower latency** — direct invocation avoids the API Gateway routing layer
+
+**Local development:** For local dev and testing, `RunLocalAsync()` starts a Kestrel server that exposes the same `/trax/execute` and `/trax/run` HTTP endpoints. Use `UseRemoteWorkers()` + `UseRemoteRun()` on the scheduler side during development, then switch to `UseLambdaWorkers()` + `UseLambdaRun()` for production deployment.
+
+**IAM permissions:** The scheduler process needs `lambda:InvokeFunction` on the target function ARN. The Lambda execution role needs its normal permissions (database access, etc.).
+
+**Payload size limit:** Lambda invocation payloads are limited to 256 KB (synchronous) and 256 KB (async). If your serialized train input exceeds this, store the data externally and pass a reference.
+
+**Sample:** See `Trax.Samples.ContentShield.Api` and `Trax.Samples.ContentShield.Runner` in the `samples/EphemeralWorkers/` directory of the Trax.Samples repository. The sample uses `UseRemoteWorkers()` for local development with commented-out `UseLambdaWorkers()` configuration for production deployment.
 
 ### Model 3: Standalone Workers (Poll-Based)
 
@@ -328,9 +400,11 @@ app.Run();
 |----------|-------------------|
 | Single-server deployment | **Local Workers** — simplest setup, no network overhead |
 | Separate worker servers (always running) | **Standalone Workers** — poll-based, no HTTP layer needed |
-| AWS Lambda with durability | **SQS Workers** — guaranteed delivery, retries, DLQ, auto-scaling |
+| AWS Lambda (recommended) | **Lambda Workers** — direct SDK invocation, no public endpoints, IAM-governed |
+| AWS Lambda with durable queuing | **SQS Workers** — guaranteed delivery, retries, DLQ, auto-scaling |
 | Google Cloud Run / Azure Functions | **Remote Workers** — push-based HTTP, matches serverless event model |
 | Different hardware per train type | **Remote Workers** — route to GPU/high-memory endpoints |
+| Security-sensitive Lambda workloads | **Lambda Workers** — no Function URL or API Gateway needed |
 | Just getting started | **Local Workers** — scale out later when you need to |
 
 You can also mix models. For example, run local workers for fast trains and remote workers for expensive GPU trains — using per-train routing with `ForTrain<T>()`:
@@ -553,11 +627,13 @@ When a remote job fails, check these in order:
 - [Job Submission](/docs/scheduler/job-submission) — architecture of the job submission pipeline
 - [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) — API reference for local worker configuration
 - [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — API reference for remote workers (HTTP)
+- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) — API reference for Lambda workers (direct SDK invocation)
+- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) — API reference for Lambda run execution (direct SDK invocation)
 - [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) — API reference for SQS workers (Lambda)
-- [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) — API reference for remote run execution
+- [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) — API reference for remote run execution (HTTP)
 - [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — API reference for remote receiver setup
 - [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) — API reference for standalone worker setup
 
 ## SDK Reference
 
-> [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxJobRunner / UseTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)
+> [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) | [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxJobRunner / UseTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)

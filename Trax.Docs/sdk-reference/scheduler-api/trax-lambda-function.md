@@ -8,7 +8,7 @@ nav_order: 11
 
 # TraxLambdaFunction
 
-Abstract base class for AWS Lambda functions that execute Trax trains via API Gateway HTTP API v2. Handles service provider lifecycle, configuration loading, request routing, cancellation, and error handling so your Lambda function is just a DI configuration.
+Abstract base class for AWS Lambda functions that execute Trax trains via direct SDK invocation. Handles service provider lifecycle, envelope-based dispatching, cancellation, and error handling so your Lambda function is just a DI configuration.
 
 ## Package
 
@@ -23,11 +23,9 @@ public abstract class TraxLambdaFunction
 {
     protected abstract void ConfigureServices(IServiceCollection services, IConfiguration configuration);
     protected virtual void ConfigureLogging(ILoggingBuilder logging);
-    protected virtual void ConfigureRoutes();
-    protected void MapRoute(string path, LambdaRouteHandler handler);
 
-    public Task<APIGatewayHttpApiV2ProxyResponse> FunctionHandler(
-        APIGatewayHttpApiV2ProxyRequest request,
+    public Task<object?> FunctionHandler(
+        LambdaEnvelope envelope,
         ILambdaContext context
     );
 
@@ -41,30 +39,22 @@ public abstract class TraxLambdaFunction
 |--------|----------|-------------|
 | `ConfigureServices(IServiceCollection, IConfiguration)` | Yes | Register your Trax effects, mediator, data contexts, and application services. `IConfiguration` is loaded from `appsettings.json` (if present) and environment variables. Do **not** call `AddTraxJobRunner()` — the base class does this automatically. |
 | `ConfigureLogging(ILoggingBuilder)` | No | Customize logging. Default: console logging at `Information` level. |
-| `ConfigureRoutes()` | No | Customize route registration. Default registers `/trax/execute` and `/trax/run`. Call `MapRoute()` to add or replace routes. |
 
-## Routes
+## Envelope Dispatching
 
-The `FunctionHandler` entry point routes based on `request.RawPath`:
+The `FunctionHandler` entry point receives a `LambdaEnvelope` directly from the AWS SDK — no API Gateway or Function URL is involved. The envelope's `Type` field determines the operation:
 
-| Route | Handler | Description |
-|-------|---------|-------------|
-| `/trax/execute` | `ITraxRequestHandler.ExecuteJobAsync` | Fire-and-forget job execution (queue path) |
-| `/trax/run` | `ITraxRequestHandler.RunTrainAsync` | Synchronous execution with output (run path) |
-| _anything else_ | — | Returns 404 |
+| Type | Handler | Description |
+|------|---------|-------------|
+| `Execute` | `ITraxRequestHandler.ExecuteJobAsync` | Fire-and-forget job execution (queue path). Returns `RemoteJobResponse`. |
+| `Run` | `ITraxRequestHandler.RunTrainAsync` | Synchronous execution with output (run path). Returns `RemoteRunResponse`. |
+| _unknown_ | — | Throws `InvalidOperationException` |
 
-Override `ConfigureRoutes()` to add custom routes:
+The `LambdaEnvelope` is a shared contract defined in `Trax.Scheduler`:
 
 ```csharp
-protected override void ConfigureRoutes()
-{
-    base.ConfigureRoutes(); // keep default routes
-    MapRoute("/my/custom-route", async (body, services, ct) =>
-    {
-        // resolve services, handle request
-        return JsonResponse(200, new { ok = true });
-    });
-}
+public record LambdaEnvelope(LambdaRequestType Type, string PayloadJson);
+public enum LambdaRequestType { Execute, Run }
 ```
 
 ## Examples
@@ -125,14 +115,18 @@ public class Function : TraxLambdaFunction
 
 ## Local Development
 
-Use `RunLocalAsync` to run the Lambda function as a local Kestrel web server. This maps all registered routes as POST endpoints, so the API can dispatch jobs to it via HTTP just like it would to the deployed Lambda.
+Use `RunLocalAsync` to run the Lambda function as a local Kestrel web server. This maps `POST /trax/execute` and `POST /trax/run` endpoints that wrap incoming HTTP request bodies into `LambdaEnvelope` payloads and execute them through the same handler logic as the Lambda entry point.
 
 ```csharp
 // Program.cs
 await new Function().RunLocalAsync(args);
 ```
 
-The local server reads its port from `appsettings.json` (via Kestrel configuration) and exposes the same `/trax/execute` and `/trax/run` endpoints that API Gateway would route to in production.
+This enables a smooth development workflow:
+- **Local dev:** Scheduler uses `UseRemoteWorkers()` + `UseRemoteRun()` to hit the local Kestrel server
+- **Production:** Scheduler uses `UseLambdaWorkers()` + `UseLambdaRun()` for direct SDK invocation
+
+The local server reads its port from `appsettings.json` (via Kestrel configuration) and exposes the same endpoints that the Lambda would handle in production.
 
 ## Configuration
 
@@ -150,8 +144,8 @@ The service provider is built **lazily on the first invocation**, not during Lam
 To minimize cold start time:
 
 - Keep `ConfigureServices` lean — only register what the runner needs
+- Use `SkipMigrations()` — migrations should run from the API or CI, not the Lambda
 - Avoid unnecessary effect providers — if the runner doesn't need broadcasting, don't register it
-- Consider splitting API Gateway routes across separate Lambda functions if different routes pull in different dependency trees
 
 ## How It Works
 
@@ -166,10 +160,17 @@ To minimize cold start time:
    - Builds and caches the `IServiceProvider`
 3. Each invocation creates a new DI scope and resolves `ITraxRequestHandler`
 4. Cancellation is derived from `ILambdaContext.RemainingTime`
-5. Routes are matched from the route table (populated by `ConfigureRoutes()`)
+5. The `LambdaEnvelope.Type` field determines which handler method is called
+
+## Error Handling
+
+For `Execute` requests, exceptions are caught and returned as a `RemoteJobResponse` with structured error fields (`IsError`, `ErrorMessage`, `ExceptionType`, `StackTrace`). The `LambdaJobSubmitter` on the scheduler side does not read this response (fire-and-forget), but the error is persisted in the Lambda function's metadata.
+
+For `Run` requests, `ITraxRequestHandler.RunTrainAsync` returns a `RemoteRunResponse` that may contain structured error fields. The `LambdaRunExecutor` on the scheduler side reads the response and reconstructs a `TrainException` with the full error context.
 
 ## See Also
 
 - [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
+- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) — scheduler-side configuration for Lambda dispatch
+- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) — scheduler-side configuration for Lambda run execution
 - [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — what `AddTraxJobRunner()` registers (called automatically by the base class)
-- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) — alternative: SQS-triggered Lambda (uses `SqsJobRunnerHandler` instead)

@@ -230,5 +230,6 @@ The API process needs `sqs:SendMessage`. The Lambda function needs `sqs:ReceiveM
 
 - [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
 - [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — HTTP-based per-train remote dispatch (alternative transport)
+- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) — Lambda-based per-train dispatch (direct SDK invocation, alternative transport)
 - [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — setting up the remote receiver
 - [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) — customizing the local (default) execution backend
