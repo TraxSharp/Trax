@@ -207,6 +207,17 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
+    /// Sets the timeout after which an InProgress job that never completed is automatically failed.
+    /// </summary>
+    /// <param name="timeout">The stale in-progress timeout (default: 60 minutes)</param>
+    /// <returns>The builder for method chaining</returns>
+    public SchedulerConfigurationBuilder StaleInProgressTimeout(TimeSpan timeout)
+    {
+        _configuration.StaleInProgressTimeout = timeout;
+        return this;
+    }
+
+    /// <summary>
     /// Sets the default misfire policy for manifests that do not specify one.
     /// </summary>
     /// <param name="policy">The default misfire policy (default: FireOnceNow)</param>

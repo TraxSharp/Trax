@@ -14,6 +14,7 @@ public class ManifestManagerTrain : ServiceTrain<Unit, Unit>, IManifestManagerTr
             .Chain<LoadManifestsJunction>()
             .Chain<CancelTimedOutJobsJunction>()
             .Chain<ReapStalePendingMetadataJunction>()
+            .Chain<ReapStaleInProgressMetadataJunction>()
             .Chain<ReapFailedJobsJunction>()
             .Chain<DetermineJobsToQueueJunction>()
             .Chain<CreateWorkQueueEntriesJunction>()

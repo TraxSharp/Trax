@@ -161,6 +161,18 @@ public class SchedulerConfiguration
     public TimeSpan StalePendingTimeout { get; set; } = TimeSpan.FromMinutes(20);
 
     /// <summary>
+    /// Timeout after which an InProgress job that never completed is automatically failed.
+    /// </summary>
+    /// <remarks>
+    /// Acts as a safety net for worker crashes, Lambda hard-kills, or OOM events where the
+    /// process dies without reaching FinishServiceTrain. If a job remains in InProgress state
+    /// longer than this duration, the ManifestManager's ReapStaleInProgressMetadataJunction
+    /// will mark it as Failed. This should be longer than <see cref="DefaultJobTimeout"/>
+    /// to allow cooperative cancellation to propagate before force-failing.
+    /// </remarks>
+    public TimeSpan StaleInProgressTimeout { get; set; } = TimeSpan.FromMinutes(60);
+
+    /// <summary>
     /// The default misfire policy applied to manifests that do not specify one.
     /// </summary>
     /// <remarks>
