@@ -13,7 +13,7 @@ The ManifestManager is the first half of each polling cycle. It figures out whic
 ## Chain
 
 ```
-LoadManifestsJunction → ReapFailedJobsJunction → DetermineJobsToQueueJunction → CreateWorkQueueEntriesJunction
+LoadManifestsJunction → CancelTimedOutJobsJunction → ReapStalePendingMetadataJunction → ReapStaleInProgressMetadataJunction → ReapFailedJobsJunction → DetermineJobsToQueueJunction → CreateWorkQueueEntriesJunction
 ```
 
 ## Junctions
@@ -23,6 +23,20 @@ LoadManifestsJunction → ReapFailedJobsJunction → DetermineJobsToQueueJunctio
 Projects all enabled manifests into lightweight `ManifestDispatchView` records using a single database query with pre-computed aggregate flags (`FailedCount`, `HasAwaitingDeadLetter`, `HasQueuedWork`, `HasActiveExecution`, `HasSuccessfulMetadata`). These flags are computed via COUNT/EXISTS subqueries pushed into the database, keeping query cost O(manifests) regardless of how large the child tables (`Metadatas`, `DeadLetters`, `WorkQueues`) grow.
 
 The projection uses `AsNoTracking()` — the results are read-only snapshots used for scheduling decisions only. No unbounded child collections are loaded into memory.
+
+### CancelTimedOutJobsJunction
+
+Finds InProgress metadata that has exceeded `DefaultJobTimeout` and requests cooperative cancellation. Sets `CancellationRequested = true` in the database (picked up by `CancellationCheckProvider` at the next junction boundary) and attempts same-server instant cancellation via the `CancellationRegistry`.
+
+### ReapStalePendingMetadataJunction
+
+Fails Pending metadata that has not been picked up within `StalePendingTimeout` (default: 20 minutes). Acts as a safety net for dispatch failures where the worker never started executing the job (e.g., remote worker unreachable, Lambda crashed after receiving the request).
+
+### ReapStaleInProgressMetadataJunction
+
+Fails InProgress metadata that has not completed within `StaleInProgressTimeout` (default: 60 minutes). Acts as a safety net for hard crashes — Lambda hard-kills, OOM events, or process crashes where the worker dies without reaching `FinishServiceTrain`. This timeout should be longer than `DefaultJobTimeout` to allow cooperative cancellation (via `CancelTimedOutJobsJunction`) to propagate before force-failing.
+
+Newly-failed metadata from both stale reapers is visible to `ReapFailedJobsJunction` in the same ManifestManager cycle, enabling dead-lettering if retries are exhausted.
 
 ### ReapFailedJobsJunction
 

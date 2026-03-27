@@ -551,7 +551,20 @@ The ManifestManager runs a `ReapStalePendingMetadataJunction` on every polling c
 
 Or at runtime via the Dashboard under **Server Settings > Job Settings > Stale Pending Timeout**.
 
-### 4. Dead-Lettering
+### 4. Stale InProgress Reaper
+
+The ManifestManager also runs a `ReapStaleInProgressMetadataJunction` on every polling cycle. Any Metadata that has been in `InProgress` state longer than `StaleInProgressTimeout` (default: 60 minutes) is automatically marked as `Failed`. This catches hard crashes where the worker dies without reaching `FinishServiceTrain` — Lambda hard-kills, OOM events, or process crashes that bypass all .NET exception handling.
+
+```csharp
+.AddScheduler(scheduler => scheduler
+    .StaleInProgressTimeout(TimeSpan.FromMinutes(45))
+    // ...
+)
+```
+
+This timeout should be longer than `DefaultJobTimeout` (default: 20 minutes) to give cooperative cancellation time to propagate before force-failing. The ordering in the ManifestManager pipeline is: `CancelTimedOutJobsJunction` (cooperative cancel) → `ReapStalePendingMetadataJunction` → `ReapStaleInProgressMetadataJunction` (force-fail) → `ReapFailedJobsJunction` (dead-letter).
+
+### 5. Dead-Lettering
 
 After `MaxRetries` failed **executions** (distinct from dispatch attempts), the ManifestManager creates a `DeadLetter` record and marks the manifest as `AwaitingIntervention`. Dead letters can be resolved via the Dashboard or programmatically.
 
@@ -636,4 +649,4 @@ When a remote job fails, check these in order:
 
 ## SDK Reference
 
-> [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) | [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxJobRunner / UseTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)
+> [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) | [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxJobRunner / UseTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler) | [StalePendingTimeout / StaleInProgressTimeout](/docs/sdk-reference/scheduler-api/add-scheduler)

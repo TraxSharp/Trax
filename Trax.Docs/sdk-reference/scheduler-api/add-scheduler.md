@@ -107,6 +107,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `DefaultMisfireThreshold(TimeSpan)` | threshold | 60 seconds | Grace period before misfire policies take effect. If a manifest is overdue by less than this, it fires normally |
 | `RecoverStuckJobsOnStartup(bool)` | recover | `true` | Whether to auto-recover stuck jobs on startup |
 | `StalePendingTimeout(TimeSpan)` | timeout | 20 minutes | Timeout after which a Pending job that was never picked up is automatically failed |
+| `StaleInProgressTimeout(TimeSpan)` | timeout | 60 minutes | Timeout after which an InProgress job that never completed is automatically failed. Acts as a safety net for hard crashes (Lambda kills, OOM) where FinishServiceTrain never runs. Should be longer than `DefaultJobTimeout` to allow cooperative cancellation to propagate first |
 | `PruneOrphanedManifests(bool)` | prune | `true` | Whether to [delete manifests](/docs/scheduler/orphan-manifest-cleanup) from the database that are no longer defined in the startup configuration. Disable if you create manifests dynamically at runtime via `ITraxScheduler` |
 | `DependentPriorityBoost(int)` | boost | 16 | Priority boost added to dependent train work queue entries at dispatch time. Range: 0-31. Ensures dependent trains are dispatched before non-dependent ones by default |
 
