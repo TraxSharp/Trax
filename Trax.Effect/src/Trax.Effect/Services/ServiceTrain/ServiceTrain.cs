@@ -155,23 +155,23 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         Metadata.AssertLoaded();
         await EffectRunner.SaveChanges(CancellationToken);
 
-        await LifecycleHookRunner.OnStarted(Metadata, CancellationToken);
-
         try
         {
-            await OnStarted(Metadata, CancellationToken);
-        }
-        catch (Exception hookEx)
-        {
-            Logger?.LogError(
-                hookEx,
-                "Train-level OnStarted hook threw for train ({TrainName}).",
-                TrainName
-            );
-        }
+            await LifecycleHookRunner.OnStarted(Metadata, CancellationToken);
 
-        try
-        {
+            try
+            {
+                await OnStarted(Metadata, CancellationToken);
+            }
+            catch (Exception hookEx)
+            {
+                Logger?.LogError(
+                    hookEx,
+                    "Train-level OnStarted hook threw for train ({TrainName}).",
+                    TrainName
+                );
+            }
+
             Logger?.LogTrace("Running Train: ({TrainName})", TrainName);
             Metadata.SetInputObject(input);
             var result = await RunInternal(input);
@@ -332,7 +332,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public virtual async Task<TOut> Run(TIn input, Metadata metadata)
     {
         await this.InitializeServiceTrain(metadata);
-        return await Run(input);
+        return await Run(input, CancellationToken);
     }
 
     /// <summary>
@@ -346,7 +346,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     {
         CancellationToken = cancellationToken;
         await this.InitializeServiceTrain(metadata);
-        return await Run(input);
+        return await Run(input, CancellationToken);
     }
 
     /// <summary>

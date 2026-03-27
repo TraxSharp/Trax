@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Tests.Data.InMemory.Integration.Fixtures;
 
@@ -241,6 +242,93 @@ public class TrainLifecycleOverrideTests : TestSetup
 
         train.StartedCancellationToken.Should().Be(cts.Token);
         train.CompletedCancellationToken.Should().Be(cts.Token);
+    }
+
+    [Test]
+    public async Task Run_WithMetadataAndCancellationToken_TokenPreservedThroughHooks()
+    {
+        var train = (RecordingTrain)Scope.ServiceProvider.GetRequiredService<IRecordingTrain>();
+        using var cts = new CancellationTokenSource();
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(IRecordingTrain).FullName!,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+
+        await train.Run(Unit.Default, metadata, cts.Token);
+
+        train.StartedCancellationToken.Should().Be(cts.Token);
+        train.CompletedCancellationToken.Should().Be(cts.Token);
+    }
+
+    [Test]
+    public async Task Run_WithMetadataAndCancellationToken_TokenNotOverwrittenByDefault()
+    {
+        // Regression test: previously Run(input, metadata, ct) called Run(input)
+        // which overwrote the token with CancellationToken.None
+        var train = (RecordingTrain)Scope.ServiceProvider.GetRequiredService<IRecordingTrain>();
+        using var cts = new CancellationTokenSource();
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(IRecordingTrain).FullName!,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+
+        await train.Run(Unit.Default, metadata, cts.Token);
+
+        train
+            .StartedCancellationToken.Should()
+            .NotBe(
+                CancellationToken.None,
+                "the real token should survive through to hooks, not be overwritten with default"
+            );
+    }
+
+    [Test]
+    public async Task Run_WithMetadataOnly_DoesNotClobberToken()
+    {
+        // Run(input, metadata) should pass CancellationToken through without issue
+        var train = (RecordingTrain)Scope.ServiceProvider.GetRequiredService<IRecordingTrain>();
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(IRecordingTrain).FullName!,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+
+        await train.Run(Unit.Default, metadata);
+
+        train.StartedCalled.Should().BeTrue();
+        train.CompletedCalled.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Run_CancelledDuringExecution_WithMetadataOverload_CallsOnCancelled()
+    {
+        var train = (CancellingRecordingTrain)
+            Scope.ServiceProvider.GetRequiredService<ICancellingRecordingTrain>();
+        using var cts = new CancellationTokenSource();
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(ICancellingRecordingTrain).FullName!,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+
+        var act = async () => await train.Run(Unit.Default, metadata, cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        train.CancelledCalled.Should().BeTrue();
     }
 
     #endregion
