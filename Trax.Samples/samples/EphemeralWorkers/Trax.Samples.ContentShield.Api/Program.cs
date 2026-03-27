@@ -13,6 +13,20 @@
 //   - Run mutations (GenerateModerationReport) are also offloaded to the Runner
 //     via UseRemoteRun() — the API blocks until the Runner returns the output
 //
+// For AWS deployments, replace UseRemoteWorkers/UseRemoteRun with
+// UseLambdaWorkers/UseLambdaRun to invoke the Lambda directly via AWS SDK
+// (no public endpoint needed — access governed by IAM policies):
+//
+//   using Trax.Scheduler.Lambda.Extensions;
+//
+//   .UseLambdaWorkers(
+//       lambda => lambda.FunctionName = "content-shield-runner",
+//       routing => routing
+//           .ForTrain<IReviewContentTrain>()
+//           .ForTrain<ISendViolationNoticeTrain>()
+//           .ForTrain<IGenerateModerationReportTrain>())
+//   .UseLambdaRun(lambda => lambda.FunctionName = "content-shield-runner")
+//
 // GraphQL schema (auto-generated from train attributes):
 //   Queries:    lookupModerationResult                — [TraxQuery]
 //   Mutations:  reviewContent                         — [TraxMutation(Queue)]
