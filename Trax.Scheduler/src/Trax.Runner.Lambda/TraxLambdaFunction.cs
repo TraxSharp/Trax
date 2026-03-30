@@ -104,15 +104,22 @@ public abstract class TraxLambdaFunction
         using var cts = new CancellationTokenSource(context.RemainingTime);
         using var scope = _serviceProvider.Value.CreateScope();
         var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraxLambdaFunction>>();
 
         return envelope.Type switch
         {
             LambdaRequestType.Execute => await HandleExecute(
                 envelope.PayloadJson,
                 handler,
+                logger,
                 cts.Token
             ),
-            LambdaRequestType.Run => await HandleRun(envelope.PayloadJson, handler, cts.Token),
+            LambdaRequestType.Run => await HandleRun(
+                envelope.PayloadJson,
+                handler,
+                logger,
+                cts.Token
+            ),
             _ => throw new InvalidOperationException(
                 $"Unknown Lambda request type: {envelope.Type}"
             ),
@@ -146,7 +153,10 @@ public abstract class TraxLambdaFunction
 
                 using var scope = _serviceProvider.Value.CreateScope();
                 var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
-                var result = await HandleExecute(body, handler, ctx.RequestAborted);
+                var logger = scope.ServiceProvider.GetRequiredService<
+                    ILogger<TraxLambdaFunction>
+                >();
+                var result = await HandleExecute(body, handler, logger, ctx.RequestAborted);
 
                 ctx.Response.ContentType = "application/json";
                 await ctx.Response.WriteAsync(JsonSerializer.Serialize(result));
@@ -162,7 +172,10 @@ public abstract class TraxLambdaFunction
 
                 using var scope = _serviceProvider.Value.CreateScope();
                 var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
-                var result = await HandleRun(body, handler, ctx.RequestAborted);
+                var logger = scope.ServiceProvider.GetRequiredService<
+                    ILogger<TraxLambdaFunction>
+                >();
+                var result = await HandleRun(body, handler, logger, ctx.RequestAborted);
 
                 ctx.Response.ContentType = "application/json";
                 await ctx.Response.WriteAsync(JsonSerializer.Serialize(result));
@@ -175,6 +188,7 @@ public abstract class TraxLambdaFunction
     private static async Task<RemoteJobResponse> HandleExecute(
         string payloadJson,
         ITraxRequestHandler handler,
+        ILogger logger,
         CancellationToken ct
     )
     {
@@ -189,6 +203,12 @@ public abstract class TraxLambdaFunction
         }
         catch (Exception ex)
         {
+            logger.LogError(
+                ex,
+                "HandleExecute failed for MetadataId {MetadataId}",
+                request.MetadataId
+            );
+
             return new RemoteJobResponse(
                 request.MetadataId,
                 IsError: true,
@@ -202,6 +222,7 @@ public abstract class TraxLambdaFunction
     private static async Task<RemoteRunResponse> HandleRun(
         string payloadJson,
         ITraxRequestHandler handler,
+        ILogger logger,
         CancellationToken ct
     )
     {
@@ -209,7 +230,15 @@ public abstract class TraxLambdaFunction
             JsonSerializer.Deserialize<RemoteRunRequest>(payloadJson, CaseInsensitiveOptions)
             ?? throw new InvalidOperationException("Failed to deserialize RemoteRunRequest.");
 
-        return await handler.RunTrainAsync(request, ct);
+        try
+        {
+            return await handler.RunTrainAsync(request, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "HandleRun failed for train {TrainName}", request.TrainName);
+            throw;
+        }
     }
 
     private IServiceProvider BuildServiceProvider()
