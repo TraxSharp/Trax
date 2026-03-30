@@ -167,7 +167,7 @@ Maps a `POST` endpoint at the specified route that:
 3. Creates a new DI scope and resolves `IJobRunnerTrain`
 4. Calls `Run(new RunJobRequest(metadataId, input))`
 5. Returns `200 OK` with a `RemoteJobResponse` containing the metadata ID on success
-6. On error: returns `200 OK` with `RemoteJobResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `StackTrace`)
+6. On error: logs the exception, then returns `200 OK` with `RemoteJobResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `StackTrace`)
 
 ### UseTraxRunEndpoint
 

@@ -164,9 +164,9 @@ To minimize cold start time:
 
 ## Error Handling
 
-For `Execute` requests, exceptions are caught and returned as a `RemoteJobResponse` with structured error fields (`IsError`, `ErrorMessage`, `ExceptionType`, `StackTrace`). The `LambdaJobSubmitter` on the scheduler side does not read this response (fire-and-forget), but the error is persisted in the Lambda function's metadata.
+For `Execute` requests, exceptions are logged and returned as a `RemoteJobResponse` with structured error fields (`IsError`, `ErrorMessage`, `ExceptionType`, `StackTrace`). Errors that occur within the train itself are also persisted to the `Metadata` table by `ServiceTrain.Run`. However, pre-train errors (e.g., deserialization failures) only appear in the log output. The `LambdaJobSubmitter` on the scheduler side does not read the response (fire-and-forget).
 
-For `Run` requests, `ITraxRequestHandler.RunTrainAsync` returns a `RemoteRunResponse` that may contain structured error fields. The `LambdaRunExecutor` on the scheduler side reads the response and reconstructs a `TrainException` with the full error context.
+For `Run` requests, exceptions are logged before being rethrown. `ITraxRequestHandler.RunTrainAsync` returns a `RemoteRunResponse` that may contain structured error fields. The `LambdaRunExecutor` on the scheduler side reads the response and reconstructs a `TrainException` with the full error context.
 
 ## See Also
 

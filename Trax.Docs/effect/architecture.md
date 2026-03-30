@@ -79,7 +79,7 @@ The `Run` method wraps the user-defined method (`Junctions()` or `RunInternal`) 
 
 The `EffectRunner` coordinates all registered effect providers. It builds its provider list at construction time by querying `IEffectProviderFactory` instances filtered through the `IEffectRegistry`.
 
-It exposes three operations that fan out to every active provider:
+It exposes three operations that fan out to every active provider, awaiting each provider sequentially:
 - **`Track(model)`** — Register a new model for tracking (e.g., add `Metadata` to the EF change tracker)
 - **`Update(model)`** — Notify providers of an in-memory mutation (e.g., re-serialize parameters after output is set)
 - **`SaveChanges(ct)`** — Persist all accumulated changes across all providers
@@ -173,7 +173,7 @@ Junctions execute inside the "Execute Train Chain" box. Each mutation to the tra
 
 ### DataContext
 
-`DataContext<TDbContext>` extends EF Core's `DbContext` and implements both `IDataContext` and `IEffectProvider`. It maps `Track` → `Add`, `Update` → EF `Update`, and `SaveChanges` → `SaveChangesAsync`, delegating persistence to EF Core's change tracker. It also provides transaction support via `BeginTransaction`, `CommitTransaction`, and `RollbackTransaction`.
+`DataContext<TDbContext>` extends EF Core's `DbContext` and implements both `IDataContext` and `IEffectProvider`. It maps `Track` and `Update` to direct entity state assignment (Added for new entities, Modified for existing), and `SaveChanges` to `SaveChangesAsync`. State is set on the target entity only — navigation properties are not traversed, which prevents unnecessary UPDATE statements when entities cross DI scope boundaries (e.g., metadata loaded by `LoadMetadataJunction` passed into a child train's context). It also provides transaction support via `BeginTransaction`, `CommitTransaction`, and `RollbackTransaction`.
 
 **DbSets:**
 
