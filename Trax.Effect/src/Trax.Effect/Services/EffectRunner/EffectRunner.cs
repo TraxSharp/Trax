@@ -101,13 +101,13 @@ public class EffectRunner : IEffectRunner
     /// </remarks>
     public async Task Track(IModel model)
     {
-        ActiveEffectProviders.RunAll(provider => provider.Track(model));
+        await ActiveEffectProviders.RunAllAsync(provider => provider.Track(model));
     }
 
     /// <inheritdoc />
     public async Task Update(IModel model)
     {
-        ActiveEffectProviders.RunAll(provider => provider.Update(model));
+        await ActiveEffectProviders.RunAllAsync(provider => provider.Update(model));
     }
 
     /// <summary>

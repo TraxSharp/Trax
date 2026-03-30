@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.InMemory.Services.InMemoryContext;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.Manifest;
+using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.Metadata.DTOs;
 using Metadata = Trax.Effect.Models.Metadata.Metadata;
 
@@ -287,6 +289,100 @@ public class DataContextChangeTrackingTests
         contextB.Reset();
         var found = await contextB.Metadatas.FirstAsync(x => x.Id == savedId);
         found.TrainState.Should().Be(TrainState.InProgress);
+    }
+
+    #endregion
+
+    #region Navigation Isolation Tests
+
+    [Test]
+    public async Task Track_EntityWithLoadedNavigation_DoesNotMarkNavigationAsModified()
+    {
+        var dbName = nameof(Track_EntityWithLoadedNavigation_DoesNotMarkNavigationAsModified);
+
+        // Context A: create manifest and metadata with FK relationship
+        var contextA = CreateContext(dbName);
+        var manifest = Manifest.Create(
+            new CreateManifest { Name = typeof(DataContextChangeTrackingTests) }
+        );
+        contextA.Manifests.Add(manifest);
+        await contextA.SaveChanges(CancellationToken.None);
+
+        var metadata = CreateMetadata("NavIsolation");
+        metadata.ManifestId = manifest.Id;
+        await contextA.Track(metadata);
+        await contextA.SaveChanges(CancellationToken.None);
+        var savedId = metadata.Id;
+
+        // Context B: load metadata WITH Manifest eagerly loaded (like LoadMetadataJunction)
+        var contextB = CreateContext(dbName);
+        var loaded = await contextB
+            .Metadatas.Include(x => x.Manifest)
+            .FirstAsync(x => x.Id == savedId);
+        loaded.Manifest.Should().NotBeNull();
+
+        // Context C: simulate inner train's EffectRunner context (cross-context Track)
+        var contextC = CreateContext(dbName);
+        contextC.Entry(loaded).State.Should().Be(EntityState.Detached);
+
+        await contextC.Track(loaded);
+
+        // Metadata should be tracked as Modified
+        contextC.Entry(loaded).State.Should().Be(EntityState.Modified);
+
+        // Manifest should NOT be tracked — this is the bug fix
+        contextC
+            .Entry(loaded.Manifest!)
+            .State.Should()
+            .Be(
+                EntityState.Detached,
+                "Navigation properties should not be cascaded into the change tracker"
+            );
+    }
+
+    [Test]
+    public async Task Update_EntityWithLoadedNavigation_DoesNotMarkNavigationAsModified()
+    {
+        var dbName = nameof(Update_EntityWithLoadedNavigation_DoesNotMarkNavigationAsModified);
+
+        // Context A: create manifest and metadata with FK relationship
+        var contextA = CreateContext(dbName);
+        var manifest = Manifest.Create(
+            new CreateManifest { Name = typeof(DataContextChangeTrackingTests) }
+        );
+        contextA.Manifests.Add(manifest);
+        await contextA.SaveChanges(CancellationToken.None);
+
+        var metadata = CreateMetadata("NavIsolationUpdate");
+        metadata.ManifestId = manifest.Id;
+        await contextA.Track(metadata);
+        await contextA.SaveChanges(CancellationToken.None);
+        var savedId = metadata.Id;
+
+        // Context B: load metadata WITH Manifest eagerly loaded
+        var contextB = CreateContext(dbName);
+        var loaded = await contextB
+            .Metadatas.Include(x => x.Manifest)
+            .FirstAsync(x => x.Id == savedId);
+        loaded.Manifest.Should().NotBeNull();
+
+        // Context C: simulate cross-context Update on detached entity
+        var contextC = CreateContext(dbName);
+        contextC.Entry(loaded).State.Should().Be(EntityState.Detached);
+
+        await contextC.Update(loaded);
+
+        // Metadata should be tracked as Modified
+        contextC.Entry(loaded).State.Should().Be(EntityState.Modified);
+
+        // Manifest should NOT be tracked
+        contextC
+            .Entry(loaded.Manifest!)
+            .State.Should()
+            .Be(
+                EntityState.Detached,
+                "Navigation properties should not be cascaded into the change tracker"
+            );
     }
 
     #endregion

@@ -152,6 +152,32 @@ public class EffectRunnerRegistryTests
     }
 
     [Test]
+    public async Task EffectRunner_Track_AwaitsAsyncProviders()
+    {
+        var registry = new EffectRegistry();
+        var factory = new AsyncTrackingEffectFactory();
+        registry.Register(typeof(AsyncTrackingEffectFactory), enabled: true);
+
+        using var runner = new EffectRunner([factory], registry);
+        await runner.Track(new FakeModel());
+
+        factory.Provider.TrackCompleted.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task EffectRunner_Update_AwaitsAsyncProviders()
+    {
+        var registry = new EffectRegistry();
+        var factory = new AsyncTrackingEffectFactory();
+        registry.Register(typeof(AsyncTrackingEffectFactory), enabled: true);
+
+        using var runner = new EffectRunner([factory], registry);
+        await runner.Update(new FakeModel());
+
+        factory.Provider.UpdateCompleted.Should().BeTrue();
+    }
+
+    [Test]
     public void EffectRunner_Dispose_HandlesProviderDisposalFailure()
     {
         var registry = new EffectRegistry();
@@ -458,6 +484,35 @@ public class EffectRunnerRegistryTests
         public ThrowingDisposeJunctionEffectProvider Provider { get; } = new();
 
         public IJunctionEffectProvider Create() => Provider;
+    }
+
+    private class AsyncTrackingEffectProvider : IEffectProvider
+    {
+        public bool TrackCompleted { get; private set; }
+        public bool UpdateCompleted { get; private set; }
+
+        public Task SaveChanges(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public async Task Track(IModel model)
+        {
+            await Task.Yield();
+            TrackCompleted = true;
+        }
+
+        public async Task Update(IModel model)
+        {
+            await Task.Yield();
+            UpdateCompleted = true;
+        }
+
+        public void Dispose() { }
+    }
+
+    private class AsyncTrackingEffectFactory : IEffectProviderFactory
+    {
+        public AsyncTrackingEffectProvider Provider { get; } = new();
+
+        public IEffectProvider Create() => Provider;
     }
 
     #endregion
