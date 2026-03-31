@@ -24,10 +24,7 @@ The `MetadataCleanupPollingService` is a separate `BackgroundService` from the m
 
 ## The Deletion Junction
 
-`DeleteExpiredMetadataJunction` uses EF Core's `ExecuteDeleteAsync` for efficient bulk deletion—no entities are loaded into memory. It deletes in two passes to respect foreign key constraints:
-
-1. **Delete log entries** for matching metadata rows
-2. **Delete metadata rows** themselves
+`DeleteExpiredMetadataJunction` deletes expired metadata in configurable batches (default: 1000 rows per batch) to limit row-level lock duration. Each batch loads metadata IDs first, then deletes associated FK rows and the metadata itself by ID. The junction loops until no more expired rows remain.
 
 A metadata row is deleted when all three conditions are true:
 
@@ -45,15 +42,19 @@ The MetadataCleanup train uses no application-level locking. Multiple servers ca
 
 `DeleteExpiredMetadataJunction` uses EF Core's `ExecuteDeleteAsync()`, which translates to atomic `DELETE FROM ... WHERE ...` SQL statements. The database engine acquires implicit row-level locks during these deletes. If two servers execute the same `DELETE` concurrently, the first deletes the rows and the second finds no matching rows — a no-op. No errors, no side effects.
 
+Batching limits the duration of these implicit row-level locks. Without batching, a single `DELETE` matching thousands of rows holds locks on all of them for the entire statement. With batching, each batch locks at most `DeleteBatchSize` rows, reducing contention with concurrent workers calling `SaveChanges` on the same table.
+
 ### Deletion Order
 
-The junction deletes in a specific order to respect foreign key constraints:
+Each batch follows a five-step process:
 
-1. **WorkQueue entries** — delete entries whose `MetadataId` matches the set to be cleaned
-2. **Log entries** — delete logs whose `MetadataId` matches
-3. **Metadata rows** — delete the metadata itself
+1. **Load batch of metadata IDs** — select up to `DeleteBatchSize` IDs matching the criteria
+2. **WorkQueue entries** — delete entries whose `MetadataId` is in the batch
+3. **Log entries** — delete logs whose `MetadataId` is in the batch
+4. **Metadata rows** — delete metadata by ID
+5. **Repeat** until no more IDs match
 
-This ordering prevents FK constraint violations. Each `ExecuteDeleteAsync` is its own SQL statement (not wrapped in an explicit transaction), so a failure in pass 2 would leave orphaned WorkQueue deletions — but since the Metadata rows survive, the next cleanup cycle will retry and complete the deletion.
+Using ID-based deletion ensures all three DELETE statements in a batch target the exact same rows, avoiding race conditions between statements. Each `ExecuteDeleteAsync` is its own SQL statement, so a failure mid-batch leaves the Metadata rows intact — the next cleanup cycle retries and completes the deletion.
 
 ### Safety Boundary
 
@@ -93,6 +94,7 @@ With no arguments, this cleans up `ManifestManagerTrain` and `MetadataCleanupTra
 |--------|---------|-------------|
 | `CleanupInterval` | 1 minute | How often the cleanup service runs |
 | `RetentionPeriod` | 30 minutes | Age threshold for deletion eligibility |
+| `DeleteBatchSize` | 1000 | Max rows deleted per batch. Set to `null` for single-statement deletes |
 | `TrainTypeWhitelist` | ManifestManager, MetadataCleanup | Train names whose metadata can be deleted |
 
 ## SDK Reference

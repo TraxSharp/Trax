@@ -109,7 +109,7 @@ Capacity is enforced at two independent levels: global and per-group.
 
 ### Global MaxActiveJobs
 
-The global limit works the same as before. The count is based on `Metadata` rows in `Pending` or `InProgress` state, excluding administrative trains (and any types registered via `ExcludeFromMaxActiveJobs<T>()`).
+The global limit works the same as before. The count is based on `Metadata` rows in `Pending` or `InProgress` state, excluding administrative trains (and any types registered via `ExcludeFromMaxActiveJobs<T>()`). The capacity count query uses a `HashSet<string>` for excluded train names, which Npgsql translates to a single parameterized `<> ALL(@excluded)` array comparison instead of N separate `NOT LIKE` clauses. This allows PostgreSQL to use the covering partial index on active metadata efficiently.
 
 The count happens once at the start of each dispatch cycle, not per-entry. If you have `MaxActiveJobs = 100` and 95 are active, the dispatcher will take up to 5 entries from the queue. The remaining entries stay `Queued` and get picked up on the next polling cycle.
 
