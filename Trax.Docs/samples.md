@@ -271,6 +271,17 @@ dotnet run --project samples/LocalWorkers/Trax.Samples.GameServer.Api
 
 Dashboard at `http://localhost:5201/trax`. GraphQL IDE at `http://localhost:5200/trax/graphql`.
 
+#### E2E Tests
+
+The GameServer sample includes a full E2E test suite that validates scheduler dispatch, dependency chains, dormant dependent activation, dead-letter flows, and GraphQL authorization against a real Postgres database:
+
+```bash
+cd Trax.Samples && docker compose up -d
+dotnet test --filter "FullyQualifiedName~GameServer.E2E"
+```
+
+See [E2E Testing](/docs/cross-cutting/e2e-testing) for the patterns used.
+
 ### DistributedWorkers (Hub + Workers)
 
 ```bash
@@ -282,6 +293,15 @@ dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker
 ```
 
 Dashboard at `http://localhost:5202/trax`. GraphQL IDE at `http://localhost:5202/trax/graphql`.
+
+#### E2E Tests
+
+```bash
+cd Trax.Samples && docker compose up -d
+dotnet test --filter "FullyQualifiedName~EnergyHub.E2E"
+```
+
+Tests cover manifest configuration (dependency chains, batch scheduling, cron), train completion via `TrainBus.RunAsync`, GraphQL queries/mutations, and the solar-to-battery dependency chain through the scheduler.
 
 ### EphemeralWorkers (API + Serverless Runner)
 
@@ -329,6 +349,15 @@ mutation { dispatch { sendMessage(input: { chatRoomId: "<id>", senderUserId: "al
 # 5. Query chat history
 { discover { getChatHistory(input: { chatRoomId: "<id>" }) { messages { senderDisplayName content sentAt } } } }
 ```
+
+#### E2E Tests
+
+```bash
+cd Trax.Samples && docker compose up -d
+dotnet test --filter "FullyQualifiedName~ChatService.E2E"
+```
+
+Tests cover chat room CRUD, message persistence, participant management, Trax metadata verification, and lifecycle subscriptions via WebSocket.
 
 ### TestRunner (Hub with Built-In Subscriptions)
 

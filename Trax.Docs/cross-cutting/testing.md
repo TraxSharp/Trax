@@ -169,6 +169,12 @@ public async Task Junction_UsesToken_ForAsyncOperations()
 
 *Full details: [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens#testing-with-cancellation-tokens)*
 
+## E2E Testing
+
+For full application validation — scheduler dispatch, dependency chains, dormant dependent activation, dead-letter flows, and GraphQL authorization — use `WebApplicationFactory<T>`-based E2E tests against a real Postgres database.
+
+*Full details: [E2E Testing](/docs/cross-cutting/e2e-testing)*
+
 ## SDK Reference
 
 > [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
