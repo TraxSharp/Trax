@@ -13,8 +13,10 @@ using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
-public partial class RunTrainDialog
+public partial class RunTrainDialog : IDisposable
 {
+    private readonly CancellationTokenSource _cts = new();
+
     [Inject]
     private IDataContextProviderFactory DataContextFactory { get; set; } = default!;
 
@@ -95,11 +97,9 @@ public partial class RunTrainDialog
                 }
             );
 
-            using var dataContext = await DataContextFactory.CreateDbContextAsync(
-                CancellationToken.None
-            );
+            using var dataContext = await DataContextFactory.CreateDbContextAsync(_cts.Token);
             await dataContext.Track(metadata);
-            await dataContext.SaveChanges(CancellationToken.None);
+            await dataContext.SaveChanges(_cts.Token);
 
             await JobSubmitter.EnqueueAsync(metadata.Id, input);
 
@@ -214,4 +214,10 @@ public partial class RunTrainDialog
                 "yyyy-MM-dd HH:mm:ss",
             _ => $"Enter {type.Name}",
         };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
 }

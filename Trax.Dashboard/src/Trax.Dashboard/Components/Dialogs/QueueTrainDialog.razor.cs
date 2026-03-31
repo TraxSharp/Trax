@@ -13,8 +13,10 @@ using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
-public partial class QueueTrainDialog
+public partial class QueueTrainDialog : IDisposable
 {
+    private readonly CancellationTokenSource _cts = new();
+
     [Inject]
     private IDataContextProviderFactory DataContextFactory { get; set; } = default!;
 
@@ -100,11 +102,9 @@ public partial class QueueTrainDialog
                 }
             );
 
-            using var dataContext = await DataContextFactory.CreateDbContextAsync(
-                CancellationToken.None
-            );
+            using var dataContext = await DataContextFactory.CreateDbContextAsync(_cts.Token);
             await dataContext.Track(entry);
-            await dataContext.SaveChanges(CancellationToken.None);
+            await dataContext.SaveChanges(_cts.Token);
 
             DialogService.Close();
             Navigation.NavigateTo($"trax/data/work-queue/{entry.Id}");
@@ -217,4 +217,10 @@ public partial class QueueTrainDialog
                 "yyyy-MM-dd HH:mm:ss",
             _ => $"Enter {type.Name}",
         };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
 }
