@@ -11,13 +11,49 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: trax
+          POSTGRES_PASSWORD: trax123
+          POSTGRES_DB: trax
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      rabbitmq:
+        image: rabbitmq:4-management
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5672:5672
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           dotnet-quality: preview
+
+      - name: Create test databases
+        run: |
+          for db in trax_e2e_tests chat_e2e_tests energyhub_e2e_tests; do
+            PGPASSWORD=trax123 psql -h localhost -U trax -d trax -c "CREATE DATABASE \"$db\";"
+          done
+
       - run: dotnet tool restore
       - run: dotnet csharpier check .
-      - run: dotnet build --configuration Release
-      - run: dotnet test --configuration Release --no-build
+      - run: dotnet build Trax.Samples.slnx --configuration Release
+      - run: dotnet test Trax.Samples.slnx --configuration Release --no-build

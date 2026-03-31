@@ -243,3 +243,8 @@ var app = builder.Build();
 app.UseTraxDashboard();
 
 app.Run();
+
+namespace Trax.Samples.GameServer.Scheduler
+{
+    public partial class Program;
+}

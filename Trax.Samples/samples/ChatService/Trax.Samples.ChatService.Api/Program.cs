@@ -121,3 +121,8 @@ app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
 app.Run();
+
+namespace Trax.Samples.ChatService.Api
+{
+    public partial class Program;
+}

@@ -9,10 +9,13 @@
     <Project Path="samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub/Trax.Samples.EnergyHub.Hub.csproj" />
     <Project Path="samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker/Trax.Samples.EnergyHub.Worker.csproj" />
   </Folder>
+  <!-- DataPipeline samples excluded: KedroSpaceflights depends on unpublished Flowthru.* packages -->
+  <!--
   <Folder Name="/samples/DataPipeline/">
     <Project Path="samples/DataPipeline/Trax.Samples.Flowthru.Spaceflights/Trax.Samples.Flowthru.Spaceflights.csproj" />
     <Project Path="samples/DataPipeline/Trax.Samples.Flowthru.Spaceflights.Scheduler/Trax.Samples.Flowthru.Spaceflights.Scheduler.csproj" />
   </Folder>
+  -->
   <Folder Name="/samples/EphemeralWorkers/">
     <Project Path="samples/EphemeralWorkers/Trax.Samples.ContentShield/Trax.Samples.ContentShield.csproj" />
     <Project Path="samples/EphemeralWorkers/Trax.Samples.ContentShield.Api/Trax.Samples.ContentShield.Api.csproj" />
@@ -30,6 +33,9 @@
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Samples.ChatService.Tests/Trax.Samples.ChatService.Tests.csproj" />
     <Project Path="tests/Trax.Samples.TestRunner.Tests/Trax.Samples.TestRunner.Tests.csproj" />
+    <Project Path="tests/Trax.Samples.GameServer.E2E/Trax.Samples.GameServer.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.ChatService.E2E/Trax.Samples.ChatService.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.EnergyHub.E2E/Trax.Samples.EnergyHub.E2E.csproj" />
   </Folder>
   <Folder Name="/templates/">
     <Project Path="templates/Trax.Samples.Templates.csproj" />

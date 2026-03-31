@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\samples\DistributedWorkers\Trax.Samples.EnergyHub.Hub\Trax.Samples.EnergyHub.Hub.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" Version="8.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.*" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.*" />
+    <PackageReference Include="NUnit" Version="4.*" />
+    <PackageReference Include="NUnit3TestAdapter" Version="6.*" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.*" />
+    <PackageReference Include="coverlet.collector" Version="6.*" />
+  </ItemGroup>
+</Project>

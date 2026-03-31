@@ -298,3 +298,8 @@ app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
 app.Run();
+
+namespace Trax.Samples.GameServer.Api
+{
+    public partial class Program;
+}

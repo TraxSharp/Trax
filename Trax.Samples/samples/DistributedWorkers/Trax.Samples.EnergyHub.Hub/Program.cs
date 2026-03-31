@@ -191,3 +191,8 @@ app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
 app.Run();
+
+namespace Trax.Samples.EnergyHub.Hub
+{
+    public partial class Program;
+}
