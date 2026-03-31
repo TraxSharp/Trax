@@ -14,10 +14,11 @@ namespace Trax.Scheduler.Trains.MetadataCleanup.Junctions;
 /// Deletes expired metadata and associated work queue entries and log entries for whitelisted train types.
 /// </summary>
 /// <remarks>
-/// Uses EF Core bulk delete (<see cref="RelationalQueryableExtensions.ExecuteDeleteAsync{TSource}"/>)
-/// for efficient single-statement SQL deletion without loading entities into memory.
+/// Deletes in configurable batches (default: 1000 rows) to limit row-level lock duration.
+/// Each batch loads metadata IDs first, then deletes associated FK rows and metadata by ID.
+/// The junction loops until no more expired rows remain.
 ///
-/// Only metadata in a terminal state (Completed or Failed) is eligible for deletion.
+/// Only metadata in a terminal state (Completed, Failed, or Cancelled) is eligible for deletion.
 /// Associated work queue entries and log entries are deleted first to avoid foreign key constraint violations.
 /// </remarks>
 internal class DeleteExpiredMetadataJunction(
@@ -30,10 +31,12 @@ internal class DeleteExpiredMetadataJunction(
     public override async Task<Unit> Run(MetadataCleanupRequest input)
     {
         var cleanupConfig = configuration.MetadataCleanup!;
-        var whitelist = TrainNameExpander
-            .ExpandTrainNames(cleanupConfig.TrainTypeWhitelist, discoveryService)
-            .ToList();
+        var whitelist = TrainNameExpander.ExpandTrainNames(
+            cleanupConfig.TrainTypeWhitelist,
+            discoveryService
+        );
         var cutoffTime = DateTime.UtcNow - cleanupConfig.RetentionPeriod;
+        var batchSize = cleanupConfig.DeleteBatchSize;
 
         logger.LogDebug(
             "Deleting metadata older than {CutoffTime} for train types [{Whitelist}]",
@@ -41,47 +44,59 @@ internal class DeleteExpiredMetadataJunction(
             string.Join(", ", whitelist)
         );
 
-        // Build the set of metadata IDs to delete (terminal state, matching whitelist, expired)
-        var metadataIdsToDelete = dataContext
-            .Metadatas.Where(m => whitelist.Contains(m.Name))
-            .Where(m => m.StartTime < cutoffTime)
-            .Where(m =>
-                m.TrainState == TrainState.Completed
-                || m.TrainState == TrainState.Failed
-                || m.TrainState == TrainState.Cancelled
-            )
-            .Select(m => m.Id);
+        var totalMetadataDeleted = 0;
+        var totalWorkQueuesDeleted = 0;
+        var totalLogsDeleted = 0;
 
-        // Delete associated work queue entries first to avoid FK constraint violations
-        var workQueuesDeleted = await dataContext
-            .WorkQueues.Where(wq =>
-                wq.MetadataId.HasValue && metadataIdsToDelete.Contains(wq.MetadataId.Value)
-            )
-            .ExecuteDeleteAsync(CancellationToken);
+        while (true)
+        {
+            // Load a batch of metadata IDs to delete
+            var query = dataContext
+                .Metadatas.Where(m => whitelist.Contains(m.Name))
+                .Where(m => m.StartTime < cutoffTime)
+                .Where(m =>
+                    m.TrainState == TrainState.Completed
+                    || m.TrainState == TrainState.Failed
+                    || m.TrainState == TrainState.Cancelled
+                )
+                .Select(m => m.Id);
 
-        // Delete associated logs to avoid FK constraint violations
-        var logsDeleted = await dataContext
-            .Logs.Where(l => metadataIdsToDelete.Contains(l.MetadataId))
-            .ExecuteDeleteAsync(CancellationToken);
+            var batchIds = batchSize.HasValue
+                ? await query.Take(batchSize.Value).ToListAsync(CancellationToken)
+                : await query.ToListAsync(CancellationToken);
 
-        // Delete the metadata rows
-        var metadataDeleted = await dataContext
-            .Metadatas.Where(m => whitelist.Contains(m.Name))
-            .Where(m => m.StartTime < cutoffTime)
-            .Where(m =>
-                m.TrainState == TrainState.Completed
-                || m.TrainState == TrainState.Failed
-                || m.TrainState == TrainState.Cancelled
-            )
-            .ExecuteDeleteAsync(CancellationToken);
+            if (batchIds.Count == 0)
+                break;
 
-        if (metadataDeleted > 0)
+            // Delete associated work queue entries first to avoid FK constraint violations
+            totalWorkQueuesDeleted += await dataContext
+                .WorkQueues.Where(wq =>
+                    wq.MetadataId.HasValue && batchIds.Contains(wq.MetadataId.Value)
+                )
+                .ExecuteDeleteAsync(CancellationToken);
+
+            // Delete associated logs to avoid FK constraint violations
+            totalLogsDeleted += await dataContext
+                .Logs.Where(l => batchIds.Contains(l.MetadataId))
+                .ExecuteDeleteAsync(CancellationToken);
+
+            // Delete the metadata rows
+            totalMetadataDeleted += await dataContext
+                .Metadatas.Where(m => batchIds.Contains(m.Id))
+                .ExecuteDeleteAsync(CancellationToken);
+
+            // If no batch limit or batch was smaller than limit, we're done
+            if (!batchSize.HasValue || batchIds.Count < batchSize.Value)
+                break;
+        }
+
+        if (totalMetadataDeleted > 0)
         {
             logger.LogInformation(
                 "Metadata cleanup completed: deleted {MetadataCount} metadata, {WorkQueueCount} work queue entries, and {LogCount} log entries",
-                metadataDeleted,
-                workQueuesDeleted,
-                logsDeleted
+                totalMetadataDeleted,
+                totalWorkQueuesDeleted,
+                totalLogsDeleted
             );
         }
         else

@@ -30,6 +30,12 @@ public class MetadataCleanupConfiguration
     public TimeSpan RetentionPeriod { get; set; } = TimeSpan.FromMinutes(30);
 
     /// <summary>
+    /// Maximum number of metadata rows deleted per batch. Limits row-level lock duration
+    /// during cleanup. Set to null for single-statement deletes (pre-batch behavior).
+    /// </summary>
+    public int? DeleteBatchSize { get; set; } = 1000;
+
+    /// <summary>
     /// The list of train type names whose metadata should be cleaned up.
     /// </summary>
     /// <remarks>

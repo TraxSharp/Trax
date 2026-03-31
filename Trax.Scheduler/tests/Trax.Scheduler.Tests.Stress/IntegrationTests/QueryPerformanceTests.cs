@@ -174,6 +174,192 @@ public class QueryPerformanceTests : TestSetup
 
     #endregion
 
+    #region Dispatch Capacity with Exclusion Filter (HashSet optimization)
+
+    [Test]
+    public async Task LoadDispatchCapacity_WithExclusionFilter_With50KRows_CompletesWithinTimeout()
+    {
+        // Reproduces the exact LoadDispatchCapacityJunction query pattern with excluded
+        // train names. Before the HashSet fix, this generated 9+ NOT LIKE clauses which
+        // prevented index usage. After the fix, it uses <> ALL(@excluded) with a single
+        // parameterized array comparison.
+        var excluded = new HashSet<string>
+        {
+            "Trax.Scheduler.Trains.ManifestManager.IManifestManagerTrain",
+            "Trax.Scheduler.Trains.ManifestManager.ManifestManagerTrain",
+            "Trax.Scheduler.Trains.ManifestManager.InMemoryManifestManagerTrain",
+            "Trax.Scheduler.Trains.JobRunner.IJobRunnerTrain",
+            "Trax.Scheduler.Trains.JobRunner.JobRunnerTrain",
+            "Trax.Scheduler.Trains.MetadataCleanup.IMetadataCleanupTrain",
+            "Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupTrain",
+            "Trax.Scheduler.Trains.JobDispatcher.IJobDispatcherTrain",
+            "Trax.Scheduler.Trains.JobDispatcher.JobDispatcherTrain",
+        };
+
+        var elapsed = await AssertCompletesWithin(async () =>
+        {
+            var activeCounts = await DataContext
+                .Metadatas.Where(m =>
+                    !excluded.Contains(m.Name)
+                    && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
+                )
+                .GroupJoin(
+                    DataContext.Manifests,
+                    m => m.ManifestId,
+                    man => man.Id,
+                    (m, manifests) => new { m, manifests }
+                )
+                .SelectMany(
+                    x => x.manifests.DefaultIfEmpty(),
+                    (x, man) =>
+                        new { GroupId = man == null ? (long?)null : (long?)man.ManifestGroupId }
+                )
+                .GroupBy(x => x.GroupId)
+                .Select(g => new { GroupId = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            activeCounts.Should().NotBeEmpty("test data includes active metadata");
+        });
+
+        TestContext.Out.WriteLine(
+            $"LoadDispatchCapacity (with exclusion filter): {elapsed.TotalMilliseconds:F0}ms"
+        );
+    }
+
+    #endregion
+
+    #region Batched Metadata Cleanup (DeleteExpiredMetadataJunction optimization)
+
+    [Test]
+    public async Task BatchedDeleteExpiredMetadata_With50KRows_CompletesWithinTimeout()
+    {
+        // Tests the batched deletion pattern from DeleteExpiredMetadataJunction.
+        // Instead of a single massive DELETE, we load IDs in batches and delete
+        // associated FK rows + metadata per batch. This limits row-level lock duration.
+        var trainName = typeof(StressTestTrain).FullName!;
+        var cutoff = DateTime.UtcNow.AddMinutes(-30);
+        var batchSize = 1000;
+        var whitelist = new HashSet<string> { trainName };
+
+        var elapsed = await AssertCompletesWithin(
+            async () =>
+            {
+                var totalDeleted = 0;
+
+                while (true)
+                {
+                    var batchIds = await DataContext
+                        .Metadatas.Where(m => whitelist.Contains(m.Name))
+                        .Where(m => m.StartTime < cutoff)
+                        .Where(m =>
+                            m.TrainState == TrainState.Completed
+                            || m.TrainState == TrainState.Failed
+                            || m.TrainState == TrainState.Cancelled
+                        )
+                        .Select(m => m.Id)
+                        .Take(batchSize)
+                        .ToListAsync();
+
+                    if (batchIds.Count == 0)
+                        break;
+
+                    await DataContext
+                        .WorkQueues.Where(wq =>
+                            wq.MetadataId.HasValue && batchIds.Contains(wq.MetadataId.Value)
+                        )
+                        .ExecuteDeleteAsync();
+
+                    await DataContext
+                        .Logs.Where(l => batchIds.Contains(l.MetadataId))
+                        .ExecuteDeleteAsync();
+
+                    totalDeleted += await DataContext
+                        .Metadatas.Where(m => batchIds.Contains(m.Id))
+                        .ExecuteDeleteAsync();
+
+                    if (batchIds.Count < batchSize)
+                        break;
+                }
+
+                totalDeleted
+                    .Should()
+                    .BeGreaterThan(0, "expired metadata should exist in test data");
+            },
+            TimeSpan.FromSeconds(30)
+        );
+
+        TestContext.Out.WriteLine(
+            $"BatchedDeleteExpiredMetadata (batch={batchSize}): {elapsed.TotalMilliseconds:F0}ms"
+        );
+    }
+
+    [Test]
+    public async Task BatchedDeleteExpiredMetadata_SmallBatches_CompletesWithinTimeout()
+    {
+        // Small batch size (100) exercises the loop more frequently.
+        // Verifies overhead from multiple round-trips is acceptable.
+        var trainName = typeof(StressTestTrain).FullName!;
+        var cutoff = DateTime.UtcNow.AddMinutes(-30);
+        var batchSize = 100;
+        var whitelist = new HashSet<string> { trainName };
+        var batchCount = 0;
+
+        var elapsed = await AssertCompletesWithin(
+            async () =>
+            {
+                var totalDeleted = 0;
+
+                while (true)
+                {
+                    var batchIds = await DataContext
+                        .Metadatas.Where(m => whitelist.Contains(m.Name))
+                        .Where(m => m.StartTime < cutoff)
+                        .Where(m =>
+                            m.TrainState == TrainState.Completed
+                            || m.TrainState == TrainState.Failed
+                            || m.TrainState == TrainState.Cancelled
+                        )
+                        .Select(m => m.Id)
+                        .Take(batchSize)
+                        .ToListAsync();
+
+                    if (batchIds.Count == 0)
+                        break;
+
+                    batchCount++;
+
+                    await DataContext
+                        .WorkQueues.Where(wq =>
+                            wq.MetadataId.HasValue && batchIds.Contains(wq.MetadataId.Value)
+                        )
+                        .ExecuteDeleteAsync();
+
+                    await DataContext
+                        .Logs.Where(l => batchIds.Contains(l.MetadataId))
+                        .ExecuteDeleteAsync();
+
+                    totalDeleted += await DataContext
+                        .Metadatas.Where(m => batchIds.Contains(m.Id))
+                        .ExecuteDeleteAsync();
+
+                    if (batchIds.Count < batchSize)
+                        break;
+                }
+
+                totalDeleted
+                    .Should()
+                    .BeGreaterThan(0, "expired metadata should exist in test data");
+            },
+            TimeSpan.FromSeconds(30)
+        );
+
+        TestContext.Out.WriteLine(
+            $"BatchedDeleteExpiredMetadata (batch={batchSize}, {batchCount} batches): {elapsed.TotalMilliseconds:F0}ms"
+        );
+    }
+
+    #endregion
+
     #region Cancel Timed-Out Jobs (CancelTimedOutJobsJunction pattern)
 
     [Test]

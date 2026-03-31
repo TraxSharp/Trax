@@ -28,9 +28,10 @@ internal class LoadDispatchCapacityJunction(
         if (entries.Count == 0)
             return Empty;
 
-        var excluded = TrainNameExpander
-            .ExpandTrainNames(config.ExcludedTrainTypeNames, discoveryService)
-            .ToList();
+        var excluded = TrainNameExpander.ExpandTrainNames(
+            config.ExcludedTrainTypeNames,
+            discoveryService
+        );
 
         // Single query: left-join Metadatas → Manifests, grouped by ManifestGroupId.
         // Rows without a manifest group under null. This gives both the global active

@@ -36,6 +36,9 @@ public class MetadataCleanupTrainTests : TestSetup
     [TearDown]
     public async Task MetadataCleanupTrainTestsTearDown()
     {
+        // Reset batch size to default for test isolation
+        _config.MetadataCleanup!.DeleteBatchSize = 1000;
+
         if (_train is IDisposable disposable)
             disposable.Dispose();
     }
@@ -491,7 +494,179 @@ public class MetadataCleanupTrainTests : TestSetup
 
     #endregion
 
+    #region Batched Deletion Tests
+
+    [Test]
+    public async Task Run_WithMoreExpiredThanBatchSize_DeletesAllInMultipleBatches()
+    {
+        // Arrange - Set batch size to 2 and create 5 expired metadata rows
+        _config.MetadataCleanup!.DeleteBatchSize = 2;
+
+        for (var i = 0; i < 5; i++)
+        {
+            await CreateAndSaveMetadata(
+                name: typeof(ManifestManagerTrain).FullName!,
+                state: TrainState.Completed,
+                startTime: DateTime.UtcNow.AddHours(-2)
+            );
+        }
+
+        // Act
+        await _train.Run(new MetadataCleanupRequest());
+
+        // Assert - All 5 should be deleted (3 batches: 2 + 2 + 1)
+        DataContext.Reset();
+        var remaining = await DataContext
+            .Metadatas.Where(m => m.Name == typeof(ManifestManagerTrain).FullName!)
+            .CountAsync();
+
+        remaining.Should().Be(0, "all expired metadata should be deleted across multiple batches");
+    }
+
+    [Test]
+    public async Task Run_WithBatchSizeNull_DeletesAllInSinglePass()
+    {
+        // Arrange - Disable batching
+        _config.MetadataCleanup!.DeleteBatchSize = null;
+
+        for (var i = 0; i < 5; i++)
+        {
+            await CreateAndSaveMetadata(
+                name: typeof(ManifestManagerTrain).FullName!,
+                state: TrainState.Completed,
+                startTime: DateTime.UtcNow.AddHours(-2)
+            );
+        }
+
+        // Act
+        await _train.Run(new MetadataCleanupRequest());
+
+        // Assert
+        DataContext.Reset();
+        var remaining = await DataContext
+            .Metadatas.Where(m => m.Name == typeof(ManifestManagerTrain).FullName!)
+            .CountAsync();
+
+        remaining.Should().Be(0, "all expired metadata should be deleted in single pass");
+    }
+
+    [Test]
+    public async Task Run_BatchedDeletion_DeletesAssociatedLogsAndWorkQueues()
+    {
+        // Arrange - Small batch size with associated FK rows
+        _config.MetadataCleanup!.DeleteBatchSize = 1;
+
+        var metadata = await CreateAndSaveMetadata(
+            name: typeof(ManifestManagerTrain).FullName!,
+            state: TrainState.Completed,
+            startTime: DateTime.UtcNow.AddHours(-2)
+        );
+
+        // Create associated log
+        var log = Log.Create(
+            new CreateLog
+            {
+                Level = LogLevel.Information,
+                Message = "Test log entry",
+                CategoryName = "TestCategory",
+                EventId = 1,
+            }
+        );
+        await DataContext.Logs.AddAsync(log);
+        await DataContext.SaveChanges(CancellationToken.None);
+        var logId = log.Id;
+        await DataContext
+            .Logs.Where(l => l.Id == logId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(l => l.MetadataId, metadata.Id));
+
+        // Create associated work queue entry
+        var workQueueEntry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(ManifestManagerTrain).FullName!,
+                Input = null,
+                InputTypeName = null,
+            }
+        );
+        await DataContext.Track(workQueueEntry);
+        await DataContext.SaveChanges(CancellationToken.None);
+        var entryId = workQueueEntry.Id;
+        await DataContext
+            .WorkQueues.Where(wq => wq.Id == entryId)
+            .ExecuteUpdateAsync(setters =>
+                setters
+                    .SetProperty(wq => wq.MetadataId, metadata.Id)
+                    .SetProperty(wq => wq.Status, WorkQueueStatus.Dispatched)
+                    .SetProperty(wq => wq.DispatchedAt, DateTime.UtcNow)
+            );
+
+        DataContext.Reset();
+
+        // Act
+        await _train.Run(new MetadataCleanupRequest());
+
+        // Assert
+        DataContext.Reset();
+        var remainingMetadata = await DataContext
+            .Metadatas.Where(m => m.Id == metadata.Id)
+            .FirstOrDefaultAsync();
+        var remainingLog = await DataContext.Logs.Where(l => l.Id == logId).FirstOrDefaultAsync();
+        var remainingEntry = await DataContext
+            .WorkQueues.Where(wq => wq.Id == entryId)
+            .FirstOrDefaultAsync();
+
+        remainingMetadata.Should().BeNull("metadata should be deleted in batched mode");
+        remainingLog.Should().BeNull("associated logs should be deleted in batched mode");
+        remainingEntry
+            .Should()
+            .BeNull("associated work queue entries should be deleted in batched mode");
+    }
+
+    [Test]
+    public async Task Run_BatchedDeletion_DoesNotDeleteNonExpiredMetadata()
+    {
+        // Arrange - Mix of expired and non-expired, with small batch size
+        _config.MetadataCleanup!.DeleteBatchSize = 1;
+
+        var expired = await CreateAndSaveMetadata(
+            name: typeof(ManifestManagerTrain).FullName!,
+            state: TrainState.Completed,
+            startTime: DateTime.UtcNow.AddHours(-2)
+        );
+
+        var recent = await CreateAndSaveMetadata(
+            name: typeof(ManifestManagerTrain).FullName!,
+            state: TrainState.Completed,
+            startTime: DateTime.UtcNow.AddMinutes(-10)
+        );
+
+        // Act
+        await _train.Run(new MetadataCleanupRequest());
+
+        // Assert
+        DataContext.Reset();
+        var expiredCheck = await DataContext
+            .Metadatas.Where(m => m.Id == expired.Id)
+            .FirstOrDefaultAsync();
+        var recentCheck = await DataContext
+            .Metadatas.Where(m => m.Id == recent.Id)
+            .FirstOrDefaultAsync();
+
+        expiredCheck.Should().BeNull("expired metadata should be deleted");
+        recentCheck.Should().NotBeNull("recent metadata should survive batched cleanup");
+    }
+
+    #endregion
+
     #region Configuration Tests
+
+    [Test]
+    public void DefaultDeleteBatchSize_IsOneThousand()
+    {
+        _config
+            .MetadataCleanup!.DeleteBatchSize.Should()
+            .Be(1000, "default delete batch size should be 1000");
+    }
 
     [Test]
     public void AddTrainType_Generic_AddsTypeName()
