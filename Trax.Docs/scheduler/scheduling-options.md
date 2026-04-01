@@ -346,6 +346,11 @@ Key options to know:
 - **`ManifestManagerPollingInterval`** / **`JobDispatcherPollingInterval`** (default: 5 seconds each) — how often the ManifestManager and JobDispatcher poll independently. Use `PollingInterval` to set both to the same value
 - **`MaxActiveJobs`** (default: 10) — global concurrent job cap; set to `null` for unlimited. Per-group limits can be set from code via `.Group(group => group.MaxActiveJobs(...))` or from the dashboard (see [Per-Group Dispatch Controls](#per-group-dispatch-controls))
 - **`DefaultMaxRetries`** (default: 3) — retry attempts before dead-lettering
+- **`DefaultRetryDelay`** (default: 5 minutes) — base delay between retry attempts. Combined with `RetryBackoffMultiplier` for exponential backoff
+- **`RetryBackoffMultiplier`** (default: 2.0) — multiplier applied to each subsequent retry delay (e.g., 5m, 10m, 20m). Set to `1.0` for constant delay
+- **`MaxRetryDelay`** (default: 1 hour) — maximum retry delay cap, prevents unbounded backoff growth
+- **`DeadLetterRetentionPeriod`** (default: 30 days) — how long resolved dead letters are kept before auto-purge
+- **`AutoPurgeDeadLetters`** (default: true) — enable automatic deletion of resolved dead letters past the retention period
 - **`DefaultJobTimeout`** (default: 20 minutes) — jobs exceeding this duration are actively cancelled (see [Timeout Enforcement](#timeout-enforcement))
 - **`DefaultMisfirePolicy`** (default: `FireOnceNow`) — how missed runs are handled
 - **`DefaultMisfireThreshold`** (default: 60 seconds) — grace period for misfire detection
