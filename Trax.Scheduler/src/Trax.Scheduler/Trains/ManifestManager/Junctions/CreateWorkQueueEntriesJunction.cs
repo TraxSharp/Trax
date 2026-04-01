@@ -37,11 +37,11 @@ internal class CreateWorkQueueEntriesJunction(
         if (limit.HasValue && views.Count > limit.Value)
         {
             logger.LogInformation(
-                "Limiting to {Limit} of {Total} due manifests (excess deferred to next cycle)",
+                "Applying group-fair batching: {Limit} of {Total} due manifests (excess deferred to next cycle)",
                 limit.Value,
                 views.Count
             );
-            views = views.Take(limit.Value).ToList();
+            views = SelectGroupFair(views, limit.Value);
         }
 
         foreach (var view in views)
@@ -124,5 +124,63 @@ internal class CreateWorkQueueEntriesJunction(
             logger.LogDebug("CreateWorkQueueEntriesJunction completed: no entries created");
 
         return Unit.Default;
+    }
+
+    /// <summary>
+    /// Distributes the total limit fairly across manifest groups, ensuring every group
+    /// with due manifests gets representation. Each group gets a base allocation of
+    /// <c>limit / numGroups</c>, with remainder and unused slots going to higher-priority
+    /// groups first. This prevents a single large group from monopolizing the batch and
+    /// starving smaller groups.
+    /// </summary>
+    private List<ManifestDispatchView> SelectGroupFair(List<ManifestDispatchView> views, int limit)
+    {
+        var groups = views
+            .GroupBy(v => v.ManifestGroup.Id)
+            .OrderByDescending(g => g.First().ManifestGroup.Priority)
+            .Select(g => g.ToList())
+            .ToList();
+
+        var numGroups = groups.Count;
+        var perGroupBase = limit / numGroups;
+        var result = new List<ManifestDispatchView>(limit);
+
+        // First pass: give each group its base allocation
+        var leftover = 0;
+        var groupTaken = new int[numGroups];
+        for (var i = 0; i < numGroups; i++)
+        {
+            var take = Math.Min(perGroupBase, groups[i].Count);
+            groupTaken[i] = take;
+            result.AddRange(groups[i].Take(take));
+            leftover += perGroupBase - take;
+        }
+
+        // Second pass: distribute remainder + leftover to groups that still have capacity,
+        // ordered by priority (highest first)
+        var extra = (limit - perGroupBase * numGroups) + leftover;
+        for (var i = 0; i < numGroups && extra > 0; i++)
+        {
+            var available = groups[i].Count - groupTaken[i];
+            var take = Math.Min(available, extra);
+            if (take > 0)
+            {
+                result.AddRange(groups[i].Skip(groupTaken[i]).Take(take));
+                extra -= take;
+            }
+        }
+
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            var distribution = result
+                .GroupBy(v => v.ManifestGroup.Id)
+                .Select(g => $"{g.First().ManifestGroup.Name ?? g.Key.ToString()}={g.Count()}");
+            logger.LogDebug(
+                "Group-fair distribution: {Distribution}",
+                string.Join(", ", distribution)
+            );
+        }
+
+        return result;
     }
 }

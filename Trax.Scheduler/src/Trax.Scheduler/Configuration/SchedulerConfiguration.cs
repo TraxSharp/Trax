@@ -246,11 +246,11 @@ public class SchedulerConfiguration
     /// </summary>
     /// <remarks>
     /// Controls how many entries <see cref="Trains.ManifestManager.Junctions.CreateWorkQueueEntriesJunction"/>
-    /// creates per cycle. When more manifests are due than this limit, excess manifests are
-    /// deferred to the next polling cycle (default: 5 seconds). This prevents a burst of DB
-    /// writes from saturating low-resource database instances, particularly after extended
-    /// downtime when many manifests become due simultaneously via the <c>FireOnceNow</c>
-    /// misfire policy.
+    /// creates per cycle. When more manifests are due than this limit, entries are distributed
+    /// fairly across manifest groups: each group gets a base allocation of
+    /// <c>limit / numGroups</c>, with overflow slots going to higher-priority groups first.
+    /// This prevents a single large group from monopolizing the batch and starving smaller
+    /// groups (e.g., 5000 cache manifests crowding out 15 delta manifests).
     /// Set to null to disable the limit (unlimited — all due manifests are enqueued per cycle).
     /// </remarks>
     public int? MaxWorkQueueEntriesPerCycle { get; set; } = 200;

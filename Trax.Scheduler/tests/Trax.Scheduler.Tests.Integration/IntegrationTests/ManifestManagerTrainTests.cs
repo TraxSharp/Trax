@@ -513,6 +513,227 @@ public class ManifestManagerTrainTests : TestSetup
 
     #endregion
 
+    #region Group-Fair Batching Tests
+
+    [Test]
+    public async Task Run_GroupFairBatching_LargeGroupDoesNotStarveSmallGroup()
+    {
+        // Arrange — Group A has 100 manifests, Group B has 5. Limit = 20.
+        // Without group-fair batching, Group A would consume the entire limit.
+        var groupA = await TestSetup.CreateAndSaveManifestGroup(DataContext, name: "large-group");
+        var groupB = await TestSetup.CreateAndSaveManifestGroup(DataContext, name: "small-group");
+
+        for (var i = 0; i < 100; i++)
+            await CreateAndSaveManifestInGroup(groupA, inputValue: $"Large_{i}");
+        for (var i = 0; i < 5; i++)
+            await CreateAndSaveManifestInGroup(groupB, inputValue: $"Small_{i}");
+
+        var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalLimit = config.MaxWorkQueueEntriesPerCycle;
+        config.MaxWorkQueueEntriesPerCycle = 20;
+
+        try
+        {
+            // Act
+            await _train.Run(Unit.Default);
+
+            // Assert
+            DataContext.Reset();
+            var groupAEntries = await DataContext
+                .WorkQueues.Include(q => q.Manifest)
+                .Where(q =>
+                    q.Status == WorkQueueStatus.Queued && q.Manifest!.ManifestGroupId == groupA.Id
+                )
+                .CountAsync();
+            var groupBEntries = await DataContext
+                .WorkQueues.Include(q => q.Manifest)
+                .Where(q =>
+                    q.Status == WorkQueueStatus.Queued && q.Manifest!.ManifestGroupId == groupB.Id
+                )
+                .CountAsync();
+
+            groupBEntries.Should().Be(5, "small group should get all its due manifests queued");
+            groupAEntries.Should().Be(15, "large group should get the remaining budget (20 - 5)");
+            (groupAEntries + groupBEntries).Should().Be(20, "total should equal the limit");
+        }
+        finally
+        {
+            config.MaxWorkQueueEntriesPerCycle = originalLimit;
+        }
+    }
+
+    [Test]
+    public async Task Run_GroupFairBatching_AllGroupsGetEqualRepresentation()
+    {
+        // Arrange — 4 groups × 50 manifests each. Limit = 20.
+        var groups = new List<ManifestGroup>();
+        for (var g = 0; g < 4; g++)
+        {
+            var group = await TestSetup.CreateAndSaveManifestGroup(
+                DataContext,
+                name: $"equal-group-{g}"
+            );
+            groups.Add(group);
+
+            for (var i = 0; i < 50; i++)
+                await CreateAndSaveManifestInGroup(group, inputValue: $"G{g}_{i}");
+        }
+
+        var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalLimit = config.MaxWorkQueueEntriesPerCycle;
+        config.MaxWorkQueueEntriesPerCycle = 20;
+
+        try
+        {
+            // Act
+            await _train.Run(Unit.Default);
+
+            // Assert — each group should get exactly 5 entries (20 / 4)
+            DataContext.Reset();
+            foreach (var group in groups)
+            {
+                var count = await DataContext
+                    .WorkQueues.Include(q => q.Manifest)
+                    .Where(q =>
+                        q.Status == WorkQueueStatus.Queued
+                        && q.Manifest!.ManifestGroupId == group.Id
+                    )
+                    .CountAsync();
+
+                count.Should().Be(5, $"group '{group.Name}' should get limit/numGroups entries");
+            }
+        }
+        finally
+        {
+            config.MaxWorkQueueEntriesPerCycle = originalLimit;
+        }
+    }
+
+    [Test]
+    public async Task Run_GroupFairBatching_HigherPriorityGetsOverflowSlots()
+    {
+        // Arrange — Group A (priority=10) has 50 manifests, Group B (priority=0) has 3.
+        // Limit = 20. Base = 10 each. Group B only uses 3, leaving 7 overflow → Group A.
+        var groupA = await TestSetup.CreateAndSaveManifestGroup(
+            DataContext,
+            name: "high-priority",
+            priority: 10
+        );
+        var groupB = await TestSetup.CreateAndSaveManifestGroup(
+            DataContext,
+            name: "low-priority",
+            priority: 0
+        );
+
+        for (var i = 0; i < 50; i++)
+            await CreateAndSaveManifestInGroup(groupA, inputValue: $"HighPri_{i}");
+        for (var i = 0; i < 3; i++)
+            await CreateAndSaveManifestInGroup(groupB, inputValue: $"LowPri_{i}");
+
+        var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalLimit = config.MaxWorkQueueEntriesPerCycle;
+        config.MaxWorkQueueEntriesPerCycle = 20;
+
+        try
+        {
+            // Act
+            await _train.Run(Unit.Default);
+
+            // Assert
+            DataContext.Reset();
+            var groupAEntries = await DataContext
+                .WorkQueues.Include(q => q.Manifest)
+                .Where(q =>
+                    q.Status == WorkQueueStatus.Queued && q.Manifest!.ManifestGroupId == groupA.Id
+                )
+                .CountAsync();
+            var groupBEntries = await DataContext
+                .WorkQueues.Include(q => q.Manifest)
+                .Where(q =>
+                    q.Status == WorkQueueStatus.Queued && q.Manifest!.ManifestGroupId == groupB.Id
+                )
+                .CountAsync();
+
+            groupBEntries.Should().Be(3, "low-priority group gets all its due manifests");
+            groupAEntries
+                .Should()
+                .Be(17, "high-priority group gets its base allocation + overflow from Group B");
+        }
+        finally
+        {
+            config.MaxWorkQueueEntriesPerCycle = originalLimit;
+        }
+    }
+
+    [Test]
+    public async Task Run_GroupFairBatching_SingleGroup_TakesUpToLimit()
+    {
+        // Arrange — 1 group with 50 manifests. Limit = 20.
+        var group = await TestSetup.CreateAndSaveManifestGroup(DataContext, name: "only-group");
+
+        for (var i = 0; i < 50; i++)
+            await CreateAndSaveManifestInGroup(group, inputValue: $"Only_{i}");
+
+        var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalLimit = config.MaxWorkQueueEntriesPerCycle;
+        config.MaxWorkQueueEntriesPerCycle = 20;
+
+        try
+        {
+            // Act
+            await _train.Run(Unit.Default);
+
+            // Assert
+            DataContext.Reset();
+            var count = await DataContext
+                .WorkQueues.Where(q => q.Status == WorkQueueStatus.Queued)
+                .CountAsync();
+
+            count.Should().Be(20, "single group should take up to the full limit");
+        }
+        finally
+        {
+            config.MaxWorkQueueEntriesPerCycle = originalLimit;
+        }
+    }
+
+    [Test]
+    public async Task Run_GroupFairBatching_LimitExceedsTotal_AllProcessed()
+    {
+        // Arrange — 2 groups × 5 manifests. Limit = 200 (far exceeds total).
+        var groupA = await TestSetup.CreateAndSaveManifestGroup(DataContext, name: "small-a");
+        var groupB = await TestSetup.CreateAndSaveManifestGroup(DataContext, name: "small-b");
+
+        for (var i = 0; i < 5; i++)
+            await CreateAndSaveManifestInGroup(groupA, inputValue: $"SmallA_{i}");
+        for (var i = 0; i < 5; i++)
+            await CreateAndSaveManifestInGroup(groupB, inputValue: $"SmallB_{i}");
+
+        var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalLimit = config.MaxWorkQueueEntriesPerCycle;
+        config.MaxWorkQueueEntriesPerCycle = 200;
+
+        try
+        {
+            // Act
+            await _train.Run(Unit.Default);
+
+            // Assert — all 10 should be processed (no truncation)
+            DataContext.Reset();
+            var count = await DataContext
+                .WorkQueues.Where(q => q.Status == WorkQueueStatus.Queued)
+                .CountAsync();
+
+            count.Should().Be(10, "limit > total means all manifests get entries");
+        }
+        finally
+        {
+            config.MaxWorkQueueEntriesPerCycle = originalLimit;
+        }
+    }
+
+    #endregion
+
     #region Full Train Integration Tests
 
     [Test]
@@ -2043,6 +2264,34 @@ public class ManifestManagerTrainTests : TestSetup
     #endregion
 
     #region Helper Methods
+
+    private async Task<Manifest> CreateAndSaveManifestInGroup(
+        ManifestGroup group,
+        string inputValue = "TestValue",
+        ScheduleType scheduleType = ScheduleType.Interval,
+        int? intervalSeconds = 60
+    )
+    {
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(SchedulerTestTrain),
+                IsEnabled = true,
+                ScheduleType = scheduleType,
+                IntervalSeconds = intervalSeconds,
+                MaxRetries = 3,
+                Properties = new SchedulerTestInput { Value = inputValue },
+            }
+        );
+
+        manifest.ManifestGroupId = group.Id;
+
+        await DataContext.Track(manifest);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        return manifest;
+    }
 
     private async Task<Manifest> CreateAndSaveManifest(
         ScheduleType scheduleType = ScheduleType.None,
