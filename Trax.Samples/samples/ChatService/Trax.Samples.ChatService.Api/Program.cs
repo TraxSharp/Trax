@@ -88,8 +88,7 @@ builder.Services.AddTrax(trax =>
 );
 
 // ── Register GraphQL API + chat subscriptions ───────────────────────────────
-builder.Services.AddTraxGraphQL();
-builder.Services.AddGraphQLServer("trax").AddTypeExtension<ChatSubscriptions>();
+builder.Services.AddTraxGraphQL(graphql => graphql.AddTypeExtension<ChatSubscriptions>());
 
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 

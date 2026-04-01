@@ -117,7 +117,9 @@ builder.Services.AddTrax(trax =>
 builder.Services.AddDbContextFactory<GameDbContext>(options => options.UseNpgsql(connectionString));
 
 // ── Register GraphQL API with model query discovery ─────────────────────
-builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<GameDbContext>());
+builder.Services.AddTraxGraphQL(graphql =>
+    graphql.AddDbContext<GameDbContext>().AddTypeExtensions(typeof(Program).Assembly)
+);
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
