@@ -31,6 +31,8 @@ At startup, after seeding all configured manifests via upsert, the scheduler com
 
 If deleting an orphaned manifest would break a `DependsOnManifestId` foreign key on another manifest, that reference is set to `null` before deletion.
 
+Orphan pruning deletes manifests in batches (500 per batch) to keep SQL `IN(...)` clauses small and avoid command timeouts on large prune operations. Each batch clears FK references, then deletes in FK-safe order: WorkQueues, DeadLetters, Metadata, and finally the manifests themselves. This makes the operation resilient to restarts — each batch commits independently, so partial progress is preserved.
+
 After manifest pruning, any `ManifestGroup` with no remaining manifests is also deleted.
 
 ## Configuration

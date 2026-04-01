@@ -24,6 +24,8 @@ Projects all enabled manifests into lightweight `ManifestDispatchView` records u
 
 The projection uses `AsNoTracking()` — the results are read-only snapshots used for scheduling decisions only. No unbounded child collections are loaded into memory.
 
+> **Scaling note:** LoadManifestsJunction loads all enabled manifests in a single query. For typical production deployments (up to 10K manifests), this is efficient with proper indexes. The junction cannot be paginated without breaking the reap junctions' ability to identify stale jobs across all manifests.
+
 ### CancelTimedOutJobsJunction
 
 Finds InProgress metadata that has exceeded `DefaultJobTimeout` and requests cooperative cancellation. Sets `CancellationRequested = true` in the database (picked up by `CancellationCheckProvider` at the next junction boundary) and attempts same-server instant cancellation via the `CancellationRegistry`.
@@ -79,6 +81,8 @@ For each manifest identified as due, creates a `WorkQueue` entry with:
 For dependent manifests, `DependentPriorityBoost` is still added on top of the group priority at dispatch time.
 
 Each entry is saved individually. If one fails (e.g., a serialization issue for a specific manifest), the others still get queued. Errors are logged per-manifest.
+
+The number of entries created per cycle is limited by `MaxWorkQueueEntriesPerCycle` (default: 200). When more manifests are due than the limit allows, excess manifests are deferred to the next polling cycle. This prevents a burst of DB writes from saturating low-resource database instances, particularly after extended downtime when many manifests become due simultaneously via the `FireOnceNow` misfire policy. Set to `null` for unlimited.
 
 ## Concurrency Model: Two-Layer Defense
 
