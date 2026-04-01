@@ -8,4 +8,6 @@ namespace Trax.Api.GraphQL.Mutations;
 public class RootMutation
 {
     public OperationsMutations Operations() => new();
+
+    public DeadLetterMutations DeadLetters() => new();
 }

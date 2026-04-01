@@ -8,4 +8,6 @@ namespace Trax.Api.GraphQL.Queries;
 public class RootQuery
 {
     public OperationsQueries Operations() => new();
+
+    public DeadLetterQueries DeadLetters() => new();
 }
