@@ -207,4 +207,137 @@ public class DeadLetterTests
         // Assert final state
         deadLetter.Status.Should().Be(DeadLetterStatus.Retried);
     }
+
+    #region Requeue and LinkRetryMetadata
+
+    [Test]
+    public void Requeue_SetsStatusRetriedAndResolvedAt()
+    {
+        // Arrange
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(DeadLetterTests),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.None,
+                MaxRetries = 3,
+            }
+        );
+        var deadLetter = DeadLetter.Create(
+            new CreateDeadLetter
+            {
+                Manifest = manifest,
+                Reason = "Max retries exceeded",
+                RetryCount = 3,
+            }
+        );
+        var note = "Re-queued via dashboard (WorkQueue 42)";
+
+        // Act
+        deadLetter.Requeue(note);
+
+        // Assert
+        deadLetter.Status.Should().Be(DeadLetterStatus.Retried);
+        deadLetter.ResolutionNote.Should().Be(note);
+        deadLetter.ResolvedAt.Should().NotBeNull();
+        deadLetter.ResolvedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        deadLetter.RetryMetadataId.Should().BeNull();
+    }
+
+    [Test]
+    public void Requeue_DoesNotRequireMetadataId()
+    {
+        // Arrange
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(DeadLetterTests),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.None,
+                MaxRetries = 3,
+            }
+        );
+        var deadLetter = DeadLetter.Create(
+            new CreateDeadLetter
+            {
+                Manifest = manifest,
+                Reason = "Max retries exceeded",
+                RetryCount = 3,
+            }
+        );
+
+        // Act
+        deadLetter.Requeue("Requeued for retry");
+
+        // Assert — RetryMetadataId is NOT set; it gets linked later by the dispatcher
+        deadLetter.RetryMetadataId.Should().BeNull();
+        deadLetter.Status.Should().Be(DeadLetterStatus.Retried);
+    }
+
+    [Test]
+    public void LinkRetryMetadata_SetsRetryMetadataId()
+    {
+        // Arrange
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(DeadLetterTests),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.None,
+                MaxRetries = 3,
+            }
+        );
+        var deadLetter = DeadLetter.Create(
+            new CreateDeadLetter
+            {
+                Manifest = manifest,
+                Reason = "Max retries exceeded",
+                RetryCount = 3,
+            }
+        );
+
+        // Requeue first (the normal flow)
+        deadLetter.Requeue("Re-queued via dashboard");
+
+        // Act — dispatcher links the metadata after creating it
+        deadLetter.LinkRetryMetadata(99);
+
+        // Assert
+        deadLetter.RetryMetadataId.Should().Be(99);
+        deadLetter.Status.Should().Be(DeadLetterStatus.Retried);
+    }
+
+    [Test]
+    public void StatusTransition_FromAwaitingIntervention_ToRetriedViaRequeue()
+    {
+        // Arrange
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(DeadLetterTests),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.None,
+                MaxRetries = 3,
+            }
+        );
+        var deadLetter = DeadLetter.Create(
+            new CreateDeadLetter
+            {
+                Manifest = manifest,
+                Reason = "Test reason",
+                RetryCount = 1,
+            }
+        );
+
+        // Assert initial state
+        deadLetter.Status.Should().Be(DeadLetterStatus.AwaitingIntervention);
+
+        // Act
+        deadLetter.Requeue("Requeued");
+
+        // Assert final state
+        deadLetter.Status.Should().Be(DeadLetterStatus.Retried);
+    }
+
+    #endregion
 }

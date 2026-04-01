@@ -35,4 +35,9 @@ public class CreateWorkQueue
     /// Null means dispatch immediately.
     /// </summary>
     public DateTime? ScheduledAt { get; set; }
+
+    /// <summary>
+    /// Optional dead letter ID when this entry is created by requeuing a dead letter.
+    /// </summary>
+    public long? DeadLetterId { get; set; }
 }

@@ -120,6 +120,18 @@ public class WorkQueue : IModel
     /// </summary>
     public Metadata.Metadata? Metadata { get; set; }
 
+    /// <summary>
+    /// Optional dead letter ID — set when this entry was created by requeuing a dead letter.
+    /// Used by the JobDispatcher to link the retry metadata back to the dead letter.
+    /// </summary>
+    [Column("dead_letter_id")]
+    public long? DeadLetterId { get; set; }
+
+    /// <summary>
+    /// The dead letter record that triggered this requeue, if applicable.
+    /// </summary>
+    public DeadLetter.DeadLetter? DeadLetter { get; set; }
+
     #endregion
 
     #region Functions
@@ -138,6 +150,7 @@ public class WorkQueue : IModel
             ManifestId = dto.ManifestId,
             Priority = Math.Clamp(dto.Priority, MinPriority, MaxPriority),
             ScheduledAt = dto.ScheduledAt,
+            DeadLetterId = dto.DeadLetterId,
             Status = WorkQueueStatus.Queued,
             CreatedAt = DateTime.UtcNow,
         };

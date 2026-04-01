@@ -30,6 +30,12 @@ public class PersistentWorkQueue : Effect.Models.WorkQueue.WorkQueue
                 .WithMany()
                 .HasForeignKey(x => x.MetadataId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity
+                .HasOne(x => x.DeadLetter)
+                .WithMany()
+                .HasForeignKey(x => x.DeadLetterId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
