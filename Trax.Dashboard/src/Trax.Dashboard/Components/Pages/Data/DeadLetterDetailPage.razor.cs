@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
@@ -6,10 +5,7 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.Metadata;
-using Trax.Effect.Models.WorkQueue;
-using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Effect.Utils;
-using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Services.TraxScheduler;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
@@ -23,7 +19,7 @@ public partial class DeadLetterDetailPage
     private NavigationManager Navigation { get; set; } = default!;
 
     [Inject]
-    private ITrainDiscoveryService TrainDiscovery { get; set; } = default!;
+    private ITraxScheduler Scheduler { get; set; } = default!;
 
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
@@ -68,7 +64,7 @@ public partial class DeadLetterDetailPage
 
     private async Task RequeueManifest()
     {
-        if (_deadLetter?.Manifest is null)
+        if (_deadLetter is null)
             return;
 
         _actionError = null;
@@ -76,85 +72,22 @@ public partial class DeadLetterDetailPage
 
         try
         {
-            var manifest = _deadLetter.Manifest;
+            var result = await Scheduler.RequeueDeadLetterAsync(DeadLetterId, DisposalToken);
 
-            var registration = TrainDiscovery
-                .DiscoverTrains()
-                .FirstOrDefault(r => r.ServiceType.FullName == manifest.Name);
-
-            if (registration is null)
+            if (!result.Success)
             {
-                _actionError =
-                    $"No train registration found for '{ShortName(manifest.Name)}'. Is the train still registered?";
+                _actionError = result.Message;
                 return;
             }
-
-            string? serializedInput = null;
-            string? inputTypeName = null;
-
-            if (!string.IsNullOrWhiteSpace(manifest.Properties))
-            {
-                var deserializedInput = JsonSerializer.Deserialize(
-                    manifest.Properties,
-                    registration.InputType,
-                    TraxJsonSerializationOptions.ManifestProperties
-                );
-
-                if (deserializedInput is not null)
-                {
-                    serializedInput = JsonSerializer.Serialize(
-                        deserializedInput,
-                        registration.InputType,
-                        TraxJsonSerializationOptions.ManifestProperties
-                    );
-                    inputTypeName = registration.InputType.FullName;
-                }
-            }
-
-            var entry = WorkQueue.Create(
-                new CreateWorkQueue
-                {
-                    TrainName = manifest.Name,
-                    Input = serializedInput,
-                    InputTypeName = inputTypeName,
-                    ManifestId = manifest.Id,
-                    Priority = manifest.Priority,
-                }
-            );
-
-            using var dataContext = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-
-            await dataContext.Track(entry);
-
-            // Only update the dead letter record when it's still blocking the ManifestManager.
-            // Already-resolved dead letters (Retried/Acknowledged) are just audit records —
-            // re-queuing from them creates a fresh WorkQueue entry without mutating history.
-            if (_deadLetter.Status == DeadLetterStatus.AwaitingIntervention)
-            {
-                var trackedDeadLetter = await dataContext.DeadLetters.FirstAsync(d =>
-                    d.Id == DeadLetterId
-                );
-
-                trackedDeadLetter.Status = DeadLetterStatus.Retried;
-                trackedDeadLetter.ResolvedAt = DateTime.UtcNow;
-                trackedDeadLetter.ResolutionNote =
-                    $"Re-queued via dashboard (WorkQueue {entry.Id})";
-            }
-
-            await dataContext.SaveChanges(DisposalToken);
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
                 "Train Re-queued",
-                $"{ShortName(manifest.Name)} has been re-queued (WorkQueue ID {entry.Id}).",
+                $"{ShortName(_deadLetter.Manifest?.Name ?? "Unknown")} has been re-queued (WorkQueue ID {result.WorkQueueId}).",
                 duration: 4000
             );
 
-            Navigation.NavigateTo($"trax/data/work-queue/{entry.Id}");
-        }
-        catch (JsonException je)
-        {
-            _actionError = $"Invalid manifest properties JSON: {je.Message}";
+            Navigation.NavigateTo($"trax/data/work-queue/{result.WorkQueueId}");
         }
         catch (Exception ex)
         {
@@ -176,14 +109,17 @@ public partial class DeadLetterDetailPage
 
         try
         {
-            using var dataContext = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-
-            var trackedDeadLetter = await dataContext.DeadLetters.FirstAsync(d =>
-                d.Id == DeadLetterId
+            var result = await Scheduler.AcknowledgeDeadLetterAsync(
+                DeadLetterId,
+                _acknowledgeNote,
+                DisposalToken
             );
 
-            trackedDeadLetter.Acknowledge(_acknowledgeNote);
-            await dataContext.SaveChanges(DisposalToken);
+            if (!result.Success)
+            {
+                _actionError = result.Message;
+                return;
+            }
 
             _showAcknowledgeInput = false;
             _acknowledgeNote = "";
@@ -195,7 +131,6 @@ public partial class DeadLetterDetailPage
                 duration: 4000
             );
 
-            // Reload to reflect updated status
             await LoadDataAsync(DisposalToken);
         }
         catch (Exception ex)

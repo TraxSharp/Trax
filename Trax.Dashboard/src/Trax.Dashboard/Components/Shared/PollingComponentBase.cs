@@ -35,6 +35,14 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     protected bool IsLoading { get; set; } = true;
 
     /// <summary>
+    /// When true, the polling loop skips data refreshes until the value is set back to false.
+    /// Use this to prevent data reloads while the user has an active selection or is in the
+    /// middle of an interaction (e.g. batch operations with checkboxes).
+    /// The next poll tick after the flag is cleared will refresh normally.
+    /// </summary>
+    protected bool PausePolling { get; set; }
+
+    /// <summary>
     /// A CancellationToken that is cancelled when the component is disposed.
     /// Event handlers can pass this to async operations so they abort when the user navigates away.
     /// </summary>
@@ -140,6 +148,9 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
             while (!ct.IsCancellationRequested)
             {
                 await Task.Delay(DashboardSettings.PollingInterval, ct);
+
+                if (PausePolling)
+                    continue;
 
                 try
                 {

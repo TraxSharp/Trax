@@ -13,10 +13,38 @@
     Execution records for each train run, tracking state, timing, input/output, and failure details.
 </RadzenText>
 
+@if (_selectedMetadata.Count > 0)
+{
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" class="rz-mb-3">
+        <RadzenButton Text="@($"Cancel Selected ({_selectedMetadata.Count})")"
+                      Icon="cancel"
+                      ButtonStyle="ButtonStyle.Warning"
+                      Size="ButtonSize.Small"
+                      Disabled="@(_batchOperating)"
+                      Click="@CancelSelected" />
+    </RadzenStack>
+}
+
+@if (_batchError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@_batchError</RadzenAlert>
+}
+
 <TraxDataGrid @ref="_grid"
                     TItem="Metadata"
                     ServerLoadData="@LoadPageAsync">
     <Columns>
+        <RadzenDataGridColumn TItem="Metadata"
+                              Width="40px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true">
+            <Template Context="m">
+                <RadzenCheckBox TValue="bool"
+                                Value="@(_selectedMetadata.Contains(m))"
+                                Change="@(args => { if ((bool)args!) _selectedMetadata.Add(m); else _selectedMetadata.Remove(m); PausePolling = _selectedMetadata.Count > 0; })" />
+            </Template>
+        </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="Metadata"
                               Title=""
                               Width="80px"
@@ -111,6 +139,9 @@
 
 @code {
     private TraxDataGrid<Metadata>? _grid;
+    private HashSet<Metadata> _selectedMetadata = [];
+    private bool _batchOperating;
+    private string? _batchError;
 
     private async Task CancelTrain(long metadataId, string trainName)
     {
@@ -142,6 +173,52 @@
                 duration: 6000
             );
         }
+    }
+
+    private async Task CancelSelected()
+    {
+        _batchError = null;
+        _batchOperating = true;
+
+        try
+        {
+            var inProgressIds = _selectedMetadata
+                .Where(m => m.TrainState == TrainState.InProgress)
+                .Select(m => m.Id)
+                .ToList();
+
+            if (inProgressIds.Count == 0)
+            {
+                _batchError = "No in-progress executions selected. Only in-progress executions can be cancelled.";
+                return;
+            }
+
+            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
+            var count = await context.Metadatas
+                .Where(m => inProgressIds.Contains(m.Id) && m.TrainState == TrainState.InProgress)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.CancellationRequested, true),
+                    DisposalToken);
+
+            var registry = ServiceProvider.GetService<ICancellationRegistry>();
+            if (registry is not null)
+            {
+                foreach (var id in inProgressIds)
+                    registry.TryCancel(id);
+            }
+
+            NotificationService.Notify(
+                NotificationSeverity.Success,
+                "Batch Cancellation",
+                $"Cancel signal sent for {count} execution(s).",
+                duration: 4000);
+
+            _selectedMetadata.Clear();
+            PausePolling = false;
+            await LoadDataAsync(DisposalToken);
+        }
+        catch (Exception ex) { _batchError = ex.Message; }
+        finally { _batchOperating = false; }
     }
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
@@ -178,5 +255,4 @@
         var items = await query.ToListAsync(cancellationToken);
         return new ServerDataResult<Metadata>(items, count);
     }
-
 }

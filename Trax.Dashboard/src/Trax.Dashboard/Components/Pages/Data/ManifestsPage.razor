@@ -1,17 +1,62 @@
 @page "/trax/data/manifests"
+@using Trax.Scheduler.Services.TraxScheduler
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
+@inject ITraxScheduler Scheduler
+@inject NotificationService NotificationService
 
 <RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Manifests</RadzenText>
 <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
     Scheduled train definitions with their scheduling configuration, retry policies, and execution history.
 </RadzenText>
 
+<RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" class="rz-mb-3">
+    @if (_selectedManifests.Count > 0)
+    {
+        <RadzenButton Text="@($"Trigger Selected ({_selectedManifests.Count})")"
+                      Icon="play_arrow"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Size="ButtonSize.Small"
+                      Disabled="@(_batchOperating)"
+                      Click="@TriggerSelected" />
+        <RadzenButton Text="@($"Enable Selected ({_selectedManifests.Count})")"
+                      Icon="check_circle"
+                      ButtonStyle="ButtonStyle.Success"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Disabled="@(_batchOperating)"
+                      Click="@(() => SetSelectedEnabled(true))" />
+        <RadzenButton Text="@($"Disable Selected ({_selectedManifests.Count})")"
+                      Icon="block"
+                      ButtonStyle="ButtonStyle.Danger"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Disabled="@(_batchOperating)"
+                      Click="@(() => SetSelectedEnabled(false))" />
+    }
+</RadzenStack>
+
+@if (_batchError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@_batchError</RadzenAlert>
+}
+
 <TraxDataGrid Data="@_items"
                     TItem="Manifest"
                     IsLoading="@IsLoading">
     <Columns>
+        <RadzenDataGridColumn TItem="Manifest"
+                              Width="40px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true">
+            <Template Context="m">
+                <RadzenCheckBox TValue="bool"
+                                Value="@(_selectedManifests.Contains(m))"
+                                Change="@(args => { if ((bool)args!) _selectedManifests.Add(m); else _selectedManifests.Remove(m); PausePolling = _selectedManifests.Count > 0; })" />
+            </Template>
+        </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="Manifest"
                               Title=""
                               Width="50px"
@@ -84,6 +129,9 @@
 
 @code {
     private List<Manifest> _items = [];
+    private HashSet<Manifest> _selectedManifests = [];
+    private bool _batchOperating;
+    private string? _batchError;
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -96,4 +144,60 @@
         _items = await query.ToListAsync(cancellationToken);
     }
 
+    private async Task TriggerSelected()
+    {
+        _batchError = null;
+        _batchOperating = true;
+
+        try
+        {
+            var count = 0;
+            foreach (var manifest in _selectedManifests)
+            {
+                await Scheduler.TriggerAsync(manifest.ExternalId);
+                count++;
+            }
+
+            NotificationService.Notify(
+                NotificationSeverity.Success,
+                "Batch Trigger",
+                $"{count} manifest(s) triggered.",
+                duration: 4000);
+
+            _selectedManifests.Clear();
+            PausePolling = false;
+        }
+        catch (Exception ex) { _batchError = ex.Message; }
+        finally { _batchOperating = false; }
+    }
+
+    private async Task SetSelectedEnabled(bool enabled)
+    {
+        _batchError = null;
+        _batchOperating = true;
+
+        try
+        {
+            var ids = _selectedManifests.Select(m => m.Id).ToList();
+
+            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
+            var count = await context.Manifests
+                .Where(m => ids.Contains(m.Id))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.IsEnabled, enabled),
+                    DisposalToken);
+
+            NotificationService.Notify(
+                NotificationSeverity.Success,
+                enabled ? "Manifests Enabled" : "Manifests Disabled",
+                $"{count} manifest(s) {(enabled ? "enabled" : "disabled")}.",
+                duration: 4000);
+
+            _selectedManifests.Clear();
+            PausePolling = false;
+            await LoadDataAsync(DisposalToken);
+        }
+        catch (Exception ex) { _batchError = ex.Message; }
+        finally { _batchOperating = false; }
+    }
 }

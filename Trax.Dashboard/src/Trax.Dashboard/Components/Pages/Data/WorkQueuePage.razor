@@ -3,16 +3,45 @@
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
+@inject NotificationService NotificationService
 
 <RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Work Queue</RadzenText>
 <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
     Pending and dispatched train execution requests. Items are queued when a manifest is due and dispatched to the task server for execution.
 </RadzenText>
 
+@if (_selectedEntries.Count > 0)
+{
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" class="rz-mb-3">
+        <RadzenButton Text="@($"Cancel Selected ({_selectedEntries.Count})")"
+                      Icon="cancel"
+                      ButtonStyle="ButtonStyle.Warning"
+                      Size="ButtonSize.Small"
+                      Disabled="@(_batchOperating)"
+                      Click="@CancelSelected" />
+    </RadzenStack>
+}
+
+@if (_batchError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@_batchError</RadzenAlert>
+}
+
 <TraxDataGrid @ref="_grid"
                     TItem="WorkQueue"
                     ServerLoadData="@LoadPageAsync">
     <Columns>
+        <RadzenDataGridColumn TItem="WorkQueue"
+                              Width="40px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true">
+            <Template Context="q">
+                <RadzenCheckBox TValue="bool"
+                                Value="@(_selectedEntries.Contains(q))"
+                                Change="@(args => { if ((bool)args!) _selectedEntries.Add(q); else _selectedEntries.Remove(q); PausePolling = _selectedEntries.Count > 0; })" />
+            </Template>
+        </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="WorkQueue"
                               Title=""
                               Width="50px"
@@ -74,11 +103,53 @@
 
 @code {
     private TraxDataGrid<WorkQueue>? _grid;
+    private HashSet<WorkQueue> _selectedEntries = [];
+    private bool _batchOperating;
+    private string? _batchError;
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         if (_grid is not null)
             await _grid.ReloadAsync();
+    }
+
+    private async Task CancelSelected()
+    {
+        _batchError = null;
+        _batchOperating = true;
+
+        try
+        {
+            var queuedIds = _selectedEntries
+                .Where(e => e.Status == WorkQueueStatus.Queued)
+                .Select(e => e.Id)
+                .ToList();
+
+            if (queuedIds.Count == 0)
+            {
+                _batchError = "No queued entries selected. Only queued entries can be cancelled.";
+                return;
+            }
+
+            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
+            var count = await context.WorkQueues
+                .Where(wq => queuedIds.Contains(wq.Id) && wq.Status == WorkQueueStatus.Queued)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(wq => wq.Status, WorkQueueStatus.Cancelled),
+                    DisposalToken);
+
+            NotificationService.Notify(
+                NotificationSeverity.Success,
+                "Entries Cancelled",
+                $"{count} work queue entry(s) cancelled.",
+                duration: 4000);
+
+            _selectedEntries.Clear();
+            PausePolling = false;
+            await LoadDataAsync(DisposalToken);
+        }
+        catch (Exception ex) { _batchError = ex.Message; }
+        finally { _batchOperating = false; }
     }
 
     private async Task<ServerDataResult<WorkQueue>> LoadPageAsync(

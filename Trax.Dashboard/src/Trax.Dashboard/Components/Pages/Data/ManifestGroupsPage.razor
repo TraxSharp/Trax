@@ -1,7 +1,12 @@
 @page "/trax/data/manifest-groups"
+@using Trax.Scheduler.Services.TraxScheduler
+@using Trax.Scheduler.Services.CancellationRegistry
+@using Microsoft.Extensions.DependencyInjection
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
+@inject ITraxScheduler Scheduler
+@inject IServiceProvider ServiceProvider
 @inject NotificationService NotificationService
 
 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
@@ -15,20 +20,58 @@
                           Variant="Variant.Outlined"
                           Size="ButtonSize.Small"
                           Click="@(() => SetAllGroupsEnabled(true))"
-                          Disabled="@(_toggling || _items.All(g => g.IsEnabled))" />
+                          Disabled="@(_operating || _items.All(g => g.IsEnabled))" />
             <RadzenButton Text="Disable All"
                           Icon="pause"
                           ButtonStyle="ButtonStyle.Danger"
                           Variant="Variant.Outlined"
                           Size="ButtonSize.Small"
                           Click="@(() => SetAllGroupsEnabled(false))"
-                          Disabled="@(_toggling || _items.All(g => !g.IsEnabled))" />
+                          Disabled="@(_operating || _items.All(g => !g.IsEnabled))" />
         </RadzenStack>
     }
 </RadzenStack>
 <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
     Logical groupings of related manifests with per-group dispatch controls.
 </RadzenText>
+
+@if (_selectedGroups.Count > 0)
+{
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" class="rz-mb-3">
+        <RadzenButton Text="@($"Trigger Selected ({_selectedGroups.Count})")"
+                      Icon="play_arrow"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Size="ButtonSize.Small"
+                      Disabled="@(_operating)"
+                      Click="@TriggerSelected" />
+        <RadzenButton Text="@($"Enable Selected ({_selectedGroups.Count})")"
+                      Icon="check_circle"
+                      ButtonStyle="ButtonStyle.Success"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Disabled="@(_operating)"
+                      Click="@(() => SetSelectedEnabled(true))" />
+        <RadzenButton Text="@($"Disable Selected ({_selectedGroups.Count})")"
+                      Icon="block"
+                      ButtonStyle="ButtonStyle.Danger"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Disabled="@(_operating)"
+                      Click="@(() => SetSelectedEnabled(false))" />
+        <RadzenButton Text="@($"Cancel Running ({_selectedGroups.Count})")"
+                      Icon="cancel"
+                      ButtonStyle="ButtonStyle.Warning"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Disabled="@(_operating)"
+                      Click="@CancelSelectedRunning" />
+    </RadzenStack>
+}
+
+@if (_batchError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@_batchError</RadzenAlert>
+}
 
 @if (_dagLayout is not null && _dagLayout.Nodes.Count > 0)
 {
@@ -40,6 +83,17 @@
                     TItem="GroupSummary"
                     IsLoading="@IsLoading">
     <Columns>
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Width="40px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true">
+            <Template Context="g">
+                <RadzenCheckBox TValue="bool"
+                                Value="@(_selectedGroups.Contains(g))"
+                                Change="@(args => { if ((bool)args!) _selectedGroups.Add(g); else _selectedGroups.Remove(g); PausePolling = _selectedGroups.Count > 0; })" />
+            </Template>
+        </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="GroupSummary"
                               Title=""
                               Width="50px"
@@ -98,8 +152,10 @@
 
 @code {
     private List<GroupSummary> _items = [];
+    private HashSet<GroupSummary> _selectedGroups = [];
     private DagLayout? _dagLayout;
-    private bool _toggling;
+    private bool _operating;
+    private string? _batchError;
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -153,7 +209,7 @@
 
     private async Task SetAllGroupsEnabled(bool enabled)
     {
-        _toggling = true;
+        _operating = true;
 
         try
         {
@@ -196,8 +252,92 @@
         }
         finally
         {
-            _toggling = false;
+            _operating = false;
         }
+    }
+
+    private async Task SetSelectedEnabled(bool enabled)
+    {
+        _batchError = null;
+        _operating = true;
+
+        try
+        {
+            var ids = _selectedGroups.Select(g => g.Id).ToList();
+
+            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
+            var count = await context.ManifestGroups
+                .Where(g => ids.Contains(g.Id))
+                .ExecuteUpdateAsync(
+                    s => s
+                        .SetProperty(g => g.IsEnabled, enabled)
+                        .SetProperty(g => g.UpdatedAt, DateTime.UtcNow),
+                    DisposalToken);
+
+            NotificationService.Notify(
+                NotificationSeverity.Success,
+                enabled ? "Groups Enabled" : "Groups Disabled",
+                $"{count} group(s) {(enabled ? "enabled" : "disabled")}.",
+                duration: 4000);
+
+            _selectedGroups.Clear();
+            PausePolling = false;
+            await RefreshNowAsync();
+        }
+        catch (Exception ex) { _batchError = ex.Message; }
+        finally { _operating = false; }
+    }
+
+    private async Task TriggerSelected()
+    {
+        _batchError = null;
+        _operating = true;
+
+        try
+        {
+            var totalQueued = 0;
+            foreach (var group in _selectedGroups)
+            {
+                totalQueued += await Scheduler.TriggerGroupAsync(group.Id);
+            }
+
+            NotificationService.Notify(
+                NotificationSeverity.Success,
+                "Groups Triggered",
+                $"{totalQueued} manifest(s) queued across {_selectedGroups.Count} group(s).",
+                duration: 4000);
+
+            _selectedGroups.Clear();
+            PausePolling = false;
+        }
+        catch (Exception ex) { _batchError = ex.Message; }
+        finally { _operating = false; }
+    }
+
+    private async Task CancelSelectedRunning()
+    {
+        _batchError = null;
+        _operating = true;
+
+        try
+        {
+            var totalCancelled = 0;
+            foreach (var group in _selectedGroups)
+            {
+                totalCancelled += await Scheduler.CancelGroupAsync(group.Id);
+            }
+
+            NotificationService.Notify(
+                NotificationSeverity.Success,
+                "Cancellation Requested",
+                $"Cancel signal sent for {totalCancelled} execution(s) across {_selectedGroups.Count} group(s).",
+                duration: 4000);
+
+            _selectedGroups.Clear();
+            PausePolling = false;
+        }
+        catch (Exception ex) { _batchError = ex.Message; }
+        finally { _operating = false; }
     }
 
     private void OnDagNodeClick(long groupId)
