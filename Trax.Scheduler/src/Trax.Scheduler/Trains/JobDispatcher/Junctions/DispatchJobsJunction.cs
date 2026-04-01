@@ -182,6 +182,27 @@ internal class DispatchJobsJunction(
         claimed.DispatchedAt = DateTime.UtcNow;
         await dataContext.SaveChanges(CancellationToken);
 
+        // Link retry metadata on the dead letter if this WorkQueue was from a requeue
+        if (claimed.DeadLetterId is not null)
+        {
+            var deadLetter = await dataContext.DeadLetters.FirstOrDefaultAsync(
+                d => d.Id == claimed.DeadLetterId,
+                CancellationToken
+            );
+
+            if (deadLetter is not null)
+            {
+                deadLetter.LinkRetryMetadata(metadata.Id);
+                await dataContext.SaveChanges(CancellationToken);
+
+                logger.LogDebug(
+                    "Linked retry metadata {MetadataId} to dead letter {DeadLetterId}",
+                    metadata.Id,
+                    claimed.DeadLetterId
+                );
+            }
+        }
+
         // Commit the claim transaction before enqueuing. The Metadata and WorkQueue
         // updates must be visible to the job submitter — InMemoryJobSubmitter executes
         // synchronously and needs to read the Metadata, while PostgresJobSubmitter and

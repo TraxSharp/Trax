@@ -195,57 +195,81 @@ internal class SchedulerStartupService(
             && IsTransient(ex.InnerException)
         );
 
+    /// <summary>
+    /// Maximum number of orphaned manifests to delete per batch. Keeps the SQL IN(...)
+    /// clause small enough to avoid command timeouts on large prune operations.
+    /// </summary>
+    internal const int PruneBatchSize = 500;
+
     private async Task PruneOrphanedManifestsAsync(
         IDataContext dataContext,
         HashSet<string> expectedExternalIds,
         CancellationToken cancellationToken
     )
     {
-        // Find all manifest IDs whose ExternalId is not in the configured set
-        var orphanedManifestIds = await dataContext
-            .Manifests.Where(m => !expectedExternalIds.Contains(m.ExternalId))
-            .Select(m => m.Id)
-            .ToListAsync(cancellationToken);
+        var totalPruned = 0;
 
-        if (orphanedManifestIds.Count == 0)
+        while (true)
         {
-            logger.LogDebug("No orphaned manifests found");
-            return;
+            // Fetch the next batch of orphaned manifest IDs
+            var orphanedManifestIds = await dataContext
+                .Manifests.Where(m => !expectedExternalIds.Contains(m.ExternalId))
+                .OrderBy(m => m.Id)
+                .Select(m => m.Id)
+                .Take(PruneBatchSize)
+                .ToListAsync(cancellationToken);
+
+            if (orphanedManifestIds.Count == 0)
+                break;
+
+            // Clear self-referencing FK (DependsOnManifestId) for any manifest pointing to
+            // an orphan in this batch. Handles both orphan→orphan and kept→orphan references.
+            await dataContext
+                .Manifests.Where(m =>
+                    m.DependsOnManifestId.HasValue
+                    && orphanedManifestIds.Contains(m.DependsOnManifestId.Value)
+                )
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.DependsOnManifestId, (long?)null),
+                    cancellationToken
+                );
+
+            // Delete in FK-dependency order: WorkQueues → DeadLetters → Metadata → Manifests
+            await dataContext
+                .WorkQueues.Where(w =>
+                    w.ManifestId.HasValue && orphanedManifestIds.Contains(w.ManifestId.Value)
+                )
+                .ExecuteDeleteAsync(cancellationToken);
+
+            await dataContext
+                .DeadLetters.Where(d => orphanedManifestIds.Contains(d.ManifestId))
+                .ExecuteDeleteAsync(cancellationToken);
+
+            await dataContext
+                .Metadatas.Where(m =>
+                    m.ManifestId.HasValue && orphanedManifestIds.Contains(m.ManifestId.Value)
+                )
+                .ExecuteDeleteAsync(cancellationToken);
+
+            var pruned = await dataContext
+                .Manifests.Where(m => orphanedManifestIds.Contains(m.Id))
+                .ExecuteDeleteAsync(cancellationToken);
+
+            totalPruned += pruned;
+
+            logger.LogInformation(
+                "Pruned batch of {BatchCount} orphaned manifest(s) ({TotalCount} total so far)",
+                pruned,
+                totalPruned
+            );
         }
 
-        // Clear self-referencing FK (DependsOnManifestId) for any manifest pointing to an orphan.
-        // This handles both orphan→orphan and kept→orphan references.
-        await dataContext
-            .Manifests.Where(m =>
-                m.DependsOnManifestId.HasValue
-                && orphanedManifestIds.Contains(m.DependsOnManifestId.Value)
-            )
-            .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.DependsOnManifestId, (long?)null),
-                cancellationToken
+        if (totalPruned > 0)
+            logger.LogInformation(
+                "Finished pruning {Count} orphaned manifest(s) from the database",
+                totalPruned
             );
-
-        // Delete in FK-dependency order: WorkQueues → DeadLetters → Metadata → Manifests
-        await dataContext
-            .WorkQueues.Where(w =>
-                w.ManifestId.HasValue && orphanedManifestIds.Contains(w.ManifestId.Value)
-            )
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await dataContext
-            .DeadLetters.Where(d => orphanedManifestIds.Contains(d.ManifestId))
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await dataContext
-            .Metadatas.Where(m =>
-                m.ManifestId.HasValue && orphanedManifestIds.Contains(m.ManifestId.Value)
-            )
-            .ExecuteDeleteAsync(cancellationToken);
-
-        var pruned = await dataContext
-            .Manifests.Where(m => orphanedManifestIds.Contains(m.Id))
-            .ExecuteDeleteAsync(cancellationToken);
-
-        logger.LogInformation("Pruned {Count} orphaned manifest(s) from the database", pruned);
+        else
+            logger.LogDebug("No orphaned manifests found");
     }
 }

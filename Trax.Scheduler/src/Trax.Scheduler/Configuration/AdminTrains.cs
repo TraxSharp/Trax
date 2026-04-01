@@ -1,3 +1,4 @@
+using Trax.Scheduler.Trains.DeadLetterCleanup;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.JobRunner;
 using Trax.Scheduler.Trains.ManifestManager;
@@ -25,6 +26,8 @@ public static class AdminTrains
         typeof(MetadataCleanupTrain),
         typeof(IJobDispatcherTrain),
         typeof(JobDispatcherTrain),
+        typeof(IDeadLetterCleanupTrain),
+        typeof(DeadLetterCleanupTrain),
     ];
 
     /// <summary>

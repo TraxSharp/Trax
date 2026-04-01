@@ -274,4 +274,79 @@ public interface ITraxScheduler
     /// the group and attempts same-server instant cancellation via <see cref="ICancellationRegistry"/>.
     /// </remarks>
     Task<int> CancelGroupAsync(long groupId, CancellationToken ct = default);
+
+    #region Dead Letter Operations
+
+    /// <summary>
+    /// Requeues a single dead letter, creating a new WorkQueue entry for retry.
+    /// </summary>
+    /// <param name="deadLetterId">The ID of the dead letter to requeue.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Result indicating success and the new WorkQueue ID.</returns>
+    /// <remarks>
+    /// Only dead letters in <see cref="DeadLetterStatus.AwaitingIntervention"/> status
+    /// can be requeued. The dead letter's failure counter is reset, allowing the manifest
+    /// to resume normal scheduling.
+    /// </remarks>
+    Task<DeadLetterOperationResult> RequeueDeadLetterAsync(
+        long deadLetterId,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// Acknowledges a single dead letter without retrying.
+    /// </summary>
+    /// <param name="deadLetterId">The ID of the dead letter to acknowledge.</param>
+    /// <param name="note">A note explaining the acknowledgement.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Result indicating success.</returns>
+    Task<DeadLetterOperationResult> AcknowledgeDeadLetterAsync(
+        long deadLetterId,
+        string note,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// Requeues multiple dead letters by ID.
+    /// </summary>
+    /// <param name="deadLetterIds">The IDs of the dead letters to requeue.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The number of dead letters successfully requeued.</returns>
+    Task<BatchDeadLetterResult> RequeueDeadLettersAsync(
+        long[] deadLetterIds,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// Acknowledges multiple dead letters by ID.
+    /// </summary>
+    /// <param name="deadLetterIds">The IDs of the dead letters to acknowledge.</param>
+    /// <param name="note">A note explaining the acknowledgement.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The number of dead letters successfully acknowledged.</returns>
+    Task<BatchDeadLetterResult> AcknowledgeDeadLettersAsync(
+        long[] deadLetterIds,
+        string note,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// Requeues all dead letters in AwaitingIntervention status.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The number of dead letters requeued.</returns>
+    Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Acknowledges all dead letters in AwaitingIntervention status.
+    /// </summary>
+    /// <param name="note">A note explaining the acknowledgement.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The number of dead letters acknowledged.</returns>
+    Task<BatchDeadLetterResult> AcknowledgeAllDeadLettersAsync(
+        string note,
+        CancellationToken ct = default
+    );
+
+    #endregion
 }

@@ -857,6 +857,205 @@ public class TraxScheduler(
         }
     }
 
+    // ── Dead Letter Operations ────────────────────────────────────────────
+
+    /// <inheritdoc />
+    public async Task<DeadLetterOperationResult> RequeueDeadLetterAsync(
+        long deadLetterId,
+        CancellationToken ct = default
+    )
+    {
+        await using var context = CreateContext();
+
+        var deadLetter = await context
+            .DeadLetters.Include(d => d.Manifest)
+            .FirstOrDefaultAsync(
+                d => d.Id == deadLetterId && d.Status == DeadLetterStatus.AwaitingIntervention,
+                ct
+            );
+
+        if (deadLetter is null)
+            return new DeadLetterOperationResult(
+                false,
+                null,
+                "Dead letter not found or already resolved"
+            );
+
+        var entry = CreateWorkQueueFromDeadLetter(deadLetter);
+        context.WorkQueues.Add(entry);
+
+        deadLetter.Requeue($"Re-queued (WorkQueue {entry.Id})");
+        await context.SaveChanges(ct);
+
+        // WorkQueue ID is available after SaveChanges — update the resolution note
+        deadLetter.ResolutionNote = $"Re-queued (WorkQueue {entry.Id})";
+        await context.SaveChanges(ct);
+
+        logger.LogInformation(
+            "Requeued dead letter {DeadLetterId} as WorkQueue {WorkQueueId}",
+            deadLetterId,
+            entry.Id
+        );
+
+        return new DeadLetterOperationResult(true, entry.Id, "Dead letter requeued");
+    }
+
+    /// <inheritdoc />
+    public async Task<DeadLetterOperationResult> AcknowledgeDeadLetterAsync(
+        long deadLetterId,
+        string note,
+        CancellationToken ct = default
+    )
+    {
+        await using var context = CreateContext();
+
+        var deadLetter = await context.DeadLetters.FirstOrDefaultAsync(
+            d => d.Id == deadLetterId && d.Status == DeadLetterStatus.AwaitingIntervention,
+            ct
+        );
+
+        if (deadLetter is null)
+            return new DeadLetterOperationResult(
+                false,
+                null,
+                "Dead letter not found or already resolved"
+            );
+
+        deadLetter.Acknowledge(note);
+        await context.SaveChanges(ct);
+
+        logger.LogInformation("Acknowledged dead letter {DeadLetterId}", deadLetterId);
+
+        return new DeadLetterOperationResult(true, null, "Dead letter acknowledged");
+    }
+
+    /// <inheritdoc />
+    public async Task<BatchDeadLetterResult> RequeueDeadLettersAsync(
+        long[] deadLetterIds,
+        CancellationToken ct = default
+    )
+    {
+        await using var context = CreateContext();
+
+        var deadLetters = await context
+            .DeadLetters.Include(d => d.Manifest)
+            .Where(d =>
+                deadLetterIds.Contains(d.Id) && d.Status == DeadLetterStatus.AwaitingIntervention
+            )
+            .ToListAsync(ct);
+
+        return await RequeueDeadLetterBatch(context, deadLetters, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<BatchDeadLetterResult> AcknowledgeDeadLettersAsync(
+        long[] deadLetterIds,
+        string note,
+        CancellationToken ct = default
+    )
+    {
+        await using var context = CreateContext();
+
+        var deadLetters = await context
+            .DeadLetters.Where(d =>
+                deadLetterIds.Contains(d.Id) && d.Status == DeadLetterStatus.AwaitingIntervention
+            )
+            .ToListAsync(ct);
+
+        foreach (var dl in deadLetters)
+            dl.Acknowledge(note);
+
+        await context.SaveChanges(ct);
+
+        logger.LogInformation("Acknowledged {Count} dead letters", deadLetters.Count);
+
+        return new BatchDeadLetterResult(
+            deadLetters.Count,
+            $"{deadLetters.Count} dead letter(s) acknowledged"
+        );
+    }
+
+    /// <inheritdoc />
+    public async Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(
+        CancellationToken ct = default
+    )
+    {
+        await using var context = CreateContext();
+
+        var deadLetters = await context
+            .DeadLetters.Include(d => d.Manifest)
+            .Where(d => d.Status == DeadLetterStatus.AwaitingIntervention)
+            .ToListAsync(ct);
+
+        return await RequeueDeadLetterBatch(context, deadLetters, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<BatchDeadLetterResult> AcknowledgeAllDeadLettersAsync(
+        string note,
+        CancellationToken ct = default
+    )
+    {
+        await using var context = CreateContext();
+
+        var deadLetters = await context
+            .DeadLetters.Where(d => d.Status == DeadLetterStatus.AwaitingIntervention)
+            .ToListAsync(ct);
+
+        foreach (var dl in deadLetters)
+            dl.Acknowledge(note);
+
+        await context.SaveChanges(ct);
+
+        logger.LogInformation("Acknowledged all {Count} dead letters", deadLetters.Count);
+
+        return new BatchDeadLetterResult(
+            deadLetters.Count,
+            $"{deadLetters.Count} dead letter(s) acknowledged"
+        );
+    }
+
+    private async Task<BatchDeadLetterResult> RequeueDeadLetterBatch(
+        IDataContext context,
+        List<Effect.Models.DeadLetter.DeadLetter> deadLetters,
+        CancellationToken ct
+    )
+    {
+        foreach (var dl in deadLetters)
+        {
+            var entry = CreateWorkQueueFromDeadLetter(dl);
+            context.WorkQueues.Add(entry);
+            dl.Requeue($"Re-queued (batch)");
+        }
+
+        await context.SaveChanges(ct);
+
+        logger.LogInformation("Requeued {Count} dead letters", deadLetters.Count);
+
+        return new BatchDeadLetterResult(
+            deadLetters.Count,
+            $"{deadLetters.Count} dead letter(s) requeued"
+        );
+    }
+
+    private static WorkQueue CreateWorkQueueFromDeadLetter(
+        Effect.Models.DeadLetter.DeadLetter deadLetter
+    )
+    {
+        var manifest = deadLetter.Manifest!;
+        return WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = manifest.Name,
+                Input = manifest.Properties,
+                InputTypeName = manifest.PropertyTypeName,
+                ManifestId = manifest.Id,
+                Priority = manifest.Priority,
+                DeadLetterId = deadLetter.Id,
+            }
+        );
+    }
+
     // ── Private helpers ──────────────────────────────────────────────────
 
     private IDataContext CreateContext() =>

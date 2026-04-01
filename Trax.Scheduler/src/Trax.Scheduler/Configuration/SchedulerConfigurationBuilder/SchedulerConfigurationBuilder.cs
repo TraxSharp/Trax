@@ -147,6 +147,10 @@ public partial class SchedulerConfigurationBuilder
             IMetadataCleanupTrain,
             MetadataCleanupTrain
         >();
+        _parentBuilder.ServiceCollection.AddScopedTraxRoute<
+            Trains.DeadLetterCleanup.IDeadLetterCleanupTrain,
+            Trains.DeadLetterCleanup.DeadLetterCleanupTrain
+        >();
 
         // Register the job submitter and local workers.
         // Priority: UseInMemoryWorkers/OverrideSubmitter > default (Postgres local workers or InMemory).
@@ -196,6 +200,9 @@ public partial class SchedulerConfigurationBuilder
 
             if (_configuration.MetadataCleanup is not null)
                 _parentBuilder.ServiceCollection.AddHostedService<MetadataCleanupPollingService>();
+
+            if (_configuration.AutoPurgeDeadLetters)
+                _parentBuilder.ServiceCollection.AddHostedService<Services.DeadLetterCleanupPollingService.DeadLetterCleanupPollingService>();
         }
     }
 

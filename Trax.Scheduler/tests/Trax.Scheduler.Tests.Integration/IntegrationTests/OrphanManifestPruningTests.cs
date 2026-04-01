@@ -328,6 +328,35 @@ public class OrphanManifestPruningTests : TestSetup
             );
     }
 
+    [Test]
+    public async Task StartAsync_WithMoreOrphansThanBatchSize_PrunesAllOrphans()
+    {
+        // Arrange: Create more orphaned manifests than PruneBatchSize to verify
+        // the batching loop processes all batches until complete.
+        var orphanCount = SchedulerStartupService.PruneBatchSize + 10;
+        var kept = await CreateAndSaveManifestWithExternalId("kept-manifest");
+
+        for (var i = 0; i < orphanCount; i++)
+            await CreateAndSaveManifestWithExternalId($"orphan-{i}");
+
+        var configuration = CreateConfiguration(
+            expectedExternalIds: ["kept-manifest"],
+            pruneOrphanedManifests: true
+        );
+
+        var startupService = CreateStartupService(configuration);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        DataContext.Reset();
+        var remaining = await DataContext.Manifests.Select(m => m.ExternalId).ToListAsync();
+
+        remaining.Should().HaveCount(1);
+        remaining.Should().Contain("kept-manifest");
+    }
+
     #endregion
 
     #region Helper Methods

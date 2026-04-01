@@ -852,58 +852,67 @@ public class QueryPerformanceTests : TestSetup
     #region Orphan Manifest Pruning at Scale
 
     [Test]
-    public async Task PruneOrphanedManifests_AtStartupScale_CompletesWithinTimeout()
+    public async Task PruneOrphanedManifests_Batched_AtStartupScale_CompletesWithinTimeout()
     {
-        // Simulates SchedulerStartupService.PruneOrphanedManifestsAsync with many manifests
-        // and a small expected set — most manifests are orphaned and need deletion.
+        // Simulates SchedulerStartupService.PruneOrphanedManifestsAsync with batched deletes.
+        // With 500 manifests and batch size 500, this exercises at least one full batch.
         var expectedIds = _manifests.Take(50).Select(m => m.ExternalId).ToHashSet();
+        var batchSize = SchedulerStartupService.PruneBatchSize;
 
         var elapsed = await AssertCompletesWithin(
             async () =>
             {
-                var orphanedIds = await DataContext
-                    .Manifests.Where(m => !expectedIds.Contains(m.ExternalId))
-                    .Select(m => m.Id)
-                    .ToListAsync();
+                var totalPruned = 0;
 
-                orphanedIds.Should().HaveCount(ManifestCount - 50);
+                while (true)
+                {
+                    var orphanedIds = await DataContext
+                        .Manifests.Where(m => !expectedIds.Contains(m.ExternalId))
+                        .OrderBy(m => m.Id)
+                        .Select(m => m.Id)
+                        .Take(batchSize)
+                        .ToListAsync();
 
-                await DataContext
-                    .Manifests.Where(m =>
-                        m.DependsOnManifestId.HasValue
-                        && orphanedIds.Contains(m.DependsOnManifestId.Value)
-                    )
-                    .ExecuteUpdateAsync(s =>
-                        s.SetProperty(m => m.DependsOnManifestId, (long?)null)
-                    );
+                    if (orphanedIds.Count == 0)
+                        break;
 
-                await DataContext
-                    .WorkQueues.Where(w =>
-                        w.ManifestId.HasValue && orphanedIds.Contains(w.ManifestId.Value)
-                    )
-                    .ExecuteDeleteAsync();
+                    await DataContext
+                        .Manifests.Where(m =>
+                            m.DependsOnManifestId.HasValue
+                            && orphanedIds.Contains(m.DependsOnManifestId.Value)
+                        )
+                        .ExecuteUpdateAsync(s =>
+                            s.SetProperty(m => m.DependsOnManifestId, (long?)null)
+                        );
 
-                await DataContext
-                    .DeadLetters.Where(d => orphanedIds.Contains(d.ManifestId))
-                    .ExecuteDeleteAsync();
+                    await DataContext
+                        .WorkQueues.Where(w =>
+                            w.ManifestId.HasValue && orphanedIds.Contains(w.ManifestId.Value)
+                        )
+                        .ExecuteDeleteAsync();
 
-                await DataContext
-                    .Metadatas.Where(m =>
-                        m.ManifestId.HasValue && orphanedIds.Contains(m.ManifestId.Value)
-                    )
-                    .ExecuteDeleteAsync();
+                    await DataContext
+                        .DeadLetters.Where(d => orphanedIds.Contains(d.ManifestId))
+                        .ExecuteDeleteAsync();
 
-                var pruned = await DataContext
-                    .Manifests.Where(m => orphanedIds.Contains(m.Id))
-                    .ExecuteDeleteAsync();
+                    await DataContext
+                        .Metadatas.Where(m =>
+                            m.ManifestId.HasValue && orphanedIds.Contains(m.ManifestId.Value)
+                        )
+                        .ExecuteDeleteAsync();
 
-                pruned.Should().Be(ManifestCount - 50);
+                    totalPruned += await DataContext
+                        .Manifests.Where(m => orphanedIds.Contains(m.Id))
+                        .ExecuteDeleteAsync();
+                }
+
+                totalPruned.Should().Be(ManifestCount - 50);
             },
             TimeSpan.FromSeconds(60)
         );
 
         TestContext.Out.WriteLine(
-            $"PruneOrphanedManifests ({ManifestCount - 50} pruned): {elapsed.TotalMilliseconds:F0}ms"
+            $"PruneOrphanedManifests batched ({ManifestCount - 50} pruned, batch size {batchSize}): {elapsed.TotalMilliseconds:F0}ms"
         );
     }
 

@@ -212,6 +212,11 @@ public class SchedulerConfiguration
     public bool AutoPurgeDeadLetters { get; set; } = true;
 
     /// <summary>
+    /// The interval at which the dead letter cleanup service checks for expired dead letters.
+    /// </summary>
+    public TimeSpan DeadLetterCleanupInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// Configuration for automatic metadata cleanup, if enabled.
     /// </summary>
     /// <remarks>

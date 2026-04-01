@@ -43,6 +43,29 @@ internal class CreateWorkQueueEntriesJunction(
                         ? basePriority + schedulerConfiguration.DependentPriorityBoost
                         : basePriority;
 
+                // Apply retry delay with exponential backoff when the manifest has prior failures
+                DateTime? scheduledAt = null;
+                if (view.FailedCount > 0)
+                {
+                    var delaySeconds =
+                        schedulerConfiguration.DefaultRetryDelay.TotalSeconds
+                        * Math.Pow(
+                            schedulerConfiguration.RetryBackoffMultiplier,
+                            view.FailedCount - 1
+                        );
+                    var clampedDelay = TimeSpan.FromSeconds(
+                        Math.Min(delaySeconds, schedulerConfiguration.MaxRetryDelay.TotalSeconds)
+                    );
+                    scheduledAt = DateTime.UtcNow + clampedDelay;
+
+                    logger.LogDebug(
+                        "Applying retry delay of {Delay} for manifest {ManifestId} (failure #{FailureCount})",
+                        clampedDelay,
+                        view.Manifest.Id,
+                        view.FailedCount
+                    );
+                }
+
                 var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
                     new CreateWorkQueue
                     {
@@ -51,6 +74,7 @@ internal class CreateWorkQueueEntriesJunction(
                         InputTypeName = view.Manifest.PropertyTypeName,
                         ManifestId = view.Manifest.Id,
                         Priority = effectivePriority,
+                        ScheduledAt = scheduledAt,
                     }
                 );
 
