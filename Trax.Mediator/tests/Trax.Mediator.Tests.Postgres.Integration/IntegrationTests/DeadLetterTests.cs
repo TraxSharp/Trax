@@ -277,6 +277,186 @@ public class DeadLetterTests : TestSetup
     }
 
     [Theory]
+    public async Task TestDeadLetterRequeuePersists()
+    {
+        // Arrange
+        var postgresContextFactory =
+            Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+
+        using var context = (IDataContext)postgresContextFactory.Create();
+
+        var manifestGroup = await CreateTestManifestGroup(context);
+
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(DeadLetterTests),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.None,
+                MaxRetries = 3,
+            }
+        );
+        manifest.ManifestGroupId = manifestGroup.Id;
+
+        await context.Track(manifest);
+        await context.SaveChanges(CancellationToken.None);
+
+        var deadLetter = DeadLetter.Create(
+            new CreateDeadLetter
+            {
+                Manifest = manifest,
+                Reason = "Max retries exceeded",
+                RetryCount = 3,
+            }
+        );
+        await context.Track(deadLetter);
+        await context.SaveChanges(CancellationToken.None);
+        var deadLetterId = deadLetter.Id;
+        context.Reset();
+
+        // Act
+        var foundDeadLetter = await context.DeadLetters.FirstAsync(x => x.Id == deadLetterId);
+        foundDeadLetter.Requeue("Re-queued via dashboard (WorkQueue 42)");
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        // Assert
+        var requeuedDeadLetter = await context.DeadLetters.FirstAsync(x => x.Id == deadLetterId);
+        requeuedDeadLetter.Status.Should().Be(DeadLetterStatus.Retried);
+        requeuedDeadLetter.ResolutionNote.Should().Be("Re-queued via dashboard (WorkQueue 42)");
+        requeuedDeadLetter.ResolvedAt.Should().NotBeNull();
+        requeuedDeadLetter.RetryMetadataId.Should().BeNull();
+    }
+
+    [Theory]
+    public async Task TestDeadLetterLinkRetryMetadataPersists()
+    {
+        // Arrange
+        var postgresContextFactory =
+            Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+
+        using var context = (IDataContext)postgresContextFactory.Create();
+
+        var manifestGroup = await CreateTestManifestGroup(context);
+
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(DeadLetterTests),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.None,
+                MaxRetries = 3,
+            }
+        );
+        manifest.ManifestGroupId = manifestGroup.Id;
+
+        await context.Track(manifest);
+        await context.SaveChanges(CancellationToken.None);
+
+        var deadLetter = DeadLetter.Create(
+            new CreateDeadLetter
+            {
+                Manifest = manifest,
+                Reason = "Max retries exceeded",
+                RetryCount = 3,
+            }
+        );
+        await context.Track(deadLetter);
+        await context.SaveChanges(CancellationToken.None);
+
+        // Create retry metadata
+        var retryMetadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = nameof(TestDeadLetterLinkRetryMetadataPersists),
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = new { Test = "value" },
+            }
+        );
+        await context.Track(retryMetadata);
+        await context.SaveChanges(CancellationToken.None);
+        var deadLetterId = deadLetter.Id;
+        var retryMetadataId = retryMetadata.Id;
+        context.Reset();
+
+        // Act — Requeue first, then link metadata (the real-world two-phase flow)
+        var foundDeadLetter = await context.DeadLetters.FirstAsync(x => x.Id == deadLetterId);
+        foundDeadLetter.Requeue("Re-queued via service");
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var foundAgain = await context.DeadLetters.FirstAsync(x => x.Id == deadLetterId);
+        foundAgain.LinkRetryMetadata(retryMetadataId);
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        // Assert
+        var linkedDeadLetter = await context
+            .DeadLetters.Include(d => d.RetryMetadata)
+            .FirstAsync(x => x.Id == deadLetterId);
+        linkedDeadLetter.Status.Should().Be(DeadLetterStatus.Retried);
+        linkedDeadLetter.RetryMetadataId.Should().Be(retryMetadataId);
+        linkedDeadLetter.RetryMetadata.Should().NotBeNull();
+    }
+
+    [Theory]
+    public async Task TestWorkQueueDeadLetterIdPersists()
+    {
+        // Arrange
+        var postgresContextFactory =
+            Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+
+        using var context = (IDataContext)postgresContextFactory.Create();
+
+        var manifestGroup = await CreateTestManifestGroup(context);
+
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(DeadLetterTests),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.None,
+                MaxRetries = 3,
+            }
+        );
+        manifest.ManifestGroupId = manifestGroup.Id;
+        await context.Track(manifest);
+        await context.SaveChanges(CancellationToken.None);
+
+        var deadLetter = DeadLetter.Create(
+            new CreateDeadLetter
+            {
+                Manifest = manifest,
+                Reason = "Max retries exceeded",
+                RetryCount = 3,
+            }
+        );
+        await context.Track(deadLetter);
+        await context.SaveChanges(CancellationToken.None);
+
+        // Create WorkQueue entry with DeadLetterId
+        var workQueue = Effect.Models.WorkQueue.WorkQueue.Create(
+            new Effect.Models.WorkQueue.DTOs.CreateWorkQueue
+            {
+                TrainName = typeof(DeadLetterTests).FullName!,
+                ManifestId = manifest.Id,
+                DeadLetterId = deadLetter.Id,
+            }
+        );
+        await context.Track(workQueue);
+        await context.SaveChanges(CancellationToken.None);
+        var workQueueId = workQueue.Id;
+        context.Reset();
+
+        // Assert
+        var foundWorkQueue = await context
+            .WorkQueues.Include(w => w.DeadLetter)
+            .FirstAsync(w => w.Id == workQueueId);
+        foundWorkQueue.DeadLetterId.Should().Be(deadLetter.Id);
+        foundWorkQueue.DeadLetter.Should().NotBeNull();
+    }
+
+    [Theory]
     public async Task TestCanQueryDeadLettersByStatus()
     {
         // Arrange
