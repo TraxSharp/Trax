@@ -18,28 +18,28 @@
                       Icon="play_arrow"
                       ButtonStyle="ButtonStyle.Primary"
                       Size="ButtonSize.Small"
-                      Disabled="@(_batchOperating)"
+                      Disabled="@(BatchOperating)"
                       Click="@TriggerSelected" />
         <RadzenButton Text="@($"Enable Selected ({_selectedManifests.Count})")"
                       Icon="check_circle"
                       ButtonStyle="ButtonStyle.Success"
                       Variant="Variant.Outlined"
                       Size="ButtonSize.Small"
-                      Disabled="@(_batchOperating)"
+                      Disabled="@(BatchOperating)"
                       Click="@(() => SetSelectedEnabled(true))" />
         <RadzenButton Text="@($"Disable Selected ({_selectedManifests.Count})")"
                       Icon="block"
                       ButtonStyle="ButtonStyle.Danger"
                       Variant="Variant.Outlined"
                       Size="ButtonSize.Small"
-                      Disabled="@(_batchOperating)"
+                      Disabled="@(BatchOperating)"
                       Click="@(() => SetSelectedEnabled(false))" />
     }
 </RadzenStack>
 
-@if (_batchError is not null)
+@if (BatchError is not null)
 {
-    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@_batchError</RadzenAlert>
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@BatchError</RadzenAlert>
 }
 
 <TraxDataGrid Data="@_items"
@@ -130,8 +130,6 @@
 @code {
     private List<Manifest> _items = [];
     private HashSet<Manifest> _selectedManifests = [];
-    private bool _batchOperating;
-    private string? _batchError;
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -144,60 +142,37 @@
         _items = await query.ToListAsync(cancellationToken);
     }
 
-    private async Task TriggerSelected()
+    private Task TriggerSelected() => RunBatchOperationAsync(async () =>
     {
-        _batchError = null;
-        _batchOperating = true;
-
-        try
+        var count = 0;
+        foreach (var manifest in _selectedManifests)
         {
-            var count = 0;
-            foreach (var manifest in _selectedManifests)
-            {
-                await Scheduler.TriggerAsync(manifest.ExternalId);
-                count++;
-            }
-
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                "Batch Trigger",
-                $"{count} manifest(s) triggered.",
-                duration: 4000);
-
-            _selectedManifests.Clear();
-            PausePolling = false;
+            await Scheduler.TriggerAsync(manifest.ExternalId);
+            count++;
         }
-        catch (Exception ex) { _batchError = ex.Message; }
-        finally { _batchOperating = false; }
-    }
 
-    private async Task SetSelectedEnabled(bool enabled)
+        NotificationService.Notify(
+            NotificationSeverity.Success,
+            "Batch Trigger",
+            $"{count} manifest(s) triggered.",
+            duration: 4000);
+    }, () => _selectedManifests.Clear());
+
+    private Task SetSelectedEnabled(bool enabled) => RunBatchOperationAsync(async () =>
     {
-        _batchError = null;
-        _batchOperating = true;
+        var ids = _selectedManifests.Select(m => m.Id).ToList();
 
-        try
-        {
-            var ids = _selectedManifests.Select(m => m.Id).ToList();
+        using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
+        var count = await context.Manifests
+            .Where(m => ids.Contains(m.Id))
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(m => m.IsEnabled, enabled),
+                DisposalToken);
 
-            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-            var count = await context.Manifests
-                .Where(m => ids.Contains(m.Id))
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.IsEnabled, enabled),
-                    DisposalToken);
-
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                enabled ? "Manifests Enabled" : "Manifests Disabled",
-                $"{count} manifest(s) {(enabled ? "enabled" : "disabled")}.",
-                duration: 4000);
-
-            _selectedManifests.Clear();
-            PausePolling = false;
-            await LoadDataAsync(DisposalToken);
-        }
-        catch (Exception ex) { _batchError = ex.Message; }
-        finally { _batchOperating = false; }
-    }
+        NotificationService.Notify(
+            NotificationSeverity.Success,
+            enabled ? "Manifests Enabled" : "Manifests Disabled",
+            $"{count} manifest(s) {(enabled ? "enabled" : "disabled")}.",
+            duration: 4000);
+    }, () => _selectedManifests.Clear());
 }

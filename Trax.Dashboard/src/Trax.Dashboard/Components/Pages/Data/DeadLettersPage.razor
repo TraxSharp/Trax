@@ -18,14 +18,14 @@
                   ButtonStyle="ButtonStyle.Primary"
                   Variant="Variant.Outlined"
                   Size="ButtonSize.Small"
-                  Disabled="@(_batchOperating)"
+                  Disabled="@(BatchOperating)"
                   Click="@RequeueAll" />
     <RadzenButton Text="Acknowledge All"
                   Icon="check_circle"
                   ButtonStyle="ButtonStyle.Success"
                   Variant="Variant.Outlined"
                   Size="ButtonSize.Small"
-                  Disabled="@(_batchOperating)"
+                  Disabled="@(BatchOperating)"
                   Click="@(() => { _showBatchAcknowledgeInput = true; })" />
     @if (_selectedDeadLetters.Count > 0)
     {
@@ -33,13 +33,13 @@
                       Icon="replay"
                       ButtonStyle="ButtonStyle.Primary"
                       Size="ButtonSize.Small"
-                      Disabled="@(_batchOperating)"
+                      Disabled="@(BatchOperating)"
                       Click="@RequeueSelected" />
         <RadzenButton Text="@($"Acknowledge Selected ({_selectedDeadLetters.Count})")"
                       Icon="check_circle"
                       ButtonStyle="ButtonStyle.Success"
                       Size="ButtonSize.Small"
-                      Disabled="@(_batchOperating)"
+                      Disabled="@(BatchOperating)"
                       Click="@(() => { _showBatchAcknowledgeInput = true; _acknowledgeSelectedOnly = true; })" />
     }
 </RadzenStack>
@@ -54,7 +54,7 @@
             <RadzenButton Text="Confirm"
                           ButtonStyle="ButtonStyle.Success"
                           Size="ButtonSize.Small"
-                          Disabled="@(_batchOperating)"
+                          Disabled="@(BatchOperating)"
                           Click="@AcknowledgeBatch" />
             <RadzenButton Text="Cancel"
                           ButtonStyle="ButtonStyle.Light"
@@ -64,9 +64,9 @@
     </RadzenCard>
 }
 
-@if (_batchError is not null)
+@if (BatchError is not null)
 {
-    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@_batchError</RadzenAlert>
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@BatchError</RadzenAlert>
 }
 
 <TraxDataGrid @ref="_grid"
@@ -149,11 +149,9 @@
 @code {
     private TraxDataGrid<DeadLetter>? _grid;
     private IList<DeadLetter> _selectedDeadLetters = new List<DeadLetter>();
-    private bool _batchOperating;
     private bool _showBatchAcknowledgeInput;
     private bool _acknowledgeSelectedOnly;
     private string _batchAcknowledgeNote = "";
-    private string? _batchError;
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -161,112 +159,45 @@
             await _grid.ReloadAsync();
     }
 
-    private async Task<ServerDataResult<DeadLetter>> LoadPageAsync(
-        LoadDataArgs args,
-        CancellationToken cancellationToken)
+    private Task<ServerDataResult<DeadLetter>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+        => DataGridQueryHelper.LoadPageAsync(
+            DataContextFactory,
+            db => db.DeadLetters.AsNoTracking().OrderByDescending(d => d.Id),
+            args,
+            ct
+        );
+
+    private Task RequeueAll() => RunBatchOperationAsync(async () =>
     {
-        using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
-        IQueryable<DeadLetter> query = context.DeadLetters.AsNoTracking();
+        var result = await Scheduler.RequeueAllDeadLettersAsync();
+        NotificationService.Notify(NotificationSeverity.Success, "Batch Requeue", result.Message, duration: 4000);
+    }, () => _selectedDeadLetters.Clear());
 
-        if (!string.IsNullOrEmpty(args.Filter))
-            query = query.Where(args.Filter);
-
-        if (!string.IsNullOrEmpty(args.OrderBy))
-            query = query.OrderBy(args.OrderBy);
-        else
-            query = query.OrderByDescending(d => d.Id);
-
-        var count = await query.CountAsync(cancellationToken);
-
-        if (args.Skip.HasValue)
-            query = query.Skip(args.Skip.Value);
-        if (args.Top.HasValue)
-            query = query.Take(args.Top.Value);
-
-        var items = await query.ToListAsync(cancellationToken);
-        return new ServerDataResult<DeadLetter>(items, count);
-    }
-
-    private async Task RequeueAll()
+    private Task RequeueSelected() => RunBatchOperationAsync(async () =>
     {
-        _batchError = null;
-        _batchOperating = true;
+        var ids = _selectedDeadLetters.Select(d => d.Id).ToArray();
+        var result = await Scheduler.RequeueDeadLettersAsync(ids);
+        NotificationService.Notify(NotificationSeverity.Success, "Batch Requeue", result.Message, duration: 4000);
+    }, () => _selectedDeadLetters.Clear());
 
-        try
-        {
-            var result = await Scheduler.RequeueAllDeadLettersAsync();
-
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                "Batch Requeue",
-                result.Message,
-                duration: 4000);
-
-            _selectedDeadLetters.Clear();
-            PausePolling = false;
-            await LoadDataAsync(DisposalToken);
-        }
-        catch (Exception ex) { _batchError = ex.Message; }
-        finally { _batchOperating = false; }
-    }
-
-    private async Task RequeueSelected()
+    private Task AcknowledgeBatch() => RunBatchOperationAsync(async () =>
     {
-        _batchError = null;
-        _batchOperating = true;
+        BatchDeadLetterResult result;
 
-        try
+        if (_acknowledgeSelectedOnly)
         {
             var ids = _selectedDeadLetters.Select(d => d.Id).ToArray();
-            var result = await Scheduler.RequeueDeadLettersAsync(ids);
-
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                "Batch Requeue",
-                result.Message,
-                duration: 4000);
-
-            _selectedDeadLetters.Clear();
-            PausePolling = false;
-            await LoadDataAsync(DisposalToken);
+            result = await Scheduler.AcknowledgeDeadLettersAsync(ids, _batchAcknowledgeNote);
         }
-        catch (Exception ex) { _batchError = ex.Message; }
-        finally { _batchOperating = false; }
-    }
-
-    private async Task AcknowledgeBatch()
-    {
-        _batchError = null;
-        _batchOperating = true;
-
-        try
+        else
         {
-            BatchDeadLetterResult result;
-
-            if (_acknowledgeSelectedOnly)
-            {
-                var ids = _selectedDeadLetters.Select(d => d.Id).ToArray();
-                result = await Scheduler.AcknowledgeDeadLettersAsync(ids, _batchAcknowledgeNote);
-            }
-            else
-            {
-                result = await Scheduler.AcknowledgeAllDeadLettersAsync(_batchAcknowledgeNote);
-            }
-
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                "Batch Acknowledge",
-                result.Message,
-                duration: 4000);
-
-            _showBatchAcknowledgeInput = false;
-            _acknowledgeSelectedOnly = false;
-            _batchAcknowledgeNote = "";
-            _selectedDeadLetters.Clear();
-            PausePolling = false;
-            await LoadDataAsync(DisposalToken);
+            result = await Scheduler.AcknowledgeAllDeadLettersAsync(_batchAcknowledgeNote);
         }
-        catch (Exception ex) { _batchError = ex.Message; }
-        finally { _batchOperating = false; }
-    }
+
+        NotificationService.Notify(NotificationSeverity.Success, "Batch Acknowledge", result.Message, duration: 4000);
+
+        _showBatchAcknowledgeInput = false;
+        _acknowledgeSelectedOnly = false;
+        _batchAcknowledgeNote = "";
+    }, () => _selectedDeadLetters.Clear());
 }

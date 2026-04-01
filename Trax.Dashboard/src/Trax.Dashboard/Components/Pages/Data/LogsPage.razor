@@ -49,29 +49,11 @@
             await _grid.ReloadAsync();
     }
 
-    private async Task<ServerDataResult<Log>> LoadPageAsync(
-        LoadDataArgs args,
-        CancellationToken cancellationToken)
-    {
-        using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
-        IQueryable<Log> query = context.Logs.AsNoTracking();
-
-        if (!string.IsNullOrEmpty(args.Filter))
-            query = query.Where(args.Filter);
-
-        if (!string.IsNullOrEmpty(args.OrderBy))
-            query = query.OrderBy(args.OrderBy);
-        else
-            query = query.OrderByDescending(l => l.Id);
-
-        var count = await query.CountAsync(cancellationToken);
-
-        if (args.Skip.HasValue)
-            query = query.Skip(args.Skip.Value);
-        if (args.Top.HasValue)
-            query = query.Take(args.Top.Value);
-
-        var items = await query.ToListAsync(cancellationToken);
-        return new ServerDataResult<Log>(items, count);
-    }
+    private Task<ServerDataResult<Log>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+        => DataGridQueryHelper.LoadPageAsync(
+            DataContextFactory,
+            db => db.Logs.AsNoTracking().OrderByDescending(l => l.Id),
+            args,
+            ct
+        );
 }

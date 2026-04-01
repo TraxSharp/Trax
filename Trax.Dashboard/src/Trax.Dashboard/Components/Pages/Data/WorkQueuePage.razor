@@ -17,14 +17,14 @@
                       Icon="cancel"
                       ButtonStyle="ButtonStyle.Warning"
                       Size="ButtonSize.Small"
-                      Disabled="@(_batchOperating)"
+                      Disabled="@(BatchOperating)"
                       Click="@CancelSelected" />
     </RadzenStack>
 }
 
-@if (_batchError is not null)
+@if (BatchError is not null)
 {
-    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@_batchError</RadzenAlert>
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@BatchError</RadzenAlert>
 }
 
 <TraxDataGrid @ref="_grid"
@@ -72,7 +72,7 @@
                               Title="Status"
                               Width="120px">
             <Template Context="q">
-                <RadzenBadge BadgeStyle="@GetStatusBadgeStyle(q.Status)"
+                <RadzenBadge BadgeStyle="@GetWorkQueueStatusBadgeStyle(q.Status)"
                              Text="@q.Status.ToString()" />
             </Template>
         </RadzenDataGridColumn>
@@ -104,8 +104,6 @@
 @code {
     private TraxDataGrid<WorkQueue>? _grid;
     private HashSet<WorkQueue> _selectedEntries = [];
-    private bool _batchOperating;
-    private string? _batchError;
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -113,77 +111,39 @@
             await _grid.ReloadAsync();
     }
 
-    private async Task CancelSelected()
+    private Task CancelSelected() => RunBatchOperationAsync(async () =>
     {
-        _batchError = null;
-        _batchOperating = true;
+        var queuedIds = _selectedEntries
+            .Where(e => e.Status == WorkQueueStatus.Queued)
+            .Select(e => e.Id)
+            .ToList();
 
-        try
+        if (queuedIds.Count == 0)
         {
-            var queuedIds = _selectedEntries
-                .Where(e => e.Status == WorkQueueStatus.Queued)
-                .Select(e => e.Id)
-                .ToList();
-
-            if (queuedIds.Count == 0)
-            {
-                _batchError = "No queued entries selected. Only queued entries can be cancelled.";
-                return;
-            }
-
-            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-            var count = await context.WorkQueues
-                .Where(wq => queuedIds.Contains(wq.Id) && wq.Status == WorkQueueStatus.Queued)
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(wq => wq.Status, WorkQueueStatus.Cancelled),
-                    DisposalToken);
-
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                "Entries Cancelled",
-                $"{count} work queue entry(s) cancelled.",
-                duration: 4000);
-
-            _selectedEntries.Clear();
-            PausePolling = false;
-            await LoadDataAsync(DisposalToken);
+            BatchError = "No queued entries selected. Only queued entries can be cancelled.";
+            return;
         }
-        catch (Exception ex) { _batchError = ex.Message; }
-        finally { _batchOperating = false; }
-    }
 
-    private async Task<ServerDataResult<WorkQueue>> LoadPageAsync(
-        LoadDataArgs args,
-        CancellationToken cancellationToken)
-    {
-        using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
-        IQueryable<WorkQueue> query = context.WorkQueues.AsNoTracking();
+        using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
+        var count = await context.WorkQueues
+            .Where(wq => queuedIds.Contains(wq.Id) && wq.Status == WorkQueueStatus.Queued)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(wq => wq.Status, WorkQueueStatus.Cancelled),
+                DisposalToken);
 
-        if (!string.IsNullOrEmpty(args.Filter))
-            query = query.Where(args.Filter);
+        NotificationService.Notify(
+            NotificationSeverity.Success,
+            "Entries Cancelled",
+            $"{count} work queue entry(s) cancelled.",
+            duration: 4000);
+    }, () => _selectedEntries.Clear());
 
-        if (!string.IsNullOrEmpty(args.OrderBy))
-            query = query.OrderBy(args.OrderBy);
-        else
-            query = query.OrderByDescending(q => q.Id);
+    private Task<ServerDataResult<WorkQueue>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+        => DataGridQueryHelper.LoadPageAsync(
+            DataContextFactory,
+            db => db.WorkQueues.AsNoTracking().OrderByDescending(q => q.Id),
+            args,
+            ct
+        );
 
-        var count = await query.CountAsync(cancellationToken);
-
-        if (args.Skip.HasValue)
-            query = query.Skip(args.Skip.Value);
-        if (args.Top.HasValue)
-            query = query.Take(args.Top.Value);
-
-        var items = await query.ToListAsync(cancellationToken);
-        return new ServerDataResult<WorkQueue>(items, count);
-    }
-
-    private static BadgeStyle GetStatusBadgeStyle(WorkQueueStatus status) =>
-        status switch
-        {
-            WorkQueueStatus.Queued => BadgeStyle.Info,
-            WorkQueueStatus.Dispatched => BadgeStyle.Success,
-            WorkQueueStatus.Cancelled => BadgeStyle.Warning,
-            _ => BadgeStyle.Light,
-        };
 }

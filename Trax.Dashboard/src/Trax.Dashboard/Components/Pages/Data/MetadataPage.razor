@@ -1,6 +1,5 @@
 @page "/trax/data/metadata"
 @using System.Linq.Dynamic.Core
-@using Trax.Scheduler.Services.CancellationRegistry
 @using Microsoft.Extensions.DependencyInjection
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
@@ -20,14 +19,14 @@
                       Icon="cancel"
                       ButtonStyle="ButtonStyle.Warning"
                       Size="ButtonSize.Small"
-                      Disabled="@(_batchOperating)"
+                      Disabled="@(BatchOperating)"
                       Click="@CancelSelected" />
     </RadzenStack>
 }
 
-@if (_batchError is not null)
+@if (BatchError is not null)
 {
-    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@_batchError</RadzenAlert>
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@BatchError</RadzenAlert>
 }
 
 <TraxDataGrid @ref="_grid"
@@ -140,22 +139,13 @@
 @code {
     private TraxDataGrid<Metadata>? _grid;
     private HashSet<Metadata> _selectedMetadata = [];
-    private bool _batchOperating;
-    private string? _batchError;
 
     private async Task CancelTrain(long metadataId, string trainName)
     {
         try
         {
-            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-            await context
-                .Metadatas.Where(m => m.Id == metadataId)
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.CancellationRequested, true),
-                    DisposalToken
-                );
-
-            ServiceProvider.GetService<ICancellationRegistry>()?.TryCancel(metadataId);
+            var count = await CancellationHelper.CancelTrainsAsync(
+                DataContextFactory, ServiceProvider, [metadataId], DisposalToken);
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
@@ -175,51 +165,28 @@
         }
     }
 
-    private async Task CancelSelected()
+    private Task CancelSelected() => RunBatchOperationAsync(async () =>
     {
-        _batchError = null;
-        _batchOperating = true;
+        var inProgressIds = _selectedMetadata
+            .Where(m => m.TrainState == TrainState.InProgress)
+            .Select(m => m.Id)
+            .ToList();
 
-        try
+        if (inProgressIds.Count == 0)
         {
-            var inProgressIds = _selectedMetadata
-                .Where(m => m.TrainState == TrainState.InProgress)
-                .Select(m => m.Id)
-                .ToList();
-
-            if (inProgressIds.Count == 0)
-            {
-                _batchError = "No in-progress executions selected. Only in-progress executions can be cancelled.";
-                return;
-            }
-
-            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-            var count = await context.Metadatas
-                .Where(m => inProgressIds.Contains(m.Id) && m.TrainState == TrainState.InProgress)
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.CancellationRequested, true),
-                    DisposalToken);
-
-            var registry = ServiceProvider.GetService<ICancellationRegistry>();
-            if (registry is not null)
-            {
-                foreach (var id in inProgressIds)
-                    registry.TryCancel(id);
-            }
-
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                "Batch Cancellation",
-                $"Cancel signal sent for {count} execution(s).",
-                duration: 4000);
-
-            _selectedMetadata.Clear();
-            PausePolling = false;
-            await LoadDataAsync(DisposalToken);
+            BatchError = "No in-progress executions selected. Only in-progress executions can be cancelled.";
+            return;
         }
-        catch (Exception ex) { _batchError = ex.Message; }
-        finally { _batchOperating = false; }
-    }
+
+        var count = await CancellationHelper.CancelTrainsAsync(
+            DataContextFactory, ServiceProvider, inProgressIds, DisposalToken);
+
+        NotificationService.Notify(
+            NotificationSeverity.Success,
+            "Batch Cancellation",
+            $"Cancel signal sent for {count} execution(s).",
+            duration: 4000);
+    }, () => _selectedMetadata.Clear());
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -227,32 +194,19 @@
             await _grid.ReloadAsync();
     }
 
-    private async Task<ServerDataResult<Metadata>> LoadPageAsync(
-        LoadDataArgs args,
-        CancellationToken cancellationToken)
-    {
-        using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
-        IQueryable<Metadata> query = context.Metadatas.AsNoTracking();
+    private Task<ServerDataResult<Metadata>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+        => DataGridQueryHelper.LoadPageAsync(
+            DataContextFactory,
+            db =>
+            {
+                IQueryable<Metadata> query = db.Metadatas.AsNoTracking();
 
-        if (DashboardSettings.HideAdminTrains)
-            query = query.ExcludeAdmin(DashboardSettings.AdminTrainNames);
+                if (DashboardSettings.HideAdminTrains)
+                    query = query.ExcludeAdmin(DashboardSettings.AdminTrainNames);
 
-        if (!string.IsNullOrEmpty(args.Filter))
-            query = query.Where(args.Filter);
-
-        if (!string.IsNullOrEmpty(args.OrderBy))
-            query = query.OrderBy(args.OrderBy);
-        else
-            query = query.OrderByDescending(m => m.Id);
-
-        var count = await query.CountAsync(cancellationToken);
-
-        if (args.Skip.HasValue)
-            query = query.Skip(args.Skip.Value);
-        if (args.Top.HasValue)
-            query = query.Take(args.Top.Value);
-
-        var items = await query.ToListAsync(cancellationToken);
-        return new ServerDataResult<Metadata>(items, count);
-    }
+                return query.OrderByDescending(m => m.Id);
+            },
+            args,
+            ct
+        );
 }

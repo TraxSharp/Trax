@@ -83,13 +83,4 @@ public partial class WorkQueueDetailPage
             _cancelling = false;
         }
     }
-
-    private static BadgeStyle GetStatusBadgeStyle(WorkQueueStatus status) =>
-        status switch
-        {
-            WorkQueueStatus.Queued => BadgeStyle.Info,
-            WorkQueueStatus.Dispatched => BadgeStyle.Success,
-            WorkQueueStatus.Cancelled => BadgeStyle.Warning,
-            _ => BadgeStyle.Light,
-        };
 }

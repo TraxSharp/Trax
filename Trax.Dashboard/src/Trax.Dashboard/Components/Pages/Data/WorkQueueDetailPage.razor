@@ -59,7 +59,7 @@
                 <FieldDisplay Label="External ID" Value="@_entry.ExternalId" />
                 <FieldDisplay Label="Train Name" Value="@ShortName(_entry.TrainName)" />
                 <FieldDisplay Label="Status">
-                    <RadzenBadge BadgeStyle="@GetStatusBadgeStyle(_entry.Status)"
+                    <RadzenBadge BadgeStyle="@GetWorkQueueStatusBadgeStyle(_entry.Status)"
                                  Text="@_entry.Status.ToString()" />
                 </FieldDisplay>
                 <FieldDisplay Label="Priority" Value="@_entry.Priority.ToString()" />

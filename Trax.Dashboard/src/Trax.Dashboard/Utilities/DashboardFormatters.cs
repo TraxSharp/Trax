@@ -97,6 +97,15 @@ public static class DashboardFormatters
         return $"{(int)uptime.TotalMinutes}m {uptime.Seconds}s";
     }
 
+    public static BadgeStyle GetWorkQueueStatusBadgeStyle(WorkQueueStatus status) =>
+        status switch
+        {
+            WorkQueueStatus.Queued => BadgeStyle.Info,
+            WorkQueueStatus.Dispatched => BadgeStyle.Success,
+            WorkQueueStatus.Cancelled => BadgeStyle.Warning,
+            _ => BadgeStyle.Light,
+        };
+
     public static BadgeStyle GetLogLevelBadgeStyle(LogLevel level) =>
         level switch
         {

@@ -1,6 +1,5 @@
 @page "/trax/data/manifest-groups"
 @using Trax.Scheduler.Services.TraxScheduler
-@using Trax.Scheduler.Services.CancellationRegistry
 @using Microsoft.Extensions.DependencyInjection
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
@@ -42,35 +41,35 @@
                       Icon="play_arrow"
                       ButtonStyle="ButtonStyle.Primary"
                       Size="ButtonSize.Small"
-                      Disabled="@(_operating)"
+                      Disabled="@(BatchOperating)"
                       Click="@TriggerSelected" />
         <RadzenButton Text="@($"Enable Selected ({_selectedGroups.Count})")"
                       Icon="check_circle"
                       ButtonStyle="ButtonStyle.Success"
                       Variant="Variant.Outlined"
                       Size="ButtonSize.Small"
-                      Disabled="@(_operating)"
+                      Disabled="@(BatchOperating)"
                       Click="@(() => SetSelectedEnabled(true))" />
         <RadzenButton Text="@($"Disable Selected ({_selectedGroups.Count})")"
                       Icon="block"
                       ButtonStyle="ButtonStyle.Danger"
                       Variant="Variant.Outlined"
                       Size="ButtonSize.Small"
-                      Disabled="@(_operating)"
+                      Disabled="@(BatchOperating)"
                       Click="@(() => SetSelectedEnabled(false))" />
         <RadzenButton Text="@($"Cancel Running ({_selectedGroups.Count})")"
                       Icon="cancel"
                       ButtonStyle="ButtonStyle.Warning"
                       Variant="Variant.Outlined"
                       Size="ButtonSize.Small"
-                      Disabled="@(_operating)"
+                      Disabled="@(BatchOperating)"
                       Click="@CancelSelectedRunning" />
     </RadzenStack>
 }
 
-@if (_batchError is not null)
+@if (BatchError is not null)
 {
-    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@_batchError</RadzenAlert>
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@BatchError</RadzenAlert>
 }
 
 @if (_dagLayout is not null && _dagLayout.Nodes.Count > 0)
@@ -155,7 +154,6 @@
     private HashSet<GroupSummary> _selectedGroups = [];
     private DagLayout? _dagLayout;
     private bool _operating;
-    private string? _batchError;
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -256,89 +254,55 @@
         }
     }
 
-    private async Task SetSelectedEnabled(bool enabled)
+    private Task SetSelectedEnabled(bool enabled) => RunBatchOperationAsync(async () =>
     {
-        _batchError = null;
-        _operating = true;
+        var ids = _selectedGroups.Select(g => g.Id).ToList();
 
-        try
-        {
-            var ids = _selectedGroups.Select(g => g.Id).ToList();
+        using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
+        var count = await context.ManifestGroups
+            .Where(g => ids.Contains(g.Id))
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(g => g.IsEnabled, enabled)
+                    .SetProperty(g => g.UpdatedAt, DateTime.UtcNow),
+                DisposalToken);
 
-            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-            var count = await context.ManifestGroups
-                .Where(g => ids.Contains(g.Id))
-                .ExecuteUpdateAsync(
-                    s => s
-                        .SetProperty(g => g.IsEnabled, enabled)
-                        .SetProperty(g => g.UpdatedAt, DateTime.UtcNow),
-                    DisposalToken);
+        NotificationService.Notify(
+            NotificationSeverity.Success,
+            enabled ? "Groups Enabled" : "Groups Disabled",
+            $"{count} group(s) {(enabled ? "enabled" : "disabled")}.",
+            duration: 4000);
+    }, () => _selectedGroups.Clear());
 
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                enabled ? "Groups Enabled" : "Groups Disabled",
-                $"{count} group(s) {(enabled ? "enabled" : "disabled")}.",
-                duration: 4000);
-
-            _selectedGroups.Clear();
-            PausePolling = false;
-            await RefreshNowAsync();
-        }
-        catch (Exception ex) { _batchError = ex.Message; }
-        finally { _operating = false; }
-    }
-
-    private async Task TriggerSelected()
+    private Task TriggerSelected() => RunBatchOperationAsync(async () =>
     {
-        _batchError = null;
-        _operating = true;
-
-        try
+        var totalQueued = 0;
+        foreach (var group in _selectedGroups)
         {
-            var totalQueued = 0;
-            foreach (var group in _selectedGroups)
-            {
-                totalQueued += await Scheduler.TriggerGroupAsync(group.Id);
-            }
-
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                "Groups Triggered",
-                $"{totalQueued} manifest(s) queued across {_selectedGroups.Count} group(s).",
-                duration: 4000);
-
-            _selectedGroups.Clear();
-            PausePolling = false;
+            totalQueued += await Scheduler.TriggerGroupAsync(group.Id);
         }
-        catch (Exception ex) { _batchError = ex.Message; }
-        finally { _operating = false; }
-    }
 
-    private async Task CancelSelectedRunning()
+        NotificationService.Notify(
+            NotificationSeverity.Success,
+            "Groups Triggered",
+            $"{totalQueued} manifest(s) queued across {_selectedGroups.Count} group(s).",
+            duration: 4000);
+    }, () => _selectedGroups.Clear());
+
+    private Task CancelSelectedRunning() => RunBatchOperationAsync(async () =>
     {
-        _batchError = null;
-        _operating = true;
-
-        try
+        var totalCancelled = 0;
+        foreach (var group in _selectedGroups)
         {
-            var totalCancelled = 0;
-            foreach (var group in _selectedGroups)
-            {
-                totalCancelled += await Scheduler.CancelGroupAsync(group.Id);
-            }
-
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                "Cancellation Requested",
-                $"Cancel signal sent for {totalCancelled} execution(s) across {_selectedGroups.Count} group(s).",
-                duration: 4000);
-
-            _selectedGroups.Clear();
-            PausePolling = false;
+            totalCancelled += await Scheduler.CancelGroupAsync(group.Id);
         }
-        catch (Exception ex) { _batchError = ex.Message; }
-        finally { _operating = false; }
-    }
+
+        NotificationService.Notify(
+            NotificationSeverity.Success,
+            "Cancellation Requested",
+            $"Cancel signal sent for {totalCancelled} execution(s) across {_selectedGroups.Count} group(s).",
+            duration: 4000);
+    }, () => _selectedGroups.Clear());
 
     private void OnDagNodeClick(long groupId)
     {

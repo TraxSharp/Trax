@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
+using Trax.Dashboard.Utilities;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Log;
@@ -11,7 +12,6 @@ using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainDiscovery;
-using Trax.Scheduler.Services.CancellationRegistry;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
@@ -72,17 +72,12 @@ public partial class MetadataDetailPage
 
         try
         {
-            // Always set DB flag (works cross-server)
-            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-            await context
-                .Metadatas.Where(m => m.Id == MetadataId)
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.CancellationRequested, true),
-                    DisposalToken
-                );
-
-            // Same-server instant cancel bonus
-            ServiceProvider.GetService<ICancellationRegistry>()?.TryCancel(MetadataId);
+            await CancellationHelper.CancelTrainsAsync(
+                DataContextFactory,
+                ServiceProvider,
+                [MetadataId],
+                DisposalToken
+            );
 
             NotificationService.Notify(
                 NotificationSeverity.Success,

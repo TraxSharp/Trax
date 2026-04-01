@@ -210,4 +210,36 @@ public class DashboardFormattersTests
     }
 
     #endregion
+
+    #region GetWorkQueueStatusBadgeStyle
+
+    [Test]
+    public void GetWorkQueueStatusBadgeStyle_Queued_ReturnsInfo()
+    {
+        var result = DashboardFormatters.GetWorkQueueStatusBadgeStyle(WorkQueueStatus.Queued);
+        result.Should().Be(BadgeStyle.Info);
+    }
+
+    [Test]
+    public void GetWorkQueueStatusBadgeStyle_Dispatched_ReturnsSuccess()
+    {
+        var result = DashboardFormatters.GetWorkQueueStatusBadgeStyle(WorkQueueStatus.Dispatched);
+        result.Should().Be(BadgeStyle.Success);
+    }
+
+    [Test]
+    public void GetWorkQueueStatusBadgeStyle_Cancelled_ReturnsWarning()
+    {
+        var result = DashboardFormatters.GetWorkQueueStatusBadgeStyle(WorkQueueStatus.Cancelled);
+        result.Should().Be(BadgeStyle.Warning);
+    }
+
+    [Test]
+    public void GetWorkQueueStatusBadgeStyle_UnknownValue_ReturnsLight()
+    {
+        var result = DashboardFormatters.GetWorkQueueStatusBadgeStyle((WorkQueueStatus)99);
+        result.Should().Be(BadgeStyle.Light);
+    }
+
+    #endregion
 }

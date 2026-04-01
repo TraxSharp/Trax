@@ -11,7 +11,6 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
-using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.TraxScheduler;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
@@ -412,7 +411,6 @@ public partial class ManifestGroupDetailPage
                 .Manifests.Where(m => m.ManifestGroupId == ManifestGroupId)
                 .Select(m => m.Id);
 
-            // Get IDs of in-progress metadata for this group
             var inProgressIds = await context
                 .Metadatas.AsNoTracking()
                 .Where(m =>
@@ -434,26 +432,17 @@ public partial class ManifestGroupDetailPage
                 return;
             }
 
-            // Batch set cancel_requested = true
-            await context
-                .Metadatas.Where(m => inProgressIds.Contains(m.Id))
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.CancellationRequested, true),
-                    DisposalToken
-                );
-
-            // Same-server instant cancel bonus
-            var registry = ServiceProvider.GetService<ICancellationRegistry>();
-            if (registry is not null)
-            {
-                foreach (var id in inProgressIds)
-                    registry.TryCancel(id);
-            }
+            var count = await CancellationHelper.CancelTrainsAsync(
+                DataContextFactory,
+                ServiceProvider,
+                inProgressIds,
+                DisposalToken
+            );
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
                 "Cancellation Requested",
-                $"Cancel signal sent for {inProgressIds.Count} train(s).",
+                $"Cancel signal sent for {count} train(s).",
                 duration: 4000
             );
         }

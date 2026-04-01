@@ -43,6 +43,46 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     protected bool PausePolling { get; set; }
 
     /// <summary>
+    /// Error message from the most recent batch operation, displayed as an alert.
+    /// Cleared at the start of each batch operation.
+    /// </summary>
+    protected string? BatchError { get; set; }
+
+    /// <summary>
+    /// True while a batch operation is in progress. Used to disable action buttons.
+    /// </summary>
+    protected bool BatchOperating { get; set; }
+
+    /// <summary>
+    /// Runs a batch operation with standardized error handling, loading state, and polling control.
+    /// Clears <see cref="BatchError"/>, sets <see cref="BatchOperating"/> during execution,
+    /// invokes <paramref name="onSuccess"/> on success, unpauses polling, and reloads data.
+    /// </summary>
+    /// <param name="operation">The async operation to execute.</param>
+    /// <param name="onSuccess">Optional callback invoked after the operation succeeds (e.g. clear selection).</param>
+    protected async Task RunBatchOperationAsync(Func<Task> operation, Action? onSuccess = null)
+    {
+        BatchError = null;
+        BatchOperating = true;
+
+        try
+        {
+            await operation();
+            onSuccess?.Invoke();
+            PausePolling = false;
+            await LoadDataAsync(DisposalToken);
+        }
+        catch (Exception ex)
+        {
+            BatchError = ex.Message;
+        }
+        finally
+        {
+            BatchOperating = false;
+        }
+    }
+
+    /// <summary>
     /// A CancellationToken that is cancelled when the component is disposed.
     /// Event handlers can pass this to async operations so they abort when the user navigates away.
     /// </summary>
