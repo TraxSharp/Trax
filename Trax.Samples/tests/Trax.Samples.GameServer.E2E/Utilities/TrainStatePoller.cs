@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.Metadata;
 
 namespace Trax.Samples.GameServer.E2E.Utilities;
@@ -141,6 +142,69 @@ public static class TrainStatePoller
 
         throw new TimeoutException(
             $"No dead letter for manifest {manifestId} appeared "
+                + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+        );
+    }
+
+    public static async Task WaitForDeadLetterResolved(
+        IDataContext dataContext,
+        long deadLetterId,
+        DeadLetterStatus expectedStatus,
+        TimeSpan? timeout = null
+    )
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            dataContext.Reset();
+
+            var deadLetter = await dataContext
+                .DeadLetters.AsNoTracking()
+                .FirstOrDefaultAsync(dl => dl.Id == deadLetterId);
+
+            if (deadLetter?.Status == expectedStatus)
+                return;
+
+            await Task.Delay(PollInterval);
+        }
+
+        throw new TimeoutException(
+            $"Dead letter {deadLetterId} did not reach status {expectedStatus} "
+                + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+        );
+    }
+
+    public static async Task<Effect.Models.WorkQueue.WorkQueue> WaitForWorkQueueByManifestId(
+        IDataContext dataContext,
+        long manifestId,
+        TimeSpan? timeout = null,
+        long? afterWorkQueueId = null
+    )
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            dataContext.Reset();
+
+            var query = dataContext
+                .WorkQueues.AsNoTracking()
+                .Where(wq => wq.ManifestId == manifestId);
+
+            if (afterWorkQueueId.HasValue)
+                query = query.Where(wq => wq.Id > afterWorkQueueId.Value);
+
+            var entry = await query.OrderByDescending(wq => wq.Id).FirstOrDefaultAsync();
+
+            if (entry != null)
+                return entry;
+
+            await Task.Delay(PollInterval);
+        }
+
+        throw new TimeoutException(
+            $"No work queue entry for manifest {manifestId} appeared "
                 + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
         );
     }
