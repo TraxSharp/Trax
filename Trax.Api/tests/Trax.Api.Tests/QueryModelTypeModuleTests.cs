@@ -197,7 +197,7 @@ public class QueryModelTypeModuleTests
     [Test]
     public async Task CreateTypesAsync_NoRegistrations_ReturnsEmpty()
     {
-        var config = new GraphQLConfiguration([], [], []);
+        var config = new GraphQLConfiguration([], [], [], []);
         var module = new QueryModelTypeModule(config);
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
@@ -216,6 +216,7 @@ public class QueryModelTypeModuleTests
                     new TraxQueryModelAttribute { Description = "Test players" }
                 ),
             ],
+            [],
             [],
             []
         );
@@ -253,6 +254,7 @@ public class QueryModelTypeModuleTests
                     new TraxQueryModelAttribute { Name = "players2" }
                 ),
             ],
+            [],
             [],
             []
         );
@@ -308,6 +310,7 @@ public class QueryModelTypeModuleTests
                     new TraxQueryModelAttribute()
                 ),
             ],
+            [],
             [],
             []
         );
@@ -427,6 +430,7 @@ public class QueryModelTypeModuleTests
                 ),
             ],
             [],
+            [],
             []
         );
         var module = new QueryModelTypeModule(config);
@@ -453,6 +457,7 @@ public class QueryModelTypeModuleTests
                     new TraxQueryModelAttribute { Description = "Test players" }
                 ),
             ],
+            [],
             [],
             []
         );
@@ -495,6 +500,7 @@ public class QueryModelTypeModuleTests
                     new TraxQueryModelAttribute()
                 ),
             ],
+            [],
             [],
             []
         );
@@ -547,6 +553,7 @@ public class QueryModelTypeModuleTests
                 ),
             ],
             [],
+            [],
             []
         );
         var module = new QueryModelTypeModule(config);
@@ -575,6 +582,7 @@ public class QueryModelTypeModuleTests
                     new TraxQueryModelAttribute()
                 ),
             ],
+            [],
             [],
             []
         );

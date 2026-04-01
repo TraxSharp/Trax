@@ -112,7 +112,7 @@ public class SchemaConfigurationTests
     public void GraphQLConfiguration_WithSchemaConfigurations_ExposesReadOnlyList()
     {
         var callbacks = new List<Action<IRequestExecutorBuilder>> { _ => { }, _ => { } };
-        var config = new GraphQLConfiguration([], [], callbacks);
+        var config = new GraphQLConfiguration([], [], callbacks, []);
 
         config.SchemaConfigurations.Should().HaveCount(2);
     }
@@ -120,7 +120,7 @@ public class SchemaConfigurationTests
     [Test]
     public void GraphQLConfiguration_EmptySchemaConfigurations_EmptyList()
     {
-        var config = new GraphQLConfiguration([], [], []);
+        var config = new GraphQLConfiguration([], [], [], []);
 
         config.SchemaConfigurations.Should().BeEmpty();
     }
@@ -137,6 +137,7 @@ public class SchemaConfigurationTests
         builder.AddFilterType<TestPlayer, TestPlayerFilterInputType>();
         builder.AddSortType<TestPlayer, TestPlayerSortInputType>();
         builder.AddTypeModule<StubTypeModuleForSchema>();
+        builder.AddTypeExtension<StubTypeExtensionForSchema>();
         builder.ConfigureSchema(_ => { });
 
         var config = builder.Build();
@@ -145,6 +146,7 @@ public class SchemaConfigurationTests
         config.ModelRegistrations[0].FilterInputType.Should().Be(typeof(TestPlayerFilterInputType));
         config.ModelRegistrations[0].SortInputType.Should().Be(typeof(TestPlayerSortInputType));
         config.AdditionalTypeModules.Should().ContainSingle();
+        config.AdditionalTypeExtensions.Should().ContainSingle();
         config.SchemaConfigurations.Should().ContainSingle();
     }
 
@@ -158,12 +160,14 @@ public class SchemaConfigurationTests
             .AddFilterType<TestPlayer, TestPlayerFilterInputType>()
             .AddSortType<TestPlayer, TestPlayerSortInputType>()
             .AddTypeModule<StubTypeModuleForSchema>()
+            .AddTypeExtension<StubTypeExtensionForSchema>()
             .ConfigureSchema(_ => { });
 
         var config = builder.Build();
 
         config.ModelRegistrations.Should().HaveCount(1);
         config.AdditionalTypeModules.Should().HaveCount(1);
+        config.AdditionalTypeExtensions.Should().HaveCount(1);
         config.SchemaConfigurations.Should().HaveCount(1);
     }
 
@@ -180,6 +184,9 @@ public class SchemaConfigurationTests
             CancellationToken cancellationToken
         ) => new(Array.Empty<HotChocolate.Types.ITypeSystemMember>());
     }
+
+    [HotChocolate.Types.ExtendObjectType(typeof(object))]
+    private class StubTypeExtensionForSchema;
 
     #endregion
 }

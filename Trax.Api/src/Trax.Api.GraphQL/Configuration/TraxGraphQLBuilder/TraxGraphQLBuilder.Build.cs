@@ -44,7 +44,8 @@ public partial class TraxGraphQLBuilder
         return new GraphQLConfiguration(
             modelRegistrations,
             AdditionalTypeModules,
-            SchemaConfigurations
+            SchemaConfigurations,
+            AdditionalTypeExtensions
         );
     }
 }

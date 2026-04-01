@@ -39,6 +39,21 @@ public static class GraphQLServiceExtensions
             );
 
     /// <summary>
+    /// Cached open-generic <c>SchemaRequestExecutorBuilderExtensions.AddTypeExtension&lt;T&gt;</c>
+    /// method for registering consumer-provided type extensions at runtime.
+    /// </summary>
+    private static readonly MethodInfo AddTypeExtensionMethod =
+        typeof(SchemaRequestExecutorBuilderExtensions)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Single(m =>
+                m.Name == "AddTypeExtension"
+                && m.IsGenericMethodDefinition
+                && m.GetGenericArguments().Length == 1
+                && m.GetParameters().Length == 1
+                && m.GetParameters()[0].ParameterType == typeof(IRequestExecutorBuilder)
+            );
+
+    /// <summary>
     /// Registers the Trax GraphQL schema on a named HotChocolate server ("trax")
     /// with support for configuring DbContext-based model queries.
     /// </summary>
@@ -118,6 +133,15 @@ public static class GraphQLServiceExtensions
         {
             services.AddSingleton(typeModuleType);
             AddTypeModuleMethod.MakeGenericMethod(typeModuleType).Invoke(null, [graphqlBuilder]);
+        }
+
+        // Register additional type extensions provided by consumers
+        // via AddTypeExtension<T>() or AddTypeExtensions(assembly).
+        foreach (var typeExtensionType in config.AdditionalTypeExtensions)
+        {
+            AddTypeExtensionMethod
+                .MakeGenericMethod(typeExtensionType)
+                .Invoke(null, [graphqlBuilder]);
         }
 
         // Apply consumer-provided schema configuration callbacks last,

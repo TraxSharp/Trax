@@ -17,6 +17,8 @@ public partial class TraxGraphQLBuilder
 
     internal List<Type> AdditionalTypeModules { get; } = [];
 
+    internal List<Type> AdditionalTypeExtensions { get; } = [];
+
     internal Dictionary<Type, Type> FilterTypeOverrides { get; } = [];
 
     internal Dictionary<Type, Type> SortTypeOverrides { get; } = [];

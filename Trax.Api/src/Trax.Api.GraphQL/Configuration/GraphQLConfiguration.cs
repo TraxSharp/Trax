@@ -17,6 +17,13 @@ public class GraphQLConfiguration
     internal IReadOnlyList<Type> AdditionalTypeModules { get; }
 
     /// <summary>
+    /// Additional HotChocolate type extension classes (e.g. <c>[ExtendObjectType]</c>)
+    /// registered by consumers via <c>AddTypeExtension&lt;T&gt;()</c> or
+    /// <c>AddTypeExtensions(assembly)</c>.
+    /// </summary>
+    internal IReadOnlyList<Type> AdditionalTypeExtensions { get; }
+
+    /// <summary>
     /// Callbacks to apply arbitrary <see cref="IRequestExecutorBuilder"/> configuration
     /// registered by consumers via <c>ConfigureSchema()</c>.
     /// </summary>
@@ -32,11 +39,13 @@ public class GraphQLConfiguration
     public GraphQLConfiguration(
         IReadOnlyList<QueryModelRegistration> modelRegistrations,
         IReadOnlyList<Type> additionalTypeModules,
-        IReadOnlyList<Action<IRequestExecutorBuilder>> schemaConfigurations
+        IReadOnlyList<Action<IRequestExecutorBuilder>> schemaConfigurations,
+        IReadOnlyList<Type> additionalTypeExtensions
     )
     {
         ModelRegistrations = modelRegistrations;
         AdditionalTypeModules = additionalTypeModules;
         SchemaConfigurations = schemaConfigurations;
+        AdditionalTypeExtensions = additionalTypeExtensions;
     }
 }

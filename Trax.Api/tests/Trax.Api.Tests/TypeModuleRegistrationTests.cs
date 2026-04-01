@@ -122,7 +122,7 @@ public class TypeModuleRegistrationTests
     public void GraphQLConfiguration_WithTypeModules_ExposesReadOnlyList()
     {
         var types = new List<Type> { typeof(StubTypeModuleA), typeof(StubTypeModuleB) };
-        var config = new GraphQLConfiguration([], types, []);
+        var config = new GraphQLConfiguration([], types, [], []);
 
         config.AdditionalTypeModules.Should().HaveCount(2);
         config.AdditionalTypeModules[0].Should().Be(typeof(StubTypeModuleA));
@@ -132,7 +132,7 @@ public class TypeModuleRegistrationTests
     [Test]
     public void GraphQLConfiguration_EmptyTypeModules_EmptyList()
     {
-        var config = new GraphQLConfiguration([], [], []);
+        var config = new GraphQLConfiguration([], [], [], []);
 
         config.AdditionalTypeModules.Should().BeEmpty();
     }
