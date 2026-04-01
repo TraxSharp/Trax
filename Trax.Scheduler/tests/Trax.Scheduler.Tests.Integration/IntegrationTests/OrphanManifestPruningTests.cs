@@ -357,6 +357,95 @@ public class OrphanManifestPruningTests : TestSetup
         remaining.Should().Contain("kept-manifest");
     }
 
+    [Test]
+    public async Task StartAsync_WithLargeExpectedIdSet_PrunesOnlyOrphans()
+    {
+        // Arrange: Simulate a production scenario with many expected manifests and a few orphans.
+        // The previous implementation generated NOT IN('id1', ..., 'id100') which could timeout
+        // with large expected sets. The new implementation loads all IDs and filters in C#.
+        var expectedCount = 100;
+        var orphanCount = 5;
+
+        var expectedIds = new List<string>();
+        for (var i = 0; i < expectedCount; i++)
+        {
+            var externalId = $"expected-{i}";
+            await CreateAndSaveManifestWithExternalId(externalId);
+            expectedIds.Add(externalId);
+        }
+
+        for (var i = 0; i < orphanCount; i++)
+            await CreateAndSaveManifestWithExternalId($"orphan-{i}");
+
+        var configuration = CreateConfiguration(
+            expectedExternalIds: expectedIds,
+            pruneOrphanedManifests: true
+        );
+
+        var startupService = CreateStartupService(configuration);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        DataContext.Reset();
+        var remaining = await DataContext.Manifests.Select(m => m.ExternalId).ToListAsync();
+
+        remaining.Should().HaveCount(expectedCount);
+        remaining.Should().NotContain(m => m.StartsWith("orphan-"));
+    }
+
+    [Test]
+    public async Task StartAsync_WithLargeExpectedIdSetAndOrphanData_CascadeDeletesRelatedData()
+    {
+        // Arrange: Large expected set + orphans with related data to verify cascade works
+        // with the server-side filtering approach.
+        var expectedIds = new List<string>();
+        for (var i = 0; i < 50; i++)
+        {
+            var externalId = $"expected-{i}";
+            await CreateAndSaveManifestWithExternalId(externalId);
+            expectedIds.Add(externalId);
+        }
+
+        var orphan = await CreateAndSaveManifestWithExternalId("orphan-with-data");
+        await CreateAndSaveWorkQueueEntry(orphan);
+        await CreateAndSaveDeadLetter(orphan);
+        await CreateAndSaveMetadata(orphan, TrainState.Completed);
+
+        var configuration = CreateConfiguration(
+            expectedExternalIds: expectedIds,
+            pruneOrphanedManifests: true
+        );
+
+        var startupService = CreateStartupService(configuration);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        DataContext.Reset();
+
+        var remaining = await DataContext.Manifests.Select(m => m.ExternalId).ToListAsync();
+        remaining.Should().HaveCount(50);
+        remaining.Should().NotContain("orphan-with-data");
+
+        var orphanWorkQueues = await DataContext
+            .WorkQueues.Where(w => w.ManifestId == orphan.Id)
+            .CountAsync();
+        orphanWorkQueues.Should().Be(0);
+
+        var orphanDeadLetters = await DataContext
+            .DeadLetters.Where(d => d.ManifestId == orphan.Id)
+            .CountAsync();
+        orphanDeadLetters.Should().Be(0);
+
+        var orphanMetadata = await DataContext
+            .Metadatas.Where(m => m.ManifestId == orphan.Id)
+            .CountAsync();
+        orphanMetadata.Should().Be(0);
+    }
+
     #endregion
 
     #region Helper Methods

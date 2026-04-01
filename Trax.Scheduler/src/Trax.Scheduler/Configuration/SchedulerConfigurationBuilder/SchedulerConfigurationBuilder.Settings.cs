@@ -110,6 +110,24 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
+    /// Sets the maximum number of work queue entries created per ManifestManager polling cycle.
+    /// </summary>
+    /// <param name="limit">The maximum entries to create (default: 200, null = unlimited, minimum: 1)</param>
+    /// <returns>The builder for method chaining</returns>
+    /// <remarks>
+    /// Prevents a burst of DB writes after extended downtime when many manifests become due
+    /// simultaneously. Excess manifests are deferred to the next cycle (default: 5 seconds).
+    /// Set to null to disable the limit.
+    /// </remarks>
+    public SchedulerConfigurationBuilder MaxWorkQueueEntriesPerCycle(int? limit)
+    {
+        _configuration.MaxWorkQueueEntriesPerCycle = limit.HasValue
+            ? Math.Max(1, limit.Value)
+            : null;
+        return this;
+    }
+
+    /// <summary>
     /// Excludes a train type from the MaxActiveJobs count.
     /// </summary>
     /// <typeparam name="TTrain">The train class type to exclude</typeparam>

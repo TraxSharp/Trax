@@ -33,6 +33,17 @@ internal class CreateWorkQueueEntriesJunction(
             views.Count
         );
 
+        var limit = schedulerConfiguration.MaxWorkQueueEntriesPerCycle;
+        if (limit.HasValue && views.Count > limit.Value)
+        {
+            logger.LogInformation(
+                "Limiting to {Limit} of {Total} due manifests (excess deferred to next cycle)",
+                limit.Value,
+                views.Count
+            );
+            views = views.Take(limit.Value).ToList();
+        }
+
         foreach (var view in views)
         {
             try

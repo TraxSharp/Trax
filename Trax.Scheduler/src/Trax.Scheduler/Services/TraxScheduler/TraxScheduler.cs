@@ -1127,17 +1127,23 @@ public class TraxScheduler(
         CancellationToken ct
     )
     {
-        var staleManifestIds = await context
-            .Manifests.Where(m =>
-                m.ExternalId.StartsWith(prunePrefix) && !keepExternalIds.Contains(m.ExternalId)
-            )
-            .Select(m => m.Id)
+        // Server compute: load prefixed manifest IDs, filter stale ones in C#.
+        // Avoids a NOT IN(...) clause with many string parameters that can timeout
+        // on low-resource Postgres instances during query planning.
+        var prefixedManifests = await context
+            .Manifests.Where(m => m.ExternalId.StartsWith(prunePrefix))
+            .Select(m => new { m.Id, m.ExternalId })
             .ToListAsync(ct);
+
+        var staleManifestIds = prefixedManifests
+            .Where(m => !keepExternalIds.Contains(m.ExternalId))
+            .Select(m => m.Id)
+            .ToList();
 
         if (staleManifestIds.Count == 0)
             return;
 
-        // Delete in FK-dependency order: work_queue → dead_letters → metadata → manifests
+        // Database compute: delete by integer PK — small IN(...) clause per query.
         await context
             .WorkQueues.Where(w =>
                 w.ManifestId.HasValue && staleManifestIds.Contains(w.ManifestId.Value)

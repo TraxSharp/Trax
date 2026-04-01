@@ -47,6 +47,10 @@ public class RecoverStuckJobsTests : TestSetup
         updated.TrainState.Should().Be(TrainState.Failed);
         updated.EndTime.Should().NotBeNull();
         updated.FailureReason.Should().Contain("Server restarted while job was in progress");
+        updated.FailureException.Should().Be("ServerRestart");
+        updated
+            .FailureJunction.Should()
+            .Be(nameof(SchedulerStartupService), "recovery sets FailureJunction to its source");
     }
 
     [Test]
@@ -168,6 +172,42 @@ public class RecoverStuckJobsTests : TestSetup
         // Act & Assert
         var act = async () => await startupService.StartAsync(CancellationToken.None);
         await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task StartAsync_WithMoreStuckJobsThanBatchSize_RecoversAllInBatches()
+    {
+        // Arrange — Create more stuck jobs than PruneBatchSize to verify the batching
+        // loop processes all batches until complete.
+        var count = SchedulerStartupService.PruneBatchSize + 10;
+        var metadataIds = new List<long>();
+
+        for (var i = 0; i < count; i++)
+        {
+            var manifest = await CreateAndSaveManifest(inputValue: $"Stuck_{i}");
+            var metadata = await CreateAndSaveMetadata(
+                manifest,
+                TrainState.InProgress,
+                startTime: DateTime.UtcNow.AddMinutes(-10)
+            );
+            metadataIds.Add(metadata.Id);
+        }
+
+        var configuration = CreateRecoveryConfiguration(recoverStuckJobs: true);
+        var startupService = CreateStartupService(configuration);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert — all stuck jobs should be recovered
+        DataContext.Reset();
+        var failedCount = await DataContext
+            .Metadatas.Where(m => metadataIds.Contains(m.Id) && m.TrainState == TrainState.Failed)
+            .CountAsync();
+
+        failedCount
+            .Should()
+            .Be(count, "all stuck jobs should be recovered across multiple batches");
     }
 
     #endregion

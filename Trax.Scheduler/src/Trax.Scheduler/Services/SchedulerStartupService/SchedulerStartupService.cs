@@ -42,36 +42,54 @@ internal class SchedulerStartupService(
         using var scope = serviceProvider.CreateScope();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
-        var stuckJobs = await dataContext
-            .Metadatas.Where(m =>
-                m.TrainState == TrainState.InProgress && m.StartTime < serverStartTime
-            )
-            .ToListAsync(cancellationToken);
+        var totalRecovered = 0;
 
-        if (stuckJobs.Count == 0)
+        while (true)
         {
+            var stuckIds = await dataContext
+                .Metadatas.Where(m =>
+                    m.TrainState == TrainState.InProgress && m.StartTime < serverStartTime
+                )
+                .OrderBy(m => m.Id)
+                .Select(m => m.Id)
+                .Take(PruneBatchSize)
+                .ToListAsync(cancellationToken);
+
+            if (stuckIds.Count == 0)
+                break;
+
+            var now = DateTime.UtcNow;
+
+            await dataContext
+                .Metadatas.Where(m =>
+                    stuckIds.Contains(m.Id) && m.TrainState == TrainState.InProgress
+                )
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(m => m.TrainState, TrainState.Failed)
+                            .SetProperty(m => m.EndTime, now)
+                            .SetProperty(
+                                m => m.FailureReason,
+                                "Server restarted while job was in progress"
+                            )
+                            .SetProperty(m => m.FailureException, "ServerRestart")
+                            .SetProperty(m => m.FailureJunction, nameof(SchedulerStartupService)),
+                    cancellationToken
+                );
+
+            totalRecovered += stuckIds.Count;
+        }
+
+        if (totalRecovered > 0)
+            logger.LogWarning(
+                "RecoverStuckJobs: failed {Count} stuck in-progress job(s) from before server start at {ServerStartTime}",
+                totalRecovered,
+                serverStartTime
+            );
+        else
             logger.LogInformation(
                 "RecoverStuckJobs: no in-progress jobs found from before server start"
             );
-            return;
-        }
-
-        foreach (var metadata in stuckJobs)
-        {
-            metadata.TrainState = TrainState.Failed;
-            metadata.EndTime = DateTime.UtcNow;
-            metadata.AddException(
-                new InvalidOperationException("Server restarted while job was in progress")
-            );
-        }
-
-        await dataContext.SaveChanges(cancellationToken);
-
-        logger.LogWarning(
-            "RecoverStuckJobs: failed {Count} stuck in-progress job(s) from before server start at {ServerStartTime}",
-            stuckJobs.Count,
-            serverStartTime
-        );
     }
 
     private async Task SeedPendingManifests(CancellationToken cancellationToken)
@@ -207,27 +225,54 @@ internal class SchedulerStartupService(
         CancellationToken cancellationToken
     )
     {
+        // --- Server compute: load lightweight ID pairs, compute orphan set in C# ---
+        //
+        // Why not filter in the database?
+        // EF Core translates HashSet.Contains() into a SQL NOT IN(...) with every element
+        // as a literal parameter. With 5000+ expected IDs, this generates a massive SQL
+        // statement that can exceed Postgres's command timeout just in query planning on
+        // low-resource instances (2 vCPUs).
+        //
+        // Instead, we fetch all (id, external_id) pairs — a lightweight projection that
+        // transfers ~300KB even at 10K manifests — and compute the set difference in C#
+        // where it's a trivial O(n) HashSet lookup. The database only sees simple queries
+        // with small IN(...) clauses during the batched deletes.
+        var allManifests = await dataContext
+            .Manifests.Select(m => new { m.Id, m.ExternalId })
+            .ToListAsync(cancellationToken);
+
+        var orphanedManifestIds = allManifests
+            .Where(m => !expectedExternalIds.Contains(m.ExternalId))
+            .Select(m => m.Id)
+            .ToList();
+
+        if (orphanedManifestIds.Count == 0)
+        {
+            logger.LogDebug("No orphaned manifests found");
+            return;
+        }
+
+        logger.LogInformation(
+            "Found {OrphanCount} orphaned manifest(s) to prune (of {TotalCount} total)",
+            orphanedManifestIds.Count,
+            allManifests.Count
+        );
+
+        // --- Database compute: delete orphans in batches by integer PK ---
+        //
+        // Each batch generates WHERE id IN (1, 2, ..., 500) — 500 integer PKs is a
+        // trivial query plan for Postgres regardless of instance size.
         var totalPruned = 0;
 
-        while (true)
+        foreach (var batch in orphanedManifestIds.Chunk(PruneBatchSize))
         {
-            // Fetch the next batch of orphaned manifest IDs
-            var orphanedManifestIds = await dataContext
-                .Manifests.Where(m => !expectedExternalIds.Contains(m.ExternalId))
-                .OrderBy(m => m.Id)
-                .Select(m => m.Id)
-                .Take(PruneBatchSize)
-                .ToListAsync(cancellationToken);
-
-            if (orphanedManifestIds.Count == 0)
-                break;
+            var batchIds = batch.ToList();
 
             // Clear self-referencing FK (DependsOnManifestId) for any manifest pointing to
             // an orphan in this batch. Handles both orphan→orphan and kept→orphan references.
             await dataContext
                 .Manifests.Where(m =>
-                    m.DependsOnManifestId.HasValue
-                    && orphanedManifestIds.Contains(m.DependsOnManifestId.Value)
+                    m.DependsOnManifestId.HasValue && batchIds.Contains(m.DependsOnManifestId.Value)
                 )
                 .ExecuteUpdateAsync(
                     s => s.SetProperty(m => m.DependsOnManifestId, (long?)null),
@@ -237,22 +282,22 @@ internal class SchedulerStartupService(
             // Delete in FK-dependency order: WorkQueues → DeadLetters → Metadata → Manifests
             await dataContext
                 .WorkQueues.Where(w =>
-                    w.ManifestId.HasValue && orphanedManifestIds.Contains(w.ManifestId.Value)
+                    w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
                 )
                 .ExecuteDeleteAsync(cancellationToken);
 
             await dataContext
-                .DeadLetters.Where(d => orphanedManifestIds.Contains(d.ManifestId))
+                .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
                 .ExecuteDeleteAsync(cancellationToken);
 
             await dataContext
                 .Metadatas.Where(m =>
-                    m.ManifestId.HasValue && orphanedManifestIds.Contains(m.ManifestId.Value)
+                    m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
                 )
                 .ExecuteDeleteAsync(cancellationToken);
 
             var pruned = await dataContext
-                .Manifests.Where(m => orphanedManifestIds.Contains(m.Id))
+                .Manifests.Where(m => batchIds.Contains(m.Id))
                 .ExecuteDeleteAsync(cancellationToken);
 
             totalPruned += pruned;
@@ -264,12 +309,9 @@ internal class SchedulerStartupService(
             );
         }
 
-        if (totalPruned > 0)
-            logger.LogInformation(
-                "Finished pruning {Count} orphaned manifest(s) from the database",
-                totalPruned
-            );
-        else
-            logger.LogDebug("No orphaned manifests found");
+        logger.LogInformation(
+            "Finished pruning {Count} orphaned manifest(s) from the database",
+            totalPruned
+        );
     }
 }

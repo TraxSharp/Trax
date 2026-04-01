@@ -12,6 +12,7 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
 using Trax.Scheduler.Trains.ManifestManager;
@@ -431,6 +432,83 @@ public class ManifestManagerTrainTests : TestSetup
         workQueueEntry.Should().NotBeNull();
         workQueueEntry!.TrainName.Should().Be(typeof(SchedulerTestTrain).FullName);
         workQueueEntry.Status.Should().Be(WorkQueueStatus.Queued);
+    }
+
+    #endregion
+
+    #region MaxWorkQueueEntriesPerCycle Tests
+
+    [Test]
+    public async Task Run_WithMaxWorkQueueEntriesPerCycle_LimitsEntriesCreated()
+    {
+        // Arrange — seed 10 overdue interval manifests, limit creation to 3 per cycle
+        for (var i = 0; i < 10; i++)
+            await CreateAndSaveManifest(
+                scheduleType: ScheduleType.Interval,
+                intervalSeconds: 60,
+                inputValue: $"Limited_{i}"
+            );
+
+        var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalLimit = config.MaxWorkQueueEntriesPerCycle;
+        config.MaxWorkQueueEntriesPerCycle = 3;
+
+        try
+        {
+            // Act
+            await _train.Run(Unit.Default);
+
+            // Assert
+            DataContext.Reset();
+            var entryCount = await DataContext
+                .WorkQueues.Where(q => q.Status == WorkQueueStatus.Queued)
+                .CountAsync();
+
+            entryCount
+                .Should()
+                .Be(
+                    3,
+                    "only MaxWorkQueueEntriesPerCycle entries should be created, excess deferred"
+                );
+        }
+        finally
+        {
+            config.MaxWorkQueueEntriesPerCycle = originalLimit;
+        }
+    }
+
+    [Test]
+    public async Task Run_WithMaxWorkQueueEntriesPerCycleNull_CreatesAllEntries()
+    {
+        // Arrange — seed 10 overdue interval manifests with no limit
+        for (var i = 0; i < 10; i++)
+            await CreateAndSaveManifest(
+                scheduleType: ScheduleType.Interval,
+                intervalSeconds: 60,
+                inputValue: $"Unlimited_{i}"
+            );
+
+        var config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalLimit = config.MaxWorkQueueEntriesPerCycle;
+        config.MaxWorkQueueEntriesPerCycle = null;
+
+        try
+        {
+            // Act
+            await _train.Run(Unit.Default);
+
+            // Assert
+            DataContext.Reset();
+            var entryCount = await DataContext
+                .WorkQueues.Where(q => q.Status == WorkQueueStatus.Queued)
+                .CountAsync();
+
+            entryCount.Should().Be(10, "null limit means all due manifests get entries");
+        }
+        finally
+        {
+            config.MaxWorkQueueEntriesPerCycle = originalLimit;
+        }
     }
 
     #endregion

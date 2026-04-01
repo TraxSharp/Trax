@@ -852,34 +852,43 @@ public class QueryPerformanceTests : TestSetup
     #region Orphan Manifest Pruning at Scale
 
     [Test]
-    public async Task PruneOrphanedManifests_Batched_AtStartupScale_CompletesWithinTimeout()
+    public async Task PruneOrphanedManifests_ServerSideFilter_CompletesWithinTimeout()
     {
-        // Simulates SchedulerStartupService.PruneOrphanedManifestsAsync with batched deletes.
-        // With 500 manifests and batch size 500, this exercises at least one full batch.
+        // Simulates SchedulerStartupService.PruneOrphanedManifestsAsync:
+        // 1. Server compute: load all (id, external_id) pairs, compute orphan set in C#
+        // 2. Database compute: delete orphans in batches by integer PK
+        //
+        // This avoids the NOT IN(...) clause with many string parameters that caused
+        // command timeouts on low-resource Postgres instances.
         var expectedIds = _manifests.Take(50).Select(m => m.ExternalId).ToHashSet();
         var batchSize = SchedulerStartupService.PruneBatchSize;
 
         var elapsed = await AssertCompletesWithin(
             async () =>
             {
+                // Server compute: lightweight projection, filter in C#
+                var allManifests = await DataContext
+                    .Manifests.Select(m => new { m.Id, m.ExternalId })
+                    .ToListAsync();
+
+                var orphanedIds = allManifests
+                    .Where(m => !expectedIds.Contains(m.ExternalId))
+                    .Select(m => m.Id)
+                    .ToList();
+
+                orphanedIds.Should().HaveCount(ManifestCount - 50);
+
+                // Database compute: delete in batches by integer PK
                 var totalPruned = 0;
 
-                while (true)
+                foreach (var batch in orphanedIds.Chunk(batchSize))
                 {
-                    var orphanedIds = await DataContext
-                        .Manifests.Where(m => !expectedIds.Contains(m.ExternalId))
-                        .OrderBy(m => m.Id)
-                        .Select(m => m.Id)
-                        .Take(batchSize)
-                        .ToListAsync();
-
-                    if (orphanedIds.Count == 0)
-                        break;
+                    var batchIds = batch.ToList();
 
                     await DataContext
                         .Manifests.Where(m =>
                             m.DependsOnManifestId.HasValue
-                            && orphanedIds.Contains(m.DependsOnManifestId.Value)
+                            && batchIds.Contains(m.DependsOnManifestId.Value)
                         )
                         .ExecuteUpdateAsync(s =>
                             s.SetProperty(m => m.DependsOnManifestId, (long?)null)
@@ -887,22 +896,22 @@ public class QueryPerformanceTests : TestSetup
 
                     await DataContext
                         .WorkQueues.Where(w =>
-                            w.ManifestId.HasValue && orphanedIds.Contains(w.ManifestId.Value)
+                            w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
                         )
                         .ExecuteDeleteAsync();
 
                     await DataContext
-                        .DeadLetters.Where(d => orphanedIds.Contains(d.ManifestId))
+                        .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
                         .ExecuteDeleteAsync();
 
                     await DataContext
                         .Metadatas.Where(m =>
-                            m.ManifestId.HasValue && orphanedIds.Contains(m.ManifestId.Value)
+                            m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
                         )
                         .ExecuteDeleteAsync();
 
                     totalPruned += await DataContext
-                        .Manifests.Where(m => orphanedIds.Contains(m.Id))
+                        .Manifests.Where(m => batchIds.Contains(m.Id))
                         .ExecuteDeleteAsync();
                 }
 
@@ -912,7 +921,190 @@ public class QueryPerformanceTests : TestSetup
         );
 
         TestContext.Out.WriteLine(
-            $"PruneOrphanedManifests batched ({ManifestCount - 50} pruned, batch size {batchSize}): {elapsed.TotalMilliseconds:F0}ms"
+            $"PruneOrphanedManifests server-side filter ({ManifestCount - 50} pruned, batch size {batchSize}): {elapsed.TotalMilliseconds:F0}ms"
+        );
+    }
+
+    [Test]
+    public async Task PruneOrphanedManifests_LargeExpectedSet_CompletesWithinTimeout()
+    {
+        // Simulates the SuiteMirror production scenario: 450 expected manifests (large
+        // expected set), 50 orphans to prune. The previous NOT IN('id1', ..., 'id450')
+        // approach would generate a massive SQL statement. The server-side filter loads
+        // all 500 ID pairs (~15KB) and computes the diff in C# with O(n) HashSet lookups.
+        var expectedIds = _manifests.Take(ManifestCount - 50).Select(m => m.ExternalId).ToHashSet();
+        var batchSize = SchedulerStartupService.PruneBatchSize;
+
+        var elapsed = await AssertCompletesWithin(
+            async () =>
+            {
+                var allManifests = await DataContext
+                    .Manifests.Select(m => new { m.Id, m.ExternalId })
+                    .ToListAsync();
+
+                var orphanedIds = allManifests
+                    .Where(m => !expectedIds.Contains(m.ExternalId))
+                    .Select(m => m.Id)
+                    .ToList();
+
+                orphanedIds.Should().HaveCount(50);
+
+                var totalPruned = 0;
+
+                foreach (var batch in orphanedIds.Chunk(batchSize))
+                {
+                    var batchIds = batch.ToList();
+
+                    await DataContext
+                        .Manifests.Where(m =>
+                            m.DependsOnManifestId.HasValue
+                            && batchIds.Contains(m.DependsOnManifestId.Value)
+                        )
+                        .ExecuteUpdateAsync(s =>
+                            s.SetProperty(m => m.DependsOnManifestId, (long?)null)
+                        );
+
+                    await DataContext
+                        .WorkQueues.Where(w =>
+                            w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
+                        )
+                        .ExecuteDeleteAsync();
+
+                    await DataContext
+                        .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
+                        .ExecuteDeleteAsync();
+
+                    await DataContext
+                        .Metadatas.Where(m =>
+                            m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
+                        )
+                        .ExecuteDeleteAsync();
+
+                    totalPruned += await DataContext
+                        .Manifests.Where(m => batchIds.Contains(m.Id))
+                        .ExecuteDeleteAsync();
+                }
+
+                totalPruned.Should().Be(50);
+            },
+            TimeSpan.FromSeconds(60)
+        );
+
+        TestContext.Out.WriteLine(
+            $"PruneOrphanedManifests large expected set ({ManifestCount - 50} expected, 50 pruned): {elapsed.TotalMilliseconds:F0}ms"
+        );
+    }
+
+    [Test]
+    public async Task PruneOrphanedManifests_5KOrphans_CompletesWithinTimeout()
+    {
+        // Simulates the SuiteMirror production scenario at full scale: 5000 orphaned
+        // manifests to prune with 500 expected manifests to keep. This is the exact
+        // scenario that caused command timeouts — the old NOT IN(...) approach would
+        // inline 500 string parameters into the query, which Postgres struggled to plan
+        // on a 2 vCPU instance. The server-side filter loads all 5500 ID pairs (~165KB)
+        // and computes the diff in C#, then deletes in 10 batches of 500 integer PKs.
+        const int orphanCount = 5000;
+
+        // Seed 5000 additional orphan manifests (baseline 500 are the "expected" set)
+        var orphanGroup = await SeedManifestGroup("orphan-5k-group");
+        var orphans = new List<Manifest>(orphanCount);
+        for (var i = 0; i < orphanCount; i++)
+        {
+            var manifest = Manifest.Create(
+                new CreateManifest
+                {
+                    Name = typeof(StressTestTrain),
+                    IsEnabled = true,
+                    ScheduleType = ScheduleType.Interval,
+                    IntervalSeconds = 60,
+                    MaxRetries = 3,
+                    Properties = new StressTestInput { Value = $"orphan-{i}" },
+                }
+            );
+            manifest.ExternalId = $"orphan-{i}";
+            manifest.ManifestGroupId = orphanGroup.Id;
+            await DataContext.Track(manifest);
+            orphans.Add(manifest);
+        }
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        TestContext.Out.WriteLine(
+            $"Seeded {orphanCount} orphan manifests (total: {ManifestCount + orphanCount})"
+        );
+
+        // The 500 baseline manifests (stress-0..stress-499) are the expected set
+        var expectedIds = _manifests.Select(m => m.ExternalId).ToHashSet();
+        var batchSize = SchedulerStartupService.PruneBatchSize;
+
+        var elapsed = await AssertCompletesWithin(
+            async () =>
+            {
+                // Server compute: load all (id, external_id) pairs, filter in C#
+                var allManifests = await DataContext
+                    .Manifests.Select(m => new { m.Id, m.ExternalId })
+                    .ToListAsync();
+
+                allManifests.Should().HaveCount(ManifestCount + orphanCount);
+
+                var orphanedIds = allManifests
+                    .Where(m => !expectedIds.Contains(m.ExternalId))
+                    .Select(m => m.Id)
+                    .ToList();
+
+                orphanedIds.Should().HaveCount(orphanCount);
+
+                // Database compute: delete in batches of 500 by integer PK
+                var totalPruned = 0;
+
+                foreach (var batch in orphanedIds.Chunk(batchSize))
+                {
+                    var batchIds = batch.ToList();
+
+                    await DataContext
+                        .Manifests.Where(m =>
+                            m.DependsOnManifestId.HasValue
+                            && batchIds.Contains(m.DependsOnManifestId.Value)
+                        )
+                        .ExecuteUpdateAsync(s =>
+                            s.SetProperty(m => m.DependsOnManifestId, (long?)null)
+                        );
+
+                    await DataContext
+                        .WorkQueues.Where(w =>
+                            w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
+                        )
+                        .ExecuteDeleteAsync();
+
+                    await DataContext
+                        .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
+                        .ExecuteDeleteAsync();
+
+                    await DataContext
+                        .Metadatas.Where(m =>
+                            m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
+                        )
+                        .ExecuteDeleteAsync();
+
+                    totalPruned += await DataContext
+                        .Manifests.Where(m => batchIds.Contains(m.Id))
+                        .ExecuteDeleteAsync();
+                }
+
+                totalPruned.Should().Be(orphanCount);
+
+                // Verify expected manifests are untouched
+                var remainingCount = await DataContext.Manifests.CountAsync();
+                remainingCount.Should().Be(ManifestCount);
+            },
+            TimeSpan.FromSeconds(120)
+        );
+
+        TestContext.Out.WriteLine(
+            $"PruneOrphanedManifests 5K orphans ({orphanCount} pruned, {ManifestCount} kept, "
+                + $"batch size {batchSize}, {(orphanCount + batchSize - 1) / batchSize} batches): "
+                + $"{elapsed.TotalMilliseconds:F0}ms"
         );
     }
 

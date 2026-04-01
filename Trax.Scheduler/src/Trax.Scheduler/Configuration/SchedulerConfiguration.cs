@@ -242,6 +242,20 @@ public class SchedulerConfiguration
     public int? MaxQueuedJobsPerCycle { get; set; } = 100;
 
     /// <summary>
+    /// The maximum number of work queue entries created per ManifestManager polling cycle.
+    /// </summary>
+    /// <remarks>
+    /// Controls how many entries <see cref="Trains.ManifestManager.Junctions.CreateWorkQueueEntriesJunction"/>
+    /// creates per cycle. When more manifests are due than this limit, excess manifests are
+    /// deferred to the next polling cycle (default: 5 seconds). This prevents a burst of DB
+    /// writes from saturating low-resource database instances, particularly after extended
+    /// downtime when many manifests become due simultaneously via the <c>FireOnceNow</c>
+    /// misfire policy.
+    /// Set to null to disable the limit (unlimited — all due manifests are enqueued per cycle).
+    /// </remarks>
+    public int? MaxWorkQueueEntriesPerCycle { get; set; } = 200;
+
+    /// <summary>
     /// Whether to automatically prune manifests from the database that are no longer
     /// defined in the startup configuration.
     /// </summary>
