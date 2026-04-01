@@ -82,7 +82,13 @@ For dependent manifests, `DependentPriorityBoost` is still added on top of the g
 
 Each entry is saved individually. If one fails (e.g., a serialization issue for a specific manifest), the others still get queued. Errors are logged per-manifest.
 
-The number of entries created per cycle is limited by `MaxWorkQueueEntriesPerCycle` (default: 200). When more manifests are due than the limit allows, excess manifests are deferred to the next polling cycle. This prevents a burst of DB writes from saturating low-resource database instances, particularly after extended downtime when many manifests become due simultaneously via the `FireOnceNow` misfire policy. Set to `null` for unlimited.
+#### Group-Fair Batching
+
+The number of entries created per cycle is limited by `MaxWorkQueueEntriesPerCycle` (default: 200). When more manifests are due than the limit allows, entries are distributed fairly across manifest groups: each group gets a base allocation of `limit / numGroups`, with overflow slots going to higher-priority groups first. This prevents a single large group from monopolizing the batch and starving smaller groups (e.g., 5000 cache manifests crowding out 15 delta manifests). Excess manifests are deferred to the next polling cycle.
+
+Without group-fair batching, if a large group has thousands of simultaneously-eligible manifests (such as after a mass failure with retries), a flat `Take(N)` would consistently select manifests from that group first, leaving smaller groups perpetually deferred.
+
+Set `MaxWorkQueueEntriesPerCycle` to `null` to disable the limit (unlimited — all due manifests are enqueued per cycle, no fairness needed).
 
 ## Concurrency Model: Two-Layer Defense
 
