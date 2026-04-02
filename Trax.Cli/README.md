@@ -3,11 +3,11 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Cli)](https://www.nuget.org/packages/Trax.Cli/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-CLI tool for [Trax](https://www.nuget.org/packages/Trax.Effect/) — generate Trax API projects from GraphQL or OpenAPI schemas.
+CLI tool for [Trax](https://www.nuget.org/packages/Trax.Effect/). Generates Trax API projects from GraphQL or OpenAPI schemas.
 
 ## What This Does
 
-Takes an existing API schema and scaffolds a Trax project with two parts: a hub project (from the `trax-hub` template — API + Scheduler + Dashboard in one process) and a shared trains library with trains, junctions, input/output records, and models. The trains library follows the same structure as the DistributedWorkers sample — it can be referenced by an API, scheduler, or standalone workers.
+Takes an existing API schema and scaffolds a Trax project with two parts: a hub project (from the `trax-hub` template, with API + Scheduler + Dashboard in one process) and a shared trains library with trains, junctions, input/output records, and models. The trains library follows the same structure as the DistributedWorkers sample and can be referenced by an API, scheduler, or standalone workers.
 
 Supports two schema formats:
 
@@ -89,7 +89,7 @@ MyProject/
 │                   └── GetPlayerJunction.cs
 ```
 
-Operations are grouped into folders by noun — `createPlayer`, `getPlayer`, `deletePlayer` all go under `Players/`.
+Operations are grouped into folders by noun, so `createPlayer`, `getPlayer`, `deletePlayer` all go under `Players/`.
 
 Each junction contains a `throw new NotImplementedException()` with a TODO comment. For OpenAPI sources, the original HTTP method and path are included as a comment.
 
@@ -108,7 +108,7 @@ dotnet run
 
 ## Part of Trax
 
-Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
+Trax is a layered framework. Each package builds on the one below it, so stop at whatever layer solves your problem.
 
 ```
 Trax.Core              pipelines, junctions, railway error propagation
