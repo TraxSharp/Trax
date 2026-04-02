@@ -3,7 +3,7 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Mediator)](https://www.nuget.org/packages/Trax.Mediator/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Dispatch station for [Trax](https://www.nuget.org/packages/Trax.Effect/) trains — hand it the cargo and it routes it to the right train, no need to know which train handles what.
+Dispatch station for [Trax](https://www.nuget.org/packages/Trax.Effect/) trains. Hand it the cargo and it routes it to the right train, no need to know which train handles what.
 
 ## The Problem
 
@@ -65,14 +65,14 @@ That's it. Every `IServiceTrain<TIn, TOut>` in those assemblies is now dispatcha
 ### Dispatching a train
 
 ```csharp
-// With a return value — send cargo, get a delivery back
+// With a return value: send cargo, get a delivery back
 var user = await trainBus.RunAsync<User>(new CreateUserRequest
 {
     Email = "jane@example.com",
     Name = "Jane"
 });
 
-// One-way — send cargo, no delivery expected
+// One-way: send cargo, no delivery expected
 await trainBus.RunAsync(new SendNotificationRequest { UserId = userId });
 ```
 
@@ -106,7 +106,7 @@ public class SendWelcomeEmailJunction(ITrainBus trainBus) : Junction<User, Unit>
 
 ### The departure board
 
-The dispatch station exposes a registry of all known trains — useful for tooling and dashboards:
+The dispatch station exposes a registry of all known trains, which is useful for tooling and dashboards:
 
 ```csharp
 public class TrainListEndpoint(ITrainRegistry registry)
@@ -122,7 +122,7 @@ At startup, `AddMediator` scans the provided assemblies for types implementing `
 
 ## Part of Trax
 
-Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
+Trax is a layered framework. Each package builds on the one below it, so stop at whatever layer solves your problem.
 
 ```
 Trax.Core              pipelines, junctions, railway error propagation
