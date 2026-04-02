@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Source for [traxsharp.net](https://traxsharp.net) — the documentation and marketing site for the Trax .NET framework.
+Source for [traxsharp.net](https://traxsharp.net), the documentation and marketing site for the Trax .NET framework.
 
 ## Stack
 
