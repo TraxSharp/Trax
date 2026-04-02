@@ -3,7 +3,7 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Core)](https://www.nuget.org/packages/Trax.Core/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Railway Oriented Programming for .NET — build trains that carry data through a sequence of stops, with automatic derailment handling when something goes wrong.
+Railway Oriented Programming for .NET. Build trains that carry data through a sequence of stops, with automatic derailment handling when something goes wrong.
 
 ## Why?
 
@@ -28,7 +28,7 @@ public async Task<OrderReceipt> ProcessOrder(OrderRequest request)
 }
 ```
 
-Every junction needs its own null check, error branch, and early return. The business logic — check inventory, charge payment, create shipment — gets lost in the noise.
+Every junction needs its own null check, error branch, and early return. The business logic (check inventory, charge payment, create shipment) gets lost in the noise.
 
 ## With Trax.Core
 
@@ -44,7 +44,7 @@ public class ProcessOrderTrain : Train<OrderRequest, OrderReceipt>
 }
 ```
 
-A train departs with its cargo (`Activate`), visits each stop along the route (`.Chain<T>`), and arrives at its destination (`Resolve`). If `CheckInventoryJunction` throws, the train derails — `ChargePaymentJunction` and `CreateShipmentJunction` are never reached. The exception propagates through the chain automatically.
+A train departs with its cargo (`Activate`), visits each stop along the route (`.Chain<T>`), and arrives at its destination (`Resolve`). If `CheckInventoryJunction` throws, the train derails and `ChargePaymentJunction` and `CreateShipmentJunction` are never reached. The exception propagates through the chain automatically.
 
 ```
 Main Track:     Input → [Stop 1] → [Stop 2] → [Stop 3] → Output
@@ -96,7 +96,7 @@ public class CreateUserTrain : Train<CreateUserRequest, User>
 
 `Activate` loads the initial cargo and the train departs. At each stop, `.Chain<T>` picks up the cargo `T` needs from what the train is carrying, runs the junction, and loads the output back on. `Resolve` unloads the final delivery at the destination.
 
-The train carries all of this in **Memory** — a type-keyed store that accumulates as the train moves through its route. Each stop can use anything a previous stop produced.
+The train carries all of this in **Memory**, a type-keyed store that accumulates as the train moves through its route. Each stop can use anything a previous stop produced.
 
 **3. Run it:**
 
@@ -110,7 +110,7 @@ User user = await train.Run(request);
 
 ## Compile-Time Validation
 
-Trax.Core ships with a Roslyn analyzer that validates your route at build time. If a stop expects cargo that no previous stop has loaded, you get a compiler error — not a runtime derailment.
+Trax.Core ships with a Roslyn analyzer that validates your route at build time. If a stop expects cargo that no previous stop has loaded, you get a compiler error, not a runtime derailment.
 
 | Diagnostic | Meaning |
 |------------|---------|
@@ -121,12 +121,12 @@ Trax.Core ships with a Roslyn analyzer that validates your route at build time. 
 
 Inlay hint extensions show `TIn → TOut` types inline for each `.Chain<TJunction>()` call, so you can see what cargo flows through each stop at a glance.
 
-- **VSCode** — [Trax.Core Chain Hints](https://marketplace.visualstudio.com/items?itemName=Trax.Core.trax-hints) on the Marketplace
-- **Rider / ReSharper** — Search for **Trax.Core Chain Hints** in JetBrains Marketplace
+- **VSCode**: [Trax.Core Chain Hints](https://marketplace.visualstudio.com/items?itemName=Trax.Core.trax-hints) on the Marketplace
+- **Rider / ReSharper**: Search for **Trax.Core Chain Hints** in JetBrains Marketplace
 
 ## Part of Trax
 
-Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
+Trax is a layered framework. Each package builds on the one below it, so stop at whatever layer solves your problem.
 
 ```
 Trax.Core          ← you are here
