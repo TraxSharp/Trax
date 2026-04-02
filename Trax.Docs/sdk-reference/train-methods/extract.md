@@ -43,7 +43,7 @@ public Monad<TInput, TReturn> Extract<TIn, TOut>(TIn input)
 
 ## Returns
 
-`Monad<TInput, TReturn>` — the train instance, for fluent chaining.
+`Monad<TInput, TReturn>`, the train instance, for fluent chaining.
 
 ## Example
 

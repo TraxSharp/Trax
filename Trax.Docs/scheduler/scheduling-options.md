@@ -13,18 +13,18 @@ nav_order: 2
 
 For static bulk jobs, use the builder-time `ScheduleMany` during DI configuration. No async startup code or service resolution needed. The **name-based overload** derives `groupId`, `prunePrefix`, and the external ID prefix from a single `name` parameter. The **explicit overload** gives full control over each independently.
 
-The builder captures the manifests and seeds them when the `BackgroundService` starts—same upsert semantics as `Schedule`.
+The builder captures the manifests and seeds them when the `BackgroundService` starts, same upsert semantics as `Schedule`.
 
 ### Grouping Manifests
 
 Every manifest belongs to a **ManifestGroup**. A ManifestGroup is a first-class entity that ties related manifests together and exposes per-group dispatch controls (see [Per-Group Dispatch Controls](#per-group-dispatch-controls) below).
 
-The group is set via the `ScheduleOptions` fluent builder using `.Group(...)`. When you don't specify a group, it defaults to the manifest's `externalId`—so every manifest always has a group, even if it's a group of one. ManifestGroups are upserted by name during scheduling: if a group with that name already exists it's reused, otherwise a new one is created automatically. Orphaned groups (groups with no remaining manifests) are cleaned up on startup.
+The group is set via the `ScheduleOptions` fluent builder using `.Group(...)`. When you don't specify a group, it defaults to the manifest's `externalId`, so every manifest always has a group, even if it's a group of one. ManifestGroups are upserted by name during scheduling: if a group with that name already exists it's reused, otherwise a new one is created automatically. Orphaned groups (groups with no remaining manifests) are cleaned up on startup.
 
 ```csharp
 services.AddTrax(trax => trax
     .AddScheduler(scheduler => scheduler
-        // Single manifest — explicit group shared with other related jobs
+        // Single manifest, explicit group shared with other related jobs
         .Schedule<IExtractTrain>(
             "extract-users",
             new ExtractInput { Table = "users" },
@@ -35,7 +35,7 @@ services.AddTrax(trax => trax
             "load-users",
             new LoadInput { Table = "users" },
             options => options.Group("user-pipeline"))
-        // Bulk scheduling — name-based overload sets groupId automatically
+        // Bulk scheduling, name-based overload sets groupId automatically
         .ScheduleMany<ISyncTableTrain>(
             "table-sync",
             tables.Select(tableName => new ManifestItem(
@@ -51,7 +51,7 @@ The dashboard's **Manifest Groups** page shows each group's settings and aggrega
 
 ### Runtime: ScheduleManyAsync
 
-Use `ScheduleManyAsync` when the set of jobs is determined at runtime (loaded from a database, config file, or external API). It creates multiple manifests in a single transaction—if any fails, the entire batch rolls back. Both startup and runtime variants accept the same `ScheduleOptions` builder and use upsert semantics.
+Use `ScheduleManyAsync` when the set of jobs is determined at runtime (loaded from a database, config file, or external API). It creates multiple manifests in a single transaction, if any fails, the entire batch rolls back. Both startup and runtime variants accept the same `ScheduleOptions` builder and use upsert semantics.
 
 ### Configuration Per Item
 
@@ -103,7 +103,7 @@ await scheduler.ScheduleManyAsync<ISyncTableTrain, SyncTableInput, (string Table
 
 ### Pruning Stale Manifests
 
-When the source collection shrinks between deployments—tables removed, slices reduced—old manifests stick around in the database. The name-based overload handles this automatically (`prunePrefix: "{name}-"`). With the explicit overload, specify `prunePrefix` manually. After upserting the batch, any existing manifests whose `ExternalId` starts with the prefix but weren't in the current batch are deleted—keeping the manifest table in sync with your source data.
+When the source collection shrinks between deployments, tables removed, slices reduced, old manifests stick around in the database. The name-based overload handles this automatically (`prunePrefix: "{name}-"`). With the explicit overload, specify `prunePrefix` manually. After upserting the batch, any existing manifests whose `ExternalId` starts with the prefix but weren't in the current batch are deleted, keeping the manifest table in sync with your source data.
 
 Pruning runs in a **separate database context** after the main transaction commits. This means a prune failure (e.g., a transient database error) does not roll back successfully upserted manifests. The failure is logged as a warning and retried on the next startup or scheduling cycle.
 
@@ -114,7 +114,7 @@ Each ManifestGroup has three configurable properties that govern how its manifes
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `MaxActiveJobs` | `int?` | `null` (unlimited) | Maximum concurrent active jobs (Pending + InProgress) within this group |
-| `Priority` | `int` (0–31) | `0` | Dispatch ordering between groups—higher values are dispatched first |
+| `Priority` | `int` (0–31) | `0` | Dispatch ordering between groups. higher values are dispatched first |
 | `IsEnabled` | `bool` | `true` | When `false`, all manifests in the group are skipped during queuing and dispatch |
 
 These settings can be configured both from code via the `.Group(...)` builder on `ScheduleOptions`, and from the dashboard's **Manifest Group detail page**. Code-level configuration is applied during scheduling (upsert semantics), while the dashboard allows operators to adjust settings at runtime without redeployment.
@@ -132,9 +132,9 @@ scheduler.Schedule<IMyTrain>(
             .Enabled(true)));
 ```
 
-**MaxActiveJobs** limits concurrent active jobs within a single group. When a group hits its cap, the [JobDispatcher](admin-trains/job-dispatcher.md) skips it and moves on to the next group—so other groups can still dispatch normally. This prevents a single high-throughput group from monopolizing all capacity. The global `MaxActiveJobs` (configured in code) still applies as an overall ceiling across all groups.
+**MaxActiveJobs** limits concurrent active jobs within a single group. When a group hits its cap, the [JobDispatcher](admin-trains/job-dispatcher.md) skips it and moves on to the next group, so other groups can still dispatch normally. This prevents a single high-throughput group from monopolizing all capacity. The global `MaxActiveJobs` (configured in code) still applies as an overall ceiling across all groups.
 
-**Priority** determines the order in which groups are considered during dispatch. The JobDispatcher processes groups from highest priority (31) to lowest (0). If a high-priority group continually re-queues work, it is dispatched first—but because `MaxActiveJobs` caps how many jobs it can have active at once, lower-priority groups still get their fair share of capacity. This solves the starvation problem: priority controls *ordering*, while `MaxActiveJobs` controls *capacity*.
+**Priority** determines the order in which groups are considered during dispatch. The JobDispatcher processes groups from highest priority (31) to lowest (0). If a high-priority group continually re-queues work, it is dispatched first, but because `MaxActiveJobs` caps how many jobs it can have active at once, lower-priority groups still get their fair share of capacity. This solves the starvation problem: priority controls *ordering*, while `MaxActiveJobs` controls *capacity*.
 
 **IsEnabled** acts as a kill switch for an entire group. Disabling a group prevents its manifests from being queued or dispatched until re-enabled. This is useful during maintenance windows or when a downstream system is unavailable.
 
@@ -187,7 +187,7 @@ See [Dependent Trains](dependent-trains.md) for details on chaining trains, and 
 
 ## Exclusion Windows
 
-Exclusion windows skip execution during specific periods — weekends, holidays, maintenance windows, or daily time ranges. Add exclusions via the `.Exclude()` method on `ScheduleOptions`:
+Exclusion windows skip execution during specific periods, weekends, holidays, maintenance windows, or daily time ranges. Add exclusions via the `.Exclude()` method on `ScheduleOptions`:
 
 ```csharp
 scheduler.Schedule<IReportTrain>(
@@ -200,7 +200,7 @@ scheduler.Schedule<IReportTrain>(
         .Exclude(Exclude.TimeWindow(TimeOnly.Parse("02:00"), TimeOnly.Parse("04:00"))));
 ```
 
-Multiple exclusions can be combined — if ANY matches, the manifest is skipped. Excluded periods are "intentionally skipped", not misfires. When the excluded period ends, normal scheduling resumes and the misfire policy determines catch-up behavior.
+Multiple exclusions can be combined, if ANY matches, the manifest is skipped. Excluded periods are "intentionally skipped", not misfires. When the excluded period ends, normal scheduling resumes and the misfire policy determines catch-up behavior.
 
 Four built-in exclusion types: `DaysOfWeek`, `Dates`, `DateRange`, `TimeWindow` (supports midnight crossover).
 
@@ -208,7 +208,7 @@ See [Exclusion Windows](exclusions.md) for full details, examples, and misfire i
 
 ## Schedule Variance
 
-Schedule variance (jitter) adds a random delay to recurring schedules, preventing thundering-herd problems when many jobs share the same interval or cron expression. After each successful run, the next execution is delayed by a random value in the range `[0, variance]` seconds — jobs never fire earlier than their base schedule.
+Schedule variance (jitter) adds a random delay to recurring schedules, preventing thundering-herd problems when many jobs share the same interval or cron expression. After each successful run, the next execution is delayed by a random value in the range `[0, variance]` seconds, jobs never fire earlier than their base schedule.
 
 The computed next run time is stored in the database (`NextScheduledRun` column on the manifest), so it remains stable across polling cycles and is visible via SQL for debugging.
 
@@ -237,12 +237,12 @@ If both are specified, `Schedule.WithVariance()` takes precedence over `Schedule
 
 ### How It Works
 
-1. A manifest completes successfully — `LastSuccessfulRun` is set to now
+1. A manifest completes successfully. `LastSuccessfulRun` is set to now
 2. `ComputeNextScheduledRun` calculates: base next time + random `[0, variance]` seconds
    - **Interval**: base = `LastSuccessfulRun + IntervalSeconds`
    - **Cron**: base = next cron occurrence after `LastSuccessfulRun`
 3. The result is persisted to `NextScheduledRun` in the database
-4. On each polling cycle, `ShouldRunNow` checks `NextScheduledRun` — if it's in the past, the job fires; if in the future, it waits
+4. On each polling cycle, `ShouldRunNow` checks `NextScheduledRun`, if it's in the past, the job fires; if in the future, it waits
 
 When `NextScheduledRun` is null (first run, or variance not configured), the scheduler falls back to standard interval/cron evaluation.
 
@@ -250,16 +250,16 @@ When `NextScheduledRun` is null (first run, or variance not configured), the sch
 
 - Variance is only supported on `Interval` and `Cron` schedule types. Applying it to `Dependent`, `Once`, or other types throws `InvalidOperationException` at configuration time.
 - Variance must be non-negative.
-- Variance can exceed the interval (e.g., 5-minute variance on a 1-minute interval) — this is allowed but means runs may be delayed well past the next base interval.
+- Variance can exceed the interval (e.g., 5-minute variance on a 1-minute interval), this is allowed but means runs may be delayed well past the next base interval.
 
 ### Interaction with Other Features
 
-- **Exclusion windows**: Exclusions are checked after `NextScheduledRun` is due — if the current time falls in an exclusion window, the job is skipped even if `NextScheduledRun` is in the past.
+- **Exclusion windows**: Exclusions are checked after `NextScheduledRun` is due, if the current time falls in an exclusion window, the job is skipped even if `NextScheduledRun` is in the past.
 - **Misfire policies**: Work the same as without variance. If a job with `DoNothing` policy misses its `NextScheduledRun` by more than the misfire threshold, it's skipped. `FireOnceNow` fires immediately regardless.
 
 ## Misfire Policies
 
-A **misfire** occurs when a scheduled job was supposed to fire but couldn't — the scheduler was down, or the job was blocked by an active execution or dead letter. When the scheduler recovers, the misfire policy determines what happens.
+A **misfire** occurs when a scheduled job was supposed to fire but couldn't, the scheduler was down, or the job was blocked by an active execution or dead letter. When the scheduler recovers, the misfire policy determines what happens.
 
 ### Policies
 
@@ -272,8 +272,8 @@ A **misfire** occurs when a scheduled job was supposed to fire but couldn't — 
 
 The misfire threshold is a grace period. If a job is overdue by less than the threshold, it fires normally regardless of policy. Only when the overdue period exceeds the threshold does the policy take effect.
 
-- **Global default**: `DefaultMisfireThreshold` (default: 60 seconds) — set via `AddScheduler`
-- **Per-manifest override**: `MisfireThreshold(TimeSpan)` on `ScheduleOptions` — overrides the global default for a single manifest
+- **Global default**: `DefaultMisfireThreshold` (default: 60 seconds), set via `AddScheduler`
+- **Per-manifest override**: `MisfireThreshold(TimeSpan)` on `ScheduleOptions`, overrides the global default for a single manifest
 
 ### How DoNothing Works
 
@@ -283,7 +283,7 @@ For interval-based schedules, the scheduler finds the most recent interval bound
 
 - Most recent 5-minute boundary from `LastSuccessfulRun` (10:00): **13:00**
 - Time since boundary: 2 minutes (120 seconds) > 60-second threshold → **skip**
-- Next boundary: **13:05** — the job fires then (if within threshold)
+- Next boundary: **13:05**: the job fires then (if within threshold)
 
 If the scheduler comes back at 13:00:30 instead:
 
@@ -292,7 +292,7 @@ If the scheduler comes back at 13:00:30 instead:
 
 For cron-based schedules, the scheduler uses precise next-occurrence calculation (via the Cronos library) to find the most recent cron boundary before now and checks if the current time is within the misfire threshold of that boundary. Both 5-field and 6-field (seconds) cron expressions are supported.
 
-> **Seconds-granularity cron:** When using 6-field cron expressions with second-level precision, ensure the `ManifestManagerPollingInterval` is set appropriately. The default 5-second polling interval means the scheduler checks for due manifests every 5 seconds. For "every 10 seconds" cron (`*/10 * * * * *`), the default polling is adequate. For "every second" cron (`* * * * * *`), reduce the polling interval accordingly.
+> **Seconds-granularity cron:** When using 6-field cron expressions with second-level precision, verify the `ManifestManagerPollingInterval` is set appropriately. The default 5-second polling interval means the scheduler checks for due manifests every 5 seconds. For "every 10 seconds" cron (`*/10 * * * * *`), the default polling is adequate. For "every second" cron (`* * * * * *`), reduce the polling interval accordingly.
 
 ### Configuration
 
@@ -314,7 +314,7 @@ For cron-based schedules, the scheduler uses precise next-occurrence calculation
         .MisfireThreshold(TimeSpan.FromMinutes(10)))
 ```
 
-Misfire policies only apply to `Cron` and `Interval` schedule types. Dependent manifests fire based on parent completion, not time — misfire policies are ignored for them.
+Misfire policies only apply to `Cron` and `Interval` schedule types. Dependent manifests fire based on parent completion, not time, misfire policies are ignored for them.
 
 ## Timeout Enforcement
 
@@ -335,7 +335,7 @@ await scheduler.ScheduleAsync<IMyTrain, MyInput, Unit>(
     .DefaultJobTimeout(TimeSpan.FromMinutes(30)))
 ```
 
-Timed-out jobs are cancelled using the same dual-layer mechanism as manual cancellation: `CancellationRequested = true` in the database (cross-server) plus `ICancellationRegistry.TryCancel()` for same-server instant cancel. The job transitions to `TrainState.Cancelled` — it is **not retried** and does **not create a dead letter**. This is distinct from dead-lettering, which handles jobs that have failed repeatedly.
+Timed-out jobs are cancelled using the same dual-layer mechanism as manual cancellation: `CancellationRequested = true` in the database (cross-server) plus `ICancellationRegistry.TryCancel()` for same-server instant cancel. The job transitions to `TrainState.Cancelled`, it is **not retried** and does **not create a dead letter**. This is distinct from dead-lettering, which handles jobs that have failed repeatedly.
 
 *See also: [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens)*
 
@@ -343,17 +343,17 @@ Timed-out jobs are cancelled using the same dual-layer mechanism as manual cance
 
 Key options to know:
 
-- **`ManifestManagerPollingInterval`** / **`JobDispatcherPollingInterval`** (default: 5 seconds each) — how often the ManifestManager and JobDispatcher poll independently. Use `PollingInterval` to set both to the same value
-- **`MaxActiveJobs`** (default: 10) — global concurrent job cap; set to `null` for unlimited. Per-group limits can be set from code via `.Group(group => group.MaxActiveJobs(...))` or from the dashboard (see [Per-Group Dispatch Controls](#per-group-dispatch-controls))
-- **`DefaultMaxRetries`** (default: 3) — retry attempts before dead-lettering
-- **`DefaultRetryDelay`** (default: 5 minutes) — base delay between retry attempts. Combined with `RetryBackoffMultiplier` for exponential backoff
-- **`RetryBackoffMultiplier`** (default: 2.0) — multiplier applied to each subsequent retry delay (e.g., 5m, 10m, 20m). Set to `1.0` for constant delay
-- **`MaxRetryDelay`** (default: 1 hour) — maximum retry delay cap, prevents unbounded backoff growth
-- **`DeadLetterRetentionPeriod`** (default: 30 days) — how long resolved dead letters are kept before auto-purge
-- **`AutoPurgeDeadLetters`** (default: true) — enable automatic deletion of resolved dead letters past the retention period
-- **`DefaultJobTimeout`** (default: 20 minutes) — jobs exceeding this duration are actively cancelled (see [Timeout Enforcement](#timeout-enforcement))
-- **`DefaultMisfirePolicy`** (default: `FireOnceNow`) — how missed runs are handled
-- **`DefaultMisfireThreshold`** (default: 60 seconds) — grace period for misfire detection
+- **`ManifestManagerPollingInterval`** / **`JobDispatcherPollingInterval`** (default: 5 seconds each), how often the ManifestManager and JobDispatcher poll independently. Use `PollingInterval` to set both to the same value
+- **`MaxActiveJobs`** (default: 10), global concurrent job cap; set to `null` for unlimited. Per-group limits can be set from code via `.Group(group => group.MaxActiveJobs(...))` or from the dashboard (see [Per-Group Dispatch Controls](#per-group-dispatch-controls))
+- **`DefaultMaxRetries`** (default: 3), retry attempts before dead-lettering
+- **`DefaultRetryDelay`** (default: 5 minutes), base delay between retry attempts. Combined with `RetryBackoffMultiplier` for exponential backoff
+- **`RetryBackoffMultiplier`** (default: 2.0), multiplier applied to each subsequent retry delay (e.g., 5m, 10m, 20m). Set to `1.0` for constant delay
+- **`MaxRetryDelay`** (default: 1 hour), maximum retry delay cap, prevents unbounded backoff growth
+- **`DeadLetterRetentionPeriod`** (default: 30 days), how long resolved dead letters are kept before auto-purge
+- **`AutoPurgeDeadLetters`** (default: true), enable automatic deletion of resolved dead letters past the retention period
+- **`DefaultJobTimeout`** (default: 20 minutes), jobs exceeding this duration are actively cancelled (see [Timeout Enforcement](#timeout-enforcement))
+- **`DefaultMisfirePolicy`** (default: `FireOnceNow`), how missed runs are handled
+- **`DefaultMisfireThreshold`** (default: 60 seconds), grace period for misfire detection
 
 ## SDK Reference
 

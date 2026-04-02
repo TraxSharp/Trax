@@ -23,7 +23,7 @@ public interface ITrainDiscoveryService
 
 ### DiscoverTrains
 
-Returns all discovered train registrations. Results are cached after the first call — subsequent calls return the same list.
+Returns all discovered train registrations. Results are cached after the first call, so subsequent calls return the same list.
 
 **Returns**: `IReadOnlyList<TrainRegistration>`
 
@@ -91,7 +91,7 @@ public class TrainRegistration
 6. Reads `[TraxAuthorize]` attributes from the implementation type and extracts policy and role requirements into `RequiredPolicies` and `RequiredRoles`.
 6b. Reads `[TraxQuery]` and `[TraxMutation]` attributes from the implementation type and populates `IsQuery`, `IsMutation`, `GraphQLName`, `GraphQLDescription`, `GraphQLDeprecationReason`, and `GraphQLOperations`.
 6c. Reads the `[TraxBroadcast]` attribute and populates `IsBroadcastEnabled`.
-7. Caches the result — the list is computed once and reused for the lifetime of the service.
+7. Caches the result. The list is computed once and reused for the lifetime of the service.
 
 ## Example
 

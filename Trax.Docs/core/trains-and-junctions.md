@@ -9,7 +9,7 @@ nav_order: 1
 
 ## Junctions
 
-Junctions are the points along a train's route — each one does one thing:
+Junctions are the points along a train's route. Each one does one thing:
 
 ```csharp
 public class ValidateEmailJunction(IUserRepository UserRepository) : Junction<CreateUserRequest, Unit>
@@ -59,7 +59,7 @@ public class FetchUserJunction(IHttpClientFactory httpFactory) : Junction<UserId
 }
 ```
 
-The token comes from the caller: `train.Run(input, cancellationToken)`. If no token is provided, `CancellationToken` defaults to `CancellationToken.None`. Before each junction executes, cancellation is checked — if the token is already cancelled, the junction is skipped and `OperationCanceledException` propagates.
+The token comes from the caller: `train.Run(input, cancellationToken)`. If no token is provided, `CancellationToken` defaults to `CancellationToken.None`. Before each junction executes, cancellation is checked. If the token is already cancelled, the junction is skipped and `OperationCanceledException` propagates.
 
 *Full details: [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens)*
 
@@ -67,12 +67,12 @@ The token comes from the caller: `train.Run(input, cancellationToken)`. If no to
 
 Trax has two junction base classes:
 
-**`Junction<TIn, TOut>`** — The base class. Handles input/output and railway error propagation. No metadata, no lifecycle hooks. Use this for lightweight junctions or when running inside a plain `Train`.
+**`Junction<TIn, TOut>`** is the base class. Handles input/output and railway error propagation. No metadata, no lifecycle hooks. Use this for lightweight junctions or when running inside a plain `Train`.
 
-**`EffectJunction<TIn, TOut>`** — Extends `Junction` with per-junction metadata tracking. When run inside a `ServiceTrain`, it records a `JunctionMetadata` entry with the junction's name, input/output types, start/end times, and railway state. Junction effect providers (like `AddJunctionLogger`) hook into `EffectJunction`'s lifecycle — they fire before and after each junction executes.
+**`EffectJunction<TIn, TOut>`** extends `Junction` with per-junction metadata tracking. When run inside a `ServiceTrain`, it records a `JunctionMetadata` entry with the junction's name, input/output types, start/end times, and railway state. Junction effect providers (like `AddJunctionLogger`) hook into `EffectJunction`'s lifecycle and fire before and after each junction executes.
 
 ```csharp
-// Base junction — no metadata tracking
+// Base junction, no metadata tracking
 public class ValidateEmailJunction(IUserRepository repo) : Junction<CreateUserRequest, Unit>
 {
     public override async Task<Unit> Run(CreateUserRequest input)
@@ -83,7 +83,7 @@ public class ValidateEmailJunction(IUserRepository repo) : Junction<CreateUserRe
     }
 }
 
-// Effect junction — tracked by junction effect providers
+// Effect junction, tracked by junction effect providers
 public class ValidateEmailJunction(IUserRepository repo) : EffectJunction<CreateUserRequest, Unit>
 {
     public override async Task<Unit> Run(CreateUserRequest input)
@@ -95,13 +95,13 @@ public class ValidateEmailJunction(IUserRepository repo) : EffectJunction<Create
 }
 ```
 
-The implementation is identical — just swap the base class. `EffectJunction` only adds metadata when running inside a `ServiceTrain`. If you use `EffectJunction` inside a plain `Train`, it throws at runtime.
+The implementation is identical. Just swap the base class. `EffectJunction` only adds metadata when running inside a `ServiceTrain`. If you use `EffectJunction` inside a plain `Train`, it throws at runtime.
 
 Use `EffectJunction` when you want junction-level observability (timing, logging via `AddJunctionLogger`). Use `Junction` when you don't need it.
 
 ## Dependency Injection in Junctions
 
-Junctions use standard constructor injection for their dependencies. Do **not** use the `[Inject]` attribute — that's used internally by the `ServiceTrain` base class for its own framework-level services.
+Junctions use standard constructor injection for their dependencies. Do **not** use the `[Inject]` attribute. That's used internally by the `ServiceTrain` base class for its own framework-level services.
 
 ```csharp
 // Don't use [Inject] in your junctions
@@ -149,7 +149,7 @@ Trains/
 
 ### The Input Model
 
-Each train gets its own request type. This is required by the `TrainBus` — input types must be unique across your application:
+Each train gets its own request type. This is required by the `TrainBus` because input types must be unique across your application:
 
 ```csharp
 namespace YourApp.Trains.CreateUser;
@@ -174,7 +174,7 @@ public interface ICreateUserTrain : IServiceTrain<CreateUserRequest, User>;
 
 ### The Junctions Folder
 
-Junctions go in a `Junctions/` subfolder. Mark them `internal` — they're implementation details of this train:
+Junctions go in a `Junctions/` subfolder. Mark them `internal` since they're implementation details of this train:
 
 ```csharp
 namespace YourApp.Trains.CreateUser.Junctions;
@@ -196,7 +196,7 @@ Using `internal` keeps your public API surface clean. External code interacts wi
 
 ### When to Share Junctions
 
-Sometimes multiple trains need the same validation or transformation. Resist the urge to share junctions too early — duplication is often cheaper than the wrong abstraction.
+Sometimes multiple trains need the same validation or transformation. Resist the urge to share junctions too early. Duplication is often cheaper than the wrong abstraction.
 
 When you do need to share, create a `Shared/` folder at the `Trains/` level:
 
@@ -215,7 +215,7 @@ Shared junctions should be truly generic. If you find yourself adding conditiona
 
 ## Defining a Train
 
-Override `Junctions()` to define the route — the sequence of junctions the train passes through:
+Override `Junctions()` to define the route, the sequence of junctions the train passes through:
 
 ```csharp
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
@@ -226,11 +226,11 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 }
 ```
 
-`Junctions()` returns `TReturn` directly. There is no `Either`, no `async Task`, no `Activate`, no `Resolve` — the framework handles all of that. Chain methods (`Chain`, `ShortCircuit`, `Extract`, `AddServices`) are available as protected methods on the train itself.
+`Junctions()` returns `TReturn` directly. There is no `Either`, no `async Task`, no `Activate`, no `Resolve`. The framework handles all of that. Chain methods (`Chain`, `ShortCircuit`, `Extract`, `AddServices`) are available as protected methods on the train itself.
 
 ### When to use RunInternal
 
-For advanced cases — custom logic before/after the chain, manual `Either` construction, or passing extra objects into Memory — override `RunInternal` instead:
+For advanced cases (custom logic before/after the chain, manual `Either` construction, or passing extra objects into Memory), override `RunInternal` instead:
 
 ```csharp
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
@@ -247,7 +247,7 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 
 ## Train Lifecycle Hooks
 
-`ServiceTrain` provides `protected virtual` methods you can override to react to your train's own lifecycle events — no global hook registration needed:
+`ServiceTrain` provides `protected virtual` methods you can override to react to your train's own lifecycle events, with no global hook registration needed:
 
 ```csharp
 public class CreateUserTrain(ISlackClient slack)
@@ -265,9 +265,9 @@ public class CreateUserTrain(ISlackClient slack)
 }
 ```
 
-Available overrides: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. All default to no-op. Exceptions in overrides are caught and logged — they never cause the train to fail.
+Available overrides: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. All default to no-op. Exceptions in overrides are caught and logged and never cause the train to fail.
 
-These work alongside [global lifecycle hooks](/docs/sdk-reference/configuration/add-lifecycle-hook) — global hooks fire first, then per-train overrides.
+These work alongside [global lifecycle hooks](/docs/sdk-reference/configuration/add-lifecycle-hook). Global hooks fire first, then per-train overrides.
 
 ## SDK Reference
 

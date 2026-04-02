@@ -7,7 +7,7 @@ nav_order: 1
 
 # Cancellation Tokens
 
-Trax.Core threads `CancellationToken` through the entire pipeline — from the initial `Run` call, through every junction, down to EF Core queries and background service shutdown. This enables graceful cancellation of trains in response to HTTP request aborts, application shutdown, or explicit user cancellation.
+Trax.Core threads `CancellationToken` through the entire pipeline, from the initial `Run` call, through every junction, down to EF Core queries and background service shutdown. This enables graceful cancellation of trains in response to HTTP request aborts, application shutdown, or explicit user cancellation.
 
 ## How It Works
 
@@ -50,11 +50,11 @@ await train.RunEither(input, cancellationToken);
 await train.RunEither(input, serviceProvider, cancellationToken);
 ```
 
-If you call `Run(input)` without a token, `CancellationToken` defaults to `CancellationToken.None` — all existing code works unchanged.
+If you call `Run(input)` without a token, `CancellationToken` defaults to `CancellationToken.None` and all existing code works unchanged.
 
 ## Using the Token Inside Junctions
 
-Access `this.CancellationToken` in your junction's `Run` method. It is set automatically before `Run` is called — you never need to set it yourself:
+Access `this.CancellationToken` in your junction's `Run` method. It is set automatically before `Run` is called, so you never need to set it yourself:
 
 ```csharp
 public class FetchDataJunction(IHttpClientFactory httpFactory) : Junction<FetchRequest, ApiResponse>
@@ -122,7 +122,7 @@ If the token is already cancelled when a junction is about to execute, `Operatio
 using var cts = new CancellationTokenSource();
 cts.Cancel();
 
-// Throws OperationCanceledException — no junctions execute
+// Throws OperationCanceledException, no junctions execute
 await train.Run(input, cts.Token);
 ```
 
@@ -155,7 +155,7 @@ public override async Task<string> Run(string input)
 Cancellation is treated differently from regular exceptions:
 
 - **Regular exceptions** are wrapped with `TrainExceptionData` (junction name, train name, etc.) and returned as `Left` in the Railway pattern
-- **`OperationCanceledException`** propagates cleanly without wrapping — it is not a junction failure, it is an explicit abort signal
+- **`OperationCanceledException`** propagates cleanly without wrapping. It is not a junction failure, it is an explicit abort signal
 
 This means cancellation always throws (even with `RunEither`), which matches the .NET convention that cancellation is exceptional flow, not a business error.
 
@@ -242,7 +242,7 @@ Host signals shutdown (stoppingToken fires)
 └──────────────────────────────────────────┘
 ```
 
-This ensures trains performing critical operations (database transactions, external API calls) have time to complete cleanly rather than being aborted mid-operation.
+This gives trains performing critical operations (database transactions, external API calls) time to complete cleanly rather than being aborted mid-operation.
 
 Configure the grace period:
 
@@ -259,11 +259,11 @@ Configure the grace period:
 
 `ServiceTrain` (the database-tracked train base class) propagates the token to all its internal operations:
 
-- `SaveChangesAsync(CancellationToken)` — transaction commits use the token
-- `BeginTransaction(CancellationToken)` — transaction starts use the token
+- `SaveChangesAsync(CancellationToken)`: transaction commits use the token
+- `BeginTransaction(CancellationToken)`: transaction starts use the token
 - Junction effect providers receive the token for their before/after hooks
 
-If a train is cancelled mid-execution, the `ServiceTrain` catch block still runs `FinishTrain` to record the cancellation in Metadata — so you get an audit trail even for cancelled trains. `FinishTrain` also clears the junction progress columns (`CurrentlyRunningJunction` and `JunctionStartedAt`) as a safety net.
+If a train is cancelled mid-execution, the `ServiceTrain` catch block still runs `FinishTrain` to record the cancellation in Metadata, so you get an audit trail even for cancelled trains. `FinishTrain` also clears the junction progress columns (`CurrentlyRunningJunction` and `JunctionStartedAt`) as a safety net.
 
 ## Cancelling Running Trains
 
@@ -318,8 +318,8 @@ int cancelled = await scheduler.CancelGroupAsync(groupId);
 ```
 
 Both methods use dual-layer cancellation:
-1. **Database flag** (`CancellationRequested = true`) — works cross-server, picked up by `CancellationCheckProvider` at the next junction boundary
-2. **Same-server instant cancel** (`ICancellationRegistry.TryCancel()`) — immediately fires the `CancellationTokenSource` if the job is running on the same server
+1. **Database flag** (`CancellationRequested = true`): works cross-server, picked up by `CancellationCheckProvider` at the next junction boundary
+2. **Same-server instant cancel** (`ICancellationRegistry.TryCancel()`): immediately fires the `CancellationTokenSource` if the job is running on the same server
 
 Cancelled trains transition to `TrainState.Cancelled`, are **not retried**, and **do not create dead letters**.
 
@@ -327,7 +327,7 @@ Cancelled trains transition to `TrainState.Cancelled`, are **not retried**, and 
 
 The ManifestManager automatically cancels jobs that exceed their configured timeout. Each polling cycle, the `CancelTimedOutJobsJunction` checks all InProgress metadata and cancels any where the elapsed time exceeds the manifest's `TimeoutSeconds` (or the global `DefaultJobTimeout`).
 
-This is distinct from dead-lettering — timeout cancellation actively interrupts the running train rather than waiting for it to fail and then moving it to the dead letter queue. The job transitions to `TrainState.Cancelled` and is not retried.
+This is distinct from dead-lettering. Timeout cancellation actively interrupts the running train rather than waiting for it to fail and then moving it to the dead letter queue. The job transitions to `TrainState.Cancelled` and is not retried.
 
 Configure timeouts per-manifest or globally:
 
@@ -360,7 +360,7 @@ public interface IJobSubmitter
 }
 ```
 
-The built-in `PostgresJobSubmitter` and `InMemoryJobSubmitter` both implement the CT overloads — `PostgresJobSubmitter` passes the token to `SaveChangesAsync`, and `InMemoryJobSubmitter` passes it to `train.Run()`.
+The built-in `PostgresJobSubmitter` and `InMemoryJobSubmitter` both implement the CT overloads. `PostgresJobSubmitter` passes the token to `SaveChangesAsync`, and `InMemoryJobSubmitter` passes it to `train.Run()`.
 
 ## Testing with Cancellation Tokens
 

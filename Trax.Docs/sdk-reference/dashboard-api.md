@@ -21,7 +21,7 @@ builder.Services.AddTrax(trax => trax
     .AddMediator(typeof(Program).Assembly)
 );
 
-builder.AddTraxDashboard();  // Requires AddTrax() first — throws InvalidOperationException otherwise
+builder.AddTraxDashboard();  // Requires AddTrax() first; throws InvalidOperationException otherwise
 
 var app = builder.Build();
 app.UseTraxDashboard();

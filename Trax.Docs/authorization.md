@@ -9,8 +9,8 @@ section: Guides
 
 Trax supports two levels of authorization for the API layer:
 
-- **Endpoint-level** — gate all Trax endpoints behind a single policy using the `configure` callback on `UseTraxGraphQL`. This is standard ASP.NET Core endpoint authorization.
-- **Per-train** — restrict individual trains using the `[TraxAuthorize]` attribute on the train class. When a request comes in to run or queue a train, Trax checks the attribute against the current HTTP user before executing anything.
+- **Endpoint-level**: gate all Trax endpoints behind a single policy using the `configure` callback on `UseTraxGraphQL`. This is standard ASP.NET Core endpoint authorization.
+- **Per-train**: restrict individual trains using the `[TraxAuthorize]` attribute on the train class. When a request comes in to run or queue a train, Trax checks the attribute against the current HTTP user before executing anything.
 
 Endpoint-level auth answers "can this user access the Trax API at all?" Per-train auth answers "can this user execute *this particular* train?"
 
@@ -35,7 +35,7 @@ public class GenerateReportTrain : ServiceTrain<ReportInput, ReportOutput>, IGen
     protected override ReportOutput Junctions() => Chain<GenerateReportJunction>();
 }
 
-// No attribute — no per-train auth check
+// No attribute, no per-train auth check
 public class PingTrain : ServiceTrain<PingInput, PongOutput>, IPingTrain
 {
     protected override PongOutput Junctions() => Chain<PingJunction>();
@@ -47,7 +47,7 @@ The attribute supports two properties:
 | Property | Type | Description |
 |----------|------|-------------|
 | `Policy` | `string?` | Name of an ASP.NET Core authorization policy to evaluate |
-| `Roles` | `string?` | Comma-separated list of roles — the user must have at least one |
+| `Roles` | `string?` | Comma-separated list of roles. The user must have at least one |
 
 You can apply multiple attributes. All must pass:
 
@@ -120,7 +120,7 @@ The endpoint-level check runs first (before the request reaches the handler). Th
 
 ## The Scheduler Bypasses Auth
 
-The scheduler dequeues work items from the `work_queue` table and calls `ITrainBus.RunAsync()` directly — it never goes through `ITrainExecutionService`. Authorization is about whether a *user* can request a train, not whether the scheduler can execute one. The scheduler is trusted infrastructure.
+The scheduler dequeues work items from the `work_queue` table and calls `ITrainBus.RunAsync()` directly. It never goes through `ITrainExecutionService`. Authorization is about whether a *user* can request a train, not whether the scheduler can execute one. The scheduler is trusted infrastructure.
 
 This means you can safely decorate a train with `[TraxAuthorize("Admin")]` and still schedule it via `AddScheduler()`. The schedule runs on the scheduler machine without any HTTP context, and the authorization check doesn't apply.
 
@@ -135,7 +135,7 @@ public class CustomTrainAuthorizationService : ITrainAuthorizationService
         TrainRegistration registration,
         CancellationToken ct = default)
     {
-        // Your custom logic here — check a database, call an external service, etc.
+        // Your custom logic here: check a database, call an external service, etc.
         // Throw to deny, return normally to allow.
     }
 }

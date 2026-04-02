@@ -8,7 +8,7 @@ section: Packages
 
 # Trax.Mediator
 
-`Trax.Mediator` provides the `TrainBus` — a dispatch station that routes trains by their input type instead of requiring direct injection.
+`Trax.Mediator` provides the `TrainBus`, a dispatch station that routes trains by their input type instead of requiring direct injection.
 
 ```bash
 dotnet add package Trax.Mediator
@@ -63,7 +63,7 @@ builder.Services.AddTrax(trax => trax
 );
 ```
 
-Each input type maps to exactly one train. If two trains accept the same `TIn`, the first registration wins — the duplicate is silently skipped. This means `TrainBus.RunAsync` always resolves to a single train for a given input type. If you need multiple trains that share an input type, inject them directly by interface instead of dispatching through the bus.
+Each input type maps to exactly one train. If two trains accept the same `TIn`, the first registration wins and the duplicate is silently skipped. This means `TrainBus.RunAsync` always resolves to a single train for a given input type. If you need multiple trains that share an input type, inject them directly by interface instead of dispatching through the bus.
 
 ## Nested Trains
 
@@ -80,7 +80,7 @@ This creates a tree of journey logs you can query to trace execution across trai
 
 ## Scope Isolation
 
-Every `RunAsync` call creates its own DI scope. The train is resolved and executed within this scope, which is disposed when the call returns. This is especially important for Blazor Server where the circuit scope persists for the entire connection — without per-call scoping, trains would share `DbContext` instances and other scoped resources across executions.
+Every `RunAsync` call creates its own DI scope. The train is resolved and executed within this scope, which is disposed when the call returns. This is especially important for Blazor Server where the circuit scope persists for the entire connection. Without per-call scoping, trains would share `DbContext` instances and other scoped resources across executions.
 
 Nested dispatch (a train calling `TrainBus.RunAsync` for a child train) also creates a separate scope. Each train is a self-contained black box.
 

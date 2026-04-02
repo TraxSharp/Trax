@@ -37,18 +37,18 @@ public abstract class TraxLambdaFunction
 
 | Member | Required | Description |
 |--------|----------|-------------|
-| `ConfigureServices(IServiceCollection, IConfiguration)` | Yes | Register your Trax effects, mediator, data contexts, and application services. `IConfiguration` is loaded from `appsettings.json` (if present) and environment variables. Do **not** call `AddTraxJobRunner()` — the base class does this automatically. |
+| `ConfigureServices(IServiceCollection, IConfiguration)` | Yes | Register your Trax effects, mediator, data contexts, and application services. `IConfiguration` is loaded from `appsettings.json` (if present) and environment variables. Do **not** call `AddTraxJobRunner()` because the base class does this automatically. |
 | `ConfigureLogging(ILoggingBuilder)` | No | Customize logging. Default: console logging at `Information` level. |
 
 ## Envelope Dispatching
 
-The `FunctionHandler` entry point receives a `LambdaEnvelope` directly from the AWS SDK — no API Gateway or Function URL is involved. The envelope's `Type` field determines the operation:
+The `FunctionHandler` entry point receives a `LambdaEnvelope` directly from the AWS SDK. No API Gateway or Function URL is involved. The envelope's `Type` field determines the operation:
 
 | Type | Handler | Description |
 |------|---------|-------------|
 | `Execute` | `ITraxRequestHandler.ExecuteJobAsync` | Fire-and-forget job execution (queue path). Returns `RemoteJobResponse`. |
 | `Run` | `ITraxRequestHandler.RunTrainAsync` | Synchronous execution with output (run path). Returns `RemoteRunResponse`. |
-| _unknown_ | — | Throws `InvalidOperationException` |
+| _unknown_ | _(none)_ | Throws `InvalidOperationException` |
 
 The `LambdaEnvelope` is a shared contract defined in `Trax.Scheduler`:
 
@@ -132,10 +132,10 @@ The local server reads its port from `appsettings.json` (via Kestrel configurati
 
 The base class automatically builds an `IConfiguration` from:
 
-1. `appsettings.json` (optional — loaded from `AppContext.BaseDirectory`)
+1. `appsettings.json` (optional, loaded from `AppContext.BaseDirectory`)
 2. Environment variables
 
-This means you can use `appsettings.json` for local development and environment variables in Lambda — both work seamlessly. The configuration is passed to `ConfigureServices` and registered in DI as `IConfiguration`.
+This means you can use `appsettings.json` for local development and environment variables in Lambda. Both work out of the box. The configuration is passed to `ConfigureServices` and registered in DI as `IConfiguration`.
 
 ## Cold Start Optimization
 
@@ -143,9 +143,9 @@ The service provider is built **lazily on the first invocation**, not during Lam
 
 To minimize cold start time:
 
-- Keep `ConfigureServices` lean — only register what the runner needs
-- Use `SkipMigrations()` — migrations should run from the API or CI, not the Lambda
-- Avoid unnecessary effect providers — if the runner doesn't need broadcasting, don't register it
+- Keep `ConfigureServices` lean. Only register what the runner needs.
+- Use `SkipMigrations()`. Migrations should run from the API or CI, not the Lambda.
+- Avoid unnecessary effect providers. If the runner doesn't need broadcasting, don't register it.
 
 ## How It Works
 
@@ -170,7 +170,7 @@ For `Run` requests, exceptions are logged before being rethrown. `ITraxRequestHa
 
 ## See Also
 
-- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
-- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) — scheduler-side configuration for Lambda dispatch
-- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) — scheduler-side configuration for Lambda run execution
-- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — what `AddTraxJobRunner()` registers (called automatically by the base class)
+- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
+- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers): scheduler-side configuration for Lambda dispatch
+- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run): scheduler-side configuration for Lambda run execution
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner): what `AddTraxJobRunner()` registers (called automatically by the base class)

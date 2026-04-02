@@ -42,8 +42,8 @@ When using this overload, you must manually call `builder.WebHost.UseStaticWebAs
 
 ## Returns
 
-- **WebApplicationBuilder overload**: `WebApplicationBuilder` — for continued chaining.
-- **IServiceCollection overload**: `IServiceCollection` — for continued chaining.
+- **WebApplicationBuilder overload**: `WebApplicationBuilder`, for continued chaining.
+- **IServiceCollection overload**: `IServiceCollection`, for continued chaining.
 
 ## Example
 
@@ -62,10 +62,10 @@ app.UseTraxDashboard(routePrefix: "/admin/trax");
 
 ## What It Registers
 
-- `ITrainDiscoveryService` (singleton, from Mediator) — scans DI container for registered trains
-- `ILocalStorageService` (scoped) — browser local storage access for theme preferences
-- `IThemeStateService` (scoped) — dark/light theme state management
-- `IDashboardSettingsService` (scoped) — dashboard configuration access
+- `ITrainDiscoveryService` (singleton, from Mediator): scans DI container for registered trains
+- `ILocalStorageService` (scoped): browser local storage access for theme preferences
+- `IThemeStateService` (scoped): dark/light theme state management
+- `IDashboardSettingsService` (scoped): dashboard configuration access
 - Radzen components (via `AddRadzenComponents()`)
 - Blazor Interactive Server components (via `AddRazorComponents().AddInteractiveServerComponents()`)
 
@@ -78,7 +78,7 @@ InvalidOperationException: AddTrax() must be called before AddTraxDashboard().
 Call services.AddTrax(...) in your service configuration before calling AddTraxDashboard().
 ```
 
-This ensures the effect system and its services are available before the dashboard attempts to use them.
+This makes sure the effect system and its services are available before the dashboard attempts to use them.
 
 ## Package
 

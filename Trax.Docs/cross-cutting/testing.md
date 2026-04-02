@@ -147,7 +147,7 @@ public async Task Train_WithCancelledToken_DoesNotExecuteJunctions()
     cts.Cancel();
     var train = new MyTrain();
 
-    // Act & Assert — train should throw, junction should not run
+    // Act & Assert: train should throw, junction should not run
     var act = () => train.Run(input, cts.Token);
     await act.Should().ThrowAsync<Exception>();
 }
@@ -162,7 +162,7 @@ public async Task Junction_UsesToken_ForAsyncOperations()
     // Act
     await train.Run("input", cts.Token);
 
-    // Assert — verify the junction received the token
+    // Assert: verify the junction received the token
     // (access via a test helper that captures this.CancellationToken)
 }
 ```
@@ -171,7 +171,7 @@ public async Task Junction_UsesToken_ForAsyncOperations()
 
 ## E2E Testing
 
-For full application validation — scheduler dispatch, dependency chains, dormant dependent activation, dead-letter flows, and GraphQL authorization — use `WebApplicationFactory<T>`-based E2E tests against a real Postgres database.
+For full application validation (scheduler dispatch, dependency chains, dormant dependent activation, dead-letter flows, and GraphQL authorization), use `WebApplicationFactory<T>`-based E2E tests against a real Postgres database.
 
 *Full details: [E2E Testing](/docs/cross-cutting/e2e-testing)*
 

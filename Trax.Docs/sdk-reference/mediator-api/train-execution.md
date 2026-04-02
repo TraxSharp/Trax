@@ -8,11 +8,11 @@ nav_order: 4
 
 # TrainExecution
 
-`ITrainExecutionService` provides programmatic train execution by name. Instead of resolving a specific train interface, you pass the train's service type name and a JSON string — the service handles discovery, deserialization, and dispatch. Train lookup matches by fully-qualified canonical name first (`ServiceType.FullName`), then friendly name (`ServiceTypeName`), then short name (`ServiceType.Name`).
+`ITrainExecutionService` provides programmatic train execution by name. Instead of resolving a specific train interface, you pass the train's service type name and a JSON string. The service handles discovery, deserialization, and dispatch. Train lookup matches by fully-qualified canonical name first (`ServiceType.FullName`), then friendly name (`ServiceTypeName`), then short name (`ServiceType.Name`).
 
 It supports two execution paths:
-- **Queue** — creates a WorkQueue entry for asynchronous dispatch by the scheduler.
-- **Run** — executes the train synchronously via `ITrainBus` on the current machine.
+- **Queue**: creates a WorkQueue entry for asynchronous dispatch by the scheduler.
+- **Run**: executes the train synchronously via `ITrainBus` on the current machine.
 
 Registered automatically by `AddMediator()` as a scoped service.
 
@@ -51,8 +51,8 @@ Task<QueueTrainResult> QueueAsync(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `trainName` | `string` | Yes | — | Train name — matched by canonical name (`ServiceType.FullName`), then friendly name (`ServiceTypeName`), then short name (`ServiceType.Name`). Prefer the fully-qualified interface name (e.g. `"MyApp.Trains.IProcessOrderTrain"`). |
-| `inputJson` | `string` | Yes | — | JSON-serialized input matching the train's `InputType` |
+| `trainName` | `string` | Yes | N/A | Train name, matched by canonical name (`ServiceType.FullName`), then friendly name (`ServiceTypeName`), then short name (`ServiceType.Name`). Prefer the fully-qualified interface name (e.g. `"MyApp.Trains.IProcessOrderTrain"`). |
+| `inputJson` | `string` | Yes | N/A | JSON-serialized input matching the train's `InputType` |
 | `priority` | `int` | No | `0` | Dispatch priority (0-31, higher runs first) |
 | `ct` | `CancellationToken` | No | `default` | Cancellation token |
 
@@ -64,9 +64,9 @@ Task<QueueTrainResult> QueueAsync(
 | `ExternalId` | `string` | External ID assigned to the entry |
 
 **Throws**:
-- `InvalidOperationException` — if no train is registered with the given name. The message includes a hint to use `ITrainDiscoveryService.DiscoverTrains()` to list available trains.
-- `InvalidOperationException` — if JSON deserialization returns null.
-- `TrainAuthorizationException` — if the train has `[TraxAuthorize]` requirements that the current user does not satisfy. Only applies when `ITrainAuthorizationService` is registered (i.e., the API layer is in use).
+- `InvalidOperationException` if no train is registered with the given name. The message includes a hint to use `ITrainDiscoveryService.DiscoverTrains()` to list available trains.
+- `InvalidOperationException` if JSON deserialization returns null.
+- `TrainAuthorizationException` if the train has `[TraxAuthorize]` requirements that the current user does not satisfy. Only applies when `ITrainAuthorizationService` is registered (i.e., the API layer is in use).
 
 ### What it does
 
@@ -92,8 +92,8 @@ Task<RunTrainResult> RunAsync(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `trainName` | `string` | Yes | — | Train name (matched by canonical name, then friendly name, then short name) |
-| `inputJson` | `string` | Yes | — | JSON-serialized input matching the train's `InputType` |
+| `trainName` | `string` | Yes | N/A | Train name (matched by canonical name, then friendly name, then short name) |
+| `inputJson` | `string` | Yes | N/A | JSON-serialized input matching the train's `InputType` |
 | `ct` | `CancellationToken` | No | `default` | Cancellation token forwarded to `ITrainBus.RunAsync` |
 
 **Returns**: `RunTrainResult`
@@ -104,10 +104,10 @@ Task<RunTrainResult> RunAsync(
 | `Output` | `object?` | The train's typed output. `null` for `Unit` trains; the actual output object for trains with a typed `TOut` parameter. |
 
 **Throws**:
-- `InvalidOperationException` — if no train is registered with the given name.
-- `InvalidOperationException` — if JSON deserialization returns null.
-- `TrainException` — if the train itself fails during execution (propagated from `ITrainBus`).
-- `TrainAuthorizationException` — if the train has `[TraxAuthorize]` requirements that the current user does not satisfy. Only applies when `ITrainAuthorizationService` is registered.
+- `InvalidOperationException` if no train is registered with the given name.
+- `InvalidOperationException` if JSON deserialization returns null.
+- `TrainException` if the train itself fails during execution (propagated from `ITrainBus`).
+- `TrainAuthorizationException` if the train has `[TraxAuthorize]` requirements that the current user does not satisfy. Only applies when `ITrainAuthorizationService` is registered.
 
 ### What it does
 
@@ -191,7 +191,7 @@ public class TrainController(
 
 ## Concurrency Limiting
 
-`RunAsync` supports per-train and global concurrency limits to prevent overloading remote backends. When a limit is reached, additional requests wait in-process until a slot opens — no requests are rejected.
+`RunAsync` supports per-train and global concurrency limits to prevent overloading remote backends. When a limit is reached, additional requests wait in-process until a slot opens. No requests are rejected.
 
 See [Concurrency Limiting](/docs/sdk-reference/mediator-api/concurrency-limiting) for configuration details.
 

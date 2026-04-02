@@ -20,7 +20,7 @@ This means you cannot call `AddMediator()` without first calling `AddEffects()`,
 
 Effect-specific methods are nested inside `.AddEffects(effects => ...)`, which receives a `TraxEffectBuilder`. The `AddEffects` lambda must return the builder from the last chained call (`Func<TraxEffectBuilder, TraxEffectBuilder>`).
 
-Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData` — a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like `AddDataContextLogging()`. This provides compile-time safety: you cannot call `AddDataContextLogging()` without first configuring a data provider.
+Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData`, a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like `AddDataContextLogging()`. This provides compile-time safety: you cannot call `AddDataContextLogging()` without first configuring a data provider.
 
 ## Entry Point
 
@@ -56,7 +56,7 @@ public static TraxBuilderWithEffects AddEffects(
 )
 ```
 
-The `AddEffects` callback is a `Func` — the lambda must return the builder from the last chained call. For expression-body lambdas (the common case), this happens naturally:
+The `AddEffects` callback is a `Func`, so the lambda must return the builder from the last chained call. For expression-body lambdas (the common case), this happens naturally:
 
 ```csharp
 .AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
@@ -102,7 +102,7 @@ Inside the `AddEffects()` callback, data provider methods return a more specific
 | `TraxEffectBuilder` | `AddEffects()` lambda | `SkipMigrations()`, `UsePostgres()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddJunctionLogger()`, `AddJunctionProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()` |
 | `TraxEffectBuilderWithData` | `UsePostgres()`, `UseInMemory()` | Everything on `TraxEffectBuilder` plus `AddDataContextLogging()` |
 
-Generic effect methods (`AddJson`, `SaveTrainParameters`, `AddJunctionLogger`, `AddJunctionProgress`, `SetEffectLogLevel`, `UseBroadcaster`) preserve the concrete builder type through chaining — if you start with `TraxEffectBuilderWithData`, it stays `TraxEffectBuilderWithData`.
+Generic effect methods (`AddJson`, `SaveTrainParameters`, `AddJunctionLogger`, `AddJunctionProgress`, `SetEffectLogLevel`, `UseBroadcaster`) preserve the concrete builder type through chaining. If you start with `TraxEffectBuilderWithData`, it stays `TraxEffectBuilderWithData`.
 
 ## Ordering Enforcement
 

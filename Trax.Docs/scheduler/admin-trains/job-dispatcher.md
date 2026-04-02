@@ -24,9 +24,9 @@ Loads `WorkQueue` entries with `Status = Queued`, filtering out entries whose `M
 
 #### Group-Fair Batching
 
-When `MaxQueuedJobsPerCycle` is set (default: 100), the junction uses a window function (`ROW_NUMBER() OVER (PARTITION BY manifest_group_id)`) to load up to that many entries **per manifest group**. This ensures every group with queued work is represented in the loaded batch, preventing a single high-priority group from monopolizing the batch and starving lower-priority groups.
+When `MaxQueuedJobsPerCycle` is set (default: 100), the junction uses a window function (`ROW_NUMBER() OVER (PARTITION BY manifest_group_id)`) to load up to that many entries **per manifest group**. This guarantees every group with queued work is represented in the loaded batch, preventing a single high-priority group from monopolizing the batch and starving lower-priority groups.
 
-Without group-fair batching, if a high-priority group floods the queue (e.g., 841 entries from a `ScheduleMany` call), a flat `ORDER BY priority LIMIT 100` would load only that group's entries. `ApplyCapacityLimitsJunction` would cap the group and skip the rest — but entries from other groups would never be loaded, even when they have available capacity.
+Without group-fair batching, if a high-priority group floods the queue (e.g., 841 entries from a `ScheduleMany` call), a flat `ORDER BY priority LIMIT 100` would load only that group's entries. `ApplyCapacityLimitsJunction` would cap the group and skip the rest, but entries from other groups would never be loaded, even when they have available capacity.
 
 Manual entries (no manifest) are always included regardless of the per-group limit.
 
@@ -42,9 +42,9 @@ Set `MaxQueuedJobsPerCycle` to `null` to disable the limit and load all queued e
 
 After loading, entries are sorted by three keys:
 
-1. **ManifestGroup.Priority** (descending) — higher priority groups are dispatched first.
-2. **WorkQueue.Priority** (descending) — within a group, higher priority entries come first.
-3. **CreatedAt** (ascending) — FIFO tiebreaker within the same priority.
+1. **ManifestGroup.Priority** (descending), higher priority groups are dispatched first.
+2. **WorkQueue.Priority** (descending), within a group, higher priority entries come first.
+3. **CreatedAt** (ascending), FIFO tiebreaker within the same priority.
 
 This ordering is applied in-memory after the database query returns, since EF Core wraps `FromSqlRaw` in a subquery when navigation properties are included and Postgres does not guarantee `ORDER BY` preservation through subqueries.
 
@@ -72,13 +72,13 @@ For each successfully claimed entry, the dispatcher:
 
 4. **Commits the transaction**: the Metadata creation and WorkQueue status update are committed as a single atomic unit. This makes the Metadata visible to the job submitter before enqueue.
 
-5. **Enqueues to the job submitter**: calls `IJobSubmitter.EnqueueAsync` with the metadata ID, deserialized input, and the work queue entry's **priority**. The priority flows from the WorkQueue entry to the `background_job` table, where `LocalWorkerService` dequeues by `priority DESC, created_at ASC`. This ensures high-priority jobs are executed before low-priority ones. This happens after commit because the `InMemoryJobSubmitter` executes the train synchronously and needs to read the committed Metadata.
+5. **Enqueues to the job submitter**: calls `IJobSubmitter.EnqueueAsync` with the metadata ID, deserialized input, and the work queue entry's **priority**. The priority flows from the WorkQueue entry to the `background_job` table, where `LocalWorkerService` dequeues by `priority DESC, created_at ASC`. This means high-priority jobs are executed before low-priority ones. This happens after commit because the `InMemoryJobSubmitter` executes the train synchronously and needs to read the committed Metadata.
 
 Each entry is processed in its own DI scope with a fresh `IDataContext`. If any individual entry fails (type resolution, serialization, database error), its transaction is rolled back, the error is logged, and the loop continues to the next entry. One bad entry doesn't affect the rest of the queue.
 
 ## Parallel Dispatch
 
-By default, `DispatchJobsJunction` processes entries sequentially — one `TryClaimAndDispatchAsync` at a time. This is optimal for local workers where `EnqueueAsync` is a fast database INSERT. But when using `UseRemoteWorkers()`, each dispatch is an HTTP POST that blocks until the remote endpoint finishes executing the train. Sequential dispatch in this scenario means cycle duration scales linearly with the number of entries.
+By default, `DispatchJobsJunction` processes entries sequentially, one `TryClaimAndDispatchAsync` at a time. This is optimal for local workers where `EnqueueAsync` is a fast database INSERT. But when using `UseRemoteWorkers()`, each dispatch is an HTTP POST that blocks until the remote endpoint finishes executing the train. Sequential dispatch in this scenario means cycle duration scales linearly with the number of entries.
 
 `MaxConcurrentDispatch` controls how many entries are dispatched in parallel within a single polling cycle:
 
@@ -91,16 +91,16 @@ By default, `DispatchJobsJunction` processes entries sequentially — one `TryCl
 )
 ```
 
-When `MaxConcurrentDispatch > 1`, the junction uses a `SemaphoreSlim` to bound concurrency and `Task.WhenAll` to dispatch entries in parallel. Each entry still gets its own DI scope and database transaction — the `FOR UPDATE SKIP LOCKED` pattern ensures no two concurrent dispatches claim the same entry, even within the same cycle.
+When `MaxConcurrentDispatch > 1`, the junction uses a `SemaphoreSlim` to bound concurrency and `Task.WhenAll` to dispatch entries in parallel. Each entry still gets its own DI scope and database transaction, the `FOR UPDATE SKIP LOCKED` pattern prevents two concurrent dispatches from claiming the same entry, even within the same cycle.
 
 | `MaxConcurrentDispatch` | Behavior |
 |-------------------------|----------|
-| `1` (default) | Sequential `foreach` loop — zero overhead, exact backward compatibility |
-| `> 1` | Parallel dispatch bounded by `SemaphoreSlim` — entries are started in priority order but may complete in any order |
+| `1` (default) | Sequential `foreach` loop. Zero overhead, exact backward compatibility |
+| `> 1` | Parallel dispatch bounded by `SemaphoreSlim`. entries are started in priority order but may complete in any order |
 
 **Considerations:**
 - Each concurrent dispatch opens its own database connection. Keep the value well below your connection pool size (default Npgsql pool: 100).
-- Priority ordering within a cycle is best-effort when dispatching in parallel — entries are *started* in priority order, but complete in arbitrary order. This matches the existing behavior in multi-server deployments.
+- Priority ordering within a cycle is best-effort when dispatching in parallel, entries are *started* in priority order, but complete in arbitrary order. This matches the existing behavior in multi-server deployments.
 - Error handling is per-entry: if one dispatch fails (HTTP timeout, network error), the others continue. Failed dispatches mark their Metadata as `Failed` immediately, same as the sequential path.
 
 ## MaxActiveJobs Enforcement
@@ -113,7 +113,7 @@ The global limit works the same as before. The count is based on `Metadata` rows
 
 The count happens once at the start of each dispatch cycle, not per-entry. If you have `MaxActiveJobs = 100` and 95 are active, the dispatcher will take up to 5 entries from the queue. The remaining entries stay `Queued` and get picked up on the next polling cycle.
 
-Setting `MaxActiveJobs` to `null` disables the global check entirely—all queued entries are dispatched (subject to per-group limits).
+Setting `MaxActiveJobs` to `null` disables the global check entirely, all queued entries are dispatched (subject to per-group limits).
 
 ```csharp
 .AddScheduler(scheduler => scheduler
@@ -124,20 +124,20 @@ Setting `MaxActiveJobs` to `null` disables the global check entirely—all queue
 
 ### Per-Group MaxActiveJobs
 
-Each `ManifestGroup` can have its own `MaxActiveJobs` limit, configured from the dashboard on the ManifestGroup detail page. A group's active count only includes jobs belonging to that group—limits are completely independent across groups.
+Each `ManifestGroup` can have its own `MaxActiveJobs` limit, configured from the dashboard on the ManifestGroup detail page. A group's active count only includes jobs belonging to that group, limits are completely independent across groups.
 
 Both limits are enforced simultaneously. In practice, a group can dispatch at most `min(group limit, remaining global capacity)` jobs in a given cycle. When a group hits its per-group cap, the dispatcher uses `continue` to skip that group's entries and keeps processing entries from other groups. This prevents a single busy group from starving lower-traffic groups that still have capacity.
 
 ### How Global and Per-Group Limits Interact
 
-The global `MaxActiveJobs` is a hard ceiling on total concurrent jobs across all groups. Per-group limits are independent caps within that ceiling. When the sum of per-group limits exceeds the global limit, the global limit wins — not every group can run at full capacity simultaneously.
+The global `MaxActiveJobs` is a hard ceiling on total concurrent jobs across all groups. Per-group limits are independent caps within that ceiling. When the sum of per-group limits exceeds the global limit, the global limit wins. Not every group can run at full capacity simultaneously.
 
 The dispatcher processes entries in priority order and applies two checks with different behaviors:
 
-- **Global limit hit** → `break` — stops all further dispatching for this cycle.
-- **Per-group limit hit** → `continue` — skips that group's entry but keeps processing other groups.
+- **Global limit hit** → `break`, stops all further dispatching for this cycle.
+- **Per-group limit hit** → `continue`, skips that group's entry but keeps processing other groups.
 
-This means higher-priority groups consume global capacity first, but a group hitting its own cap doesn't waste the remaining global slots — they flow to lower-priority groups.
+This means higher-priority groups consume global capacity first, but a group hitting its own cap doesn't waste the remaining global slots, they flow to lower-priority groups.
 
 #### Example
 
@@ -157,9 +157,9 @@ Because Group A has higher priority, its entries appear first in the sorted queu
 | 4 | A-4 | 0 + 4 ≤ 5 ✓ | 0 + 3 ≥ 3 ✗ | **Skipped** (group cap) |
 | 5 | B-1 | 0 + 4 ≤ 5 ✓ | 0 + 1 ≤ 3 ✓ | **Dispatched** |
 | 6 | B-2 | 0 + 5 ≤ 5 ✓ | 0 + 2 ≤ 3 ✓ | **Dispatched** |
-| 7 | B-3 | 0 + 6 > 5 ✗ | — | **Stopped** (global cap) |
+| 7 | B-3 | 0 + 6 > 5 ✗ |. | **Stopped** (global cap) |
 
-**Result:** 5 jobs dispatched — Group A gets 3 (its per-group max), Group B gets 2 (limited by the remaining global capacity, not its own cap). Group B's remaining entry stays `Queued` and is picked up on the next polling cycle once a slot frees up.
+**Result:** 5 jobs dispatched. Group A gets 3 (its per-group max), Group B gets 2 (limited by the remaining global capacity, not its own cap). Group B's remaining entry stays `Queued` and is picked up on the next polling cycle once a slot frees up.
 
 **Key takeaway:** Per-group limits exceeding the global limit is a valid and useful configuration. It means each group *could* use up to its limit if other groups are idle, but when all groups are busy, the global limit determines the overall throughput and priority determines who gets slots first.
 

@@ -13,13 +13,13 @@ Adds PostgreSQL database support for persisting train metadata, logs, manifests,
 ## Signatures
 
 ```csharp
-// Basic — uses default Npgsql data source settings
+// Basic: uses default Npgsql data source settings
 public static TraxEffectBuilderWithData UsePostgres(
     this TraxEffectBuilder effectBuilder,
     string connectionString
 )
 
-// With data source configuration — tune pool size, timeouts, multiplexing, etc.
+// With data source configuration: tune pool size, timeouts, multiplexing, etc.
 public static TraxEffectBuilderWithData UsePostgres(
     this TraxEffectBuilder effectBuilder,
     string connectionString,
@@ -36,7 +36,7 @@ public static TraxEffectBuilderWithData UsePostgres(
 
 ## Returns
 
-`TraxEffectBuilderWithData` — a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging). This provides compile-time safety: methods that require a data provider are only available on the returned type.
+`TraxEffectBuilderWithData`, a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging). This provides compile-time safety: methods that require a data provider are only available on the returned type.
 
 ## Examples
 
@@ -78,7 +78,7 @@ services.AddTrax(trax => trax
 ## Remarks
 
 - Returns `TraxEffectBuilderWithData`, which makes `AddDataContextLogging()` available at compile time. Methods that don't require a data provider (like `AddJson()`, `SaveTrainParameters()`) use generic self-type preservation and work on both `TraxEffectBuilder` and `TraxEffectBuilderWithData`.
-- The database migration runs synchronously on startup. Ensure the database server is accessible at application start time. To skip migration (e.g., in Lambda runners), call [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) before `UsePostgres()`.
+- The database migration runs synchronously on startup. The database server must be accessible at application start time. To skip migration (e.g., in Lambda runners), call [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) before `UsePostgres()`.
 - For testing/development without a database, use [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) instead.
 
 ## Package

@@ -37,7 +37,7 @@ The parameterless overload registers the scheduler with default settings, equiva
 
 ## Returns
 
-`TraxBuilderWithMediator` — for continued fluent chaining (e.g., adding another `AddScheduler()` call is not typical, but the type allows further configuration).
+`TraxBuilderWithMediator`, for continued fluent chaining (adding another `AddScheduler()` call is not typical, but the type allows further configuration).
 
 ## Example
 
@@ -90,7 +90,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 
 | Method | Parameter | Default | Description |
 |--------|-----------|---------|-------------|
-| `PollingInterval(TimeSpan)` | interval | 5 seconds | Shorthand — sets both `ManifestManagerPollingInterval` and `JobDispatcherPollingInterval` to the same value |
+| `PollingInterval(TimeSpan)` | interval | 5 seconds | Shorthand that sets both `ManifestManagerPollingInterval` and `JobDispatcherPollingInterval` to the same value |
 | `ManifestManagerPollingInterval(TimeSpan)` | interval | 5 seconds | How often the ManifestManager evaluates manifests and writes to the work queue |
 | `JobDispatcherPollingInterval(TimeSpan)` | interval | 2 seconds | How often the JobDispatcher reads from the work queue and dispatches to the job submitter |
 | `MaxConcurrentDispatch(int)` | maxConcurrent | 1 | Max entries dispatched concurrently per polling cycle. Increase when using `UseRemoteWorkers` to avoid sequential HTTP blocking. See [Parallel Dispatch](/docs/scheduler/admin-trains/job-dispatcher#parallel-dispatch) |
@@ -98,7 +98,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `MaxActiveJobs(int?)` | maxJobs | 10 | Max concurrent active jobs (Pending + InProgress) globally. `null` = unlimited. Per-group limits can also be set from the dashboard on each ManifestGroup |
 | `MaxQueuedJobsPerCycle(int?)` | limit | 100 | Max queued work queue entries loaded per JobDispatcher cycle. Prevents unbounded memory usage when the queue is large. `null` = unlimited. Provides headroom beyond `MaxActiveJobs` for per-group limit skipping |
 | `MaxWorkQueueEntriesPerCycle(int?)` | limit | 200 | Max work queue entries created per ManifestManager cycle, distributed fairly across manifest groups (`limit / numGroups` per group, overflow to higher-priority groups). Prevents a single large group from starving smaller groups. `null` = unlimited |
-| `ExcludeFromMaxActiveJobs<TTrain>()` | — | — | Excludes a train type from the MaxActiveJobs count |
+| `ExcludeFromMaxActiveJobs<TTrain>()` | _(none)_ | _(none)_ | Excludes a train type from the MaxActiveJobs count |
 | `DefaultMaxRetries(int)` | maxRetries | 3 | Retry attempts before dead-lettering |
 | `DefaultRetryDelay(TimeSpan)` | delay | 5 minutes | Base delay between retries |
 | `RetryBackoffMultiplier(double)` | multiplier | 2.0 | Exponential backoff multiplier. Set to 1.0 for constant delay |
@@ -110,7 +110,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `StalePendingTimeout(TimeSpan)` | timeout | 20 minutes | Timeout after which a Pending job that was never picked up is automatically failed |
 | `StaleInProgressTimeout(TimeSpan)` | timeout | 60 minutes | Timeout after which an InProgress job that never completed is automatically failed. Acts as a safety net for hard crashes (Lambda kills, OOM) where FinishServiceTrain never runs. Should be longer than `DefaultJobTimeout` to allow cooperative cancellation to propagate first |
 | `PruneOrphanedManifests(bool)` | prune | `true` | Whether to [delete manifests](/docs/scheduler/orphan-manifest-cleanup) from the database that are no longer defined in the startup configuration. Disable if you create manifests dynamically at runtime via `ITraxScheduler` |
-| `DependentPriorityBoost(int)` | boost | 16 | Priority boost added to dependent train work queue entries at dispatch time. Range: 0-31. Ensures dependent trains are dispatched before non-dependent ones by default |
+| `DependentPriorityBoost(int)` | boost | 16 | Priority boost added to dependent train work queue entries at dispatch time. Range: 0-31. Dependent trains are dispatched before non-dependent ones by default |
 
 ### Startup Schedules
 
@@ -127,6 +127,6 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 - `AddScheduler` requires a data provider (`UsePostgres()` or `UseInMemory()`). If no data provider is configured, `AddScheduler` throws `InvalidOperationException` at build time with a helpful error message showing the required configuration.
 - Internal scheduler trains (`ManifestManager`, `InMemoryManifestManager`, `JobDispatcher`, `JobRunner`, `MetadataCleanup`) are automatically excluded from `MaxActiveJobs`.
 - With `UseInMemory()`, `JobDispatcherPollingService` and `MetadataCleanupPollingService` are not registered. The `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that dispatches jobs inline via `InMemoryJobSubmitter`.
-- Manifests declared via `Schedule`/`ScheduleMany` are not created immediately — they are seeded on application startup by the `SchedulerStartupService`.
+- Manifests declared via `Schedule`/`ScheduleMany` are not created immediately. They are seeded on application startup by the `SchedulerStartupService`.
 - Manifests declared via `Schedule`/`ThenInclude`/`Include` get a ManifestGroup based on their `groupId` parameter (defaults to externalId). Per-group dispatch controls (MaxActiveJobs, Priority, IsEnabled) are configured from the dashboard.
-- At build time, the scheduler validates that ManifestGroup dependencies form a DAG (no circular dependencies). If a cycle is detected, `AddScheduler` throws `InvalidOperationException` with the groups involved. See [Dependent Trains — Cycle Detection](/docs/scheduler/dependent-trains#cycle-detection).
+- At build time, the scheduler validates that ManifestGroup dependencies form a DAG (no circular dependencies). If a cycle is detected, `AddScheduler` throws `InvalidOperationException` with the groups involved. See [Dependent Trains: Cycle Detection](/docs/scheduler/dependent-trains#cycle-detection).

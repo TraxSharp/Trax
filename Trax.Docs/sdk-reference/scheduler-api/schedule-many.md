@@ -31,7 +31,7 @@ The `name` parameter automatically derives:
 - **`prunePrefix`** = `"{name}-"`
 - **`externalId`** = `"{name}-{item.Id}"` for each item
 
-Each `ManifestItem` contains the item's ID and input. The input type is inferred from `TTrain`'s `IServiceTrain<TInput, TOutput>` interface and validated at configuration time. The output type is not constrained — scheduled trains can return any output type, and the output is discarded for background jobs.
+Each `ManifestItem` contains the item's ID and input. The input type is inferred from `TTrain`'s `IServiceTrain<TInput, TOutput>` interface and validated at configuration time. The output type is not constrained: scheduled trains can return any output type, and the output is discarded for background jobs.
 
 ### Startup: Unnamed with ManifestItem
 
@@ -118,10 +118,10 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource
 
 | Type Parameter | Constraint | Description |
 |---------------|------------|-------------|
-| `TTrain` | `IServiceTrain<TInput, TOutput>` | The train interface type. All items in the batch execute the same train. Can have any output type — the output is discarded for background jobs. |
+| `TTrain` | `IServiceTrain<TInput, TOutput>` | The train interface type. All items in the batch execute the same train. Can have any output type; the output is discarded for background jobs. |
 | `TInput` | `IManifestProperties` | The input type for the train. Each item in the batch can have different input data. |
-| `TOutput` | — | The output type of the train. Not constrained — any output type is accepted. The output is discarded when jobs complete. |
-| `TSource` | — | The type of elements in the source collection. Can be any type — it is transformed into `(ExternalId, Input)` pairs by the `map` function. |
+| `TOutput` | _(none)_ | The output type of the train. Not constrained; any output type is accepted. The output is discarded when jobs complete. |
+| `TSource` | _(none)_ | The type of elements in the source collection. Can be any type and is transformed into `(ExternalId, Input)` pairs by the `map` function. |
 
 ## Parameters
 
@@ -129,27 +129,27 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `name` | `string` | Yes (name-based) | — | The batch name. Automatically derives `groupId` = `name`, `prunePrefix` = `"{name}-"`, and each external ID = `"{name}-{item.Id}"`. |
-| `items` | `IEnumerable<ManifestItem>` | Yes | — | The collection of items to create manifests from. Each item becomes one scheduled manifest. |
-| `schedule` | `Schedule` | Yes | — | The schedule definition applied to **all** manifests in the batch. Use [Every](/docs/sdk-reference/scheduler-api/scheduling-helpers) or [Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers) helpers. |
+| `name` | `string` | Yes (name-based) | _(none)_ | The batch name. Automatically derives `groupId` = `name`, `prunePrefix` = `"{name}-"`, and each external ID = `"{name}-{item.Id}"`. |
+| `items` | `IEnumerable<ManifestItem>` | Yes | _(none)_ | The collection of items to create manifests from. Each item becomes one scheduled manifest. |
+| `schedule` | `Schedule` | Yes | _(none)_ | The schedule definition applied to **all** manifests in the batch. Use [Every](/docs/sdk-reference/scheduler-api/scheduling-helpers) or [Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers) helpers. |
 | `options` | `Action<ScheduleOptions>?` | No | `null` | Optional callback to configure all scheduling options. The name-based overload pre-sets `Group(name)` and `PrunePrefix("{name}-")` before invoking your callback. See [ScheduleOptions](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions). |
 
 ### Legacy API Parameters
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `name` | `string` | Yes (name-based) | — | The batch name. Automatically derives `groupId` = `name`, `prunePrefix` = `"{name}-"`, and each external ID = `"{name}-{suffix}"`. |
-| `sources` | `IEnumerable<TSource>` | Yes | — | The collection of items to create manifests from. Each item becomes one scheduled manifest. |
-| `map` | `Func<TSource, (string, TInput)>` | Yes | — | A function that transforms each source item into an ID/suffix and input pair. |
-| `schedule` | `Schedule` | Yes | — | The schedule definition applied to **all** manifests in the batch. |
+| `name` | `string` | Yes (name-based) | _(none)_ | The batch name. Automatically derives `groupId` = `name`, `prunePrefix` = `"{name}-"`, and each external ID = `"{name}-{suffix}"`. |
+| `sources` | `IEnumerable<TSource>` | Yes | _(none)_ | The collection of items to create manifests from. Each item becomes one scheduled manifest. |
+| `map` | `Func<TSource, (string, TInput)>` | Yes | _(none)_ | A function that transforms each source item into an ID/suffix and input pair. |
+| `schedule` | `Schedule` | Yes | _(none)_ | The schedule definition applied to **all** manifests in the batch. |
 | `options` | `Action<ScheduleOptions>?` | No | `null` | Optional callback to configure all scheduling options. See [ScheduleOptions](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions). |
 | `configureEach` | `Action<TSource, ManifestOptions>?` | No | `null` | Optional callback to set per-item manifest options. Receives both the source item and options, allowing per-item overrides of the base options set via `options`. |
 | `ct` | `CancellationToken` | No | `default` | Cancellation token (runtime API only). |
 
 ## Returns
 
-- **Startup**: `SchedulerConfigurationBuilder` — for continued fluent chaining.
-- **Runtime**: `Task<IReadOnlyList<Manifest>>` — all created or updated manifest records.
+- **Startup**: `SchedulerConfigurationBuilder`, for continued fluent chaining.
+- **Runtime**: `Task<IReadOnlyList<Manifest>>`, all created or updated manifest records.
 
 ## Examples
 
@@ -173,7 +173,7 @@ services.AddTrax(trax => trax
 // groupId: "sync", prunePrefix: "sync-"
 ```
 
-Each `ManifestItem` contains the item's ID (used as the suffix in name-based overloads) and the train input. No `map` function needed — the data is already structured.
+Each `ManifestItem` contains the item's ID (used as the suffix in name-based overloads) and the train input. No `map` function needed because the data is already structured.
 
 ### Unnamed Batch Scheduling
 
@@ -268,8 +268,8 @@ public class TenantSyncService(ITraxScheduler scheduler)
 ## Remarks
 
 - All manifests are created/updated in a **single database transaction**. If any manifest fails to save, the entire batch is rolled back.
-- Pruning runs in a **separate database context** after the main transaction commits. A prune failure does not roll back the upserted manifests — the failure is logged as a warning and retried on the next cycle.
-- The `configureEach` callback receives `Action<TSource, ManifestOptions>` (not `Action<ManifestOptions>` like `Schedule`) — this lets you customize options based on the source item. It applies per-item overrides on top of the base options from `ScheduleOptions`.
+- Pruning runs in a **separate database context** after the main transaction commits. A prune failure does not roll back the upserted manifests. The failure is logged as a warning and retried on the next cycle.
+- The `configureEach` callback receives `Action<TSource, ManifestOptions>` (not `Action<ManifestOptions>` like `Schedule`), which lets you customize options based on the source item. It applies per-item overrides on top of the base options from `ScheduleOptions`.
 - The source collection is materialized (`.ToList()`) internally to avoid multiple enumeration.
 - The group is configured via `.Group(...)` on `ScheduleOptions`. Per-group settings (MaxActiveJobs, Priority, IsEnabled) can be set from code or adjusted at runtime from the dashboard. See [Per-Group Dispatch Controls](/docs/scheduler/scheduling-options#per-group-dispatch-controls).
-- `ScheduleMany` cannot be followed by `.ThenInclude()` — use [IncludeMany](/docs/sdk-reference/scheduler-api/dependent-scheduling) (with `dependsOn`) instead for batch dependent scheduling.
+- `ScheduleMany` cannot be followed by `.ThenInclude()`. Use [IncludeMany](/docs/sdk-reference/scheduler-api/dependent-scheduling) (with `dependsOn`) instead for batch dependent scheduling.

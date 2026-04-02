@@ -8,7 +8,7 @@ nav_order: 2
 
 # ConfigureLocalWorkers
 
-Customizes the built-in PostgreSQL local worker pool. Local workers are registered automatically when `UsePostgres()` is configured — no explicit call is needed to enable them.
+Customizes the built-in PostgreSQL local worker pool. Local workers are registered automatically when `UsePostgres()` is configured. No explicit call is needed to enable them.
 
 ## Signature
 
@@ -26,7 +26,7 @@ public SchedulerConfigurationBuilder ConfigureLocalWorkers(
 
 ## Returns
 
-`SchedulerConfigurationBuilder` — for continued fluent chaining.
+`SchedulerConfigurationBuilder`, for continued fluent chaining.
 
 ## LocalWorkerOptions
 
@@ -108,11 +108,11 @@ In this example, `IHeavyComputeTrain` is dispatched to the remote HTTP endpoint,
 
 - Local workers are the **implicit default** when `UsePostgres()` is configured. You only need `ConfigureLocalWorkers()` if you want to change the defaults.
 - No connection string parameter is needed. Local workers use the same `IDataContext` registered by `UsePostgres()`.
-- No additional NuGet packages required — this is included in `Trax.Scheduler`.
+- No additional NuGet packages required. This is included in `Trax.Scheduler`.
 - Jobs are queued to the `trax.background_job` table and dequeued atomically using PostgreSQL's `FOR UPDATE SKIP LOCKED`.
 - Workers delete job rows after execution (both success and failure). Trax.Core's Metadata and DeadLetter tables handle the audit trail.
 - If a worker crashes mid-execution, the job's `fetched_at` timestamp becomes stale and the job is reclaimed after `VisibilityTimeout`.
-- When `UseRemoteWorkers()` or `UseSqsWorkers()` is also configured, local workers still run — only the trains explicitly routed via `ForTrain<T>()` or `[TraxRemote]` are dispatched remotely.
+- When `UseRemoteWorkers()` or `UseSqsWorkers()` is also configured, local workers still run. Only the trains explicitly routed via `ForTrain<T>()` or `[TraxRemote]` are dispatched remotely.
 
 ## Registered Services
 
@@ -133,6 +133,6 @@ dotnet add package Trax.Scheduler
 
 ## See Also
 
-- [Job Submission Architecture](/docs/scheduler/job-submission) — detailed architecture, crash recovery, comparison with Hangfire
-- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — per-train HTTP remote dispatch
-- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) — per-train SQS dispatch
+- [Job Submission Architecture](/docs/scheduler/job-submission): detailed architecture, crash recovery, comparison with Hangfire
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers): per-train HTTP remote dispatch
+- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers): per-train SQS dispatch

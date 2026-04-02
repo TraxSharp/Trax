@@ -7,7 +7,7 @@ section: Guides
 
 # Samples & Deployment Patterns
 
-The Trax samples demonstrate a consistent architectural pattern: **put your trains in a library, then wrap them with thin executables**. Each executable is just a `Program.cs` that picks which Trax capabilities to wire up. The trains themselves stay deployment-agnostic — the same library powers a standalone scheduler, a GraphQL API, a distributed worker fleet, or all three at once.
+The Trax samples demonstrate a consistent architectural pattern: **put your trains in a library, then wrap them with thin executables**. Each executable is just a `Program.cs` that picks which Trax capabilities to wire up. The trains themselves stay deployment-agnostic. The same library powers a standalone scheduler, a GraphQL API, a distributed worker fleet, or all three at once.
 
 This mirrors the ladder philosophy. You only add the packages you need, and you only build the executables you need. The trains don't change.
 
@@ -40,11 +40,11 @@ MyApp.Api/                      ← executable (thin wrapper)
 
 The library project contains everything that defines *what your application does*:
 
-- **Trains** — `ServiceTrain<TIn, TOut>` implementations with their junctions
-- **Interfaces** — `IServiceTrain<TIn, TOut>` contracts for each train
-- **Inputs and outputs** — POCOs that define each train's data contract
-- **ManifestNames** — string constants for scheduler manifest IDs
-- **Domain types** — any shared models, enums, or utilities
+- **Trains** - `ServiceTrain<TIn, TOut>` implementations with their junctions
+- **Interfaces** - `IServiceTrain<TIn, TOut>` contracts for each train
+- **Inputs and outputs** - POCOs that define each train's data contract
+- **ManifestNames** - string constants for scheduler manifest IDs
+- **Domain types** - any shared models, enums, or utilities
 
 The library references `Trax.Effect`, `Trax.Mediator`, and `Trax.Scheduler` (or whatever layers your trains need), but it does **not** reference infrastructure packages like `Trax.Dashboard`, `Trax.Api.GraphQL`, or the effect providers. It has no `Program.cs` and no `appsettings.json`.
 
@@ -65,7 +65,7 @@ The library references `Trax.Effect`, `Trax.Mediator`, and `Trax.Scheduler` (or 
 
 ### The Executables
 
-Each executable is a `Microsoft.NET.Sdk.Web` project with a `ProjectReference` to the library. Its `Program.cs` calls `AddTrax()` and configures whichever capabilities this process needs — scheduling, dashboard, GraphQL, worker polling, or any combination.
+Each executable is a `Microsoft.NET.Sdk.Web` project with a `ProjectReference` to the library. Its `Program.cs` calls `AddTrax()` and configures whichever capabilities this process needs - scheduling, dashboard, GraphQL, worker polling, or any combination.
 
 ```xml
 <!-- Executable .csproj -->
@@ -85,7 +85,7 @@ Each executable is a `Microsoft.NET.Sdk.Web` project with a `ProjectReference` t
 </Project>
 ```
 
-The key line in `Program.cs` is the assembly scan — it points at the library so the train bus discovers all your trains:
+The key line in `Program.cs` is the assembly scan - it points at the library so the train bus discovers all your trains:
 
 ```csharp
 builder.Services.AddTrax(trax => trax
@@ -111,7 +111,7 @@ Trax.Samples.Flowthru.Spaceflights/           ← library (trains)
 Trax.Samples.Flowthru.Spaceflights.Scheduler/ ← executable (scheduler + dashboard)
 ```
 
-The simplest deployment — one process that schedules and executes everything. The executable adds `AddScheduler()` and `AddTraxDashboard()`. Local workers are the implicit default when `UsePostgres()` is configured.
+The simplest deployment - one process that schedules and executes everything. The executable adds `AddScheduler()` and `AddTraxDashboard()`. Local workers are the implicit default when `UsePostgres()` is configured.
 
 Good for: data pipelines, ETL jobs, background processing where a single server handles the load.
 
@@ -125,11 +125,11 @@ Trax.Samples.GameServer.Scheduler/  ← executable (scheduler + dashboard)
 Trax.Samples.GameServer.Api/        ← executable (API only)
 ```
 
-Two processes share the same trains library. The scheduler process handles background execution and hosts the dashboard. The GraphQL process serves the API — it can run lightweight trains synchronously and queue heavy work for the scheduler.
+Two processes share the same trains library. The scheduler process handles background execution and hosts the dashboard. The GraphQL process serves the API - it can run lightweight trains synchronously and queue heavy work for the scheduler.
 
 The split is simple:
 - **Scheduler:** `AddScheduler()` + `AddTraxDashboard()`
-- **API:** `AddTraxGraphQL()` — no scheduler, no executor
+- **API:** `AddTraxGraphQL()` - no scheduler, no executor
 
 Good for: web applications with both an API and background jobs, where the API needs to stay responsive and offload heavy work.
 
@@ -147,9 +147,9 @@ The hub process manages scheduling and serves the API, but does **not** execute 
 
 The split:
 - **Hub:** `AddScheduler()` + `OverrideSubmitter<PostgresJobSubmitter>()` + `AddTraxGraphQL()` + `AddTraxDashboard()`
-- **Worker:** `AddTraxWorker()` — polls `background_job` with `FOR UPDATE SKIP LOCKED`
+- **Worker:** `AddTraxWorker()` - polls `background_job` with `FOR UPDATE SKIP LOCKED`
 
-Workers scale horizontally — run as many as you need. The hub stays lightweight.
+Workers scale horizontally - run as many as you need. The hub stays lightweight.
 
 Good for: high-throughput systems, microservices, environments where you need to scale execution independently from scheduling.
 
@@ -163,13 +163,13 @@ Trax.Samples.ContentShield.Api/        ← executable (API + dashboard, HTTP dis
 Trax.Samples.ContentShield.Runner/     ← executable (ephemeral runner, no scheduler)
 ```
 
-No scheduled jobs — all work is triggered by GraphQL mutations. The API dispatches queued mutations directly to the Runner via HTTP using `UseRemoteWorkers()`, and also offloads synchronous `run` mutations to the Runner via `UseRemoteRun()`. The Runner simulates a serverless function (AWS Lambda, Cloud Run, Azure Functions) — it receives requests over HTTP, executes the train, and returns.
+No scheduled jobs - all work is triggered by GraphQL mutations. The API dispatches queued mutations directly to the Runner via HTTP using `UseRemoteWorkers()`, and also offloads synchronous `run` mutations to the Runner via `UseRemoteRun()`. The Runner simulates a serverless function (AWS Lambda, Cloud Run, Azure Functions) - it receives requests over HTTP, executes the train, and returns.
 
 The split:
 - **API:** `AddScheduler()` + `UseRemoteWorkers()` + `UseRemoteRun()` + `AddTraxGraphQL()` + `AddTraxDashboard()`
-- **Runner:** `AddTraxJobRunner()` + `UseTraxRunEndpoint()` + `UseBroadcaster()` — no scheduler, no polling, no dashboard
+- **Runner:** `AddTraxJobRunner()` + `UseTraxRunEndpoint()` + `UseBroadcaster()` - no scheduler, no polling, no dashboard
 
-Query trains (e.g. `LookupModerationResult`) run synchronously on the API process. Queued trains (e.g. `ReviewContent`, `SendViolationNotice`) are POSTed to the Runner via `HttpJobSubmitter`. No `background_job` table is involved — jobs go directly over HTTP.
+Query trains (e.g. `LookupModerationResult`) run synchronously on the API process. Queued trains (e.g. `ReviewContent`, `SendViolationNotice`) are POSTed to the Runner via `HttpJobSubmitter`. No `background_job` table is involved - jobs go directly over HTTP.
 
 The Runner uses `UseBroadcaster(b => b.UseRabbitMq(...))` to publish lifecycle events back to RabbitMQ, so the API's GraphQL subscriptions are notified when queued trains complete.
 
@@ -186,7 +186,7 @@ Trax.Samples.ChatService.Api/      ← executable (single server)
 Trax.Samples.ChatService.Client/   ← React + TypeScript frontend (Apollo Client, graphql-ws)
 ```
 
-A single-server chat application that demonstrates how Trax lifecycle hooks can power domain-specific real-time GraphQL subscriptions. No scheduler or workers — everything runs in one process.
+A single-server chat application that demonstrates how Trax lifecycle hooks can power domain-specific real-time GraphQL subscriptions. No scheduler or workers - everything runs in one process.
 
 The key innovation is the `ChatLifecycleHook`, a custom `ITrainLifecycleHook` that intercepts completed chat mutation trains. When a `SendMessage` train completes, the hook reads `metadata.Output` (the serialized train output), extracts the `chatRoomId`, and publishes a `ChatSubscriptionEvent` to a room-scoped HotChocolate topic. Clients subscribed to that room receive the event in real time.
 
@@ -197,9 +197,9 @@ This approach works because:
 
 The sample also includes its own EF Core data layer in a separate project (`ChatService.Data`) with `ChatRoom`, `ChatParticipant`, and `ChatMessage` entities. The `ChatDbContext` uses the `chat` schema to coexist with Trax's `trax` schema in the same database.
 
-A React + TypeScript frontend (`ChatService.Client`) demonstrates the full client/server GraphQL interaction. It uses Apollo Client with a split link — HTTP for queries/mutations and `graphql-ws` for subscriptions — connecting to the HotChocolate endpoint at `localhost:5210/trax/graphql`. The UI lets you switch between users (Alice, Bob, Charlie), create and join rooms, send messages, and see real-time subscription delivery in action.
+A React + TypeScript frontend (`ChatService.Client`) demonstrates the full client/server GraphQL interaction. It uses Apollo Client with a split link - HTTP for queries/mutations and `graphql-ws` for subscriptions - connecting to the HotChocolate endpoint at `localhost:5210/trax/graphql`. The UI lets you switch between users (Alice, Bob, Charlie), create and join rooms, send messages, and see real-time subscription delivery in action.
 
-Good for: real-time applications, chat systems, collaboration tools, notification feeds — anywhere you need domain-specific subscriptions driven by train completion events.
+Good for: real-time applications, chat systems, collaboration tools, notification feeds - anywhere you need domain-specific subscriptions driven by train completion events.
 
 ### Model 6: Hub with Built-In Subscriptions
 
@@ -211,16 +211,16 @@ Trax.Samples.TestRunner.Hub/         ← executable (API + scheduler + local wor
 Trax.Samples.TestRunner.Client/      ← React + TypeScript frontend (Apollo Client, graphql-ws)
 ```
 
-A single-process hub that runs NUnit tests across the Trax monorepo on demand. This sample demonstrates the simplest way to get real-time feedback from queued trains — using `[TraxBroadcast]` with the built-in `onTrainCompleted` subscription, with no custom lifecycle hook needed.
+A single-process hub that runs NUnit tests across the Trax monorepo on demand. This sample demonstrates the simplest way to get real-time feedback from queued trains - using `[TraxBroadcast]` with the built-in `onTrainCompleted` subscription, with no custom lifecycle hook needed.
 
 The `RunTestsTrain` is decorated with `[TraxMutation(GraphQLOperation.Queue)]` and `[TraxBroadcast]`. When a user clicks "Run" in the React frontend, a queue mutation returns an `externalId` immediately. Local workers pick up the job and execute two junctions:
 
-1. **`BuildProjectJunction`** — runs `dotnet build` via `Process.Start` to compile the test project
-2. **`ExecuteTestsJunction`** — uses NUnit.Engine (`TestEngineActivator.CreateInstance()`) to load the built DLL and run tests **in-process**, returning structured XML results parsed into a `TestResult` model
+1. **`BuildProjectJunction`** - runs `dotnet build` via `Process.Start` to compile the test project
+2. **`ExecuteTestsJunction`** - uses NUnit.Engine (`TestEngineActivator.CreateInstance()`) to load the built DLL and run tests **in-process**, returning structured XML results parsed into a `TestResult` model
 
 When the train completes, `[TraxBroadcast]` triggers the built-in `GraphQLSubscriptionHook`, which publishes a `TrainLifecycleEvent` to the `onTrainCompleted` subscription topic. The React frontend subscribes to this topic, filters events by train name (the interface FullName), and displays pass/fail counts, durations, and error details.
 
-This differs from ChatService (Model 5) in a key way: ChatService uses a **custom** `ITrainLifecycleHook` to publish domain-specific events to custom subscription topics. TestRunner uses **no custom hook at all** — the standard `[TraxBroadcast]` attribute and built-in `onTrainCompleted` subscription handle everything. The frontend parses the train's serialized `output` from the subscription event to extract test results.
+This differs from ChatService (Model 5) in a key way: ChatService uses a **custom** `ITrainLifecycleHook` to publish domain-specific events to custom subscription topics. TestRunner uses **no custom hook at all** - the standard `[TraxBroadcast]` attribute and built-in `onTrainCompleted` subscription handle everything. The frontend parses the train's serialized `output` from the subscription event to extract test results.
 
 A `TestProjectRegistry` singleton service scans the monorepo for `.csproj` files containing NUnit package references, exposed through a `DiscoverTestProjectsTrain` query that populates the UI.
 
@@ -262,10 +262,10 @@ Dashboard at `http://localhost:5000/trax`.
 ### LocalWorkers (Separate API + Scheduler)
 
 ```bash
-# Terminal 1 — scheduler
+# Terminal 1 - scheduler
 dotnet run --project samples/LocalWorkers/Trax.Samples.GameServer.Scheduler
 
-# Terminal 2 — API
+# Terminal 2 - API
 dotnet run --project samples/LocalWorkers/Trax.Samples.GameServer.Api
 ```
 
@@ -285,10 +285,10 @@ See [E2E Testing](/docs/cross-cutting/e2e-testing) for the patterns used.
 ### DistributedWorkers (Hub + Workers)
 
 ```bash
-# Terminal 1 — hub
+# Terminal 1 - hub
 dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub
 
-# Terminal 2 — worker
+# Terminal 2 - worker
 dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker
 ```
 
@@ -306,10 +306,10 @@ Tests cover manifest configuration (dependency chains, batch scheduling, cron), 
 ### EphemeralWorkers (API + Serverless Runner)
 
 ```bash
-# Terminal 1 — runner
+# Terminal 1 - runner
 dotnet run --project samples/EphemeralWorkers/Trax.Samples.ContentShield.Runner
 
-# Terminal 2 — API
+# Terminal 2 - API
 dotnet run --project samples/EphemeralWorkers/Trax.Samples.ContentShield.Api
 ```
 
@@ -318,10 +318,10 @@ Dashboard at `http://localhost:5204/trax`. GraphQL IDE at `http://localhost:5204
 ### ChatService (Single-Server Real-Time)
 
 ```bash
-# Terminal 1 — API
+# Terminal 1 - API
 dotnet run --project samples/ChatService/Trax.Samples.ChatService.Api
 
-# Terminal 2 — React client (optional)
+# Terminal 2 - React client (optional)
 cd samples/ChatService/Trax.Samples.ChatService.Client
 npm install && npm run dev
 ```
@@ -329,7 +329,7 @@ npm install && npm run dev
 GraphQL IDE at `http://localhost:5210/trax/graphql`. React client at `http://localhost:5173`.
 
 Authentication uses `X-Api-Key` header with three users: `alice-key`, `bob-key`, `charlie-key`.
-The React client provides a user switcher dropdown — open multiple browser tabs to simulate different users chatting in real time.
+The React client provides a user switcher dropdown - open multiple browser tabs to simulate different users chatting in real time.
 
 **Quick walkthrough (ChatService):**
 
@@ -337,13 +337,13 @@ The React client provides a user switcher dropdown — open multiple browser tab
 # 1. Create a room (as Alice)
 mutation { dispatch { createChatRoom(input: { name: "General", userId: "alice", displayName: "Alice" }) { externalId output { chatRoomId name } } } }
 
-# 2. Join the room (as Bob) — use the chatRoomId from step 1
+# 2. Join the room (as Bob) - use the chatRoomId from step 1
 mutation { dispatch { joinChatRoom(input: { chatRoomId: "<id>", userId: "bob", displayName: "Bob" }) { externalId output { joinedAt } } } }
 
 # 3. Subscribe to real-time events (in a second tab)
 subscription { onChatEvent(chatRoomId: "<id>") { eventType payload timestamp } }
 
-# 4. Send a message — the subscription tab receives it
+# 4. Send a message - the subscription tab receives it
 mutation { dispatch { sendMessage(input: { chatRoomId: "<id>", senderUserId: "alice", content: "Hello Bob!" }) { externalId output { messageId content sentAt } } } }
 
 # 5. Query chat history
@@ -362,17 +362,17 @@ Tests cover chat room CRUD, message persistence, participant management, Trax me
 ### TestRunner (Hub with Built-In Subscriptions)
 
 ```bash
-# Terminal 1 — Hub (API + scheduler + local workers)
+# Terminal 1 - Hub (API + scheduler + local workers)
 dotnet run --project samples/TestRunner/Trax.Samples.TestRunner.Hub
 
-# Terminal 2 — React client
+# Terminal 2 - React client
 cd samples/TestRunner/Trax.Samples.TestRunner.Client
 npm install && npm run dev
 ```
 
 GraphQL IDE at `http://localhost:5220/trax/graphql`. React client at `http://localhost:5173`.
 
-No authentication required — this is a developer tool.
+No authentication required - this is a developer tool.
 
 **Quick walkthrough (TestRunner):**
 
@@ -383,7 +383,7 @@ No authentication required — this is a developer tool.
 # 2. Subscribe to train completion events (in a second tab)
 subscription { onTrainCompleted { externalId trainName output } }
 
-# 3. Queue a test run — returns immediately with an externalId
+# 3. Queue a test run - returns immediately with an externalId
 mutation { dispatch { runTests(input: { projectName: "Trax.Core.Tests.Unit", projectPath: "/home/user/Repos/Trax/Trax.Core/tests/Trax.Core.Tests.Unit/Trax.Core.Tests.Unit.csproj" }) { externalId workQueueId } } }
 
 # The subscription tab receives the result when the train completes,

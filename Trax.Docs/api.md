@@ -7,9 +7,9 @@ section: Packages
 
 # API
 
-Trax.Api adds a programmatic interface to the scheduling and train execution system. It ships as two NuGet packages — a core library and a GraphQL transport powered by HotChocolate.
+Trax.Api adds a programmatic interface to the scheduling and train execution system. It ships as two NuGet packages: a core library and a GraphQL transport powered by HotChocolate.
 
-The API is designed to run on a **separate machine** from the scheduler. The two share a database: the API writes work queue entries and manifest updates, the scheduler polls them and dispatches trains. This means the API server doesn't run polling services or background workers — it's a thin HTTP layer over the shared state.
+The API is designed to run on a **separate machine** from the scheduler. The two share a database: the API writes work queue entries and manifest updates, the scheduler polls them and dispatches trains. This means the API server doesn't run polling services or background workers. It's a thin HTTP layer over the shared state.
 
 ## Two Execution Modes
 
@@ -42,7 +42,7 @@ builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
 
-app.UseTraxGraphQL();  // maps at /trax/graphql — opens Banana Cake Pop IDE in browser
+app.UseTraxGraphQL();  // maps at /trax/graphql, opens Banana Cake Pop IDE in browser
 app.MapHealthChecks("/trax/health");
 
 app.Run();
@@ -52,10 +52,10 @@ app.Run();
 
 | Package | Description |
 |---------|-------------|
-| `Trax.Api` | Core library — DTOs, health check, shared service registration |
+| `Trax.Api` | Core library: DTOs, health check, shared service registration |
 | `Trax.Api.GraphQL` | HotChocolate schema (queries, mutations, subscriptions) |
 
-`Trax.Api.GraphQL` depends on `Trax.Api` — you don't need to reference it directly.
+`Trax.Api.GraphQL` depends on `Trax.Api`, so you don't need to reference it directly.
 
 ## Architecture
 
@@ -83,7 +83,7 @@ app.Run();
                └──────────────────────┘
 ```
 
-The API server doesn't need `AddScheduler()` — it only needs `AddMediator()` (for train discovery and direct execution) and a data provider (for DB access). The scheduler configuration (`AddScheduler`) runs on the scheduler machine only.
+The API server doesn't need `AddScheduler()`. It only needs `AddMediator()` (for train discovery and direct execution) and a data provider (for DB access). The scheduler configuration (`AddScheduler`) runs on the scheduler machine only.
 
 However, if you want the API to also schedule manifests at startup (like the scheduler does), you can add `AddScheduler()` on the API machine as well. The polling services can be disabled with configuration if you only want startup seeding.
 
@@ -91,10 +91,10 @@ However, if you want the API to also schedule manifests at startup (like the sch
 
 The API includes an ASP.NET Core `IHealthCheck` that queries the database and reports:
 
-- **Queue depth** — work items waiting for dispatch
-- **In-progress** — currently executing trains
-- **Failed (last hour)** — recent failures
-- **Dead letters** — unresolved dead letter entries
+- **Queue depth** - work items waiting for dispatch
+- **In-progress** - currently executing trains
+- **Failed (last hour)** - recent failures
+- **Dead letters** - unresolved dead letter entries
 
 In-progress and failed counts are batched into a single database query (via `GroupBy`) to minimize round-trips on each health check poll.
 
@@ -107,7 +107,7 @@ app.MapHealthChecks("/trax/health");
 
 ## Authentication & Middleware
 
-Trax doesn't include built-in auth — you add it with standard ASP.NET Core middleware. `UseTraxGraphQL` accepts a `configure` callback for applying endpoint conventions like authorization, rate limiting, or CORS:
+Trax doesn't include built-in auth. You add it with standard ASP.NET Core middleware. `UseTraxGraphQL` accepts a `configure` callback for applying endpoint conventions like authorization, rate limiting, or CORS:
 
 ```csharp
 app.UseTraxGraphQL(configure: endpoint => endpoint
@@ -137,17 +137,17 @@ When the API receives a request to run or queue this train, it checks the curren
 
 ## Named GraphQL Schema
 
-The GraphQL API registers on a **named HotChocolate schema** (`"trax"`) rather than the default unnamed schema. This means it won't conflict with your own `AddGraphQLServer()` calls — both can coexist in the same application at different paths.
+The GraphQL API registers on a **named HotChocolate schema** (`"trax"`) rather than the default unnamed schema. This means it won't conflict with your own `AddGraphQLServer()` calls, and both can coexist in the same application at different paths.
 
 ## Sample Projects
 
 The API is demonstrated in three samples, each using a different deployment topology:
 
-- **LocalWorkers (GameServer)** — API and scheduler as separate processes. The GraphQL API handles lightweight trains directly and queues heavy work for the scheduler. See `samples/LocalWorkers/Trax.Samples.GameServer.Api`.
-- **DistributedWorkers (EnergyHub)** — API, scheduler, and dashboard in a single hub process. The hub schedules and serves GraphQL but offloads execution to separate worker processes. See `samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub`.
-- **EphemeralWorkers (ContentShield)** — API with `UseRemoteWorkers()` dispatches queued mutations directly to an ephemeral Runner via HTTP. No scheduled jobs, no `background_job` table — purely on-demand, serverless-style execution. See `samples/EphemeralWorkers/Trax.Samples.ContentShield.Api`.
+- **LocalWorkers (GameServer)** - API and scheduler as separate processes. The GraphQL API handles lightweight trains directly and queues heavy work for the scheduler. See `samples/LocalWorkers/Trax.Samples.GameServer.Api`.
+- **DistributedWorkers (EnergyHub)** - API, scheduler, and dashboard in a single hub process. The hub schedules and serves GraphQL but offloads execution to separate worker processes. See `samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub`.
+- **EphemeralWorkers (ContentShield)** - API with `UseRemoteWorkers()` dispatches queued mutations directly to an ephemeral Runner via HTTP. No scheduled jobs, no `background_job` table, purely on-demand, serverless-style execution. See `samples/EphemeralWorkers/Trax.Samples.ContentShield.Api`.
 
-All follow the [trains library pattern](/docs/samples) — trains live in a shared library, executables are thin wrappers that pick which capabilities to enable.
+All follow the [trains library pattern](/docs/samples). Trains live in a shared library, executables are thin wrappers that pick which capabilities to enable.
 
 ## SDK Reference
 

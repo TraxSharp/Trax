@@ -8,7 +8,7 @@ nav_order: 3
 
 # Parameter Effect
 
-The parameter effect serializes train inputs and outputs to JSON and stores them on the `Metadata` record. Without this provider, the `Metadata.Input` and `Metadata.Output` columns are null — you'll know a train ran and whether it succeeded, but not what data it processed.
+The parameter effect serializes train inputs and outputs to JSON and stores them on the `Metadata` record. Without this provider, the `Metadata.Input` and `Metadata.Output` columns are null. You'll know a train ran and whether it succeeded, but not what data it processed.
 
 ## Registration
 
@@ -64,13 +64,13 @@ The configuration is registered as a singleton and can be modified at runtime vi
 
 ## How It Works
 
-The parameter effect only cares about `Metadata` objects — it ignores other tracked models. When `SaveChanges` runs:
+The parameter effect only cares about `Metadata` objects and ignores other tracked models. When `SaveChanges` runs:
 
 1. It iterates through every tracked `Metadata` instance.
 2. If `SaveInputs` is enabled, it calls `metadata.GetInputObject()`, serializes it to JSON, and assigns it to `metadata.Input`.
 3. If `SaveOutputs` is enabled, it calls `metadata.GetOutputObject()`, serializes it to JSON, and assigns it to `metadata.Output`.
 
-These fields are then persisted by whatever data provider you have registered (Postgres or InMemory). When you later inspect train executions — through the [Dashboard](/docs/dashboard), direct database queries, or the metadata API — you can see exactly what went in and what came out.
+These fields are then persisted by whatever data provider you have registered (Postgres or InMemory). When you later inspect train executions (through the [Dashboard](/docs/dashboard), direct database queries, or the metadata API), you can see exactly what went in and what came out.
 
 On disposal, the provider clears the input/output object references from metadata to release memory.
 
@@ -80,9 +80,9 @@ This effect populates fields on `Metadata`, but it doesn't persist the metadata 
 
 ## When to Use It
 
-- **Production** — When you need to query or debug train executions after the fact. "What input caused this failure?"
-- **Audit trails** — The serialized input/output gives you a record of what data each train processed.
-- **Dashboard** — The [Dashboard](/docs/dashboard) displays `Input` and `Output` in its metadata detail view. Without this provider, those fields show as empty.
+- **Production**: When you need to query or debug train executions after the fact. "What input caused this failure?"
+- **Audit trails**: The serialized input/output gives you a record of what data each train processed.
+- **Dashboard**: The [Dashboard](/docs/dashboard) displays `Input` and `Output` in its metadata detail view. Without this provider, those fields show as empty.
 
 ## SDK Reference
 

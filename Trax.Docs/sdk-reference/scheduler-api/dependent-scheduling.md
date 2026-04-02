@@ -10,16 +10,16 @@ nav_order: 5
 
 Schedules trains that run only after a parent manifest completes successfully. There are three patterns for declaring dependencies at startup:
 
-- **Root-based** (`Include` / `IncludeMany`) — branches from the root `Schedule` or explicitly maps parents via `dependsOn`. Use `IncludeMany` for first-level batch dependents after `ScheduleMany`.
-- **Cursor-based** (`ThenInclude` / `ThenIncludeMany`) — chains from the most recently declared manifest, creating deeper pipelines. Use `ThenIncludeMany` for second-level-and-beyond batch dependents after a previous `IncludeMany`.
+- **Root-based** (`Include` / `IncludeMany`): branches from the root `Schedule` or explicitly maps parents via `dependsOn`. Use `IncludeMany` for first-level batch dependents after `ScheduleMany`.
+- **Cursor-based** (`ThenInclude` / `ThenIncludeMany`): chains from the most recently declared manifest, creating deeper pipelines. Use `ThenIncludeMany` for second-level-and-beyond batch dependents after a previous `IncludeMany`.
 
 At runtime, `ScheduleDependentAsync` and `ScheduleManyDependentAsync` take an explicit parent external ID.
 
-Dependent manifests are evaluated during polling — when a parent's `LastSuccessfulRun` is newer than the dependent's own `LastSuccessfulRun`, the dependent is queued for execution.
+Dependent manifests are evaluated during polling. When a parent's `LastSuccessfulRun` is newer than the dependent's own `LastSuccessfulRun`, the dependent is queued for execution.
 
 ## Signatures
 
-### Startup: ThenInclude (Single — cursor-based, Recommended)
+### Startup: ThenInclude (Single, cursor-based, Recommended)
 
 ```csharp
 public SchedulerConfigurationBuilder ThenInclude<TTrain>(
@@ -30,7 +30,7 @@ public SchedulerConfigurationBuilder ThenInclude<TTrain>(
     where TTrain : class
 ```
 
-### Startup: Include (Single — root-based, Recommended)
+### Startup: Include (Single, root-based, Recommended)
 
 ```csharp
 public SchedulerConfigurationBuilder Include<TTrain>(
@@ -41,7 +41,7 @@ public SchedulerConfigurationBuilder Include<TTrain>(
     where TTrain : class
 ```
 
-Both infer the input type from `TTrain`'s `IServiceTrain<TInput, TOutput>` interface and validate the provided `input` at configuration time. The output type is not constrained — scheduled trains can return any output type, and the output is discarded for background jobs.
+Both infer the input type from `TTrain`'s `IServiceTrain<TInput, TOutput>` interface and validate the provided `input` at configuration time. The output type is not constrained: scheduled trains can return any output type, and the output is discarded for background jobs.
 
 ### Startup: IncludeMany with ManifestItem (Recommended)
 
@@ -85,7 +85,7 @@ public SchedulerConfigurationBuilder ThenIncludeMany<TTrain>(
     where TTrain : class
 ```
 
-Every `ManifestItem.DependsOn` **must** be set — `ThenIncludeMany` throws `InvalidOperationException` if any item has a null `DependsOn`.
+Every `ManifestItem.DependsOn` **must** be set. `ThenIncludeMany` throws `InvalidOperationException` if any item has a null `DependsOn`.
 
 ### Startup: Explicit Type Parameters (Legacy)
 
@@ -137,7 +137,7 @@ Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TOutput
 
 ## Parameters
 
-### ThenInclude / Include (Startup — Single)
+### ThenInclude / Include (Startup, Single)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -145,11 +145,11 @@ Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TOutput
 | `input` | `IManifestProperties` (inferred) / `TInput` (explicit) | Yes | Input data passed to the train on each execution. Validated against the train's expected input type at configuration time. |
 | `options` | `Action<ScheduleOptions>?` | No | Optional callback to configure all scheduling options via a fluent builder. Includes manifest-level settings (`Priority`, `Enabled`, `MaxRetries`, `Timeout`) and group-level settings (`.Group(...)` with `MaxActiveJobs`, `Priority`, `Enabled`). See [ScheduleOptions](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions). |
 
-`ThenInclude` links to the **cursor** — the most recently declared manifest (the last `Schedule`, `ThenInclude`, or `Include`). Must be called after `Schedule()`, `Include()`, or another `ThenInclude()`.
+`ThenInclude` links to the **cursor**, which is the most recently declared manifest (the last `Schedule`, `ThenInclude`, or `Include`). Must be called after `Schedule()`, `Include()`, or another `ThenInclude()`.
 
-`Include` links to the **root** — the most recent `Schedule()` call. Must be called after `Schedule()`. Use `Include` to create multiple independent branches from a single root.
+`Include` links to the **root**, which is the most recent `Schedule()` call. Must be called after `Schedule()`. Use `Include` to create multiple independent branches from a single root.
 
-### IncludeMany / ThenIncludeMany with ManifestItem (Startup — Batch)
+### IncludeMany / ThenIncludeMany with ManifestItem (Startup, Batch)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -159,7 +159,7 @@ Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TOutput
 
 `IncludeMany` items can use `DependsOn` per-item or fall back to the root `Schedule`. `ThenIncludeMany` requires `DependsOn` on every item.
 
-### ScheduleDependentAsync (Runtime — Single)
+### ScheduleDependentAsync (Runtime, Single)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -169,7 +169,7 @@ Task<IReadOnlyList<Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TOutput
 | `options` | `Action<ScheduleOptions>?` | No | Optional callback to configure all scheduling options via a fluent builder. See [ScheduleOptions](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions). |
 | `ct` | `CancellationToken` | No | Cancellation token |
 
-### ScheduleManyDependentAsync (Runtime — Batch)
+### ScheduleManyDependentAsync (Runtime, Batch)
 
 Uses the legacy three-type-parameter API with `map` and `dependsOn` functions. See [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) for parameter details.
 
@@ -301,7 +301,7 @@ await scheduler.ScheduleDependentAsync<IProcessDataTrain, ProcessInput, Unit>(
 
 ## Dormant Option
 
-Add `.Dormant()` to `ScheduleOptions` when declaring a dependent to make it a dormant dependent. Dormant dependents appear in the topology but never auto-fire—they must be explicitly activated at runtime by the parent train.
+Add `.Dormant()` to `ScheduleOptions` when declaring a dependent to make it a dormant dependent. Dormant dependents appear in the topology but never auto-fire. They must be explicitly activated at runtime by the parent train.
 
 ```csharp
 scheduler
@@ -339,7 +339,7 @@ Task ActivateAsync<TTrain, TInput, TOutput>(
 | `ct` | `CancellationToken` | No | Cancellation token |
 
 **Exceptions:**
-- `InvalidOperationException` — context not initialized, manifest not found, manifest is not `DormantDependent`, or manifest does not depend on the current parent
+- `InvalidOperationException` if the context is not initialized, the manifest is not found, the manifest is not `DormantDependent`, or the manifest does not depend on the current parent
 
 **Concurrency:** If the target manifest already has a queued `WorkQueue` entry or an active execution (`Pending`/`InProgress` metadata), the activation is silently skipped with a warning log.
 
@@ -386,11 +386,11 @@ public class SelectiveDispatchJunction(IDormantDependentContext dormants)
 
 ## Remarks
 
-- `ThenInclude()` must follow `Schedule()`, `Include()`, or another `ThenInclude()` — calling it first throws `InvalidOperationException`.
-- `Include()` and `IncludeMany()` (without `dependsOn`) must follow `Schedule()` — calling them without a root throws `InvalidOperationException`.
+- `ThenInclude()` must follow `Schedule()`, `Include()`, or another `ThenInclude()`. Calling it first throws `InvalidOperationException`.
+- `Include()` and `IncludeMany()` (without `dependsOn`) must follow `Schedule()`. Calling them without a root throws `InvalidOperationException`.
 - `IncludeMany()` (with `dependsOn`) can follow `ScheduleMany()` for first-level batch dependents. `ThenIncludeMany()` is for deeper chaining after a previous `IncludeMany()`.
-- Dependent manifests have `ScheduleType.Dependent` and no interval/cron schedule of their own — they are triggered solely by their parent's successful completion. Dormant dependents have `ScheduleType.DormantDependent` and must be explicitly activated via `IDormantDependentContext`.
+- Dependent manifests have `ScheduleType.Dependent` and no interval/cron schedule of their own. They are triggered solely by their parent's successful completion. Dormant dependents have `ScheduleType.DormantDependent` and must be explicitly activated via `IDormantDependentContext`.
 - The dependency check compares `parent.LastSuccessfulRun > dependent.LastSuccessfulRun` during each polling cycle.
-- **Cursor vs. Root**: The builder tracks two pointers — the *cursor* (last declared manifest, used by `ThenInclude`) and the *root* (the last `Schedule()`, used by `Include`). `Schedule` sets both. `ThenInclude` and `Include` move the cursor but leave the root unchanged. `ScheduleMany` resets both to null.
-- **Priority boost**: When a dependent manifest's work queue entry is created, `DependentPriorityBoost` (default 16) is added to its base priority. This ensures dependent trains are dispatched before non-dependent trains by default. The boost is configurable via [`DependentPriorityBoost`](/docs/sdk-reference/scheduler-api/add-scheduler) on the scheduler builder. The final priority is clamped to [0, 31].
-- **Cycle detection**: ManifestGroup dependencies must form a DAG. At startup, the builder derives group-level edges from all `Schedule`/`ThenInclude`/`Include`/`ScheduleMany`/`ThenIncludeMany`/`IncludeMany` calls and validates that no circular dependencies exist between groups. If a cycle is detected, `Build()` throws `InvalidOperationException` listing the groups involved. Within-group dependencies are allowed—only cross-group edges are validated. See [Dependent Trains — Cycle Detection](/docs/scheduler/dependent-trains#cycle-detection) for details.
+- **Cursor vs. Root**: The builder tracks two pointers: the *cursor* (last declared manifest, used by `ThenInclude`) and the *root* (the last `Schedule()`, used by `Include`). `Schedule` sets both. `ThenInclude` and `Include` move the cursor but leave the root unchanged. `ScheduleMany` resets both to null.
+- **Priority boost**: When a dependent manifest's work queue entry is created, `DependentPriorityBoost` (default 16) is added to its base priority. This means dependent trains are dispatched before non-dependent trains by default. The boost is configurable via [`DependentPriorityBoost`](/docs/sdk-reference/scheduler-api/add-scheduler) on the scheduler builder. The final priority is clamped to [0, 31].
+- **Cycle detection**: ManifestGroup dependencies must form a DAG. At startup, the builder derives group-level edges from all `Schedule`/`ThenInclude`/`Include`/`ScheduleMany`/`ThenIncludeMany`/`IncludeMany` calls and validates that no circular dependencies exist between groups. If a cycle is detected, `Build()` throws `InvalidOperationException` listing the groups involved. Within-group dependencies are allowed; only cross-group edges are validated. See [Dependent Trains: Cycle Detection](/docs/scheduler/dependent-trains#cycle-detection) for details.

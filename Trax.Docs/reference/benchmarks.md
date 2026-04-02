@@ -26,9 +26,9 @@ Three execution modes are compared for identical workloads:
 
 | Mode | Description |
 |------|-------------|
-| **Serial** | Plain function calls — no framework, no abstractions |
-| **BaseTrain** | `Train<TIn, TOut>` — the core Chain/Resolve pipeline with `Either` error handling |
-| **ServiceTrain (no effects)** | `ServiceTrain<TIn, TOut>` — full DI-resolved train with effect runner lifecycle, but no effect providers registered |
+| **Serial** | Plain function calls, no framework, no abstractions |
+| **BaseTrain** | `Train<TIn, TOut>`, the core Chain/Resolve pipeline with `Either` error handling |
+| **ServiceTrain (no effects)** | `ServiceTrain<TIn, TOut>`, full DI-resolved train with effect runner lifecycle, but no effect providers registered |
 
 ## Train Overhead
 
@@ -36,25 +36,25 @@ How much does Trax.Core cost for different kinds of work?
 
 | Method | Mean | Allocated |
 |--------|-----:|----------:|
-| **Serial — Add 1** | 0.23 ns | — |
-| BaseTrain — Add 1 | 1,564 ns | 3,688 B |
-| ServiceTrain — Add 1 | 7,061 ns | 7,176 B |
+| **Serial - Add 1** | 0.23 ns | - |
+| BaseTrain - Add 1 | 1,564 ns | 3,688 B |
+| ServiceTrain - Add 1 | 7,061 ns | 7,176 B |
 | | | |
-| **Serial — Add 3** (3 junctions) | 0.23 ns | — |
-| BaseTrain — Add 3 | 1,966 ns | 4,536 B |
-| ServiceTrain — Add 3 | 7,696 ns | 8,024 B |
+| **Serial - Add 3** (3 junctions) | 0.23 ns | - |
+| BaseTrain - Add 3 | 1,966 ns | 4,536 B |
+| ServiceTrain - Add 3 | 7,696 ns | 8,024 B |
 | | | |
-| **Serial — Transform** (DTO → entity) | 19.7 ns | 152 B |
-| BaseTrain — Transform | 1,340 ns | 1,648 B |
-| ServiceTrain — Transform | 6,889 ns | 5,232 B |
+| **Serial - Transform** (DTO → entity) | 19.7 ns | 152 B |
+| BaseTrain - Transform | 1,340 ns | 1,648 B |
+| ServiceTrain - Transform | 6,889 ns | 5,232 B |
 | | | |
-| **Serial — Simulated I/O** (3× `Task.Yield`) | 1,053 ns | 112 B |
-| BaseTrain — Simulated I/O | 3,747 ns | 4,992 B |
-| ServiceTrain — Simulated I/O | 9,516 ns | 8,479 B |
+| **Serial - Simulated I/O** (3× `Task.Yield`) | 1,053 ns | 112 B |
+| BaseTrain - Simulated I/O | 3,747 ns | 4,992 B |
+| ServiceTrain - Simulated I/O | 9,516 ns | 8,479 B |
 
 ### Reading the Numbers
 
-For trivial arithmetic, the framework overhead looks enormous in relative terms — a `BaseTrain` is ~6,900× slower than `input + 1`. But that comparison is misleading because `input + 1` completes in a fraction of a nanosecond.
+For trivial arithmetic, the framework overhead looks enormous in relative terms. A `BaseTrain` is ~6,900× slower than `input + 1`. But that comparison is misleading because `input + 1` completes in a fraction of a nanosecond.
 
 In absolute terms:
 
@@ -71,7 +71,7 @@ How does overhead grow as you chain more junctions?
 
 | Junctions | Serial | BaseTrain | ServiceTrain | Base Overhead/Junction | Effect Overhead/Junction |
 |------:|-------:|-------------:|---------------:|-------------------:|---------------------:|
-| 1 | 4.7 ns | 1,630 ns | 7,186 ns | — | — |
+| 1 | 4.7 ns | 1,630 ns | 7,186 ns | - | - |
 | 3 | 4.7 ns | 1,987 ns | 7,622 ns | ~179 ns | ~218 ns |
 | 5 | 5.1 ns | 2,468 ns | 8,079 ns | ~210 ns | ~223 ns |
 | 10 | 10.7 ns | 3,440 ns | 9,016 ns | ~201 ns | ~203 ns |
@@ -100,7 +100,7 @@ Each additional junction allocates roughly **~424 B** (BaseTrain) or **~464 B** 
 
 ## Guidance
 
-**Trax.Core is not designed for hot-path, sub-microsecond operations.** It's designed for business train orchestration where each junction does meaningful work — database queries, API calls, file I/O, domain logic.
+**Trax.Core is not designed for hot-path, sub-microsecond operations.** It's designed for business train orchestration where each junction does meaningful work: database queries, API calls, file I/O, domain logic.
 
 Use Trax.Core when:
 - Junctions perform I/O or non-trivial computation (the ~7 μs overhead is noise)

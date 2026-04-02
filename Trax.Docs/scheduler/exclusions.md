@@ -7,7 +7,7 @@ nav_order: 8
 
 # Exclusion Windows
 
-Exclusion windows let you skip execution during specific periods — weekends, holidays, maintenance windows, or daily time ranges. When any exclusion matches the current time, the manifest is skipped. Excluded periods are treated as **intentionally skipped**, not as misfires.
+Exclusion windows let you skip execution during specific periods, weekends, holidays, maintenance windows, or daily time ranges. When any exclusion matches the current time, the manifest is skipped. Excluded periods are treated as **intentionally skipped**, not as misfires.
 
 ## Exclusion Types
 
@@ -86,7 +86,7 @@ scheduler.Schedule<IReportTrain>(
 
 ## Interaction with Misfire Policies
 
-Excluded periods are **intentionally skipped** — they are not considered misfires. When the excluded period ends, normal scheduling resumes. If the manifest is overdue at that point, the existing misfire policy determines what happens:
+Excluded periods are **intentionally skipped**: they are not considered misfires. When the excluded period ends, normal scheduling resumes. If the manifest is overdue at that point, the existing misfire policy determines what happens:
 
 - **`FireOnceNow`** (default): the manifest fires immediately to catch up
 - **`DoNothing`**: the scheduler checks the most recent interval boundary and fires only if within the misfire threshold
@@ -97,7 +97,7 @@ This interaction is usually correct:
 
 ## Storage
 
-Exclusions are stored as a JSONB column on the manifest table. They are configured per-manifest via the `ScheduleOptions` fluent builder — there are no global exclusion defaults. Exclusions apply to all schedule types (Cron, Interval, Once). Dependent manifests are triggered by parent completion rather than time, so exclusions on dependent manifests are not evaluated during normal scheduling.
+Exclusions are stored as a JSONB column on the manifest table. They are configured per-manifest via the `ScheduleOptions` fluent builder, there are no global exclusion defaults. Exclusions apply to all schedule types (Cron, Interval, Once). Dependent manifests are triggered by parent completion rather than time, so exclusions on dependent manifests are not evaluated during normal scheduling.
 
 ## Dashboard
 

@@ -26,14 +26,14 @@ public SchedulerConfigurationBuilder UseRemoteRun(
 
 ## Returns
 
-`SchedulerConfigurationBuilder` — for continued fluent chaining.
+`SchedulerConfigurationBuilder`, for continued fluent chaining.
 
 ## RemoteRunOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `BaseUrl` | `string` | _(required)_ | The URL of the remote endpoint that receives run requests (e.g., `https://my-runner.example.com/trax/run`) |
-| `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` — add auth headers, custom timeouts, or any other HTTP configuration |
+| `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` (add auth headers, custom timeouts, or any other HTTP configuration) |
 | `Timeout` | `TimeSpan` | 5 minutes | HTTP request timeout. Longer default than `UseRemoteWorkers` (30s) because run requests block until the train completes |
 | `Retry` | `HttpRetryOptions` | _(see below)_ | Retry options for transient HTTP failures (429, 502, 503). Same configuration as [`RemoteWorkerOptions.Retry`](/docs/sdk-reference/scheduler-api/use-remote-workers#httpretryoptions) |
 
@@ -131,14 +131,14 @@ When a GraphQL `run*` mutation is called, the `HttpRunExecutor`:
 4. On success: deserializes the train output from the response and returns it to GraphQL
 5. On error: throws a `TrainException` with the remote error message
 
-The remote endpoint (`UseTraxRunEndpoint`) calls `ITrainExecutionService.RunAsync()` locally — which creates metadata, runs the train, and returns the output. Since both processes share the same Postgres database, the metadata is visible to the dashboard.
+The remote endpoint (`UseTraxRunEndpoint`) calls `ITrainExecutionService.RunAsync()` locally, which creates metadata, runs the train, and returns the output. Since both processes share the same Postgres database, the metadata is visible to the dashboard.
 
 ## Differences from UseRemoteWorkers
 
 | | UseRemoteRun | UseRemoteWorkers |
 |---|---|---|
 | **Execution path** | `run*` mutations | `queue*` mutations |
-| **Blocking** | Yes — blocks until train completes | No — returns immediately with WorkQueueId |
+| **Blocking** | Yes, blocks until train completes | No, returns immediately with WorkQueueId |
 | **Returns** | Train output (deserialized from response) | WorkQueueId + ExternalId |
 | **Remote endpoint** | `UseTraxRunEndpoint()` (`/trax/run`) | `UseTraxJobRunner()` (`/trax/execute`) |
 | **Abstraction** | `IRunExecutor` | `IJobSubmitter` |
@@ -152,7 +152,7 @@ dotnet add package Trax.Scheduler
 
 ## See Also
 
-- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
-- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — remote dispatch for queued trains
-- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) — Lambda-based run execution (direct SDK, no public endpoint)
-- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — remote receiver setup (includes `UseTraxRunEndpoint`)
+- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers): remote dispatch for queued trains
+- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run): Lambda-based run execution (direct SDK, no public endpoint)
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner): remote receiver setup (includes `UseTraxRunEndpoint`)

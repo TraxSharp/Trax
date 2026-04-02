@@ -17,18 +17,18 @@ type Mutation {
 }
 ```
 
-- **`dispatch`** — auto-generated typed mutations for trains annotated with [`[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
-- **`operations`** — scheduler management operations (trigger, disable, enable, cancel manifests and groups)
+- **`dispatch`**: auto-generated typed mutations for trains annotated with [`[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
+- **`operations`**: scheduler management operations (trigger, disable, enable, cancel manifests and groups)
 
 ## Dispatch Mutations (Auto-Generated)
 
-Trax auto-generates strongly-typed mutations for trains that opt in with `[TraxMutation]`. Only trains with this attribute appear under `dispatch`. Trains annotated with `[TraxQuery]` appear under `query { discover { ... } }` instead — see [Queries](/docs/sdk-reference/graphql-api/queries).
+Trax auto-generates strongly-typed mutations for trains that opt in with `[TraxMutation]`. Only trains with this attribute appear under `dispatch`. Trains annotated with `[TraxQuery]` appear under `query { discover { ... } }` instead; see [Queries](/docs/sdk-reference/graphql-api/queries).
 
 Each whitelisted train gets a single mutation field named after the train (no prefix). Trains with `Namespace` set are grouped under a sub-namespace (e.g. `dispatch { alerts { createAlert } }`). The mutation's parameters and behavior depend on the operations passed to the attribute constructor:
 
-- **Run + Queue (default)** — when no operations are specified (or both `GraphQLOperation.Run` and `GraphQLOperation.Queue` are passed), the mutation accepts an optional `mode: ExecutionMode` parameter (`RUN` or `QUEUE`, default `RUN`) and an optional `priority: Int`.
-- **Run only** — the mutation always runs synchronously. No `mode` or `priority` parameters.
-- **Queue only** — the mutation always queues. Has `priority` but no `mode` parameter.
+- **Run + Queue (default)**: when no operations are specified (or both `GraphQLOperation.Run` and `GraphQLOperation.Queue` are passed), the mutation accepts an optional `mode: ExecutionMode` parameter (`RUN` or `QUEUE`, default `RUN`) and an optional `priority: Int`.
+- **Run only**: the mutation always runs synchronously. No `mode` or `priority` parameters.
+- **Queue only**: the mutation always queues. Has `priority` but no `mode` parameter.
 
 ### Naming Convention
 
@@ -100,10 +100,10 @@ type BanPlayerResponse {
 
 | Field | Type | When Populated |
 |-------|------|----------------|
-| `externalId` | `String!` | Always — identifies the execution or work queue entry |
-| `metadataId` | `Long` | RUN mode — metadata ID of the completed execution |
+| `externalId` | `String!` | Always present. Identifies the execution or work queue entry |
+| `metadataId` | `Long` | RUN mode. Metadata ID of the completed execution |
 | `output` | `{OutputType}` | RUN mode, only for trains with non-`Unit` output |
-| `workQueueId` | `Long` | QUEUE mode — database ID of the created WorkQueue entry |
+| `workQueueId` | `Long` | QUEUE mode. Database ID of the created WorkQueue entry |
 
 ### Run + Queue Mode (Default)
 
@@ -111,7 +111,7 @@ When no operations are specified (or both `GraphQLOperation.Run` and `GraphQLOpe
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `input` | `{TrainName}Input!` | Yes | — | Strongly-typed input matching the train's input record |
+| `input` | `{TrainName}Input!` | Yes | N/A | Strongly-typed input matching the train's input record |
 | `mode` | `ExecutionMode` | No | `RUN` | Whether to run synchronously (`RUN`) or queue for async execution (`QUEUE`) |
 | `priority` | `Int` | No | `0` | Dispatch priority (0-31, higher runs first). Silently ignored for `RUN` mode. |
 
@@ -176,7 +176,7 @@ mutation {
 }
 ```
 
-The output type is automatically registered as a GraphQL `ObjectType` and deduplicated — if multiple trains share the same output type, only one GraphQL type is generated.
+The output type is automatically registered as a GraphQL `ObjectType` and deduplicated. If multiple trains share the same output type, only one GraphQL type is generated.
 
 ### Run-Only Mode
 
@@ -194,7 +194,7 @@ When `GraphQLOperation.Queue` is the only operation passed (e.g. `[TraxMutation(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `input` | `{TrainName}Input!` | Yes | — | Strongly-typed input matching the train's input record |
+| `input` | `{TrainName}Input!` | Yes | N/A | Strongly-typed input matching the train's input record |
 | `priority` | `Int` | No | `0` | Dispatch priority (0-31, higher runs first) |
 
 The response type still uses the unified format, but `metadataId` and `output` will always be `null`.
@@ -319,7 +319,7 @@ mutation {
 |-----------|------|----------|-------------|
 | `externalId` | `String!` | Yes | The manifest's external ID |
 
-**Returns**: `OperationResponse` (includes `count` — number of executions marked for cancellation)
+**Returns**: `OperationResponse` (includes `count`, the number of executions marked for cancellation)
 
 ---
 
@@ -343,7 +343,7 @@ mutation {
 |-----------|------|----------|-------------|
 | `groupId` | `Long!` | Yes | The manifest group's database ID |
 
-**Returns**: `OperationResponse` (includes `count` — number of manifests triggered)
+**Returns**: `OperationResponse` (includes `count`, the number of manifests triggered)
 
 ---
 
@@ -367,7 +367,7 @@ mutation {
 |-----------|------|----------|-------------|
 | `groupId` | `Long!` | Yes | The manifest group's database ID |
 
-**Returns**: `OperationResponse` (includes `count` — number of executions marked for cancellation)
+**Returns**: `OperationResponse` (includes `count`, the number of executions marked for cancellation)
 
 ---
 

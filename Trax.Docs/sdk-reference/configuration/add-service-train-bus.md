@@ -116,7 +116,7 @@ services.AddTrax(trax => trax
 
 ## Input Type Uniqueness
 
-Each input type maps to **exactly one** train via the `TrainBus`. If two trains accept the same `TIn`, the first registration wins — the duplicate is silently skipped via `TryAdd`. Only the first-registered train will be dispatched when calling `RunAsync` with that input type.
+Each input type maps to **exactly one** train via the `TrainBus`. If two trains accept the same `TIn`, the first registration wins and the duplicate is silently skipped via `TryAdd`. Only the first-registered train will be dispatched when calling `RunAsync` with that input type.
 
 ```csharp
 // This is fine -- different input types
@@ -140,7 +140,7 @@ If you need multiple trains that share an input type, inject them directly by in
 
 ## Remarks
 
-- The assembly scanning uses reflection to find `IServiceTrain<,>` implementations. Ensure the assemblies containing your trains are passed to `ScanAssemblies()` or the shorthand overload.
+- The assembly scanning uses reflection to find `IServiceTrain<,>` implementations. The assemblies containing your trains must be passed to `ScanAssemblies()` or the shorthand overload.
 - Trains registered here are available both through `ITrainBus.RunAsync` and through the scheduler system.
 - See [TrainBus](/docs/sdk-reference/mediator-api/train-bus) for the runtime dispatch API.
 

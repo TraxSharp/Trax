@@ -7,7 +7,7 @@ nav_order: 3
 
 # Memory
 
-Memory is how junctions communicate in a train. Think of it as the cargo the train carries between junctions — a type-keyed dictionary that accumulates as the train executes. Each junction pulls its input from Memory and pushes its output back in.
+Memory is how junctions communicate in a train. Think of it as the cargo the train carries between junctions: a type-keyed dictionary that accumulates as the train executes. Each junction pulls its input from Memory and pushes its output back in.
 
 ## How It Works
 
@@ -21,23 +21,23 @@ Chain<ValidateEmailJunction>()         // Takes CreateUserRequest, returns Unit 
 // User is resolved from Memory automatically
 ```
 
-Each junction declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the junction, and stores `TOut` back. If `TIn` isn't in Memory, the train fails at runtime — though the [Analyzer](analyzer.md) catches this at compile time.
+Each junction declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the junction, and stores `TOut` back. If `TIn` isn't in Memory, the train fails at runtime, though the [Analyzer](analyzer.md) catches this at compile time.
 
 ## Storage by Type
 
-Memory stores one value per type. If two junctions both return `string`, the second one overwrites the first. This is by design — use distinct types to avoid collisions:
+Memory stores one value per type. If two junctions both return `string`, the second one overwrites the first. This is by design. Use distinct types to avoid collisions:
 
 ```csharp
 // These would collide in Memory (both produce string)
 .Chain<GetFirstNameJunction>()   // Returns string
-.Chain<GetLastNameJunction>()    // Returns string — overwrites the first!
+.Chain<GetLastNameJunction>()    // Returns string, overwrites the first!
 
 // Use distinct types instead
 .Chain<GetFirstNameJunction>()   // Returns FirstName
 .Chain<GetLastNameJunction>()    // Returns LastName
 ```
 
-This is why Trax encourages specific types (records, value objects) over primitives. A junction signature like `Junction<User, EmailAddress>` tells you exactly what goes in and what comes out — `Junction<User, string>` doesn't.
+This is why Trax encourages specific types (records, value objects) over primitives. A junction signature like `Junction<User, EmailAddress>` tells you exactly what goes in and what comes out, while `Junction<User, string>` doesn't.
 
 ## References, Not Copies
 
@@ -49,7 +49,7 @@ public class EnrichUserJunction : Junction<User, Unit>
     public override async Task<Unit> Run(User user)
     {
         user.EnrichedData = "some data";
-        // No need to return the User — the reference in Memory is already updated
+        // No need to return the User. The reference in Memory is already updated
         return Unit.Default;
     }
 }
@@ -61,7 +61,7 @@ This means you don't need to "pass through" a type just to keep it in Memory. If
 Chain<CreateUserJunction>()            // Returns User -> stored in Memory
     .Chain<ValidateUserJunction>()     // Takes User, returns Unit (validation only)
     .Chain<EnrichUserJunction>()       // Takes User, returns Unit (modifies in place)
-    .Chain<SendNotificationJunction>() // Takes User — sees all modifications
+    .Chain<SendNotificationJunction>() // Takes User, sees all modifications
 ```
 
 Only return a type from a junction when you're producing something **new** for Memory. If you're just reading or mutating an existing object, return `Unit`.
@@ -98,16 +98,16 @@ public class ProcessCheckoutJunction : Junction<(User, Order, Payment), Receipt>
 // Memory finds User, Order, and Payment individually, constructs the tuple, and passes it in
 ```
 
-This lets you load multiple entities in one junction and consume them individually — or as a group — in later junctions:
+This lets you load multiple entities in one junction and consume them individually, or as a group, in later junctions:
 
 ```csharp
 public class CheckoutTrain : ServiceTrain<CheckoutRequest, Receipt>
 {
     protected override Receipt Junctions() =>
-        Chain<LoadEntitiesJunction>()          // Returns (User, Order, Payment) — deconstructed into Memory
+        Chain<LoadEntitiesJunction>()          // Returns (User, Order, Payment), deconstructed into Memory
             .Chain<ValidateUserJunction>()     // Takes User from Memory
             .Chain<ValidateOrderJunction>()    // Takes Order from Memory
-            .Chain<ProcessCheckoutJunction>(); // Takes (User, Order, Payment) — reconstructed from Memory
+            .Chain<ProcessCheckoutJunction>(); // Takes (User, Order, Payment), reconstructed from Memory
 }
 ```
 

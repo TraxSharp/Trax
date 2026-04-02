@@ -15,19 +15,19 @@ To resolve a dead letter, use the **Dashboard UI**, the **GraphQL API**, or the 
 
 ### Via Dashboard
 
-Navigate to **Data > Dead Letters** and click the visibility icon on any row. The dead letter detail page shows full context — the dead letter reason, manifest configuration, the most recent failure's stack trace, and a history of all failed runs.
+Navigate to **Data > Dead Letters** and click the visibility icon on any row. The dead letter detail page shows full context, the dead letter reason, manifest configuration, the most recent failure's stack trace, and a history of all failed runs.
 
 Two actions are available while the dead letter is in `AwaitingIntervention` status:
 
-- **Re-queue** — Creates a new WorkQueue entry from the manifest's properties and marks the dead letter as `Retried`
-- **Acknowledge** — Prompts for a resolution note and marks the dead letter as `Acknowledged`
+- **Re-queue**: Creates a new WorkQueue entry from the manifest's properties and marks the dead letter as `Retried`
+- **Acknowledge**: Prompts for a resolution note and marks the dead letter as `Acknowledged`
 
 #### Batch Operations
 
 The dead letters list page supports batch operations for resolving multiple dead letters at once:
 
-- **Requeue All / Acknowledge All** — Resolves every `AwaitingIntervention` dead letter in a single operation
-- **Requeue Selected / Acknowledge Selected** — Use the checkboxes to select specific dead letters, then resolve just those
+- **Requeue All / Acknowledge All**: Resolves every `AwaitingIntervention` dead letter in a single operation
+- **Requeue Selected / Acknowledge Selected**: Use the checkboxes to select specific dead letters, then resolve just those
 
 ### Via GraphQL
 
@@ -115,7 +115,7 @@ var result = await scheduler.AcknowledgeAllDeadLettersAsync("Mass acknowledge");
 
 ### Failure Counter Reset
 
-Resolving a dead letter (either action) resets the manifest's failure counter. The ManifestManager only counts failures that occurred **after** the most recent resolution when comparing against `MaxRetries`. This means a retried manifest starts fresh — it won't be immediately re-dead-lettered based on the same failures that triggered the original dead letter.
+Resolving a dead letter (either action) resets the manifest's failure counter. The ManifestManager only counts failures that occurred **after** the most recent resolution when comparing against `MaxRetries`. This means a retried manifest starts fresh, it won't be immediately re-dead-lettered based on the same failures that triggered the original dead letter.
 
 ### RetryMetadataId Linking
 
@@ -123,7 +123,7 @@ When a dead letter is requeued, the new WorkQueue entry carries a `DeadLetterId`
 
 ### Concurrency Safety
 
-All dead letter operations filter by `status = 'awaiting_intervention'` at query time. If two users resolve the same dead letter simultaneously, the second operation sees no matching record and returns a "not found or already resolved" result — no duplicate work queue entries are created.
+All dead letter operations filter by `status = 'awaiting_intervention'` at query time. If two users resolve the same dead letter simultaneously, the second operation sees no matching record and returns a "not found or already resolved" result. No duplicate work queue entries are created.
 
 ## Retry Delay & Backoff
 
@@ -157,7 +157,7 @@ Configure via the scheduler builder:
 
 ## Monitoring
 
-The **Trax.Core Dashboard** at `/trax/data/dead-letters` provides a real-time view of all dead letters with status badges and links to detail pages. The dead letter detail page surfaces the full failure context — stack traces, inputs, and execution history — so operators can make informed retry/acknowledge decisions without writing queries.
+The **Trax.Core Dashboard** at `/trax/data/dead-letters` provides a real-time view of all dead letters with status badges and links to detail pages. The dead letter detail page surfaces the full failure context, stack traces, inputs, and execution history, so operators can make informed retry/acknowledge decisions without writing queries.
 
 The built-in local workers execute JobRunner jobs using PostgreSQL's `background_job` table. Worker health and job status can be monitored via the Trax Dashboard at `/trax`.
 
@@ -199,7 +199,7 @@ System trains like `ManifestManagerTrain` run frequently (every 5 seconds by def
 
 The cleanup only targets metadata in **terminal states** (Completed, Failed, or Cancelled). Pending and InProgress metadata is never deleted, regardless of age. Associated work queue entries and log entries are deleted first to avoid foreign key constraint violations.
 
-Deletion uses EF Core's `ExecuteDeleteAsync` for efficient single-statement SQL—no entities are loaded into memory.
+Deletion uses EF Core's `ExecuteDeleteAsync` for efficient single-statement SQL. No entities are loaded into memory.
 
 ### Enabling Cleanup
 
@@ -217,7 +217,7 @@ A metadata row is deleted when **all** of these conditions are true:
 
 Any work queue entries and log entries associated with deleted metadata are also removed.
 
-Cancelled trains are treated as terminal — they are eligible for cleanup but are **not retried** and **do not create dead letters**. Cancellation is an explicit operator action, not a transient failure.
+Cancelled trains are treated as terminal, they are eligible for cleanup but are **not retried** and **do not create dead letters**. Cancellation is an explicit operator action, not a transient failure.
 
 ## Dead Letter Auto-Purge
 

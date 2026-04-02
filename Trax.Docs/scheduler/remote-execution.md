@@ -7,11 +7,11 @@ nav_order: 9
 
 # Remote Execution
 
-By default, the scheduler schedules, dispatches, and executes trains all within the same process. Remote execution lets you separate **where trains are scheduled** from **where they run** — offloading execution to dedicated worker servers, AWS Lambda, ECS tasks, or any other compute.
+By default, the scheduler schedules, dispatches, and executes trains all within the same process. Remote execution lets you separate **where trains are scheduled** from **where they run**, offloading execution to dedicated worker servers, AWS Lambda, ECS tasks, or any other compute.
 
 ## Key Concept
 
-Postgres is always the source of truth. Every deployment model — local, remote, or standalone — connects to the same Postgres database for metadata, manifests, and state. The only thing that changes is **where the train code runs**.
+Postgres is always the source of truth. Every deployment model, local, remote, or standalone, connects to the same Postgres database for metadata, manifests, and state. The only thing that changes is **where the train code runs**.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -139,11 +139,11 @@ app.UseTraxRunEndpoint("/trax/run");    // synchronous run path
 app.Run();
 ```
 
-The `UseBroadcaster()` call is essential for cross-process subscriptions — without it, the API process has no way to receive lifecycle events from the remote worker. See [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) for details.
+The `UseBroadcaster()` call is essential for cross-process subscriptions, without it, the API process has no way to receive lifecycle events from the remote worker. See [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) for details.
 
 **Remote side (AWS Lambda with `Trax.Runner.Lambda`):**
 
-For Lambda deployments, consider using [Lambda Workers (Direct Invocation)](#model-2c-lambda-workers-direct-invocation) instead — it eliminates public endpoints entirely. The HTTP model shown here requires a Function URL or API Gateway, which creates a publicly-routable endpoint.
+For Lambda deployments, consider using [Lambda Workers (Direct Invocation)](#model-2c-lambda-workers-direct-invocation) instead, it eliminates public endpoints entirely. The HTTP model shown here requires a Function URL or API Gateway, which creates a publicly-routable endpoint.
 
 If you do use HTTP with Lambda, the `TraxLambdaFunction` base class handles service provider lifecycle, envelope-based dispatching, cancellation from Lambda's remaining time, and error handling. `RunLocalAsync()` exposes HTTP endpoints for local development. See the [TraxLambdaFunction API reference](/docs/sdk-reference/scheduler-api/trax-lambda-function) for details.
 
@@ -163,12 +163,12 @@ If you do use HTTP with Lambda, the `TraxLambdaFunction` base class handles serv
 ```
 
 **When to use:**
-- **Serverless compute** (AWS Lambda, Google Cloud Run, Azure Functions) — trains only run when invoked, zero idle cost
-- **Isolation** — trains run in a separate security boundary or VPC
-- **Heterogeneous compute** — different train types need different hardware (GPU, high memory)
-- **Scaling** — the remote endpoint can auto-scale independently of the scheduler
+- **Serverless compute** (AWS Lambda, Google Cloud Run, Azure Functions), trains only run when invoked, zero idle cost
+- **Isolation**: trains run in a separate security boundary or VPC
+- **Heterogeneous compute**: different train types need different hardware (GPU, high memory)
+- **Scaling**: the remote endpoint can auto-scale independently of the scheduler
 
-**Sample:** See `Trax.Samples.ContentShield.Api` and `Trax.Samples.ContentShield.Runner` in the `samples/EphemeralWorkers/` directory of the Trax.Samples repository. The API serves GraphQL and dispatches queued mutations to the Runner via HTTP — no `background_job` table, no DB polling. The Runner uses `UseBroadcaster` with RabbitMQ so GraphQL subscriptions on the API are notified when queued trains complete.
+**Sample:** See `Trax.Samples.ContentShield.Api` and `Trax.Samples.ContentShield.Runner` in the `samples/EphemeralWorkers/` directory of the Trax.Samples repository. The API serves GraphQL and dispatches queued mutations to the Runner via HTTP. No `background_job` table, no DB polling. The Runner uses `UseBroadcaster` with RabbitMQ so GraphQL subscriptions on the API are notified when queued trains complete.
 
 ### Model 2b: SQS Workers (Queue-Based, AWS Lambda)
 
@@ -232,16 +232,16 @@ public class Function
 ```
 
 **When to use:**
-- **AWS Lambda** — event-driven, auto-scaling, zero idle cost with durable message delivery
-- **Guaranteed delivery** — SQS retries failed messages and dead-letters after max retries
-- **Backpressure** — SQS buffers burst traffic; Lambda drains at a controlled rate
-- **High volume** — thousands of concurrent jobs without overwhelming endpoints
+- **AWS Lambda**: event-driven, auto-scaling, zero idle cost with durable message delivery
+- **Guaranteed delivery**: SQS retries failed messages and dead-letters after max retries
+- **Backpressure**: SQS buffers burst traffic; Lambda drains at a controlled rate
+- **High volume**: thousands of concurrent jobs without overwhelming endpoints
 
 **Sample:** The SQS transport is not yet production-ready. See the [Lambda Workers](#model-2c-lambda-workers-direct-invocation) model for the recommended Lambda deployment pattern.
 
 ### Model 2c: Lambda Workers (Direct Invocation)
 
-Like Remote Workers but without any public endpoint. The scheduler invokes the Lambda function directly via the AWS SDK — no API Gateway, Function URLs, or HTTP endpoints. Access is controlled entirely by IAM policies.
+Like Remote Workers but without any public endpoint. The scheduler invokes the Lambda function directly via the AWS SDK. No API Gateway, Function URLs, or HTTP endpoints. Access is controlled entirely by IAM policies.
 
 Requires the `Trax.Scheduler.Lambda` package.
 
@@ -293,7 +293,7 @@ public class Function : TraxLambdaFunction
 }
 ```
 
-The `TraxLambdaFunction` base class receives a `LambdaEnvelope` payload directly from the SDK — no HTTP routing is needed. The envelope's `Type` field determines whether the request is a fire-and-forget job execution (`Execute`) or a synchronous train run (`Run`). See the [TraxLambdaFunction API reference](/docs/sdk-reference/scheduler-api/trax-lambda-function) for details.
+The `TraxLambdaFunction` base class receives a `LambdaEnvelope` payload directly from the SDK. No HTTP routing is needed. The envelope's `Type` field determines whether the request is a fire-and-forget job execution (`Execute`) or a synchronous train run (`Run`). See the [TraxLambdaFunction API reference](/docs/sdk-reference/scheduler-api/trax-lambda-function) for details.
 
 ```
 ┌──── Scheduler Process ────┐         ┌──── AWS Lambda ─────────────────┐
@@ -314,14 +314,14 @@ Two invocation modes:
 
 | Mode | `InvocationType` | Behavior |
 |------|-------------------|----------|
-| **Execute** (queued trains) | `Event` | Fire-and-forget — scheduler gets 202, Lambda runs async |
+| **Execute** (queued trains) | `Event` | Fire-and-forget. scheduler gets 202, Lambda runs async |
 | **Run** (synchronous trains) | `RequestResponse` | Scheduler blocks until Lambda completes and returns output |
 
 **When to use:**
-- **AWS Lambda** — direct SDK invocation, no public endpoints, access governed by IAM
-- **Security-sensitive workloads** — no Function URLs or API Gateway; the Lambda is never publicly reachable
-- **Simpler infrastructure** — fewer AWS resources to manage (no API Gateway, no Function URL configuration)
-- **Lower latency** — direct invocation avoids the API Gateway routing layer
+- **AWS Lambda**: direct SDK invocation, no public endpoints, access governed by IAM
+- **Security-sensitive workloads**: no Function URLs or API Gateway; the Lambda is never publicly reachable
+- **Simpler infrastructure**: fewer AWS resources to manage (no API Gateway, no Function URL configuration)
+- **Lower latency**: direct invocation avoids the API Gateway routing layer
 
 **Local development:** For local dev and testing, `RunLocalAsync()` starts a Kestrel server that exposes the same `/trax/execute` and `/trax/run` HTTP endpoints. Use `UseRemoteWorkers()` + `UseRemoteRun()` on the scheduler side during development, then switch to `UseLambdaWorkers()` + `UseLambdaRun()` for production deployment.
 
@@ -333,9 +333,9 @@ Two invocation modes:
 
 ### Model 3: Standalone Workers (Poll-Based)
 
-A separate, always-on process polls the `background_job` table and runs trains. No scheduler logic — just execution.
+A separate, always-on process polls the `background_job` table and runs trains. No scheduler logic, just execution.
 
-**Scheduler side** (scheduling only — no local execution):
+**Scheduler side** (scheduling only, no local execution):
 
 ```csharp
 services.AddTrax(trax => trax
@@ -352,7 +352,7 @@ services.AddTrax(trax => trax
 );
 ```
 
-> **Tip:** `OverrideSubmitter` with `PostgresJobSubmitter` gives you a scheduler that only writes to the `background_job` table — no `LocalWorkerService` is started. By default (without `OverrideSubmitter`), local workers are started automatically when Postgres is configured, and you can run standalone workers alongside them for horizontal scaling.
+> **Tip:** `OverrideSubmitter` with `PostgresJobSubmitter` gives you a scheduler that only writes to the `background_job` table. No `LocalWorkerService` is started. By default (without `OverrideSubmitter`), local workers are started automatically when Postgres is configured, and you can run standalone workers alongside them for horizontal scaling.
 
 **Standalone worker process:**
 
@@ -387,10 +387,10 @@ app.Run();
 ```
 
 **When to use:**
-- **Separate servers** — dedicated worker machines with different specs
-- **Horizontal scaling** — run multiple worker processes, each polling the same table (PostgreSQL `SKIP LOCKED` prevents duplicates)
-- **Process isolation** — scheduler crash doesn't kill in-flight trains
-- **Kubernetes/ECS** — deploy workers as a separate service with independent scaling
+- **Separate servers**: dedicated worker machines with different specs
+- **Horizontal scaling**: run multiple worker processes, each polling the same table (PostgreSQL `SKIP LOCKED` prevents duplicates)
+- **Process isolation**: scheduler crash doesn't kill in-flight trains
+- **Kubernetes/ECS**: deploy workers as a separate service with independent scaling
 
 **Sample:** See `Trax.Samples.EnergyHub.Hub` and `Trax.Samples.EnergyHub.Worker` in the `samples/DistributedWorkers/` directory of the Trax.Samples repository for a working example. The Hub combines GraphQL API, scheduler, and dashboard in one process while offloading all train execution to the Worker.
 
@@ -398,16 +398,16 @@ app.Run();
 
 | Scenario | Recommended Model |
 |----------|-------------------|
-| Single-server deployment | **Local Workers** — simplest setup, no network overhead |
-| Separate worker servers (always running) | **Standalone Workers** — poll-based, no HTTP layer needed |
-| AWS Lambda (recommended) | **Lambda Workers** — direct SDK invocation, no public endpoints, IAM-governed |
-| AWS Lambda with durable queuing | **SQS Workers** — guaranteed delivery, retries, DLQ, auto-scaling |
-| Google Cloud Run / Azure Functions | **Remote Workers** — push-based HTTP, matches serverless event model |
-| Different hardware per train type | **Remote Workers** — route to GPU/high-memory endpoints |
-| Security-sensitive Lambda workloads | **Lambda Workers** — no Function URL or API Gateway needed |
-| Just getting started | **Local Workers** — scale out later when you need to |
+| Single-server deployment | **Local Workers**: simplest setup, no network overhead |
+| Separate worker servers (always running) | **Standalone Workers**: poll-based, no HTTP layer needed |
+| AWS Lambda (recommended) | **Lambda Workers**: direct SDK invocation, no public endpoints, IAM-governed |
+| AWS Lambda with durable queuing | **SQS Workers**: guaranteed delivery, retries, DLQ, auto-scaling |
+| Google Cloud Run / Azure Functions | **Remote Workers**: push-based HTTP, matches serverless event model |
+| Different hardware per train type | **Remote Workers**: route to GPU/high-memory endpoints |
+| Security-sensitive Lambda workloads | **Lambda Workers**: no Function URL or API Gateway needed |
+| Just getting started | **Local Workers**: scale out later when you need to |
 
-You can also mix models. For example, run local workers for fast trains and remote workers for expensive GPU trains — using per-train routing with `ForTrain<T>()`:
+You can also mix models. For example, run local workers for fast trains and remote workers for expensive GPU trains, using per-train routing with `ForTrain<T>()`:
 
 ```csharp
 .AddScheduler(scheduler => scheduler
@@ -426,7 +426,7 @@ Trains not routed via `ForTrain<T>()` or `[TraxRemote]` execute locally.
 
 Trax does not bake in any authentication mechanism. Both the scheduler and remote sides use standard ASP.NET patterns:
 
-**Scheduler side** — configure the `HttpClient` used by `HttpJobSubmitter`:
+**Scheduler side**: configure the `HttpClient` used by `HttpJobSubmitter`:
 
 ```csharp
 .UseRemoteWorkers(
@@ -449,7 +449,7 @@ Trax does not bake in any authentication mechanism. Both the scheduler and remot
     routing => routing.ForTrain<IMyTrain>())
 ```
 
-**Remote side** — use ASP.NET middleware:
+**Remote side**: use ASP.NET middleware:
 
 ```csharp
 var app = builder.Build();
@@ -468,11 +468,11 @@ Or restrict the endpoint directly:
 app.UseTraxJobRunner("/trax/execute").RequireAuthorization();
 ```
 
-This keeps Trax focused on scheduling and execution while letting you use whatever auth strategy your infrastructure requires — API keys, JWT tokens, mTLS, IAM roles, or nothing at all.
+This keeps Trax focused on scheduling and execution while letting you use whatever auth strategy your infrastructure requires: API keys, JWT tokens, mTLS, IAM roles, or nothing at all.
 
 ## Host Tracking
 
-Every metadata record automatically captures which host executed the train — hostname, environment type (Lambda, ECS, Kubernetes, etc.), and instance ID. This works across all deployment models with zero configuration. You can also add custom labels (region, service, team) via the builder API.
+Every metadata record automatically captures which host executed the train, hostname, environment type (Lambda, ECS, Kubernetes, etc.), and instance ID. This works across all deployment models with zero configuration. You can also add custom labels (region, service, team) via the builder API.
 
 See [Host Tracking](/docs/effect/host-tracking) for details on auto-detection, custom labels, and querying by host.
 
@@ -480,9 +480,9 @@ See [Host Tracking](/docs/effect/host-tracking) for details on auto-detection, c
 
 Regardless of deployment model, every process that executes trains must:
 
-1. **Reference the same train assemblies** — the train types are resolved by fully-qualified name
-2. **Connect to the same Postgres database** — metadata, manifests, and state are shared
-3. **Register the effect system** — `AddTrax()` with `UsePostgres()` and `AddMediator()`
+1. **Reference the same train assemblies**: the train types are resolved by fully-qualified name
+2. **Connect to the same Postgres database**: metadata, manifests, and state are shared
+3. **Register the effect system**: `AddTrax()` with `UsePostgres()` and `AddMediator()`
 
 ## Failure Handling
 
@@ -492,7 +492,7 @@ Trax handles this with multiple layers of protection:
 
 ### 1. HTTP Retry with Exponential Backoff
 
-`HttpJobSubmitter` and `HttpRunExecutor` automatically retry on transient HTTP status codes (429 Too Many Requests, 502 Bad Gateway, 503 Service Unavailable) with exponential backoff and jitter. This handles short-lived throttling — for example, when AWS Lambda returns 429 because reserved concurrency is exhausted.
+`HttpJobSubmitter` and `HttpRunExecutor` automatically retry on transient HTTP status codes (429 Too Many Requests, 502 Bad Gateway, 503 Service Unavailable) with exponential backoff and jitter. This handles short-lived throttling, for example, when AWS Lambda returns 429 because reserved concurrency is exhausted.
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -553,7 +553,7 @@ Or at runtime via the Dashboard under **Server Settings > Job Settings > Stale P
 
 ### 4. Stale InProgress Reaper
 
-The ManifestManager also runs a `ReapStaleInProgressMetadataJunction` on every polling cycle. Any Metadata that has been in `InProgress` state longer than `StaleInProgressTimeout` (default: 60 minutes) is automatically marked as `Failed`. This catches hard crashes where the worker dies without reaching `FinishServiceTrain` — Lambda hard-kills, OOM events, or process crashes that bypass all .NET exception handling.
+The ManifestManager also runs a `ReapStaleInProgressMetadataJunction` on every polling cycle. Any Metadata that has been in `InProgress` state longer than `StaleInProgressTimeout` (default: 60 minutes) is automatically marked as `Failed`. This catches hard crashes where the worker dies without reaching `FinishServiceTrain`: Lambda hard-kills, OOM events, or process crashes that bypass all .NET exception handling.
 
 ```csharp
 .AddScheduler(scheduler => scheduler
@@ -568,7 +568,7 @@ This timeout should be longer than `DefaultJobTimeout` (default: 20 minutes) to 
 
 After `MaxRetries` failed **executions** (distinct from dispatch attempts), the ManifestManager creates a `DeadLetter` record and marks the manifest as `AwaitingIntervention`. Dead letters can be resolved via the Dashboard or programmatically.
 
-Failed metadata feeds into the normal retry pipeline — if the manifest has retries remaining, the ManifestManager will create a new work queue entry on the next cycle.
+Failed metadata feeds into the normal retry pipeline, if the manifest has retries remaining, the ManifestManager will create a new work queue entry on the next cycle.
 
 ### Tuning for Throttled Environments
 
@@ -593,7 +593,7 @@ When a train fails on a remote worker, Trax preserves the full exception context
 | `FailureJunction` | The train junction where the failure occurred (extracted from `TrainExceptionData`) |
 | `StackTrace` | The remote stack trace |
 
-On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. This ensures that `Metadata.AddException()` on the API side correctly parses the failure into `FailureException`, `FailureJunction`, `FailureReason`, and `StackTrace` — the same fields you'd see for a locally-executed train failure.
+On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. This means `Metadata.AddException()` on the API side correctly parses the failure into `FailureException`, `FailureJunction`, `FailureReason`, and `StackTrace`, the same fields you'd see for a locally-executed train failure.
 
 ```
 Runner Process                         API Process
@@ -620,15 +620,15 @@ RemoteRunResponse / RemoteJobResponse
                                         into structured failure fields
 ```
 
-If the HTTP call itself fails (network error, infrastructure 5xx before reaching the endpoint), the error body is read and included in the exception message for debugging — you'll see the HTTP status code and the response body rather than a generic "500 Internal Server Error".
+If the HTTP call itself fails (network error, infrastructure 5xx before reaching the endpoint), the error body is read and included in the exception message for debugging, you'll see the HTTP status code and the response body rather than a generic "500 Internal Server Error".
 
 ### Debugging Remote Failures
 
 When a remote job fails, check these in order:
 
-1. **Metadata table** — `SELECT failure_exception, failure_junction, failure_reason, stack_trace FROM trax.metadata WHERE id = <id>`. These fields are populated from the structured error response.
-2. **Log table** — `SELECT * FROM trax.log WHERE metadata_id = <id> ORDER BY id`. If `AddDataContextLogging()` is enabled on the runner, junction-level logs are persisted.
-3. **Stale pending check** — If `failure_exception = 'StalePendingTimeout'`, the runner never started executing. Check runner health, network connectivity, and deployment status.
+1. **Metadata table**: `SELECT failure_exception, failure_junction, failure_reason, stack_trace FROM trax.metadata WHERE id = <id>`. These fields are populated from the structured error response.
+2. **Log table**: `SELECT * FROM trax.log WHERE metadata_id = <id> ORDER BY id`. If `AddDataContextLogging()` is enabled on the runner, junction-level logs are persisted.
+3. **Stale pending check**: If `failure_exception = 'StalePendingTimeout'`, the runner never started executing. Check runner health, network connectivity, and deployment status.
 
 ## Limitations
 
@@ -637,15 +637,15 @@ When a remote job fails, check these in order:
 
 ## See Also
 
-- [Job Submission](/docs/scheduler/job-submission) — architecture of the job submission pipeline
-- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) — API reference for local worker configuration
-- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — API reference for remote workers (HTTP)
-- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) — API reference for Lambda workers (direct SDK invocation)
-- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) — API reference for Lambda run execution (direct SDK invocation)
-- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) — API reference for SQS workers (Lambda)
-- [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) — API reference for remote run execution (HTTP)
-- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — API reference for remote receiver setup
-- [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) — API reference for standalone worker setup
+- [Job Submission](/docs/scheduler/job-submission): architecture of the job submission pipeline
+- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers): API reference for local worker configuration
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers): API reference for remote workers (HTTP)
+- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers): API reference for Lambda workers (direct SDK invocation)
+- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run): API reference for Lambda run execution (direct SDK invocation)
+- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers): API reference for SQS workers (Lambda)
+- [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run): API reference for remote run execution (HTTP)
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner): API reference for remote receiver setup
+- [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker): API reference for standalone worker setup
 
 ## SDK Reference
 

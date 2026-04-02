@@ -37,8 +37,8 @@ public Task<Either<Exception, TReturn>> RunEither(TInput input)
 
 ## Returns
 
-- **`Run`**: `Task<TReturn>` — the train result. Throws the captured exception if the train failed. Throws `OperationCanceledException` if the token is cancelled.
-- **`RunEither`**: `Task<Either<Exception, TReturn>>` — `Left` on failure, `Right` on success. Note: cancellation still throws `OperationCanceledException` rather than returning `Left` — cancellation is not a business error.
+- **`Run`**: `Task<TReturn>`, the train result. Throws the captured exception if the train failed. Throws `OperationCanceledException` if the token is cancelled.
+- **`RunEither`**: `Task<Either<Exception, TReturn>>`, `Left` on failure, `Right` on success. Note: cancellation still throws `OperationCanceledException` rather than returning `Left` because cancellation is not a business error.
 
 ## Examples
 
@@ -88,7 +88,7 @@ public async Task<IActionResult> ProcessOrder(
 4. **`Run`**: Unwraps the `Either` result. If `Left`, rethrows the exception. If `Right`, returns the value.
 5. **`RunEither`**: Returns the `Either` directly without unwrapping.
 
-During junction execution, the train's `CancellationToken` is automatically propagated to each junction before its `Run` method is called. Junctions access the token via `this.CancellationToken`. Before each junction executes, `CancellationToken.ThrowIfCancellationRequested()` is called — if the token is already cancelled, the junction is skipped entirely.
+During junction execution, the train's `CancellationToken` is automatically propagated to each junction before its `Run` method is called. Junctions access the token via `this.CancellationToken`. Before each junction executes, `CancellationToken.ThrowIfCancellationRequested()` is called. If the token is already cancelled, the junction is skipped entirely.
 
 ## Remarks
 

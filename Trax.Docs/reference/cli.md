@@ -7,7 +7,7 @@ nav_order: 5
 
 # Trax CLI
 
-The Trax CLI generates Trax API projects from existing API schemas. Point it at a GraphQL SDL file or an OpenAPI spec and it scaffolds an API project (via `dotnet new trax-api`) alongside a shared trains library with trains, junctions, input/output records, and wiring — following the same structure as the DistributedWorkers sample.
+The Trax CLI generates Trax API projects from existing API schemas. Point it at a GraphQL SDL file or an OpenAPI spec and it scaffolds an API project (via `dotnet new trax-api`) alongside a shared trains library with trains, junctions, input/output records, and wiring, following the same structure as the DistributedWorkers sample.
 
 ## Prerequisites
 
@@ -108,18 +108,18 @@ MyProject/
 
 ### What gets generated
 
-- **API project** — a fully wired Trax API from the `trax-api` template, with its `Program.cs` patched to scan the trains library assembly and a `ProjectReference` to the trains library.
-- **Trains library** — a class library containing all the domain code:
-  - **ManifestNames.cs** — centralized `const string` identifiers for each operation (kebab-case), matching the pattern used in the DistributedWorkers sample.
+- **API project**: a fully wired Trax API from the `trax-api` template, with its `Program.cs` patched to scan the trains library assembly and a `ProjectReference` to the trains library.
+- **Trains library**: a class library containing all the domain code:
+  - **ManifestNames.cs**: centralized `const string` identifiers for each operation (kebab-case), matching the pattern used in the DistributedWorkers sample.
   - **Trains** are grouped into folders by noun (e.g., `createPlayer` and `getPlayer` both go under `Players/`).
   - **Shared types** referenced by multiple operations are placed in `Models/`.
   - **Enums** are also placed in `Models/`.
-  - **Junctions** contain a `throw new NotImplementedException()` with a TODO comment — this is where you add your business logic.
+  - **Junctions** contain a `throw new NotImplementedException()` with a TODO comment. This is where you add your business logic.
   - For OpenAPI endpoints, the junction includes the original HTTP method and path as a comment.
 
 ### Why two projects?
 
-This structure separates infrastructure from domain logic. The trains library can be referenced by multiple projects — an API, a scheduler, standalone workers — without duplicating train definitions. This is the same pattern demonstrated in the DistributedWorkers sample with `Trax.Samples.EnergyHub`.
+This structure separates infrastructure from domain logic. The trains library can be referenced by multiple projects (an API, a scheduler, standalone workers) without duplicating train definitions. This is the same pattern demonstrated in the DistributedWorkers sample with `Trax.Samples.EnergyHub`.
 
 ## Type Mapping
 

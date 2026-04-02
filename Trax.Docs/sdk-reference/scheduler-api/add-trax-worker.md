@@ -8,7 +8,7 @@ nav_order: 11
 
 # AddTraxWorker
 
-Registers a standalone worker process that polls the `background_job` table and executes trains. No scheduler logic — just execution.
+Registers a standalone worker process that polls the `background_job` table and executes trains. No scheduler logic, just execution.
 
 ## Signature
 
@@ -69,7 +69,7 @@ builder.Services.AddTraxWorker(opts =>
 
 ### Multiple Worker Processes
 
-You can run multiple standalone worker processes against the same database. PostgreSQL's `FOR UPDATE SKIP LOCKED` ensures each job is claimed by exactly one worker — no duplicates, no coordination needed.
+You can run multiple standalone worker processes against the same database. PostgreSQL's `FOR UPDATE SKIP LOCKED` guarantees each job is claimed by exactly one worker. No duplicates, no coordination needed.
 
 ```
 ┌── Worker Process A ──┐    ┌── Worker Process B ──┐
@@ -94,7 +94,7 @@ You can run multiple standalone worker processes against the same database. Post
 | `LocalWorkerOptions` | Singleton | Worker configuration |
 | `LocalWorkerService` | Hosted Service | Background worker that polls `background_job` and executes trains |
 
-**Not registered:** ManifestManager, JobDispatcher, polling services, startup service. This process only executes — it doesn't schedule or dispatch.
+**Not registered:** ManifestManager, JobDispatcher, polling services, startup service. This process only executes; it doesn't schedule or dispatch.
 
 ## How It Differs from the Scheduler's Local Workers
 
@@ -110,9 +110,9 @@ You can run multiple standalone worker processes against the same database. Post
 
 The standalone worker must:
 
-- **Reference the same train assemblies** passed to `AddMediator()` — train types are resolved by fully-qualified name
-- **Connect to the same Postgres database** — metadata, manifests, and state are shared across all processes
-- **Register the effect system** — `AddTrax()` with `UsePostgres()` is required
+- **Reference the same train assemblies** passed to `AddMediator()`. Train types are resolved by fully-qualified name.
+- **Connect to the same Postgres database.** Metadata, manifests, and state are shared across all processes.
+- **Register the effect system.** `AddTrax()` with `UsePostgres()` is required.
 
 ## Package
 
@@ -122,6 +122,6 @@ dotnet add package Trax.Scheduler
 
 ## See Also
 
-- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
-- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) — customizing local workers within the scheduler process
-- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — push-based alternative (HTTP endpoint)
+- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
+- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers): customizing local workers within the scheduler process
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner): push-based alternative (HTTP endpoint)

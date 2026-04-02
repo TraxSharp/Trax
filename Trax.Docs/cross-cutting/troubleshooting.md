@@ -84,7 +84,7 @@ Chain<ValidateJunction>()              // Takes CreateUserRequest, returns Unit
     .Chain<SendEmailJunction>();       // Takes User (from previous junction)
 ```
 
-The [Analyzer](../core/analyzer.md) catches most of these issues at compile time—if you see CHAIN001, the message tells you exactly which type is missing and what's available.
+The [Analyzer](../core/analyzer.md) catches most of these issues at compile time. If you see CHAIN001, the message tells you exactly which type is missing and what's available.
 
 ## Train completes but metadata shows "Failed"
 
@@ -99,10 +99,10 @@ If you're using `ShortCircuit`, remember that throwing an exception means "conti
 ## Scheduled jobs don't execute (no errors)
 
 Possible causes:
-- The manifest's `IsEnabled` is `false`—check via `ITraxScheduler` or the database
+- The manifest's `IsEnabled` is `false`. Check via `ITraxScheduler` or the database
 - `ManifestManagerPollingInterval` or `JobDispatcherPollingInterval` is set too high and the job hasn't been picked up yet
 - The train's input type doesn't implement `IManifestProperties`
-- Your train assembly isn't registered with `AddMediator()` — make sure to pass the assembly containing your trains
+- Your train assembly isn't registered with `AddMediator()`. Make sure to pass the assembly containing your trains
 
 ## "Ambiguous reference" between Cron types
 

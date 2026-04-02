@@ -8,7 +8,7 @@ nav_order: 10.1
 
 # UseLambdaWorkers
 
-Routes specific trains to an AWS Lambda function for execution via direct SDK invocation. No public endpoint is created — access is governed entirely by IAM policies. Trains not included in the routing configuration continue to execute locally via `PostgresJobSubmitter` and `LocalWorkerService`.
+Routes specific trains to an AWS Lambda function for execution via direct SDK invocation. No public endpoint is created; access is governed entirely by IAM policies. Trains not included in the routing configuration continue to execute locally via `PostgresJobSubmitter` and `LocalWorkerService`.
 
 ## Package
 
@@ -37,14 +37,14 @@ Defined in `Trax.Scheduler.Lambda.Extensions.LambdaSchedulerExtensions`.
 
 ## Returns
 
-`SchedulerConfigurationBuilder` — for continued fluent chaining.
+`SchedulerConfigurationBuilder`, for continued fluent chaining.
 
 ## LambdaWorkerOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `FunctionName` | `string` | _(required)_ | The Lambda function name, ARN, or partial ARN to invoke |
-| `ConfigureLambdaClient` | `Action<AmazonLambdaConfig>?` | `null` | Optional callback to configure the `AmazonLambdaConfig` — set region, endpoint override (LocalStack), etc. |
+| `ConfigureLambdaClient` | `Action<AmazonLambdaConfig>?` | `null` | Optional callback to configure the `AmazonLambdaConfig` (set region, endpoint override for LocalStack, etc.) |
 
 ## SubmitterRouting
 
@@ -120,7 +120,7 @@ Combine `UseLambdaWorkers` with `UseLambdaRun` to offload both queued and synchr
 
 ### Mixed with Other Transports
 
-You can use Lambda workers alongside HTTP remote workers and SQS workers — each for different trains:
+You can use Lambda workers alongside HTTP remote workers and SQS workers, each for different trains:
 
 ```csharp
 .AddScheduler(scheduler => scheduler
@@ -145,7 +145,7 @@ When the JobDispatcher processes a work queue entry, it checks the `JobSubmitter
 1. Serializes a `RemoteJobRequest` containing the metadata ID and optional input
 2. Wraps it in a `LambdaEnvelope` with `Type = Execute`
 3. Calls `IAmazonLambda.InvokeAsync()` with `InvocationType.Event` (fire-and-forget)
-4. Checks `response.FunctionError` — throws `TrainException` if the Lambda failed
+4. Checks `response.FunctionError` and throws `TrainException` if the Lambda failed
 5. Returns a synthetic job ID (`"lambda-{guid}"`)
 
 The Lambda function receives the `LambdaEnvelope` via `TraxLambdaFunction.FunctionHandler()`, deserializes the `RemoteJobRequest`, and executes the train through `ITraxRequestHandler.ExecuteJobAsync()`.
@@ -170,20 +170,20 @@ The scheduler process needs:
 |---------|----------|-------------|
 | `LambdaWorkerOptions` | Singleton | Configuration options |
 | `IAmazonLambda` | Singleton | AWS Lambda client |
-| `LambdaJobSubmitter` | Scoped (concrete type) | Dispatches jobs via Lambda SDK — resolved per train via routing |
+| `LambdaJobSubmitter` | Scoped (concrete type) | Dispatches jobs via Lambda SDK, resolved per train via routing |
 
 > **Note:** `UseLambdaWorkers()` does **not** replace the default `IJobSubmitter`. Local workers continue to run for trains not routed to this function.
 
 ## Limitations
 
 - **Payload size limit:** Lambda invocation payloads are limited to 256 KB. If your serialized train input exceeds this, store the data externally and pass a reference.
-- **No HTTP retries:** Unlike `UseRemoteWorkers()`, there is no retry configuration — Lambda handles retries at the infrastructure level for async (`Event`) invocations.
-- **Cancellation is process-local:** Same limitation as other remote execution models — dashboard "Cancel" only affects trains on the same process.
+- **No HTTP retries:** Unlike `UseRemoteWorkers()`, there is no retry configuration. Lambda handles retries at the infrastructure level for async (`Event`) invocations.
+- **Cancellation is process-local:** Same limitation as other remote execution models. Dashboard "Cancel" only affects trains on the same process.
 
 ## See Also
 
-- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
-- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) — offload synchronous runs to Lambda
-- [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) — the Lambda receiver base class
-- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — HTTP-based per-train remote dispatch (alternative transport)
-- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) — SQS-based per-train dispatch (alternative transport)
+- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
+- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run): offload synchronous runs to Lambda
+- [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function): the Lambda receiver base class
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers): HTTP-based per-train remote dispatch (alternative transport)
+- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers): SQS-based per-train dispatch (alternative transport)

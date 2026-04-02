@@ -81,7 +81,7 @@ Uses JetBrains' PSI (Program Structure Interface) for type resolution. A daemon 
 3. Walks the junction's super-type hierarchy to find `IJunction<TIn, TOut>`
 4. Places a `TIn -> TOut` hint after the closing parenthesis
 
-PSI resolution is fully semantic — generics, inheritance chains, and type substitution are handled correctly without regex.
+PSI resolution is fully semantic. Generics, inheritance chains, and type substitution are handled correctly without regex.
 
 ### Architecture
 

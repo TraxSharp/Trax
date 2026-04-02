@@ -8,7 +8,7 @@ nav_order: 11
 
 # Host Tracking
 
-Methods on `TraxBuilder` for configuring host identity. All are optional — host tracking works with zero configuration via auto-detection.
+Methods on `TraxBuilder` for configuring host identity. All are optional. Host tracking works with zero configuration via auto-detection.
 
 ## SetHostEnvironment
 

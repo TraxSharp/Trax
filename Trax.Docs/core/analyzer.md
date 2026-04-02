@@ -7,7 +7,7 @@ nav_order: 4
 
 # Analyzer
 
-Trax.Core includes a Roslyn analyzer that validates your train's route at compile time — like a route planner that checks every junction has the cargo it needs before the train ever departs. When you chain junctions via `.Chain<TJunction>()`, the analyzer simulates the runtime Memory dictionary to verify that each junction's input type is available before that junction executes.
+Trax.Core includes a Roslyn analyzer that validates your train's route at compile time, like a route planner that checks every junction has the cargo it needs before the train ever departs. When you chain junctions via `.Chain<TJunction>()`, the analyzer simulates the runtime Memory dictionary to verify that each junction's input type is available before that junction executes.
 
 ## The Problem
 
@@ -20,7 +20,7 @@ Chain<LoadMetadataJunction>()                // TIn=RunJobRequest -> TOut=Metada
     .Chain<UpdateManifestSuccessJunction>();
 ```
 
-If someone removes `LoadMetadataJunction`, `ValidateMetadataStateJunction` expects `Metadata` in Memory but nothing produces it. Today this is a runtime error — the train fails when it tries to find `Metadata` in the dictionary. You won't discover this until the code actually runs.
+If someone removes `LoadMetadataJunction`, `ValidateMetadataStateJunction` expects `Metadata` in Memory but nothing produces it. Today this is a runtime error. The train fails when it tries to find `Metadata` in the dictionary. You won't discover this until the code actually runs.
 
 The analyzer makes it a compile-time error. You see the problem immediately in your IDE, before you even build.
 
@@ -39,7 +39,7 @@ Chain<JunctionA>()    -> Check: is JunctionA's TIn in Memory? Add JunctionA's TO
 |--------|----------------------|
 | `Junctions()` / `Activate(input)` | Seeds Memory with `TInput` and `Unit` |
 | `.Chain<TJunction>()` | Checks `TIn` in Memory, then adds `TOut` |
-| `.ShortCircuit<TJunction>()` | Same as `Chain` — checks `TIn` in Memory, adds `TOut` |
+| `.ShortCircuit<TJunction>()` | Same as `Chain`: checks `TIn` in Memory, adds `TOut` |
 | `.AddServices<T1, T2>()` | Adds each type argument to Memory |
 | `.Extract<TIn, TOut>()` | Adds `TOut` to Memory |
 | `.Resolve()` / end of chain | Checks `TReturn` in Memory |
@@ -97,7 +97,7 @@ The analyzer mirrors the runtime's Memory behavior:
 
 ## Setup
 
-The analyzer ships with the Trax.Core NuGet package. If you're referencing Trax.Core, you already have it — no additional setup required.
+The analyzer ships with the Trax.Core NuGet package. If you're referencing Trax.Core, you already have it. No additional setup required.
 
 For development within the Trax.Core solution itself, the analyzer is propagated to all projects via `Directory.Build.props`:
 

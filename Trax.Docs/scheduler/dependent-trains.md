@@ -9,7 +9,7 @@ nav_order: 5
 
 ## The Problem
 
-Some jobs only make sense after another job finishes. An ETL pipeline extracts data first, then transforms and loads it. A notification train runs after a report completes. You could schedule both on the same interval and hope the timing works out, but that's fragile—if the parent runs slow or retries, the dependent kicks off against stale data.
+Some jobs only make sense after another job finishes. An ETL pipeline extracts data first, then transforms and loads it. A notification train runs after a report completes. You could schedule both on the same interval and hope the timing works out, but that's fragile, if the parent runs slow or retries, the dependent kicks off against stale data.
 
 Dependent trains solve this. A manifest with `ScheduleType.Dependent` doesn't run on a timer. It runs when its parent's `LastSuccessfulRun` moves forward.
 
@@ -45,13 +45,13 @@ services.AddTrax(trax => trax
 );
 ```
 
-`ThenInclude` captures the previous call's external ID as the parent. No schedule parameter—dependent manifests don't have one.
+`ThenInclude` captures the previous call's external ID as the parent. No schedule parameter, dependent manifests don't have one.
 
 Chaining works: `.Schedule(...).ThenInclude(...).ThenInclude(...)` creates A &rarr; B &rarr; C. Each `ThenInclude` depends on the one before it. If `extract` fails, neither downstream train fires.
 
 ## Fan-Out: Include
 
-Sometimes one job needs to trigger multiple independent downstream jobs. An extract might feed both a transform pipeline and a validation junction. `ThenInclude` can't express this — it always chains from the previous manifest, producing a linear pipeline.
+Sometimes one job needs to trigger multiple independent downstream jobs. An extract might feed both a transform pipeline and a validation junction. `ThenInclude` can't express this, it always chains from the previous manifest, producing a linear pipeline.
 
 `Include` solves this. It always branches from the **root** `Schedule`, not the cursor:
 
@@ -99,13 +99,13 @@ scheduler
 //          load-0..load-99 (groupId: "load", prunePrefix: "load-")
 ```
 
-The `DependsOn` property on each `ManifestItem` specifies the parent's external ID. In this example, `load-0` depends on `extract-0`, `load-1` on `extract-1`, and so on. When `extract-42` succeeds, only `load-42` gets queued—the rest are unaffected.
+The `DependsOn` property on each `ManifestItem` specifies the parent's external ID. In this example, `load-0` depends on `extract-0`, `load-1` on `extract-1`, and so on. When `extract-42` succeeds, only `load-42` gets queued, the rest are unaffected.
 
-The mapping is flexible. You aren't limited to 1:1—multiple dependents can point to the same parent. The name-based overloads automatically set `groupId` and `prunePrefix` from the `name` parameter. For deeper chaining (a third batch level), use `ThenIncludeMany`.
+The mapping is flexible. You aren't limited to 1:1, multiple dependents can point to the same parent. The name-based overloads automatically set `groupId` and `prunePrefix` from the `name` parameter. For deeper chaining (a third batch level), use `ThenIncludeMany`.
 
 ## Bulk Fan-Out: IncludeMany
 
-When a single root manifest should trigger an entire batch of dependents, use `IncludeMany` without `DependsOn` — items automatically depend on the root `Schedule`:
+When a single root manifest should trigger an entire batch of dependents, use `IncludeMany` without `DependsOn`, items automatically depend on the root `Schedule`:
 
 ```csharp
 scheduler
@@ -122,7 +122,7 @@ scheduler
         )));
 ```
 
-All 10 `load-*` manifests depend on `extract-all`. No `DependsOn` needed — `IncludeMany` automatically parents every item from the root `Schedule`. The name `"load"` derives `groupId: "load"` and `prunePrefix: "load-"`.
+All 10 `load-*` manifests depend on `extract-all`. No `DependsOn` needed. `IncludeMany` automatically parents every item from the root `Schedule`. The name `"load"` derives `groupId: "load"` and `prunePrefix: "load-"`.
 
 ## Runtime API
 
@@ -130,7 +130,7 @@ For jobs created at runtime rather than startup, use `ITraxScheduler.ScheduleDep
 
 ## Cycle Detection
 
-ManifestGroup dependencies must form a directed acyclic graph (DAG). Circular dependencies between groups—where group A depends on group B which depends back on group A, directly or transitively—would create a deadlock where no group can ever fire.
+ManifestGroup dependencies must form a directed acyclic graph (DAG). Circular dependencies between groups, where group A depends on group B which depends back on group A, directly or transitively, would create a deadlock where no group can ever fire.
 
 The scheduler validates this **at startup**. When `AddScheduler` builds the configuration, it derives group-level edges from the manifest-level `Schedule`/`ThenInclude`/`Include`/`ScheduleMany`/`ThenIncludeMany`/`IncludeMany` calls and runs a topological sort (Kahn's algorithm) over the group graph. If a cycle is detected, the application fails fast with an `InvalidOperationException` listing the groups involved:
 
@@ -139,7 +139,7 @@ Circular dependency detected among manifest groups: [group-a, group-b, group-c].
 Manifest groups must form a directed acyclic graph (DAG).
 ```
 
-Dependencies **within** a single group (two manifests in the same `groupId` where one depends on the other) are fine—only cross-group edges are checked, since within-group ordering is handled by the polling loop's parent/dependent evaluation.
+Dependencies **within** a single group (two manifests in the same `groupId` where one depends on the other) are fine, only cross-group edges are checked, since within-group ordering is handled by the polling loop's parent/dependent evaluation.
 
 The dashboard also visualizes the group dependency graph on the ManifestGroups page and each ManifestGroup detail page, making it easy to see the structure at a glance.
 
@@ -177,7 +177,7 @@ scheduler
         options: o => o.Dormant().Group(group => group.MaxActiveJobs(4)));
 ```
 
-The `delta-bronze-*` manifests appear in the topology with `ScheduleType.DormantDependent`. The ManifestManager never auto-queues them—neither on a timer nor when their parent succeeds.
+The `delta-bronze-*` manifests appear in the topology with `ScheduleType.DormantDependent`. The ManifestManager never auto-queues them, neither on a timer nor when their parent succeeds.
 
 ### Runtime Activation
 
@@ -226,22 +226,22 @@ ALTER TABLE trax.manifest
     REFERENCES trax.manifest(id) ON DELETE SET NULL;
 ```
 
-It's a self-referencing FK. If the parent manifest is deleted, the dependent's `DependsOnManifestId` is set to `NULL`—it won't fire, but it won't break either.
+It's a self-referencing FK. If the parent manifest is deleted, the dependent's `DependsOnManifestId` is set to `NULL`, it won't fire, but it won't break either.
 
-The `schedule_type` enum has two dependency values: `dependent` and `dormant_dependent`. Both have no `CronExpression` or `IntervalSeconds`—those fields are `NULL`. The difference is behavioral: `dependent` manifests auto-fire when their parent succeeds, while `dormant_dependent` manifests must be explicitly activated via `IDormantDependentContext`.
+The `schedule_type` enum has two dependency values: `dependent` and `dormant_dependent`. Both have no `CronExpression` or `IntervalSeconds`, those fields are `NULL`. The difference is behavioral: `dependent` manifests auto-fire when their parent succeeds, while `dormant_dependent` manifests must be explicitly activated via `IDormantDependentContext`.
 
 ### Evaluation in ManifestManagerTrain
 
 The `DetermineJobsToQueueJunction` runs two passes:
 
 1. **Time-based manifests** (Cron, Interval): checked against their schedule as before. `DormantDependent` manifests are explicitly excluded from this pass.
-2. **Dependent manifests**: only `ScheduleType.Dependent` manifests are checked against their parent's `LastSuccessfulRun`. `DormantDependent` manifests are excluded—they are never auto-queued.
+2. **Dependent manifests**: only `ScheduleType.Dependent` manifests are checked against their parent's `LastSuccessfulRun`. `DormantDependent` manifests are excluded, they are never auto-queued.
 
 The dependent pass loads all enabled manifests (parents and dependents together), so it can resolve parent references without extra queries. If a parent is disabled or missing from the loaded set, its dependents are skipped.
 
 ### Chain Behavior
 
-In an A &rarr; B &rarr; C chain, B won't fire until A succeeds. C won't fire until B succeeds. If A succeeds but B fails and gets dead-lettered, C stays idle—it's still waiting for B's `LastSuccessfulRun` to advance.
+In an A &rarr; B &rarr; C chain, B won't fire until A succeeds. C won't fire until B succeeds. If A succeeds but B fails and gets dead-lettered, C stays idle, it's still waiting for B's `LastSuccessfulRun` to advance.
 
 Each link in the chain is independent. The scheduler doesn't have a concept of "the whole chain failed." Each manifest manages its own retries and dead letters. This keeps the model simple: every manifest is still just a manifest, whether it runs on a timer or after another manifest.
 

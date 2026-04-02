@@ -47,7 +47,7 @@ Every `ServiceTrain` execution creates a `Metadata` row:
 | `ParentId` | Links to parent train for [nested trains](/docs/mediator#nested-trains) |
 | `ManifestId` | Links to scheduling manifest |
 
-Without the [Parameter Effect](parameter-effect.md), the `Input` and `Output` columns are null — metadata is still persisted, but without the serialized request/response data.
+Without the [Parameter Effect](parameter-effect.md), the `Input` and `Output` columns are null. Metadata is still persisted, but without the serialized request/response data.
 
 ## InMemory
 

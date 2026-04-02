@@ -53,8 +53,8 @@ builder.Services.AddTraxGraphQL(graphql => graphql
 | `AddFilterType<TEntity, TFilter>()` | Overrides the auto-generated `FilterInputType` for a specific entity. `TFilter` must extend `FilterInputType<TEntity>`. See [custom filter and sort types](/docs/sdk-reference/graphql-api/query-models#custom-filter-and-sort-types). |
 | `AddSortType<TEntity, TSort>()` | Overrides the auto-generated `SortInputType` for a specific entity. `TSort` must extend `SortInputType<TEntity>`. See [custom filter and sort types](/docs/sdk-reference/graphql-api/query-models#custom-filter-and-sort-types). |
 | `AddTypeExtension<T>()` | Registers a single HotChocolate type extension class (e.g., a class decorated with `[ExtendObjectType]`) on the Trax schema. `T` must be a class. Use this for explicit per-type registration. |
-| `AddTypeExtensions(params Assembly[])` | Scans the given assemblies for all non-abstract classes decorated with `[ExtendObjectType]` and registers them on the Trax schema. Mirrors the `AddMediator` assembly-scanning pattern — add a new type extension class and it's auto-discovered. |
-| `ConfigureSchema(Action<IRequestExecutorBuilder>)` | Applies arbitrary configuration to the underlying HotChocolate `IRequestExecutorBuilder`. Use this for settings that Trax doesn't expose directly — cost analysis options, custom conventions, error handling, etc. Callbacks run after all standard Trax configuration. |
+| `AddTypeExtensions(params Assembly[])` | Scans the given assemblies for all non-abstract classes decorated with `[ExtendObjectType]` and registers them on the Trax schema. Mirrors the `AddMediator` assembly-scanning pattern: add a new type extension class and it's auto-discovered. |
+| `ConfigureSchema(Action<IRequestExecutorBuilder>)` | Applies arbitrary configuration to the underlying HotChocolate `IRequestExecutorBuilder`. Use this for settings that Trax doesn't expose directly (cost analysis options, custom conventions, error handling, etc.). Callbacks run after all standard Trax configuration. |
 
 All builder methods return the builder for fluent chaining.
 
@@ -70,7 +70,7 @@ public static WebApplication UseTraxGraphQL(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `app` | `WebApplication` | Yes | — | The built application |
+| `app` | `WebApplication` | Yes | N/A | The built application |
 | `routePrefix` | `string` | No | `"/trax/graphql"` | The URL path where the GraphQL endpoint is mapped |
 | `configure` | `Action<IEndpointConventionBuilder>?` | No | `null` | Optional callback to apply endpoint conventions (authorization, rate limiting, CORS) to the GraphQL endpoint. |
 
@@ -82,17 +82,17 @@ public static WebApplication UseTraxGraphQL(
 
 `AddTraxGraphQL` calls `AddTraxApi()` internally (shared API services), then configures HotChocolate:
 
-- **Named GraphQL server** via `AddGraphQLServer("trax")` — uses a named schema so it coexists with your own HotChocolate schemas in the same application
+- **Named GraphQL server** via `AddGraphQLServer("trax")`, using a named schema so it coexists with your own HotChocolate schemas in the same application
 - **Query type**: `RootQuery` with grouped sub-types:
-  - **`operations`** (`OperationsQueries`) — always present. Predefined operational queries: `health` status, registered `trains` discovery, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution`
-  - **`discover`** (`DiscoverQueries`) — present when trains annotated with [`[TraxQuery]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute) are registered, or when entities annotated with [`[TraxQueryModel]`](/docs/sdk-reference/graphql-api/query-models) are discovered via `AddDbContext<T>()`. Contains auto-generated typed query fields for each query train, and paginated/filterable/sortable fields for each query model.
+  - **`operations`** (`OperationsQueries`): always present. Predefined operational queries: `health` status, registered `trains` discovery, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution`
+  - **`discover`** (`DiscoverQueries`): present when trains annotated with [`[TraxQuery]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute) are registered, or when entities annotated with [`[TraxQueryModel]`](/docs/sdk-reference/graphql-api/query-models) are discovered via `AddDbContext<T>()`. Contains auto-generated typed query fields for each query train, and paginated/filterable/sortable fields for each query model.
 - **Mutation type**: `RootMutation` with grouped sub-types:
-  - **`operations`** (`OperationsMutations`) — always present. `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
-  - **`dispatch`** (`DispatchMutations`) — only present when trains annotated with [`[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute) are registered. Auto-generated typed mutations with strongly-typed input objects derived from each train's input record. Each train gets a single mutation field (e.g. `banPlayer`) with an optional `mode: ExecutionMode` parameter when both Run and Queue operations are enabled (the default).
-- **Subscription type**: `LifecycleSubscriptions` — real-time [lifecycle events](/docs/sdk-reference/graphql-api/subscriptions) via WebSocket (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`)
-- **In-memory subscription transport** — HotChocolate's built-in pub/sub for delivering events to WebSocket clients
-- **Error filter**: `TraxErrorFilter` — exposes actual exception messages for train-related errors instead of HotChocolate's default "Unexpected Execution Error". Exposed types: `TrainException` (code: `TRAX_TRAIN_ERROR`), `TrainAuthorizationException` (code: `TRAX_AUTHORIZATION`), `InvalidOperationException` (code: `TRAX_INVALID_OPERATION`). All other exception types retain the default masked message.
-- **Lifecycle hook**: `GraphQLSubscriptionHook` — automatically registered to publish train state transitions to the subscription transport
+  - **`operations`** (`OperationsMutations`): always present. `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`
+  - **`dispatch`** (`DispatchMutations`): only present when trains annotated with [`[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute) are registered. Auto-generated typed mutations with strongly-typed input objects derived from each train's input record. Each train gets a single mutation field (e.g. `banPlayer`) with an optional `mode: ExecutionMode` parameter when both Run and Queue operations are enabled (the default).
+- **Subscription type**: `LifecycleSubscriptions`, providing real-time [lifecycle events](/docs/sdk-reference/graphql-api/subscriptions) via WebSocket (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`)
+- **In-memory subscription transport**: HotChocolate's built-in pub/sub for delivering events to WebSocket clients
+- **Error filter**: `TraxErrorFilter`, which exposes actual exception messages for train-related errors instead of HotChocolate's default "Unexpected Execution Error". Exposed types: `TrainException` (code: `TRAX_TRAIN_ERROR`), `TrainAuthorizationException` (code: `TRAX_AUTHORIZATION`), `InvalidOperationException` (code: `TRAX_INVALID_OPERATION`). All other exception types retain the default masked message.
+- **Lifecycle hook**: `GraphQLSubscriptionHook`, automatically registered to publish train state transitions to the subscription transport
 
 ## Prerequisites
 
@@ -105,7 +105,7 @@ InvalidOperationException: AddTrax() must be called before AddTraxGraphQL().
 Call services.AddTrax(...) in your service configuration before calling AddTraxGraphQL().
 ```
 
-This ensures the required Trax services are available before the GraphQL schema is built.
+This makes sure the required Trax services are available before the GraphQL schema is built.
 
 ## Example
 

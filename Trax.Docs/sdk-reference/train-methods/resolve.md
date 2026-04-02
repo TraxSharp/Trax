@@ -10,7 +10,7 @@ nav_order: 7
 
 Extracts the final `TReturn` result from the train. Used in the `RunInternal` path as the **last** method call. Follows a priority chain: exception > short-circuit value > Memory lookup.
 
-> **Note:** When using `Junctions()`, resolution happens automatically via an implicit conversion — you do not call `Resolve` yourself. This method is only needed when overriding `RunInternal`.
+> **Note:** When using `Junctions()`, resolution happens automatically via an implicit conversion and you do not call `Resolve` yourself. This method is only needed when overriding `RunInternal`.
 
 ## Signatures
 
@@ -36,7 +36,7 @@ public Either<Exception, TReturn> Resolve(Either<Exception, TReturn> returnType)
 
 ## Returns
 
-`Either<Exception, TReturn>` — the train result. `Left` contains the exception on failure; `Right` contains the `TReturn` value on success.
+`Either<Exception, TReturn>`, the train result. `Left` contains the exception on failure; `Right` contains the `TReturn` value on success.
 
 ## Examples
 
@@ -72,5 +72,5 @@ protected override async Task<Either<Exception, string>> RunInternal(Unit input)
 
 ## Remarks
 
-- `Resolve()` does not throw — it returns an `Either`. The calling `Run()` method unwraps the Either and throws if needed.
+- `Resolve()` does not throw. It returns an `Either`. The calling `Run()` method unwraps the Either and throws if needed.
 - The parameterized `Resolve(returnType)` is simpler: it returns the exception if one exists, otherwise returns the provided value. It does **not** check short-circuit or Memory.

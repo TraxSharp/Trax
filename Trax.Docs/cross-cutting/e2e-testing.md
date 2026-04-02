@@ -7,7 +7,7 @@ nav_order: 4
 
 # E2E Testing
 
-E2E tests verify that the full Trax application works correctly — scheduler dispatches work, trains execute, dependencies chain, failures dead-letter, and GraphQL resolves against real infrastructure. They complement [unit and integration tests](/docs/cross-cutting/testing) by catching issues that only surface when all components run together (DI wiring, EF graph traversal, scheduler timing, authorization).
+E2E tests verify that the full Trax application works correctly: scheduler dispatches work, trains execute, dependencies chain, failures dead-letter, and GraphQL resolves against real infrastructure. They complement [unit and integration tests](/docs/cross-cutting/testing) by catching issues that only surface when all components run together (DI wiring, EF graph traversal, scheduler timing, authorization).
 
 ## Architecture
 
@@ -103,7 +103,7 @@ public abstract class SchedulerTestFixture
     {
         // Create per-test scope and clean execution data
         // (metadata, work queues, dead letters, logs, background jobs).
-        // Preserve manifests — they don't need re-seeding.
+        // Preserve manifests. They don't need re-seeding.
     }
 }
 ```
@@ -128,7 +128,7 @@ finally
 
 When testing scheduler dispatch (as opposed to `TrainBus.RunAsync`), create work queue entries manually. This is required for dormant dependent tests where `IDormantDependentContext.ActivateAsync` only works within a scheduled execution context.
 
-**Important:** Serialize input using `TraxJsonSerializationOptions.ManifestProperties` — this uses camelCase property naming, matching what the scheduler's `DispatchJobsJunction` expects during deserialization. Using default `JsonSerializer.Serialize` produces PascalCase, which causes silent deserialization failures.
+**Important:** Serialize input using `TraxJsonSerializationOptions.ManifestProperties`. This uses camelCase property naming, matching what the scheduler's `DispatchJobsJunction` expects during deserialization. Using default `JsonSerializer.Serialize` produces PascalCase, which causes silent deserialization failures.
 
 ```csharp
 var entry = WorkQueue.Create(new CreateWorkQueue
@@ -136,7 +136,7 @@ var entry = WorkQueue.Create(new CreateWorkQueue
     TrainName = manifest.Name,
     Input = JsonSerializer.Serialize(
         input,
-        TraxJsonSerializationOptions.ManifestProperties  // camelCase — must match dispatcher
+        TraxJsonSerializationOptions.ManifestProperties  // camelCase, must match dispatcher
     ),
     InputTypeName = typeof(MyInput).FullName,
     ManifestId = manifest.Id,
@@ -201,7 +201,7 @@ public abstract class ApiTestFixture
 }
 ```
 
-Send GraphQL queries as JSON POST requests to `/trax/graphql`. Remember that HotChocolate returns HTTP 400 for GraphQL errors — read the response body regardless of status code.
+Send GraphQL queries as JSON POST requests to `/trax/graphql`. Remember that HotChocolate returns HTTP 400 for GraphQL errors, so read the response body regardless of status code.
 
 ## Test Parallelism
 

@@ -19,7 +19,7 @@ Trax targets `net10.0` exclusively. If your project is on `net8.0` or `net9.0`, 
 <TargetFramework>net10.0</TargetFramework>
 ```
 
-This affects your entire solution—every project that references a Trax package must target `net10.0`.
+This affects your entire solution. Every project that references a Trax package must target `net10.0`.
 
 ## Package Renames
 
@@ -55,7 +55,7 @@ Trax aligns all dependencies with .NET 10. If your project pins any of these pac
 | `EFCore.NamingConventions` | 8.0.x | 10.0.1+ |
 | `Microsoft.Extensions.*` | 8.0.x | 10.0.3+ |
 
-These are transitive dependencies—Trax's NuGet packages pull in the correct versions automatically. You only need to act if your project has explicit `<PackageReference>` entries for any of these.
+These are transitive dependencies, so Trax's NuGet packages pull in the correct versions automatically. You only need to act if your project has explicit `<PackageReference>` entries for any of these.
 
 ## Npgsql Enum Mapping (Breaking Change)
 
@@ -90,7 +90,7 @@ services.AddDbContext<MyContext>(options =>
     }));
 ```
 
-Both registrations are necessary—the `NpgsqlDataSourceBuilder` mapping handles the ADO.NET layer, and the `UseNpgsql` callback mapping handles the EF Core model layer. Omitting the latter causes `column "x" is of type my_enum but expression is of type integer` errors at runtime.
+Both registrations are necessary. The `NpgsqlDataSourceBuilder` mapping handles the ADO.NET layer, and the `UseNpgsql` callback mapping handles the EF Core model layer. Omitting the latter causes `column "x" is of type my_enum but expression is of type integer` errors at runtime.
 
 Trax.Core handles this internally for its own enum types (`TrainState`, `LogLevel`, `ScheduleType`, `DeadLetterStatus`). This only affects you if you've added custom PostgreSQL enum types to your own `DbContext` that extends `DataContext<T>`.
 
@@ -103,7 +103,7 @@ Trax.Core handles this internally for its own enum types (`TrainState`, `LogLeve
 5. **Update `using` statements.** A global find-and-replace across `.cs` files covers it.
 6. **Restore and build.** `dotnet restore && dotnet build` will surface anything you missed.
 
-If you hit unresolved types after the rename, check the [Namespace Reference](scheduler/setup.md#namespace-reference) for the full namespace of scheduler-related types—some live in unexpected packages.
+If you hit unresolved types after the rename, check the [Namespace Reference](scheduler/setup.md#namespace-reference) for the full namespace of scheduler-related types, since some live in unexpected packages.
 
 ## ManifestGroup Migration (1.5+)
 
@@ -118,7 +118,7 @@ Run `014_manifest_group.sql` against your database. This migration:
 3. Adds a `manifest_group_id` foreign key (NOT NULL) on `trax.manifest`
 4. Drops the old `group_id` column
 
-The migration is idempotent — existing data is preserved and migrated automatically.
+The migration is idempotent. Existing data is preserved and migrated automatically.
 
 ### Code Changes
 
@@ -129,7 +129,7 @@ The migration is idempotent — existing data is preserved and migrated automati
 
 ### No Breaking Changes for Most Users
 
-If you were not using `Manifest.GroupId` directly in your code, no source changes are needed beyond running the migration. The `groupId` parameter defaults are designed to be backward-compatible — each manifest gets its own group when no explicit groupId is provided.
+If you were not using `Manifest.GroupId` directly in your code, no source changes are needed beyond running the migration. The `groupId` parameter defaults are backward-compatible: each manifest gets its own group when no explicit groupId is provided.
 
 ## Scaling Indexes Migration (026)
 
@@ -144,4 +144,4 @@ Run `026_scaling_indexes.sql` against your database. This migration adds partial
 | `ix_background_job_unfetched` | `background_job` | Worker dequeue query (partial: unfetched only) |
 | `ix_work_queue_manifest_id_status_queued` | `work_queue` | Dormant dependent activation check (partial: `queued` only) |
 
-These indexes are recommended for any deployment with more than a few thousand metadata rows. They have no effect on correctness — only on query performance.
+These indexes are recommended for any deployment with more than a few thousand metadata rows. They have no effect on correctness, only on query performance.

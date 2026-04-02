@@ -15,7 +15,7 @@ nav_order: 1
 dotnet add package Trax.Scheduler
 ```
 
-The scheduler includes built-in local workers backed by PostgreSQL — no additional packages needed.
+The scheduler includes built-in local workers backed by PostgreSQL. No additional packages needed.
 
 ### Default Job Submitter
 
@@ -27,7 +27,7 @@ The scheduler automatically selects the right job submitter based on your effect
 | `UseInMemory()` (no database) | `InMemoryJobSubmitter` | Executes jobs inline, synchronously. No database needed. Good for testing and prototyping. |
 | `OverrideSubmitter(...)` | Custom | Your own `IJobSubmitter` implementation takes priority over both defaults. |
 
-> **Validation:** The scheduler validates configuration at build time. `AddScheduler()` requires a data provider (`UsePostgres()` or `UseInMemory()`) — without one, it throws a clear `InvalidOperationException` with a message showing the fix. Similarly, `AddJunctionProgress()` without a data provider fails fast at build time.
+> **Validation:** The scheduler validates configuration at build time. `AddScheduler()` requires a data provider (`UsePostgres()` or `UseInMemory()`), without one, it throws a clear `InvalidOperationException` with a message showing the fix. Similarly, `AddJunctionProgress()` without a data provider fails fast at build time.
 
 ### Configuration
 
@@ -77,11 +77,11 @@ app.Run();
 | `JobDispatcherPollingService` | Claims work queue entries via `FOR UPDATE SKIP LOCKED` | Not registered (InMemory dispatches directly) |
 | `MetadataCleanupPollingService` | Cleans up old metadata (if `AddMetadataCleanup()`) | Not registered (uses `ExecuteDeleteAsync`) |
 
-With InMemory, the `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that skips PostgreSQL-specific junctions (`CancelTimedOutJobs`, `ReapStalePending`) and dispatches jobs directly via `InMemoryJobSubmitter` — no work queue or JobDispatcher needed.
+With InMemory, the `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that skips PostgreSQL-specific junctions (`CancelTimedOutJobs`, `ReapStalePending`) and dispatches jobs directly via `InMemoryJobSubmitter`. No work queue or JobDispatcher needed.
 
-When `UsePostgres()` is configured, the scheduler automatically starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed — it reuses the `IDataContext` from `UsePostgres()`. See [Job Submission](/docs/scheduler/job-submission) for architecture details.
+When `UsePostgres()` is configured, the scheduler automatically starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed, it reuses the `IDataContext` from `UsePostgres()`. See [Job Submission](/docs/scheduler/job-submission) for architecture details.
 
-All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()` — you only need to pass your own train assemblies to `AddMediator()`.
+All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()`, you only need to pass your own train assemblies to `AddMediator()`.
 
 ### Local Worker Options
 
@@ -117,7 +117,7 @@ public record SyncCustomersInput : IManifestProperties
 }
 ```
 
-Types without `IManifestProperties` won't compile with the scheduling API—this catches mistakes before runtime.
+Types without `IManifestProperties` won't compile with the scheduling API, this catches mistakes before runtime.
 
 `IManifestProperties` lives in the `Trax.Effect` package (namespace `Trax.Effect.Models.Manifest`), not in the Scheduler package. You won't need an extra package reference if you already have `Trax.Effect` installed.
 
@@ -137,10 +137,10 @@ public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, Unit>, ISyncC
 }
 ```
 
-Scheduled trains can return any output type — the output is discarded for background jobs. Using `Unit` is common for fire-and-forget work, but any `TOutput` is valid:
+Scheduled trains can return any output type, the output is discarded for background jobs. Using `Unit` is common for fire-and-forget work, but any `TOutput` is valid:
 
 ```csharp
-// A train that returns a result type — the output is discarded by the scheduler
+// A train that returns a result type, the output is discarded by the scheduler
 public interface ISyncCustomersTrain : IServiceTrain<SyncCustomersInput, SyncResult> { }
 
 public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, SyncResult>, ISyncCustomersTrain
@@ -182,14 +182,14 @@ public class JobSetupService(ITraxScheduler scheduler)
 }
 ```
 
-Both approaches use upsert semantics—the ExternalId determines whether to create or update the manifest.
+Both approaches use upsert semantics, the ExternalId determines whether to create or update the manifest.
 
 ## Schedule Helpers
 
 The `Schedule` type defines when a job runs. Two static factory classes create `Schedule` objects:
 
-- **`Every`** — interval-based: `Every.Seconds(30)`, `Every.Minutes(5)`, `Every.Hours(1)`, `Every.Days(1)`
-- **`Cron`** — cron-based: `Cron.Minutely()`, `Cron.Daily(hour: 3)`, `Cron.Weekly(DayOfWeek.Sunday, hour: 2)`, `Cron.Expression("0 */6 * * *")`
+- **`Every`**: interval-based: `Every.Seconds(30)`, `Every.Minutes(5)`, `Every.Hours(1)`, `Every.Days(1)`
+- **`Cron`**: cron-based: `Cron.Minutely()`, `Cron.Daily(hour: 3)`, `Cron.Weekly(DayOfWeek.Sunday, hour: 2)`, `Cron.Expression("0 */6 * * *")`
 
 ## Namespace Reference
 

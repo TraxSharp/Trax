@@ -18,11 +18,11 @@ builder.Services.AddTrax(trax => trax
     .AddMediator(typeof(Program).Assembly)
 );
 
-builder.Services.AddTraxGraphQL();  // Requires AddTrax() first — throws InvalidOperationException otherwise
+builder.Services.AddTraxGraphQL();  // Requires AddTrax() first; throws InvalidOperationException otherwise
 
 var app = builder.Build();
 
-app.UseTraxGraphQL(); // default: /trax/graphql (named schema — won't conflict with your own)
+app.UseTraxGraphQL(); // default: /trax/graphql (named schema, won't conflict with your own)
 
 app.Run();
 ```

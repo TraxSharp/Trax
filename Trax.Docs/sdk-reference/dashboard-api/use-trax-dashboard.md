@@ -29,7 +29,7 @@ public static WebApplication UseTraxDashboard(
 
 ## Returns
 
-`WebApplication` — for continued middleware chaining.
+`WebApplication`, for continued middleware chaining.
 
 ## Example
 
@@ -47,10 +47,10 @@ The dashboard will be accessible at `https://yourapp/admin/trains`.
 
 ## What It Configures
 
-1. `UseStaticFiles()` — serves static assets (CSS, JS)
-2. `UseAntiforgery()` — CSRF protection for Blazor forms
-3. `MapStaticAssets()` — maps static web assets from the dashboard RCL
-4. `MapRazorComponents<App>().AddInteractiveServerRenderMode()` — maps Blazor components with Interactive Server rendering
+1. `UseStaticFiles()`: serves static assets (CSS, JS)
+2. `UseAntiforgery()`: CSRF protection for Blazor forms
+3. `MapStaticAssets()`: maps static web assets from the dashboard RCL
+4. `MapRazorComponents<App>().AddInteractiveServerRenderMode()`: maps Blazor components with Interactive Server rendering
 
 ## Remarks
 

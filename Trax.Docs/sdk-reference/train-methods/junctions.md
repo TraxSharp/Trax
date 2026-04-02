@@ -8,7 +8,7 @@ nav_order: 0
 
 # Junctions
 
-Override `Junctions()` to define the train's route — the sequence of junctions it passes through. This is the primary way to compose junctions in a train.
+Override `Junctions()` to define the train's route, the sequence of junctions it passes through. This is the primary way to compose junctions in a train.
 
 ## Signature
 
@@ -16,13 +16,13 @@ Override `Junctions()` to define the train's route — the sequence of junctions
 // Train<TInput, TReturn>
 protected virtual TReturn Junctions()
 
-// ServiceTrain<TIn, TOut> — same signature
+// ServiceTrain<TIn, TOut>: same signature
 protected virtual TOut Junctions()
 ```
 
 ## Returns
 
-`TReturn` — the train's output type. The return value is resolved automatically from Memory via an implicit conversion on `Monad`. You do not need to call `Resolve()` or wrap the result in `Either`.
+`TReturn`, the train's output type. The return value is resolved automatically from Memory via an implicit conversion on `Monad`. You do not need to call `Resolve()` or wrap the result in `Either`.
 
 ## Examples
 
@@ -75,11 +75,11 @@ public class NotifyTrain(ISlackClient slack) : ServiceTrain<NotifyInput, Unit>
 
 `Junctions()` covers the common case. Override `RunInternal` when you need:
 
-- **Custom logic before or after the chain** — try/catch around the chain, logging, or conditional branching
-- **Extra objects in Memory** — `Activate(input, extraObject)` passes additional objects into Memory
-- **Manual Either construction** — returning `Left(exception)` or `Right(value)` directly
-- **Async setup** — awaiting something before building the chain
-- **Combining nested train results** — calling `TrainBus.RunAsync` and merging the result with the chain via `Resolve(explicitValue)`
+- **Custom logic before or after the chain**: try/catch around the chain, logging, or conditional branching
+- **Extra objects in Memory**: `Activate(input, extraObject)` passes additional objects into Memory
+- **Manual Either construction**: returning `Left(exception)` or `Right(value)` directly
+- **Async setup**: awaiting something before building the chain
+- **Combining nested train results**: calling `TrainBus.RunAsync` and merging the result with the chain via `Resolve(explicitValue)`
 
 ```csharp
 protected override async Task<Either<Exception, ParentResult>> RunInternal(ParentInput input)
@@ -99,6 +99,6 @@ protected override async Task<Either<Exception, ParentResult>> RunInternal(Paren
 
 ## Remarks
 
-- `Junctions()` and `RunInternal` are mutually exclusive — override one or the other, not both. If both are overridden, `RunInternal` takes precedence.
+- `Junctions()` and `RunInternal` are mutually exclusive. Override one or the other, not both. If both are overridden, `RunInternal` takes precedence.
 - The implicit conversion from `Monad<TInput, TReturn>` to `TReturn` calls `Resolve()` internally, following the same resolution priority: exception > short-circuit value > Memory lookup.
 - Backwards compatible: existing trains using `RunInternal` continue to work without changes.

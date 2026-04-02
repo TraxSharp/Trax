@@ -8,4 +8,4 @@ section: Guides
 
 # Cross-Cutting Concerns
 
-Topics that apply across multiple Trax packages — cancellation, testing patterns, DI registration, troubleshooting, and functional programming foundations.
+Topics that apply across multiple Trax packages: cancellation, testing patterns, DI registration, troubleshooting, and functional programming foundations.

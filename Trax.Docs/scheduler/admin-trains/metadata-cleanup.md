@@ -16,7 +16,7 @@ The MetadataCleanup train deletes old metadata rows for high-frequency internal 
 DeleteExpiredMetadataJunction
 ```
 
-One junction. It's a simple train because the logic is straightforward—the complexity is in the deletion query, not in orchestration.
+One junction. It's a simple train because the logic is straightforward, the complexity is in the deletion query, not in orchestration.
 
 ## How It Runs
 
@@ -40,7 +40,7 @@ The MetadataCleanup train uses no application-level locking. Multiple servers ca
 
 ### Implicit Database Locks
 
-`DeleteExpiredMetadataJunction` uses EF Core's `ExecuteDeleteAsync()`, which translates to atomic `DELETE FROM ... WHERE ...` SQL statements. The database engine acquires implicit row-level locks during these deletes. If two servers execute the same `DELETE` concurrently, the first deletes the rows and the second finds no matching rows — a no-op. No errors, no side effects.
+`DeleteExpiredMetadataJunction` uses EF Core's `ExecuteDeleteAsync()`, which translates to atomic `DELETE FROM ... WHERE ...` SQL statements. The database engine acquires implicit row-level locks during these deletes. If two servers execute the same `DELETE` concurrently, the first deletes the rows and the second finds no matching rows, a no-op. No errors, no side effects.
 
 Batching limits the duration of these implicit row-level locks. Without batching, a single `DELETE` matching thousands of rows holds locks on all of them for the entire statement. With batching, each batch locks at most `DeleteBatchSize` rows, reducing contention with concurrent workers calling `SaveChanges` on the same table.
 
@@ -48,13 +48,13 @@ Batching limits the duration of these implicit row-level locks. Without batching
 
 Each batch follows a five-step process:
 
-1. **Load batch of metadata IDs** — select up to `DeleteBatchSize` IDs matching the criteria
-2. **WorkQueue entries** — delete entries whose `MetadataId` is in the batch
-3. **Log entries** — delete logs whose `MetadataId` is in the batch
-4. **Metadata rows** — delete metadata by ID
+1. **Load batch of metadata IDs**: select up to `DeleteBatchSize` IDs matching the criteria
+2. **WorkQueue entries**: delete entries whose `MetadataId` is in the batch
+3. **Log entries**: delete logs whose `MetadataId` is in the batch
+4. **Metadata rows**: delete metadata by ID
 5. **Repeat** until no more IDs match
 
-Using ID-based deletion ensures all three DELETE statements in a batch target the exact same rows, avoiding race conditions between statements. Each `ExecuteDeleteAsync` is its own SQL statement, so a failure mid-batch leaves the Metadata rows intact — the next cleanup cycle retries and completes the deletion.
+Using ID-based deletion guarantees all three DELETE statements in a batch target the exact same rows, avoiding race conditions between statements. Each `ExecuteDeleteAsync` is its own SQL statement, so a failure mid-batch leaves the Metadata rows intact, the next cleanup cycle retries and completes the deletion.
 
 ### Safety Boundary
 

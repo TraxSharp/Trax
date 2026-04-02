@@ -11,7 +11,7 @@ nav_order: 2
 
 ### Train-Level Error Handling
 
-For custom error handling, use `RunInternal` — this is one of the cases where it's more appropriate than `Junctions()`:
+For custom error handling, use `RunInternal`. This is one of the cases where it's more appropriate than `Junctions()`:
 
 ```csharp
 public class RobustTrain : ServiceTrain<ProcessOrderRequest, ProcessOrderResult>

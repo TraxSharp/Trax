@@ -8,7 +8,7 @@ nav_order: 1
 
 # ManifestManagerTrain
 
-The ManifestManager is the first half of each polling cycle. It figures out which manifests are due for execution and writes them to the work queue. It doesn't dispatch anything—that's the [JobDispatcher's](job-dispatcher.md) job.
+The ManifestManager is the first half of each polling cycle. It figures out which manifests are due for execution and writes them to the work queue. It doesn't dispatch anything; that's the [JobDispatcher's](job-dispatcher.md) job.
 
 ## Chain
 
@@ -22,7 +22,7 @@ LoadManifestsJunction → CancelTimedOutJobsJunction → ReapStalePendingMetadat
 
 Projects all enabled manifests into lightweight `ManifestDispatchView` records using a single database query with pre-computed aggregate flags (`FailedCount`, `HasAwaitingDeadLetter`, `HasQueuedWork`, `HasActiveExecution`, `HasSuccessfulMetadata`). These flags are computed via COUNT/EXISTS subqueries pushed into the database, keeping query cost O(manifests) regardless of how large the child tables (`Metadatas`, `DeadLetters`, `WorkQueues`) grow.
 
-The projection uses `AsNoTracking()` — the results are read-only snapshots used for scheduling decisions only. No unbounded child collections are loaded into memory.
+The projection uses `AsNoTracking()`, the results are read-only snapshots used for scheduling decisions only. No unbounded child collections are loaded into memory.
 
 > **Scaling note:** LoadManifestsJunction loads all enabled manifests in a single query. For typical production deployments (up to 10K manifests), this is efficient with proper indexes. The junction cannot be paginated without breaking the reap junctions' ability to identify stale jobs across all manifests.
 
@@ -36,7 +36,7 @@ Fails Pending metadata that has not been picked up within `StalePendingTimeout` 
 
 ### ReapStaleInProgressMetadataJunction
 
-Fails InProgress metadata that has not completed within `StaleInProgressTimeout` (default: 60 minutes). Acts as a safety net for hard crashes — Lambda hard-kills, OOM events, or process crashes where the worker dies without reaching `FinishServiceTrain`. This timeout should be longer than `DefaultJobTimeout` to allow cooperative cancellation (via `CancelTimedOutJobsJunction`) to propagate before force-failing.
+Fails InProgress metadata that has not completed within `StaleInProgressTimeout` (default: 60 minutes). Acts as a safety net for hard crashes. Lambda hard-kills, OOM events, or process crashes where the worker dies without reaching `FinishServiceTrain`. This timeout should be longer than `DefaultJobTimeout` to allow cooperative cancellation (via `CancelTimedOutJobsJunction`) to propagate before force-failing.
 
 Newly-failed metadata from both stale reapers is visible to `ReapFailedJobsJunction` in the same ManifestManager cycle, enabling dead-lettering if retries are exhausted.
 
@@ -46,7 +46,7 @@ Scans loaded manifests for any whose failure count meets or exceeds `MaxRetries`
 
 A manifest is only reaped if it doesn't already have an unresolved dead letter. This prevents duplicate dead letters from accumulating when the same manifest fails across multiple polling cycles.
 
-`FailedCount` only counts failures that occurred **after** the most recent dead letter resolution. When a dead letter is resolved (retried or acknowledged), the failure counter effectively resets — only new failures contribute toward the next `MaxRetries` threshold. This prevents retried manifests from being immediately re-dead-lettered due to historical failures that were already addressed.
+`FailedCount` only counts failures that occurred **after** the most recent dead letter resolution. When a dead letter is resolved (retried or acknowledged), the failure counter effectively resets, only new failures contribute toward the next `MaxRetries` threshold. This prevents retried manifests from being immediately re-dead-lettered due to historical failures that were already addressed.
 
 The junction returns the list of newly created dead letters so `DetermineJobsToQueueJunction` can skip those manifests without re-querying the database.
 
@@ -58,7 +58,7 @@ The decision junction. It runs two passes over the loaded manifests:
 
 **Pass 2: Dependent manifests**. For each manifest with `ScheduleType.Dependent`, it finds the parent in the loaded set and checks whether `parent.LastSuccessfulRun > dependent.LastSuccessfulRun`. Before comparing timestamps, the junction verifies that the parent has at least one `Completed` metadata record (`HasSuccessfulMetadata`). If the parent has a `LastSuccessfulRun` timestamp but no successful metadata to back it up (e.g., metadata was truncated or pruned), the timestamp is considered stale and the dependent is not queued. See [Dependent Trains](../dependent-trains.md).
 
-Manifests with `ScheduleType.DormantDependent` are excluded from **both** passes. They are never auto-queued by the ManifestManager—dormant dependents must be explicitly activated at runtime by the parent train via [`IDormantDependentContext`](../dependent-trains.md#dormant-dependents).
+Manifests with `ScheduleType.DormantDependent` are excluded from **both** passes. They are never auto-queued by the ManifestManager, dormant dependents must be explicitly activated at runtime by the parent train via [`IDormantDependentContext`](../dependent-trains.md#dormant-dependents).
 
 Both passes apply the same per-manifest guards before evaluating the schedule:
 - Skip if the manifest's ManifestGroup has `IsEnabled = false`
@@ -67,7 +67,7 @@ Both passes apply the same per-manifest guards before evaluating the schedule:
 - Skip if it has a `Queued` work queue entry (already waiting to be dispatched)
 - Skip if it has `Pending` or `InProgress` metadata (already running)
 
-`MaxActiveJobs` is deliberately **not** enforced here. The ManifestManager freely identifies all due manifests. The JobDispatcher handles capacity gating at dispatch time. This keeps the two concerns separate—scheduling logic doesn't need to know about system-wide capacity.
+`MaxActiveJobs` is deliberately **not** enforced here. The ManifestManager freely identifies all due manifests. The JobDispatcher handles capacity gating at dispatch time. This keeps the two concerns separate, scheduling logic doesn't need to know about system-wide capacity.
 
 ### CreateWorkQueueEntriesJunction
 
@@ -88,7 +88,7 @@ The number of entries created per cycle is limited by `MaxWorkQueueEntriesPerCyc
 
 Without group-fair batching, if a large group has thousands of simultaneously-eligible manifests (such as after a mass failure with retries), a flat `Take(N)` would consistently select manifests from that group first, leaving smaller groups perpetually deferred.
 
-Set `MaxWorkQueueEntriesPerCycle` to `null` to disable the limit (unlimited — all due manifests are enqueued per cycle, no fairness needed).
+Set `MaxWorkQueueEntriesPerCycle` to `null` to disable the limit (unlimited, all due manifests are enqueued per cycle, no fairness needed).
 
 ## Concurrency Model: Two-Layer Defense
 
@@ -102,11 +102,11 @@ The `ManifestManagerPollingService` acquires a PostgreSQL transaction-scoped adv
 SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager'))
 ```
 
-This is a **non-blocking try-lock** — if another server already holds it, the current server skips the cycle entirely and waits for the next polling tick. No server ever blocks waiting for the lock.
+This is a **non-blocking try-lock**: if another server already holds it, the current server skips the cycle entirely and waits for the next polling tick. No server ever blocks waiting for the lock.
 
-The lock is `xact`-scoped (transaction-scoped), meaning it auto-releases when the wrapping transaction commits or rolls back. The entire ManifestManagerTrain runs within this transaction, so all database changes (dead letters, WorkQueue entries) are committed atomically. If the train fails partway through, everything rolls back — no partial state.
+The lock is `xact`-scoped (transaction-scoped), meaning it auto-releases when the wrapping transaction commits or rolls back. The entire ManifestManagerTrain runs within this transaction, so all database changes (dead letters, WorkQueue entries) are committed atomically. If the train fails partway through, everything rolls back. No partial state.
 
-This is the primary concurrency control. It ensures that in a multi-server deployment, only one server evaluates manifests at a time, eliminating the TOCTOU race between `LoadManifestsJunction` (which reads `HasQueuedWork = false`) and `CreateWorkQueueEntriesJunction` (which inserts the entry).
+This is the primary concurrency control. It guarantees that in a multi-server deployment, only one server evaluates manifests at a time, eliminating the TOCTOU race between `LoadManifestsJunction` (which reads `HasQueuedWork = false`) and `CreateWorkQueueEntriesJunction` (which inserts the entry).
 
 ### Inner Layer: Logical State Guards
 
@@ -119,7 +119,7 @@ Even within a single-server cycle, `DetermineJobsToQueueJunction` applies per-ma
 | Already queued | `HasQueuedWork` | Duplicate WorkQueue entries for the same manifest |
 | Already executing | `HasActiveExecution` | Overlapping runs of the same manifest |
 
-These guards are computed from the database-projected flags in `ManifestDispatchView`. They are **not a replacement** for the advisory lock — without the lock, two servers could simultaneously see `HasQueuedWork = false` for the same manifest and both create entries. The guards protect against logical errors within a single evaluation cycle (e.g., a manifest that appears "due" but is already being handled).
+These guards are computed from the database-projected flags in `ManifestDispatchView`. They are **not a replacement** for the advisory lock, without the lock, two servers could simultaneously see `HasQueuedWork = false` for the same manifest and both create entries. The guards protect against logical errors within a single evaluation cycle (e.g., a manifest that appears "due" but is already being handled).
 
 ### Backstop: Unique Partial Index
 
@@ -131,11 +131,11 @@ CREATE UNIQUE INDEX ix_work_queue_unique_queued_manifest
     WHERE status = 'queued' AND manifest_id IS NOT NULL;
 ```
 
-If the advisory lock is somehow bypassed (e.g., a bug, a code path that doesn't go through the polling service), this index causes a constraint violation on the second insert. The per-entry `try/catch` in `CreateWorkQueueEntriesJunction` catches the error and logs it — no crash, no corruption. Manual WorkQueue entries (`manifest_id IS NULL`) are excluded from this index.
+If the advisory lock is somehow bypassed (e.g., a bug, a code path that doesn't go through the polling service), this index causes a constraint violation on the second insert. The per-entry `try/catch` in `CreateWorkQueueEntriesJunction` catches the error and logs it. No crash, no corruption. Manual WorkQueue entries (`manifest_id IS NULL`) are excluded from this index.
 
 ### Non-Postgres Providers
 
-The advisory lock is only acquired when the `IDataContext` is backed by Entity Framework Core (`DbContext`). When using the InMemory provider for tests, the lock is skipped and the train runs directly — safe because InMemory implies a single-process setup.
+The advisory lock is only acquired when the `IDataContext` is backed by Entity Framework Core (`DbContext`). When using the InMemory provider for tests, the lock is skipped and the train runs directly, safe because InMemory implies a single-process setup.
 
 See [Multi-Server Concurrency](../concurrency.md) for the full cross-service concurrency model.
 

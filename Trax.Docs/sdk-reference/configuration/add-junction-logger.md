@@ -20,7 +20,7 @@ public static TBuilder AddJunctionLogger<TBuilder>(
     where TBuilder : TraxEffectBuilder
 ```
 
-The generic type parameter `TBuilder` is inferred by the compiler — callers just write `.AddJunctionLogger()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
+The generic type parameter `TBuilder` is inferred by the compiler, so callers just write `.AddJunctionLogger()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
 
 ## Parameters
 
@@ -30,7 +30,7 @@ The generic type parameter `TBuilder` is inferred by the compiler — callers ju
 
 ## Returns
 
-`TBuilder` — the same builder type that was passed in, for continued fluent chaining.
+`TBuilder`, the same builder type that was passed in, for continued fluent chaining.
 
 ## Example
 

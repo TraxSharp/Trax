@@ -94,7 +94,7 @@ public class TraxQueryModelAttribute : Attribute
 | `Paging` | `bool` | `true` | Enables cursor-based pagination (Relay Connection spec). When true, the field returns a Connection type with `nodes`, `edges`, `pageInfo`, and `totalCount`. |
 | `Filtering` | `bool` | `true` | Enables filtering via a `where` argument. HotChocolate generates filter input types for all entity properties. |
 | `Sorting` | `bool` | `true` | Enables sorting via an `order` argument. HotChocolate generates sort input types for all entity properties. |
-| `Projection` | `bool` | `true` | Enables field projection — only the columns requested by the GraphQL client are selected from the database. |
+| `Projection` | `bool` | `true` | Enables field projection. Only the columns requested by the GraphQL client are selected from the database. |
 | `BindFields` | `FieldBindingBehavior` | `Implicit` | Controls how fields are bound on the generated GraphQL ObjectType. When `Explicit`, only properties with `[Column]` are exposed; `[NotMapped]`, methods, and non-column members are excluded. |
 
 ## Feature Configuration
@@ -106,11 +106,11 @@ Each feature can be independently disabled per model. All default to `true`.
 [TraxQueryModel]
 public class Player { ... }
 
-// Pagination and filtering only — no sorting or projection
+// Pagination and filtering only, no sorting or projection
 [TraxQueryModel(Sorting = false, Projection = false)]
 public class AuditLog { ... }
 
-// Simple list query — no middleware at all
+// Simple list query, no middleware at all
 [TraxQueryModel(Paging = false, Filtering = false, Sorting = false, Projection = false)]
 public class StatusCode { ... }
 ```

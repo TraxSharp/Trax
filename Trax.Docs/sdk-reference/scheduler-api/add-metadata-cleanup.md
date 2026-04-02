@@ -26,7 +26,7 @@ public SchedulerConfigurationBuilder AddMetadataCleanup(
 
 ## Returns
 
-`SchedulerConfigurationBuilder` — for continued fluent chaining.
+`SchedulerConfigurationBuilder`, for continued fluent chaining.
 
 ## MetadataCleanupConfiguration
 
@@ -70,5 +70,5 @@ public SchedulerConfigurationBuilder AddMetadataCleanup(
 
 - Only metadata in a **terminal state** (`Completed`, `Failed`, or `Cancelled`) older than `RetentionPeriod` is deleted. `Pending` and `InProgress` metadata is never cleaned up.
 - The cleanup service runs as an `IHostedService` on the configured `CleanupInterval`.
-- `ManifestManagerTrain` and `MetadataCleanupTrain` are always included in the cleanup whitelist by default — you don't need to add them manually.
-- Train type names are matched against the `name` column in the metadata table (which stores the interface FullName — the canonical train name).
+- `ManifestManagerTrain` and `MetadataCleanupTrain` are always included in the cleanup whitelist by default. You don't need to add them manually.
+- Train type names are matched against the `name` column in the metadata table (which stores the interface FullName, the canonical train name).

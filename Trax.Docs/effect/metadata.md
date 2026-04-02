@@ -39,14 +39,14 @@ The `TrainState` tracks the lifecycle: `Pending` -> `InProgress` -> `Completed`,
 
 ## Host Tracking
 
-In distributed environments (Lambda, ECS, multiple servers), every metadata record captures where the train actually executed. Host information is auto-detected at startup and stamped on each execution — see [Host Tracking](host-tracking.md) for details on auto-detection, custom labels, and the builder API.
+In distributed environments (Lambda, ECS, multiple servers), every metadata record captures where the train actually executed. Host information is auto-detected at startup and stamped on each execution. See [Host Tracking](host-tracking.md) for details on auto-detection, custom labels, and the builder API.
 
 ## Nested Trains
 
-A junction can dispatch another train mid-execution by injecting `ITrainBus`. Pass the current `Metadata` to the child train to link the executions — this creates a tree of metadata records you can query to trace execution across an entire network of trains.
+A junction can dispatch another train mid-execution by injecting `ITrainBus`. Pass the current `Metadata` to the child train to link the executions. This creates a tree of metadata records you can query to trace execution across an entire network of trains.
 
 See [Mediator: Nested Trains](/docs/mediator#nested-trains) for implementation details.
 
 ## Execution Flow
 
-For a diagram of the full ServiceTrain lifecycle — from client request through metadata initialization to SaveChanges — see [Effect Architecture](architecture.md#execution-flow).
+For a diagram of the full ServiceTrain lifecycle, from client request through metadata initialization to SaveChanges, see [Effect Architecture](architecture.md#execution-flow).

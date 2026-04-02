@@ -8,7 +8,7 @@ nav_order: 10.2
 
 # UseLambdaRun
 
-Offloads synchronous `run` execution to an AWS Lambda function via direct SDK invocation instead of executing in-process. The call blocks until the Lambda completes and returns the train output. No public endpoint is created — access is governed by IAM policies.
+Offloads synchronous `run` execution to an AWS Lambda function via direct SDK invocation instead of executing in-process. The call blocks until the Lambda completes and returns the train output. No public endpoint is created; access is governed by IAM policies.
 
 ## Package
 
@@ -35,14 +35,14 @@ Defined in `Trax.Scheduler.Lambda.Extensions.LambdaSchedulerExtensions`.
 
 ## Returns
 
-`SchedulerConfigurationBuilder` — for continued fluent chaining.
+`SchedulerConfigurationBuilder`, for continued fluent chaining.
 
 ## LambdaRunOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `FunctionName` | `string` | _(required)_ | The Lambda function name, ARN, or partial ARN to invoke |
-| `ConfigureLambdaClient` | `Action<AmazonLambdaConfig>?` | `null` | Optional callback to configure the `AmazonLambdaConfig` — set region, endpoint override (LocalStack), etc. |
+| `ConfigureLambdaClient` | `Action<AmazonLambdaConfig>?` | `null` | Optional callback to configure the `AmazonLambdaConfig` (set region, endpoint override for LocalStack, etc.) |
 
 ## Examples
 
@@ -110,7 +110,7 @@ When a GraphQL `run*` mutation is called, the `LambdaRunExecutor`:
 2. Wraps it in a `LambdaEnvelope` with `Type = Run`
 3. Calls `IAmazonLambda.InvokeAsync()` with `InvocationType.RequestResponse`
 4. Blocks until the Lambda completes
-5. Reads `response.FunctionError` — throws `TrainException` if the Lambda failed at the infrastructure level
+5. Reads `response.FunctionError` and throws `TrainException` if the Lambda failed at the infrastructure level
 6. Deserializes the response payload as `RemoteRunResponse`
 7. On success: returns the train output to GraphQL
 8. On error (`RemoteRunResponse.IsError`): throws `TrainException` with the remote error details
@@ -120,7 +120,7 @@ When a GraphQL `run*` mutation is called, the `LambdaRunExecutor`:
 | | UseLambdaRun | UseRemoteRun |
 |---|---|---|
 | **Transport** | AWS SDK direct invocation | HTTP POST |
-| **Public endpoint** | None — IAM-governed | Required (Function URL, API Gateway, or similar) |
+| **Public endpoint** | None (IAM-governed) | Required (Function URL, API Gateway, or similar) |
 | **Package** | `Trax.Scheduler.Lambda` | `Trax.Scheduler` (built-in) |
 | **Retry** | Handled by AWS SDK | Configurable `HttpRetryOptions` |
 | **Timeout** | Lambda execution timeout (AWS config) | `RemoteRunOptions.Timeout` (default 5 min) |
@@ -145,7 +145,7 @@ The scheduler process needs:
 
 ## See Also
 
-- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
-- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) — dispatch queued trains to Lambda
-- [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) — the Lambda receiver base class
-- [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) — HTTP-based remote run execution (alternative transport)
+- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
+- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers): dispatch queued trains to Lambda
+- [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function): the Lambda receiver base class
+- [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run): HTTP-based remote run execution (alternative transport)

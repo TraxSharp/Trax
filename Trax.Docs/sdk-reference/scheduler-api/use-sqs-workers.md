@@ -37,14 +37,14 @@ Defined in `Trax.Scheduler.Sqs.Extensions.SqsSchedulerExtensions`.
 
 ## Returns
 
-`SchedulerConfigurationBuilder` — for continued fluent chaining.
+`SchedulerConfigurationBuilder`, for continued fluent chaining.
 
 ## SqsWorkerOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `QueueUrl` | `string` | _(required)_ | The SQS queue URL (e.g., `https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs`) |
-| `ConfigureSqsClient` | `Action<AmazonSQSConfig>?` | `null` | Optional callback to configure the SQS client — set region, endpoint override (LocalStack), etc. |
+| `ConfigureSqsClient` | `Action<AmazonSQSConfig>?` | `null` | Optional callback to configure the SQS client (set region, endpoint override for LocalStack, etc.) |
 | `MessageGroupId` | `string?` | `null` | For FIFO queues: a fixed message group ID. When null, each message gets a unique group ID (no ordering). Ignored for standard queues. |
 
 ## SubmitterRouting
@@ -120,7 +120,7 @@ In this example, `IBatchProcessTrain` is dispatched to SQS. `IMyTrain` executes 
 
 ### Mixed with Remote Workers
 
-You can use both SQS and HTTP remote workers — each for different trains:
+You can use both SQS and HTTP remote workers, each for different trains:
 
 ```csharp
 .AddScheduler(scheduler => scheduler
@@ -180,7 +180,7 @@ The handler:
 |---------|----------|-------------|
 | `SqsWorkerOptions` | Singleton | Configuration options |
 | `IAmazonSQS` | Singleton | AWS SQS client |
-| `SqsJobSubmitter` | Scoped (concrete type) | Dispatches jobs as SQS messages — resolved per train via routing |
+| `SqsJobSubmitter` | Scoped (concrete type) | Dispatches jobs as SQS messages, resolved per train via routing |
 
 > **Note:** `UseSqsWorkers()` does **not** replace the default `IJobSubmitter`. Local workers continue to run for trains not routed to this queue.
 
@@ -224,12 +224,12 @@ The API process needs `sqs:SendMessage`. The Lambda function needs `sqs:ReceiveM
 
 - **Message size limit:** SQS messages are limited to 256 KB. If your serialized train input exceeds this, the send will fail. For large inputs, store the data externally and pass a reference.
 - **No synchronous return:** SQS is fire-and-forget. For mutations that need a return value, continue using [`UseRemoteRun()`](/docs/sdk-reference/scheduler-api/use-remote-run) alongside `UseSqsWorkers()`.
-- **Cancellation is process-local:** Same limitation as other remote execution models — dashboard "Cancel" only affects trains on the same process.
+- **Cancellation is process-local:** Same limitation as other remote execution models. Dashboard "Cancel" only affects trains on the same process.
 
 ## See Also
 
-- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
-- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — HTTP-based per-train remote dispatch (alternative transport)
-- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) — Lambda-based per-train dispatch (direct SDK invocation, alternative transport)
-- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — setting up the remote receiver
-- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) — customizing the local (default) execution backend
+- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers): HTTP-based per-train remote dispatch (alternative transport)
+- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers): Lambda-based per-train dispatch (direct SDK invocation, alternative transport)
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner): setting up the remote receiver
+- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers): customizing the local (default) execution backend

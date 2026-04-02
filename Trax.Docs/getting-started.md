@@ -126,7 +126,7 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 }
 ```
 
-The `Junctions()` code is identical to Core — `ServiceTrain` adds the execution logging and DI around it.
+The `Junctions()` code is identical to Core. `ServiceTrain` adds the execution logging and DI around it.
 
 **Next:** [Effect docs](/docs/effect) for metadata, effect providers, and the ServiceTrain lifecycle.
 
@@ -170,12 +170,12 @@ app.Run();
 ```
 
 **Next:**
-- [Mediator](/docs/mediator) — decoupled dispatch with TrainBus
-- [Scheduling](/docs/scheduler) — cron jobs, retries, dead letters
-- [Dashboard](/docs/dashboard) — monitoring UI
-- [API](/docs/api) — GraphQL interface
-- [Project Template](/docs/reference/templates) — full template reference
-- [Samples & Deployment](/docs/samples) — the trains library pattern and deployment topologies
+- [Mediator](/docs/mediator): decoupled dispatch with TrainBus
+- [Scheduling](/docs/scheduler): cron jobs, retries, dead letters
+- [Dashboard](/docs/dashboard): monitoring UI
+- [API](/docs/api): GraphQL interface
+- [Project Template](/docs/reference/templates): full template reference
+- [Samples & Deployment](/docs/samples): the trains library pattern and deployment topologies
 
 ## SDK Reference
 

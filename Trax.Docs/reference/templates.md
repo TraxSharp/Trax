@@ -9,10 +9,10 @@ nav_order: 4
 
 Trax ships two `dotnet new` templates that scaffold working projects with PostgreSQL persistence, ready to run out of the box:
 
-- **`trax-api`** — a GraphQL API with typed query and mutation trains
-- **`trax-scheduler`** — a scheduler with the Trax Dashboard
+- **`trax-api`**: a GraphQL API with typed query and mutation trains
+- **`trax-scheduler`**: a scheduler with the Trax Dashboard
 
-They're designed to work together against a shared PostgreSQL database — the API handles lightweight operations directly and queues heavy work for the scheduler.
+They're designed to work together against a shared PostgreSQL database. The API handles lightweight operations directly and queues heavy work for the scheduler.
 
 ## Installation
 
@@ -76,14 +76,14 @@ MyCompany.Api/
 
 **Program.cs** configures:
 
-- **Trax Effects** — train bus, PostgreSQL persistence, JSON and parameter providers
-- **GraphQL API** — HotChocolate schema at `/trax/graphql` with Banana Cake Pop IDE
-- **Health check** — ASP.NET Core health endpoint at `/trax/health`
+- **Trax Effects**: train bus, PostgreSQL persistence, JSON and parameter providers
+- **GraphQL API**: HotChocolate schema at `/trax/graphql` with Banana Cake Pop IDE
+- **Health check**: ASP.NET Core health endpoint at `/trax/health`
 
 **Sample trains:**
 
-- **LookupTrain** — a `[TraxQuery]` train that returns typed output. Generates a query field: `query { discover { lookup(input: { id: "42" }) { id name createdAt } } }`
-- **HelloWorldTrain** — a `[TraxMutation]` train that logs a greeting. Generates a mutation field: `mutation { dispatch { helloWorld(input: { name: "Trax" }) { externalId metadataId } } }`
+- **LookupTrain**: a `[TraxQuery]` train that returns typed output. Generates a query field: `query { discover { lookup(input: { id: "42" }) { id name createdAt } } }`
+- **HelloWorldTrain**: a `[TraxMutation]` train that logs a greeting. Generates a mutation field: `mutation { dispatch { helloWorld(input: { name: "Trax" }) { externalId metadataId } } }`
 
 **Packages:**
 
@@ -117,9 +117,9 @@ MyCompany.Scheduler/
 
 **Program.cs** configures:
 
-- **Trax Effects** — train bus, PostgreSQL persistence, JSON and parameter providers, junction progress tracking
-- **Scheduler** — PostgreSQL local workers with a HelloWorld job running every 20 seconds
-- **Dashboard** — Trax Blazor Dashboard at `/trax`
+- **Trax Effects**: train bus, PostgreSQL persistence, JSON and parameter providers, junction progress tracking
+- **Scheduler**: PostgreSQL local workers with a HelloWorld job running every 20 seconds
+- **Dashboard**: Trax Blazor Dashboard at `/trax`
 
 **Packages:**
 
@@ -155,10 +155,10 @@ The HelloWorld train will start running every 20 seconds. Check the dashboard to
 The two templates are designed to run side-by-side against the same database:
 
 ```bash
-# Terminal 1 — Scheduler
+# Terminal 1 - Scheduler
 cd MyCompany.Scheduler && dotnet run
 
-# Terminal 2 — API
+# Terminal 2 - API
 cd MyCompany.Api && dotnet run
 ```
 

@@ -7,16 +7,16 @@ nav_order: 3
 
 # Effect Architecture
 
-How the Effect system works internally — the `ServiceTrain` lifecycle, `EffectRunner`, effect providers, and the data layer.
+How the Effect system works internally: the `ServiceTrain` lifecycle, `EffectRunner`, effect providers, and the data layer.
 
 ## Trax.Core (Core Engine)
 
-The foundation layer providing Railway Oriented Programming patterns — chaining junctions, propagating errors, and managing Memory.
+The foundation layer providing Railway Oriented Programming patterns: chaining junctions, propagating errors, and managing Memory.
 
 ### Key Classes
 
 ```csharp
-// Base train class — chains steps and propagates errors
+// Base train class: chains steps and propagates errors
 public abstract class Train<TIn, TOut>
 {
     public Task<TOut> Run(TIn input);
@@ -68,25 +68,25 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
 The `Run` method wraps the user-defined method (`Junctions()` or `RunInternal`) with a lifecycle that follows these steps:
 
-1. **Initialize** — Create `Metadata`, set `TrainState.InProgress`, persist via `SaveChanges`
-2. **Hooks** — Fire `OnStarted` (global lifecycle hooks, then per-train override)
-3. **Execute** — Call the train's route definition, producing `Either<Exception, TOut>`
-4. **Finalize** — Set output (right track) or exception details (left track), update `TrainState`
-5. **Persist** — `SaveChanges` on both tracks — metadata is always saved regardless of outcome
-6. **Post-hooks** — Fire `OnCompleted` or `OnFailed`/`OnCancelled` depending on the result
+1. **Initialize**: Create `Metadata`, set `TrainState.InProgress`, persist via `SaveChanges`
+2. **Hooks**: Fire `OnStarted` (global lifecycle hooks, then per-train override)
+3. **Execute**: Call the train's route definition, producing `Either<Exception, TOut>`
+4. **Finalize**: Set output (right track) or exception details (left track), update `TrainState`
+5. **Persist**: `SaveChanges` on both tracks. Metadata is always saved regardless of outcome
+6. **Post-hooks**: Fire `OnCompleted` or `OnFailed`/`OnCancelled` depending on the result
 
 ### EffectRunner
 
 The `EffectRunner` coordinates all registered effect providers. It builds its provider list at construction time by querying `IEffectProviderFactory` instances filtered through the `IEffectRegistry`.
 
 It exposes three operations that fan out to every active provider, awaiting each provider sequentially:
-- **`Track(model)`** — Register a new model for tracking (e.g., add `Metadata` to the EF change tracker)
-- **`Update(model)`** — Notify providers of an in-memory mutation (e.g., re-serialize parameters after output is set)
-- **`SaveChanges(ct)`** — Persist all accumulated changes across all providers
+- **`Track(model)`**: Register a new model for tracking (e.g., add `Metadata` to the EF change tracker)
+- **`Update(model)`**: Notify providers of an in-memory mutation (e.g., re-serialize parameters after output is set)
+- **`SaveChanges(ct)`**: Persist all accumulated changes across all providers
 
 ### Canonical Train Naming
 
-When a `ServiceTrain` is resolved through DI (via `AddScopedTraxRoute`, `AddMediator`, etc.), the registration factory sets `CanonicalName` to the **service interface type's `FullName`** (e.g., `MyApp.Trains.IProcessOrderTrain`). This ensures that:
+When a `ServiceTrain` is resolved through DI (via `AddScopedTraxRoute`, `AddMediator`, etc.), the registration factory sets `CanonicalName` to the **service interface type's `FullName`** (e.g., `MyApp.Trains.IProcessOrderTrain`). This means:
 
 - **Metadata records** always store the interface name, not the concrete class name
 - **Work queue entries** reference the interface name, making train resolution stable across refactors of the implementation class
@@ -167,13 +167,13 @@ The full lifecycle of a `ServiceTrain` execution:
            [Return Result]
 ```
 
-Junctions execute inside the "Execute Train Chain" box. Each mutation to the train's `Metadata` is followed by an `Update` call that notifies all registered effect providers — allowing them to react immediately (e.g., `ParameterEffect` re-serializes input/output parameters). The final `SaveChanges` call persists all accumulated side effects. Both success and failure paths call `SaveChanges`, so metadata is always persisted regardless of outcome.
+Junctions execute inside the "Execute Train Chain" box. Each mutation to the train's `Metadata` is followed by an `Update` call that notifies all registered effect providers, allowing them to react immediately (e.g., `ParameterEffect` re-serializes input/output parameters). The final `SaveChanges` call persists all accumulated side effects. Both success and failure paths call `SaveChanges`, so metadata is always persisted regardless of outcome.
 
 ## Data Layer
 
 ### DataContext
 
-`DataContext<TDbContext>` extends EF Core's `DbContext` and implements both `IDataContext` and `IEffectProvider`. It maps `Track` and `Update` to direct entity state assignment (Added for new entities, Modified for existing), and `SaveChanges` to `SaveChangesAsync`. State is set on the target entity only — navigation properties are not traversed, which prevents unnecessary UPDATE statements when entities cross DI scope boundaries (e.g., metadata loaded by `LoadMetadataJunction` passed into a child train's context). It also provides transaction support via `BeginTransaction`, `CommitTransaction`, and `RollbackTransaction`.
+`DataContext<TDbContext>` extends EF Core's `DbContext` and implements both `IDataContext` and `IEffectProvider`. It maps `Track` and `Update` to direct entity state assignment (Added for new entities, Modified for existing), and `SaveChanges` to `SaveChangesAsync`. State is set on the target entity only. Navigation properties are not traversed, which prevents unnecessary UPDATE statements when entities cross DI scope boundaries (e.g., metadata loaded by `LoadMetadataJunction` passed into a child train's context). It also provides transaction support via `BeginTransaction`, `CommitTransaction`, and `RollbackTransaction`.
 
 **DbSets:**
 
@@ -213,6 +213,6 @@ Key tables:
 
 ### Implementation Variants
 
-**PostgreSQL** — ACID transactions, JSON column support, automatic schema migration, PostgreSQL-specific optimizations (enums, JSON queries).
+**PostgreSQL** provides ACID transactions, JSON column support, automatic schema migration, and PostgreSQL-specific optimizations (enums, JSON queries).
 
-**InMemory** — Fast and lightweight for testing, no external dependencies, API-compatible with production database.
+**InMemory** is fast and lightweight for testing, with no external dependencies and an API compatible with the production database.

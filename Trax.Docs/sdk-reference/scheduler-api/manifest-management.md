@@ -8,7 +8,7 @@ nav_order: 6
 
 # Manifest Management
 
-Runtime methods on `ITraxScheduler` for controlling scheduled jobs. These are injected via DI and called at runtime — they are not available during startup configuration.
+Runtime methods on `ITraxScheduler` for controlling scheduled jobs. These are injected via DI and called at runtime. They are not available during startup configuration.
 
 ## DisableAsync
 
@@ -42,7 +42,7 @@ Task EnableAsync(string externalId, CancellationToken ct = default)
 
 ## TriggerAsync
 
-Triggers execution of a scheduled job, independent of its normal schedule. The overload with `delay` creates a work queue entry with a future `ScheduledAt` — the JobDispatcher skips it until that time arrives.
+Triggers execution of a scheduled job, independent of its normal schedule. The overload with `delay` creates a work queue entry with a future `ScheduledAt`. The JobDispatcher skips it until that time arrives.
 
 ```csharp
 Task TriggerAsync(string externalId, CancellationToken ct = default)
@@ -95,7 +95,7 @@ Task<Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(
 | `options` | `Action<ScheduleOptions>?` | No | Optional callback to configure manifest options (MaxRetries, Timeout, Priority, Group). |
 | `ct` | `CancellationToken` | No | Cancellation token |
 
-**Returns**: `Task<Manifest>` — the created manifest record.
+**Returns**: `Task<Manifest>`, the created manifest record.
 
 **Auto-disable**: When the job completes successfully, `IsEnabled` is set to `false` on the manifest. The manifest remains in the database for audit purposes but is skipped by the ManifestManager on subsequent cycles. If the job fails, normal retry logic applies until it succeeds (and auto-disables) or exceeds `MaxRetries` (and is dead-lettered).
 
@@ -193,8 +193,8 @@ public class SchedulerController(ITraxScheduler scheduler) : ControllerBase
 ## Remarks
 
 - `DisableAsync` sets `IsEnabled = false` on the manifest. The ManifestManager skips disabled manifests during polling.
-- `TriggerAsync` creates a new execution independent of the regular schedule — the job's normal schedule continues unaffected. The work queue entry inherits the manifest's stored priority (no `DependentPriorityBoost` is applied for manual triggers). The `delay` overload sets `ScheduledAt` on the work queue entry; the JobDispatcher skips entries with a future `ScheduledAt`.
-- `ScheduleOnceAsync` creates a manifest with `ScheduleType.Once`. The manifest auto-disables (`IsEnabled = false`) after its first successful execution. If no `externalId` is provided, one is generated as `once-{guid}`. Uses upsert semantics — safe to call with the same `externalId` without creating duplicates.
+- `TriggerAsync` creates a new execution independent of the regular schedule. The job's normal schedule continues unaffected. The work queue entry inherits the manifest's stored priority (no `DependentPriorityBoost` is applied for manual triggers). The `delay` overload sets `ScheduledAt` on the work queue entry; the JobDispatcher skips entries with a future `ScheduledAt`.
+- `ScheduleOnceAsync` creates a manifest with `ScheduleType.Once`. The manifest auto-disables (`IsEnabled = false`) after its first successful execution. If no `externalId` is provided, one is generated as `once-{guid}`. Uses upsert semantics, so it is safe to call with the same `externalId` without creating duplicates.
 - `CancelAsync` uses dual-layer cancellation: a database flag (`CancellationRequested = true`) for cross-server support, plus `ICancellationRegistry.TryCancel()` for same-server instant cancellation. Cancelled trains are **not retried** and **do not create dead letters**.
 - `CancelGroupAsync` applies the same dual-layer cancellation to all in-progress executions across all manifests in the group.
 - All methods (except `CancelGroupAsync` and `ScheduleOnceAsync`) require the manifest to already exist. Use [ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) to create manifests first.

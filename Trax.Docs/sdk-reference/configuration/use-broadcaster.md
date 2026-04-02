@@ -8,7 +8,7 @@ nav_order: 12
 
 # UseBroadcaster
 
-Enables cross-process lifecycle event broadcasting. When trains execute on a remote worker process, their lifecycle events (started, completed, failed, cancelled) are published to a message bus and delivered to hub processes — where [GraphQL subscriptions](/docs/sdk-reference/graphql-api/subscriptions) forward them to connected clients.
+Enables cross-process lifecycle event broadcasting. When trains execute on a remote worker process, their lifecycle events (started, completed, failed, cancelled) are published to a message bus and delivered to hub processes, where [GraphQL subscriptions](/docs/sdk-reference/graphql-api/subscriptions) forward them to connected clients.
 
 Without `UseBroadcaster()`, subscriptions only fire for trains that execute in the same process as the GraphQL API. With it, subscriptions work regardless of which process executes the train.
 
@@ -22,7 +22,7 @@ public static TBuilder UseBroadcaster<TBuilder>(
     where TBuilder : TraxEffectBuilder
 ```
 
-The generic type parameter `TBuilder` is inferred by the compiler — callers just write `.UseBroadcaster(...)`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
+The generic type parameter `TBuilder` is inferred by the compiler, so callers just write `.UseBroadcaster(...)`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -40,7 +40,7 @@ The transport-specific `ITrainEventBroadcaster` and `ITrainEventReceiver` are re
 
 ## Connection Resilience
 
-The `TrainEventReceiverService` automatically retries if the transport connection fails (e.g., RabbitMQ is unavailable at startup). It uses exponential backoff starting at 5 seconds, capping at 2 minutes. The service will not crash the host — it logs a warning and keeps retrying until the transport becomes available or the host shuts down.
+The `TrainEventReceiverService` automatically retries if the transport connection fails (e.g., RabbitMQ is unavailable at startup). It uses exponential backoff starting at 5 seconds, capping at 2 minutes. The service will not crash the host. It logs a warning and keeps retrying until the transport becomes available or the host shuts down.
 
 ## De-duplication
 
@@ -100,14 +100,14 @@ effects.UseBroadcaster(b => b.UseRabbitMq("amqp://guest:guest@localhost:5672"))
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `connectionString` | `string` | Yes | — | AMQP connection URI |
+| `connectionString` | `string` | Yes | N/A | AMQP connection URI |
 | `configure` | `Action<RabbitMqBroadcasterOptions>?` | No | `null` | Optional callback to customize options |
 
 Options:
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `ConnectionString` | `string` | — | AMQP connection URI |
+| `ConnectionString` | `string` | N/A | AMQP connection URI |
 | `ExchangeName` | `string` | `"trax.lifecycle"` | Fanout exchange name |
 
 The RabbitMQ transport uses a **fanout exchange** so all connected hub instances receive every event. Each receiver creates its own exclusive, auto-delete queue.
@@ -163,7 +163,7 @@ builder.Services.AddTraxWorker(opts => { opts.WorkerCount = 4; });
 
 When `AddTraxGraphQL()` detects that `ITrainEventReceiver` is registered (via `UseBroadcaster()`), it automatically registers `GraphQLTrainEventHandler` as an `ITrainEventHandler`. This handler maps received `TrainLifecycleEventMessage` records to `TrainLifecycleEvent` DTOs and sends them to HotChocolate's `ITopicEventSender`, making them available to all connected WebSocket subscribers.
 
-No additional configuration is needed — just call `UseBroadcaster()` in your effects and `AddTraxGraphQL()` as usual.
+No additional configuration is needed. Just call `UseBroadcaster()` in your effects and `AddTraxGraphQL()` as usual.
 
 ## Architecture
 
@@ -178,7 +178,7 @@ Train.Run()                            GraphQL Subscription Clients
                                                → WebSocket delivery
 ```
 
-The database remains the **single source of truth** for all train data. The broadcaster only carries lightweight lifecycle event notifications — all metadata, logs, manifests, and train state are always persisted to and queried from PostgreSQL.
+The database remains the **single source of truth** for all train data. The broadcaster only carries lightweight lifecycle event notifications. All metadata, logs, manifests, and train state are always persisted to and queried from PostgreSQL.
 
 ## Implementing a Custom Transport
 

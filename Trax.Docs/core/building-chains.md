@@ -7,7 +7,7 @@ nav_order: 2
 
 # Building Chains
 
-A train's route is a chain of junctions. Override `Junctions()` to define it — `.Chain<T>()` adds junctions, and the framework handles activation and resolution automatically.
+A train's route is a chain of junctions. Override `Junctions()` to define it. `.Chain<T>()` adds junctions, and the framework handles activation and resolution automatically.
 
 ## Chain
 
@@ -29,12 +29,12 @@ If a previous junction switched the train to the left track, `.Chain<TJunction>(
 ```csharp
 Chain<ValidateEmailJunction>()    // Throws ValidationException
     .Chain<CreateUserJunction>()  // Skipped
-    .Chain<SendEmailJunction>();  // Skipped — caller receives the ValidationException
+    .Chain<SendEmailJunction>();  // Skipped. Caller receives the ValidationException
 ```
 
 ## Resolve
 
-When using `Junctions()`, resolution happens automatically — the last value in Memory matching `TReturn` is returned. You don't call `Resolve()` yourself.
+When using `Junctions()`, resolution happens automatically. The last value in Memory matching `TReturn` is returned. You don't call `Resolve()` yourself.
 
 When using `RunInternal`, `.Resolve()` terminates the chain and returns `Either<Exception, TReturn>`:
 
@@ -47,7 +47,7 @@ protected override async Task<Either<Exception, User>> RunInternal(CreateUserReq
         .Resolve();
 ```
 
-`Resolve` checks for a captured exception, then a [ShortCircuit](#shortcircuit) value, then looks up `TReturn` in [Memory](memory.md) — in that order. See [SDK Reference: Resolve](/docs/sdk-reference/train-methods/resolve) for the full resolution priority and error behavior.
+`Resolve` checks for a captured exception, then a [ShortCircuit](#shortcircuit) value, then looks up `TReturn` in [Memory](memory.md), in that order. See [SDK Reference: Resolve](/docs/sdk-reference/train-methods/resolve) for the full resolution priority and error behavior.
 
 The [Analyzer](analyzer.md) catches missing return types at compile time with **CHAIN002**.
 
@@ -73,13 +73,13 @@ protected override async Task<Either<Exception, ParentResult>> RunInternal(Paren
 }
 ```
 
-This skips the Memory lookup — you're providing the result directly. If an exception exists from the chain, it still takes precedence and the provided value is ignored. This is useful when you need to construct the return value manually, like combining results from nested trains with the chain's output.
+This skips the Memory lookup because you're providing the result directly. If an exception exists from the chain, it still takes precedence and the provided value is ignored. This is useful when you need to construct the return value manually, like combining results from nested trains with the chain's output.
 
 ## ShortCircuit
 
-`.ShortCircuit<TJunction>()` lets a junction take the express route — capturing a result for early return. If the junction returns a value of the train's return type, that value is stored as the short-circuit result and `Resolve()` will return it instead of doing a Memory lookup. If the junction throws, the train continues normally.
+`.ShortCircuit<TJunction>()` lets a junction take the express route, capturing a result for early return. If the junction returns a value of the train's return type, that value is stored as the short-circuit result and `Resolve()` will return it instead of doing a Memory lookup. If the junction throws, the train continues normally.
 
-> **Note:** Subsequent `Chain` calls after a successful `ShortCircuit` still execute — the short-circuit value only affects `Resolve()`. If you need to truly skip remaining junctions, combine `ShortCircuit` with a conditional pattern or the railway error path.
+> **Note:** Subsequent `Chain` calls after a successful `ShortCircuit` still execute. The short-circuit value only affects `Resolve()`. If you need to truly skip remaining junctions, combine `ShortCircuit` with a conditional pattern or the railway error path.
 
 ```csharp
 public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderResult>
@@ -98,9 +98,9 @@ public class ProcessOrderTrain : ServiceTrain<OrderRequest, OrderResult>
 See [SDK Reference: ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) for all overloads, the junction signature, and a full example.
 
 **When to use it:**
-- **Caching** — return a cached result if available, otherwise compute it
-- **Feature flags** — return a default result if a feature is disabled
-- **Early exits** — skip expensive processing when a precondition is already satisfied
+- **Caching**: return a cached result if available, otherwise compute it
+- **Feature flags**: return a default result if a feature is disabled
+- **Early exits**: skip expensive processing when a precondition is already satisfied
 
 ## Extract
 
@@ -128,7 +128,7 @@ public class GetUserEmailJunction : Junction<User, EmailAddress>
 
 ## AddServices
 
-`.AddServices()` puts service instances directly into [Memory](memory.md), making them available to subsequent junctions. This bypasses the DI container — the instances you pass are stored as-is.
+`.AddServices()` puts service instances directly into [Memory](memory.md), making them available to subsequent junctions. This bypasses the DI container. The instances you pass are stored as-is.
 
 ```csharp
 protected override User Junctions()
@@ -145,7 +145,7 @@ protected override User Junctions()
 
 Each type argument is stored in Memory with the corresponding instance. See [SDK Reference: AddServices](/docs/sdk-reference/train-methods/add-services) for all overloads and interface-type storage behavior.
 
-Use `AddServices` when you need to inject runtime-created instances into the chain — objects that aren't available through the DI container or that need to be created per-execution. For standard dependencies, prefer constructor injection in your junctions instead.
+Use `AddServices` when you need to inject runtime-created instances into the chain, like objects that aren't available through the DI container or that need to be created per-execution. For standard dependencies, prefer constructor injection in your junctions instead.
 
 > **Note:** `AddServices` is one of the cases where `Junctions()` works well, but if you need to do more complex setup (async calls, try/catch, combining results from nested trains), use `RunInternal` instead.
 

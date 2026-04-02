@@ -7,7 +7,7 @@ nav_order: 2
 
 # Host Tracking
 
-When trains run across distributed infrastructure — Lambda functions, ECS tasks, Kubernetes pods, multiple servers — every metadata record captures WHERE the train executed. Since all hosts share the same Postgres database, you can query exactly which machine ran any given train.
+When trains run across distributed infrastructure (Lambda functions, ECS tasks, Kubernetes pods, multiple servers), every metadata record captures WHERE the train executed. Since all hosts share the same Postgres database, you can query exactly which machine ran any given train.
 
 ## How It Works
 
@@ -94,8 +94,8 @@ ORDER BY failures DESC;
 
 Host fields are available on both queries and subscriptions:
 
-- `getExecutions` / `getExecution` — returns `hostName`, `hostEnvironment`, `hostInstanceId`
-- Lifecycle subscriptions (`onTrainStarted`, `onTrainCompleted`, etc.) — include `hostName`, `hostEnvironment`
+- `getExecutions` / `getExecution`: returns `hostName`, `hostEnvironment`, `hostInstanceId`
+- Lifecycle subscriptions (`onTrainStarted`, `onTrainCompleted`, etc.): include `hostName`, `hostEnvironment`
 
 ## Dashboard
 

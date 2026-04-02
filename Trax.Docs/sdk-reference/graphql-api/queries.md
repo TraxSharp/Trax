@@ -17,8 +17,8 @@ type Query {
 }
 ```
 
-- **`discover`** — auto-generated typed query fields for trains annotated with [`[TraxQuery]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
-- **`operations`** — predefined operational queries: health status, registered trains, manifests, manifest groups, and execution history
+- **`discover`**: auto-generated typed query fields for trains annotated with [`[TraxQuery]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
+- **`operations`**: predefined operational queries: health status, registered trains, manifests, manifest groups, and execution history
 
 ## Discover Queries (Auto-Generated)
 
@@ -207,7 +207,7 @@ query {
 |-----------|------|---------|-------------|
 | `skip` | `Int` | `0` | Number of records to skip (offset pagination) |
 | `take` | `Int` | `25` | Number of records to return |
-| `afterId` | `Long` | `null` | Keyset cursor — returns records with `id < afterId`. When provided, `skip` is ignored. See [Pagination](#pagination) |
+| `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. When provided, `skip` is ignored. See [Pagination](#pagination) |
 
 **Returns**: `PagedResult<ManifestSummary>`
 
@@ -255,7 +255,7 @@ query {
 |-----------|------|----------|-------------|
 | `id` | `Long!` | Yes | The manifest's database ID |
 
-**Returns**: `ManifestSummary` (nullable — returns `null` if the ID does not exist)
+**Returns**: `ManifestSummary` (nullable, returns `null` if the ID does not exist)
 
 ---
 
@@ -290,7 +290,7 @@ query {
 |-----------|------|---------|-------------|
 | `skip` | `Int` | `0` | Number of records to skip (offset pagination) |
 | `take` | `Int` | `25` | Number of records to return |
-| `afterId` | `Long` | `null` | Keyset cursor — returns records with `id < afterId`. See [Pagination](#pagination) |
+| `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. See [Pagination](#pagination) |
 
 **Returns**: `PagedResult<ManifestGroupSummary>`
 
@@ -342,7 +342,7 @@ query {
 |-----------|------|---------|-------------|
 | `skip` | `Int` | `0` | Number of records to skip (offset pagination) |
 | `take` | `Int` | `25` | Number of records to return |
-| `afterId` | `Long` | `null` | Keyset cursor — returns records with `id < afterId`. See [Pagination](#pagination) |
+| `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. See [Pagination](#pagination) |
 
 **Returns**: `PagedResult<ExecutionSummary>`
 
@@ -388,7 +388,7 @@ query {
 |-----------|------|----------|-------------|
 | `id` | `Long!` | Yes | The execution's metadata ID |
 
-**Returns**: `ExecutionSummary` (nullable — returns `null` if the ID does not exist)
+**Returns**: `ExecutionSummary` (nullable, returns `null` if the ID does not exist)
 
 ---
 
@@ -409,7 +409,7 @@ All paginated queries return the same wrapper type:
 
 ## Pagination
 
-Paginated queries support two strategies. Both can be used interchangeably — the dashboard uses offset pagination internally, while API consumers can opt into keyset cursors for better deep-page performance.
+Paginated queries support two strategies. Both can be used interchangeably. The dashboard uses offset pagination internally, while API consumers can opt into keyset cursors for better deep-page performance.
 
 ### Offset pagination (default)
 
@@ -425,7 +425,7 @@ query {
 
 ### Keyset cursor pagination
 
-Pass `afterId` (the `nextCursor` from the previous page) instead of `skip`. This uses `WHERE id < @afterId` — constant-time regardless of how deep you paginate, because it seeks directly to the cursor position via the primary key index.
+Pass `afterId` (the `nextCursor` from the previous page) instead of `skip`. This uses `WHERE id < @afterId`, which is constant-time regardless of how deep you paginate because it seeks directly to the cursor position via the primary key index.
 
 ```graphql
 # First page
@@ -435,7 +435,7 @@ query {
   }
 }
 
-# Next page — pass nextCursor as afterId
+# Next page: pass nextCursor as afterId
 query {
   operations {
     executions(afterId: 4201, take: 25) { items { id } totalCount nextCursor }
@@ -447,6 +447,6 @@ When `afterId` is provided, `skip` is ignored.
 
 ### Estimated counts
 
-For unfiltered queries on large tables (>10,000 rows), `totalCount` uses PostgreSQL's `pg_class.reltuples` statistic instead of an exact `COUNT(*)`. This is O(1) rather than O(n) — the difference matters when the metadata table has millions of rows.
+For unfiltered queries on large tables (>10,000 rows), `totalCount` uses PostgreSQL's `pg_class.reltuples` statistic instead of an exact `COUNT(*)`. This is O(1) rather than O(n), and the difference matters when the metadata table has millions of rows.
 
 When the estimate is used, `isEstimatedCount` is `true`. The estimate is updated by PostgreSQL's autovacuum/autoanalyze and is typically accurate within a few percent. For filtered queries or small tables, an exact count is always used and `isEstimatedCount` is `false`.

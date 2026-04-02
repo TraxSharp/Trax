@@ -27,11 +27,11 @@ docs: update usage guide
 
 The `type` tells semantic-release whether you've added a feature, fixed a bug, or just updated docs. Here's what triggers a release:
 
-- `feat:` — New feature → bumps minor version (5.1.0 → 5.2.0)
-- `fix:` — Bug fix → bumps patch version (5.1.0 → 5.1.1)
-- `perf:` — Performance improvement → bumps patch version
-- `refactor:` — Code refactoring → bumps patch version
-- `docs:`, `test:`, `chore:`, `ci:` — No release triggered
+- `feat:` New feature, bumps minor version (5.1.0 → 5.2.0)
+- `fix:` Bug fix, bumps patch version (5.1.0 → 5.1.1)
+- `perf:` Performance improvement, bumps patch version
+- `refactor:` Code refactoring, bumps patch version
+- `docs:`, `test:`, `chore:`, `ci:` No release triggered
 
 For breaking changes, add `BREAKING CHANGE:` anywhere in the commit body:
 

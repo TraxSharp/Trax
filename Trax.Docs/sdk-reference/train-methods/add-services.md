@@ -36,7 +36,7 @@ All services are **required** (non-null). Passing `null` throws an `Exception`.
 
 ## Returns
 
-`Monad<TInput, TReturn>` — the train instance, for fluent chaining.
+`Monad<TInput, TReturn>`, the train instance, for fluent chaining.
 
 ## Example
 
@@ -70,6 +70,6 @@ public class ProcessOrderTrain(
 
 ## Remarks
 
-- Use interface types as the generic parameters — `AddServices<IMyService>(myService)`, not `AddServices<MyService>(myService)`.
+- Use interface types as the generic parameters (`AddServices<IMyService>(myService)`, not `AddServices<MyService>(myService)`).
 - Junctions resolve services from Memory by their interface type during construction. See [Junctions](/docs/core/trains-and-junctions) for how constructor injection works.
 - For more than 7 services, split across multiple `AddServices` calls.

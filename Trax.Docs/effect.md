@@ -8,7 +8,7 @@ section: Packages
 
 # Trax.Effect
 
-`Trax.Effect` upgrades the core pipeline engine into a full commercial service — with journey logging, dependency injection, and pluggable effect providers.
+`Trax.Effect` upgrades the core pipeline engine into a full commercial service, with journey logging, dependency injection, and pluggable effect providers.
 
 ```bash
 dotnet add package Trax.Effect
@@ -19,18 +19,18 @@ dotnet add package Trax.Effect.Data.Postgres  # or Trax.Effect.Data.InMemory
 
 Everything in [Core](core.md), plus:
 
-- **`ServiceTrain<TIn, TOut>`** — extends `Train` with automatic metadata tracking
-- **Execution metadata** — every train run produces a queryable record (state, timing, input/output, errors)
-- **Dependency injection** — junctions resolved from your DI container
-- **Effect providers** — pluggable providers for persistence, logging, and serialization
-- **Lifecycle hooks** — fire on train state transitions (started, completed, failed, cancelled) for notifications, metrics, or real-time updates
-- **Atomic side effects** — all providers save together; metadata (state, timing, errors) is always persisted regardless of outcome
+- **`ServiceTrain<TIn, TOut>`** - extends `Train` with automatic metadata tracking
+- **Execution metadata** - every train run produces a queryable record (state, timing, input/output, errors)
+- **Dependency injection** - junctions resolved from your DI container
+- **Effect providers** - pluggable providers for persistence, logging, and serialization
+- **Lifecycle hooks** - fire on train state transitions (started, completed, failed, cancelled) for notifications, metrics, or real-time updates
+- **Atomic side effects** - all providers save together; metadata (state, timing, errors) is always persisted regardless of outcome
 
 ## Train vs ServiceTrain
 
-**`Train<TIn, TOut>`** (Core) — The core pipeline engine. Chains junctions, propagates errors, manages Memory. No logging, no DI, no side effects.
+**`Train<TIn, TOut>`** (Core) - The core pipeline engine. Chains junctions, propagates errors, manages Memory. No logging, no DI, no side effects.
 
-**`ServiceTrain<TIn, TOut>`** (Effect) — The full commercial service. Wraps every journey with:
+**`ServiceTrain<TIn, TOut>`** (Effect) - The full commercial service. Wraps every journey with:
 - Journey logging (departure time, arrival time, right track / left track, cargo in/out)
 - Effect providers (database persistence, JSON logging, parameter serialization)
 - Integration with `ITrainBus` for dispatch discovery
@@ -45,13 +45,13 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 }
 ```
 
-The code inside `Junctions()` is identical — `ServiceTrain` adds the infrastructure around it.
+The code inside `Junctions()` is identical. `ServiceTrain` adds the infrastructure around it.
 
 ## The Effect Pattern
 
-Effects are operations that happen as the train passes through its route — provided by pluggable effect providers. Junctions don't write directly to a database or logger. Instead, the train tracks models during the journey, and effect providers handle the actual work at the end:
+Effects are operations that happen as the train passes through its route, provided by pluggable effect providers. Junctions don't write directly to a database or logger. Instead, the train tracks models during the journey, and effect providers handle the actual work at the end:
 
-- On both tracks, effect providers run `SaveChanges` — metadata (state, timing, errors) is always persisted
+- On both tracks, effect providers run `SaveChanges`, and metadata (state, timing, errors) is always persisted
 - If the train reaches the right track (success), output is recorded alongside the metadata
 - If any junction takes the left track (failure), the exception and failure details are recorded. User-tracked models added via custom effect providers are not committed.
 
@@ -69,9 +69,9 @@ builder.Services.AddTrax(trax => trax
 );
 ```
 
-The `AddEffects` callback is a `Func<TraxEffectBuilder, TraxEffectBuilder>` — the lambda returns the builder from the last chained call. Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData`, which unlocks data-dependent methods like `AddDataContextLogging` at compile time.
+The `AddEffects` callback is a `Func<TraxEffectBuilder, TraxEffectBuilder>`, so the lambda returns the builder from the last chained call. Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData`, which unlocks data-dependent methods like `AddDataContextLogging` at compile time.
 
-Remove any line and the train still runs — it just passes through fewer junctions.
+Remove any line and the train still runs; it just passes through fewer junctions.
 
 ## When to Use Effect
 

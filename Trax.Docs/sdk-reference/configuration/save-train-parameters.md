@@ -21,7 +21,7 @@ public static TBuilder SaveTrainParameters<TBuilder>(
     where TBuilder : TraxEffectBuilder
 ```
 
-The generic type parameter `TBuilder` is inferred by the compiler — callers just write `.SaveTrainParameters()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
+The generic type parameter `TBuilder` is inferred by the compiler, so callers just write `.SaveTrainParameters()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
 
 ## Parameters
 
@@ -41,7 +41,7 @@ The configuration is registered as a singleton and can also be modified at runti
 
 ## Returns
 
-`TBuilder` — the same builder type that was passed in, for continued fluent chaining.
+`TBuilder`, the same builder type that was passed in, for continued fluent chaining.
 
 ## Examples
 
@@ -89,9 +89,9 @@ services.AddTrax(trax => trax
 
 - Requires a data provider to be registered (the serialized parameters are stored in the database via `Metadata`).
 - The serialized JSON is stored in `Metadata.Input` (set on train start) and `Metadata.Output` (set on completion).
-- Useful for debugging failed trains — inspect the exact input that caused the failure.
+- Useful for debugging failed trains: inspect the exact input that caused the failure.
 - The `ParameterEffectConfiguration` singleton is accessible at runtime. The dashboard's Effects page provides a UI to toggle `SaveInputs` and `SaveOutputs` without restarting the application.
-- **Lifecycle hooks always receive serialized output.** Even without `SaveTrainParameters()`, `Metadata.Output` is populated in-memory before lifecycle hooks fire. This ensures hooks like `GraphQLSubscriptionHook` can always include output data in subscription events. However, without `SaveTrainParameters()` the output is **not persisted to the database** — it exists only in-memory for the duration of the hook execution. Use `SaveTrainParameters()` when you need output stored in the database for the dashboard, queries, or auditing.
+- **Lifecycle hooks always receive serialized output.** Even without `SaveTrainParameters()`, `Metadata.Output` is populated in-memory before lifecycle hooks fire, so hooks like `GraphQLSubscriptionHook` can always include output data in subscription events. However, without `SaveTrainParameters()` the output is **not persisted to the database** and exists only in-memory for the duration of the hook execution. Use `SaveTrainParameters()` when you need output stored in the database for the dashboard, queries, or auditing.
 
 ## Package
 

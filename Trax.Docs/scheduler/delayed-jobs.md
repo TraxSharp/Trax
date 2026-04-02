@@ -9,26 +9,26 @@ nav_order: 3
 
 ## The Problem
 
-Some work doesn't fit a recurring schedule. You need to send a reminder email in 30 minutes, process a refund after a 24-hour cooling period, or run a one-time data migration 5 minutes from now. These are fire-once jobs with a delay — not periodic, not dependent on another manifest, just "run this once, later."
+Some work doesn't fit a recurring schedule. You need to send a reminder email in 30 minutes, process a refund after a 24-hour cooling period, or run a one-time data migration 5 minutes from now. These are fire-once jobs with a delay. Not periodic, not dependent on another manifest, just "run this once, later."
 
 Trax supports two approaches: delayed triggers on existing manifests, and standalone one-off manifests that auto-disable after completion.
 
 ## Delayed Trigger: TriggerAsync with Delay
 
-If a manifest already exists — registered at startup or created via `ScheduleAsync` — you can trigger it with a delay. This creates a work queue entry with a future `ScheduledAt` timestamp. The JobDispatcher skips the entry until that time arrives.
+If a manifest already exists, registered at startup or created via `ScheduleAsync`, you can trigger it with a delay. This creates a work queue entry with a future `ScheduledAt` timestamp. The JobDispatcher skips the entry until that time arrives.
 
 ```csharp
 // Trigger an existing manifest 30 minutes from now
 await scheduler.TriggerAsync("send-reminder", TimeSpan.FromMinutes(30));
 ```
 
-The manifest's regular schedule (if any) continues unaffected. The delayed trigger is an independent execution — it doesn't reset or interfere with the normal cadence.
+The manifest's regular schedule (if any) continues unaffected. The delayed trigger is an independent execution, it doesn't reset or interfere with the normal cadence.
 
 This is useful when you already have a manifest for the train and want to queue an extra execution at a future time. The manifest must exist; `TriggerAsync` throws `InvalidOperationException` if it doesn't.
 
 ## One-Off Jobs: ScheduleOnceAsync
 
-For work that has no pre-existing manifest — a transient job that should run once and never again — use `ScheduleOnceAsync`. It creates a manifest with `ScheduleType.Once`, sets `ScheduledAt` to the current time plus the delay, and auto-disables the manifest after the first successful execution.
+For work that has no pre-existing manifest, a transient job that should run once and never again, use `ScheduleOnceAsync`. It creates a manifest with `ScheduleType.Once`, sets `ScheduledAt` to the current time plus the delay, and auto-disables the manifest after the first successful execution.
 
 ### Runtime API (ITraxScheduler)
 
@@ -49,7 +49,7 @@ When no `externalId` is provided, one is auto-generated in the format `once-{gui
 
 ### Startup Configuration (Builder Pattern)
 
-For one-off jobs that should be scheduled when the application starts — such as a post-deployment migration or a delayed initialization task — use the builder:
+For one-off jobs that should be scheduled when the application starts, such as a post-deployment migration or a delayed initialization task, use the builder:
 
 ```csharp
 services.AddTrax(trax => trax
@@ -62,18 +62,18 @@ services.AddTrax(trax => trax
 );
 ```
 
-Like `Schedule`, the builder captures the manifest and seeds it on startup with upsert semantics. If a manifest with the same `externalId` already exists, it is updated rather than duplicated — so restarting the application doesn't create duplicate jobs.
+Like `Schedule`, the builder captures the manifest and seeds it on startup with upsert semantics. If a manifest with the same `externalId` already exists, it is updated rather than duplicated, so restarting the application doesn't create duplicate jobs.
 
 ## Auto-Disable Behavior
 
-When a `ScheduleType.Once` manifest completes successfully, the `UpdateManifestSuccessJunction` sets `IsEnabled = false` on the manifest. The manifest stays in the database for audit purposes — you can see its execution history in the dashboard — but the ManifestManager skips it on subsequent polling cycles.
+When a `ScheduleType.Once` manifest completes successfully, the `UpdateManifestSuccessJunction` sets `IsEnabled = false` on the manifest. The manifest stays in the database for audit purposes, you can see its execution history in the dashboard, but the ManifestManager skips it on subsequent polling cycles.
 
 If the job fails, normal retry logic applies. Retries continue until the job succeeds (and auto-disables) or exceeds `MaxRetries` (and is dead-lettered). A dead-lettered once-manifest can be retried from the dashboard like any other dead letter.
 
 ## How It Works Internally
 
 1. **Manifest creation**: `ScheduleOnceAsync` creates a manifest with `ScheduleType = Once` and `ScheduledAt` set to `DateTime.UtcNow + delay`.
-2. **Queuing**: The ManifestManager's `DetermineJobsToQueueJunction` evaluates Once manifests via `ShouldRunOnce` — it queues the manifest when the current time is at or past `ScheduledAt`.
+2. **Queuing**: The ManifestManager's `DetermineJobsToQueueJunction` evaluates Once manifests via `ShouldRunOnce`, it queues the manifest when the current time is at or past `ScheduledAt`.
 3. **Dispatch filtering**: The JobDispatcher's `LoadQueuedJobsJunction` filters out work queue entries whose `ScheduledAt` is still in the future. This applies to both delayed triggers and Once manifests.
 4. **Auto-disable on success**: The `UpdateManifestSuccessJunction` checks if the manifest is `ScheduleType.Once`. If so, it sets `IsEnabled = false` after recording the successful execution.
 

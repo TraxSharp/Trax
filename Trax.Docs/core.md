@@ -8,7 +8,7 @@ section: Packages
 
 # Trax.Core
 
-`Trax.Core` is the foundation — trains, junctions, and railway error propagation. No database, no DI container, no infrastructure required.
+`Trax.Core` is the foundation: trains, junctions, and railway error propagation. No database, no DI container, no infrastructure required.
 
 ```bash
 dotnet add package Trax.Core
@@ -16,16 +16,16 @@ dotnet add package Trax.Core
 
 ## What You Get
 
-- **Trains** — typed pipelines that carry data through a sequence of junctions
-- **Junctions** — single-responsibility units of work with typed input/output
-- **Memory** — a type-keyed store that wires junction outputs to junction inputs automatically
-- **Railway error propagation** — if any junction fails, the train switches to the left track and skips the rest
-- **Compile-time analyzer** — catches broken chains before you run anything
-- **IDE extensions** — inlay hints showing cargo types at each junction
+- **Trains**: typed pipelines that carry data through a sequence of junctions
+- **Junctions**: single-responsibility units of work with typed input/output
+- **Memory**: a type-keyed store that wires junction outputs to junction inputs automatically
+- **Railway error propagation**: if any junction fails, the train switches to the left track and skips the rest
+- **Compile-time analyzer**: catches broken chains before you run anything
+- **IDE extensions**: inlay hints showing cargo types at each junction
 
 ## The Railway
 
-A train never leaves the rails — it always reaches a destination. Your code runs on two tracks: right and left. The train stays on the right track as long as every junction succeeds. If any junction fails, the train switches to the left track and passes through every remaining junction without executing them.
+A train never leaves the rails. It always reaches a destination. Your code runs on two tracks: right and left. The train stays on the right track as long as every junction succeeds. If any junction fails, the train switches to the left track and passes through every remaining junction without executing them.
 
 ```
 Right Track:    Input -> [Junction 1] -> [Junction 2] -> [Junction 3] -> Output
@@ -45,7 +45,7 @@ public class CreateUserTrain : Train<CreateUserRequest, User>
 }
 ```
 
-If `ValidateUserJunction` throws, the train switches to the left track immediately and returns `Left(exception)`. You don't write any error-checking code — the railway handles it.
+If `ValidateUserJunction` throws, the train switches to the left track immediately and returns `Left(exception)`. You don't write any error-checking code. The railway handles it.
 
 ## Running a Train
 

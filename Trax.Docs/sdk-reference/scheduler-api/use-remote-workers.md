@@ -28,14 +28,14 @@ public SchedulerConfigurationBuilder UseRemoteWorkers(
 
 ## Returns
 
-`SchedulerConfigurationBuilder` — for continued fluent chaining.
+`SchedulerConfigurationBuilder`, for continued fluent chaining.
 
 ## RemoteWorkerOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `BaseUrl` | `string` | _(required)_ | The URL of the remote endpoint that receives job requests (e.g., `https://my-workers.example.com/trax/execute`) |
-| `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` — add auth headers, custom timeouts, or any other HTTP configuration |
+| `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` (add auth headers, custom timeouts, or any other HTTP configuration) |
 | `Timeout` | `TimeSpan` | 30 seconds | HTTP request timeout for each job dispatch |
 | `Retry` | `HttpRetryOptions` | _(see below)_ | Retry options for transient HTTP failures (429, 502, 503) |
 
@@ -81,7 +81,7 @@ In this example, `IHeavyComputeTrain` and `IAiInferenceTrain` are dispatched to 
 
 ### With Authentication
 
-Trax doesn't bake in any auth — use `ConfigureHttpClient` to add whatever headers your endpoint expects:
+Trax doesn't bake in any auth. Use `ConfigureHttpClient` to add whatever headers your endpoint expects:
 
 ```csharp
 .UseRemoteWorkers(
@@ -139,11 +139,11 @@ public class HeavyComputeTrain : ServiceTrain<HeavyInput, HeavyOutput>, IHeavyCo
 
 When `UseRemoteWorkers()` is configured, trains marked with `[TraxRemote]` are automatically dispatched to the first registered remote submitter. Builder `ForTrain<T>()` routing takes precedence over the attribute.
 
-If no `UseRemoteWorkers()` is configured, `[TraxRemote]` is silently ignored — the train runs locally.
+If no `UseRemoteWorkers()` is configured, `[TraxRemote]` is silently ignored and the train runs locally.
 
 ## Performance
 
-By default, the JobDispatcher dispatches entries sequentially — one at a time. For local workers (`PostgresJobSubmitter`), this is fine because `EnqueueAsync` just inserts a database row (microseconds). But for `HttpJobSubmitter`, each dispatch blocks until the remote endpoint finishes executing the train. If each Lambda invocation takes 2 seconds and 50 entries are eligible, a single dispatch cycle takes ~100 seconds.
+By default, the JobDispatcher dispatches entries sequentially, one at a time. For local workers (`PostgresJobSubmitter`), this is fine because `EnqueueAsync` just inserts a database row (microseconds). But for `HttpJobSubmitter`, each dispatch blocks until the remote endpoint finishes executing the train. If each Lambda invocation takes 2 seconds and 50 entries are eligible, a single dispatch cycle takes ~100 seconds.
 
 Use `MaxConcurrentDispatch` to parallelize HTTP dispatch:
 
@@ -156,7 +156,7 @@ Use `MaxConcurrentDispatch` to parallelize HTTP dispatch:
 )
 ```
 
-This dispatches up to 10 entries concurrently within a single polling cycle, bounded by a `SemaphoreSlim`. The `FOR UPDATE SKIP LOCKED` pattern ensures safe concurrent dispatch — no duplicate Metadata records, even with intra-cycle parallelism.
+This dispatches up to 10 entries concurrently within a single polling cycle, bounded by a `SemaphoreSlim`. The `FOR UPDATE SKIP LOCKED` pattern guarantees safe concurrent dispatch with no duplicate Metadata records, even with intra-cycle parallelism.
 
 Keep `MaxConcurrentDispatch` well below your database connection pool size (default Npgsql pool: 100), since each concurrent dispatch opens its own DI scope and database connection.
 
@@ -164,9 +164,9 @@ See [Parallel Dispatch](/docs/scheduler/admin-trains/job-dispatcher#parallel-dis
 
 ## Routing Precedence
 
-1. **Builder `ForTrain<T>()`** — highest priority
-2. **`[TraxRemote]` attribute** — if no builder routing for this train
-3. **Default local `IJobSubmitter`** — fallback for everything else
+1. **Builder `ForTrain<T>()`** (highest priority)
+2. **`[TraxRemote]` attribute** (if no builder routing for this train)
+3. **Default local `IJobSubmitter`** (fallback for everything else)
 
 ## Registered Services
 
@@ -175,7 +175,7 @@ See [Parallel Dispatch](/docs/scheduler/admin-trains/job-dispatcher#parallel-dis
 | Service | Lifetime | Description |
 |---------|----------|-------------|
 | `RemoteWorkerOptions` | Singleton | Configuration options |
-| `HttpJobSubmitter` | Scoped (concrete type) | Dispatches jobs via HTTP POST — resolved per train via routing |
+| `HttpJobSubmitter` | Scoped (concrete type) | Dispatches jobs via HTTP POST, resolved per train via routing |
 
 > **Note:** `UseRemoteWorkers()` does **not** replace the default `IJobSubmitter`. Local workers continue to run for trains not routed to this endpoint.
 
@@ -187,7 +187,7 @@ When the JobDispatcher processes a work queue entry, it checks the `JobSubmitter
 2. POSTs the JSON payload to `BaseUrl`
 3. Returns a synthetic job ID (`"http-{guid}"`)
 
-The remote endpoint is responsible for running `JobRunnerTrain` — which loads the metadata from the shared Postgres database, validates the job state, executes the train, and updates the manifest.
+The remote endpoint is responsible for running `JobRunnerTrain`, which loads the metadata from the shared Postgres database, validates the job state, executes the train, and updates the manifest.
 
 ## Package
 
@@ -197,8 +197,8 @@ dotnet add package Trax.Scheduler
 
 ## See Also
 
-- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
-- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) — setting up the remote receiver endpoint
-- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) — customizing the local (default) execution backend
-- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) — Lambda-based per-train dispatch (direct SDK invocation)
-- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) — SQS-based per-train dispatch
+- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner): setting up the remote receiver endpoint
+- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers): customizing the local (default) execution backend
+- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers): Lambda-based per-train dispatch (direct SDK invocation)
+- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers): SQS-based per-train dispatch

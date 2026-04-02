@@ -28,7 +28,7 @@ services.AddTrax(trax => trax
 
 When `serializeJunctionData` is `false` (the default), the junction logger records timing, types, and Railway state but not the actual output values.
 
-When `true`, after each junction completes, the logger serializes the junction's output to JSON and stores it in `JunctionMetadata.OutputJson`. This is useful for debugging — you can see exactly what each junction produced — but adds serialization overhead per junction.
+When `true`, after each junction completes, the logger serializes the junction's output to JSON and stores it in `JunctionMetadata.OutputJson`. This is useful for debugging since you can see exactly what each junction produced, but it adds serialization overhead per junction.
 
 ## How It Works
 
@@ -49,7 +49,7 @@ After the junction completes:
 | Field | Description |
 |-------|-------------|
 | `EndTimeUtc` | When the junction finished |
-| `State` | Railway state — `Right` (success), `Left` (failure), or `Bottom` |
+| `State` | Railway state: `Right` (success), `Left` (failure), or `Bottom` |
 | `HasRan` | Whether the junction actually executed (skipped on failure track) |
 | `OutputJson` | Serialized output (only if `serializeJunctionData: true`) |
 
@@ -63,9 +63,9 @@ See [Junctions: EffectJunction vs Junction](/docs/core/trains-and-junctions#effe
 
 ## When to Use It
 
-- **Debugging slow trains** — The timing data shows which junction is the bottleneck.
-- **Tracing failures** — The Railway state tells you exactly where and why a train switched to the left track.
-- **Development** — Pair with `serializeJunctionData: true` to see junction-by-junction data flow through the chain.
+- **Debugging slow trains**: The timing data shows which junction is the bottleneck.
+- **Tracing failures**: The Railway state tells you exactly where and why a train switched to the left track.
+- **Development**: Pair with `serializeJunctionData: true` to see junction-by-junction data flow through the chain.
 
 ## SDK Reference
 

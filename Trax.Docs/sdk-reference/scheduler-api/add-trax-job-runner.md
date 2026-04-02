@@ -8,7 +8,7 @@ nav_order: 10
 
 # AddTraxJobRunner
 
-Registers the minimal services needed to run `JobRunnerTrain` without the full scheduler. Used on the **remote receiver side** — the process that actually executes trains dispatched by a scheduler via `UseRemoteWorkers()`. Also documents `UseTraxRunEndpoint()` for handling synchronous `run` requests from `UseRemoteRun()`.
+Registers the minimal services needed to run `JobRunnerTrain` without the full scheduler. Used on the **remote receiver side**, the process that actually executes trains dispatched by a scheduler via `UseRemoteWorkers()`. Also documents `UseTraxRunEndpoint()` for handling synchronous `run` requests from `UseRemoteRun()`.
 
 ## Signatures
 
@@ -93,7 +93,7 @@ app.Run();
 
 ### With ASP.NET Authentication
 
-Trax doesn't bake in any auth. The endpoint mapped by `UseTraxJobRunner()` is a standard ASP.NET minimal API endpoint — secure it however you normally would:
+Trax doesn't bake in any auth. The endpoint mapped by `UseTraxJobRunner()` is a standard ASP.NET minimal API endpoint. Secure it however you normally would:
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -156,7 +156,7 @@ Registers the minimum set of services to run `JobRunnerTrain`:
 | `IJobRunnerTrain` → `JobRunnerTrain` | Scoped | The train execution pipeline |
 | `ITraxRequestHandler` → `TraxRequestHandler` | Scoped | Hosting-agnostic request handler for execute/run paths |
 
-**Not registered:** ManifestManager, JobDispatcher, polling services, startup service, `LocalWorkerService`. This process only runs trains — it doesn't schedule or dispatch them.
+**Not registered:** ManifestManager, JobDispatcher, polling services, startup service, `LocalWorkerService`. This process only runs trains; it doesn't schedule or dispatch them.
 
 ### UseTraxJobRunner
 
@@ -183,9 +183,9 @@ Maps a `POST` endpoint at the specified route that handles synchronous run reque
 
 The remote process must:
 
-- **Reference the same train assemblies** passed to `AddMediator()` — train types are resolved by fully-qualified name
-- **Connect to the same Postgres database** — metadata, manifests, and state are shared across all processes
-- **Register the effect system** — `AddTrax()` with `UsePostgres()` is required
+- **Reference the same train assemblies** passed to `AddMediator()`. Train types are resolved by fully-qualified name.
+- **Connect to the same Postgres database.** Metadata, manifests, and state are shared across all processes.
+- **Register the effect system.** `AddTrax()` with `UsePostgres()` is required.
 
 ## Package
 
@@ -195,7 +195,7 @@ dotnet add package Trax.Scheduler
 
 ## See Also
 
-- [Remote Execution](/docs/scheduler/remote-execution) — architecture overview and deployment models
-- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) — scheduler-side configuration for HTTP dispatch (queue path)
-- [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) — scheduler-side configuration for remote run execution
-- [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) — standalone worker (poll-based alternative)
+- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers): scheduler-side configuration for HTTP dispatch (queue path)
+- [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run): scheduler-side configuration for remote run execution
+- [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker): standalone worker (poll-based alternative)

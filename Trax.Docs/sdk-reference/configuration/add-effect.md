@@ -72,11 +72,11 @@ public static TraxEffectBuilder AddJunctionEffect<TIJunctionEffectProviderFactor
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `toggleable` | `bool` | No | `true` | Whether the effect can be enabled/disabled at runtime via the effect registry. Set to `false` for essential effects (like data persistence). |
-| `factory` | `TEffectProviderFactory` | No | — | A pre-created factory instance (instance overloads only) |
+| `factory` | `TEffectProviderFactory` | No | N/A | A pre-created factory instance (instance overloads only) |
 
 ## Returns
 
-`TraxEffectBuilder` — for continued fluent chaining.
+`TraxEffectBuilder`, for continued fluent chaining.
 
 ## Example
 

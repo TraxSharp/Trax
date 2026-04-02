@@ -10,7 +10,7 @@ nav_order: 1
 
 Stores the train input (and optional extra objects) into Memory. Used in the `RunInternal` path as the **first** method call. After activation, the input is available to subsequent junctions via Memory's type-based lookup.
 
-> **Note:** When using `Junctions()`, activation happens automatically — you do not call `Activate` yourself. This method is only needed when overriding `RunInternal`.
+> **Note:** When using `Junctions()`, activation happens automatically and you do not call `Activate` yourself. This method is only needed when overriding `RunInternal`.
 
 ## Signature
 
@@ -18,7 +18,7 @@ Stores the train input (and optional extra objects) into Memory. Used in the `Ru
 // Train<TInput, TReturn>
 public Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs)
 
-// ServiceTrain<TIn, TOut> — overrides to inject ServiceProvider for junction DI
+// ServiceTrain<TIn, TOut>: overrides to inject ServiceProvider for junction DI
 public new Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs)
 ```
 
@@ -31,7 +31,7 @@ public new Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs)
 
 ## Returns
 
-`Monad<TInput, TReturn>` — the train instance, for fluent chaining.
+`Monad<TInput, TReturn>`, the train instance, for fluent chaining.
 
 ## Examples
 
@@ -47,7 +47,7 @@ protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderI
 
 ### With Extra Inputs
 
-Pass additional objects into Memory via the `otherInputs` parameter. This is only available in the `RunInternal` path — it's one of the reasons to use `RunInternal` over `Junctions()`:
+Pass additional objects into Memory via the `otherInputs` parameter. This is only available in the `RunInternal` path, and it's one of the reasons to use `RunInternal` over `Junctions()`:
 
 ```csharp
 protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderInput input) =>

@@ -25,7 +25,7 @@ protected override User Junctions() =>
         .Chain<CreateUserJunction>();
 ```
 
-Under the hood, the chain handles the wrapping — if a junction throws, the chain catches it and returns `Left(exception)`. If everything succeeds, you get `Right(result)`. When using `Junctions()`, this is invisible to you. When using `RunInternal`, you work with `Either` directly.
+Under the hood, the chain handles the wrapping. If a junction throws, the chain catches it and returns `Left(exception)`. If everything succeeds, you get `Right(result)`. When using `Junctions()`, this is invisible to you. When using `RunInternal`, you work with `Either` directly.
 
 To inspect the result:
 
@@ -43,7 +43,7 @@ if (result.IsRight)
 }
 ```
 
-This is the foundation of [Railway Oriented Programming](railway-programming.md) — the right track carries `Right` values, the left track carries `Left` values.
+This is the foundation of [Railway Oriented Programming](railway-programming.md). The right track carries `Right` values, the left track carries `Left` values.
 
 ## Unit
 
@@ -68,14 +68,14 @@ public class ValidateEmailJunction : Junction<CreateUserRequest, Unit>
 
 ## Effects
 
-In functional programming, an *effect* is a side effect — anything that reaches outside the function boundary. Database writes, HTTP calls, logging, file I/O: these are all effects. A pure function takes input and returns output without touching the outside world. Obviously, a train that does nothing observable isn't very useful, so the question becomes: how do you manage side effects without scattering them through every junction?
+In functional programming, an *effect* is a side effect, anything that reaches outside the function boundary. Database writes, HTTP calls, logging, file I/O: these are all effects. A pure function takes input and returns output without touching the outside world. Obviously, a train that does nothing observable isn't very useful, so the question becomes: how do you manage side effects without scattering them through every junction?
 
-In Trax, effects are operations that happen as the train passes through its route. Junctions don't write directly to a database or logger. Instead, the train tracks models (like `Metadata`) during the journey, and **effect providers** handle the actual work at the end. On both tracks, effect providers run `SaveChanges` — metadata (state, timing, errors) is always persisted. If the train reaches the right track (success), output is recorded alongside the metadata. If any junction switches the train to the left track (failure), the exception and failure details are recorded, but user-tracked models added via custom effect providers are not committed.
+In Trax, effects are operations that happen as the train passes through its route. Junctions don't write directly to a database or logger. Instead, the train tracks models (like `Metadata`) during the journey, and **effect providers** handle the actual work at the end. On both tracks, effect providers run `SaveChanges` and metadata (state, timing, errors) is always persisted. If the train reaches the right track (success), output is recorded alongside the metadata. If any junction switches the train to the left track (failure), the exception and failure details are recorded, but user-tracked models added via custom effect providers are not committed.
 
 This gives you two things:
 
-1. **Full audit trails** — Every run produces a metadata record regardless of outcome. Failures capture exception details, timing, and which junction failed.
-2. **Modularity** — Each effect provider is an independent plugin. Adding Postgres persistence doesn't change your train code. Removing the JSON logger doesn't either.
+1. **Full audit trails.** Every run produces a metadata record regardless of outcome. Failures capture exception details, timing, and which junction failed.
+2. **Modularity.** Each effect provider is an independent plugin. Adding Postgres persistence doesn't change your train code. Removing the JSON logger doesn't either.
 
 ```csharp
 services.AddTrax(trax => trax
@@ -88,7 +88,7 @@ services.AddTrax(trax => trax
 );
 ```
 
-Remove any line and the train still runs — it just passes through fewer junctions. Add a line and you gain new observability without modifying a single junction.
+Remove any line and the train still runs. It just passes through fewer junctions. Add a line and you gain new observability without modifying a single junction.
 
 The `ServiceTrain` base class manages this lifecycle. When you use a plain `Train`, you get routing and error propagation but no effect providers. When you use `ServiceTrain`, you get the full effect provider network on top.
 

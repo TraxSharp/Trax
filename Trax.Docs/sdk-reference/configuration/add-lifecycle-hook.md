@@ -8,7 +8,7 @@ nav_order: 11
 
 # AddLifecycleHook
 
-Registers a lifecycle hook that fires on train state transitions. Use lifecycle hooks to trigger side effects when trains start, complete, fail, or are cancelled — without coupling your train logic to the side effect.
+Registers a lifecycle hook that fires on train state transitions. Use lifecycle hooks to trigger side effects when trains start, complete, fail, or are cancelled, without coupling your train logic to the side effect.
 
 ## Signatures
 
@@ -21,7 +21,7 @@ public static TraxEffectBuilder AddLifecycleHook<T>(
 ) where T : class // ITrainLifecycleHook or ITrainLifecycleHookFactory
 ```
 
-When `T` implements `ITrainLifecycleHook`, a factory is created internally — no need to write a factory class. When `T` implements `ITrainLifecycleHookFactory`, it is registered directly (advanced).
+When `T` implements `ITrainLifecycleHook`, a factory is created internally and there is no need to write a factory class. When `T` implements `ITrainLifecycleHookFactory`, it is registered directly (advanced).
 
 Register with an existing factory instance:
 
@@ -35,8 +35,8 @@ public static TraxEffectBuilder AddLifecycleHook<TFactory>(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `builder` | `TraxEffectBuilder` | Yes | — | The effect configuration builder |
-| `factory` | `TFactory` | No | — | An existing factory instance (when not using DI to create it) |
+| `builder` | `TraxEffectBuilder` | Yes | N/A | The effect configuration builder |
+| `factory` | `TFactory` | No | N/A | An existing factory instance (when not using DI to create it) |
 | `toggleable` | `bool` | No | `true` | Whether the hook can be enabled/disabled at runtime via `IEffectRegistry` |
 
 ## ITrainLifecycleHook
@@ -68,10 +68,10 @@ The input is set before junctions execute; the output is set only after a succes
 
 | Hook | `TrainInput` / `GetInput<T>()` | `TrainOutput` / `GetOutput<T>()` |
 |------|------|-------|
-| `OnStarted` | Yes | No — train hasn't run yet |
+| `OnStarted` | Yes | No (train hasn't run yet) |
 | `OnCompleted` | Yes | Yes |
-| `OnFailed` | Yes | No — train failed before producing output |
-| `OnCancelled` | Yes | No — train was cancelled |
+| `OnFailed` | Yes | No (train failed before producing output) |
+| `OnCancelled` | Yes | No (train was cancelled) |
 
 When unavailable, both return `default` (`null` for reference types, zero for value types).
 
@@ -106,7 +106,7 @@ protected TIn TrainInput   // available in all hooks
 protected TOut TrainOutput  // available in OnCompleted (default in OnFailed/OnCancelled)
 ```
 
-No casting, no type parameters — the types come from the train's generic arguments:
+No casting, no type parameters. The types come from the train's generic arguments:
 
 ```csharp
 public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
@@ -134,11 +134,11 @@ public interface ITrainLifecycleHookFactory
 }
 ```
 
-Most users do not need to implement this interface — `AddLifecycleHook<THook>()` generates a factory automatically. Use a custom factory only if you need non-standard creation logic. The factory is a singleton; it creates a new hook instance per train execution.
+Most users do not need to implement this interface. `AddLifecycleHook<THook>()` generates a factory automatically. Use a custom factory only if you need non-standard creation logic. The factory is a singleton; it creates a new hook instance per train execution.
 
 ## Error Handling
 
-Lifecycle hook exceptions are **caught and logged, never propagated**. A failing hook will never cause a train to fail. This is intentional — side effects like posting to Grafana or sending Slack notifications should not affect train reliability.
+Lifecycle hook exceptions are **caught and logged, never propagated**. A failing hook will never cause a train to fail. This is intentional: side effects like posting to Grafana or sending Slack notifications should not affect train reliability.
 
 ## Example: Custom Slack Notification Hook
 
@@ -162,7 +162,7 @@ builder.Services.AddTrax(trax => trax
 );
 ```
 
-No factory class needed — Trax creates one internally and resolves your hook's constructor dependencies from DI.
+No factory class needed. Trax creates one internally and resolves your hook's constructor dependencies from DI.
 
 ## Built-in Hooks
 
@@ -197,7 +197,7 @@ public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
 }
 ```
 
-No registration needed — just `override` the method. The available methods match the global hook interface:
+No registration needed, just `override` the method. The available methods match the global hook interface:
 
 | Method | Signature |
 |--------|-----------|
@@ -215,7 +215,7 @@ In addition to the `metadata` parameter, per-train hooks can use the `TrainInput
 | | Global (`AddLifecycleHook<T>`) | Per-Train (`override`) |
 |---|---|---|
 | Scope | Fires for every train | Fires only for the overriding train |
-| Registration | `AddLifecycleHook<T>()` in builder | No registration — just override |
+| Registration | `AddLifecycleHook<T>()` in builder | No registration, just override |
 | DI access | Constructor injection on the hook class | Constructor injection on the train itself |
 | Execution order | Fires first | Fires after global hooks |
 | Error handling | Caught and logged | Caught and logged |

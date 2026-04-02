@@ -19,7 +19,7 @@ public static TBuilder AddJson<TBuilder>(
     where TBuilder : TraxEffectBuilder
 ```
 
-The generic type parameter `TBuilder` is inferred by the compiler — callers just write `.AddJson()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
+The generic type parameter `TBuilder` is inferred by the compiler, so callers just write `.AddJson()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
 
 ## Parameters
 
@@ -27,7 +27,7 @@ None.
 
 ## Returns
 
-`TBuilder` — the same builder type that was passed in, for continued fluent chaining.
+`TBuilder`, the same builder type that was passed in, for continued fluent chaining.
 
 ## Example
 
@@ -42,7 +42,7 @@ services.AddTrax(trax => trax
 
 ## Remarks
 
-- This is a **toggleable** effect — it can be enabled/disabled at runtime via the effect registry.
+- This is a **toggleable** effect that can be enabled/disabled at runtime via the effect registry.
 - Useful for auditing and debugging to see exactly what data each junction modified.
 - Has a performance cost due to serialization on every junction execution. Consider disabling in performance-critical production environments.
 

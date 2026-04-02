@@ -19,7 +19,7 @@ Trains without this attribute run normally but are silently skipped by both the 
 public class TraxBroadcastAttribute : Attribute { }
 ```
 
-A simple marker attribute with no properties — just opt-in/opt-out.
+A simple marker attribute with no properties, just opt-in/opt-out.
 
 ## Example
 

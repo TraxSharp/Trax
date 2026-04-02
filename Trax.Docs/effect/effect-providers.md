@@ -8,7 +8,7 @@ has_children: true
 
 # Configuring Effect Providers
 
-Effect providers handle side effects as a train runs — database writes, logging, serialization. Each provider is independent: add or remove any of them without changing your train code. For the conceptual background, see [Effect overview](/docs/effect).
+Effect providers handle side effects as a train runs: database writes, logging, serialization. Each provider is independent: add or remove any of them without changing your train code. For the conceptual background, see [Effect overview](/docs/effect).
 
 ## Database Persistence (Postgres or InMemory)
 
@@ -51,7 +51,7 @@ services.AddTrax(trax => trax
 );
 ```
 
-This doesn't persist anything — it just logs. Useful for seeing what's happening without setting up a database.
+This doesn't persist anything. It just logs. Useful for seeing what's happening without setting up a database.
 
 See [JSON Effect](effect-providers/json-effect.md) for how change detection works.
 
@@ -114,8 +114,8 @@ services.AddTrax(trax => trax
 
 This registers two junction-level effect providers:
 
-1. **CancellationCheckProvider** — Before each junction, queries the database for `Metadata.CancellationRequested`. If `true`, throws `OperationCanceledException`, which maps to `TrainState.Cancelled`.
-2. **JunctionProgressProvider** — Before each junction, writes the junction name and start time to `Metadata.CurrentlyRunningJunction` and `Metadata.JunctionStartedAt`. After the junction, clears both columns.
+1. **CancellationCheckProvider** queries the database for `Metadata.CancellationRequested` before each junction. If `true`, throws `OperationCanceledException`, which maps to `TrainState.Cancelled`.
+2. **JunctionProgressProvider** writes the junction name and start time to `Metadata.CurrentlyRunningJunction` and `Metadata.JunctionStartedAt` before each junction. After the junction, clears both columns.
 
 The cancellation check runs first so a cancelled train never writes progress columns for a junction that won't execute. Requires junctions to inherit from `EffectJunction<TIn, TOut>`.
 
@@ -123,7 +123,7 @@ See [Junction Progress](effect-providers/junction-progress.md) for the dual-path
 
 ## Lifecycle Hooks (`AddLifecycleHook`)
 
-**Use when:** You want side effects to fire on train state transitions — notifications, metrics, real-time updates — without coupling your train code to those concerns.
+**Use when:** You want side effects to fire on train state transitions (notifications, metrics, real-time updates) without coupling your train code to those concerns.
 
 ```csharp
 services.AddTrax(trax => trax
@@ -133,7 +133,7 @@ services.AddTrax(trax => trax
 );
 ```
 
-Lifecycle hooks implement `ITrainLifecycleHook` and fire at four points: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. Unlike effect providers, hook exceptions are **caught and logged, never propagated** — a failing Slack webhook will never cause a train to fail.
+Lifecycle hooks implement `ITrainLifecycleHook` and fire at four points: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. Unlike effect providers, hook exceptions are **caught and logged, never propagated**. A failing Slack webhook will never cause a train to fail.
 
 The `Trax.Api.GraphQL` package includes a built-in hook (`GraphQLSubscriptionHook`) that publishes lifecycle events to [GraphQL subscriptions](/docs/sdk-reference/graphql-api/subscriptions) over WebSocket. It's automatically registered by `AddTraxGraphQL()`. Only trains decorated with [`[TraxBroadcast]`](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) have their events published.
 
