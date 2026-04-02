@@ -3,13 +3,13 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Api.GraphQL)](https://www.nuget.org/packages/Trax.Api.GraphQL/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-GraphQL API for [Trax](https://www.nuget.org/packages/Trax.Effect/) — expose train discovery, execution, and scheduler operations over HTTP via HotChocolate.
+GraphQL API for [Trax](https://www.nuget.org/packages/Trax.Effect/). Exposes train discovery, execution, and scheduler operations over HTTP via HotChocolate.
 
 ## What This Does
 
-Adds a programmatic interface to your train network. External consumers can discover registered trains, run them on demand, queue work for the scheduler, and manage manifests — all through a typed GraphQL schema.
+Adds a programmatic interface to your train network. External consumers can discover registered trains, run them on demand, queue work for the scheduler, and manage manifests, all through a typed GraphQL schema.
 
-The API is designed to run on a **separate machine** from the scheduler. Both share a PostgreSQL database: the API writes work queue entries, the scheduler polls and dispatches. This means the API server is a thin HTTP layer — no polling services or background workers.
+The API is designed to run on a **separate machine** from the scheduler. Both share a PostgreSQL database: the API writes work queue entries, the scheduler polls and dispatches. This means the API server is a thin HTTP layer with no polling services or background workers.
 
 ## Installation
 
@@ -17,7 +17,7 @@ The API is designed to run on a **separate machine** from the scheduler. Both sh
 dotnet add package Trax.Api.GraphQL
 ```
 
-`Trax.Api.GraphQL` depends on `Trax.Api` — you don't need to reference it directly.
+`Trax.Api.GraphQL` depends on `Trax.Api`, so you don't need to reference it directly.
 
 ## Setup
 
@@ -68,12 +68,12 @@ public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrai
 
 | Package | Description |
 |---------|-------------|
-| `Trax.Api` | Core library — DTOs, health check, shared service registration |
+| `Trax.Api` | Core library: DTOs, health check, shared service registration |
 | `Trax.Api.GraphQL` | HotChocolate schema (queries, mutations, subscriptions) |
 
 ## Part of Trax
 
-Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
+Trax is a layered framework. Each package builds on the one below it, so stop at whatever layer solves your problem.
 
 ```
 Trax.Core              pipelines, junctions, railway error propagation
