@@ -242,4 +242,195 @@ public class RemoteErrorRoundTripTests
     }
 
     #endregion
+
+    #region AddException Exception.Data Priority
+
+    [Test]
+    public void AddException_WithExceptionDataDictionary_PrefersStructuredData()
+    {
+        // Arrange — attach TrainExceptionData via Exception.Data (local execution path)
+        var exception = new InvalidOperationException("raw message");
+        var data = new TrainExceptionData
+        {
+            TrainName = "MyTrain",
+            TrainExternalId = "ext-1",
+            Type = "InvalidOperationException",
+            Junction = "MyJunction",
+            Message = "structured message",
+            StackTrace = "at MyApp.MyJunction.Run()",
+        };
+        exception.Data["TrainExceptionData"] = data;
+
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Test.Train",
+                ExternalId = "test",
+                Input = null,
+            }
+        );
+
+        // Act
+        metadata.AddException(exception);
+
+        // Assert — should use the structured data, not the raw exception
+        metadata.FailureException.Should().Be("InvalidOperationException");
+        metadata.FailureJunction.Should().Be("MyJunction");
+        metadata.FailureReason.Should().Be("structured message");
+        metadata.StackTrace.Should().Be("at MyApp.MyJunction.Run()");
+    }
+
+    [Test]
+    public void AddException_WithJsonMessage_FallsBackToDeserialization()
+    {
+        // Arrange — JSON in message (remote execution path), no Data dictionary
+        var jsonData = new TrainExceptionData
+        {
+            TrainName = "RemoteTrain",
+            TrainExternalId = "ext-2",
+            Type = "ArgumentException",
+            Junction = "RemoteJunction",
+            Message = "bad input",
+            StackTrace = "at Remote.Junction.Run()",
+        };
+        var exception = new TrainException(JsonSerializer.Serialize(jsonData));
+
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Test.Train",
+                ExternalId = "test",
+                Input = null,
+            }
+        );
+
+        // Act
+        metadata.AddException(exception);
+
+        // Assert
+        metadata.FailureException.Should().Be("ArgumentException");
+        metadata.FailureJunction.Should().Be("RemoteJunction");
+        metadata.FailureReason.Should().Be("bad input");
+        metadata.StackTrace.Should().Be("at Remote.Junction.Run()");
+    }
+
+    [Test]
+    public void AddException_WithExceptionDataAndStackTrace_PrefersOriginalStackTrace()
+    {
+        // Arrange — exception has a real stack trace from being thrown,
+        // but TrainExceptionData has the original (correct) stack trace
+        Exception thrownException;
+        try
+        {
+            throw new InvalidOperationException("test");
+        }
+        catch (Exception ex)
+        {
+            thrownException = ex;
+        }
+
+        var data = new TrainExceptionData
+        {
+            TrainName = "MyTrain",
+            TrainExternalId = "ext-1",
+            Type = "InvalidOperationException",
+            Junction = "OriginalJunction",
+            Message = "test",
+            StackTrace = "at Original.Junction.Run() in /app/Junction.cs:line 10",
+        };
+        thrownException.Data["TrainExceptionData"] = data;
+
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Test.Train",
+                ExternalId = "test",
+                Input = null,
+            }
+        );
+
+        // Act
+        metadata.AddException(thrownException);
+
+        // Assert — should prefer the TrainExceptionData.StackTrace over the exception's own
+        metadata.StackTrace.Should().Be("at Original.Junction.Run() in /app/Junction.cs:line 10");
+        metadata.StackTrace.Should().NotBe(thrownException.StackTrace);
+    }
+
+    [Test]
+    public void AddException_WithExceptionDataNoStackTrace_FallsBackToExceptionStackTrace()
+    {
+        // Arrange — TrainExceptionData has null StackTrace (backwards compat)
+        Exception thrownException;
+        try
+        {
+            throw new InvalidOperationException("test");
+        }
+        catch (Exception ex)
+        {
+            thrownException = ex;
+        }
+
+        var data = new TrainExceptionData
+        {
+            TrainName = "MyTrain",
+            TrainExternalId = "ext-1",
+            Type = "InvalidOperationException",
+            Junction = "MyJunction",
+            Message = "test",
+            StackTrace = null,
+        };
+        thrownException.Data["TrainExceptionData"] = data;
+
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Test.Train",
+                ExternalId = "test",
+                Input = null,
+            }
+        );
+
+        // Act
+        metadata.AddException(thrownException);
+
+        // Assert — should fall back to trainException.StackTrace
+        metadata.StackTrace.Should().Be(thrownException.StackTrace);
+        metadata.StackTrace.Should().NotBeNullOrEmpty();
+    }
+
+    [Test]
+    public void AddException_PlainException_UsesExceptionDirectly()
+    {
+        // Arrange — plain exception with no Trax context at all
+        Exception thrownException;
+        try
+        {
+            throw new InvalidOperationException("plain error");
+        }
+        catch (Exception ex)
+        {
+            thrownException = ex;
+        }
+
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Test.Train",
+                ExternalId = "test",
+                Input = null,
+            }
+        );
+
+        // Act
+        metadata.AddException(thrownException);
+
+        // Assert
+        metadata.FailureException.Should().Be("InvalidOperationException");
+        metadata.FailureReason.Should().Be("plain error");
+        metadata.FailureJunction.Should().Be("TrainException");
+        metadata.StackTrace.Should().Be(thrownException.StackTrace);
+    }
+
+    #endregion
 }
