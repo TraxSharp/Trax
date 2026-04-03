@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
@@ -34,7 +35,8 @@ internal class DispatchJobsJunction(
     IServiceProvider serviceProvider,
     ILogger<DispatchJobsJunction> logger,
     JobSubmitterRoutingConfiguration routingConfiguration,
-    SchedulerConfiguration schedulerConfiguration
+    SchedulerConfiguration schedulerConfiguration,
+    ISqlDialect sqlDialect
 ) : EffectJunction<List<WorkQueue>, Unit>
 {
     public override async Task<Unit> Run(List<WorkQueue> entries)
@@ -128,14 +130,7 @@ internal class DispatchJobsJunction(
 
         // Atomically claim the entry — skips entries locked by other dispatchers
         var claimed = await dataContext
-            .WorkQueues.FromSqlRaw(
-                """
-                SELECT * FROM trax.work_queue
-                WHERE id = {0} AND status = 'queued'
-                FOR UPDATE SKIP LOCKED
-                """,
-                entry.Id
-            )
+            .WorkQueues.FromSqlRaw(sqlDialect.ClaimWorkQueueEntry(), entry.Id)
             .FirstOrDefaultAsync(CancellationToken);
 
         if (claimed is null)

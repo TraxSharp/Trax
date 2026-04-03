@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Trains.ManifestManager;
 
@@ -25,7 +26,8 @@ namespace Trax.Scheduler.Services.ManifestManagerPollingService;
 internal class ManifestManagerPollingService(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration,
-    ILogger<ManifestManagerPollingService> logger
+    ILogger<ManifestManagerPollingService> logger,
+    ISqlDialect? sqlDialect = null
 ) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -70,7 +72,7 @@ internal class ManifestManagerPollingService(
 
                 var acquired = await ((DbContext)dataContext)
                     .Database.SqlQuery<bool>(
-                        $"""SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager')) AS "Value" """
+                        sqlDialect!.TryAcquireLeaderLock("trax_manifest_manager")
                     )
                     .FirstAsync(cancellationToken);
 

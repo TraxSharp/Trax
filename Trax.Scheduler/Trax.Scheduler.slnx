@@ -9,5 +9,6 @@
     <Project Path="tests/Trax.Scheduler.Tests/Trax.Scheduler.Tests.csproj" />
     <Project Path="tests/Trax.Scheduler.Tests.ArrayLogger/Trax.Scheduler.Tests.ArrayLogger.csproj" />
     <Project Path="tests/Trax.Scheduler.Tests.Integration/Trax.Scheduler.Tests.Integration.csproj" />
+    <Project Path="tests/Trax.Scheduler.Tests.Sqlite.Integration/Trax.Scheduler.Tests.Sqlite.Integration.csproj" />
   </Folder>
 </Solution>

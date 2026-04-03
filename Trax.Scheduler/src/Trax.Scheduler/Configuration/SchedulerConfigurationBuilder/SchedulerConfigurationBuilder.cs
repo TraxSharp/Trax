@@ -295,12 +295,12 @@ public partial class SchedulerConfigurationBuilder
         if (!_parentBuilder.HasDataProvider)
         {
             throw new InvalidOperationException(
-                "AddScheduler() requires a data provider (UsePostgres() or UseInMemory()). "
+                "AddScheduler() requires a data provider (UsePostgres(), UseSqlite(), or UseInMemory()). "
                     + "The scheduler's background services need a data context to manage manifests, "
                     + "metadata, and work queue entries.\n\n"
                     + "Add a data provider to your effects configuration:\n\n"
                     + "  services.AddTrax(trax => trax\n"
-                    + "      .AddEffects(effects => effects.UsePostgres(connectionString)) // or .UseInMemory()\n"
+                    + "      .AddEffects(effects => effects.UsePostgres(connectionString)) // or .UseSqlite(connectionString) / .UseInMemory()\n"
                     + "      .AddMediator(assemblies)\n"
                     + "      .AddScheduler(scheduler => ...)\n"
                     + "  );\n"

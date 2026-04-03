@@ -1,6 +1,7 @@
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.EffectJunction;
@@ -23,8 +24,11 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 /// <see cref="SchedulerConfiguration.MaxQueuedJobsPerCycle"/> controls the per-group batch limit.
 /// <see cref="ApplyCapacityLimitsJunction"/> handles the actual global and per-group dispatch caps.
 /// </remarks>
-internal class LoadQueuedJobsJunction(IDataContext dataContext, SchedulerConfiguration config)
-    : EffectJunction<Unit, List<WorkQueue>>
+internal class LoadQueuedJobsJunction(
+    IDataContext dataContext,
+    SchedulerConfiguration config,
+    ISqlDialect sqlDialect
+) : EffectJunction<Unit, List<WorkQueue>>
 {
     public override async Task<List<WorkQueue>> Run(Unit input)
     {
@@ -65,28 +69,8 @@ internal class LoadQueuedJobsJunction(IDataContext dataContext, SchedulerConfigu
         // Note: ORDER BY is applied in-memory after loading because EF Core wraps FromSqlRaw
         // in a subquery when .Include() is chained, and Postgres does not guarantee ORDER BY
         // preservation through subqueries.
-        const string sql = """
-            WITH ranked AS (
-                SELECT wq.id,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY m.manifest_group_id
-                           ORDER BY wq.priority DESC, wq.created_at ASC
-                       ) AS rn
-                FROM trax.work_queue wq
-                JOIN trax.manifest m ON wq.manifest_id = m.id
-                JOIN trax.manifest_group mg ON m.manifest_group_id = mg.id
-                WHERE wq.status = 'queued'
-                  AND mg.is_enabled = true
-                  AND (wq.scheduled_at IS NULL OR wq.scheduled_at <= NOW())
-            )
-            SELECT wq.* FROM trax.work_queue wq
-            WHERE wq.id IN (SELECT ranked.id FROM ranked WHERE ranked.rn <= {0})
-               OR (wq.manifest_id IS NULL AND wq.status = 'queued'
-                   AND (wq.scheduled_at IS NULL OR wq.scheduled_at <= NOW()))
-            """;
-
         var entries = await dataContext
-            .WorkQueues.FromSqlRaw(sql, perGroupLimit)
+            .WorkQueues.FromSqlRaw(sqlDialect.LoadGroupFairQueuedJobs(), perGroupLimit)
             .AsNoTracking()
             .Include(q => q.Manifest)
                 .ThenInclude(m => m!.ManifestGroup)
