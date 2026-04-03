@@ -51,7 +51,7 @@ public partial class TraxBuilder(IServiceCollection services, IEffectRegistry re
     public bool HasDatabaseProvider { get; set; }
 
     /// <summary>
-    /// Whether any data provider (<c>UsePostgres()</c> or <c>UseInMemory()</c>) was configured.
+    /// Whether any data provider (<c>UsePostgres()</c>, <c>UseSqlite()</c>, or <c>UseInMemory()</c>) was configured.
     /// Unlike <see cref="HasDatabaseProvider"/> (Postgres only), this is true for all data providers.
     /// Used for build-time validation of features that require any data context.
     /// </summary>

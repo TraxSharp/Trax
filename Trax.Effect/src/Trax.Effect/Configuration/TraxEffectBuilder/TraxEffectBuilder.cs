@@ -12,7 +12,7 @@ namespace Trax.Effect.Configuration.TraxEffectBuilder;
 /// Builder for configuring the Trax effect system (data providers, junction providers, lifecycle hooks).
 /// </summary>
 /// <remarks>
-/// After calling a data provider method (<c>UsePostgres()</c> or <c>UseInMemory()</c>), the builder
+/// After calling a data provider method (<c>UsePostgres()</c>, <c>UseSqlite()</c>, or <c>UseInMemory()</c>), the builder
 /// is promoted to <see cref="TraxEffectBuilderWithData"/>, which unlocks additional methods such as
 /// <c>AddDataContextLogging()</c>. All general effect methods (e.g., <c>AddJson()</c>,
 /// <c>SaveTrainParameters()</c>) are available on both types via generic self-type preservation.
@@ -68,7 +68,7 @@ public partial class TraxEffectBuilder
     }
 
     /// <summary>
-    /// Whether any data provider (<c>UsePostgres()</c> or <c>UseInMemory()</c>) was configured.
+    /// Whether any data provider (<c>UsePostgres()</c>, <c>UseSqlite()</c>, or <c>UseInMemory()</c>) was configured.
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool HasDataProvider

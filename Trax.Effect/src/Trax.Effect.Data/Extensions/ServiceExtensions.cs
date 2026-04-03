@@ -24,11 +24,11 @@ public static class ServiceExtensions
 {
     /// <summary>
     /// Adds data context logging to the Trax.Effect system.
-    /// Requires a data provider (<c>UsePostgres()</c> or <c>UseInMemory()</c>) to have been configured first.
+    /// Requires a data provider (<c>UsePostgres()</c>, <c>UseSqlite()</c>, or <c>UseInMemory()</c>) to have been configured first.
     /// </summary>
     /// <param name="configurationBuilder">
     /// The effect builder with a data provider configured. This method is only available
-    /// after calling <c>UsePostgres()</c> or <c>UseInMemory()</c>, which promotes the builder
+    /// after calling <c>UsePostgres()</c>, <c>UseSqlite()</c>, or <c>UseInMemory()</c>, which promotes the builder
     /// to <see cref="TraxEffectBuilderWithData"/>.
     /// </param>
     /// <param name="minimumLogLevel">The minimum log level to capture (defaults to Information if not specified)</param>

@@ -7,13 +7,13 @@ public partial class TraxEffectBuilder
         if (JunctionProgressEnabled && !HasDataProvider)
         {
             throw new InvalidOperationException(
-                "AddJunctionProgress() requires a data provider (UsePostgres() or UseInMemory()). "
+                "AddJunctionProgress() requires a data provider (UsePostgres(), UseSqlite(), or UseInMemory()). "
                     + "Junction progress tracking persists progress to metadata and checks for cancellation signals, "
                     + "which requires a data context.\n\n"
                     + "Add a data provider to your effects configuration:\n\n"
                     + "  services.AddTrax(trax => trax\n"
                     + "      .AddEffects(effects => effects\n"
-                    + "          .UsePostgres(connectionString) // or .UseInMemory()\n"
+                    + "          .UsePostgres(connectionString) // or .UseSqlite(connectionString) / .UseInMemory()\n"
                     + "          .AddJunctionProgress()\n"
                     + "      )\n"
                     + "  );\n"

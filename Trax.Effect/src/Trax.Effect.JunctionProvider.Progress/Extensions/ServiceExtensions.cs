@@ -14,7 +14,7 @@ public static class ServiceExtensions
     /// Adds junction progress tracking and cancellation checking. Each junction's progress
     /// (current junction index, total junctions, junction name) is persisted to metadata, and
     /// the train's cancellation token is checked before each junction executes.
-    /// Requires a data provider (<c>UsePostgres()</c> or <c>UseInMemory()</c>).
+    /// Requires a data provider (<c>UsePostgres()</c>, <c>UseSqlite()</c>, or <c>UseInMemory()</c>).
     /// </summary>
     /// <typeparam name="TBuilder">The builder type (supports chaining through promoted builders).</typeparam>
     /// <param name="configurationBuilder">The effect builder.</param>
