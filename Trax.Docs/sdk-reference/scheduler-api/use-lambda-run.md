@@ -122,7 +122,7 @@ When a GraphQL `run*` mutation is called, the `LambdaRunExecutor`:
 | **Transport** | AWS SDK direct invocation | HTTP POST |
 | **Public endpoint** | None (IAM-governed) | Required (Function URL, API Gateway, or similar) |
 | **Package** | `Trax.Scheduler.Lambda` | `Trax.Scheduler` (built-in) |
-| **Retry** | Handled by AWS SDK | Configurable `HttpRetryOptions` |
+| **Retry** | Configurable `LambdaRetryOptions` | Configurable `HttpRetryOptions` |
 | **Timeout** | Lambda execution timeout (AWS config) | `RemoteRunOptions.Timeout` (default 5 min) |
 
 ## IAM Permissions

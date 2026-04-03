@@ -45,6 +45,17 @@ Defined in `Trax.Scheduler.Lambda.Extensions.LambdaSchedulerExtensions`.
 |----------|------|---------|-------------|
 | `FunctionName` | `string` | _(required)_ | The Lambda function name, ARN, or partial ARN to invoke |
 | `ConfigureLambdaClient` | `Action<AmazonLambdaConfig>?` | `null` | Optional callback to configure the `AmazonLambdaConfig` (set region, endpoint override for LocalStack, etc.) |
+| `Retry` | `LambdaRetryOptions` | _(see below)_ | Retry options for transient AWS failures (429, 502, 503, 504) |
+
+### LambdaRetryOptions
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `MaxRetries` | `int` | 5 | Maximum retry attempts. Set to 0 to disable retries. |
+| `BaseDelay` | `TimeSpan` | 1 second | Starting delay between retries (doubled on each attempt with ±25% jitter) |
+| `MaxDelay` | `TimeSpan` | 30 seconds | Maximum delay cap to prevent unbounded exponential growth |
+
+Retries on AWS status codes 429 (Throttling), 502 (Bad Gateway), 503 (Service Unavailable), and 504 (Gateway Timeout), as well as network-level `HttpRequestException`. Does not retry on `ResourceNotFoundException`, `InvalidParameterValueException`, or Lambda function errors.
 
 ## SubmitterRouting
 
@@ -177,7 +188,6 @@ The scheduler process needs:
 ## Limitations
 
 - **Payload size limit:** Lambda invocation payloads are limited to 256 KB. If your serialized train input exceeds this, store the data externally and pass a reference.
-- **No HTTP retries:** Unlike `UseRemoteWorkers()`, there is no retry configuration. Lambda handles retries at the infrastructure level for async (`Event`) invocations.
 - **Cancellation is process-local:** Same limitation as other remote execution models. Dashboard "Cancel" only affects trains on the same process.
 
 ## See Also
