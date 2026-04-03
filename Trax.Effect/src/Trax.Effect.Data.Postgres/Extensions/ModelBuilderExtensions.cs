@@ -2,7 +2,7 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
-using Trax.Effect.Data.Postgres.Utils;
+using Trax.Effect.Data.Utils;
 using Trax.Effect.Enums;
 using Trax.Effect.Models;
 

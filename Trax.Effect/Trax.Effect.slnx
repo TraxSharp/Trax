@@ -6,6 +6,7 @@
     <Project Path="src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
     <Project Path="src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
     <Project Path="src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <Project Path="src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
   </Folder>
   <Folder Name="/src/broadcaster/">
     <Project Path="src/Trax.Effect.Broadcaster.RabbitMQ/Trax.Effect.Broadcaster.RabbitMQ.csproj" />
@@ -22,6 +23,7 @@
     <Project Path="tests/Trax.Effect.Tests.Integration/Trax.Effect.Tests.Integration.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Json.Integration/Trax.Effect.Tests.Json.Integration.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Data.InMemory.Integration/Trax.Effect.Tests.Data.InMemory.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Data.Sqlite.Integration/Trax.Effect.Tests.Data.Sqlite.Integration.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Benchmarks/Trax.Effect.Tests.Benchmarks.csproj" />
   </Folder>
 </Solution>

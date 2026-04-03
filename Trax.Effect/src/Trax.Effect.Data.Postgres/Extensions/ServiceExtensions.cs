@@ -8,10 +8,12 @@ using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Enums;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Postgres.Services.PostgresContextFactory;
+using Trax.Effect.Data.Postgres.Services.SqlDialect;
 using Trax.Effect.Data.Postgres.Utils;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models;
@@ -153,6 +155,9 @@ public static class ServiceExtensions
         configurationBuilder.AddEffect<IDataContextProviderFactory, PostgresContextProviderFactory>(
             toggleable: false
         );
+
+        // Register the SQL dialect for provider-specific raw SQL
+        configurationBuilder.ServiceCollection.AddSingleton<ISqlDialect, PostgresSqlDialect>();
 
         configurationBuilder.HasDatabaseProvider = true;
         configurationBuilder.HasDataProvider = true;

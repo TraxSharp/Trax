@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageDescription>SQLite Provider for Trax.Effect.Data Library</PackageDescription>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <AssemblyName>Trax.Effect.Data.Sqlite</AssemblyName>
+    <NoWarn>NETSDK1206</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations/*.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
+    <PackageReference Include="dbup-core" Version="5.0.87" />
+    <PackageReference Include="dbup-sqlite" Version="5.0.40" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
+  </ItemGroup>
+</Project>
