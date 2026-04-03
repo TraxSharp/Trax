@@ -88,9 +88,11 @@ The [Analyzer](../core/analyzer.md) catches most of these issues at compile time
 
 ## Train completes but metadata shows "Failed"
 
-Check `FailureException` and `FailureReason` in the metadata record for details. Common causes:
+Check `FailureException` and `FailureReason` in the metadata record for details. `FailureJunction` identifies which junction threw, and `StackTrace` points to the original throw site. Common causes:
 - An effect provider failed during `SaveChanges` (database connection, serialization error)
 - A junction threw after the main train logic completed
+
+If you catch the exception outside Trax, you'll see the original exception type and message. Structured junction context is available via `exception.Data["TrainExceptionData"]`.
 
 ## Junctions execute out of order or skip unexpectedly
 

@@ -37,6 +37,19 @@ Every train execution produces a metadata record. It captures everything about t
 
 The `TrainState` tracks the lifecycle: `Pending` -> `InProgress` -> `Completed`, `Failed`, or `Cancelled`. If a train fails, the metadata record captures the exception, stack trace, and which junction it happened at.
 
+### Failure Fields
+
+When a junction throws, Trax captures structured context without modifying the original exception. The junction name, exception type, original message, and stack trace from the throw site are attached to the exception via `Exception.Data["TrainExceptionData"]`. When the train finishes, `Metadata.AddException()` reads this structured data and populates:
+
+| Field | Source | Example |
+|-------|--------|---------|
+| `FailureJunction` | Junction class name where the throw occurred | `"ValidateInputJunction"` |
+| `FailureException` | Exception type short name | `"InvalidOperationException"` |
+| `FailureReason` | Original exception message (unmodified) | `"Input 'email' was null"` |
+| `StackTrace` | Stack trace from the original throw site | Points to the junction's `Run` method |
+
+The original exception is rethrown to callers with its type, message, and stack trace intact. `TrainExceptionData` rides along in `Exception.Data` for any code that wants structured context (e.g., logging, monitoring).
+
 ## Host Tracking
 
 In distributed environments (Lambda, ECS, multiple servers), every metadata record captures where the train actually executed. Host information is auto-detected at startup and stamped on each execution. See [Host Tracking](host-tracking.md) for details on auto-detection, custom labels, and the builder API.

@@ -490,9 +490,13 @@ When the JobDispatcher dispatches a job, the Metadata record is committed to the
 
 Trax handles this with multiple layers of protection:
 
-### 1. HTTP Retry with Exponential Backoff
+### 1. Retry with Exponential Backoff
 
-`HttpJobSubmitter` and `HttpRunExecutor` automatically retry on transient HTTP status codes (429 Too Many Requests, 502 Bad Gateway, 503 Service Unavailable) with exponential backoff and jitter. This handles short-lived throttling, for example, when AWS Lambda returns 429 because reserved concurrency is exhausted.
+All remote submitters (HTTP and Lambda) retry on transient failures with exponential backoff and jitter.
+
+`HttpJobSubmitter` and `HttpRunExecutor` retry on HTTP 429, 502, and 503. If the server sends a `Retry-After` header, the helper uses that instead of the computed backoff delay.
+
+`LambdaJobSubmitter` and `LambdaRunExecutor` retry on AWS status codes 429 (Throttling), 502, 503, and 504, plus network-level `HttpRequestException`.
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -500,23 +504,31 @@ Trax handles this with multiple layers of protection:
 | `Retry.BaseDelay` | 1 second | Starting delay, doubled on each attempt |
 | `Retry.MaxDelay` | 30 seconds | Cap on exponential growth |
 
-Configure via `RemoteWorkerOptions.Retry` or `RemoteRunOptions.Retry`:
+Configure via the options object on each transport:
 
 ```csharp
+// HTTP
 .UseRemoteWorkers(
     remote =>
     {
         remote.BaseUrl = "https://my-workers.example.com/trax/execute";
         remote.Retry.MaxRetries = 10;
         remote.Retry.BaseDelay = TimeSpan.FromSeconds(2);
-        remote.Retry.MaxDelay = TimeSpan.FromSeconds(60);
     },
     routing => routing.ForTrain<IMyTrain>())
+
+// Lambda
+.UseLambdaWorkers(
+    lambda =>
+    {
+        lambda.FunctionName = "my-runner";
+        lambda.Retry.MaxRetries = 10;
+        lambda.Retry.BaseDelay = TimeSpan.FromSeconds(2);
+    },
+    routing => routing.ForTrain<IMyOtherTrain>())
 ```
 
 Set `MaxRetries = 0` to disable retries entirely.
-
-If the server sends a `Retry-After` header (as Lambda does on 429), the helper respects it instead of using the computed backoff delay.
 
 ### 2. Dispatch Requeue
 
@@ -593,7 +605,7 @@ When a train fails on a remote worker, Trax preserves the full exception context
 | `FailureJunction` | The train junction where the failure occurred (extracted from `TrainExceptionData`) |
 | `StackTrace` | The remote stack trace |
 
-On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. This means `Metadata.AddException()` on the API side correctly parses the failure into `FailureException`, `FailureJunction`, `FailureReason`, and `StackTrace`, the same fields you'd see for a locally-executed train failure.
+On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. `Metadata.AddException()` populates `FailureException`, `FailureJunction`, `FailureReason`, and `StackTrace` from the reconstructed exception. Locally-executed trains attach this data via `Exception.Data["TrainExceptionData"]`; remote trains carry it as JSON in the exception message instead.
 
 ```
 Runner Process                         API Process

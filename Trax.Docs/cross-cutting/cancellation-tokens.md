@@ -154,7 +154,7 @@ public override async Task<string> Run(string input)
 
 Cancellation is treated differently from regular exceptions:
 
-- **Regular exceptions** are wrapped with `TrainExceptionData` (junction name, train name, etc.) and returned as `Left` in the Railway pattern
+- **Regular exceptions** are enriched with `TrainExceptionData` (junction name, train name, original stack trace, etc.) via `Exception.Data` and returned as `Left` in the Railway pattern. The original exception type and message are preserved — callers outside Trax see the exception exactly as the junction threw it
 - **`OperationCanceledException`** propagates cleanly without wrapping. It is not a junction failure, it is an explicit abort signal
 
 This means cancellation always throws (even with `RunEither`), which matches the .NET convention that cancellation is exceptional flow, not a business error.
