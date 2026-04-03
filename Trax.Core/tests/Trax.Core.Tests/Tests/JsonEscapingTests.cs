@@ -9,8 +9,9 @@ using Trax.Core.Train;
 namespace Trax.Core.Tests.Tests;
 
 /// <summary>
-/// Tests to verify that JSON content in exception messages is properly escaped
-/// when exceptions are enriched with junction information.
+/// Tests to verify that exception messages with special characters (including JSON content)
+/// are preserved in their original form, and that structured junction context is available
+/// via Exception.Data["TrainExceptionData"].
 /// </summary>
 public class JsonEscapingTests
 {
@@ -22,14 +23,12 @@ public class JsonEscapingTests
 
     /// <summary>
     /// Test junction that throws an exception with JSON content in the message.
-    /// This simulates the scenario described in the issue where a CybersourcePaymentsException
-    /// contains JSON in its message.
+    /// This simulates the scenario where an API exception contains JSON in its message.
     /// </summary>
     private class TestJunctionWithJsonException : Junction<string, string>
     {
         public override Task<string> Run(string input)
         {
-            // Simulate an exception with JSON content in the message (like CybersourcePaymentsException)
             var jsonMessage =
                 """{"success":false,"referenceId":"reference-me2","amount":null,"id":"7551812047776009403814","submitTimeUtc":null,"cardType":null,"metadata":{"cybersourceReason":"Decline - Insufficient funds in the account.","statusReason":"The credit card was declined with a reason.","processorReason":"Decline - Insufficient funds in the account.","cardVerificationReason":null,"addressVerificationReason":null},"attemptCount":2}""";
 
@@ -38,7 +37,7 @@ public class JsonEscapingTests
     }
 
     [Test]
-    public async Task RailwayJunction_WhenExceptionContainsJson_ShouldProduceValidJson()
+    public async Task RailwayJunction_WhenExceptionContainsJson_OriginalMessagePreserved()
     {
         // Arrange
         var junction = new TestJunctionWithJsonException();
@@ -56,28 +55,36 @@ public class JsonEscapingTests
         );
 
         var exception = result.Swap().ValueUnsafe();
-        var exceptionMessage = exception.Message;
 
-        // Verify that the exception message is valid JSON
-        Assert.That(
-            IsValidJson(exceptionMessage),
-            Is.True,
-            $"Exception message should be valid JSON, but got: {exceptionMessage}"
-        );
-
-        // Verify that we can deserialize the exception message
-        var exceptionData = JsonSerializer.Deserialize<TrainExceptionData>(exceptionMessage);
-        Assert.That(exceptionData, Is.Not.Null);
-        Assert.That(exceptionData.Junction, Is.EqualTo("TestJunctionWithJsonException"));
-        Assert.That(exceptionData.Type, Is.EqualTo("InvalidOperationException"));
-
-        // Verify that the original JSON message is properly escaped within the message property
-        Assert.That(exceptionData.Message, Does.Contain("\"success\":false"));
-        Assert.That(exceptionData.Message, Does.Contain("\"referenceId\":\"reference-me2\""));
+        // The original message should be preserved (not replaced with TrainExceptionData JSON)
+        Assert.That(exception.Message, Does.Contain("\"success\":false"));
+        Assert.That(exception.Message, Does.Contain("\"referenceId\":\"reference-me2\""));
     }
 
     [Test]
-    public async Task RailwayJunction_WhenExceptionContainsSpecialCharacters_ShouldProduceValidJson()
+    public async Task RailwayJunction_WhenExceptionContainsJson_ExceptionDataAvailable()
+    {
+        // Arrange
+        var junction = new TestJunctionWithJsonException();
+        var input = Either<Exception, string>.Right("test input");
+        var train = new DummyTrain();
+
+        // Act
+        var result = await junction.RailwayJunction(input, train);
+
+        // Assert
+        var exception = result.Swap().ValueUnsafe();
+
+        // Structured data should be available via Exception.Data
+        var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
+        Assert.That(data, Is.Not.Null);
+        Assert.That(data!.Junction, Is.EqualTo("TestJunctionWithJsonException"));
+        Assert.That(data.Type, Is.EqualTo("InvalidOperationException"));
+        Assert.That(data.Message, Does.Contain("\"success\":false"));
+    }
+
+    [Test]
+    public async Task RailwayJunction_WhenExceptionContainsSpecialCharacters_OriginalMessagePreserved()
     {
         // Arrange
         var junction = new TestJunctionWithSpecialCharacters();
@@ -88,32 +95,67 @@ public class JsonEscapingTests
         var result = await junction.RailwayJunction(input, train);
 
         // Assert
-        Assert.That(
-            result.IsLeft,
-            Is.True,
-            "Expected the junction to fail and return Left(Exception)"
-        );
-
         var exception = result.Swap().ValueUnsafe();
-        var exceptionMessage = exception.Message;
 
-        // Verify that the exception message is valid JSON
+        // The original message should be preserved
+        Assert.That(exception.Message, Does.Contain("quotes"));
+        Assert.That(exception.Message, Does.Contain("newlines"));
+        Assert.That(exception.Message, Does.Contain("backslashes"));
+    }
+
+    [Test]
+    public async Task RailwayJunction_WhenExceptionContainsSpecialCharacters_ExceptionDataAvailable()
+    {
+        // Arrange
+        var junction = new TestJunctionWithSpecialCharacters();
+        var input = Either<Exception, string>.Right("test input");
+        var train = new DummyTrain();
+
+        // Act
+        var result = await junction.RailwayJunction(input, train);
+
+        // Assert
+        var exception = result.Swap().ValueUnsafe();
+
+        // Structured data should be available via Exception.Data
+        var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
+        Assert.That(data, Is.Not.Null);
+        Assert.That(data!.Junction, Is.EqualTo("TestJunctionWithSpecialCharacters"));
+        Assert.That(data.Type, Is.EqualTo("InvalidOperationException"));
+
+        // Original message preserved in the data object
+        Assert.That(data.Message, Does.Contain("quotes"));
+        Assert.That(data.Message, Does.Contain("newlines"));
+        Assert.That(data.Message, Does.Contain("backslashes"));
+    }
+
+    [Test]
+    public async Task RailwayJunction_ExceptionDataMessage_CanBeSerializedToValidJson()
+    {
+        // Arrange
+        var junction = new TestJunctionWithJsonException();
+        var input = Either<Exception, string>.Right("test input");
+        var train = new DummyTrain();
+
+        // Act
+        var result = await junction.RailwayJunction(input, train);
+
+        // Assert — the TrainExceptionData can be serialized to valid JSON
+        var exception = result.Swap().ValueUnsafe();
+        var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
+        Assert.That(data, Is.Not.Null);
+
+        var json = JsonSerializer.Serialize(data);
         Assert.That(
-            IsValidJson(exceptionMessage),
+            IsValidJson(json),
             Is.True,
-            $"Exception message should be valid JSON, but got: {exceptionMessage}"
+            $"Serialized TrainExceptionData should be valid JSON: {json}"
         );
 
-        // Verify that we can deserialize the exception message
-        var exceptionData = JsonSerializer.Deserialize<TrainExceptionData>(exceptionMessage);
-        Assert.That(exceptionData, Is.Not.Null);
-        Assert.That(exceptionData.Junction, Is.EqualTo("TestJunctionWithSpecialCharacters"));
-        Assert.That(exceptionData.Type, Is.EqualTo("InvalidOperationException"));
-
-        // Verify that special characters are properly escaped
-        Assert.That(exceptionData.Message, Does.Contain("quotes"));
-        Assert.That(exceptionData.Message, Does.Contain("newlines"));
-        Assert.That(exceptionData.Message, Does.Contain("backslashes"));
+        // Round-trip: deserialize and verify the original JSON message survives
+        var roundTripped = JsonSerializer.Deserialize<TrainExceptionData>(json);
+        Assert.That(roundTripped, Is.Not.Null);
+        Assert.That(roundTripped!.Message, Does.Contain("\"success\":false"));
     }
 
     /// <summary>

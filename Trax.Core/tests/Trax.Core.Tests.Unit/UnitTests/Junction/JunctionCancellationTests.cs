@@ -1,6 +1,7 @@
 using FluentAssertions;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
+using Trax.Core.Exceptions;
 using Trax.Core.Junction;
 using Trax.Core.Train;
 
@@ -103,6 +104,84 @@ public class JunctionCancellationTests : TestSetup
         result.IsLeft.Should().BeTrue();
         junction.ExceptionData.Should().NotBeNull();
         junction.ExceptionData!.Junction.Should().Be(nameof(ThrowingStep));
+    }
+
+    [Theory]
+    public async Task RailwayJunction_ExceptionThrown_OriginalMessagePreserved()
+    {
+        // Arrange
+        var junction = new ThrowingStep();
+        var train = new TestTrain();
+
+        Either<Exception, string> input = "hello";
+
+        // Act
+        var result = await junction.RailwayJunction(input, train);
+
+        // Assert — the exception message must be the original, not JSON
+        var exception = result.Swap().ValueUnsafe();
+        exception.Message.Should().Be("test error");
+    }
+
+    [Theory]
+    public async Task RailwayJunction_ExceptionThrown_ExceptionDataAttachedViaDataDictionary()
+    {
+        // Arrange
+        var junction = new ThrowingStep();
+        var train = new TestTrain();
+
+        Either<Exception, string> input = "hello";
+
+        // Act
+        var result = await junction.RailwayJunction(input, train);
+
+        // Assert — TrainExceptionData stored in Exception.Data dictionary
+        var exception = result.Swap().ValueUnsafe();
+        exception.Data["TrainExceptionData"].Should().NotBeNull();
+        var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
+        data.Should().NotBeNull();
+        data!.Junction.Should().Be(nameof(ThrowingStep));
+        data.Type.Should().Be("InvalidOperationException");
+        data.Message.Should().Be("test error");
+        data.TrainName.Should().Be(nameof(TestTrain));
+    }
+
+    [Theory]
+    public async Task RailwayJunction_ExceptionThrown_OriginalStackTraceInExceptionData()
+    {
+        // Arrange
+        var junction = new ThrowingStep();
+        var train = new TestTrain();
+
+        Either<Exception, string> input = "hello";
+
+        // Act
+        var result = await junction.RailwayJunction(input, train);
+
+        // Assert — the captured StackTrace should contain the junction's Run method
+        var exception = result.Swap().ValueUnsafe();
+        var data = exception.Data["TrainExceptionData"] as TrainExceptionData;
+        data.Should().NotBeNull();
+        data!.StackTrace.Should().NotBeNullOrEmpty();
+        data.StackTrace.Should().Contain(nameof(ThrowingStep));
+    }
+
+    [Theory]
+    public async Task RailwayJunction_ExceptionThrown_ExceptionDataAndPropertyAreConsistent()
+    {
+        // Arrange
+        var junction = new ThrowingStep();
+        var train = new TestTrain();
+
+        Either<Exception, string> input = "hello";
+
+        // Act
+        var result = await junction.RailwayJunction(input, train);
+
+        // Assert — Junction.ExceptionData property and Exception.Data dictionary should match
+        var exception = result.Swap().ValueUnsafe();
+        var dictionaryData = exception.Data["TrainExceptionData"] as TrainExceptionData;
+        junction.ExceptionData.Should().BeSameAs(dictionaryData);
     }
 
     #region Test Helpers

@@ -31,4 +31,11 @@ public class TrainExceptionData
     /// </summary>
     [JsonPropertyName("message")]
     public required string Message { get; set; }
+
+    /// <summary>
+    /// The original stack trace from where the exception was thrown.
+    /// Nullable for backwards compatibility with previously serialized data.
+    /// </summary>
+    [JsonPropertyName("stackTrace")]
+    public string? StackTrace { get; set; }
 }

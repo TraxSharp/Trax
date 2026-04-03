@@ -1,6 +1,4 @@
 using System.ComponentModel;
-using System.Reflection;
-using System.Text.Json;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Exceptions;
@@ -96,15 +94,6 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
         }
         catch (Exception e)
         {
-            // Enrich the exception with junction information for better debugging
-            var messageField = typeof(Exception).GetField(
-                "_message",
-                BindingFlags.Instance | BindingFlags.NonPublic
-            );
-
-            if (messageField is null)
-                return e;
-
             var exceptionData = new TrainExceptionData
             {
                 TrainName = train.GetType().Name,
@@ -112,14 +101,16 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
                 Junction = GetType().Name,
                 Type = e.GetType().Name,
                 Message = e.Message,
+                StackTrace = e.StackTrace,
             };
 
             ExceptionData = exceptionData;
 
-            var serializedMessage = JsonSerializer.Serialize(exceptionData);
-            messageField.SetValue(e, serializedMessage);
+            // Store structured data on the exception without mutating its message.
+            // This preserves the original exception for callers outside Trax,
+            // while still making junction context available to Metadata.AddException().
+            e.Data["TrainExceptionData"] = exceptionData;
 
-            // Return the exception as Left
             return e;
         }
     }

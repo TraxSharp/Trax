@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using LanguageExt;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
@@ -50,7 +51,7 @@ public partial class Monad<TInput, TReturn>
     internal TReturn ResolveOrThrow()
     {
         if (Exception is not null)
-            throw Exception;
+            ExceptionDispatchInfo.Capture(Exception).Throw();
 
         if (ShortCircuitValueSet)
             return ShortCircuitValue;
