@@ -5,8 +5,8 @@
 // hosts the Trax Dashboard. Uses an in-memory data provider by default so
 // you can run it immediately without any external dependencies.
 //
-// To switch to PostgreSQL, replace UseInMemory() with UsePostgres(connectionString)
-// and swap the Trax.Effect.Data.InMemory package for Trax.Effect.Data.Postgres.
+// To switch providers, replace UseInMemory() with UseSqlite(connectionString) or
+// UsePostgres(connectionString) and add the corresponding Trax.Effect.Data package.
 //
 // Try it:
 //   dotnet run
