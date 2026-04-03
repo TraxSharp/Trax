@@ -1,6 +1,8 @@
+using System.Net;
 using System.Text.Json;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
+using Amazon.Runtime;
 using FluentAssertions;
 using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
@@ -282,6 +284,43 @@ public class LambdaJobSubmitterTests
 
     #endregion
 
+    #region Retry Tests
+
+    [Test]
+    public async Task EnqueueAsync_ThrottleThenSuccess_RetriesTransparentlyAndReturnsJobId()
+    {
+        // Arrange
+        var options = new LambdaWorkerOptions
+        {
+            FunctionName = "my-lambda-function",
+            Retry = new LambdaRetryOptions
+            {
+                MaxRetries = 3,
+                BaseDelay = TimeSpan.FromMilliseconds(1),
+            },
+        };
+        var client = new MockLambdaClient();
+        client.ExceptionsBeforeSuccess.Enqueue(
+            new AmazonServiceException("Throttled") { StatusCode = HttpStatusCode.TooManyRequests }
+        );
+        var logger = Microsoft
+            .Extensions
+            .Logging
+            .Abstractions
+            .NullLogger<LambdaJobSubmitter>
+            .Instance;
+        var submitter = new LambdaJobSubmitter(client, options, logger);
+
+        // Act
+        var jobId = await submitter.EnqueueAsync(42);
+
+        // Assert
+        jobId.Should().StartWith("lambda-");
+        client.AllRequests.Should().HaveCount(2); // 1 throttled + 1 success
+    }
+
+    #endregion
+
     #region MockLambdaClient
 
     internal class MockLambdaClient : IAmazonLambda
@@ -290,6 +329,12 @@ public class LambdaJobSubmitterTests
         public List<InvokeRequest> AllRequests { get; } = [];
         public bool ThrowOnInvoke { get; set; }
         public string? FunctionError { get; set; }
+
+        /// <summary>
+        /// Optional queue of exceptions to throw before returning a successful response.
+        /// Each invocation pops the next exception; once empty, returns normally.
+        /// </summary>
+        public Queue<Exception> ExceptionsBeforeSuccess { get; } = new();
 
         public Amazon.Runtime.IClientConfig Config => throw new NotImplementedException();
 
@@ -302,11 +347,15 @@ public class LambdaJobSubmitterTests
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            AllRequests.Add(request);
+
+            if (ExceptionsBeforeSuccess.Count > 0)
+                throw ExceptionsBeforeSuccess.Dequeue();
+
             if (ThrowOnInvoke)
                 throw new AmazonLambdaException("Mock Lambda error");
 
             LastRequest = request;
-            AllRequests.Add(request);
 
             return Task.FromResult(
                 new InvokeResponse { StatusCode = 202, FunctionError = FunctionError }

@@ -81,7 +81,13 @@ public class LambdaJobSubmitter(
             request.MetadataId
         );
 
-        var response = await lambdaClient.InvokeAsync(invokeRequest, cancellationToken);
+        var response = await LambdaRetryHelper.InvokeWithRetryAsync(
+            lambdaClient,
+            invokeRequest,
+            options.Retry,
+            logger,
+            cancellationToken
+        );
 
         if (!string.IsNullOrEmpty(response.FunctionError))
         {

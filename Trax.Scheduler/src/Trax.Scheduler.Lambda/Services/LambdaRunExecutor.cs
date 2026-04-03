@@ -63,7 +63,13 @@ public class LambdaRunExecutor(
             trainName
         );
 
-        var invokeResponse = await lambdaClient.InvokeAsync(invokeRequest, ct);
+        var invokeResponse = await LambdaRetryHelper.InvokeWithRetryAsync(
+            lambdaClient,
+            invokeRequest,
+            options.Retry,
+            logger,
+            ct
+        );
 
         if (!string.IsNullOrEmpty(invokeResponse.FunctionError))
         {

@@ -1,264 +1,419 @@
 using System.Net;
-using System.Text;
-using System.Text.Json;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
 using Amazon.Runtime;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Trax.Core.Exceptions;
-using Trax.Effect.Utils;
 using Trax.Scheduler.Lambda.Configuration;
 using Trax.Scheduler.Lambda.Services;
-using Trax.Scheduler.Services.Lambda;
-using Trax.Scheduler.Services.RunExecutor;
 
 namespace Trax.Scheduler.Tests.UnitTests;
 
 [TestFixture]
-public class LambdaRunExecutorTests
+public class LambdaRetryHelperTests
 {
-    #region Successful Execution
-
-    [Test]
-    public async Task ExecuteAsync_SuccessfulResponse_ReturnsOutputAndMetadataId()
-    {
-        // Arrange
-        var response = new RemoteRunResponse(
-            MetadataId: 42,
-            OutputJson: """{"value":"hello","count":7}""",
-            OutputType: typeof(TestRunOutput).FullName
-        );
-        var client = CreateMockClient(response);
-        var executor = CreateExecutor(client);
-
-        // Act
-        var result = await executor.ExecuteAsync(
-            "My.Train",
-            new TestRunInput { Name = "test" },
-            typeof(TestRunOutput)
-        );
-
-        // Assert
-        result.MetadataId.Should().Be(42);
-        result.Output.Should().NotBeNull();
-        result.Output.Should().BeOfType<TestRunOutput>();
-        var output = (TestRunOutput)result.Output!;
-        output.Value.Should().Be("hello");
-        output.Count.Should().Be(7);
-    }
-
-    [Test]
-    public async Task ExecuteAsync_UnitResponse_ReturnsNullOutput()
-    {
-        // Arrange
-        var response = new RemoteRunResponse(MetadataId: 10);
-        var client = CreateMockClient(response);
-        var executor = CreateExecutor(client);
-
-        // Act
-        var result = await executor.ExecuteAsync(
-            "My.UnitTrain",
-            new TestRunInput { Name = "unit" },
-            typeof(LanguageExt.Unit)
-        );
-
-        // Assert
-        result.MetadataId.Should().Be(10);
-        result.Output.Should().BeNull();
-    }
-
-    [Test]
-    public async Task ExecuteAsync_UsesRequestResponseInvocationType()
-    {
-        // Arrange
-        var response = new RemoteRunResponse(MetadataId: 1);
-        var client = CreateMockClient(response);
-        var executor = CreateExecutor(client);
-
-        // Act
-        await executor.ExecuteAsync(
-            "My.Train",
-            new TestRunInput { Name = "test" },
-            typeof(TestRunOutput)
-        );
-
-        // Assert
-        client.LastRequest.Should().NotBeNull();
-        client.LastRequest!.InvocationType.Should().Be(InvocationType.RequestResponse);
-    }
-
-    [Test]
-    public async Task ExecuteAsync_SendsCorrectEnvelope()
-    {
-        // Arrange
-        var response = new RemoteRunResponse(MetadataId: 1);
-        var client = CreateMockClient(response);
-        var executor = CreateExecutor(client);
-
-        // Act
-        await executor.ExecuteAsync(
-            "My.Train.FullName",
-            new TestRunInput { Name = "serialize-test" },
-            typeof(TestRunOutput)
-        );
-
-        // Assert
-        var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(
-            client.LastRequest!.Payload,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-        );
-
-        envelope.Should().NotBeNull();
-        envelope!.Type.Should().Be(LambdaRequestType.Run);
-
-        var request = JsonSerializer.Deserialize<RemoteRunRequest>(
-            envelope.PayloadJson,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-        );
-        request.Should().NotBeNull();
-        request!.TrainName.Should().Be("My.Train.FullName");
-        request.InputType.Should().Be(typeof(TestRunInput).FullName);
-        request.InputJson.Should().Contain("serialize-test");
-    }
-
-    #endregion
-
-    #region Error Handling — IsError Response
-
-    [Test]
-    public async Task ExecuteAsync_ErrorResponse_ThrowsTrainException()
-    {
-        // Arrange
-        var response = new RemoteRunResponse(
-            MetadataId: 0,
-            IsError: true,
-            ErrorMessage: "Train failed: something went wrong"
-        );
-        var client = CreateMockClient(response);
-        var executor = CreateExecutor(client);
-
-        // Act
-        var act = async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestRunInput { Name = "fail" },
-                typeof(TestRunOutput)
-            );
-
-        // Assert
-        await act.Should()
-            .ThrowAsync<TrainException>()
-            .WithMessage("*Train failed: something went wrong*");
-    }
-
-    [Test]
-    public async Task ExecuteAsync_ErrorResponse_WithTrainExceptionData_ReconstructsStructuredException()
-    {
-        // Arrange
-        var response = new RemoteRunResponse(
-            MetadataId: 0,
-            IsError: true,
-            ErrorMessage: "Validation failed",
-            ExceptionType: "InvalidOperationException",
-            FailureJunction: "ValidateInputJunction",
-            StackTrace: "at MyApp.ValidateInputJunction.Run()"
-        );
-        var client = CreateMockClient(response);
-        var executor = CreateExecutor(client);
-
-        // Act
-        var act = async () =>
-            await executor.ExecuteAsync(
-                "My.FailingTrain",
-                new TestRunInput { Name = "fail" },
-                typeof(TestRunOutput)
-            );
-
-        // Assert
-        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
-        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
-        data.Should().NotBeNull();
-        data!.Type.Should().Be("InvalidOperationException");
-        data.Junction.Should().Be("ValidateInputJunction");
-        data.Message.Should().Be("Validation failed");
-    }
-
-    [Test]
-    public async Task ExecuteAsync_ErrorResponse_WithPlainMessage_FallsBackToFlatString()
-    {
-        // Arrange
-        var response = new RemoteRunResponse(
-            MetadataId: 0,
-            IsError: true,
-            ErrorMessage: "Something failed"
-        );
-        var client = CreateMockClient(response);
-        var executor = CreateExecutor(client);
-
-        // Act
-        var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestRunInput { Name = "x" },
-                typeof(TestRunOutput)
-            );
-
-        // Assert
-        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
-        ex.Message.Should().Contain("Something failed");
-        // Should NOT be parseable as TrainExceptionData
-        var parseAct = () => JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
-        parseAct.Should().Throw<JsonException>();
-    }
-
-    #endregion
-
-    #region Error Handling — Lambda Function Error
-
-    [Test]
-    public async Task ExecuteAsync_FunctionError_ThrowsTrainException()
-    {
-        // Arrange
-        var client = new MockLambdaClient { FunctionError = "Unhandled" };
-        var executor = CreateExecutor(client);
-
-        // Act
-        var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestRunInput { Name = "crash" },
-                typeof(TestRunOutput)
-            );
-
-        // Assert
-        await act.Should().ThrowAsync<TrainException>().WithMessage("*Unhandled*");
-    }
-
-    #endregion
-
-    #region Error Handling — Null Response
-
-    [Test]
-    public async Task ExecuteAsync_NullResponsePayload_ThrowsTrainException()
-    {
-        // Arrange
-        var client = new MockLambdaClient
+    private static LambdaRetryOptions FastOptions(int maxRetries = 3) =>
+        new()
         {
-            ResponsePayload = new MemoryStream(Encoding.UTF8.GetBytes("null")),
+            MaxRetries = maxRetries,
+            BaseDelay = TimeSpan.FromMilliseconds(1),
+            MaxDelay = TimeSpan.FromSeconds(30),
         };
-        var executor = CreateExecutor(client);
 
-        // Act
+    private static InvokeRequest DefaultRequest =>
+        new() { FunctionName = "test-fn", Payload = "{}" };
+
+    #region Retry on Transient Exceptions
+
+    [Test]
+    public async Task InvokeWithRetryAsync_429ThenSuccess_RetriesAndReturnsResponse()
+    {
+        var client = new SequentialMockLambdaClient([
+            Throw(HttpStatusCode.TooManyRequests),
+            Succeed(),
+        ]);
+
+        var response = await LambdaRetryHelper.InvokeWithRetryAsync(
+            client,
+            DefaultRequest,
+            FastOptions(),
+            NullLogger.Instance,
+            CancellationToken.None
+        );
+
+        response.StatusCode.Should().Be(200);
+        client.InvokeCount.Should().Be(2);
+    }
+
+    [Test]
+    public async Task InvokeWithRetryAsync_502ThenSuccess_RetriesAndReturnsResponse()
+    {
+        var client = new SequentialMockLambdaClient([Throw(HttpStatusCode.BadGateway), Succeed()]);
+
+        var response = await LambdaRetryHelper.InvokeWithRetryAsync(
+            client,
+            DefaultRequest,
+            FastOptions(),
+            NullLogger.Instance,
+            CancellationToken.None
+        );
+
+        response.StatusCode.Should().Be(200);
+        client.InvokeCount.Should().Be(2);
+    }
+
+    [Test]
+    public async Task InvokeWithRetryAsync_503ThenSuccess_RetriesAndReturnsResponse()
+    {
+        var client = new SequentialMockLambdaClient([
+            Throw(HttpStatusCode.ServiceUnavailable),
+            Succeed(),
+        ]);
+
+        var response = await LambdaRetryHelper.InvokeWithRetryAsync(
+            client,
+            DefaultRequest,
+            FastOptions(),
+            NullLogger.Instance,
+            CancellationToken.None
+        );
+
+        response.StatusCode.Should().Be(200);
+        client.InvokeCount.Should().Be(2);
+    }
+
+    [Test]
+    public async Task InvokeWithRetryAsync_504ThenSuccess_RetriesAndReturnsResponse()
+    {
+        var client = new SequentialMockLambdaClient([
+            Throw(HttpStatusCode.GatewayTimeout),
+            Succeed(),
+        ]);
+
+        var response = await LambdaRetryHelper.InvokeWithRetryAsync(
+            client,
+            DefaultRequest,
+            FastOptions(),
+            NullLogger.Instance,
+            CancellationToken.None
+        );
+
+        response.StatusCode.Should().Be(200);
+        client.InvokeCount.Should().Be(2);
+    }
+
+    [Test]
+    public async Task InvokeWithRetryAsync_HttpRequestExceptionThenSuccess_Retries()
+    {
+        var client = new SequentialMockLambdaClient([ThrowHttp("connection reset"), Succeed()]);
+
+        var response = await LambdaRetryHelper.InvokeWithRetryAsync(
+            client,
+            DefaultRequest,
+            FastOptions(),
+            NullLogger.Instance,
+            CancellationToken.None
+        );
+
+        response.StatusCode.Should().Be(200);
+        client.InvokeCount.Should().Be(2);
+    }
+
+    [Test]
+    public async Task InvokeWithRetryAsync_Multiple429ThenSuccess_RetriesMultipleTimes()
+    {
+        var client = new SequentialMockLambdaClient([
+            Throw(HttpStatusCode.TooManyRequests),
+            Throw(HttpStatusCode.TooManyRequests),
+            Throw(HttpStatusCode.TooManyRequests),
+            Succeed(),
+        ]);
+
+        var response = await LambdaRetryHelper.InvokeWithRetryAsync(
+            client,
+            DefaultRequest,
+            FastOptions(5),
+            NullLogger.Instance,
+            CancellationToken.None
+        );
+
+        response.StatusCode.Should().Be(200);
+        client.InvokeCount.Should().Be(4);
+    }
+
+    #endregion
+
+    #region Exhaust Retries
+
+    [Test]
+    public async Task InvokeWithRetryAsync_429ExceedsMaxRetries_ThrowsLastException()
+    {
+        var client = new SequentialMockLambdaClient([
+            Throw(HttpStatusCode.TooManyRequests),
+            Throw(HttpStatusCode.TooManyRequests),
+            Throw(HttpStatusCode.TooManyRequests),
+            Throw(HttpStatusCode.TooManyRequests),
+        ]);
+
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestRunInput { Name = "null" },
-                typeof(TestRunOutput)
+            await LambdaRetryHelper.InvokeWithRetryAsync(
+                client,
+                DefaultRequest,
+                FastOptions(3),
+                NullLogger.Instance,
+                CancellationToken.None
             );
 
-        // Assert
-        await act.Should().ThrowAsync<TrainException>().WithMessage("*null response*");
+        await act.Should().ThrowAsync<AmazonServiceException>();
+        client.InvokeCount.Should().Be(4); // 1 initial + 3 retries
+    }
+
+    #endregion
+
+    #region Non-Transient Exceptions
+
+    [Test]
+    public async Task InvokeWithRetryAsync_ResourceNotFound_DoesNotRetry()
+    {
+        var client = new SequentialMockLambdaClient([
+            ThrowCustom(new ResourceNotFoundException("not found")),
+        ]);
+
+        var act = async () =>
+            await LambdaRetryHelper.InvokeWithRetryAsync(
+                client,
+                DefaultRequest,
+                FastOptions(),
+                NullLogger.Instance,
+                CancellationToken.None
+            );
+
+        await act.Should().ThrowAsync<ResourceNotFoundException>();
+        client.InvokeCount.Should().Be(1);
+    }
+
+    [Test]
+    public async Task InvokeWithRetryAsync_InvalidParameterValue_DoesNotRetry()
+    {
+        var client = new SequentialMockLambdaClient([
+            ThrowCustom(new InvalidParameterValueException("bad param")),
+        ]);
+
+        var act = async () =>
+            await LambdaRetryHelper.InvokeWithRetryAsync(
+                client,
+                DefaultRequest,
+                FastOptions(),
+                NullLogger.Instance,
+                CancellationToken.None
+            );
+
+        await act.Should().ThrowAsync<InvalidParameterValueException>();
+        client.InvokeCount.Should().Be(1);
+    }
+
+    [Test]
+    public async Task InvokeWithRetryAsync_500InternalServerError_DoesNotRetry()
+    {
+        var client = new SequentialMockLambdaClient([Throw(HttpStatusCode.InternalServerError)]);
+
+        var act = async () =>
+            await LambdaRetryHelper.InvokeWithRetryAsync(
+                client,
+                DefaultRequest,
+                FastOptions(),
+                NullLogger.Instance,
+                CancellationToken.None
+            );
+
+        await act.Should().ThrowAsync<AmazonServiceException>();
+        client.InvokeCount.Should().Be(1);
+    }
+
+    #endregion
+
+    #region MaxRetries = 0 (Disabled)
+
+    [Test]
+    public async Task InvokeWithRetryAsync_MaxRetriesZero_DoesNotRetry()
+    {
+        var client = new SequentialMockLambdaClient([
+            Throw(HttpStatusCode.TooManyRequests),
+            Succeed(),
+        ]);
+
+        var act = async () =>
+            await LambdaRetryHelper.InvokeWithRetryAsync(
+                client,
+                DefaultRequest,
+                FastOptions(0),
+                NullLogger.Instance,
+                CancellationToken.None
+            );
+
+        await act.Should().ThrowAsync<AmazonServiceException>();
+        client.InvokeCount.Should().Be(1);
+    }
+
+    #endregion
+
+    #region Success Without Retry
+
+    [Test]
+    public async Task InvokeWithRetryAsync_ImmediateSuccess_DoesNotRetry()
+    {
+        var client = new SequentialMockLambdaClient([Succeed()]);
+
+        var response = await LambdaRetryHelper.InvokeWithRetryAsync(
+            client,
+            DefaultRequest,
+            FastOptions(),
+            NullLogger.Instance,
+            CancellationToken.None
+        );
+
+        response.StatusCode.Should().Be(200);
+        client.InvokeCount.Should().Be(1);
+    }
+
+    #endregion
+
+    #region ComputeDelay
+
+    [Test]
+    public void ComputeDelay_Attempt0_ReturnsAroundBaseDelay()
+    {
+        var options = new LambdaRetryOptions
+        {
+            BaseDelay = TimeSpan.FromSeconds(1),
+            MaxDelay = TimeSpan.FromSeconds(30),
+        };
+
+        var delay = LambdaRetryHelper.ComputeDelay(0, options);
+
+        // Base delay * 2^0 = 1s, with +/-25% jitter -> 0.75s to 1.25s
+        delay.TotalMilliseconds.Should().BeInRange(750, 1250);
+    }
+
+    [Test]
+    public void ComputeDelay_Attempt3_ReturnsExponentiallyHigher()
+    {
+        var options = new LambdaRetryOptions
+        {
+            BaseDelay = TimeSpan.FromSeconds(1),
+            MaxDelay = TimeSpan.FromSeconds(30),
+        };
+
+        var delay = LambdaRetryHelper.ComputeDelay(3, options);
+
+        // Base delay * 2^3 = 8s, with +/-25% jitter -> 6s to 10s
+        delay.TotalMilliseconds.Should().BeInRange(6000, 10000);
+    }
+
+    [Test]
+    public void ComputeDelay_LargeAttempt_CapsAtMaxDelay()
+    {
+        var options = new LambdaRetryOptions
+        {
+            BaseDelay = TimeSpan.FromSeconds(1),
+            MaxDelay = TimeSpan.FromSeconds(30),
+        };
+
+        var delay = LambdaRetryHelper.ComputeDelay(10, options);
+
+        delay.Should().BeLessThanOrEqualTo(TimeSpan.FromSeconds(30));
+    }
+
+    [Test]
+    public void ComputeDelay_JitterApplied_ProducesDifferentValues()
+    {
+        var options = new LambdaRetryOptions
+        {
+            BaseDelay = TimeSpan.FromSeconds(1),
+            MaxDelay = TimeSpan.FromSeconds(30),
+        };
+
+        var delays = Enumerable
+            .Range(0, 20)
+            .Select(_ => LambdaRetryHelper.ComputeDelay(2, options))
+            .ToList();
+
+        delays.Distinct().Count().Should().BeGreaterThan(1);
+    }
+
+    #endregion
+
+    #region IsTransient
+
+    [Test]
+    public void IsTransient_429_ReturnsTrue()
+    {
+        var ex = new AmazonServiceException("throttle")
+        {
+            StatusCode = HttpStatusCode.TooManyRequests,
+        };
+        LambdaRetryHelper.IsTransient(ex).Should().BeTrue();
+    }
+
+    [Test]
+    public void IsTransient_502_ReturnsTrue()
+    {
+        var ex = new AmazonServiceException("bad gateway")
+        {
+            StatusCode = HttpStatusCode.BadGateway,
+        };
+        LambdaRetryHelper.IsTransient(ex).Should().BeTrue();
+    }
+
+    [Test]
+    public void IsTransient_503_ReturnsTrue()
+    {
+        var ex = new AmazonServiceException("unavailable")
+        {
+            StatusCode = HttpStatusCode.ServiceUnavailable,
+        };
+        LambdaRetryHelper.IsTransient(ex).Should().BeTrue();
+    }
+
+    [Test]
+    public void IsTransient_504_ReturnsTrue()
+    {
+        var ex = new AmazonServiceException("timeout")
+        {
+            StatusCode = HttpStatusCode.GatewayTimeout,
+        };
+        LambdaRetryHelper.IsTransient(ex).Should().BeTrue();
+    }
+
+    [Test]
+    public void IsTransient_HttpRequestException_ReturnsTrue()
+    {
+        var ex = new HttpRequestException("connection reset");
+        LambdaRetryHelper.IsTransient(ex).Should().BeTrue();
+    }
+
+    [Test]
+    public void IsTransient_500_ReturnsFalse()
+    {
+        var ex = new AmazonServiceException("internal error")
+        {
+            StatusCode = HttpStatusCode.InternalServerError,
+        };
+        LambdaRetryHelper.IsTransient(ex).Should().BeFalse();
+    }
+
+    [Test]
+    public void IsTransient_ResourceNotFoundException_ReturnsFalse()
+    {
+        var ex = new ResourceNotFoundException("not found");
+        LambdaRetryHelper.IsTransient(ex).Should().BeFalse();
+    }
+
+    [Test]
+    public void IsTransient_InvalidOperationException_ReturnsFalse()
+    {
+        var ex = new InvalidOperationException("bad state");
+        LambdaRetryHelper.IsTransient(ex).Should().BeFalse();
     }
 
     #endregion
@@ -266,120 +421,61 @@ public class LambdaRunExecutorTests
     #region Cancellation
 
     [Test]
-    public async Task ExecuteAsync_CancelledToken_ThrowsOperationCancelledException()
+    public async Task InvokeWithRetryAsync_CancelledDuringRetry_ThrowsOperationCancelled()
     {
-        // Arrange
-        var response = new RemoteRunResponse(MetadataId: 1);
-        var client = CreateMockClient(response);
-        var executor = CreateExecutor(client);
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        var client = new SequentialMockLambdaClient([
+            Throw(HttpStatusCode.TooManyRequests),
+            Throw(HttpStatusCode.TooManyRequests),
+            Succeed(),
+        ]);
 
-        // Act
+        var options = new LambdaRetryOptions
+        {
+            MaxRetries = 5,
+            BaseDelay = TimeSpan.FromSeconds(10),
+            MaxDelay = TimeSpan.FromSeconds(30),
+        };
+
+        using var cts = new CancellationTokenSource();
+        cts.CancelAfter(TimeSpan.FromMilliseconds(50));
+
         var act = async () =>
-            await executor.ExecuteAsync(
-                "My.Train",
-                new TestRunInput { Name = "cancel" },
-                typeof(TestRunOutput),
+            await LambdaRetryHelper.InvokeWithRetryAsync(
+                client,
+                DefaultRequest,
+                options,
+                NullLogger.Instance,
                 cts.Token
             );
 
-        // Assert
         await act.Should().ThrowAsync<OperationCanceledException>();
-    }
-
-    #endregion
-
-    #region Retry
-
-    [Test]
-    public async Task ExecuteAsync_ThrottleThenSuccess_RetriesTransparentlyAndReturnsResult()
-    {
-        // Arrange
-        var response = new RemoteRunResponse(
-            MetadataId: 42,
-            OutputJson: """{"value":"ok","count":1}""",
-            OutputType: typeof(TestRunOutput).FullName
-        );
-        var client = CreateMockClient(response);
-        client.ExceptionsBeforeSuccess.Enqueue(
-            new AmazonServiceException("Throttled") { StatusCode = HttpStatusCode.TooManyRequests }
-        );
-        var executor = new LambdaRunExecutor(
-            client,
-            new LambdaRunOptions
-            {
-                FunctionName = "my-runner",
-                Retry = new LambdaRetryOptions
-                {
-                    MaxRetries = 3,
-                    BaseDelay = TimeSpan.FromMilliseconds(1),
-                },
-            },
-            NullLogger<LambdaRunExecutor>.Instance
-        );
-
-        // Act
-        var result = await executor.ExecuteAsync(
-            "My.Train",
-            new TestRunInput { Name = "test" },
-            typeof(TestRunOutput)
-        );
-
-        // Assert
-        result.MetadataId.Should().Be(42);
-        client.AllRequests.Should().HaveCount(2); // 1 throttled + 1 success
     }
 
     #endregion
 
     #region Helpers
 
-    private static LambdaRunExecutor CreateExecutor(MockLambdaClient client) =>
-        new(
-            client,
-            new LambdaRunOptions { FunctionName = "my-runner" },
-            NullLogger<LambdaRunExecutor>.Instance
-        );
+    private static Func<InvokeResponse> Succeed() => () => new InvokeResponse { StatusCode = 200 };
 
-    private static MockLambdaClient CreateMockClient(RemoteRunResponse response)
-    {
-        var json = JsonSerializer.Serialize(response);
-        return new MockLambdaClient
-        {
-            ResponsePayload = new MemoryStream(Encoding.UTF8.GetBytes(json)),
-        };
-    }
+    private static Func<InvokeResponse> Throw(HttpStatusCode statusCode) =>
+        () =>
+            throw new AmazonServiceException($"AWS error {statusCode}") { StatusCode = statusCode };
+
+    private static Func<InvokeResponse> ThrowHttp(string message) =>
+        () => throw new HttpRequestException(message);
+
+    private static Func<InvokeResponse> ThrowCustom(Exception ex) => () => throw ex;
 
     #endregion
 
-    #region Test Types
+    #region SequentialMockLambdaClient
 
-    public record TestRunInput
+    private class SequentialMockLambdaClient(List<Func<InvokeResponse>> behaviors) : IAmazonLambda
     {
-        public string Name { get; init; } = "";
-    }
+        private int _callIndex;
+        public int InvokeCount => _callIndex;
 
-    public record TestRunOutput
-    {
-        public string Value { get; init; } = "";
-        public int Count { get; init; }
-    }
-
-    #endregion
-
-    #region MockLambdaClient
-
-    private class MockLambdaClient : IAmazonLambda
-    {
-        public InvokeRequest? LastRequest { get; private set; }
-        public List<InvokeRequest> AllRequests { get; } = [];
-        public string? FunctionError { get; set; }
-        public MemoryStream? ResponsePayload { get; set; }
-        public Queue<Exception> ExceptionsBeforeSuccess { get; } = new();
-
-        public Amazon.Runtime.IClientConfig Config => throw new NotImplementedException();
-
+        public IClientConfig Config => throw new NotImplementedException();
         public ILambdaPaginatorFactory Paginators => throw new NotImplementedException();
 
         public Task<InvokeResponse> InvokeAsync(
@@ -389,26 +485,14 @@ public class LambdaRunExecutorTests
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            AllRequests.Add(request);
+            var index = _callIndex < behaviors.Count ? _callIndex : behaviors.Count - 1;
+            _callIndex++;
 
-            if (ExceptionsBeforeSuccess.Count > 0)
-                throw ExceptionsBeforeSuccess.Dequeue();
-
-            LastRequest = request;
-
-            var payload = ResponsePayload ?? new MemoryStream(Encoding.UTF8.GetBytes("{}"));
-
-            return Task.FromResult(
-                new InvokeResponse
-                {
-                    StatusCode = 200,
-                    FunctionError = FunctionError,
-                    Payload = payload,
-                }
-            );
+            var response = behaviors[index]();
+            return Task.FromResult(response);
         }
 
-        // Minimal interface stubs — only InvokeAsync(InvokeRequest) is used
+        // Minimal interface stubs
         public Task<InvokeResponse> InvokeAsync(
             string functionName,
             CancellationToken cancellationToken = default
@@ -505,7 +589,7 @@ public class LambdaRunExecutorTests
         ) => throw new NotImplementedException();
 
         public Amazon.Runtime.Endpoints.Endpoint DetermineServiceOperationEndpoint(
-            Amazon.Runtime.AmazonWebServiceRequest r
+            AmazonWebServiceRequest r
         ) => throw new NotImplementedException();
 
         public Task<GetAccountSettingsResponse> GetAccountSettingsAsync(

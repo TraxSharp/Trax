@@ -10,6 +10,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests" />
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../Trax.Scheduler/Trax.Scheduler.csproj" />
   </ItemGroup>
 

@@ -25,4 +25,9 @@ public class LambdaRunOptions
     /// Use this to set a custom region, endpoint override (e.g., LocalStack), or service URL.
     /// </summary>
     public Action<AmazonLambdaConfig>? ConfigureLambdaClient { get; set; }
+
+    /// <summary>
+    /// Retry options for transient Lambda invocation failures (throttling, service errors).
+    /// </summary>
+    public LambdaRetryOptions Retry { get; set; } = new();
 }
