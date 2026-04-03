@@ -33,7 +33,7 @@ public class TraxBuilderWithMediator
     public bool HasDatabaseProvider => Root.HasDatabaseProvider;
 
     /// <summary>
-    /// Whether any data provider (<c>UsePostgres()</c> or <c>UseInMemory()</c>) was configured.
+    /// Whether any data provider (<c>UsePostgres()</c>, <c>UseSqlite()</c>, or <c>UseInMemory()</c>) was configured.
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool HasDataProvider => Root.HasDataProvider;
