@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Core.Exceptions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -201,6 +202,63 @@ public class GraphQLSubscriptionHookTests
         var evt = sender.Events[0].Message as TrainLifecycleEvent;
         evt.Should().NotBeNull();
         evt!.FailureReason.Should().Contain("something broke");
+    }
+
+    [Test]
+    public async Task OnFailed_WithTrainExceptionData_MapsJunctionAndReason()
+    {
+        // Simulate the real flow: Junction catches, attaches TrainExceptionData
+        var sender = new RecordingTopicEventSender();
+        var hook = CreateHook(sender, enabledTrainName: "My.Train");
+        var metadata = CreateMetadata("My.Train");
+
+        var exception = new InvalidOperationException("HTTP 500");
+        exception.Data["TrainExceptionData"] = new TrainExceptionData
+        {
+            TrainName = "MyTrain",
+            TrainExternalId = "ext-1",
+            Type = "InvalidOperationException",
+            Junction = "CallApiJunction",
+            Message = "HTTP 500",
+            StackTrace = "at MyApp.CallApiJunction.Run()",
+        };
+        metadata.AddException(exception);
+
+        await hook.OnFailed(metadata, exception, CancellationToken.None);
+
+        var evt = sender.Events[0].Message as TrainLifecycleEvent;
+        evt.Should().NotBeNull();
+        evt!.FailureJunction.Should().Be("CallApiJunction");
+        evt.FailureReason.Should().Be("HTTP 500");
+    }
+
+    [Test]
+    public async Task OnFailed_WithJsonInExceptionMessage_ReasonIsNotJsonBlob()
+    {
+        // Previously the exception message was mutated to JSON. Verify the GraphQL
+        // event contains the original human-readable message, not a JSON blob.
+        var sender = new RecordingTopicEventSender();
+        var hook = CreateHook(sender, enabledTrainName: "My.Train");
+        var metadata = CreateMetadata("My.Train");
+
+        var exception = new InvalidOperationException("Connection timed out after 30s");
+        exception.Data["TrainExceptionData"] = new TrainExceptionData
+        {
+            TrainName = "MyTrain",
+            TrainExternalId = "ext-1",
+            Type = "InvalidOperationException",
+            Junction = "DatabaseJunction",
+            Message = "Connection timed out after 30s",
+            StackTrace = "at MyApp.DatabaseJunction.Run()",
+        };
+        metadata.AddException(exception);
+
+        await hook.OnFailed(metadata, exception, CancellationToken.None);
+
+        var evt = sender.Events[0].Message as TrainLifecycleEvent;
+        evt.Should().NotBeNull();
+        evt!.FailureReason.Should().Be("Connection timed out after 30s");
+        evt.FailureReason.Should().NotStartWith("{");
     }
 
     [Test]
