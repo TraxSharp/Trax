@@ -10,7 +10,7 @@ nav_order: 1
 
 The data persistence effect stores a `Metadata` record for every train execution. Each record captures the train name, state, timing, inputs/outputs, and failure details. See [Metadata](/docs/effect/metadata) for the full field breakdown.
 
-Two backends are available: PostgreSQL for production and InMemory for testing. Both implement the same `IDataContext` interface, so your train code doesn't change between them.
+Three backends are available: PostgreSQL for production, SQLite for lightweight/single-server deployments, and InMemory for testing. All three implement the same `IDataContext` interface, so your train code doesn't change between them.
 
 ## PostgreSQL
 
@@ -48,6 +48,34 @@ Every `ServiceTrain` execution creates a `Metadata` row:
 | `ManifestId` | Links to scheduling manifest |
 
 Without the [Parameter Effect](parameter-effect.md), the `Input` and `Output` columns are null. Metadata is still persisted, but without the serialized request/response data.
+
+## SQLite
+
+```bash
+dotnet add package Trax.Effect.Data.Sqlite
+```
+
+```csharp
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UseSqlite("Data Source=trax.db")
+    )
+);
+```
+
+File-backed persistence with zero infrastructure. No database server to install or configure. On first startup, the SQLite provider creates the database file and runs migrations. WAL mode is enabled automatically for concurrent read/write performance.
+
+SQLite supports the full scheduler pipeline (ManifestManager, JobDispatcher, MetadataCleanup, DeadLetterCleanup) and all batch operations (`ExecuteUpdateAsync`, `ExecuteDeleteAsync`). The main limitation is single-server only: SQLite does not support advisory locks or `FOR UPDATE SKIP LOCKED`, so multi-server scheduling coordination is not available.
+
+| | PostgreSQL | SQLite | InMemory |
+|---|---|---|---|
+| Persistence | Yes | Yes | No |
+| Infrastructure | Database server | None (file) | None |
+| Multi-server scheduling | Yes | No | No |
+| Full scheduler trains | Yes | Yes | No (simplified) |
+| Batch operations | Yes | Yes | No |
+
+Use SQLite for local development, integration testing with real SQL, or single-server deployments where Postgres is overkill.
 
 ## InMemory
 
@@ -110,4 +138,4 @@ Blacklist entries support exact matches and wildcard patterns.
 
 ## SDK Reference
 
-> [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging)
+> [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging)

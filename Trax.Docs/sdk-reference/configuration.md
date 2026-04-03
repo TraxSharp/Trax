@@ -99,8 +99,8 @@ Inside the `AddEffects()` callback, data provider methods return a more specific
 
 | Type | Returned By | Exposes |
 |------|-------------|---------|
-| `TraxEffectBuilder` | `AddEffects()` lambda | `SkipMigrations()`, `UsePostgres()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddJunctionLogger()`, `AddJunctionProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()` |
-| `TraxEffectBuilderWithData` | `UsePostgres()`, `UseInMemory()` | Everything on `TraxEffectBuilder` plus `AddDataContextLogging()` |
+| `TraxEffectBuilder` | `AddEffects()` lambda | `SkipMigrations()`, `UsePostgres()`, `UseSqlite()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddJunctionLogger()`, `AddJunctionProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()` |
+| `TraxEffectBuilderWithData` | `UsePostgres()`, `UseSqlite()`, `UseInMemory()` | Everything on `TraxEffectBuilder` plus `AddDataContextLogging()` |
 
 Generic effect methods (`AddJson`, `SaveTrainParameters`, `AddJunctionLogger`, `AddJunctionProgress`, `SetEffectLogLevel`, `UseBroadcaster`) preserve the concrete builder type through chaining. If you start with `TraxEffectBuilderWithData`, it stays `TraxEffectBuilderWithData`.
 

@@ -88,7 +88,7 @@ Add execution logging, DI, and persistent metadata. Every train run becomes a qu
 ```bash
 dotnet add package Trax.Core
 dotnet add package Trax.Effect
-dotnet add package Trax.Effect.Data.Postgres  # or Trax.Effect.Data.InMemory
+dotnet add package Trax.Effect.Data.Postgres  # or Trax.Effect.Data.Sqlite / Trax.Effect.Data.InMemory
 ```
 
 ### Program.cs Setup
