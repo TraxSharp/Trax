@@ -1,6 +1,6 @@
 using Trax.Samples.ChatService.E2E.Factories;
 
-namespace Trax.Samples.ChatService.E2E.ChatApiTests;
+namespace Trax.Samples.ChatService.E2E;
 
 [SetUpFixture]
 public class SharedChatApiSetup
@@ -19,6 +19,5 @@ public class SharedChatApiSetup
     public async Task OneTimeTearDown()
     {
         await Factory.DisposeAsync();
-        Npgsql.NpgsqlConnection.ClearAllPools();
     }
 }

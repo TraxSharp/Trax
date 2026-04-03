@@ -13,9 +13,10 @@
 //   charlie-key → user "charlie" (display name: Charlie)
 //
 // Prerequisites:
-//   1. Start Postgres:  cd Trax.Samples && docker compose up -d
-//   2. Pack local:      ./pack-local.sh
-//   3. Start API:       dotnet run --project samples/ChatService/Trax.Samples.ChatService.Api
+//   1. Pack local:      ./pack-local.sh
+//   2. Start API:       dotnet run --project samples/ChatService/Trax.Samples.ChatService.Api
+//
+// No Docker or Postgres required — uses SQLite for both Trax metadata and chat data.
 //
 // Try it:
 //   Open http://localhost:5210/trax/graphql in a browser for Banana Cake Pop IDE
@@ -40,7 +41,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
-using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
@@ -53,17 +54,15 @@ using Trax.Samples.ChatService.Subscriptions;
 var builder = WebApplication.CreateBuilder(args);
 
 var traxConnectionString =
-    builder.Configuration.GetConnectionString("TraxDatabase")
-    ?? throw new InvalidOperationException("Connection string 'TraxDatabase' not found.");
+    builder.Configuration.GetConnectionString("TraxDatabase") ?? "Data Source=trax.db";
 
 var chatConnectionString =
-    builder.Configuration.GetConnectionString("ChatDatabase")
-    ?? throw new InvalidOperationException("Connection string 'ChatDatabase' not found.");
+    builder.Configuration.GetConnectionString("ChatDatabase") ?? "Data Source=chat.db";
 
 builder.Services.AddLogging(logging => logging.AddConsole());
 
 // ── Chat data layer ─────────────────────────────────────────────────────────
-builder.Services.AddDbContext<ChatDbContext>(options => options.UseNpgsql(chatConnectionString));
+builder.Services.AddDbContext<ChatDbContext>(options => options.UseSqlite(chatConnectionString));
 
 // ── Authentication — fake API key for demonstration ─────────────────────────
 builder
@@ -79,7 +78,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
             effects
-                .UsePostgres(traxConnectionString)
+                .UseSqlite(traxConnectionString)
                 .AddJson()
                 .SaveTrainParameters()
                 .AddLifecycleHook<ChatLifecycleHookFactory>()

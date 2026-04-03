@@ -11,8 +11,6 @@ public class ChatDbContext(DbContextOptions<ChatDbContext> options) : DbContext(
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.HasDefaultSchema("chat");
-
         modelBuilder.Entity<ChatRoom>(entity =>
         {
             entity.HasKey(e => e.Id);

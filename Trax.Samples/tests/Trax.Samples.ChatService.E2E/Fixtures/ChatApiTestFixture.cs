@@ -4,7 +4,6 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Samples.ChatService.Auth;
 using Trax.Samples.ChatService.Data;
-using Trax.Samples.ChatService.E2E.ChatApiTests;
 using Trax.Samples.ChatService.E2E.Utilities;
 
 namespace Trax.Samples.ChatService.E2E.Fixtures;
