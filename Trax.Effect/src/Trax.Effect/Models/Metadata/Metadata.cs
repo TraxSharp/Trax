@@ -399,37 +399,38 @@ public class Metadata : IModel, IDisposable
     /// </remarks>
     public Unit AddException(Exception trainException)
     {
-        try
+        // Priority 1: Structured data attached to the exception object (local execution)
+        if (trainException.Data["TrainExceptionData"] is TrainExceptionData data)
         {
-            var deserializedException = JsonSerializer.Deserialize<TrainExceptionData>(
-                trainException.Message
-            );
-
-            if (deserializedException == null)
-            {
-                FailureException = trainException.GetType().Name;
-                FailureReason = trainException.Message;
-                FailureJunction = "TrainException";
-                StackTrace = trainException.StackTrace;
-            }
-            else
-            {
-                FailureException = deserializedException.Type;
-                FailureReason = deserializedException.Message;
-                FailureJunction = deserializedException.Junction;
-                StackTrace = trainException.StackTrace;
-            }
-
+            FailureException = data.Type;
+            FailureReason = data.Message;
+            FailureJunction = data.Junction;
+            StackTrace = data.StackTrace ?? trainException.StackTrace;
             return Unit.Default;
         }
-        catch (Exception)
-        {
-            FailureException = trainException.GetType().Name;
-            FailureReason = trainException.Message;
-            FailureJunction = "TrainException";
-            StackTrace = trainException.StackTrace;
-        }
 
+        // Priority 2: JSON-serialized TrainExceptionData in the message (remote execution / legacy)
+        try
+        {
+            var deserialized = JsonSerializer.Deserialize<TrainExceptionData>(
+                trainException.Message
+            );
+            if (deserialized != null)
+            {
+                FailureException = deserialized.Type;
+                FailureReason = deserialized.Message;
+                FailureJunction = deserialized.Junction;
+                StackTrace = deserialized.StackTrace ?? trainException.StackTrace;
+                return Unit.Default;
+            }
+        }
+        catch { }
+
+        // Priority 3: Plain exception (no Trax context)
+        FailureException = trainException.GetType().Name;
+        FailureReason = trainException.Message;
+        FailureJunction = "TrainException";
+        StackTrace = trainException.StackTrace;
         return Unit.Default;
     }
 

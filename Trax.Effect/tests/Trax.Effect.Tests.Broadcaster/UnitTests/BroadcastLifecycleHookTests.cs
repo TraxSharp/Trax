@@ -1,6 +1,7 @@
 using System.Reflection;
 using FluentAssertions;
 using NSubstitute;
+using Trax.Core.Exceptions;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
@@ -201,6 +202,65 @@ public class BroadcastLifecycleHookTests
 
         captured!.FailureJunction.Should().NotBeNull();
         captured.FailureReason.Should().Be("something broke");
+    }
+
+    [Test]
+    public async Task OnFailed_WithTrainExceptionData_BroadcastsJunctionAndReason()
+    {
+        var metadata = CreateMetadata(TrainState.Failed);
+
+        var exception = new InvalidOperationException("connection refused");
+        exception.Data["TrainExceptionData"] = new TrainExceptionData
+        {
+            TrainName = "TestTrain",
+            TrainExternalId = "ext-1",
+            Type = "InvalidOperationException",
+            Junction = "DatabaseJunction",
+            Message = "connection refused",
+            StackTrace = "at App.DatabaseJunction.Run()",
+        };
+        metadata.AddException(exception);
+
+        TrainLifecycleEventMessage? captured = null;
+        await _broadcaster.PublishAsync(
+            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+            Arg.Any<CancellationToken>()
+        );
+
+        await _hook.OnFailed(metadata, exception, CancellationToken.None);
+
+        captured!.FailureJunction.Should().Be("DatabaseJunction");
+        captured.FailureReason.Should().Be("connection refused");
+    }
+
+    [Test]
+    public async Task OnFailed_FailureReasonIsNotJsonBlob()
+    {
+        var metadata = CreateMetadata(TrainState.Failed);
+
+        var exception = new HttpRequestException("500 Internal Server Error");
+        exception.Data["TrainExceptionData"] = new TrainExceptionData
+        {
+            TrainName = "TestTrain",
+            TrainExternalId = "ext-1",
+            Type = "HttpRequestException",
+            Junction = "ApiCallJunction",
+            Message = "500 Internal Server Error",
+            StackTrace = "at App.ApiCallJunction.Run()",
+        };
+        metadata.AddException(exception);
+
+        TrainLifecycleEventMessage? captured = null;
+        await _broadcaster.PublishAsync(
+            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+            Arg.Any<CancellationToken>()
+        );
+
+        await _hook.OnFailed(metadata, exception, CancellationToken.None);
+
+        // The broadcaster should not receive a JSON blob as the failure reason
+        captured!.FailureReason.Should().NotStartWith("{");
+        captured.FailureReason.Should().Be("500 Internal Server Error");
     }
 
     [Test]
