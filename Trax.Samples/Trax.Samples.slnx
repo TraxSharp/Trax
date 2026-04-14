@@ -26,6 +26,11 @@
     <Project Path="samples/ChatService/Trax.Samples.ChatService/Trax.Samples.ChatService.csproj" />
     <Project Path="samples/ChatService/Trax.Samples.ChatService.Api/Trax.Samples.ChatService.Api.csproj" />
   </Folder>
+  <Folder Name="/samples/JobHunt/">
+    <Project Path="samples/JobHunt/Trax.Samples.JobHunt.Data/Trax.Samples.JobHunt.Data.csproj" />
+    <Project Path="samples/JobHunt/Trax.Samples.JobHunt/Trax.Samples.JobHunt.csproj" />
+    <Project Path="samples/JobHunt/Trax.Samples.JobHunt.Hub/Trax.Samples.JobHunt.Hub.csproj" />
+  </Folder>
   <Folder Name="/samples/TestRunner/">
     <Project Path="samples/TestRunner/Trax.Samples.TestRunner/Trax.Samples.TestRunner.csproj" />
     <Project Path="samples/TestRunner/Trax.Samples.TestRunner.Hub/Trax.Samples.TestRunner.Hub.csproj" />
@@ -36,6 +41,8 @@
     <Project Path="tests/Trax.Samples.GameServer.E2E/Trax.Samples.GameServer.E2E.csproj" />
     <Project Path="tests/Trax.Samples.ChatService.E2E/Trax.Samples.ChatService.E2E.csproj" />
     <Project Path="tests/Trax.Samples.EnergyHub.E2E/Trax.Samples.EnergyHub.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.JobHunt.Tests/Trax.Samples.JobHunt.Tests.csproj" />
+    <Project Path="tests/Trax.Samples.JobHunt.E2E/Trax.Samples.JobHunt.E2E.csproj" />
   </Folder>
   <Folder Name="/templates/">
     <Project Path="templates/Trax.Samples.Templates.csproj" />

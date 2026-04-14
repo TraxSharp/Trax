@@ -49,7 +49,7 @@ jobs:
 
       - name: Create test databases
         run: |
-          for db in trax_e2e_tests chat_e2e_tests energyhub_e2e_tests; do
+          for db in trax_e2e_tests chat_e2e_tests energyhub_e2e_tests jobhunt_e2e_tests; do
             PGPASSWORD=trax123 psql -h localhost -U trax -d trax -c "CREATE DATABASE \"$db\";"
           done
 
