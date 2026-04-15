@@ -10,11 +10,24 @@ namespace Trax.Effect.Attributes;
 ///
 /// Trains without this attribute have no per-train authorization requirements
 /// (though endpoint-level auth from the <c>configure</c> callback still applies).
-///
-/// Multiple attributes can be combined — all must be satisfied.
+/// <para>
+/// Combinator semantics when the attribute is present:
+/// <list type="bullet">
+/// <item>Bare <c>[TraxAuthorize]</c> (no policy, no roles) requires an authenticated user.</item>
+/// <item>Policies across all applied attributes are AND'd: every <see cref="Policy"/> must pass.</item>
+/// <item>Roles across all applied attributes are unioned and OR'd: the user must hold at least one of the listed roles. Within a single attribute, <see cref="Roles"/> is a comma-separated list that is also OR'd.</item>
+/// <item>When policies and roles are both specified, both sides must be satisfied.</item>
+/// </list>
+/// </para>
 /// The scheduler bypasses this check entirely since it is trusted infrastructure.
+/// Authorization is enforced once at API submission time; scheduled and remote-worker
+/// executions run against work that was already authorized.
 /// </remarks>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = true)]
+[AttributeUsage(
+    AttributeTargets.Class | AttributeTargets.Interface,
+    AllowMultiple = true,
+    Inherited = true
+)]
 public class TraxAuthorizeAttribute : Attribute
 {
     /// <summary>
