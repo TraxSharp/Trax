@@ -260,7 +260,12 @@ public class TrainExecutionServiceTests
 
         // Act & Assert
         var act = async () => await executionService.RunAsync("NonExistent.Train", "{}");
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*No train found*");
+        // TrainNotFoundException extends InvalidOperationException; it uses a generic
+        // public message so unauthenticated probers can't distinguish "missing" from
+        // "present but gated".
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*requested train was not found*");
     }
 
     [Test]

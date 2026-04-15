@@ -6,6 +6,8 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Utils;
+using Trax.Mediator.Configuration;
+using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.ConcurrencyLimiter;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainAuthorization;
@@ -18,6 +20,7 @@ public class TrainExecutionService(
     IRunExecutor runExecutor,
     IConcurrencyLimiter concurrencyLimiter,
     IDataContextProviderFactory dataContextFactory,
+    MediatorConfiguration mediatorConfiguration,
     IServiceProvider serviceProvider
 ) : ITrainExecutionService
 {
@@ -30,6 +33,7 @@ public class TrainExecutionService(
     {
         var registration = FindTrain(trainName);
         await AuthorizeAsync(registration, ct);
+        EnforceInputSizeCap(inputJson, registration);
         var input = DeserializeInput(inputJson, registration);
 
         registration.ServiceType.FullName.AssertLoaded();
@@ -65,6 +69,7 @@ public class TrainExecutionService(
     {
         var registration = FindTrain(trainName);
         await AuthorizeAsync(registration, ct);
+        EnforceInputSizeCap(inputJson, registration);
         var input = DeserializeInput(inputJson, registration);
 
         registration.ServiceType.FullName.AssertLoaded();
@@ -85,27 +90,65 @@ public class TrainExecutionService(
     private async Task AuthorizeAsync(TrainRegistration registration, CancellationToken ct)
     {
         var authService = serviceProvider.GetService<ITrainAuthorizationService>();
+
         if (authService is not null)
+        {
             await authService.AuthorizeAsync(registration, ct);
+            return;
+        }
+
+        // Fail closed: if the train carries auth requirements but no enforcer is
+        // registered, refuse to execute. Hosts that genuinely run no API submissions
+        // (e.g. scheduler-only processes) can opt out via
+        // TraxMediatorBuilder.AllowMissingAuthorizationService().
+        if (
+            registration.HasAuthorizeAttribute
+            && !mediatorConfiguration.AllowMissingAuthorizationService
+        )
+        {
+            throw new InvalidOperationException(
+                $"Train '{registration.ServiceTypeName}' declares [TraxAuthorize] but no "
+                    + "ITrainAuthorizationService is registered. Call AddTraxApi() (or register "
+                    + "a custom ITrainAuthorizationService) before building the host. If this "
+                    + "process intentionally runs no authorized submissions, opt out with "
+                    + "AddMediator(m => m.AllowMissingAuthorizationService())."
+            );
+        }
     }
 
     private TrainRegistration FindTrain(string trainName)
     {
         var trains = discoveryService.DiscoverTrains();
 
-        // Match on fully qualified name, friendly name, or short name
-        var registration =
-            trains.FirstOrDefault(t => t.ServiceType.FullName == trainName)
-            ?? trains.FirstOrDefault(t => t.ServiceTypeName == trainName)
-            ?? trains.FirstOrDefault(t => t.ServiceType.Name == trainName);
+        var byFullName = trains.FirstOrDefault(t => t.ServiceType.FullName == trainName);
+        if (byFullName is not null)
+            return byFullName;
 
-        if (registration is null)
-            throw new InvalidOperationException(
-                $"No train found with name '{trainName}'. "
-                    + "Use ITrainDiscoveryService.DiscoverTrains() to list available trains."
+        var byFriendlyName = trains.Where(t => t.ServiceTypeName == trainName).ToList();
+        if (byFriendlyName.Count == 1)
+            return byFriendlyName[0];
+        if (byFriendlyName.Count > 1)
+            throw new AmbiguousTrainNameException(
+                trainName,
+                byFriendlyName.Select(t => t.ServiceType.FullName ?? t.ServiceTypeName).ToList()
             );
 
-        return registration;
+        throw new TrainNotFoundException(trainName);
+    }
+
+    private void EnforceInputSizeCap(string inputJson, TrainRegistration registration)
+    {
+        // Enforced post-authorization so unauthenticated callers can't map the cap,
+        // and pre-deserialization so oversized JSON never reaches the deserializer.
+        // Byte length (UTF-8) is the bounded resource — char length would miscount
+        // surrogate pairs and multi-byte sequences.
+        var byteCount = System.Text.Encoding.UTF8.GetByteCount(inputJson);
+        if (byteCount > mediatorConfiguration.MaxInputJsonBytes)
+            throw new TrainInputValidationException(
+                registration.ServiceTypeName,
+                byteCount,
+                mediatorConfiguration.MaxInputJsonBytes
+            );
     }
 
     private static object DeserializeInput(string inputJson, TrainRegistration registration)

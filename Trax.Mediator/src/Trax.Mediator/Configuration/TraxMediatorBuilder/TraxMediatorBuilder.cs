@@ -14,6 +14,9 @@ public partial class TraxMediatorBuilder
     private readonly List<Assembly> _assemblies = [];
     private int? _globalMaxConcurrentRun;
     private readonly Dictionary<string, int> _concurrencyOverrides = new();
+    private bool _allowMissingAuthorizationService;
+    private int _maxInputJsonBytes = 262_144;
+    private int? _perPrincipalMaxConcurrentRun;
 
     internal TraxMediatorBuilder(TraxBuilderWithEffects parent)
     {

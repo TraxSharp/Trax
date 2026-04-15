@@ -23,6 +23,13 @@ public class TrainRegistration
     public required IReadOnlyList<string> RequiredRoles { get; init; }
 
     /// <summary>
+    /// True when the implementation carries at least one <see cref="TraxAuthorizeAttribute"/>,
+    /// including the parameterless form. A bare <c>[TraxAuthorize]</c> sets this flag with empty
+    /// policies and roles; authorization enforcement treats it as "require an authenticated user."
+    /// </summary>
+    public bool HasAuthorizeAttribute { get; init; }
+
+    /// <summary>
     /// Whether this train is exposed as a typed GraphQL query field under <c>discover</c>.
     /// True when the implementation class has a <see cref="TraxQueryAttribute"/>.
     /// </summary>

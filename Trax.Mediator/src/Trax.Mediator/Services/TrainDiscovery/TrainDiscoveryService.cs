@@ -48,7 +48,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 ?? descriptor.ImplementationInstance?.GetType()
                 ?? descriptor.ServiceType;
 
-            var (policies, roles) = GetAuthorizationRequirements(implementationType);
+            var (hasAuthorize, policies, roles) = GetAuthorizationRequirements(implementationType);
             var graphql = GetGraphQLMetadata(implementationType);
             var broadcastEnabled = HasBroadcastAttribute(implementationType);
             var isRemote = HasRemoteAttribute(implementationType);
@@ -68,6 +68,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     OutputTypeName = GetFriendlyTypeName(outputType),
                     RequiredPolicies = policies,
                     RequiredRoles = roles,
+                    HasAuthorizeAttribute = hasAuthorize,
                     IsQuery = graphql.IsQuery,
                     IsMutation = graphql.IsMutation,
                     IsBroadcastEnabled = broadcastEnabled,
@@ -93,7 +94,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 var preferred = interfaceReg ?? concreteReg ?? g.First();
 
                 var implType = concreteReg?.ImplementationType ?? preferred.ImplementationType;
-                var (policies, roles) = GetAuthorizationRequirements(implType);
+                var (hasAuthorize, policies, roles) = GetAuthorizationRequirements(implType);
                 var graphql = GetGraphQLMetadata(implType);
                 var broadcastEnabled = HasBroadcastAttribute(implType);
                 var isRemote = HasRemoteAttribute(implType);
@@ -113,6 +114,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     OutputTypeName = preferred.OutputTypeName,
                     RequiredPolicies = policies,
                     RequiredRoles = roles,
+                    HasAuthorizeAttribute = hasAuthorize,
                     IsQuery = graphql.IsQuery,
                     IsMutation = graphql.IsMutation,
                     IsBroadcastEnabled = broadcastEnabled,
@@ -143,29 +145,59 @@ public class TrainDiscoveryService : ITrainDiscoveryService
     }
 
     private static (
+        bool HasAuthorize,
         IReadOnlyList<string> Policies,
         IReadOnlyList<string> Roles
     ) GetAuthorizationRequirements(Type implementationType)
     {
-        var attributes = implementationType.GetCustomAttributes<TraxAuthorizeAttribute>().ToList();
+        // Attributes declared on an interface do not flow to implementing types via
+        // GetCustomAttributes(inherit: true). Union attributes from every surface a
+        // developer might reasonably decorate: the implementation (including its base
+        // chain, via inherit: true) and the interfaces it implements. Ensures
+        // [TraxAuthorize] on IFooTrain or an abstract base class is honored.
+        var carriers = new List<Type> { implementationType };
+        carriers.AddRange(implementationType.GetInterfaces());
+
+        var attributes = carriers
+            .SelectMany(t => t.GetCustomAttributes<TraxAuthorizeAttribute>(inherit: true))
+            .Distinct()
+            .ToList();
 
         if (attributes.Count == 0)
-            return (Array.Empty<string>(), Array.Empty<string>());
+            return (false, Array.Empty<string>(), Array.Empty<string>());
 
-        var policies = attributes
-            .Where(a => a.Policy is not null)
-            .Select(a => a.Policy!)
-            .Distinct()
-            .ToList();
+        // Discovery is permissive: it does not throw on malformed attribute shapes
+        // (empty policy strings, whitespace-only Roles). Malformed shapes silently
+        // produce empty collections here. Startup-time validation in
+        // AuthorizationRegistrationValidator surfaces those cases loudly so hosts
+        // can fix them before serving traffic, while keeping discovery itself safe
+        // to call from assembly scanners that may pick up intentionally-malformed
+        // fixtures in test projects.
+        var policies = new List<string>();
+        foreach (var attr in attributes.Where(a => !string.IsNullOrWhiteSpace(a.Policy)))
+        {
+            var policy = attr.Policy!;
+            if (!policies.Contains(policy))
+                policies.Add(policy);
+        }
 
-        var roles = attributes
-            .Where(a => a.Roles is not null)
-            .SelectMany(a => a.Roles!.Split(',', StringSplitOptions.TrimEntries))
-            .Where(r => r.Length > 0)
-            .Distinct()
-            .ToList();
+        var roles = new List<string>();
+        foreach (var attr in attributes.Where(a => a.Roles is not null))
+        {
+            var parsed = attr.Roles!.Split(',', StringSplitOptions.TrimEntries)
+                .Where(r => r.Length > 0);
 
-        return (policies.AsReadOnly(), roles.AsReadOnly());
+            // Normalize to upper-invariant so role comparisons are case-insensitive
+            // regardless of what casing the user's ClaimTypes.Role claims carry.
+            foreach (var role in parsed)
+            {
+                var normalized = role.ToUpperInvariant();
+                if (!roles.Contains(normalized))
+                    roles.Add(normalized);
+            }
+        }
+
+        return (true, policies.AsReadOnly(), roles.AsReadOnly());
     }
 
     private static (

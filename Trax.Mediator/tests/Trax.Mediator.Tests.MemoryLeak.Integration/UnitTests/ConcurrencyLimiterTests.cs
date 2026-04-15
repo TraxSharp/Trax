@@ -231,7 +231,7 @@ public class ConcurrencyLimiterTests
         var config = new MediatorConfiguration();
         config.ConcurrencyOverrides[typeof(IFakeConcurrencyTrain).FullName!] = 3;
 
-        var limiter = new ConcurrencyLimiter(config, discovery);
+        var limiter = new ConcurrencyLimiter(config, discovery, new NullPrincipalProvider());
         var trainName = typeof(IFakeConcurrencyTrain).FullName!;
 
         // Should allow 3 concurrent (builder override), not 1 (attribute)
@@ -301,7 +301,13 @@ public class ConcurrencyLimiterTests
         }
 
         var discovery = new StubDiscoveryService([]);
-        return new ConcurrencyLimiter(config, discovery);
+        return new ConcurrencyLimiter(config, discovery, new NullPrincipalProvider());
+    }
+
+    private sealed class NullPrincipalProvider
+        : Mediator.Services.Principal.ICurrentPrincipalProvider
+    {
+        public string? GetCurrentPrincipalId() => null;
     }
 
     private interface IFakeConcurrencyTrain;

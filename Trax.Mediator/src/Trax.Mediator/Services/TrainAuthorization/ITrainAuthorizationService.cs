@@ -12,9 +12,10 @@ namespace Trax.Mediator.Services.TrainAuthorization;
 /// to evaluate <see cref="Trax.Effect.Attributes.TraxAuthorizeAttribute"/>
 /// requirements against the current HTTP user.
 ///
-/// This service is resolved optionally by <see cref="TrainExecution.TrainExecutionService"/>.
-/// When not registered (e.g., scheduler-only or dashboard-only setups),
-/// no authorization checks are performed.
+/// The execution service requires this service to be registered whenever any
+/// registered train carries <see cref="Trax.Effect.Attributes.TraxAuthorizeAttribute"/>.
+/// Scheduler-only or dashboard-only hosts that never serve API submissions can opt out via
+/// <c>TraxMediatorBuilder.AllowMissingAuthorizationService()</c>.
 /// </remarks>
 public interface ITrainAuthorizationService
 {

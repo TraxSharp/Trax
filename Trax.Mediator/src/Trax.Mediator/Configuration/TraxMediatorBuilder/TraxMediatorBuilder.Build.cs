@@ -24,6 +24,9 @@ public partial class TraxMediatorBuilder
             TrainLifetime = _lifetime,
             Assemblies = [.. _assemblies],
             GlobalMaxConcurrentRun = _globalMaxConcurrentRun,
+            AllowMissingAuthorizationService = _allowMissingAuthorizationService,
+            MaxInputJsonBytes = _maxInputJsonBytes,
+            PerPrincipalMaxConcurrentRun = _perPrincipalMaxConcurrentRun,
         };
 
         foreach (var (trainName, limit) in _concurrencyOverrides)

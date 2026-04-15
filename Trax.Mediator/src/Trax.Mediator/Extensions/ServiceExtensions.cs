@@ -3,17 +3,21 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.ConcurrencyLimiter;
+using Trax.Mediator.Services.Principal;
 using Trax.Mediator.Services.RunExecutor;
+using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Services.TrainRegistry;
+using Trax.Mediator.Services.TrustedExecution;
 
 namespace Trax.Mediator.Extensions;
 
@@ -177,6 +181,12 @@ public static class ServiceExtensions
             .AddSingleton<ITrainRegistry>(trainRegistry)
             .AddSingleton<ITrainDiscoveryService, TrainDiscoveryService>()
             .AddSingleton<IConcurrencyLimiter, ConcurrencyLimiter>()
+            .AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>()
+            // Default null-returning principal provider. Hosts with an HTTP
+            // pipeline replace this via AddTraxApi with an HttpContext-backed
+            // implementation so per-principal concurrency caps activate.
+            .AddSingleton<ICurrentPrincipalProvider, NullPrincipalProvider>()
+            .AddHostedService<AuthorizationRegistrationValidator>()
             .AddScoped<ITrainBus, TrainBus>()
             .AddScoped<IRunExecutor, LocalRunExecutor>()
             .AddScoped<ITrainExecutionService, TrainExecutionService>()

@@ -173,7 +173,9 @@ public class RunExecutorTests
 
         var act = async () => await executionService.RunAsync("NonExistent.Train", "{}");
 
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*No train found*");
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*requested train was not found*");
     }
 
     [Test]
