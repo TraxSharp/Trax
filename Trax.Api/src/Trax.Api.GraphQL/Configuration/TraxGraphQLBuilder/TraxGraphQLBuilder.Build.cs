@@ -45,7 +45,11 @@ public partial class TraxGraphQLBuilder
             modelRegistrations,
             AdditionalTypeModules,
             SchemaConfigurations,
-            AdditionalTypeExtensions
+            AdditionalTypeExtensions,
+            MaxExecutionDepthValue,
+            CostOverride,
+            IntrospectionPredicate,
+            MaxOperationsPerRequestValue
         );
     }
 }

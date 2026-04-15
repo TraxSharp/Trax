@@ -1,7 +1,10 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Trax.Api/Trax.Api.csproj" />
+    <Project Path="src/Trax.Api.Auth/Trax.Api.Auth.csproj" />
+    <Project Path="src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
     <Project Path="src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <Project Path="src/Trax.Api.GraphQL.Audit/Trax.Api.GraphQL.Audit.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Api.Tests/Trax.Api.Tests.csproj" />

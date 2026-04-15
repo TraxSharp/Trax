@@ -10,15 +10,18 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Api.Tests" />
+    <InternalsVisibleTo Include="Trax.Api.GraphQL.Audit" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../Trax.Api/Trax.Api.csproj" />
+    <ProjectReference Include="../Trax.Api.Auth/Trax.Api.Auth.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="HotChocolate.AspNetCore" Version="15.*" />
+    <PackageReference Include="HotChocolate.CostAnalysis" Version="15.*" />
     <PackageReference Include="HotChocolate.Data" Version="15.*" />
     <PackageReference Include="HotChocolate.Data.EntityFramework" Version="15.*" />
   </ItemGroup>

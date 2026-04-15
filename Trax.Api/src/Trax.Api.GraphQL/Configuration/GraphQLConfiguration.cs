@@ -1,4 +1,6 @@
+using HotChocolate.CostAnalysis;
 using HotChocolate.Execution.Configuration;
+using Microsoft.AspNetCore.Http;
 
 namespace Trax.Api.GraphQL.Configuration;
 
@@ -36,16 +38,46 @@ public class GraphQLConfiguration
     /// </summary>
     internal HashSet<string> RegisteredNamespaceTypes { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Max GraphQL execution depth (default 4). Queries deeper than this are rejected
+    /// during validation.
+    /// </summary>
+    public int MaxExecutionDepth { get; }
+
+    /// <summary>
+    /// Optional cost-analysis override. Applied after Trax defaults.
+    /// </summary>
+    internal Action<CostOptions>? CostOverride { get; }
+
+    /// <summary>
+    /// Predicate that gates introspection per request. Null → default
+    /// (Development-only). Returns <c>true</c> to allow, <c>false</c> to deny.
+    /// </summary>
+    internal Predicate<HttpContext>? IntrospectionPredicate { get; }
+
+    /// <summary>
+    /// Maximum top-level GraphQL selections per request (default 50).
+    /// </summary>
+    public int MaxOperationsPerRequest { get; }
+
     public GraphQLConfiguration(
         IReadOnlyList<QueryModelRegistration> modelRegistrations,
         IReadOnlyList<Type> additionalTypeModules,
         IReadOnlyList<Action<IRequestExecutorBuilder>> schemaConfigurations,
-        IReadOnlyList<Type> additionalTypeExtensions
+        IReadOnlyList<Type> additionalTypeExtensions,
+        int maxExecutionDepth = 4,
+        Action<CostOptions>? costOverride = null,
+        Predicate<HttpContext>? introspectionPredicate = null,
+        int maxOperationsPerRequest = 50
     )
     {
         ModelRegistrations = modelRegistrations;
         AdditionalTypeModules = additionalTypeModules;
         SchemaConfigurations = schemaConfigurations;
         AdditionalTypeExtensions = additionalTypeExtensions;
+        MaxExecutionDepth = maxExecutionDepth;
+        CostOverride = costOverride;
+        IntrospectionPredicate = introspectionPredicate;
+        MaxOperationsPerRequest = maxOperationsPerRequest;
     }
 }

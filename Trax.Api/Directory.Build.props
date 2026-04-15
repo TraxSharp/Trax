@@ -1,5 +1,9 @@
 <Project>
   <PropertyGroup>
     <Version>1.99.99</Version>
+    <Authors>Theauxm</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Api</RepositoryUrl>
+    <PackageProjectUrl>https://traxsharp.net</PackageProjectUrl>
   </PropertyGroup>
 </Project>

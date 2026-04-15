@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="FluentAssertions" Version="8.8.0" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
@@ -27,6 +28,9 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Api/Trax.Api.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.Auth/Trax.Api.Auth.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.GraphQL.Audit/Trax.Api.GraphQL.Audit.csproj" />
   </ItemGroup>
 </Project>

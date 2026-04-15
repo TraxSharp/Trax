@@ -2,8 +2,11 @@ using System.Reflection;
 using HotChocolate.Data;
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
+using HotChocolate.Validation;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
@@ -11,9 +14,11 @@ using Trax.Api.GraphQL.Errors;
 using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Api.GraphQL.Startup;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.GraphQL.Types;
+using Trax.Api.GraphQL.Validation;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
@@ -99,6 +104,8 @@ public static class GraphQLServiceExtensions
             .AddTypeModule<TrainTypeModule>()
             .AddErrorFilter<TraxErrorFilter>()
             .AddInMemorySubscriptions();
+
+        ApplyHardeningDefaults(services, graphqlBuilder, config);
 
         if (config.ModelRegistrations.Count > 0)
         {
@@ -192,5 +199,70 @@ public static class GraphQLServiceExtensions
         var endpoint = app.MapGraphQL(routePrefix, SchemaName);
         configure?.Invoke(endpoint);
         return app;
+    }
+
+    /// <summary>
+    /// Applies the Trax GraphQL hardening defaults — max depth, cost analysis,
+    /// introspection gating, and per-request operation cap — plus any overrides
+    /// the consumer supplied via <c>TraxGraphQLBuilder</c>.
+    /// </summary>
+    private static void ApplyHardeningDefaults(
+        IServiceCollection services,
+        IRequestExecutorBuilder graphqlBuilder,
+        GraphQLConfiguration config
+    )
+    {
+        // G1 — Max execution depth. Defaults to 4 unless the consumer overrides.
+        graphqlBuilder.AddMaxExecutionDepthRule(
+            config.MaxExecutionDepth,
+            skipIntrospectionFields: true
+        );
+
+        // G2 — Cost analyzer. Apply a modest default, then let the consumer tune.
+        graphqlBuilder.ModifyCostOptions(opts =>
+        {
+            opts.MaxFieldCost = 1000;
+            opts.DefaultResolverCost = 10;
+            config.CostOverride?.Invoke(opts);
+        });
+
+        // G3 — Conditional introspection. Default: on in Development, off elsewhere.
+        // Consumer predicate wins. DisableIntrospection's delegate returns TRUE to
+        // disable, so invert our "allow" predicate.
+        graphqlBuilder.DisableIntrospection(
+            (sp, _) =>
+            {
+                var httpCtx = sp.GetService<IHttpContextAccessor>()?.HttpContext;
+                if (httpCtx is null)
+                    return false;
+
+                if (config.IntrospectionPredicate is not null)
+                    return !config.IntrospectionPredicate(httpCtx);
+
+                var env = sp.GetService<IHostEnvironment>();
+                return env?.IsDevelopment() != true;
+            }
+        );
+
+        // G5 — Subscription auth interceptor. Wired when an API-key resolver is in DI.
+        if (
+            services.Any(sd =>
+                sd.ServiceType == typeof(Trax.Api.Auth.ITraxPrincipalResolver<string>)
+            )
+        )
+            graphqlBuilder.AddSocketSessionInterceptor<TraxApiKeySocketInterceptor>();
+
+        // G6 — Per-request operation cap. Register as a document validator rule so
+        // the rejection happens during validation, before any resolver runs.
+        graphqlBuilder.ConfigureSchemaServices(sc =>
+            sc.AddSingleton<IDocumentValidatorRule>(
+                new OperationCountValidatorRule(config.MaxOperationsPerRequest)
+            )
+        );
+
+        // G9 — Startup warning when model queries exist and the exposure surface is
+        // not gated explicitly. Only logs once, at host start.
+        if (config.ModelRegistrations.Count > 0)
+            services.AddHostedService<GraphQLModelExposureWarningService>();
     }
 }

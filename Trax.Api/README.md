@@ -64,12 +64,21 @@ For per-train authorization, decorate train classes with `[TraxAuthorize]`:
 public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrain { ... }
 ```
 
+## Security Disclaimer
+
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [SECURITY-DISCLAIMER.md](SECURITY-DISCLAIMER.md).
+
+Trax.Api ships authentication (`Trax.Api.Auth`, `Trax.Api.Auth.ApiKey`) and audit (`Trax.Api.GraphQL.Audit`) packages. They provide the glue between ASP.NET Core's auth primitives and Trax's train dispatch. They do not guarantee that a system using them is secure. Read [SECURITY-DISCLAIMER.md](SECURITY-DISCLAIMER.md) before deploying.
+
 ## Packages
 
 | Package | Description |
 |---------|-------------|
 | `Trax.Api` | Core library: DTOs, health check, shared service registration |
 | `Trax.Api.GraphQL` | HotChocolate schema (queries, mutations, subscriptions) |
+| `Trax.Api.Auth` | Principal abstraction and claim-type constants (no scheme). NO WARRANTY. |
+| `Trax.Api.Auth.ApiKey` | API-key authentication handler. NO WARRANTY. |
+| `Trax.Api.GraphQL.Audit` | GraphQL request audit pipeline (listener, channel, writer, sink). NO WARRANTY. |
 
 ## Part of Trax
 
