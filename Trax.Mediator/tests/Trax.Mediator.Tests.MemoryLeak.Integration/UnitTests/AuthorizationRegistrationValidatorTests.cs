@@ -85,6 +85,30 @@ public class AuthorizationRegistrationValidatorTests
     }
 
     [Test]
+    public async Task StartAsync_WhenAuthServiceScoped_AndScopeValidationOn_DoesNotThrow()
+    {
+        // Regression: the validator previously resolved ITrainAuthorizationService
+        // off the root IServiceProvider. Once the real service is registered
+        // Scoped (as it is in Trax.Api), ServiceProvider's scope validation
+        // rejects the resolution with "Cannot resolve scoped service from
+        // root provider" during hosted-service startup.
+        var services = new ServiceCollection();
+        services.AddScopedTraxRoute<ITestAuthedTrain, TestAuthedTrain>();
+        services.AddScoped<ITrainAuthorizationService>(_ =>
+            Substitute.For<ITrainAuthorizationService>()
+        );
+        var discovery = new TrainDiscoveryService(services);
+        var config = new MediatorConfiguration();
+        var sp = services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateScopes = true }
+        );
+
+        var validator = new AuthorizationRegistrationValidator(discovery, config, sp);
+
+        await validator.StartAsync(CancellationToken.None);
+    }
+
+    [Test]
     public async Task StartAsync_WhenNoAuthorizedTrainsExist_Allows()
     {
         var services = new ServiceCollection();

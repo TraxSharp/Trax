@@ -43,9 +43,15 @@ internal sealed class AuthorizationRegistrationValidator(
         if (configuration.AllowMissingAuthorizationService)
             return;
 
-        var authService = serviceProvider.GetService<ITrainAuthorizationService>();
-        if (authService is not null)
-            return;
+        // ITrainAuthorizationService is registered Scoped, so we must resolve it
+        // inside a scope. Startup runs against the root provider, which trips
+        // ServiceProvider's scope validation in dev / test hosts.
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var authService = scope.ServiceProvider.GetService<ITrainAuthorizationService>();
+            if (authService is not null)
+                return;
+        }
 
         var authorizedTrains = registrations
             .Where(t => t.HasAuthorizeAttribute)
