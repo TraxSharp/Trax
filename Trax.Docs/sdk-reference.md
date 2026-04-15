@@ -49,3 +49,19 @@ Includes: `AddTraxDashboard`, `UseTraxDashboard`, `DashboardOptions`.
 GraphQL schema for Trax using HotChocolate. Exposes train discovery, execution (via `[TraxQuery]`/`[TraxMutation]` whitelist), scheduler operations, and read-only queries.
 
 Includes: `AddTraxGraphQL`, `UseTraxGraphQL`, `[TraxQuery]`/`[TraxMutation]` attributes, queries, mutations.
+
+### [API Auth](/docs/sdk-reference/api-auth) (API)
+
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible. See [API Security](/docs/api-security).
+
+API-key authentication and the shared principal abstraction. Designed so future JWT/OIDC schemes drop in additively.
+
+Includes: `AddTraxApiKeyAuth`, `TraxPrincipal`, `ITraxPrincipalResolver`, `ApiKeyDefaults`, `ApiKeyAuthenticationOptions`, `TraxAuthClaimTypes`.
+
+### [API Audit](/docs/sdk-reference/api-audit) (API)
+
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible. See [API Security](/docs/api-security).
+
+Request-level audit pipeline for Trax GraphQL hosts. Bounded channel, background batch writer, pluggable sink and redactor.
+
+Includes: `AddAudit`, `TraxAuditEntry`, `ITraxAuditSink`, `ITraxAuditRedactor`, `TraxAuditOptions`.

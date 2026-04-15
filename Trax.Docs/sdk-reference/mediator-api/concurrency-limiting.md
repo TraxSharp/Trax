@@ -19,8 +19,23 @@ Limits are resolved in priority order:
 1. **Builder override**: `ConcurrentRunLimit<TTrain>(int)` on the mediator builder
 2. **Attribute**: `[TraxConcurrencyLimit(int)]` on the train class
 3. **Global default**: `GlobalConcurrentRunLimit(int)` on the mediator builder
+4. **Per-principal default**: `PerPrincipalMaxConcurrentRun(int)` on the mediator builder
 
-When both a per-train limit and a global limit are configured, a request must acquire both. The per-train limit prevents slamming one specific backend; the global limit caps total concurrent executions across all trains.
+When multiple limits are configured, a request must acquire all applicable permits. Acquisition order is deterministic (per-train → per-principal → global) so cross-lock deadlocks are impossible.
+
+### Per-Principal Limiting
+
+`PerPrincipalMaxConcurrentRun(int)` caps the number of concurrent `RunAsync` executions for any single authenticated principal (bucketed by the `trax:principal-id` claim). Use this to keep a single authenticated caller from saturating the global or per-train budget via request fan-out. Anonymous callers, scheduler runs, and remote-worker executions do not count against the cap.
+
+```csharp
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connStr))
+    .AddMediator(mediator => mediator
+        .ScanAssemblies(typeof(Program).Assembly)
+        .PerPrincipalMaxConcurrentRun(10)));
+```
+
+Requires `IHttpContextAccessor` in DI (registered automatically by `AddTraxApi`). Hosts without a request pipeline (scheduler-only workers) can configure the cap but it will have no effect.
 
 ### Attribute
 

@@ -7,6 +7,8 @@ section: Packages
 
 # API
 
+> **Security.** Trax ships authentication (`Trax.Api.Auth`, `Trax.Api.Auth.ApiKey`) and audit (`Trax.Api.GraphQL.Audit`) packages alongside this library. NO WARRANTY. See [API Security](/docs/api-security) before deploying to production.
+
 Trax.Api adds a programmatic interface to the scheduling and train execution system. It ships as two NuGet packages: a core library and a GraphQL transport powered by HotChocolate.
 
 The API is designed to run on a **separate machine** from the scheduler. The two share a database: the API writes work queue entries and manifest updates, the scheduler polls them and dispatches trains. This means the API server doesn't run polling services or background workers. It's a thin HTTP layer over the shared state.
