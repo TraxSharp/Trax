@@ -42,7 +42,7 @@ public class SubscriptionTests : ChatApiTestFixture
         var chatRoomId = await CreateRoom();
 
         var wsClient = SharedChatApiSetup.Factory.Server.CreateWebSocketClient();
-        await using var sub = await GraphQLWebSocketClient.ConnectAsync(wsClient);
+        await using var sub = await GraphQLWebSocketClient.ConnectAsync(wsClient, apiKey: AliceKey);
 
         await sub.SubscribeAsync(
             "completed-1",
@@ -86,7 +86,7 @@ public class SubscriptionTests : ChatApiTestFixture
     public async Task OnTrainCompleted_ReceivesEventForCreateChatRoom()
     {
         var wsClient = SharedChatApiSetup.Factory.Server.CreateWebSocketClient();
-        await using var sub = await GraphQLWebSocketClient.ConnectAsync(wsClient);
+        await using var sub = await GraphQLWebSocketClient.ConnectAsync(wsClient, apiKey: AliceKey);
 
         await sub.SubscribeAsync(
             "completed-2",
@@ -130,7 +130,7 @@ public class SubscriptionTests : ChatApiTestFixture
         var chatRoomId = await CreateRoom();
 
         var wsClient = SharedChatApiSetup.Factory.Server.CreateWebSocketClient();
-        await using var sub = await GraphQLWebSocketClient.ConnectAsync(wsClient);
+        await using var sub = await GraphQLWebSocketClient.ConnectAsync(wsClient, apiKey: AliceKey);
 
         await sub.SubscribeAsync(
             "no-event-1",

@@ -11,7 +11,10 @@ public class SubscriptionTests : ApiTestFixture
     {
         // Connect WebSocket to subscription endpoint.
         var wsClient = SharedApiSetup.Factory.Server.CreateWebSocketClient();
-        await using var sub = await GraphQLWebSocketClient.ConnectAsync(wsClient);
+        await using var sub = await GraphQLWebSocketClient.ConnectAsync(
+            wsClient,
+            apiKey: PlayerKey
+        );
 
         await sub.SubscribeAsync(
             "completed-1",
@@ -57,7 +60,10 @@ public class SubscriptionTests : ApiTestFixture
     public async Task OnTrainStarted_ReceivesEvent()
     {
         var wsClient = SharedApiSetup.Factory.Server.CreateWebSocketClient();
-        await using var sub = await GraphQLWebSocketClient.ConnectAsync(wsClient);
+        await using var sub = await GraphQLWebSocketClient.ConnectAsync(
+            wsClient,
+            apiKey: PlayerKey
+        );
 
         await sub.SubscribeAsync(
             "started-1",
@@ -101,7 +107,10 @@ public class SubscriptionTests : ApiTestFixture
     public async Task OnTrainFailed_NoEventForNonBroadcastTrain()
     {
         var wsClient = SharedApiSetup.Factory.Server.CreateWebSocketClient();
-        await using var sub = await GraphQLWebSocketClient.ConnectAsync(wsClient);
+        await using var sub = await GraphQLWebSocketClient.ConnectAsync(
+            wsClient,
+            apiKey: PlayerKey
+        );
 
         await sub.SubscribeAsync(
             "failed-1",

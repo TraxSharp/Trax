@@ -181,7 +181,11 @@ builder.Services.AddTrax(trax =>
 // Trains annotated with [TraxQuery] or [TraxMutation] get typed GraphQL
 // fields auto-generated. [TraxBroadcast] trains emit subscription events.
 builder.AddTraxDashboard();
-builder.Services.AddTraxGraphQL();
+
+// Depth 6 accommodates the dispatch → mutation → output → nested type →
+// field → scalar query chain. The Trax default of 4 is the conservative
+// production choice; raise it deliberately when your schema needs it.
+builder.Services.AddTraxGraphQL(graphql => graphql.MaxExecutionDepth(6));
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();

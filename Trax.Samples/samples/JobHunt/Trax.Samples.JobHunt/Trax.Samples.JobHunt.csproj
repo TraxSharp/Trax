@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="HotChocolate.AspNetCore" Version="15.*" />
+    <PackageReference Include="Trax.Api.Auth" Version="1.*" />
     <PackageReference Include="Trax.Effect" Version="1.*" />
     <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
     <PackageReference Include="Trax.Mediator" Version="1.*" />

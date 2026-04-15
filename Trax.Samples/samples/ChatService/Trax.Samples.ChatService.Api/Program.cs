@@ -8,9 +8,9 @@
 // to that room receives the event via WebSocket.
 //
 // Authentication: fake API key via X-Api-Key header (for demonstration only)
-//   alice-key   → user "alice"   (display name: Alice)
-//   bob-key     → user "bob"     (display name: Bob)
-//   charlie-key → user "charlie" (display name: Charlie)
+//   alice-key   → user "alice"
+//   bob-key     → user "bob"
+//   charlie-key → user "charlie"
 //
 // Prerequisites:
 //   1. Pack local:      ./pack-local.sh
@@ -37,8 +37,8 @@
 //   { discover { getChatHistory(input: { chatRoomId: "<id>" }) { messages { senderDisplayName content sentAt } } } }
 // ─────────────────────────────────────────────────────────────────────────────
 
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
+using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Effect.Data.Sqlite.Extensions;
@@ -50,6 +50,7 @@ using Trax.Samples.ChatService.Auth;
 using Trax.Samples.ChatService.Data;
 using Trax.Samples.ChatService.Hooks;
 using Trax.Samples.ChatService.Subscriptions;
+using SampleKeys = Trax.Samples.ChatService.Auth.ApiKeyDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -64,13 +65,12 @@ builder.Services.AddLogging(logging => logging.AddConsole());
 // ── Chat data layer ─────────────────────────────────────────────────────────
 builder.Services.AddDbContext<ChatDbContext>(options => options.UseSqlite(chatConnectionString));
 
-// ── Authentication — fake API key for demonstration ─────────────────────────
-builder
-    .Services.AddAuthentication(ApiKeyDefaults.AuthenticationScheme)
-    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthHandler>(
-        ApiKeyDefaults.AuthenticationScheme,
-        null
-    );
+// ── Authentication, fake API key for demonstration (NO WARRANTY, see SECURITY-DISCLAIMER.md) ──
+builder.Services.AddTraxApiKeyAuth(keys =>
+    keys.Add(SampleKeys.AliceKey, id: "alice", nameof(ChatRole.User))
+        .Add(SampleKeys.BobKey, id: "bob", nameof(ChatRole.User))
+        .Add(SampleKeys.CharlieKey, id: "charlie", nameof(ChatRole.User))
+);
 
 builder.Services.AddAuthorization();
 

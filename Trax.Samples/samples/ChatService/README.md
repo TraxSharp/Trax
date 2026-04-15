@@ -122,3 +122,9 @@ dotnet test tests/Trax.Samples.ChatService.Tests
 ```
 
 31 tests covering lifecycle hook behavior (10 unit) and all train steps (21 integration using EF Core in-memory provider).
+
+## Security
+
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [SECURITY-DISCLAIMER.md](../../../Trax.Api/SECURITY-DISCLAIMER.md).
+
+The sample keys (`alice-key`, `bob-key`, `charlie-key`) are plaintext constants for demonstration only. Never ship them in production.

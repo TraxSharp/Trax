@@ -59,7 +59,15 @@ builder.Services.AddTrax(trax =>
                 .AddJunctionProgress()
                 .AddLifecycleHook<AuditLogHook>()
         )
-        .AddMediator(typeof(ManifestNames).Assembly)
+        // The scheduler is trusted infrastructure: it dispatches work that was
+        // already authorized at API submission time. [TraxAuthorize]-gated
+        // trains still register here because they execute in this process, but
+        // no ITrainAuthorizationService is wired up.
+        .AddMediator(mediator =>
+            mediator
+                .ScanAssemblies(typeof(ManifestNames).Assembly)
+                .AllowMissingAuthorizationService()
+        )
         .AddScheduler(scheduler =>
             scheduler
                 // ── Global Configuration ────────────────────────────────────────

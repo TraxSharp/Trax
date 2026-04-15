@@ -54,8 +54,8 @@
 //   curl http://localhost:5200/trax/health
 // ─────────────────────────────────────────────────────────────────────────────
 
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
+using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Effect.Data.Extensions;
@@ -69,6 +69,7 @@ using Trax.Samples.GameServer.Auth;
 using Trax.Samples.GameServer.Data;
 using Trax.Samples.GameServer.Data.Models;
 using Trax.Samples.GameServer.Hooks;
+using SampleKeys = Trax.Samples.GameServer.Auth.ApiKeyDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -78,24 +79,31 @@ var connectionString =
 
 builder.Services.AddLogging(logging => logging.AddConsole());
 
-// ── CORS — allow any local dev to connect ──────────────
+// ── CORS — restrict to known local dev origins ────────────────────────
+// AllowAnyOrigin() combined with custom auth headers lets any origin script
+// requests that carry whatever credentials the browser has available. Widen
+// this list deliberately, or switch to a cookie scheme with real CSRF
+// protection, before shipping.
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+    options.AddDefaultPolicy(policy =>
+        policy
+            .WithOrigins("http://localhost:5173", "http://localhost:3000")
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+    );
 });
 
-// ── Authentication — fake API key for demonstration ──────────────────────
-builder
-    .Services.AddAuthentication(ApiKeyDefaults.AuthenticationScheme)
-    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthHandler>(
-        ApiKeyDefaults.AuthenticationScheme,
-        null
-    );
+// ── Authentication, fake API key for demonstration (NO WARRANTY, see SECURITY-DISCLAIMER.md) ──
+builder.Services.AddTraxApiKeyAuth(keys =>
+    keys.Add(SampleKeys.AdminKey, id: "admin", nameof(GameRole.Admin), nameof(GameRole.Player))
+        .Add(SampleKeys.PlayerKey, id: "player", nameof(GameRole.Player))
+);
 
 // ── Authorization policies ──────────────────────────────────────────────
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
+    options.AddPolicy(nameof(GameRole.Admin), policy => policy.RequireRole(nameof(GameRole.Admin)));
 });
 
 // ── Register Trax Effect + Mediator (trains, bus, discovery, execution) ──
@@ -117,8 +125,15 @@ builder.Services.AddTrax(trax =>
 builder.Services.AddDbContextFactory<GameDbContext>(options => options.UseNpgsql(connectionString));
 
 // ── Register GraphQL API with model query discovery ─────────────────────
+// Depth 6 accommodates the sample's model-query chain:
+// dispatch → mutation → output → nested type → field → scalar.
+// The Trax default of 4 is the conservative production choice; raise it
+// deliberately when your schema needs it.
 builder.Services.AddTraxGraphQL(graphql =>
-    graphql.AddDbContext<GameDbContext>().AddTypeExtensions(typeof(Program).Assembly)
+    graphql
+        .MaxExecutionDepth(6)
+        .AddDbContext<GameDbContext>()
+        .AddTypeExtensions(typeof(Program).Assembly)
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 

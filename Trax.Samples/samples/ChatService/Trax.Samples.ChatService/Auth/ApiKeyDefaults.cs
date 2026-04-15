@@ -1,12 +1,19 @@
 namespace Trax.Samples.ChatService.Auth;
 
+/// <summary>
+/// Demo API keys used by the ChatService sample. For demonstration only: these
+/// are plaintext constants published in the Trax repository. Any production
+/// system that ships them is broken. See
+/// <c>Trax.Api/SECURITY-DISCLAIMER.md</c>.
+/// </summary>
 public static class ApiKeyDefaults
 {
-    public const string AuthenticationScheme = "ApiKey";
-    public const string HeaderName = "X-Api-Key";
-
-    // WARNING: FAKE KEYS — never use plaintext keys in production.
+    /// <summary>Resolves to user <c>alice</c> (display name <c>Alice</c>).</summary>
     public const string AliceKey = "alice-key";
+
+    /// <summary>Resolves to user <c>bob</c> (display name <c>Bob</c>).</summary>
     public const string BobKey = "bob-key";
+
+    /// <summary>Resolves to user <c>charlie</c> (display name <c>Charlie</c>).</summary>
     public const string CharlieKey = "charlie-key";
 }

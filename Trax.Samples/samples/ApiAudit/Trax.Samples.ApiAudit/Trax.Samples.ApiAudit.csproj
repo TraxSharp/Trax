@@ -5,20 +5,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
-    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Trax.Samples.JobHunt\Trax.Samples.JobHunt.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <PackageReference Include="Trax.Effect" Version="1.*" />
+    <PackageReference Include="Trax.Effect.Data.Sqlite" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.*" />
+    <PackageReference Include="Trax.Mediator" Version="1.*" />
     <PackageReference Include="Trax.Api" Version="1.*" />
     <PackageReference Include="Trax.Api.Auth.ApiKey" Version="1.*" />
     <PackageReference Include="Trax.Api.GraphQL" Version="1.*" />
-    <PackageReference Include="Trax.Dashboard" Version="1.*" />
+    <PackageReference Include="Trax.Api.GraphQL.Audit" Version="1.*" />
   </ItemGroup>
 </Project>

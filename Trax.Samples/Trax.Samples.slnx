@@ -31,6 +31,9 @@
     <Project Path="samples/JobHunt/Trax.Samples.JobHunt/Trax.Samples.JobHunt.csproj" />
     <Project Path="samples/JobHunt/Trax.Samples.JobHunt.Hub/Trax.Samples.JobHunt.Hub.csproj" />
   </Folder>
+  <Folder Name="/samples/ApiAudit/">
+    <Project Path="samples/ApiAudit/Trax.Samples.ApiAudit/Trax.Samples.ApiAudit.csproj" />
+  </Folder>
   <Folder Name="/samples/TestRunner/">
     <Project Path="samples/TestRunner/Trax.Samples.TestRunner/Trax.Samples.TestRunner.csproj" />
     <Project Path="samples/TestRunner/Trax.Samples.TestRunner.Hub/Trax.Samples.TestRunner.Hub.csproj" />
