@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainExecution;
+using Trax.Mediator.Services.TrustedExecution;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RunExecutor;
 using Trax.Scheduler.Trains.JobRunner;
@@ -16,6 +17,7 @@ namespace Trax.Scheduler.Services.RequestHandler;
 internal class TraxRequestHandler(
     IJobRunnerTrain jobRunnerTrain,
     ITrainExecutionService executionService,
+    ITrustedExecutionScope trustedScope,
     ILogger<TraxRequestHandler> logger
 ) : ITraxRequestHandler
 {
@@ -51,6 +53,10 @@ internal class TraxRequestHandler(
     {
         try
         {
+            // Remote job submissions were already authorized at the original API
+            // submission point. Mark this execution as trusted so the mediator's
+            // authorization service skips the per-train check.
+            using var _ = trustedScope.BeginTrusted("scheduler.remote-run");
             var result = await executionService.RunAsync(request.TrainName, request.InputJson, ct);
 
             string? outputJson = null;

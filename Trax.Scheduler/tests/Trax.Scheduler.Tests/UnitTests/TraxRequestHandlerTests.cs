@@ -7,6 +7,7 @@ using Trax.Core.Exceptions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainExecution;
+using Trax.Mediator.Services.TrustedExecution;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RequestHandler;
 using Trax.Scheduler.Services.RunExecutor;
@@ -302,6 +303,7 @@ public class TraxRequestHandlerTests
         return new TraxRequestHandler(
             jobRunner ?? new FakeJobRunnerTrain(),
             executionService ?? new FakeTrainExecutionService(),
+            new TrustedExecutionScope(),
             NullLogger<TraxRequestHandler>.Instance
         );
     }
