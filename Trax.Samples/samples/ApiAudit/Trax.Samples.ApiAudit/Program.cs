@@ -52,12 +52,18 @@ builder.Services.AddTrax(trax =>
 );
 
 // ── GraphQL + Audit (NO WARRANTY) ──
+// RequireAuthorization() gates HTTP execution behind the API key. The Banana
+// Cake Pop tool page (GET /trax/graphql) and schema introspection are
+// governed independently and stay reachable, so a developer can load the
+// IDE without credentials and only needs a key to run an actual operation.
 builder.Services.AddTraxGraphQL(graphql =>
-    graphql.AddAudit<ConsoleAuditSink>(opts =>
-    {
-        opts.BatchSize = 10;
-        opts.FlushInterval = TimeSpan.FromMilliseconds(250);
-    })
+    graphql
+        .RequireAuthorization()
+        .AddAudit<ConsoleAuditSink>(opts =>
+        {
+            opts.BatchSize = 10;
+            opts.FlushInterval = TimeSpan.FromMilliseconds(250);
+        })
 );
 
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
