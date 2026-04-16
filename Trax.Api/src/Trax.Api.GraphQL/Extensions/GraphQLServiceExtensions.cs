@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.Extensions;
+using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Errors;
@@ -251,6 +252,15 @@ public static class GraphQLServiceExtensions
             )
         )
             graphqlBuilder.AddSocketSessionInterceptor<TraxApiKeySocketInterceptor>();
+
+        // G7 — HTTP execution authorization. Wired when the builder opted in via
+        // RequireAuthorization(). The interceptor only runs for GraphQL execution
+        // requests, so the BCP tool page and schema introspection stay reachable.
+        if (config.AuthorizationRequired)
+        {
+            graphqlBuilder.AddHttpRequestInterceptor<TraxGraphQLAuthInterceptor>();
+            services.AddHostedService<TraxGraphQLAuthPolicyValidator>();
+        }
 
         // G6 — Per-request operation cap. Register as a document validator rule so
         // the rejection happens during validation, before any resolver runs.

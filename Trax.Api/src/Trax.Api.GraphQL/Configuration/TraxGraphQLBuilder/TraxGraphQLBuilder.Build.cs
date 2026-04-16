@@ -49,7 +49,9 @@ public partial class TraxGraphQLBuilder
             MaxExecutionDepthValue,
             CostOverride,
             IntrospectionPredicate,
-            MaxOperationsPerRequestValue
+            MaxOperationsPerRequestValue,
+            AuthorizationRequired,
+            AuthorizationPolicy
         );
     }
 }

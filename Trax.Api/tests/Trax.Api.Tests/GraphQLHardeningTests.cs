@@ -230,4 +230,62 @@ public class GraphQLHardeningTests
     }
 
     #endregion
+
+    #region RequireAuthorization
+
+    [Test]
+    public void RequireAuthorization_DefaultBuilderState_NotRequired()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+
+        builder.AuthorizationRequired.Should().BeFalse();
+        builder.AuthorizationPolicy.Should().BeNull();
+    }
+
+    [Test]
+    public void RequireAuthorization_NoArgs_FlagsRequired_WithNullPolicy()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+
+        builder.RequireAuthorization();
+
+        builder.AuthorizationRequired.Should().BeTrue();
+        builder.AuthorizationPolicy.Should().BeNull();
+    }
+
+    [Test]
+    public void RequireAuthorization_WithExplicitPolicy_StoresPolicy()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+
+        builder.RequireAuthorization("MyCustomPolicy");
+
+        builder.AuthorizationRequired.Should().BeTrue();
+        builder.AuthorizationPolicy.Should().Be("MyCustomPolicy");
+    }
+
+    [Test]
+    public void RequireAuthorization_PropagatesToConfiguration()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+        builder.RequireAuthorization("ExplicitPolicy");
+
+        var config = builder.Build();
+
+        config.AuthorizationRequired.Should().BeTrue();
+        config.AuthorizationPolicy.Should().Be("ExplicitPolicy");
+    }
+
+    [Test]
+    public void RequireAuthorization_NotCalled_ConfigurationFlagsFalse()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+
+        var config = builder.Build();
+
+        config.AuthorizationRequired.Should().BeFalse();
+        config.AuthorizationPolicy.Should().BeNull();
+    }
+
+    #endregion
 }

@@ -60,6 +60,21 @@ public class GraphQLConfiguration
     /// </summary>
     public int MaxOperationsPerRequest { get; }
 
+    /// <summary>
+    /// True when <c>RequireAuthorization()</c> was called on the builder.
+    /// Gates GraphQL execution (HTTP POST and GET-with-query); the BCP tool
+    /// page and schema introspection are governed independently.
+    /// </summary>
+    internal bool AuthorizationRequired { get; }
+
+    /// <summary>
+    /// Authorization policy applied by the execution interceptor when
+    /// <see cref="AuthorizationRequired"/> is true. <c>null</c> means
+    /// "use the combined Trax auth policy" — every <c>AddTrax*Auth</c>
+    /// registers its scheme into that policy.
+    /// </summary>
+    internal string? AuthorizationPolicy { get; }
+
     public GraphQLConfiguration(
         IReadOnlyList<QueryModelRegistration> modelRegistrations,
         IReadOnlyList<Type> additionalTypeModules,
@@ -68,7 +83,9 @@ public class GraphQLConfiguration
         int maxExecutionDepth = 4,
         Action<CostOptions>? costOverride = null,
         Predicate<HttpContext>? introspectionPredicate = null,
-        int maxOperationsPerRequest = 50
+        int maxOperationsPerRequest = 50,
+        bool authorizationRequired = false,
+        string? authorizationPolicy = null
     )
     {
         ModelRegistrations = modelRegistrations;
@@ -79,5 +96,7 @@ public class GraphQLConfiguration
         CostOverride = costOverride;
         IntrospectionPredicate = introspectionPredicate;
         MaxOperationsPerRequest = maxOperationsPerRequest;
+        AuthorizationRequired = authorizationRequired;
+        AuthorizationPolicy = authorizationPolicy;
     }
 }

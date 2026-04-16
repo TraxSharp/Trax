@@ -19,6 +19,10 @@ public partial class TraxGraphQLBuilder
 
     internal int MaxOperationsPerRequestValue { get; private set; } = 50;
 
+    internal bool AuthorizationRequired { get; private set; }
+
+    internal string? AuthorizationPolicy { get; private set; }
+
     /// <summary>
     /// Sets the maximum GraphQL query depth. The default is <c>4</c>.
     /// Callers that legitimately need deeper queries (e.g. model projections
@@ -83,6 +87,33 @@ public partial class TraxGraphQLBuilder
                 "MaxOperationsPerRequest must be positive."
             );
         MaxOperationsPerRequestValue = maxOperations;
+        return this;
+    }
+
+    /// <summary>
+    /// Gates GraphQL execution behind an authorization policy. The Banana Cake
+    /// Pop tool page (HTML GET) and schema introspection are governed
+    /// independently and remain reachable; only requests that carry an actual
+    /// GraphQL operation are checked.
+    /// <para>
+    /// Pass no argument to use the combined Trax auth policy
+    /// (<c>TraxAuthClaimTypes.TraxAuthPolicy</c>), which every <c>AddTrax*Auth</c>
+    /// extension registers its scheme into. Pass an explicit policy name to
+    /// require something more specific (for example <c>ApiKeyDefaults.PolicyName</c>
+    /// to require an API key even if other schemes are registered).
+    /// </para>
+    /// <para>
+    /// Failed checks surface as a GraphQL error with code <c>TRAX_AUTHORIZATION</c>
+    /// rather than an HTTP 401, so the IDE renders them in its result pane and
+    /// the response shape stays consistent with per-train authorization failures.
+    /// Subscription auth is governed by the WebSocket interceptor wired by
+    /// <c>AddTraxApiKeyAuth</c>; this method only affects HTTP execution.
+    /// </para>
+    /// </summary>
+    public TraxGraphQLBuilder RequireAuthorization(string? policy = null)
+    {
+        AuthorizationRequired = true;
+        AuthorizationPolicy = policy;
         return this;
     }
 }
