@@ -59,6 +59,7 @@ builder.Services.AddTraxGraphQL(graphql => graphql
 | `ConfigureCost(Action<CostOptions>)` | Adjusts HotChocolate cost-analyzer options on top of Trax defaults (`MaxFieldCost = 1000`, `DefaultResolverCost = 10`). |
 | `AllowIntrospection(Predicate<HttpContext>)` | Supplies a per-request predicate that decides whether introspection is allowed. Default: allowed in Development, denied elsewhere. |
 | `MaxOperationsPerRequest(int)` | Overrides the default top-level operation cap (default: 50). Aliased fields and batched operations both count. Rejects with code `TRAX_TOO_MANY_OPERATIONS`. |
+| `RequireAuthorization(string? policy = null)` | Gates GraphQL HTTP execution behind an authorization policy. The Banana Cake Pop tool page (HTML GET) and schema introspection are governed independently and stay reachable. Pass no argument to use the combined Trax auth policy that every `AddTrax*Auth` extension contributes a scheme to; pass an explicit policy name (e.g. `ApiKeyDefaults.PolicyName`) to require something more specific. Failed checks return a GraphQL error with code `TRAX_AUTHORIZATION` rather than HTTP 401. Subscription auth is governed by the WebSocket interceptor. |
 
 All builder methods return the builder for fluent chaining.
 
@@ -140,12 +141,20 @@ To serve the endpoint at a different path:
 app.UseTraxGraphQL(routePrefix: "/api/graphql");
 ```
 
-With authorization:
+Endpoint-level authorization (gates *everything* on the route, including the BCP tool page):
 
 ```csharp
 app.UseTraxGraphQL(configure: endpoint => endpoint
     .RequireAuthorization("AdminPolicy"));
 ```
+
+Execution-only authorization (BCP and introspection stay open, queries and mutations require a key):
+
+```csharp
+builder.Services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
+```
+
+The two are independent. Use the builder method when you want developers to load the IDE without credentials and only enforce auth on actual GraphQL operations; use the endpoint method when even the IDE shell should be gated.
 
 ## Package
 

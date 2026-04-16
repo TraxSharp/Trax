@@ -116,6 +116,30 @@ services.AddTraxGraphQL(graphql => graphql
 | Introspection | On in Development, off elsewhere | Prevents anonymous schema enumeration in production. |
 | `MaxOperationsPerRequest` | 50 | Caps aliased + batched top-level selections per request. Rejects with `TRAX_TOO_MANY_OPERATIONS`. |
 
+### Gating GraphQL Execution Without Locking the IDE
+
+Endpoint-level `RequireAuthorization` blanket-gates the route, including the GET that serves the Banana Cake Pop tool page. Developers can't even load the IDE to paste a key. The builder method splits these concerns:
+
+```csharp
+services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
+```
+
+This installs a HotChocolate `IHttpRequestInterceptor` that runs only when the request is an actual GraphQL operation. The BCP HTML shell, schema introspection (when allowed by `AllowIntrospection`), and CORS preflights are not affected. POST queries and mutations are checked against the policy and rejected with a GraphQL error:
+
+```json
+{ "errors": [{ "message": "Not authorized.", "extensions": { "code": "TRAX_AUTHORIZATION" } }] }
+```
+
+The error renders inline in the IDE result pane and matches the shape of per-train `[TraxAuthorize]` failures.
+
+The default policy is the combined `TraxAuthClaimTypes.TraxAuthPolicy`, which every `AddTrax*Auth` extension contributes its scheme to. When multiple schemes are registered (API key + JWT, etc.), any one of them is sufficient. To require a specific scheme:
+
+```csharp
+services.AddTraxGraphQL(graphql => graphql.RequireAuthorization(ApiKeyDefaults.PolicyName));
+```
+
+Subscription auth is a separate path: the `connection_init` payload is checked by `TraxApiKeySocketInterceptor` (wired automatically by `AddTraxApiKeyAuth`). `RequireAuthorization` only governs HTTP execution. If the policy isn't actually registered at startup, the host fails fast with a message naming the policy and pointing to `AddTraxApiKeyAuth`.
+
 ### Per-Principal Concurrency
 
 `PerPrincipalMaxConcurrentRun(int)` on `TraxMediatorBuilder` caps the number of concurrent `RunAsync` executions for any single authenticated principal. Requests that exceed the cap queue on a per-principal semaphore until in-flight work completes.
