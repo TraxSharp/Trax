@@ -125,9 +125,18 @@ public sealed class TraxGraphQLAuditListener(
         if (variables is null)
             return null;
 
+        // context.Variables is IReadOnlyList<IVariableValueCollection> in HC 15.x
+        // (one collection per operation, to support batched requests). The inner
+        // IVariableValueCollection itself is IEnumerable<VariableValue>, so no
+        // cast is needed past the outer list.
         var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var variable in (IEnumerable<VariableValue>)variables)
-            dict[variable.Name] = variable.Value?.ToString();
+        foreach (var collection in variables)
+        {
+            if (collection is null)
+                continue;
+            foreach (var variable in collection)
+                dict[variable.Name] = variable.Value?.ToString();
+        }
         return dict.Count == 0 ? null : dict;
     }
 
