@@ -13,6 +13,14 @@ section: Guides
 
 This page covers authentication, audit logging, and operational hygiene for Trax GraphQL hosts. Read the [security disclaimer](https://github.com/TraxSharp/Trax.Api/blob/main/SECURITY-DISCLAIMER.md) before shipping any of this to production.
 
+Trax ships three pluggable authentication schemes, all feeding the same [`TraxPrincipal`](/docs/sdk-reference/api-auth/trax-principal) abstraction:
+
+- `Trax.Api.Auth.ApiKey` — header-based API keys for service-to-service calls.
+- `Trax.Api.Auth.Jwt` — JWT bearer tokens for SPA and machine-to-machine API clients.
+- `Trax.Api.Auth.Oidc` — OpenID Connect code flow for interactive browser sign-in.
+
+Multiple schemes can coexist in a single host. Every `AddTrax*Auth` call contributes its scheme to the combined `TraxAuthClaimTypes.TraxAuthPolicy`, so endpoints protected by that policy accept credentials from any registered scheme.
+
 ## API-Key Authentication
 
 `Trax.Api.Auth.ApiKey` wraps an ASP.NET Core `AuthenticationHandler`. Every request that presents a configured header (default `X-Api-Key`) is resolved by an `ITraxPrincipalResolver<string>` into a `TraxPrincipal`. Missing header returns `NoResult`, letting `[AllowAnonymous]` routes keep working. Present but unresolved returns `Fail`.
@@ -60,9 +68,51 @@ The handler rejects:
 
 Missing or whitespace-only headers return `AuthenticateResult.NoResult()` so `[AllowAnonymous]` routes keep working.
 
+## JWT Bearer Authentication
+
+`Trax.Api.Auth.Jwt` is a thin wrapper around `Microsoft.AspNetCore.Authentication.JwtBearer`. Token validation (signature, issuer, audience, lifetime) runs through Microsoft's handler. After validation, Trax runs an `ITraxPrincipalResolver<JwtTokenInput>` to project the validated token into a `TraxPrincipal`.
+
+For tokens from an OIDC provider (Auth0, Okta, Entra, Cognito):
+
+```csharp
+services.AddTraxJwtAuth(jwt => jwt.UseAuthority(
+    authority: "https://login.example.com",
+    audience:  "my-api"));
+```
+
+For self-issued tokens:
+
+```csharp
+services.AddTraxJwtAuth(jwt => jwt.UseSymmetricKey(
+    issuer:   "https://trax.internal",
+    audience: "my-api",
+    key:      Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SigningKey"]!)));
+```
+
+The default resolver maps `sub` (or `nameidentifier`) to `TraxPrincipal.Id`, `name` or `preferred_username` to `DisplayName`, and `role` / `roles` / `ClaimTypes.Role` claims to `Roles`. Other claims pass through on the custom claim bag. For custom mapping (database enrichment, token revocation checks), supply `ITraxPrincipalResolver<JwtTokenInput>` via `AddTraxJwtAuth<TResolver>`.
+
+## OpenID Connect Authentication
+
+`Trax.Api.Auth.Oidc` wires the browser-facing OIDC code flow with PKCE. A challenge against `OidcDefaults.SchemeName` redirects to the identity provider; on callback, the handler validates the id-token and signs the user into a session cookie (`OidcDefaults.CookieSchemeName`). Subsequent requests authenticate against the cookie.
+
+```csharp
+services.AddTraxOidcAuth(oidc => oidc
+    .UseAuthority("https://login.example.com", "my-client-id")
+    .WithClientSecret(builder.Configuration["Oidc:ClientSecret"]!)
+    .AddScope("email"));
+
+app.MapGet("/login", () =>
+    Results.Challenge(new AuthenticationProperties { RedirectUri = "/" },
+        new[] { OidcDefaults.SchemeName }));
+```
+
+Unauthenticated API requests against the cookie scheme return `401` (not a redirect to `/Account/Login`). For non-browser clients that present bearer tokens, use `AddTraxJwtAuth` instead; OIDC is for the interactive sign-in path.
+
 ## Subscription Authentication
 
-Browsers cannot attach custom headers to a WebSocket upgrade, so subscription auth travels in the `connection_init` payload:
+Browsers cannot attach custom headers to a WebSocket upgrade, so header-bound schemes (API key, JWT bearer) carry credentials in the `connection_init` payload instead. Cookie-bound schemes (OIDC) need no special handling: the browser attaches cookies to the upgrade request, so the cookie middleware authenticates the upgrade like any HTTP request.
+
+### API key
 
 ```js
 const ws = new WebSocket("wss://host/trax/graphql", "graphql-transport-ws");
@@ -72,7 +122,23 @@ ws.onopen = () => ws.send(JSON.stringify({
 }));
 ```
 
-`AddTraxApiKeyAuth` automatically registers `TraxApiKeySocketInterceptor` when the Trax GraphQL schema is present. The interceptor resolves the token via the same `ITraxPrincipalResolver<string>` used by the REST handler, attaches the resulting principal to `HttpContext.User` for the socket lifetime, and rejects the connection when the token is missing or invalid.
+`AddTraxApiKeyAuth` auto-registers `TraxApiKeySocketInterceptor` when the Trax GraphQL schema is present. The interceptor resolves the token via the same `ITraxPrincipalResolver<string>` used by the REST handler, attaches the resulting principal to `HttpContext.User` for the socket lifetime, and rejects the connection when the token is missing or invalid.
+
+### JWT bearer
+
+```js
+const ws = new WebSocket("wss://host/trax/graphql", "graphql-transport-ws");
+ws.onopen = () => ws.send(JSON.stringify({
+    type: "connection_init",
+    payload: { authToken: "<jwt>" }  // or "bearer"
+}));
+```
+
+`AddTraxJwtAuth` auto-registers `TraxJwtSocketInterceptor` when the Trax GraphQL schema is present. The interceptor validates the token against the same `JwtBearerOptions` (signature, issuer, audience, lifetime, clock skew) the HTTP handler uses — the WS and HTTP paths cannot diverge. It then runs `ITraxPrincipalResolver<JwtTokenInput>` and attaches the resulting principal.
+
+### OIDC cookie
+
+No extra code required. The browser attaches the session cookie (`trax.oidc`) to the WebSocket upgrade request; ASP.NET Core's cookie middleware reads and validates it on the upgrade, and `HttpContext.User` is populated for the socket lifetime. This is the one genuinely symmetric path across HTTP and WS.
 
 ## Per-Train Authorization
 
@@ -207,4 +273,4 @@ Trax does none of these for you:
 
 ## SDK Reference
 
-> [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal) | [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal) | [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddAudit](/docs/sdk-reference/api-audit/add-audit) | [TraxAuditEntry](/docs/sdk-reference/api-audit/trax-audit-entry) | [ITraxAuditSink](/docs/sdk-reference/api-audit/i-trax-audit-sink) | [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options)
+> [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [AddTraxOidcAuth](/docs/sdk-reference/api-auth/add-trax-oidc-auth) | [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal) | [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal) | [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddAudit](/docs/sdk-reference/api-audit/add-audit) | [TraxAuditEntry](/docs/sdk-reference/api-audit/trax-audit-entry) | [ITraxAuditSink](/docs/sdk-reference/api-audit/i-trax-audit-sink) | [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options)
