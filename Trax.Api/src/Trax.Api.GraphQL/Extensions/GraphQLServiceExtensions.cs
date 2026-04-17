@@ -245,13 +245,28 @@ public static class GraphQLServiceExtensions
             }
         );
 
-        // G5 — Subscription auth interceptor. Wired when an API-key resolver is in DI.
+        // G5 — Subscription auth interceptors. Browsers cannot attach headers to
+        // WebSocket upgrades, so each auth scheme registers an interceptor that
+        // reads the credential from the connection_init payload. Wired only when
+        // the corresponding principal resolver is present in DI.
+        //
+        // Cookie-based auth (Trax.Api.Auth.Oidc) needs no interceptor here: the
+        // browser attaches cookies to the upgrade request and the cookie scheme
+        // authenticates on the upgrade like any HTTP request.
         if (
             services.Any(sd =>
                 sd.ServiceType == typeof(Trax.Api.Auth.ITraxPrincipalResolver<string>)
             )
         )
             graphqlBuilder.AddSocketSessionInterceptor<TraxApiKeySocketInterceptor>();
+
+        if (
+            services.Any(sd =>
+                sd.ServiceType
+                == typeof(Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput>)
+            )
+        )
+            graphqlBuilder.AddSocketSessionInterceptor<TraxJwtSocketInterceptor>();
 
         // G7 — HTTP execution authorization. Wired when the builder opted in via
         // RequireAuthorization(). The interceptor only runs for GraphQL execution

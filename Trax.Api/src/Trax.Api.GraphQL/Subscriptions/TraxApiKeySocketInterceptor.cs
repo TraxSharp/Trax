@@ -109,5 +109,5 @@ public sealed class TraxApiKeySocketInterceptor(
         }
     }
 
-    private sealed record ConnectionInitPayload(string? AuthToken, string? ApiKey);
+    internal sealed record ConnectionInitPayload(string? AuthToken, string? ApiKey);
 }

@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="../Trax.Api/Trax.Api.csproj" />
     <ProjectReference Include="../Trax.Api.Auth/Trax.Api.Auth.csproj" />
+    <ProjectReference Include="../Trax.Api.Auth.Jwt/Trax.Api.Auth.Jwt.csproj" />
   </ItemGroup>
 
   <ItemGroup>
