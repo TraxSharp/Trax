@@ -78,6 +78,32 @@ services.AddTraxJwtAuth(jwt => jwt.UseSymmetricKey(
 
 `UseSymmetricKey` requires at least 32 bytes (HS256 minimum). For RSA or EC, use `UseSigningKey(issuer, audience, SecurityKey)` with an `RsaSecurityKey` or `ECDsaSecurityKey`.
 
+## Do you actually need a custom resolver?
+
+Most apps don't. The positional overload plus the default resolver is the whole integration:
+
+```csharp
+services.AddTraxJwtAuth("https://login.example.com", "my-api");
+```
+
+`DefaultJwtPrincipalResolver` maps the standard OIDC claims:
+
+| Token claim | Lands on |
+|---|---|
+| `sub` (then `nameidentifier`) | `TraxPrincipal.Id` |
+| `name` (then `preferred_username`, `email`) | `TraxPrincipal.DisplayName` |
+| `role`, `roles`, `ClaimTypes.Role` | `TraxPrincipal.Roles` |
+| Everything else | `TraxPrincipal.Claims` (verbatim, with Trax-reserved claim types filtered out) |
+
+If your provider emits those claims (Google, Auth0, Entra, Cognito, Okta all do), you write zero code. `TraxPrincipal` injection, per-train `[TraxAuthorize]`, and role checks all work end to end.
+
+Reach for a custom resolver only when one of these is true:
+
+- **Roles live in a non-standard claim.** Entra app roles, Okta group URIs, namespaced Auth0 claims.
+- **You need database enrichment.** Look up the user's tenant, permissions, feature flags — anything that isn't already in the token.
+- **You need to reject unknown subjects.** Allow-list of provisioned users, revocation cache, account suspension check.
+- **You need to transform claims.** Strip a namespace prefix, coerce numeric subjects to strings, merge multiple role sources into one.
+
 ## Custom resolver
 
 When the token's `sub` needs to be matched against a user record (tenant lookup, role enrichment, revocation check):
