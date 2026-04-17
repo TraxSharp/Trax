@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <UserSecretsId>a4458be6-4c07-4927-ad99-1a366d87cb3b</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +17,7 @@
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
     <PackageReference Include="Trax.Api" Version="1.*" />
     <PackageReference Include="Trax.Api.Auth.ApiKey" Version="1.*" />
+    <PackageReference Include="Trax.Api.Auth.Jwt" Version="1.*" />
     <PackageReference Include="Trax.Api.GraphQL" Version="1.*" />
   </ItemGroup>
 </Project>

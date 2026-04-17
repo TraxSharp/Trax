@@ -1,0 +1,23 @@
+{
+  "name": "trax-samples-gameserver-web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Next.js companion app for Trax.Samples.GameServer.Api. Signs users in with Google via NextAuth, forwards the Google-issued id-token to the Trax API as a bearer credential.",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000"
+  },
+  "dependencies": {
+    "next": "^15.0.0",
+    "next-auth": "^5.0.0-beta.25",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.5.0"
+  }
+}

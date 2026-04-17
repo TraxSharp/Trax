@@ -6,9 +6,21 @@
 // dispatch { trainName(mode: QUEUE) } mutations. This process does NOT run a scheduler — start the
 // Scheduler project alongside this one.
 //
-// Authentication: fake API key via X-Api-Key header (for demonstration only)
-//   Admin key:  admin-key-do-not-use-in-production  (roles: Admin, Player)
-//   Player key: player-key-do-not-use-in-production (role: Player)
+// Authentication (two schemes coexist, pick either per request):
+//
+//   1. API key via X-Api-Key header — service-to-service / scripting
+//        Admin key:  admin-key-do-not-use-in-production  (roles: Admin, Player)
+//        Player key: player-key-do-not-use-in-production (role: Player)
+//
+//   2. JWT bearer via Authorization: Bearer <google-id-token> — the Next.js
+//      companion app (samples/LocalWorkers/trax-samples-gameserver-web)
+//      signs users in with Google via NextAuth, then forwards the id-token
+//      to this API. Trax validates against Google's JWKS. Enable by setting
+//      Google:ClientId in appsettings.json to your OAuth 2.0 client id from
+//      Google Cloud Console.
+//
+//   Both schemes feed the same TraxPrincipal, so [TraxAuthorize] works against
+//   either credential type.
 //
 // Prerequisites:
 //   1. Start Postgres:  cd Trax.Samples && docker compose up -d
@@ -25,25 +37,25 @@
 //   curl -H "X-Api-Key: player-key-do-not-use-in-production" \
 //        -X POST http://localhost:5200/trax/graphql \
 //        -H "Content-Type: application/json" \
-//        -d '{"query":"{ trains { serviceTypeName inputTypeName requiredPolicies requiredRoles inputSchema { name typeName } } }"}'
+//        -d '{"query":"{ operations { trains { serviceTypeName inputTypeName requiredPolicies requiredRoles inputSchema { name typeName } } } }"}'
 //
 //   # Query a train directly (typed query from [TraxQuery])
 //   curl -H "X-Api-Key: player-key-do-not-use-in-production" \
 //        -X POST http://localhost:5200/trax/graphql \
 //        -H "Content-Type: application/json" \
-//        -d '{"query":"{ discover { lookupPlayer(input: {playerId: \"player-42\"}) { playerId rank wins losses rating } } }"}'
+//        -d '{"query":"{ discover { players { lookupPlayer(input: {playerId: \"player-42\"}) { playerId rank wins losses rating } } } }"}'
 //
 //   # Query model data directly with filtering and pagination ([TraxQueryModel])
 //   curl -H "X-Api-Key: player-key-do-not-use-in-production" \
 //        -X POST http://localhost:5200/trax/graphql \
 //        -H "Content-Type: application/json" \
-//        -d '{"query":"{ discover { playerRecords(first: 10, where: { rating: { gte: 1500 } }) { nodes { playerId displayName rating } pageInfo { hasNextPage endCursor } } } }"}'
+//        -d '{"query":"{ discover { players { playerRecords(first: 10, where: { rating: { gte: 1500 } }) { nodes { playerId displayName rating } pageInfo { hasNextPage endCursor } } } } }"}'
 //
 //   # Queue a heavy train for the scheduler (typed mutation from [TraxMutation])
 //   curl -H "X-Api-Key: player-key-do-not-use-in-production" \
 //        -X POST http://localhost:5200/trax/graphql \
 //        -H "Content-Type: application/json" \
-//        -d '{"query":"mutation { dispatch { processMatchResult(input: {region: \"na\", matchId: \"match-999\", winnerId: \"player-1\", loserId: \"player-2\", winnerScore: 100, loserScore: 30}, mode: QUEUE, priority: 10) { externalId workQueueId } } }"}'
+//        -d '{"query":"mutation { dispatch { matches { processMatchResult(input: {region: \"na\", matchId: \"match-999\", winnerId: \"player-1\", loserId: \"player-2\", winnerScore: 100, loserScore: 30}, mode: QUEUE, priority: 10) { externalId workQueueId } } } }"}'
 //
 //   # Subscribe to real-time train lifecycle events (use Banana Cake Pop IDE):
 //   #   subscription { onTrainStarted { metadataId trainName trainState timestamp } }
@@ -52,10 +64,14 @@
 //
 //   # Health check (no auth required)
 //   curl http://localhost:5200/trax/health
+//
+//   # Google JWT path: see ../trax-samples-gameserver-web for a Next.js app
+//   # that signs in with Google via NextAuth and forwards the id-token here.
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.Auth.ApiKey;
+using Trax.Api.Auth.Jwt;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Effect.Data.Extensions;
@@ -65,6 +81,7 @@ using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.GameServer;
+using Trax.Samples.GameServer.Api;
 using Trax.Samples.GameServer.Auth;
 using Trax.Samples.GameServer.Data;
 using Trax.Samples.GameServer.Data.Models;
@@ -94,11 +111,28 @@ builder.Services.AddCors(options =>
     );
 });
 
-// ── Authentication, fake API key for demonstration (NO WARRANTY, see SECURITY-DISCLAIMER.md) ──
+// ── Authentication (NO WARRANTY, see SECURITY-DISCLAIMER.md) ──────────
+// Two schemes coexist. Both contribute to the combined TraxAuthPolicy, so a
+// route gated by that policy accepts either credential type.
+
+// 1. Fake API keys for scripting / service-to-service.
 builder.Services.AddTraxApiKeyAuth(keys =>
     keys.Add(SampleKeys.AdminKey, id: "admin", nameof(GameRole.Admin), nameof(GameRole.Player))
         .Add(SampleKeys.PlayerKey, id: "player", nameof(GameRole.Player))
 );
+
+// 2. JWT bearer: accept Google-issued id-tokens. The Next.js frontend obtains
+//    them via NextAuth and sends them as Authorization: Bearer <id-token>.
+//    Signature validation happens against Google's published JWKS; only tokens
+//    minted for our specific OAuth client id are accepted (aud claim check).
+var googleClientId = builder.Configuration["Google:ClientId"];
+if (!string.IsNullOrWhiteSpace(googleClientId))
+{
+    builder.Services.AddTraxJwtAuth<GoogleJwtResolver>(
+        "https://accounts.google.com",
+        googleClientId
+    );
+}
 
 // ── Authorization policies ──────────────────────────────────────────────
 builder.Services.AddAuthorization(options =>
