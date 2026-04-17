@@ -16,8 +16,15 @@
 //      companion app (samples/LocalWorkers/trax-samples-gameserver-web)
 //      signs users in with Google via NextAuth, then forwards the id-token
 //      to this API. Trax validates against Google's JWKS. Enable by setting
-//      Google:ClientId in appsettings.json to your OAuth 2.0 client id from
-//      Google Cloud Console.
+//      Google:ClientId (via `dotnet user-secrets set "Google:ClientId" <id>`)
+//      to your OAuth 2.0 client id from Google Cloud Console.
+//
+//      For a real app, the whole integration is one line:
+//        services.AddTraxJwtAuth("https://accounts.google.com", googleClientId);
+//      The default resolver handles standard OIDC claims. This sample uses a
+//      custom resolver only to hand every Google user the Player role so the
+//      trains work out of the box — see GoogleJwtResolver.cs for the rationale
+//      and the "when do I need a custom resolver?" guidance.
 //
 //   Both schemes feed the same TraxPrincipal, so [TraxAuthorize] works against
 //   either credential type.
@@ -125,6 +132,16 @@ builder.Services.AddTraxApiKeyAuth(keys =>
 //    them via NextAuth and sends them as Authorization: Bearer <id-token>.
 //    Signature validation happens against Google's published JWKS; only tokens
 //    minted for our specific OAuth client id are accepted (aud claim check).
+//
+//    The one-line path below is enough for most apps — the package's default
+//    resolver maps sub → Id, name/email → DisplayName, and role claims → Roles.
+//    We override with GoogleJwtResolver here ONLY because this sample needs to
+//    grant every signed-in user the Player role so the sample trains work.
+//    A real deployment would keep the default and look up roles in its user
+//    database via a scoped resolver — see GoogleJwtResolver.cs for the shape.
+//
+//    Default-resolver version (swap in for a real app):
+//        builder.Services.AddTraxJwtAuth("https://accounts.google.com", googleClientId);
 var googleClientId = builder.Configuration["Google:ClientId"];
 if (!string.IsNullOrWhiteSpace(googleClientId))
 {

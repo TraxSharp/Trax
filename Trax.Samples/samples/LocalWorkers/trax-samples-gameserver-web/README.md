@@ -5,9 +5,12 @@ with Google via NextAuth, then forwards the Google-issued id-token to the
 Trax GraphQL API as an `Authorization: Bearer` credential. The API validates
 the token against Google's JWKS via `AddTraxJwtAuth("https://accounts.google.com", googleClientId)`.
 
-> **Demo only.** The resolver in `GoogleJwtResolver.cs` grants the `Player`
-> role to every authenticated Google user so the sample's trains work out of
-> the box. Do not copy that pattern into anything real.
+> **Most apps don't need a custom resolver.** The actual integration is one
+> line — `services.AddTraxJwtAuth("https://accounts.google.com", clientId)` —
+> and Trax's default resolver handles standard OIDC claims. This sample only
+> has a `GoogleJwtResolver` class because it hard-assigns the `Player` role
+> to every signed-in user so the trains are exercisable; see the comments on
+> that class for "when do I actually need a custom resolver?"
 
 ## Prerequisites
 
