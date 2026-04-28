@@ -71,7 +71,12 @@ internal static class TestGraphQLExtensions
 {
     internal static IServiceCollection AddTraxGraphQLForTesting(this IServiceCollection services)
     {
-        // Call the real extension method
-        return Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(services);
+        // Call the real extension method. The operations namespace is opt-in;
+        // these registration tests do not care about schema shape, but RootQuery
+        // would otherwise be empty and AddTraxGraphQL would refuse the build.
+        return Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+            services,
+            graphql => graphql.ExposeOperationQueries()
+        );
     }
 }

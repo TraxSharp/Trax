@@ -267,7 +267,7 @@ public class TypeExtensionRegistrationTests
 
         Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
             services,
-            graphql => graphql.AddTypeExtension<PingTypeExtension>()
+            graphql => graphql.ExposeOperationQueries().AddTypeExtension<PingTypeExtension>()
         );
 
         services.AddScoped(_ => Substitute.For<Trax.Api.Services.HealthCheck.ITraxHealthService>());
@@ -326,7 +326,10 @@ public class TypeExtensionRegistrationTests
 
         Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
             services,
-            graphql => graphql.AddTypeExtensions(typeof(PingTypeExtension).Assembly)
+            graphql =>
+                graphql
+                    .ExposeOperationQueries()
+                    .AddTypeExtensions(typeof(PingTypeExtension).Assembly)
         );
 
         services.AddScoped(_ => Substitute.For<Trax.Api.Services.HealthCheck.ITraxHealthService>());

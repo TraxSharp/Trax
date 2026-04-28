@@ -5,9 +5,15 @@ namespace Trax.Api.GraphQL.Mutations;
 
 /// <summary>
 /// Scheduler management mutations: trigger, disable, enable, and cancel manifests and groups.
+/// Also exposes the nested <c>deadLetters</c> namespace.
 /// </summary>
 public class OperationsMutations
 {
+    /// <summary>
+    /// Nested namespace exposing dead letter mutations (requeue, acknowledge, batch ops).
+    /// </summary>
+    public DeadLetterMutations DeadLetters() => new();
+
     public async Task<OperationResponse> TriggerManifest(
         string externalId,
         [Service] ITraxScheduler scheduler,

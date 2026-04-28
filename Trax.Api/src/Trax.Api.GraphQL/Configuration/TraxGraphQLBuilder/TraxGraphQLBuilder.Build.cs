@@ -51,7 +51,9 @@ public partial class TraxGraphQLBuilder
             IntrospectionPredicate,
             MaxOperationsPerRequestValue,
             AuthorizationRequired,
-            AuthorizationPolicy
+            AuthorizationPolicy,
+            OperationQueriesExposed,
+            OperationMutationsExposed
         );
     }
 }

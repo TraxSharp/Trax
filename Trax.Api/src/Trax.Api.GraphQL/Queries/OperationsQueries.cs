@@ -8,10 +8,16 @@ using Trax.Mediator.Services.TrainDiscovery;
 namespace Trax.Api.GraphQL.Queries;
 
 /// <summary>
-/// Predefined operational queries: health, trains, manifests, manifest groups, and execution history.
+/// Predefined operational queries: health, trains, manifests, manifest groups, execution
+/// history, and the nested <c>deadLetters</c> namespace.
 /// </summary>
 public class OperationsQueries
 {
+    /// <summary>
+    /// Nested namespace exposing dead letter queries (<c>deadLetters</c>, <c>deadLetter</c>).
+    /// </summary>
+    public DeadLetterQueries DeadLetters() => new();
+
     public async Task<HealthStatus> GetHealth(
         [Service] ITraxHealthService healthService,
         CancellationToken ct

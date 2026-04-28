@@ -23,6 +23,7 @@ using Trax.Api.GraphQL.Validation;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
+using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Api.GraphQL.Extensions;
 
@@ -94,17 +95,76 @@ public static class GraphQLServiceExtensions
                 sp.GetRequiredService<LifecycleHookFactory<GraphQLSubscriptionHook>>()
             );
 
-        var graphqlBuilder = services
-            .AddGraphQLServer(SchemaName)
-            .AddQueryType<RootQuery>()
-            .AddMutationType<RootMutation>()
+        // Detect train queries/mutations registered before us so we can decide whether
+        // RootQuery / RootMutation will have any fields by the time HotChocolate builds
+        // the schema. Trains registered AFTER AddTraxGraphQL won't be picked up here —
+        // the established pattern is `AddTrax(...).AddTraxGraphQL(...)` with all train
+        // registrations completed inside or before AddTrax.
+        // Honor a pre-registered ITrainDiscoveryService when present (test setups
+        // substitute a mock), otherwise scan the live ServiceCollection ourselves.
+        var trainRegistrations = ResolveTrainDiscoveryService(services).DiscoverTrains();
+        var hasTrainQueries = trainRegistrations.Any(r => r.IsQuery);
+        var hasTrainMutations = trainRegistrations.Any(r => r.IsMutation);
+
+        var hasQueryRoot =
+            config.OperationQueriesExposed
+            || hasTrainQueries
+            || config.ModelRegistrations.Count > 0;
+        var hasMutationRoot = config.OperationMutationsExposed || hasTrainMutations;
+
+        if (!hasQueryRoot)
+            throw new InvalidOperationException(
+                "AddTraxGraphQL() found no GraphQL queries to expose. The root Query type "
+                    + "would be empty and HotChocolate would fail to build the schema. "
+                    + "Either register at least one [TraxQuery] train, register a "
+                    + "DbContext via AddDbContext<T>() with [TraxQueryModel] entities, or "
+                    + "call ExposeOperationQueries() on the builder to expose the "
+                    + "predefined operations namespace."
+            );
+
+        var graphqlBuilder = services.AddGraphQLServer(SchemaName);
+
+        graphqlBuilder.AddQueryType<RootQuery>();
+
+        if (hasMutationRoot)
+            graphqlBuilder.AddMutationType<RootMutation>();
+
+        graphqlBuilder
             .AddSubscriptionType<LifecycleSubscriptions>()
-            .AddType<ObjectType<OperationsMutations>>()
-            .AddType<ObjectType<OperationsQueries>>()
             .AddType<TrainLifecycleEventType>()
             .AddTypeModule<TrainTypeModule>()
             .AddErrorFilter<TraxErrorFilter>()
             .AddInMemorySubscriptions();
+
+        if (config.OperationQueriesExposed)
+        {
+            graphqlBuilder.AddType(new ObjectType<OperationsQueries>());
+            graphqlBuilder.AddType(new ObjectType<DeadLetterQueries>());
+            graphqlBuilder.AddTypeExtension(
+                new ObjectTypeExtension(d =>
+                {
+                    d.Name("RootQuery");
+                    d.Field("operations")
+                        .Type<ObjectType<OperationsQueries>>()
+                        .Resolve(_ => new OperationsQueries());
+                })
+            );
+        }
+
+        if (config.OperationMutationsExposed)
+        {
+            graphqlBuilder.AddType(new ObjectType<OperationsMutations>());
+            graphqlBuilder.AddType(new ObjectType<DeadLetterMutations>());
+            graphqlBuilder.AddTypeExtension(
+                new ObjectTypeExtension(d =>
+                {
+                    d.Name("RootMutation");
+                    d.Field("operations")
+                        .Type<ObjectType<OperationsMutations>>()
+                        .Resolve(_ => new OperationsMutations());
+                })
+            );
+        }
 
         ApplyHardeningDefaults(services, graphqlBuilder, config);
 
@@ -200,6 +260,23 @@ public static class GraphQLServiceExtensions
         var endpoint = app.MapGraphQL(routePrefix, SchemaName);
         configure?.Invoke(endpoint);
         return app;
+    }
+
+    /// <summary>
+    /// Returns a <see cref="ITrainDiscoveryService"/> that reflects the current
+    /// <see cref="IServiceCollection"/> contents. Prefers an instance/factory
+    /// registered by the consumer (used by tests that substitute a mock), and
+    /// falls back to scanning the live collection when none is registered.
+    /// </summary>
+    private static ITrainDiscoveryService ResolveTrainDiscoveryService(IServiceCollection services)
+    {
+        var descriptor = services.LastOrDefault(sd =>
+            sd.ServiceType == typeof(ITrainDiscoveryService)
+        );
+        if (descriptor?.ImplementationInstance is ITrainDiscoveryService instance)
+            return instance;
+
+        return new TrainDiscoveryService(services);
     }
 
     /// <summary>

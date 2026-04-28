@@ -75,6 +75,20 @@ public class GraphQLConfiguration
     /// </summary>
     internal string? AuthorizationPolicy { get; }
 
+    /// <summary>
+    /// True when the consumer opted in via
+    /// <c>TraxGraphQLBuilder.ExposeOperationQueries()</c>. When false the
+    /// <c>operations</c> field is omitted from <c>RootQuery</c>.
+    /// </summary>
+    public bool OperationQueriesExposed { get; }
+
+    /// <summary>
+    /// True when the consumer opted in via
+    /// <c>TraxGraphQLBuilder.ExposeOperationMutations()</c>. When false the
+    /// <c>operations</c> field is omitted from <c>RootMutation</c>.
+    /// </summary>
+    public bool OperationMutationsExposed { get; }
+
     public GraphQLConfiguration(
         IReadOnlyList<QueryModelRegistration> modelRegistrations,
         IReadOnlyList<Type> additionalTypeModules,
@@ -85,7 +99,9 @@ public class GraphQLConfiguration
         Predicate<HttpContext>? introspectionPredicate = null,
         int maxOperationsPerRequest = 50,
         bool authorizationRequired = false,
-        string? authorizationPolicy = null
+        string? authorizationPolicy = null,
+        bool operationQueriesExposed = false,
+        bool operationMutationsExposed = false
     )
     {
         ModelRegistrations = modelRegistrations;
@@ -98,5 +114,7 @@ public class GraphQLConfiguration
         MaxOperationsPerRequest = maxOperationsPerRequest;
         AuthorizationRequired = authorizationRequired;
         AuthorizationPolicy = authorizationPolicy;
+        OperationQueriesExposed = operationQueriesExposed;
+        OperationMutationsExposed = operationMutationsExposed;
     }
 }

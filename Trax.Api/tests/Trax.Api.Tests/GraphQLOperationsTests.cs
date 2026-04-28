@@ -314,8 +314,13 @@ public class GraphQLOperationsTests
         services.AddSingleton(_discoveryService);
         services.AddSingleton(Substitute.For<IEffectRegistry>());
 
-        // Register GraphQL schema (this calls AddTraxApi which registers concrete services)
-        Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(services);
+        // Register GraphQL schema (this calls AddTraxApi which registers concrete services).
+        // The operations namespace is opt-in; tests in this fixture exercise it
+        // directly so both query and mutation surfaces are exposed.
+        Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+            services,
+            graphql => graphql.ExposeOperationQueries().ExposeOperationMutations()
+        );
 
         // Register mocks AFTER AddTraxGraphQL so they override the concrete registrations
         services.AddScoped(_ => _healthService);
