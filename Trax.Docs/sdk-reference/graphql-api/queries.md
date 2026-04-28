@@ -13,12 +13,12 @@ Queries are organized into two groups under the root `Query` type:
 ```graphql
 type Query {
   discover: DiscoverQueries!
-  operations: OperationsQueries!
+  operations: OperationsQueries!  # only when ExposeOperationQueries() is set
 }
 ```
 
 - **`discover`**: auto-generated typed query fields for trains annotated with [`[TraxQuery]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
-- **`operations`**: predefined operational queries: health status, registered trains, manifests, manifest groups, and execution history
+- **`operations`**: predefined operational queries: health status, registered trains, manifests, manifest groups, execution history, and the nested `deadLetters` namespace. **Off by default**, opt in with [`ExposeOperationQueries()`](/docs/sdk-reference/graphql-api/add-trax-graphql) on the builder.
 
 ## Discover Queries (Auto-Generated)
 
@@ -450,3 +450,7 @@ When `afterId` is provided, `skip` is ignored.
 For unfiltered queries on large tables (>10,000 rows), `totalCount` uses PostgreSQL's `pg_class.reltuples` statistic instead of an exact `COUNT(*)`. This is O(1) rather than O(n), and the difference matters when the metadata table has millions of rows.
 
 When the estimate is used, `isEstimatedCount` is `true`. The estimate is updated by PostgreSQL's autovacuum/autoanalyze and is typically accurate within a few percent. For filtered queries or small tables, an exact count is always used and `isEstimatedCount` is `false`.
+
+## deadLetters (nested under operations)
+
+The `operations.deadLetters` namespace exposes paginated dead-letter reads (`deadLetters`, `deadLetter`). See [scheduler/dead-letters-and-cleanup](/docs/scheduler/dead-letters-and-cleanup) for the full surface and examples.

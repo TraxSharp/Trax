@@ -12,13 +12,15 @@ Mutations are organized into two groups under the root `Mutation` type:
 
 ```graphql
 type Mutation {
-  dispatch: DispatchMutations!
-  operations: OperationsMutations!
+  dispatch: DispatchMutations!     # only when [TraxMutation] trains exist
+  operations: OperationsMutations! # only when ExposeOperationMutations() is set
 }
 ```
 
 - **`dispatch`**: auto-generated typed mutations for trains annotated with [`[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
-- **`operations`**: scheduler management operations (trigger, disable, enable, cancel manifests and groups)
+- **`operations`**: scheduler management operations (trigger, disable, enable, cancel manifests and groups, plus the nested `deadLetters` namespace for requeue/acknowledge). **Off by default**, opt in with [`ExposeOperationMutations()`](/docs/sdk-reference/graphql-api/add-trax-graphql) on the builder. The Trax scheduler is reachable through these mutations, so leaving them open lets any caller disrupt scheduled work.
+
+The root `Mutation` type is omitted entirely when no source contributes to it (no `[TraxMutation]` train and `ExposeOperationMutations()` not called).
 
 ## Dispatch Mutations (Auto-Generated)
 
@@ -368,6 +370,12 @@ mutation {
 | `groupId` | `Long!` | Yes | The manifest group's database ID |
 
 **Returns**: `OperationResponse` (includes `count`, the number of executions marked for cancellation)
+
+---
+
+### deadLetters (nested namespace)
+
+The `operations.deadLetters` namespace exposes dead-letter requeue and acknowledge mutations: `requeueDeadLetter`, `acknowledgeDeadLetter`, batch variants (`requeueDeadLetters`, `acknowledgeDeadLetters`), and "all" variants (`requeueAllDeadLetters`, `acknowledgeAllDeadLetters`). See [scheduler/dead-letters-and-cleanup](/docs/scheduler/dead-letters-and-cleanup) for full details and examples.
 
 ---
 

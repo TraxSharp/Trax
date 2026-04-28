@@ -31,46 +31,54 @@ The dead letters list page supports batch operations for resolving multiple dead
 
 ### Via GraphQL
 
-Dead letter mutations are available under the `deadLetters` namespace:
+Dead letter operations live under `operations.deadLetters`. The `operations` namespace is opt-in (off by default), wired via [`ExposeOperationQueries()`](/docs/sdk-reference/graphql-api/add-trax-graphql) and [`ExposeOperationMutations()`](/docs/sdk-reference/graphql-api/add-trax-graphql) on the `AddTraxGraphQL` builder. Once enabled:
 
 ```graphql
 # Requeue a single dead letter
 mutation {
-  deadLetters {
-    requeueDeadLetter(id: 42) {
-      success
-      workQueueId
-      message
+  operations {
+    deadLetters {
+      requeueDeadLetter(id: 42) {
+        success
+        workQueueId
+        message
+      }
     }
   }
 }
 
 # Acknowledge a single dead letter
 mutation {
-  deadLetters {
-    acknowledgeDeadLetter(id: 42, note: "Root cause fixed") {
-      success
-      message
+  operations {
+    deadLetters {
+      acknowledgeDeadLetter(id: 42, note: "Root cause fixed") {
+        success
+        message
+      }
     }
   }
 }
 
 # Batch requeue by IDs
 mutation {
-  deadLetters {
-    requeueDeadLetters(ids: [42, 43, 44]) {
-      count
-      message
+  operations {
+    deadLetters {
+      requeueDeadLetters(ids: [42, 43, 44]) {
+        count
+        message
+      }
     }
   }
 }
 
 # Requeue all awaiting dead letters
 mutation {
-  deadLetters {
-    requeueAllDeadLetters {
-      count
-      message
+  operations {
+    deadLetters {
+      requeueAllDeadLetters {
+        count
+        message
+      }
     }
   }
 }
@@ -80,16 +88,18 @@ Query dead letters with optional status filtering:
 
 ```graphql
 query {
-  deadLetters {
-    getDeadLetters(status: AWAITING_INTERVENTION, take: 10) {
-      items {
-        id
-        manifestName
-        status
-        reason
-        deadLetteredAt
+  operations {
+    deadLetters {
+      getDeadLetters(status: AWAITING_INTERVENTION, take: 10) {
+        items {
+          id
+          manifestName
+          status
+          reason
+          deadLetteredAt
+        }
+        totalCount
       }
-      totalCount
     }
   }
 }

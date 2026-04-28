@@ -53,6 +53,39 @@ The positional overload is sugar for `AddTraxJwtAuth(jwt => jwt.UseAuthority(aut
 services.AddTraxJwtAuth("https://login.example.com", "my-api");
 ```
 
+## Provider shortcuts
+
+Authority URLs for the common identity providers have non-obvious shapes. These wrappers in `Trax.Api.Auth.Jwt` hide them:
+
+```csharp
+// Google — authority baked to https://accounts.google.com
+services.AddTraxGoogleJwtAuth(oauthClientId);
+
+// Auth0 — authority baked to https://{domain}/ (trailing slash required by Auth0)
+services.AddTraxAuth0JwtAuth("my-tenant.auth0.com", "https://api.example.com");
+
+// Microsoft Entra (v2.0) — authority baked to
+// https://login.microsoftonline.com/{tenantId}/v2.0
+services.AddTraxEntraJwtAuth(tenantId, "api://my-app");
+
+// Amazon Cognito — authority baked to
+// https://cognito-idp.{region}.amazonaws.com/{userPoolId}
+services.AddTraxCognitoJwtAuth("us-east-1", "us-east-1_AbCdEfGhI", "app-client-id");
+```
+
+| Helper | Authority built | Audience semantics |
+|---|---|---|
+| `AddTraxGoogleJwtAuth(clientId)` | `https://accounts.google.com` | OAuth 2.0 client id (id-token `aud`) |
+| `AddTraxAuth0JwtAuth(domain, audience)` | `https://{domain}/` (normalized) | Auth0 API identifier, not the client id |
+| `AddTraxEntraJwtAuth(tenantId, audience)` | `https://login.microsoftonline.com/{tenantId}/v2.0` | Application (client) ID or App ID URI |
+| `AddTraxCognitoJwtAuth(region, userPoolId, audience)` | `https://cognito-idp.{region}.amazonaws.com/{userPoolId}` | Cognito app client id (id-token path) |
+
+Each helper has a `<TResolver>` overload when you need claim-to-principal enrichment beyond the default. Behind the scenes they delegate to `AddTraxJwtAuth(authority, audience)`, so the combined `TraxAuthPolicy`, subscription interceptor, and everything else on this page applies.
+
+The Auth0 helper normalizes the `domain` argument: strips `https://` / `http://` prefixes, strips a trailing slash, re-wraps to `https://{domain}/`. Pass `my-tenant.auth0.com`, `https://my-tenant.auth0.com`, or `my-tenant.auth0.com/` — all resolve identically.
+
+Entra's `tenantId` can be a directory GUID, a verified domain (`contoso.onmicrosoft.com`), or one of the multi-tenant sentinels (`common`, `organizations`). The sentinels come with their own signing-key validation rules; prefer a specific tenant unless you explicitly need multi-tenancy.
+
 ## OIDC authority (JWKS)
 
 Fetches signing keys from a provider's discovery document. Keys rotate on the provider's cadence; the handler caches and refreshes automatically.
