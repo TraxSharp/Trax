@@ -185,7 +185,15 @@ builder.AddTraxDashboard();
 // Depth 6 accommodates the dispatch → mutation → output → nested type →
 // field → scalar query chain. The Trax default of 4 is the conservative
 // production choice; raise it deliberately when your schema needs it.
-builder.Services.AddTraxGraphQL(graphql => graphql.MaxExecutionDepth(6));
+builder.Services.AddTraxGraphQL(graphql =>
+    graphql
+        .MaxExecutionDepth(6)
+        // The hub exposes operational queries and scheduler-control mutations
+        // so the EnergyHub web UI can render the manifest dashboard and
+        // trigger jobs. Both surfaces are off by default; opt in here.
+        .ExposeOperationQueries()
+        .ExposeOperationMutations()
+);
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();

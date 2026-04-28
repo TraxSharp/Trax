@@ -112,7 +112,15 @@ builder.Services.AddSingleton<IContactEnrichmentProvider, ManualContactProvider>
 builder.Services.AddSingleton<IEmailSender, StubEmailSender>();
 
 // ── GraphQL API + subscriptions ─────────────────────────────────────────────
-builder.Services.AddTraxGraphQL(graphql => graphql.AddTypeExtension<JobHuntSubscriptions>());
+// Phase 0 has no [TraxQuery]/[TraxMutation] trains yet, so without the
+// operations namespace RootQuery would be empty. Expose ops so the schema
+// has at least the framework-level query and mutation fields.
+builder.Services.AddTraxGraphQL(graphql =>
+    graphql
+        .AddTypeExtension<JobHuntSubscriptions>()
+        .ExposeOperationQueries()
+        .ExposeOperationMutations()
+);
 
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 

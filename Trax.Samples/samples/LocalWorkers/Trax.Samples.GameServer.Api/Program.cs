@@ -185,6 +185,11 @@ builder.Services.AddTraxGraphQL(graphql =>
         .MaxExecutionDepth(6)
         .AddDbContext<GameDbContext>()
         .AddTypeExtensions(typeof(Program).Assembly)
+        // The web UI surfaces health, manifests, executions, and dead letters
+        // for the in-browser ops dashboard, and lets operators trigger /
+        // cancel jobs. Both surfaces are off by default; opt in here.
+        .ExposeOperationQueries()
+        .ExposeOperationMutations()
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
