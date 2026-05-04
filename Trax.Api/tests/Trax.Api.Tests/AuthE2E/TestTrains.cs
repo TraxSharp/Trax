@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
 using Trax.Effect.Models.Manifest;
@@ -22,7 +23,8 @@ public interface IEchoTrain : IServiceTrain<EchoInput, EchoOutput>;
 [TraxQuery(Namespace = "audit", Description = "Echoes input back.")]
 public class EchoTrain : ServiceTrain<EchoInput, EchoOutput>, IEchoTrain
 {
-    protected override EchoOutput Junctions() => Chain<EchoJunction>();
+    protected override Task<Either<Exception, EchoOutput>> Junctions() =>
+        Chain<EchoJunction>().Resolve();
 }
 
 internal sealed class EchoJunction : Junction<EchoInput, EchoOutput>
@@ -51,7 +53,8 @@ public interface INotifyTrain : IServiceTrain<NotifyInput, NotifyOutput>;
 [TraxMutation(Namespace = "audit", Description = "Notifies a topic.")]
 public class NotifyTrain : ServiceTrain<NotifyInput, NotifyOutput>, INotifyTrain
 {
-    protected override NotifyOutput Junctions() => Chain<NotifyJunction>();
+    protected override Task<Either<Exception, NotifyOutput>> Junctions() =>
+        Chain<NotifyJunction>().Resolve();
 }
 
 internal sealed class NotifyJunction : Junction<NotifyInput, NotifyOutput>
@@ -80,7 +83,8 @@ public interface IAdminLookupTrain : IServiceTrain<AdminLookupInput, AdminLookup
 [TraxAuthorize(Roles = "Admin")]
 public class AdminLookupTrain : ServiceTrain<AdminLookupInput, AdminLookupOutput>, IAdminLookupTrain
 {
-    protected override AdminLookupOutput Junctions() => Chain<AdminLookupJunction>();
+    protected override Task<Either<Exception, AdminLookupOutput>> Junctions() =>
+        Chain<AdminLookupJunction>().Resolve();
 }
 
 internal sealed class AdminLookupJunction : Junction<AdminLookupInput, AdminLookupOutput>
@@ -109,7 +113,8 @@ public interface IWipeTrain : IServiceTrain<WipeInput, WipeOutput>;
 [TraxAuthorize(Policy = "AdminPolicy")]
 public class WipeTrain : ServiceTrain<WipeInput, WipeOutput>, IWipeTrain
 {
-    protected override WipeOutput Junctions() => Chain<WipeJunction>();
+    protected override Task<Either<Exception, WipeOutput>> Junctions() =>
+        Chain<WipeJunction>().Resolve();
 }
 
 internal sealed class WipeJunction : Junction<WipeInput, WipeOutput>
