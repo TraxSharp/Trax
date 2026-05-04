@@ -64,4 +64,46 @@ public class DashboardServiceExtensionsTests
         provider.GetService<IServiceCollection>().Should().BeNull();
         provider.GetService<ITrainDiscoveryService>().Should().BeNull();
     }
+
+    [Test]
+    public void AddTraxDashboard_WithoutTraxMarker_ThrowsHelpfulException()
+    {
+        var services = new ServiceCollection();
+
+        Action act = () => services.AddTraxDashboard();
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*AddTrax*")
+            .WithMessage("*services.AddTrax*");
+    }
+
+    [Test]
+    public void AddTraxDashboard_RegistersScopedServices()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<TraxMarker>();
+
+        services.AddTraxDashboard();
+
+        services
+            .Should()
+            .Contain(sd =>
+                sd.ServiceType == typeof(Trax.Dashboard.Services.LocalStorage.ILocalStorageService)
+                && sd.Lifetime == ServiceLifetime.Scoped
+            );
+        services
+            .Should()
+            .Contain(sd =>
+                sd.ServiceType == typeof(Trax.Dashboard.Services.ThemeState.IThemeStateService)
+                && sd.Lifetime == ServiceLifetime.Scoped
+            );
+        services
+            .Should()
+            .Contain(sd =>
+                sd.ServiceType
+                    == typeof(Trax.Dashboard.Services.DashboardSettings.IDashboardSettingsService)
+                && sd.Lifetime == ServiceLifetime.Scoped
+            );
+    }
 }
