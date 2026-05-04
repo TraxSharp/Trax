@@ -19,7 +19,7 @@ public class {{ TrainName }}Train
     : ServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>,
         I{{ TrainName }}Train
 {
-    protected override async Task<Either<Exception, {{ OutputTypeName }}>> RunInternal(
+    protected override Task<Either<Exception, {{ OutputTypeName }}>> RunInternal(
         {{ InputTypeName }} input
     ) => Activate(input).Chain<{{ TrainName }}Junction>().Resolve();
 }
