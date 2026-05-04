@@ -175,6 +175,89 @@ For full application validation (scheduler dispatch, dependency chains, dormant 
 
 *Full details: [E2E Testing](/docs/cross-cutting/e2e-testing)*
 
+## Testing Blazor Components with bUnit
+
+The dashboard is built on Blazor Server + Radzen. Component tests use [bUnit](https://bunit.dev/) to render and interact with components without a browser.
+
+Set up the test context in `[SetUp]` and dispose it in `[TearDown]`:
+
+```csharp
+using Bunit;
+using Microsoft.Extensions.DependencyInjection;
+using Radzen;
+
+[TestFixture]
+public class MyComponentTests
+{
+    // Disambiguate from NUnit.Framework.TestContext
+    private Bunit.TestContext _ctx = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _ctx = new Bunit.TestContext();
+        _ctx.Services.AddRadzenComponents();
+        _ctx.JSInterop.Mode = JSRuntimeMode.Loose;  // for components that call IJSRuntime
+    }
+
+    [TearDown]
+    public void TearDown() => _ctx.Dispose();
+
+    [Test]
+    public void MyComponent_RendersExpectedMarkup()
+    {
+        var component = _ctx.RenderComponent<MyComponent>(p =>
+            p.Add(x => x.Label, "hello")
+        );
+
+        component.Markup.Should().Contain("hello");
+        component.Find("button").Click();
+        component.Markup.Should().Contain("clicked");
+    }
+}
+```
+
+Key points:
+- Always alias `Bunit.TestContext`. It collides with `NUnit.Framework.TestContext`.
+- Components that inject `IJSRuntime` need `JSRuntimeMode.Loose` (or explicit handler setup).
+- Pages that resolve scoped services often need a full Trax registration (`AddTrax`) plus a real database. Add the deeper services per test.
+- Polling components (`PollingComponentBase`) dispose themselves; pause polling via `PausePolling = true` if you want to assert on a single render.
+
+## Choosing a Data Provider for Tests
+
+Trax ships three data providers: `UseInMemory()`, `UseSqlite()`, and `UsePostgres()`. They are not interchangeable for every test.
+
+| Use case | Provider |
+|---|---|
+| Pure model logic, no SQL | InMemory |
+| Standard EF queries (Where, OrderBy, Select) | InMemory or SQLite |
+| Raw SQL via `ExecuteSqlRawAsync`, `Database.GetDbConnection()` | SQLite or Postgres |
+| Postgres-specific features (`pg_class`, advisory locks, `FOR UPDATE SKIP LOCKED`, `make_interval`) | Postgres only |
+
+The `CountEstimator` in `Trax.Api.GraphQL` is the canonical example: it queries `pg_class.reltuples` for fast row-count estimates and only works on Postgres. Tests for `OperationsQueries` use `UsePostgres()` against the local `trax_database` container, and `TRUNCATE` the affected tables in `[SetUp]` for isolation:
+
+```csharp
+[SetUp]
+public async Task SetUp()
+{
+    var services = new ServiceCollection();
+    services.AddLogging();
+    services.AddTrax(trax => trax.AddEffects(e =>
+        e.UsePostgres("Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123")
+    ));
+    _provider = services.BuildServiceProvider();
+    _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+
+    await using var db = await _factory.CreateDbContextAsync(default);
+    await ((DbContext)db).Database.ExecuteSqlRawAsync(
+        "TRUNCATE TABLE trax.dead_letter, trax.metadata, trax.manifest, trax.manifest_group "
+        + "RESTART IDENTITY CASCADE"
+    );
+}
+```
+
+Start the database with `docker compose up -d` from `Trax.Samples/` before running tests that need it.
+
 ## SDK Reference
 
 > [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
