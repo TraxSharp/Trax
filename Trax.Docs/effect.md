@@ -39,9 +39,9 @@ Everything in [Core](core.md), plus:
 ```csharp
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
-    protected override User Junctions() =>
+    protected override Task<Either<Exception, User>> Junctions() =>
         Chain<ValidateUserJunction>()
-            .Chain<CreateUserJunction>();
+            .Chain<CreateUserJunction>().Resolve();
 }
 ```
 

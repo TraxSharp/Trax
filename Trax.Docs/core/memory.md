@@ -103,11 +103,11 @@ This lets you load multiple entities in one junction and consume them individual
 ```csharp
 public class CheckoutTrain : ServiceTrain<CheckoutRequest, Receipt>
 {
-    protected override Receipt Junctions() =>
+    protected override Task<Either<Exception, Receipt>> Junctions() =>
         Chain<LoadEntitiesJunction>()          // Returns (User, Order, Payment), deconstructed into Memory
             .Chain<ValidateUserJunction>()     // Takes User from Memory
             .Chain<ValidateOrderJunction>()    // Takes Order from Memory
-            .Chain<ProcessCheckoutJunction>(); // Takes (User, Order, Payment), reconstructed from Memory
+            .Chain<ProcessCheckoutJunction>().Resolve(); // Takes (User, Order, Payment), reconstructed from Memory
 }
 ```
 

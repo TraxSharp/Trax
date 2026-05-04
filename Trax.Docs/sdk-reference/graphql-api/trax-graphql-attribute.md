@@ -98,7 +98,8 @@ public record RefreshCacheInput;
 [TraxMutation(GraphQLOperation.Run)]
 public class RefreshCacheTrain : ServiceTrain<RefreshCacheInput, Unit>, IRefreshCacheTrain
 {
-    protected override Unit Junctions() => Chain<RefreshCacheJunction>();
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<RefreshCacheJunction>().Resolve();
 }
 ```
 

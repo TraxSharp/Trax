@@ -220,9 +220,9 @@ Override `Junctions()` to define the route, the sequence of junctions the train 
 ```csharp
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
-    protected override User Junctions() =>
+    protected override Task<Either<Exception, User>> Junctions() =>
         Chain<ValidateEmailJunction>()
-            .Chain<CreateUserJunction>();
+            .Chain<CreateUserJunction>().Resolve();
 }
 ```
 

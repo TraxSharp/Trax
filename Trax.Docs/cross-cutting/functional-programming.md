@@ -20,9 +20,9 @@ Trax.Core depends on [LanguageExt](https://github.com/louthy/language-ext), a fu
 Trax.Core uses `Either<Exception, T>` internally to represent train results. A train either fails with an exception or succeeds with a result:
 
 ```csharp
-protected override User Junctions() =>
-    Chain<ValidateEmailJunction>()
-        .Chain<CreateUserJunction>();
+protected override Task<Either<Exception, User>> Junctions() =>
+        Chain<ValidateEmailJunction>()
+        .Chain<CreateUserJunction>().Resolve();
 ```
 
 Under the hood, the chain handles the wrapping. If a junction throws, the chain catches it and returns `Left(exception)`. If everything succeeds, you get `Right(result)`. When using `Junctions()`, this is invisible to you. When using `RunInternal`, you work with `Either` directly.

@@ -13,10 +13,10 @@ Methods available on `Train<TInput, TReturn>` for composing junctions. These are
 A typical train overrides `Junctions()` and calls chain methods directly:
 
 ```csharp
-protected override OrderResult Junctions() =>
-    Chain<ValidateOrder>()              // Execute junction, auto-wiring input/output via Memory
+protected override Task<Either<Exception, OrderResult>> Junctions() =>
+        Chain<ValidateOrder>()              // Execute junction, auto-wiring input/output via Memory
         .Chain<ProcessPayment>()
-        .Chain<SendConfirmation>();     // Final result extracted from Memory automatically
+        .Chain<SendConfirmation>().Resolve();     // Final result extracted from Memory automatically
 ```
 
 For advanced cases (custom logic, async setup, manual Either construction), override `RunInternal` instead:

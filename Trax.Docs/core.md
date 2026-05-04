@@ -38,10 +38,10 @@ Trax.Core uses `Either<Exception, T>` from [LanguageExt](https://github.com/lout
 ```csharp
 public class CreateUserTrain : Train<CreateUserRequest, User>
 {
-    protected override User Junctions() =>
+    protected override Task<Either<Exception, User>> Junctions() =>
         Chain<ValidateUserJunction>()         // If this fails, skip remaining junctions
             .Chain<CreateUserJunction>()      // Only runs if validation succeeded
-            .Chain<SendEmailJunction>();      // Only runs if creation succeeded
+            .Chain<SendEmailJunction>().Resolve();      // Only runs if creation succeeded
 }
 ```
 

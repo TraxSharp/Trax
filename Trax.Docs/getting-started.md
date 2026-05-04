@@ -54,9 +54,9 @@ public class FormatNameJunction : Junction<CreateUserRequest, FullName>
 ```csharp
 public class CreateUserTrain : Train<CreateUserRequest, FullName>
 {
-    protected override FullName Junctions() =>
+    protected override Task<Either<Exception, FullName>> Junctions() =>
         Chain<ValidateEmailJunction>()
-            .Chain<FormatNameJunction>();
+            .Chain<FormatNameJunction>().Resolve();
 }
 ```
 

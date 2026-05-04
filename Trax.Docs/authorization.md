@@ -27,7 +27,8 @@ using Trax.Effect.Attributes;
 [TraxAuthorize]
 public class WhoAmITrain : ServiceTrain<Unit, UserInfo>, IWhoAmITrain
 {
-    protected override UserInfo Junctions() => Chain<ReadUserJunction>();
+    protected override Task<Either<Exception, UserInfo>> Junctions() =>
+        Chain<ReadUserJunction>().Resolve();
 }
 
 // Requires the "Admin" authorization policy

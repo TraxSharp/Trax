@@ -41,10 +41,10 @@ public Monad<TInput, TReturn> ShortCircuit<TJunction>(TJunction junctionInstance
 ## Example
 
 ```csharp
-protected override OrderResult Junctions() =>
-    ShortCircuit<CheckCache>()            // If cache has result, capture it for resolution
+protected override Task<Either<Exception, OrderResult>> Junctions() =>
+        ShortCircuit<CheckCache>()            // If cache has result, capture it for resolution
         .Chain<ValidateOrder>()           // Still executes even on cache hit
-        .Chain<ProcessPayment>();          // Returns cached result OR processed result
+        .Chain<ProcessPayment>().Resolve();          // Returns cached result OR processed result
 ```
 
 ## Behavior

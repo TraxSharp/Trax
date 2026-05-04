@@ -14,10 +14,10 @@ A train's route is a chain of junctions. Override `Junctions()` to define it. `.
 `.Chain<TJunction>()` is the primary way to add a junction to a train's route. It resolves the junction, pulls its input from [Memory](memory.md), runs it, and stores the output back in Memory.
 
 ```csharp
-protected override User Junctions() =>
-    Chain<ValidateEmailJunction>()
+protected override Task<Either<Exception, User>> Junctions() =>
+        Chain<ValidateEmailJunction>()
         .Chain<CreateUserJunction>()
-        .Chain<SendEmailJunction>();
+        .Chain<SendEmailJunction>().Resolve();
 ```
 
 For all overloads, type parameter constraints, and junction-wiring behavior, see [SDK Reference: Chain](/docs/sdk-reference/train-methods/chain). The [Analyzer](analyzer.md) catches missing types at compile time, so you'll see these errors in your IDE before you ever run the code.

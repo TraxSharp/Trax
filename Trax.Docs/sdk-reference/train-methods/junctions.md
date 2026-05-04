@@ -31,9 +31,9 @@ protected virtual TOut Junctions()
 ```csharp
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
-    protected override User Junctions() =>
+    protected override Task<Either<Exception, User>> Junctions() =>
         Chain<ValidateEmailJunction>()
-            .Chain<CreateUserJunction>();
+            .Chain<CreateUserJunction>().Resolve();
 }
 ```
 

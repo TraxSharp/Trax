@@ -53,8 +53,8 @@ Fires when a junction needs a type that no previous junction has produced.
 ```csharp
 public class BrokenTrain : ServiceTrain<string, Unit>
 {
-    protected override Unit Junctions() =>
-        Chain<LogGreetingJunction>();  // <- CHAIN001: LogGreetingJunction requires HelloWorldInput,
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<LogGreetingJunction>().Resolve();  // <- CHAIN001: LogGreetingJunction requires HelloWorldInput,
                                       //   but Memory only has [string, Unit]
 }
 ```

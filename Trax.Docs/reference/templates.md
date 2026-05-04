@@ -173,7 +173,8 @@ The API can queue trains for the scheduler via `{trainName}(mode: QUEUE)` mutati
 public class GetCustomerTrain
     : ServiceTrain<GetCustomerInput, CustomerOutput>, IGetCustomerTrain
 {
-    protected override CustomerOutput Junctions() => Chain<FetchCustomerJunction>();
+    protected override Task<Either<Exception, CustomerOutput>> Junctions() =>
+        Chain<FetchCustomerJunction>().Resolve();
 }
 ```
 

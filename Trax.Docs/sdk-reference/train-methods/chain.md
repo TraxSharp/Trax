@@ -25,9 +25,9 @@ public Monad<TInput, TReturn> Chain<TJunction>() where TJunction : class
 This is the overload used in most trains:
 
 ```csharp
-protected override OrderResult Junctions() =>
-    Chain<ValidateOrder>()          // Creates ValidateOrder, extracts its input from Memory
-        .Chain<ProcessPayment>();   // Creates ProcessPayment, extracts its input from Memory
+protected override Task<Either<Exception, OrderResult>> Junctions() =>
+        Chain<ValidateOrder>()          // Creates ValidateOrder, extracts its input from Memory
+        .Chain<ProcessPayment>().Resolve();   // Creates ProcessPayment, extracts its input from Memory
 ```
 
 ## Chain\<TJunction\>(TJunction junctionInstance)

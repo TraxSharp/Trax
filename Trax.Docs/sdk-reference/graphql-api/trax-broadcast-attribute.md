@@ -28,7 +28,8 @@ A simple marker attribute with no properties, just opt-in/opt-out.
 [TraxBroadcast]
 public class LookupPlayerTrain : ServiceTrain<LookupPlayerInput, LookupPlayerOutput>, ILookupPlayerTrain
 {
-    protected override LookupPlayerOutput Junctions() => Chain<FetchPlayerJunction>();
+    protected override Task<Either<Exception, LookupPlayerOutput>> Junctions() =>
+        Chain<FetchPlayerJunction>().Resolve();
 }
 ```
 
