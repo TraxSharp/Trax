@@ -142,17 +142,16 @@ public class PostgresContextTests : TestSetup
 
     internal class TestTrain : ServiceTrain<TestTrainInput, TestTrain>, ITestTrain
     {
-        protected override async Task<Either<Exception, TestTrain>> RunInternal(
-            TestTrainInput input
-        ) => Activate(input, this).Resolve();
+        protected override Task<Either<Exception, TestTrain>> RunInternal(TestTrainInput input) =>
+            Task.FromResult(Activate(input, this).Resolve());
     }
 
     internal class TestTrainWithoutInterface
         : ServiceTrain<TestTrainWithoutInterfaceInput, TestTrainWithoutInterface>
     {
-        protected override async Task<Either<Exception, TestTrainWithoutInterface>> RunInternal(
+        protected override Task<Either<Exception, TestTrainWithoutInterface>> RunInternal(
             TestTrainWithoutInterfaceInput input
-        ) => Activate(input, this).Resolve();
+        ) => Task.FromResult(Activate(input, this).Resolve());
     }
 
     internal record TestTrainWithoutInterfaceInput;
@@ -163,9 +162,9 @@ public class PostgresContextTests : TestSetup
         : ServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)>,
             ITestTrainWithinTrain
     {
-        protected override async Task<
-            Either<Exception, (ITestTrain, ITestTrainWithinTrain)>
-        > RunInternal(TestTrainWithinTrainInput input) =>
+        protected override Task<Either<Exception, (ITestTrain, ITestTrainWithinTrain)>> RunInternal(
+            TestTrainWithinTrainInput input
+        ) =>
             Activate(input)
                 .AddServices<ITestTrainWithinTrain>(this)
                 .Chain<JunctionToRunTestTrain>()

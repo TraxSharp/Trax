@@ -362,58 +362,45 @@ public class TupleJunction : Junction<SimpleInput, (string Result, int Count, Da
 // Test trains
 public class SmallChainTrain : Train<SimpleInput, SimpleOutput>
 {
-    protected override Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input)
-    {
-        var result = Activate(input).Chain<ProcessJunction>().Resolve();
-        return Task.FromResult(result);
-    }
+    protected override async Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input) =>
+        await Activate(input).Chain<ProcessJunction>().Resolve();
 }
 
 public class LargeChainTrain : Train<SimpleInput, SimpleOutput>
 {
-    protected override Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input)
-    {
-        // Chain multiple junctions to fill Memory dictionary
-        var result = Activate(input)
+    protected override async Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input) =>
+        await Activate(input)
             .Chain<ProcessJunction>()
             .Chain<ProcessOutputJunction>()
             .Chain<ProcessOutputJunction>()
             .Chain<ProcessOutputJunction>()
             .Chain<ProcessOutputJunction>()
             .Resolve();
-
-        return Task.FromResult(result);
-    }
 }
 
 public class LargeDataTrain : Train<LargeDataModel, SimpleOutput>
 {
-    protected override Task<Either<Exception, SimpleOutput>> RunInternal(LargeDataModel input)
-    {
-        var result = Activate(input).Chain<LargeDataJunction>().Resolve();
-        return Task.FromResult(result);
-    }
+    protected override async Task<Either<Exception, SimpleOutput>> RunInternal(
+        LargeDataModel input
+    ) => await Activate(input).Chain<LargeDataJunction>().Resolve();
 }
 
 public class VeryLargeDataTrain : Train<VeryLargeDataModel, SimpleOutput>
 {
-    protected override Task<Either<Exception, SimpleOutput>> RunInternal(VeryLargeDataModel input)
+    protected override async Task<Either<Exception, SimpleOutput>> RunInternal(
+        VeryLargeDataModel input
+    )
     {
         var largeModel = new LargeDataModel(input.Name, input.Data);
-        var result = Activate(input, largeModel).Chain<LargeDataJunction>().Resolve();
-        return Task.FromResult(result);
+        return await Activate(input, largeModel).Chain<LargeDataJunction>().Resolve();
     }
 }
 
 public class TupleTrain : Train<SimpleInput, (string Result, int Count, DateTime Timestamp)>
 {
-    protected override Task<
+    protected override async Task<
         Either<Exception, (string Result, int Count, DateTime Timestamp)>
-    > RunInternal(SimpleInput input)
-    {
-        var result = Activate(input).Chain<TupleJunction>().Resolve();
-        return Task.FromResult(result);
-    }
+    > RunInternal(SimpleInput input) => await Activate(input).Chain<TupleJunction>().Resolve();
 }
 
 // Testable train that exposes Memory dictionary for testing
@@ -421,11 +408,10 @@ public class TestableTrain : Train<SimpleInput, SimpleOutput>
 {
     private Monad.Monad<SimpleInput, SimpleOutput>? _monad;
 
-    protected override Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input)
+    protected override async Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input)
     {
         _monad = Activate(input);
-        var result = _monad.Chain<ProcessJunction>().Resolve();
-        return Task.FromResult(result);
+        return await _monad.Chain<ProcessJunction>().Resolve();
     }
 
     public int GetMemoryCount()
