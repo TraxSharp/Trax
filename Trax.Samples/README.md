@@ -2,6 +2,7 @@
 
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Samples.Templates)](https://www.nuget.org/packages/Trax.Samples.Templates/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![codecov](https://codecov.io/gh/TraxSharp/Trax.Samples/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Samples)
 
 Sample applications and a `dotnet new` project template for getting started with [Trax](https://www.nuget.org/packages/Trax.Core/).
 
