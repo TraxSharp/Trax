@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.ContentShield.Trains.ContentReview.LookupModerationResult.Junctions;
@@ -14,5 +15,6 @@ public class LookupModerationResultTrain
     : ServiceTrain<LookupModerationResultInput, ModerationResult>,
         ILookupModerationResultTrain
 {
-    protected override ModerationResult Junctions() => Chain<FetchModerationResultJunction>();
+    protected override Task<Either<Exception, ModerationResult>> Junctions() =>
+        Chain<FetchModerationResultJunction>().Resolve();
 }

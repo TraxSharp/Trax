@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.ChatService.Trains.GetChatRooms.Junctions;
@@ -9,5 +10,6 @@ public class GetChatRoomsTrain
     : ServiceTrain<GetChatRoomsInput, GetChatRoomsOutput>,
         IGetChatRoomsTrain
 {
-    protected override GetChatRoomsOutput Junctions() => Chain<FetchRoomsJunction>();
+    protected override Task<Either<Exception, GetChatRoomsOutput>> Junctions() =>
+        Chain<FetchRoomsJunction>().Resolve();
 }

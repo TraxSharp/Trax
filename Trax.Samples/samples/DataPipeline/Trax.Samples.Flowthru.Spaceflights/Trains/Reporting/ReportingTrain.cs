@@ -10,5 +10,6 @@ namespace Trax.Samples.Flowthru.Spaceflights.Trains.Reporting;
 /// </summary>
 public class ReportingTrain : ServiceTrain<ReportingPipelineInput, Unit>, IReportingTrain
 {
-    protected override Unit Junctions() => Chain<ExecuteReportingJunction>();
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<ExecuteReportingJunction>().Resolve();
 }

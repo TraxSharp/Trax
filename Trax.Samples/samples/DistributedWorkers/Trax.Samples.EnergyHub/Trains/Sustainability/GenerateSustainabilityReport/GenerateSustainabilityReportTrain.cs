@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.EnergyHub.Trains.Sustainability.GenerateSustainabilityReport.Junctions;
@@ -18,6 +19,6 @@ public class GenerateSustainabilityReportTrain
     : ServiceTrain<GenerateSustainabilityReportInput, GenerateSustainabilityReportOutput>,
         IGenerateSustainabilityReportTrain
 {
-    protected override GenerateSustainabilityReportOutput Junctions() =>
-        Chain<AggregateMetricsJunction>().Chain<PublishReportJunction>();
+    protected override Task<Either<Exception, GenerateSustainabilityReportOutput>> Junctions() =>
+        Chain<AggregateMetricsJunction>().Chain<PublishReportJunction>().Resolve();
 }

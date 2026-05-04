@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.JobHunt.Trains.GetArtifacts.Junctions;
@@ -9,5 +10,6 @@ public class GetArtifactsTrain
     : ServiceTrain<GetArtifactsInput, GetArtifactsOutput>,
         IGetArtifactsTrain
 {
-    protected override GetArtifactsOutput Junctions() => Chain<LoadArtifactsJunction>();
+    protected override Task<Either<Exception, GetArtifactsOutput>> Junctions() =>
+        Chain<LoadArtifactsJunction>().Resolve();
 }

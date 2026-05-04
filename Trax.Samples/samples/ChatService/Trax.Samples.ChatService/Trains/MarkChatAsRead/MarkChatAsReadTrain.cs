@@ -8,5 +8,6 @@ namespace Trax.Samples.ChatService.Trains.MarkChatAsRead;
 [TraxMutation(Description = "Marks a chat room as read for a user")]
 public class MarkChatAsReadTrain : ServiceTrain<MarkChatAsReadInput, Unit>, IMarkChatAsReadTrain
 {
-    protected override Unit Junctions() => Chain<UpdateLastReadJunction>();
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<UpdateLastReadJunction>().Resolve();
 }

@@ -12,5 +12,6 @@ namespace Trax.Samples.Api.Trains.HelloWorld;
 [TraxMutation(GraphQLOperation.Run, Description = "Runs a hello world greeting")]
 public class HelloWorldTrain : ServiceTrain<HelloWorldInput, Unit>, IHelloWorldTrain
 {
-    protected override Unit Junctions() => Chain<LogGreetingJunction>();
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<LogGreetingJunction>().Resolve();
 }

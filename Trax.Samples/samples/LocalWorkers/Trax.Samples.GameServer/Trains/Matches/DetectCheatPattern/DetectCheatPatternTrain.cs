@@ -13,6 +13,6 @@ public class DetectCheatPatternTrain
     : ServiceTrain<DetectCheatPatternInput, Unit>,
         IDetectCheatPatternTrain
 {
-    protected override Unit Junctions() =>
-        Chain<AnalyzePatternJunction>().Chain<FlagPlayerJunction>();
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<AnalyzePatternJunction>().Chain<FlagPlayerJunction>().Resolve();
 }

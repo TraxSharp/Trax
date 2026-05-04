@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.JobHunt.Trains.GenerateApplicationMaterials.Junctions;
@@ -10,9 +11,10 @@ public class GenerateApplicationMaterialsTrain
     : ServiceTrain<GenerateApplicationMaterialsInput, GenerateApplicationMaterialsOutput>,
         IGenerateApplicationMaterialsTrain
 {
-    protected override GenerateApplicationMaterialsOutput Junctions() =>
+    protected override Task<Either<Exception, GenerateApplicationMaterialsOutput>> Junctions() =>
         Chain<LoadJobAndProfileJunction>()
             .Chain<GenerateResumeJunction>()
             .Chain<GenerateCoverLetterJunction>()
-            .Chain<PersistArtifactsJunction>();
+            .Chain<PersistArtifactsJunction>()
+            .Resolve();
 }

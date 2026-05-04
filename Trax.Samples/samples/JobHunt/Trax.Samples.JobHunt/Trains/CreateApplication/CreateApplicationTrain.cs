@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.JobHunt.Trains.CreateApplication.Junctions;
@@ -9,5 +10,6 @@ public class CreateApplicationTrain
     : ServiceTrain<CreateApplicationInput, CreateApplicationOutput>,
         ICreateApplicationTrain
 {
-    protected override CreateApplicationOutput Junctions() => Chain<PersistApplicationJunction>();
+    protected override Task<Either<Exception, CreateApplicationOutput>> Junctions() =>
+        Chain<PersistApplicationJunction>().Resolve();
 }

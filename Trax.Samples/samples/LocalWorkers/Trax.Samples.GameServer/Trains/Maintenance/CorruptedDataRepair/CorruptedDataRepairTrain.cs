@@ -13,5 +13,6 @@ public class CorruptedDataRepairTrain
     : ServiceTrain<CorruptedDataRepairInput, Unit>,
         ICorruptedDataRepairTrain
 {
-    protected override Unit Junctions() => Chain<AttemptRepairJunction>();
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<AttemptRepairJunction>().Resolve();
 }

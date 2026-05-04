@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.ContentShield.Trains.Notices.SendViolationNotice.Junctions;
@@ -21,6 +22,6 @@ public class SendViolationNoticeTrain
     : ServiceTrain<SendViolationNoticeInput, SendViolationNoticeOutput>,
         ISendViolationNoticeTrain
 {
-    protected override SendViolationNoticeOutput Junctions() =>
-        Chain<ComposeNoticeJunction>().Chain<DeliverNoticeJunction>();
+    protected override Task<Either<Exception, SendViolationNoticeOutput>> Junctions() =>
+        Chain<ComposeNoticeJunction>().Chain<DeliverNoticeJunction>().Resolve();
 }

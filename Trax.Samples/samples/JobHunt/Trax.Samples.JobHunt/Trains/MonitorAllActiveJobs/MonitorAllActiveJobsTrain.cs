@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.JobHunt.Trains.MonitorAllActiveJobs.Junctions;
 
@@ -7,5 +8,6 @@ public class MonitorAllActiveJobsTrain
     : ServiceTrain<MonitorAllActiveJobsInput, MonitorAllActiveJobsOutput>,
         IMonitorAllActiveJobsTrain
 {
-    protected override MonitorAllActiveJobsOutput Junctions() => Chain<FanOutMonitorJunction>();
+    protected override Task<Either<Exception, MonitorAllActiveJobsOutput>> Junctions() =>
+        Chain<FanOutMonitorJunction>().Resolve();
 }

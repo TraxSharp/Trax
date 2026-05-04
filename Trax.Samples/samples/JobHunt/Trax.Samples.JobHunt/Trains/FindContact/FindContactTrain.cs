@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.JobHunt.Trains.FindContact.Junctions;
@@ -8,5 +9,6 @@ namespace Trax.Samples.JobHunt.Trains.FindContact;
 [TraxBroadcast]
 public class FindContactTrain : ServiceTrain<FindContactInput, FindContactOutput>, IFindContactTrain
 {
-    protected override FindContactOutput Junctions() => Chain<PersistContactJunction>();
+    protected override Task<Either<Exception, FindContactOutput>> Junctions() =>
+        Chain<PersistContactJunction>().Resolve();
 }

@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.GameServer.Trains.Leaderboard.GenerateSeasonReport.Junctions;
 
@@ -11,6 +12,6 @@ public class GenerateSeasonReportTrain
     : ServiceTrain<GenerateSeasonReportInput, SeasonReportOutput>,
         IGenerateSeasonReportTrain
 {
-    protected override SeasonReportOutput Junctions() =>
-        Chain<CompileStatsJunction>().Chain<FormatReportJunction>();
+    protected override Task<Either<Exception, SeasonReportOutput>> Junctions() =>
+        Chain<CompileStatsJunction>().Chain<FormatReportJunction>().Resolve();
 }

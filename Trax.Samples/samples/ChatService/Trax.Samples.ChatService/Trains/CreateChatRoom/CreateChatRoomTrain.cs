@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.ChatService.Trains.CreateChatRoom.Junctions;
@@ -10,6 +11,6 @@ public class CreateChatRoomTrain
     : ServiceTrain<CreateChatRoomInput, CreateChatRoomOutput>,
         ICreateChatRoomTrain
 {
-    protected override CreateChatRoomOutput Junctions() =>
-        Chain<ValidateInputJunction>().Chain<PersistRoomJunction>();
+    protected override Task<Either<Exception, CreateChatRoomOutput>> Junctions() =>
+        Chain<ValidateInputJunction>().Chain<PersistRoomJunction>().Resolve();
 }

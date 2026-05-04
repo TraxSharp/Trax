@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.JobHunt.Trains.UpdateProfile.Junctions;
@@ -9,6 +10,6 @@ public class UpdateProfileTrain
     : ServiceTrain<UpdateProfileInput, UpdateProfileOutput>,
         IUpdateProfileTrain
 {
-    protected override UpdateProfileOutput Junctions() =>
-        Chain<ValidateProfileJsonJunction>().Chain<PersistProfileJunction>();
+    protected override Task<Either<Exception, UpdateProfileOutput>> Junctions() =>
+        Chain<ValidateProfileJsonJunction>().Chain<PersistProfileJunction>().Resolve();
 }

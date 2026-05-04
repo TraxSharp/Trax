@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.GameServer.Trains.Leaderboard.RecalculateLeaderboard.Junctions;
@@ -18,6 +19,6 @@ public class RecalculateLeaderboardTrain
     : ServiceTrain<RecalculateLeaderboardInput, RecalculateLeaderboardOutput>,
         IRecalculateLeaderboardTrain
 {
-    protected override RecalculateLeaderboardOutput Junctions() =>
-        Chain<AggregateScoresJunction>().Chain<RankPlayersJunction>();
+    protected override Task<Either<Exception, RecalculateLeaderboardOutput>> Junctions() =>
+        Chain<AggregateScoresJunction>().Chain<RankPlayersJunction>().Resolve();
 }

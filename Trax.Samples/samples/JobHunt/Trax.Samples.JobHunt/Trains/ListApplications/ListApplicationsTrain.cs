@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.JobHunt.Trains.ListApplications.Junctions;
@@ -9,5 +10,6 @@ public class ListApplicationsTrain
     : ServiceTrain<ListApplicationsInput, ListApplicationsOutput>,
         IListApplicationsTrain
 {
-    protected override ListApplicationsOutput Junctions() => Chain<LoadApplicationsJunction>();
+    protected override Task<Either<Exception, ListApplicationsOutput>> Junctions() =>
+        Chain<LoadApplicationsJunction>().Resolve();
 }

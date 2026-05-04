@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.JobHunt.Trains.ListWatchedCompanies.Junctions;
@@ -9,6 +10,6 @@ public class ListWatchedCompaniesTrain
     : ServiceTrain<ListWatchedCompaniesInput, ListWatchedCompaniesOutput>,
         IListWatchedCompaniesTrain
 {
-    protected override ListWatchedCompaniesOutput Junctions() =>
-        Chain<LoadWatchedCompaniesJunction>();
+    protected override Task<Either<Exception, ListWatchedCompaniesOutput>> Junctions() =>
+        Chain<LoadWatchedCompaniesJunction>().Resolve();
 }

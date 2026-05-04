@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.EnergyHub.Trains.GridTrading.TradeGridEnergy.Junctions;
@@ -19,6 +20,6 @@ public class TradeGridEnergyTrain
     : ServiceTrain<TradeGridEnergyInput, TradeGridEnergyOutput>,
         ITradeGridEnergyTrain
 {
-    protected override TradeGridEnergyOutput Junctions() =>
-        Chain<CalculateExcessJunction>().Chain<SubmitToUbossJunction>();
+    protected override Task<Either<Exception, TradeGridEnergyOutput>> Junctions() =>
+        Chain<CalculateExcessJunction>().Chain<SubmitToUbossJunction>().Resolve();
 }

@@ -22,7 +22,8 @@ public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
     : ServiceTrain<BanPlayerInput, Unit>,
         IBanPlayerTrain
 {
-    protected override Unit Junctions() => Chain<ApplyBanJunction>();
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<ApplyBanJunction>().Resolve();
 
     protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
     {

@@ -12,5 +12,6 @@ public class DataProcessingTrain
     : ServiceTrain<DataProcessingPipelineInput, Unit>,
         IDataProcessingTrain
 {
-    protected override Unit Junctions() => Chain<ExecuteDataProcessingJunction>();
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<ExecuteDataProcessingJunction>().Resolve();
 }

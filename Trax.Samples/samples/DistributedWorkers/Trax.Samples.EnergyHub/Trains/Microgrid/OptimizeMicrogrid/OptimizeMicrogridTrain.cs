@@ -19,6 +19,6 @@ public class OptimizeMicrogridTrain
     : ServiceTrain<OptimizeMicrogridInput, Unit>,
         IOptimizeMicrogridTrain
 {
-    protected override Unit Junctions() =>
-        Chain<GatherEnergyMetricsJunction>().Chain<ApplyDistributionJunction>();
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<GatherEnergyMetricsJunction>().Chain<ApplyDistributionJunction>().Resolve();
 }

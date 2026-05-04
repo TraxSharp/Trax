@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.ContentShield.Trains.ContentReview.ReviewContent.Junctions;
@@ -22,6 +23,9 @@ public class ReviewContentTrain
     : ServiceTrain<ReviewContentInput, ReviewContentOutput>,
         IReviewContentTrain
 {
-    protected override ReviewContentOutput Junctions() =>
-        Chain<ClassifyContentJunction>().Chain<ScoreContentJunction>().Chain<FlagContentJunction>();
+    protected override Task<Either<Exception, ReviewContentOutput>> Junctions() =>
+        Chain<ClassifyContentJunction>()
+            .Chain<ScoreContentJunction>()
+            .Chain<FlagContentJunction>()
+            .Resolve();
 }

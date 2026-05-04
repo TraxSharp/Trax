@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.JobHunt.Trains.AddJob.Junctions;
@@ -8,8 +9,9 @@ namespace Trax.Samples.JobHunt.Trains.AddJob;
 [TraxBroadcast]
 public class AddJobTrain : ServiceTrain<AddJobInput, AddJobOutput>, IAddJobTrain
 {
-    protected override AddJobOutput Junctions() =>
+    protected override Task<Either<Exception, AddJobOutput>> Junctions() =>
         Chain<ValidateAddJobInputJunction>()
             .Chain<FetchJobPostingJunction>()
-            .Chain<PersistJobJunction>();
+            .Chain<PersistJobJunction>()
+            .Resolve();
 }

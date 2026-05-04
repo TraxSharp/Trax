@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.ChatService.Trains.GetChatHistory.Junctions;
@@ -9,5 +10,6 @@ public class GetChatHistoryTrain
     : ServiceTrain<GetChatHistoryInput, GetChatHistoryOutput>,
         IGetChatHistoryTrain
 {
-    protected override GetChatHistoryOutput Junctions() => Chain<FetchMessagesJunction>();
+    protected override Task<Either<Exception, GetChatHistoryOutput>> Junctions() =>
+        Chain<FetchMessagesJunction>().Resolve();
 }

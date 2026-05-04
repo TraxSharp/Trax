@@ -1,3 +1,4 @@
+using LanguageExt;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.TestRunner.Trains.DiscoverTestProjects.Junctions;
@@ -9,5 +10,6 @@ public class DiscoverTestProjectsTrain
     : ServiceTrain<DiscoverTestProjectsInput, DiscoverTestProjectsOutput>,
         IDiscoverTestProjectsTrain
 {
-    protected override DiscoverTestProjectsOutput Junctions() => Chain<ScanProjectsJunction>();
+    protected override Task<Either<Exception, DiscoverTestProjectsOutput>> Junctions() =>
+        Chain<ScanProjectsJunction>().Resolve();
 }
