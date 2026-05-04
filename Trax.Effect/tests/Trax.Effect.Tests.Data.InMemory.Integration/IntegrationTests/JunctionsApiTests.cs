@@ -123,29 +123,31 @@ public class JunctionsApiTests : TestSetup
 
     private class JunctionsTrain : ServiceTrain<string, int>, IJunctionsTrain
     {
-        protected override int Junctions() => Chain<StringLengthJunction>();
+        protected override Task<Either<Exception, int>> Junctions() =>
+            Chain<StringLengthJunction>().Resolve();
     }
 
     private interface IJunctionsTrain : IServiceTrain<string, int> { }
 
     private class JunctionsMultiTrain : ServiceTrain<string, string>, IJunctionsMultiTrain
     {
-        protected override string Junctions() =>
-            Chain<StringLengthJunction>().Chain<IntToStringJunction>();
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<StringLengthJunction>().Chain<IntToStringJunction>().Resolve();
     }
 
     private interface IJunctionsMultiTrain : IServiceTrain<string, string> { }
 
     private class JunctionsFailingTrain : ServiceTrain<string, int>, IJunctionsFailingTrain
     {
-        protected override int Junctions() => Chain<ThrowingJunction>();
+        protected override Task<Either<Exception, int>> Junctions() =>
+            Chain<ThrowingJunction>().Resolve();
     }
 
     private interface IJunctionsFailingTrain : IServiceTrain<string, int> { }
 
     private class RunInternalTrain : ServiceTrain<string, int>, IRunInternalTrain
     {
-        protected override async Task<Either<Exception, int>> RunInternal(string input) =>
+        protected override Task<Either<Exception, int>> RunInternal(string input) =>
             Activate(input).Chain<StringLengthJunction>().Resolve();
     }
 

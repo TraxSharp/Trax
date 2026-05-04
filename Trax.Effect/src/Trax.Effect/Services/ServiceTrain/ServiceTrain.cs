@@ -354,7 +354,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// Override this for full control over the railway pipeline (advanced).
     /// If not overridden, the default implementation calls Junctions().
     /// </summary>
-    protected override Task<Either<Exception, TOut>> RunInternal(TIn input)
+    protected override async Task<Either<Exception, TOut>> RunInternal(TIn input)
     {
         TrainMonad = new Monad<TIn, TOut>(this, ServiceProvider!, CancellationToken).Activate(
             input
@@ -362,12 +362,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         try
         {
-            TOut result = Junctions();
-            return Task.FromResult<Either<Exception, TOut>>(result);
+            return await Junctions().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            return Task.FromResult<Either<Exception, TOut>>(ex);
+            return ex;
         }
     }
 

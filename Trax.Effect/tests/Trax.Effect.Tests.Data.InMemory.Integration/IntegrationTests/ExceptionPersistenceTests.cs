@@ -360,44 +360,48 @@ public class ExceptionPersistenceTests : TestSetup
 
     private class JunctionFailingTrain : ServiceTrain<string, string>, IJunctionFailingTrain
     {
-        protected override string Junctions() => Chain<AlwaysFailsJunction>();
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<AlwaysFailsJunction>().Resolve();
     }
 
     private interface IJunctionFailingTrain : IServiceTrain<string, string> { }
 
     private class HttpErrorTrain : ServiceTrain<string, string>, IHttpErrorTrain
     {
-        protected override string Junctions() => Chain<HttpCallJunction>();
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<HttpCallJunction>().Resolve();
     }
 
     private interface IHttpErrorTrain : IServiceTrain<string, string> { }
 
     private class JsonMessageTrain : ServiceTrain<string, string>, IJsonMessageTrain
     {
-        protected override string Junctions() => Chain<JsonExceptionJunction>();
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<JsonExceptionJunction>().Resolve();
     }
 
     private interface IJsonMessageTrain : IServiceTrain<string, string> { }
 
     private class SpecialCharsTrain : ServiceTrain<string, string>, ISpecialCharsTrain
     {
-        protected override string Junctions() => Chain<SpecialCharsJunction>();
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<SpecialCharsJunction>().Resolve();
     }
 
     private interface ISpecialCharsTrain : IServiceTrain<string, string> { }
 
     private class MultiJunctionTrain : ServiceTrain<string, string>, IMultiJunctionTrain
     {
-        protected override string Junctions() =>
-            Chain<FirstJunctionSucceeds>().Chain<SecondJunctionFails>();
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<FirstJunctionSucceeds>().Chain<SecondJunctionFails>().Resolve();
     }
 
     private interface IMultiJunctionTrain : IServiceTrain<string, string> { }
 
     private class PlainExceptionTrain : ServiceTrain<Unit, Unit>, IPlainExceptionTrain
     {
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
-            new ArgumentException("plain failure");
+        protected override Task<Either<Exception, Unit>> RunInternal(Unit input) =>
+            Task.FromResult<Either<Exception, Unit>>(new ArgumentException("plain failure"));
     }
 
     private interface IPlainExceptionTrain : IServiceTrain<Unit, Unit> { }
