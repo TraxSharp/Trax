@@ -18,10 +18,9 @@ public class ShortCircuitTests : TestSetup
         var train = new TestTrain().Activate(input);
 
         // Act
-        train.ShortCircuitChain<TestJunction, string, bool>(
+        var (_, returnValue) = await train.ShortCircuitJunction<TestJunction, string, bool>(
             testJunction,
-            inputString,
-            out var returnValue
+            inputString
         );
 
         // Assert
@@ -42,11 +41,11 @@ public class ShortCircuitTests : TestSetup
         var train = new TestTrain().Activate(input);
 
         // Act
-        train.ShortCircuitChain<TestTupleOutputJunction, string, (bool, char)>(
-            testJunction,
-            inputString,
-            out var returnValue
-        );
+        var (_, returnValue) = await train.ShortCircuitJunction<
+            TestTupleOutputJunction,
+            string,
+            (bool, char)
+        >(testJunction, inputString);
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -67,11 +66,11 @@ public class ShortCircuitTests : TestSetup
         var train = new TestTrain().Activate(input);
 
         // Act
-        train.ShortCircuitChain<TestExceptionJunction, string, bool>(
-            testJunction,
-            inputString,
-            out var returnValue
-        );
+        var (_, returnValue) = await train.ShortCircuitJunction<
+            TestExceptionJunction,
+            string,
+            bool
+        >(testJunction, inputString);
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -90,7 +89,7 @@ public class ShortCircuitTests : TestSetup
         var train = new TestTrain().Activate(input, inputString);
 
         // Act
-        train.ShortCircuit<TestJunctionStringOutput>();
+        await train.ShortCircuit<TestJunctionStringOutput>();
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -106,7 +105,7 @@ public class ShortCircuitTests : TestSetup
         var train = new TestTrain().Activate(input);
 
         // Act
-        train.ShortCircuit<TestJunctionStringOutput>();
+        await train.ShortCircuit<TestJunctionStringOutput>();
 
         // Assert
         train.Memory.Should().NotBeNull();
@@ -121,7 +120,7 @@ public class ShortCircuitTests : TestSetup
         var train = new TestTrainOption().Activate(input);
 
         // Act
-        train.ShortCircuit<TestOptionJunctionTest>();
+        await train.ShortCircuit<TestOptionJunctionTest>();
 
         // Assert
         train.Memory.Should().NotBeNull();

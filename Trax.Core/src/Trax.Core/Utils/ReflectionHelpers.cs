@@ -68,10 +68,10 @@ internal static class ReflectionHelpers
     }
 
     /// <summary>
-    /// Finds the ShortCircuitChain method that matches the specified types and parameter count.
+    /// Finds the ShortCircuitJunction method that matches the specified types and parameter count.
     /// Results are cached per (monadType, junctionType, tIn, tOut, paramCount) combination.
     /// </summary>
-    internal static MethodInfo FindGenericChainInternalMethod<TJunction, TInput, TReturn>(
+    internal static MethodInfo FindGenericShortCircuitJunctionMethod<TJunction, TInput, TReturn>(
         Monad<TInput, TReturn> monad,
         Type tIn,
         Type tOut,
@@ -80,7 +80,7 @@ internal static class ReflectionHelpers
     {
         var cacheKey = (
             monad.GetType(),
-            "ShortCircuitChain",
+            "ShortCircuitJunction",
             typeof(TJunction),
             tIn,
             tOut,
@@ -99,7 +99,9 @@ internal static class ReflectionHelpers
                     .GetMethods(
                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
                     )
-                    .Where(m => m is { Name: "ShortCircuitChain", IsGenericMethodDefinition: true })
+                    .Where(m =>
+                        m is { Name: "ShortCircuitJunction", IsGenericMethodDefinition: true }
+                    )
                     .Where(m => m.GetGenericArguments().Length == 3)
                     .Where(m => m.GetParameters().Length == parameterCount)
                     .ToList();
@@ -108,10 +110,12 @@ internal static class ReflectionHelpers
                 {
                     case > 1:
                         throw new InvalidOperationException(
-                            "More than one Generic 'Chain' method found."
+                            "More than one Generic 'ShortCircuitJunction' method found."
                         );
                     case 0:
-                        throw new InvalidOperationException("Suitable 'Chain' method not found.");
+                        throw new InvalidOperationException(
+                            "Suitable 'ShortCircuitJunction' method not found."
+                        );
                 }
 
                 return methods.First().MakeGenericMethod(typeof(TJunction), tIn, tOut);
@@ -120,17 +124,24 @@ internal static class ReflectionHelpers
     }
 
     /// <summary>
-    /// Finds the Chain method that matches the specified types and parameter count.
+    /// Finds the ChainJunction method that matches the specified types and parameter count.
     /// Results are cached per (monadType, junctionType, tIn, tOut, paramCount) combination.
     /// </summary>
-    internal static MethodInfo FindGenericChainMethod<TJunction, TInput, TReturn>(
+    internal static MethodInfo FindGenericChainJunctionMethod<TJunction, TInput, TReturn>(
         Monad<TInput, TReturn> monad,
         Type tIn,
         Type tOut,
         int parameterCount
     )
     {
-        var cacheKey = (monad.GetType(), "Chain", typeof(TJunction), tIn, tOut, parameterCount);
+        var cacheKey = (
+            monad.GetType(),
+            "ChainJunction",
+            typeof(TJunction),
+            tIn,
+            tOut,
+            parameterCount
+        );
 
         if (GenericMethodCache.TryGetValue(cacheKey, out var cached))
             return cached;
@@ -144,7 +155,7 @@ internal static class ReflectionHelpers
                     .GetMethods(
                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
                     )
-                    .Where(m => m is { Name: "Chain", IsGenericMethodDefinition: true })
+                    .Where(m => m is { Name: "ChainJunction", IsGenericMethodDefinition: true })
                     .Where(m => m.GetGenericArguments().Length == 3)
                     .Where(m => m.GetParameters().Length == parameterCount)
                     .ToList();
@@ -153,10 +164,12 @@ internal static class ReflectionHelpers
                 {
                     case > 1:
                         throw new InvalidOperationException(
-                            "More than one Generic 'Chain' method found."
+                            "More than one Generic 'ChainJunction' method found."
                         );
                     case 0:
-                        throw new InvalidOperationException("Suitable 'Chain' method not found.");
+                        throw new InvalidOperationException(
+                            "Suitable 'ChainJunction' method not found."
+                        );
                 }
 
                 return methods.First().MakeGenericMethod(typeof(TJunction), tIn, tOut);

@@ -75,27 +75,27 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// </summary>
     /// <param name="input">The input data for the train</param>
     /// <returns>Either the result of the train or an exception</returns>
-    protected virtual Task<Either<Exception, TReturn>> RunInternal(TInput input)
+    protected virtual async Task<Either<Exception, TReturn>> RunInternal(TInput input)
     {
         _monad = new Monad<TInput, TReturn>(this, CancellationToken).Activate(input);
 
         try
         {
-            TReturn result = Junctions();
-            return Task.FromResult<Either<Exception, TReturn>>(result);
+            return await Junctions().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            return Task.FromResult<Either<Exception, TReturn>>(ex);
+            return ex;
         }
     }
 
     /// <summary>
     /// Defines the train's junction chain. Override this to declare which junctions
-    /// the train executes. The return type is implicitly resolved from the chain.
+    /// the train executes. The chain returns Task&lt;Either&lt;Exception, TReturn&gt;&gt;,
+    /// which the default RunInternal awaits and propagates.
     /// </summary>
-    /// <returns>The train's output, resolved from the junction chain</returns>
-    protected virtual TReturn Junctions() =>
+    /// <returns>The train's railway result</returns>
+    protected virtual Task<Either<Exception, TReturn>> Junctions() =>
         throw new NotImplementedException("Override either Junctions() or RunInternal().");
 
     /// <summary>
@@ -113,19 +113,19 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// <summary>
     /// Creates and executes a junction by its type. Input is extracted from Memory.
     /// </summary>
-    protected Monad<TInput, TReturn> Chain<TJunction>()
+    protected MonadTask<TInput, TReturn> Chain<TJunction>()
         where TJunction : class => _monad!.Chain<TJunction>();
 
     /// <summary>
     /// Executes a junction instance. Input is extracted from Memory.
     /// </summary>
-    protected Monad<TInput, TReturn> Chain<TJunction>(TJunction instance)
+    protected MonadTask<TInput, TReturn> Chain<TJunction>(TJunction instance)
         where TJunction : class => _monad!.Chain(instance);
 
     /// <summary>
     /// Executes a junction resolved from Memory by its interface type.
     /// </summary>
-    protected Monad<TInput, TReturn> IChain<TJunction>()
+    protected MonadTask<TInput, TReturn> IChain<TJunction>()
         where TJunction : class => _monad!.IChain<TJunction>();
 
     /// <summary>
@@ -143,13 +143,13 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// Executes a junction with short-circuit behavior.
     /// If the junction produces TReturn, the chain ends early with that value.
     /// </summary>
-    protected Monad<TInput, TReturn> ShortCircuit<TJunction>()
+    protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>()
         where TJunction : class => _monad!.ShortCircuit<TJunction>();
 
     /// <summary>
     /// Executes a junction instance with short-circuit behavior.
     /// </summary>
-    protected Monad<TInput, TReturn> ShortCircuit<TJunction>(TJunction instance)
+    protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction instance)
         where TJunction : class => _monad!.ShortCircuit(instance);
 
     /// <summary>

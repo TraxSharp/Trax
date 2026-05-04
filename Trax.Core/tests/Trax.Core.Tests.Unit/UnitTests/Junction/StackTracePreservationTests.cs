@@ -178,12 +178,14 @@ public class StackTracePreservationTests : TestSetup
 
     private class ThrowingTrain : Train<string, string>
     {
-        protected override string Junctions() => Chain<AlwaysThrowsJunction>();
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<AlwaysThrowsJunction>().Resolve();
     }
 
     private class ArgumentThrowingTrain : Train<string, string>
     {
-        protected override string Junctions() => Chain<ArgumentThrowsJunction>();
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<ArgumentThrowsJunction>().Resolve();
     }
 
     #endregion

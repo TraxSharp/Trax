@@ -274,7 +274,7 @@ public class CancellationTokenTests : TestSetup
 
         public SingleJunctionTrain(Junction<string, string> junction) => _junction = junction;
 
-        protected override async Task<Either<Exception, string>> RunInternal(string input) =>
+        protected override Task<Either<Exception, string>> RunInternal(string input) =>
             Activate(input).Chain(_junction).Resolve();
     }
 
@@ -292,7 +292,7 @@ public class CancellationTokenTests : TestSetup
             _junction2 = junction2;
         }
 
-        protected override async Task<Either<Exception, string>> RunInternal(string input) =>
+        protected override Task<Either<Exception, string>> RunInternal(string input) =>
             Activate(input).Chain(_junction1).Chain(_junction2).Resolve();
     }
 

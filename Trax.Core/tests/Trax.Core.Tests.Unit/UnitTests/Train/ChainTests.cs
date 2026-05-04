@@ -2,334 +2,190 @@ using FluentAssertions;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Junction;
+using Trax.Core.Monad;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
 public class ChainTests : TestSetup
 {
-    // Chain<TJunction, TIn, TOut>(TJunction, TIn, TOut)
-    [Theory]
-    public async Task TestChainThreeTypes()
-    {
-        // Arrange
-        var trainInput = 1;
-        var stringInput = "hello";
-        var train = new TestTrain().Activate(trainInput);
+    #region Internal ChainJunction (junction execution + tuple result)
 
-        // Act
-        train.Chain<TestJunction, string, bool>(
+    [Test]
+    public async Task ChainJunction_TJunctionTInTOut_PopulatesMemoryAndReturnsRight()
+    {
+        var train = new TestTrain().Activate(1);
+
+        var (monad, returnValue) = await train.ChainJunction<TestJunction, string, bool>(
             new TestJunction(),
-            stringInput,
-            out var returnValue
+            "hello"
         );
 
-        // Assert
         returnValue.IsRight.Should().BeTrue();
-        returnValue.ValueUnsafe().Should().Be(stringInput.Equals("hello"));
-        train.Memory.Should().ContainValue(stringInput.Equals("hello"));
-        train.Exception.Should().BeNull();
+        returnValue.ValueUnsafe().Should().Be(true);
+        monad.Memory.Should().ContainValue(true);
+        monad.Exception.Should().BeNull();
     }
 
-    // Chain<TJunction, TIn, TOut>(TJunction, TIn, TOut)
-    [Theory]
-    public async Task TestChainThreeTypesPreviousJunctionException()
+    [Test]
+    public async Task ChainJunction_PreviousJunctionWasLeft_ShortCircuitsAndPropagates()
     {
-        // Arrange
-        var trainInput = 1;
-        var train = new TestTrain().Activate(trainInput);
+        var train = new TestTrain().Activate(1);
 
-        // Act
-        train.Chain<TestJunction, string, bool>(
+        var (_, returnValue) = await train.ChainJunction<TestJunction, string, bool>(
             new TestJunction(),
-            new Exception(),
-            out var returnValue
+            new Exception("upstream")
         );
 
-        // Assert
         returnValue.IsLeft.Should().BeTrue();
-        returnValue.Swap().ValueUnsafe().Should().BeOfType<Exception>();
+        returnValue.Swap().ValueUnsafe().Message.Should().Be("upstream");
         train.Exception.Should().NotBeNull();
     }
 
-    // Chain<TJunction, TIn, TOut>(TJunction, TIn, TOut)
-    [Theory]
-    public async Task TestChainThreeTypesJunctionException()
+    [Test]
+    public async Task ChainJunction_JunctionThrows_CapturesExceptionInLeft()
     {
-        // Arrange
-        var trainInput = 1;
-        var stringInput = "hello";
-        var train = new TestTrain().Activate(trainInput);
+        var train = new TestTrain().Activate(1);
 
-        // Act
-        train.Chain<TestExceptionJunction, string, bool>(
+        var (_, returnValue) = await train.ChainJunction<TestExceptionJunction, string, bool>(
             new TestExceptionJunction(),
-            stringInput,
-            out var returnValue
+            "hello"
         );
 
-        // Assert
         returnValue.IsLeft.Should().BeTrue();
         returnValue.Swap().ValueUnsafe().Should().BeOfType<NotImplementedException>();
         train.Exception.Should().NotBeNull();
     }
 
-    // Chain<TJunction, TIn, TOut>(TJunction, TIn, TOut)
-    [Theory]
-    public async Task TestChainThreeTypesTupleOutput()
+    [Test]
+    public async Task ChainJunction_TupleOutput_DecomposesIntoMemory()
     {
-        // Arrange
-        var trainInput = 1;
-        var stringInput = "hello";
-        var train = new TestTrain().Activate(trainInput);
+        var train = new TestTrain().Activate(1);
 
-        // Act
-        train.Chain<TestTupleOutputJunction, string, (bool, char)>(
+        var (monad, _) = await train.ChainJunction<TestTupleOutputJunction, string, (bool, char)>(
             new TestTupleOutputJunction(),
-            stringInput,
-            out var returnValue
+            "hello"
         );
 
-        // Assert
-        returnValue.IsRight.Should().BeTrue();
-        returnValue.ValueUnsafe().Should().Be((stringInput.Equals("hello"), stringInput.First()));
-        train.Memory.Should().ContainValue(stringInput.Equals("hello"));
-        train.Memory.Should().ContainValue(stringInput.First());
+        monad.Memory.Should().ContainValue(true);
+        monad.Memory.Should().ContainValue('h');
+    }
+
+    [Test]
+    public async Task ChainJunction_InputFromMemory_ExtractsAndExecutes()
+    {
+        var train = new TestTrain().Activate(1, "hello");
+
+        await train.ChainJunction<TestJunction, string, bool>(new TestJunction());
+
+        train.Memory.Should().ContainValue(true);
         train.Exception.Should().BeNull();
     }
 
-    // Chain<TJunction, TIn, TOut>(TJunction)
-    [Theory]
-    public async Task TestChainThreeTypesOneInput()
+    #endregion
+
+    #region Public Chain<TJunction, TIn, TOut>
+
+    [Test]
+    public async Task Chain_TJunctionTInTOutWithInstance_RunsJunction()
     {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
-        var train = new TestTrain().Activate(input, inputString);
+        var train = new TestTrain().Activate(1, "hello");
 
-        // Act
-        train.Chain<TestJunction, string, bool>(new TestJunction());
+        await train.Chain<TestJunction, string, bool>(new TestJunction());
 
-        // Assert
+        train.Memory.Should().ContainValue(true);
+        train.Exception.Should().BeNull();
+    }
+
+    [Test]
+    public async Task Chain_TJunctionTInTOutWithDefaultCtor_RunsJunction()
+    {
+        var train = new TestTrain().Activate(1, "hello");
+
+        await train.Chain<TestJunction, string, bool>();
+
+        train.Memory.Should().ContainValue(true);
+        train.Exception.Should().BeNull();
+    }
+
+    [Test]
+    public async Task Chain_TJunctionTInWithInstance_RunsJunctionForUnitOutput()
+    {
+        var train = new TestTrain().Activate(1, "hello");
+
+        await train.Chain<TestUnitJunction, string>(new TestUnitJunction());
+
         train.Memory.Should().NotBeNull();
         train.Exception.Should().BeNull();
-        train.Memory.Should().ContainValue(inputString.Equals("hello"));
     }
 
-    // Chain<TJunction, TIn, TOut>(TIn, TOut)
-    [Theory]
-    public async Task TestChainThreeTypesTwoInputs()
+    [Test]
+    public async Task Chain_TJunctionTInWithDefaultCtor_RunsJunctionForUnitOutput()
     {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
-        var train = new TestTrain().Activate(input);
+        var train = new TestTrain().Activate(1, "hello");
 
-        // Act
-        train.Chain<TestJunction, string, bool>(inputString, out var returnValue);
+        await train.Chain<TestUnitJunction, string>();
 
-        // Assert
         train.Memory.Should().NotBeNull();
         train.Exception.Should().BeNull();
-        train.Memory.Should().ContainValue(inputString.Equals("hello"));
-        returnValue.IsRight.Should().BeTrue();
-        returnValue.ValueUnsafe().Should().BeTrue();
     }
 
-    // Chain<TJunction, TIn, TOut>()
-    [Theory]
-    public async Task TestChainThreeTypesNoInput()
+    #endregion
+
+    #region Public Chain<TJunction>
+
+    [Test]
+    public async Task Chain_OneTypeArgWithInstance_RunsJunction()
     {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
-        var train = new TestTrain().Activate(input, inputString);
-
-        // Act
-        train.Chain<TestJunction, string, bool>();
-
-        // Assert
-        train.Memory.Should().NotBeNull();
-        train.Exception.Should().BeNull();
-        train.Memory.Should().ContainValue(inputString.Equals("hello"));
-    }
-
-    // IChain<TJunction>()
-    [Theory]
-    public async Task TestIChainOneTypeNoInput()
-    {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
-        var testJunction = (ITestJunction)new TestJunction();
-        var train = new TestTrain().Activate(input, inputString).AddServices(testJunction);
-
-        // Act
-        train.IChain<ITestJunction>();
-
-        // Assert
-        train.Memory.Should().NotBeNull();
-        train.Exception.Should().BeNull();
-        train.Memory.Should().ContainValue(inputString.Equals("hello"));
-    }
-
-    // IChain<TJunction>()
-    [Theory]
-    public async Task TestInvalidIChainOneTypeNoInputNotInterface()
-    {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
-        var train = new TestTrain().Activate(input, inputString);
-
-        // Act
-        train.IChain<TestJunction>();
-
-        // Assert
-        train.Memory.Should().NotBeNull();
-        train.Exception.Should().NotBeNull();
-    }
-
-    // Chain<TJunction>()
-    [Theory]
-    public async Task TestChainOneTypeNoInput()
-    {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
-        var train = new TestTrain().Activate(input, inputString);
-
-        // Act
-        train.Chain<TestJunction>();
-
-        // Assert
-        train.Memory.Should().NotBeNull();
-        train.Exception.Should().BeNull();
-        train.Memory.Should().ContainValue(inputString.Equals("hello"));
-    }
-
-    // Chain<TJunction>(TJunction)
-    [Theory]
-    public async Task TestChainOneTypeOneInput()
-    {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
         var testJunction = new TestJunction();
-        var train = new TestTrain().Activate(input, inputString);
+        var train = new TestTrain().Activate(1, "hello");
 
-        // Act
-        train.Chain<TestJunction>(testJunction);
+        await train.Chain<TestJunction>(testJunction);
 
-        // Assert
-        train.Memory.Should().NotBeNull();
-        train.Exception.Should().BeNull();
-        train.Memory.Should().ContainValue(inputString.Equals("hello"));
-    }
-
-    // Chain<TJunction, TIn>(TJunction, TIn)
-    [Theory]
-    public async Task TestChainTwoTypeTwoInput()
-    {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
-        var testJunction = new TestUnitJunction();
-        var train = new TestTrain().Activate(input, inputString);
-
-        // Act
-        train.Chain<TestUnitJunction, string>(testJunction, inputString);
-
-        // Assert
-        train.Memory.Should().NotBeNull();
+        train.Memory.Should().ContainValue(true);
         train.Exception.Should().BeNull();
     }
 
-    // Chain<TJunction, TIn>(TJunction, TIn)
-    [Theory]
-    public async Task TestInvalidChainTwoTypeTwoInput()
+    [Test]
+    public async Task Chain_OneTypeArgNoInstance_ResolvesFromContainer()
     {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
-        var testJunction = new TestUnitJunction();
-        var train = new TestTrain().Activate(input, inputString);
+        var train = new TestTrain().Activate(1, "hello");
 
-        // Act
-        train.Chain<TestUnitJunction, string>(testJunction, new Exception());
+        await train.Chain<TestJunction>();
 
-        // Assert
-        train.Memory.Should().NotBeNull();
+        train.Memory.Should().ContainValue(true);
+        train.Exception.Should().BeNull();
+    }
+
+    #endregion
+
+    #region IChain<TJunction>
+
+    [Test]
+    public async Task IChain_RegisteredInterfaceJunction_RunsViaMemory()
+    {
+        var testJunction = (ITestJunction)new TestJunction();
+        var train = new TestTrain().Activate(1, "hello").AddServices(testJunction);
+
+        await train.IChain<ITestJunction>();
+
+        train.Memory.Should().ContainValue(true);
+        train.Exception.Should().BeNull();
+    }
+
+    [Test]
+    public async Task IChain_NonInterfaceTypeArg_RecordsTrainException()
+    {
+        var train = new TestTrain().Activate(1, "hello");
+
+        await train.IChain<TestJunction>();
+
         train.Exception.Should().NotBeNull();
     }
 
-    // Chain<TJunction, TIn>(TJunction)
-    [Theory]
-    public async Task TestChainTwoTypeOneInput()
-    {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
-        var testJunction = new TestUnitJunction();
-        var train = new TestTrain().Activate(input, inputString);
+    #endregion
 
-        // Act
-        train.Chain<TestUnitJunction, string>(testJunction);
-
-        // Assert
-        train.Memory.Should().NotBeNull();
-        train.Exception.Should().BeNull();
-    }
-
-    // Chain<TJunction, TIn>(TIn)
-    [Theory]
-    public async Task TestChainTwoTypeOnePreviousJunctionInput()
-    {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
-        var train = new TestTrain().Activate(input);
-
-        // Act
-        train.Chain<TestUnitJunction, string>(inputString);
-
-        // Assert
-        train.Memory.Should().NotBeNull();
-        train.Exception.Should().BeNull();
-    }
-
-    // Chain<TJunction, TIn>(TIn)
-    [Theory]
-    public async Task TestInvalidChainTwoTypeOnePreviousJunctionInput()
-    {
-        // Arrange
-        var input = 1;
-        var train = new TestTrain().Activate(input);
-
-        // Act
-        train.Chain<TestUnitJunction, string>(new Exception());
-
-        // Assert
-        train.Memory.Should().NotBeNull();
-        train.Exception.Should().NotBeNull();
-    }
-
-    // Chain<TJunction, TIn>()
-    [Theory]
-    public async Task TestChainTwoTypeNoInput()
-    {
-        // Arrange
-        var input = 1;
-        var inputString = "hello";
-        var train = new TestTrain().Activate(input, inputString);
-
-        // Act
-        train.Chain<TestUnitJunction, string>();
-
-        // Assert
-        train.Memory.Should().NotBeNull();
-        train.Exception.Should().BeNull();
-    }
+    #region Test fixtures
 
     private class TestTupleOutputJunction : Junction<string, (bool, char)>
     {
@@ -342,7 +198,7 @@ public class ChainTests : TestSetup
         public override Task<bool> Run(string input) => throw new NotImplementedException();
     }
 
-    private interface ITestUnitJunction : IJunction<string, LanguageExt.Unit>;
+    private interface ITestUnitJunction : IJunction<string, LanguageExt.Unit> { }
 
     private class TestUnitJunction : Junction<string, LanguageExt.Unit>, ITestUnitJunction
     {
@@ -361,4 +217,6 @@ public class ChainTests : TestSetup
         protected override Task<Either<Exception, string>> RunInternal(int input) =>
             throw new NotImplementedException();
     }
+
+    #endregion
 }

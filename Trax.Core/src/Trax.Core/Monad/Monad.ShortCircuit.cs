@@ -1,84 +1,89 @@
 using LanguageExt;
+using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
 using Trax.Core.Junction;
+using Trax.Core.Train;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
 
 public partial class Monad<TInput, TReturn>
 {
+    #region Internal junction execution (short-circuit)
+
     /// <summary>
     /// Executes a junction with short-circuit behavior, meaning that Left (exception) results
-    /// are ignored and don't stop the chain.
+    /// are ignored and don't stop the chain. Reflection-invoked from
+    /// <see cref="ShortCircuit{TJunction}(TJunction)"/>.
     /// </summary>
-    internal Monad<TInput, TReturn> ShortCircuitChain<TJunction, TIn, TOut>(
-        TJunction junction,
-        TIn previousJunction,
-        out Either<Exception, TOut> outVar
-    )
+    internal async Task<(
+        Monad<TInput, TReturn> Monad,
+        Either<Exception, TOut> Result
+    )> ShortCircuitJunction<TJunction, TIn, TOut>(TJunction junction, TIn previousJunction)
         where TJunction : IJunction<TIn, TOut>
     {
-        // If there's already an exception, short-circuit
         if (Exception is not null)
-        {
-            outVar = Exception;
-            return this;
-        }
+            return (this, (Exception)Exception);
 
-        // Execute the junction directly without thread pool scheduling
-        var task = junction.RailwayJunction(previousJunction, Train);
-        outVar = task.IsCompletedSuccessfully ? task.Result : task.GetAwaiter().GetResult();
+        var result = await junction.RailwayJunction(previousJunction, Train).ConfigureAwait(false);
 
         // We skip the Left for Short Circuiting - only process Right results
-        if (outVar.IsRight)
+        if (result.IsRight)
         {
-            var outValue = outVar.Unwrap()!;
+            var outValue = result.Unwrap()!;
 
-            // Store the result in Memory
             if (typeof(TOut).IsTuple())
                 this.AddTupleToMemory(outValue);
             else
                 Memory[typeof(TOut)] = outValue;
         }
 
-        return this;
+        return (this, result);
     }
+
+    #endregion
+
+    #region Public API
 
     /// <summary>
     /// Executes a junction with short-circuit behavior, potentially ending the chain early
     /// if the junction returns a value of type TReturn.
     /// </summary>
-    public Monad<TInput, TReturn> ShortCircuit<TJunction>()
+    public MonadTask<TInput, TReturn> ShortCircuit<TJunction>()
+        where TJunction : class => new(ShortCircuitAsync<TJunction>());
+
+    private Task<Monad<TInput, TReturn>> ShortCircuitAsync<TJunction>()
         where TJunction : class
     {
-        // Create an instance of the junction
         var junctionInstance = this.InitializeJunction<TJunction, TInput, TReturn>();
 
         if (junctionInstance is null)
-            return this;
+            return Task.FromResult(this);
 
-        return ShortCircuit<TJunction>(junctionInstance);
+        return ShortCircuitAsync(junctionInstance);
     }
 
     /// <summary>
     /// Executes a junction with short-circuit behavior, potentially ending the chain early
     /// if the junction returns a value of type TReturn.
     /// </summary>
-    public Monad<TInput, TReturn> ShortCircuit<TJunction>(TJunction junctionInstance)
+    public MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction junctionInstance)
+        where TJunction : class => new(ShortCircuitAsync(junctionInstance));
+
+    private async Task<Monad<TInput, TReturn>> ShortCircuitAsync<TJunction>(
+        TJunction junctionInstance
+    )
         where TJunction : class
     {
-        // Extract the input and output types from the junction
         var (tIn, tOut) = ReflectionHelpers.ExtractJunctionTypeArguments<TJunction>();
 
-        // Find the appropriate ShortCircuitChain method to call
-        var chainMethod = ReflectionHelpers.FindGenericChainInternalMethod<
+        var chainMethod = ReflectionHelpers.FindGenericShortCircuitJunctionMethod<
             TJunction,
             TInput,
             TReturn
-        >(this, tIn, tOut, 3);
+        >(this, tIn, tOut, 2);
 
-        // Extract the input from Memory
         var input = MonadExtensions.ExtractTypeFromMemory(this, tIn);
 
         if (input is null)
@@ -87,21 +92,31 @@ public partial class Monad<TInput, TReturn>
             return this;
         }
 
-        // Execute the junction
-        object[] parameters = [junctionInstance, input, null!];
-        var result = chainMethod.Invoke(this, parameters);
-        var outParam = parameters[2];
+        // Invoke the generic ShortCircuitJunction — returns Task<(Monad, Either<Exception, TOut>)>
+        var taskObj = chainMethod.Invoke(this, [junctionInstance, input])!;
 
-        // If the junction returns a value of type TReturn, set it as the ShortCircuitValue
-        var maybeRightValue = ReflectionHelpers.GetRightFromDynamicEither(outParam);
-        maybeRightValue.Iter(rightValue =>
+        // Await the dynamic Task<...>
+        var task = (Task)taskObj;
+        await task.ConfigureAwait(false);
+
+        // Extract the Result property (the tuple) from Task<TResult>.
+        // Named ValueTuple elements (Monad, Result) are stored as Item1, Item2 at runtime.
+        var resultProperty = taskObj.GetType().GetProperty("Result")!;
+        var tuple = resultProperty.GetValue(taskObj)!;
+        var tupleItem2Field = tuple.GetType().GetField("Item2")!;
+        var eitherResult = tupleItem2Field.GetValue(tuple)!;
+
+        var maybeRightValue = ReflectionHelpers.GetRightFromDynamicEither(eitherResult);
+        if (maybeRightValue.IsSome)
         {
+            object rightValue = maybeRightValue.ValueUnsafe()!;
             FunctionalExtensions.AssertLoaded(rightValue);
             ShortCircuitValue = (TReturn)rightValue;
             ShortCircuitValueSet = true;
-        });
+        }
 
-        FunctionalExtensions.AssertLoaded(result);
-        return (Monad<TInput, TReturn>)result;
+        return this;
     }
+
+    #endregion
 }

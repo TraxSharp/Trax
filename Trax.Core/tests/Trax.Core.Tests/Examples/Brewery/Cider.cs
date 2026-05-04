@@ -12,9 +12,7 @@ public class Cider(IPrepare prepare, IFerment ferment, IBrew brew, IBottle bottl
     : Train<Ingredients, List<GlassBottle>>,
         ICider
 {
-    protected override async Task<Either<Exception, List<GlassBottle>>> RunInternal(
-        Ingredients input
-    ) =>
+    protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input) =>
         Activate(input)
             .AddServices<IPrepare, IFerment, IBrew, IBottle>(prepare, ferment, brew, bottle)
             .IChain<IPrepare>()

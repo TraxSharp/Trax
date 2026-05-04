@@ -39,7 +39,7 @@ public class TrainTests : TestSetup
     private class ChainTest(IBrew brew, IPrepare prepare, IBottle bottle)
         : Train<Ingredients, List<GlassBottle>>
     {
-        protected override async Task<Either<Exception, List<GlassBottle>>> RunInternal(
+        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(
             Ingredients input
         ) =>
             Activate(input, "this is a test string to make sure it gets added to memory")
@@ -54,9 +54,7 @@ public class TrainTests : TestSetup
 
     private class ChainTestWithNoInputs : Train<Ingredients, List<GlassBottle>>
     {
-        protected override async Task<Either<Exception, List<GlassBottle>>> RunInternal(
-            Ingredients input
-        )
+        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
         {
             var brew = new Brew();
             var ferment = new Ferment() as IFerment;
@@ -74,9 +72,7 @@ public class TrainTests : TestSetup
 
     private class ChainTestWithInterfaceTuple : Train<Ingredients, List<GlassBottle>>
     {
-        protected override async Task<Either<Exception, List<GlassBottle>>> RunInternal(
-            Ingredients input
-        )
+        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
         {
             var brew = new Brew();
             var ferment = new Ferment() as IFerment;
@@ -95,9 +91,7 @@ public class TrainTests : TestSetup
 
     private class ChainTestWithOneTypedService : Train<Ingredients, List<GlassBottle>>
     {
-        protected override async Task<Either<Exception, List<GlassBottle>>> RunInternal(
-            Ingredients input
-        )
+        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
         {
             var brew = new Brew();
             var ferment = new Ferment();
@@ -121,9 +115,7 @@ public class TrainTests : TestSetup
 
     private class ChainTestWithTwoTypedServices : Train<Ingredients, List<GlassBottle>>
     {
-        protected override async Task<Either<Exception, List<GlassBottle>>> RunInternal(
-            Ingredients input
-        )
+        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
         {
             var brew = new Brew();
             var ferment = new Ferment();
@@ -148,9 +140,7 @@ public class TrainTests : TestSetup
 
     private class ChainTestWithMockedService : Train<Ingredients, List<GlassBottle>>
     {
-        protected override async Task<Either<Exception, List<GlassBottle>>> RunInternal(
-            Ingredients input
-        )
+        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
         {
             var brew = new Brew();
             var ferment = new StubFerment() as IFerment;
@@ -168,7 +158,7 @@ public class TrainTests : TestSetup
 
     private class TrainTestWithTupleInput : Train<(int, string, object), (bool, double, object)>
     {
-        protected override async Task<Either<Exception, (bool, double, object)>> RunInternal(
+        protected override Task<Either<Exception, (bool, double, object)>> RunInternal(
             (int, string, object) input
         ) =>
             Activate(input)
@@ -179,9 +169,7 @@ public class TrainTests : TestSetup
 
     private class ChainTestWithUnitInput : Train<Ingredients, List<GlassBottle>>
     {
-        protected override async Task<Either<Exception, List<GlassBottle>>> RunInternal(
-            Ingredients input
-        )
+        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
         {
             var brew = new Brew();
             var ferment = new Ferment() as IFerment;
@@ -201,9 +189,7 @@ public class TrainTests : TestSetup
     private class ChainTestWithShortCircuit(IPrepare prepare, IFerment ferment)
         : Train<Ingredients, List<GlassBottle>>
     {
-        protected override async Task<Either<Exception, List<GlassBottle>>> RunInternal(
-            Ingredients input
-        )
+        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
         {
             var brew = new Brew();
             return Activate(input)
@@ -222,9 +208,7 @@ public class TrainTests : TestSetup
     private class ChainTestWithShortCircuitStaysLeft(IPrepare prepare, IFerment ferment)
         : Train<Ingredients, List<GlassBottle>>
     {
-        protected override async Task<Either<Exception, List<GlassBottle>>> RunInternal(
-            Ingredients input
-        )
+        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
         {
             var brew = new Brew();
             return Activate(input)
@@ -266,16 +250,15 @@ public class TrainTests : TestSetup
 
     private class AccessInnerPropertyTypeTrain : Train<OuterProperty, InnerProperty>
     {
-        protected override async Task<Either<Exception, InnerProperty>> RunInternal(
+        protected override Task<Either<Exception, InnerProperty>> RunInternal(
             OuterProperty input
-        ) => Activate(input).Extract<OuterProperty, InnerProperty>().Resolve();
+        ) => Task.FromResult(Activate(input).Extract<OuterProperty, InnerProperty>().Resolve());
     }
 
     private class AccessInnerFieldTypeTrain : Train<OuterField, InnerField>
     {
-        protected override async Task<Either<Exception, InnerField>> RunInternal(
-            OuterField input
-        ) => Activate(input).Extract<OuterField, InnerField>().Resolve();
+        protected override Task<Either<Exception, InnerField>> RunInternal(OuterField input) =>
+            Task.FromResult(Activate(input).Extract<OuterField, InnerField>().Resolve());
     }
 
     private class StubFerment : Junction<BrewingJug, Unit>, IFerment

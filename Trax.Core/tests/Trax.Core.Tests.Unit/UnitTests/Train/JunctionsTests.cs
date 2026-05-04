@@ -122,49 +122,41 @@ public class JunctionsTests : TestSetup
     #region Implicit conversion
 
     [Test]
-    public async Task ImplicitConversion_OnSuccess_ReturnsTReturn()
+    public async Task ResolveAfterChain_OnSuccess_ReturnsRight()
     {
         var train = new SingleChainTrain();
         var monad = new Monad.Monad<string, int>(train, CancellationToken.None).Activate("hello");
 
-        monad.Chain<StringLengthJunction>();
+        var result = await monad.Chain<StringLengthJunction>().Resolve();
 
-        int result = monad;
-
-        result.Should().Be(5);
+        result.IsRight.Should().BeTrue();
+        result.ValueUnsafe().Should().Be(5);
     }
 
     [Test]
-    public void ImplicitConversion_OnException_Throws()
+    public async Task ResolveAfterChain_OnException_ReturnsLeft()
     {
         var train = new SingleChainTrain();
         var monad = new Monad.Monad<string, int>(train, CancellationToken.None).Activate("hello");
 
-        monad.Chain<ThrowingJunction>();
+        var result = await monad.Chain<ThrowingJunction>().Resolve();
 
-        var act = () =>
-        {
-            int result = monad;
-        };
-
-        act.Should().Throw<Exception>().WithMessage("*junction failed*");
+        result.IsLeft.Should().BeTrue();
+        result.Swap().ValueUnsafe().Message.Should().Contain("junction failed");
     }
 
     [Test]
-    public void ImplicitConversion_MissingType_ThrowsTrainException()
+    public void ResolveWithoutMatchingMemoryType_ReturnsLeftWithTrainException()
     {
         var train = new MissingRefReturnTypeTrain();
         var monad = new Monad.Monad<string, List<string>>(train, CancellationToken.None).Activate(
             "hello"
         );
 
-        // Don't chain anything — TReturn (List<string>) won't be in memory
-        var act = () =>
-        {
-            List<string> result = monad;
-        };
+        var result = monad.Resolve();
 
-        act.Should().Throw<TrainException>();
+        result.IsLeft.Should().BeTrue();
+        result.Swap().ValueUnsafe().Should().BeOfType<TrainException>();
     }
 
     #endregion
@@ -196,33 +188,37 @@ public class JunctionsTests : TestSetup
 
     private class SingleChainTrain : Train<string, int>
     {
-        protected override int Junctions() => Chain<StringLengthJunction>();
+        protected override Task<Either<Exception, int>> Junctions() =>
+            Chain<StringLengthJunction>().Resolve();
     }
 
     private class MultiChainTrain : Train<string, bool>
     {
-        protected override bool Junctions() =>
-            Chain<StringLengthJunction>().Chain<IntToBoolJunction>();
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<StringLengthJunction>().Chain<IntToBoolJunction>().Resolve();
     }
 
     private class ThrowingChainTrain : Train<string, int>
     {
-        protected override int Junctions() => Chain<ThrowingJunction>();
+        protected override Task<Either<Exception, int>> Junctions() =>
+            Chain<ThrowingJunction>().Resolve();
     }
 
     private class MissingRefReturnTypeTrain : Train<string, List<string>>
     {
-        protected override List<string> Junctions() => Chain<IdentityJunction>();
+        protected override Task<Either<Exception, List<string>>> Junctions() =>
+            Chain<IdentityJunction>().Resolve();
     }
 
     private class ExtractTrain : Train<Wrapper, string>
     {
-        protected override string Junctions() => Extract<Wrapper, string>();
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Task.FromResult(Extract<Wrapper, string>().Resolve());
     }
 
     private class RunInternalTrain : Train<string, int>
     {
-        protected override async Task<Either<Exception, int>> RunInternal(string input) =>
+        protected override Task<Either<Exception, int>> RunInternal(string input) =>
             Activate(input).Chain<StringLengthJunction>().Resolve();
     }
 

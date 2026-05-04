@@ -63,10 +63,12 @@ public class ResolveTests : TestSetup
     {
         // Arrange
         var input = 1;
-        var train = new TestStringTrain().Activate(input).ShortCircuit<TestShortCircuitJunction>();
+        var monadTask = new TestStringTrain()
+            .Activate(input)
+            .ShortCircuit<TestShortCircuitJunction>();
 
         // Act
-        var result = train.Resolve();
+        var result = await monadTask.Resolve();
 
         // Assert
         result.Should().NotBeNull();
