@@ -34,4 +34,10 @@ jobs:
       - run: dotnet tool restore
       - run: dotnet csharpier check .
       - run: dotnet build --configuration Release
-      - run: dotnet test --configuration Release --no-build
+      - run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          directory: ./TestResults
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}

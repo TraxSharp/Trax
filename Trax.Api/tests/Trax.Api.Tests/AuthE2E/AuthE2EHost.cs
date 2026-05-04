@@ -31,8 +31,11 @@ namespace Trax.Api.Tests.AuthE2E;
 /// </summary>
 public static class AuthE2EHost
 {
+    // Pin pool size and prune idle connections aggressively so the long
+    // sequence of fresh hosts in CI can't exhaust Postgres' max_connections.
     public const string ConnectionString =
-        "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123";
+        "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123;"
+        + "Maximum Pool Size=4;Minimum Pool Size=0;Connection Idle Lifetime=1;Connection Pruning Interval=1";
 
     public const string JwtIssuer = "https://trax-e2e-tests";
     public const string JwtAudience = "trax-e2e";
