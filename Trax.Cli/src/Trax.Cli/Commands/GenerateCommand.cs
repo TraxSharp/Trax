@@ -62,7 +62,7 @@ public static class GenerateCommand
         return command;
     }
 
-    private static void Handle(
+    internal static void Handle(
         FileInfo schema,
         DirectoryInfo output,
         string name,
