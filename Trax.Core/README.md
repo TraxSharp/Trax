@@ -2,6 +2,7 @@
 
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Core)](https://www.nuget.org/packages/Trax.Core/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![codecov](https://codecov.io/gh/TraxSharp/Trax.Core/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Core)
 
 Railway Oriented Programming for .NET. Build trains that carry data through a sequence of stops, with automatic derailment handling when something goes wrong.
 
