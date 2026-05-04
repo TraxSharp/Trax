@@ -9,7 +9,8 @@ namespace Trax.Samples.EnergyHub.E2E.Factories;
 public class EnergyHubFactory : WebApplicationFactory<Trax.Samples.EnergyHub.Hub.Program>
 {
     private const string ConnectionString =
-        "Host=localhost;Port=5432;Database=energyhub_e2e_tests;Username=trax;Password=trax123;Maximum Pool Size=10";
+        "Host=localhost;Port=5432;Database=energyhub_e2e_tests;Username=trax;Password=trax123;"
+        + "Maximum Pool Size=4;Minimum Pool Size=0;Connection Idle Lifetime=1;Connection Pruning Interval=1";
 
     private const string RabbitMqConnectionString = "amqp://guest:guest@localhost:5672";
 

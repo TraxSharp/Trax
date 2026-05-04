@@ -10,8 +10,11 @@ namespace Trax.Samples.JobHunt.E2E.Factories;
 
 public class JobHuntHubFactory : WebApplicationFactory<Hub.Program>
 {
+    // Pin pool size and prune idle connections aggressively so a long suite of
+    // fresh test hosts in CI can't exhaust Postgres' max_connections.
     private const string ConnectionString =
-        "Host=localhost;Port=5432;Database=jobhunt_e2e_tests;Username=trax;Password=trax123;Maximum Pool Size=10";
+        "Host=localhost;Port=5432;Database=jobhunt_e2e_tests;Username=trax;Password=trax123;"
+        + "Maximum Pool Size=4;Minimum Pool Size=0;Connection Idle Lifetime=1;Connection Pruning Interval=1";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
