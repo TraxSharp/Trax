@@ -9,7 +9,7 @@ namespace Trax.Scheduler.Trains.JobDispatcher;
 /// </summary>
 public class JobDispatcherTrain : ServiceTrain<Unit, Unit>, IJobDispatcherTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
+    protected override Task<Either<Exception, Unit>> RunInternal(Unit input) =>
         Activate(input)
             .Chain<LoadQueuedJobsJunction>()
             .Chain<LoadDispatchCapacityJunction>()

@@ -11,7 +11,6 @@ public class DeadLetterCleanupTrain
     : ServiceTrain<DeadLetterCleanupRequest, Unit>,
         IDeadLetterCleanupTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(
-        DeadLetterCleanupRequest input
-    ) => Activate(input).Chain<DeleteResolvedDeadLettersJunction>().Resolve();
+    protected override Task<Either<Exception, Unit>> RunInternal(DeadLetterCleanupRequest input) =>
+        Activate(input).Chain<DeleteResolvedDeadLettersJunction>().Resolve();
 }

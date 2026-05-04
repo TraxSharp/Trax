@@ -11,7 +11,6 @@ public class MetadataCleanupTrain
     : ServiceTrain<MetadataCleanupRequest, Unit>,
         IMetadataCleanupTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(
-        MetadataCleanupRequest input
-    ) => Activate(input).Chain<DeleteExpiredMetadataJunction>().Resolve();
+    protected override Task<Either<Exception, Unit>> RunInternal(MetadataCleanupRequest input) =>
+        Activate(input).Chain<DeleteExpiredMetadataJunction>().Resolve();
 }

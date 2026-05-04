@@ -9,7 +9,7 @@ namespace Trax.Scheduler.Trains.ManifestManager;
 /// </summary>
 public class ManifestManagerTrain : ServiceTrain<Unit, Unit>, IManifestManagerTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
+    protected override Task<Either<Exception, Unit>> RunInternal(Unit input) =>
         Activate(input)
             .Chain<LoadManifestsJunction>()
             .Chain<CancelTimedOutJobsJunction>()
