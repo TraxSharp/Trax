@@ -6,6 +6,23 @@
 
 CLI tool for [Trax](https://www.nuget.org/packages/Trax.Effect/). Generates Trax API projects from GraphQL or OpenAPI schemas.
 
+## The Trax Stack
+
+Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Cli.**
+
+| Repo | Adds |
+|------|------|
+| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Pipelines, junctions, railway error propagation |
+| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | Execution logging, DI, pluggable storage |
+| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | Decoupled dispatch via `TrainBus` |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron schedules, retries, dead-letter queues |
+| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL API for remote access |
+| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | Blazor monitoring UI |
+| **[Trax.Cli](https://github.com/TraxSharp/Trax.Cli)** | `trax-cli` project scaffolding tool |
+| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Sample apps and a `dotnet new` template |
+
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
+
 ## What This Does
 
 Takes an existing API schema and scaffolds a Trax project with two parts: a hub project (from the `trax-hub` template, with API + Scheduler + Dashboard in one process) and a shared trains library with trains, junctions, input/output records, and models. The trains library follows the same structure as the DistributedWorkers sample and can be referenced by an API, scheduler, or standalone workers.
@@ -106,22 +123,6 @@ dotnet run
 # Open http://localhost:5000/trax/graphql for GraphQL IDE
 # Open http://localhost:5000/trax for Dashboard
 ```
-
-## Part of Trax
-
-Trax is a layered framework. Each package builds on the one below it, so stop at whatever layer solves your problem.
-
-```
-Trax.Core              pipelines, junctions, railway error propagation
-└→ Trax.Effect         + execution logging, DI, pluggable storage
-   └→ Trax.Mediator       + decoupled dispatch via TrainBus
-      └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues
-         └→ Trax.Api          + GraphQL API layer
-            └→ Trax.Dashboard       + Blazor monitoring UI
-Trax.Cli               ← you are here (standalone tool)
-```
-
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
 
 ## License
 
