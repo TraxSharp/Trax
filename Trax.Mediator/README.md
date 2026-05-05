@@ -6,6 +6,23 @@
 
 Dispatch station for [Trax](https://www.nuget.org/packages/Trax.Effect/) trains. Hand it the cargo and it routes it to the right train, no need to know which train handles what.
 
+## The Trax Stack
+
+Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Mediator.**
+
+| Repo | Adds |
+|------|------|
+| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Pipelines, junctions, railway error propagation |
+| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | Execution logging, DI, pluggable storage |
+| **[Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator)** | Decoupled dispatch via `TrainBus` |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron schedules, retries, dead-letter queues |
+| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL API for remote access |
+| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | Blazor monitoring UI |
+| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | `trax-cli` project scaffolding tool |
+| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Sample apps and a `dotnet new` template |
+
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
+
 ## The Problem
 
 When one part of your system needs to send a train, it has to know exactly which train class to use. Controllers depend on concrete train types, stops that trigger other trains need direct references, and everything gets coupled together.
@@ -121,22 +138,9 @@ public class TrainListEndpoint(ITrainRegistry registry)
 
 At startup, `AddMediator` scans the provided assemblies for types implementing `IServiceTrain<TIn, TOut>`. It builds a dictionary from cargo type (input) to train type and registers each train in the DI container. When you call `RunAsync<TOut>(input)`, the dispatch station looks up `input.GetType()`, resolves the matching train from DI, and sends it on its way.
 
-## Part of Trax
+## Next Layer
 
-Trax is a layered framework. Each package builds on the one below it, so stop at whatever layer solves your problem.
-
-```
-Trax.Core              pipelines, junctions, railway error propagation
-└→ Trax.Effect         + execution logging, DI, pluggable storage
-   └→ Trax.Mediator    ← you are here
-      └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues
-         └→ Trax.Api             + GraphQL API for remote access
-            └→ Trax.Dashboard       + Blazor monitoring UI
-```
-
-**Next layer:** When you need recurring background jobs with retries and dead-lettering, add [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/).
-
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
+When you need recurring background jobs with retries and dead-lettering, move up to [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler).
 
 ## License
 
