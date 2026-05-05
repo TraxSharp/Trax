@@ -6,6 +6,23 @@
 
 Timetable management for [Trax](https://www.nuget.org/packages/Trax.Effect/) trains — recurring schedules, automatic retries, dead-letter handling, and dependent departures.
 
+## The Trax Stack
+
+Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Scheduler.**
+
+| Repo | Adds |
+|------|------|
+| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Pipelines, junctions, railway error propagation |
+| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | Execution logging, DI, pluggable storage |
+| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | Decoupled dispatch via `TrainBus` |
+| **[Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler)** | Cron schedules, retries, dead-letter queues |
+| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL API for remote access |
+| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | Blazor monitoring UI |
+| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | `trax-cli` project scaffolding tool |
+| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Sample apps and a `dotnet new` template |
+
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
+
 ## What This Does
 
 If you have trains that need to run on a timetable — ETL pipelines, data syncs, nightly reports, periodic cleanup — Trax.Scheduler handles the dispatch. You write a manifest for each train (what cargo it carries, when it departs, how many times to retry if it derails), and the scheduler takes care of the rest.
@@ -169,22 +186,9 @@ scheduler.AddMetadataCleanup(cleanup =>
 });
 ```
 
-## Part of Trax
+## Next Layer
 
-Trax is a layered framework — each package builds on the one below it. Stop at whatever layer solves your problem.
-
-```
-Trax.Core              pipelines, junctions, railway error propagation
-└→ Trax.Effect         + execution logging, DI, pluggable storage
-   └→ Trax.Mediator       + decoupled dispatch via TrainBus
-      └→ Trax.Scheduler   ← you are here
-         └→ Trax.Api             + GraphQL API for remote access
-            └→ Trax.Dashboard       + Blazor monitoring UI
-```
-
-**Next layer:** When you need a programmatic interface for external consumers — queuing jobs, running trains on demand, and querying state over HTTP — add [Trax.Api.GraphQL](https://www.nuget.org/packages/Trax.Api.GraphQL/).
-
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
+When you need a programmatic interface for external consumers (queuing jobs, running trains on demand, querying state over HTTP), move up to [Trax.Api](https://github.com/TraxSharp/Trax.Api).
 
 ## License
 
