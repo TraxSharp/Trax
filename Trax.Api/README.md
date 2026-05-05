@@ -6,6 +6,23 @@
 
 GraphQL API for [Trax](https://www.nuget.org/packages/Trax.Effect/). Exposes train discovery, execution, and scheduler operations over HTTP via HotChocolate.
 
+## The Trax Stack
+
+Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Api.**
+
+| Repo | Adds |
+|------|------|
+| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Pipelines, junctions, railway error propagation |
+| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | Execution logging, DI, pluggable storage |
+| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | Decoupled dispatch via `TrainBus` |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron schedules, retries, dead-letter queues |
+| **[Trax.Api](https://github.com/TraxSharp/Trax.Api)** | GraphQL API for remote access |
+| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | Blazor monitoring UI |
+| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | `trax-cli` project scaffolding tool |
+| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Sample apps and a `dotnet new` template |
+
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
+
 ## What This Does
 
 Adds a programmatic interface to your train network. External consumers can discover registered trains, run them on demand, queue work for the scheduler, and manage manifests, all through a typed GraphQL schema.
@@ -81,22 +98,9 @@ Trax.Api ships authentication (`Trax.Api.Auth`, `Trax.Api.Auth.ApiKey`) and audi
 | `Trax.Api.Auth.ApiKey` | API-key authentication handler. NO WARRANTY. |
 | `Trax.Api.GraphQL.Audit` | GraphQL request audit pipeline (listener, channel, writer, sink). NO WARRANTY. |
 
-## Part of Trax
+## Next Layer
 
-Trax is a layered framework. Each package builds on the one below it, so stop at whatever layer solves your problem.
-
-```
-Trax.Core              pipelines, junctions, railway error propagation
-└→ Trax.Effect         + execution logging, DI, pluggable storage
-   └→ Trax.Mediator       + decoupled dispatch via TrainBus
-      └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues
-         └→ Trax.Api          ← you are here
-            └→ Trax.Dashboard       + Blazor monitoring UI
-```
-
-**Next layer:** When you need a monitoring UI for inspecting trains, browsing execution history, and managing manifests from a browser, add [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/).
-
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
+When you need a monitoring UI for inspecting trains, browsing execution history, and managing manifests from a browser, move up to [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard).
 
 ## License
 
