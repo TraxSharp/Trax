@@ -6,6 +6,23 @@
 
 Effect system for [Trax.Core](https://www.nuget.org/packages/Trax.Core/). Upgrades a bare locomotive into a full commercial train service with journey logging, station services, and dependency injection.
 
+## The Trax Stack
+
+Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Effect.**
+
+| Repo | Adds |
+|------|------|
+| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Pipelines, junctions, railway error propagation |
+| **[Trax.Effect](https://github.com/TraxSharp/Trax.Effect)** | Execution logging, DI, pluggable storage |
+| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | Decoupled dispatch via `TrainBus` |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron schedules, retries, dead-letter queues |
+| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL API for remote access |
+| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | Blazor monitoring UI |
+| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | `trax-cli` project scaffolding tool |
+| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Sample apps and a `dotnet new` template |
+
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
+
 ## What This Does
 
 `Trax.Core` gives you `Train<TIn, TOut>`: a locomotive that carries cargo through a sequence of stops. That's enough for pure logic, but production services need to know what ran, when it departed, whether it arrived, what it was carrying, and what went wrong if it derailed.
@@ -141,22 +158,9 @@ builder.Services.AddTransientTraxRoute<IProcessOrderTrain, ProcessOrderTrain>();
 
 Or use `AddMediator` (from [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/)) to auto-register all trains in an assembly.
 
-## Part of Trax
+## Next Layer
 
-Trax is a layered framework. Each package builds on the one below it, so stop at whatever layer solves your problem.
-
-```
-Trax.Core              pipelines, junctions, railway error propagation
-└→ Trax.Effect         ← you are here
-   └→ Trax.Mediator       + decoupled dispatch via TrainBus
-      └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues
-         └→ Trax.Api             + GraphQL API for remote access
-            └→ Trax.Dashboard       + Blazor monitoring UI
-```
-
-**Next layer:** When you need decoupled dispatch (callers don't know which train handles a request), add [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/).
-
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
+When you need decoupled dispatch (callers don't know which train handles a request), move up to [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator).
 
 ## License
 
