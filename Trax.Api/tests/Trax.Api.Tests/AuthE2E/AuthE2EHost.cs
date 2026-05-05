@@ -31,13 +31,22 @@ namespace Trax.Api.Tests.AuthE2E;
 /// </summary>
 public static class AuthE2EHost
 {
-    // Pin pool size and prune idle connections aggressively so the long
-    // sequence of fresh hosts in CI can't exhaust Postgres' max_connections.
     // Each AuthE2E test class passes its own database name to keep migrations
     // and advisory locks isolated; CI provisions the per-class DBs upfront.
+    //
+    // Connection knobs:
+    //   - Timeout=30 — CI runners occasionally need >15s (the Npgsql default)
+    //     to establish the first connection in a fresh pool, especially when
+    //     prior tests have just torn down their own connections and the
+    //     OS-level TIME_WAIT slots haven't released.
+    //   - Tcp Keepalive=true — keeps pooled connections marked alive so a
+    //     half-closed peer is detected before another test rents the slot.
+    //   - Pool Size=8 — small enough that 5 fixtures × 8 = 40 connections
+    //     stays well under postgres's default max_connections=100.
     public static string ConnectionString(string database) =>
         $"Host=localhost;Port=5432;Database={database};Username=trax;Password=trax123;"
-        + "Maximum Pool Size=4;Minimum Pool Size=0;Connection Idle Lifetime=1;Connection Pruning Interval=1";
+        + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
+        + "Timeout=30;Tcp Keepalive=true";
 
     public const string JwtIssuer = "https://trax-e2e-tests";
     public const string JwtAudience = "trax-e2e";
