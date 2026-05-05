@@ -326,7 +326,7 @@ public class SchedulerConfigurationBuilderSettingsTests
         services.AddTrax(trax =>
             trax.AddEffects(effects =>
                     effects.UsePostgres(
-                        "Host=localhost;Port=5432;Database=trax_scheduler_tests;Username=trax;Password=trax123"
+                        "Host=localhost;Port=5432;Database=trax_scheduler_builder_settings;Username=trax;Password=trax123"
                     )
                 )
                 .AddMediator(typeof(AssemblyMarker).Assembly)
