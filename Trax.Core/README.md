@@ -6,6 +6,23 @@
 
 Railway Oriented Programming for .NET. Build trains that carry data through a sequence of stops, with automatic derailment handling when something goes wrong.
 
+## The Trax Stack
+
+Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Core.**
+
+| Repo | Adds |
+|------|------|
+| **[Trax.Core](https://github.com/TraxSharp/Trax.Core)** | Pipelines, junctions, railway error propagation |
+| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | Execution logging, DI, pluggable storage |
+| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | Decoupled dispatch via `TrainBus` |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron schedules, retries, dead-letter queues |
+| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL API for remote access |
+| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | Blazor monitoring UI |
+| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | `trax-cli` project scaffolding tool |
+| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Sample apps and a `dotnet new` template |
+
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
+
 ## Why?
 
 Error handling tends to bury the actual logic:
@@ -36,16 +53,15 @@ Every junction needs its own null check, error branch, and early return. The bus
 ```csharp
 public class ProcessOrderTrain : Train<OrderRequest, OrderReceipt>
 {
-    protected override async Task<Either<Exception, OrderReceipt>> RunInternal(OrderRequest input)
-        => Activate(input)
-            .Chain<CheckInventoryJunction>()
+    protected override Task<Either<Exception, OrderReceipt>> Junctions() =>
+        Chain<CheckInventoryJunction>()
             .Chain<ChargePaymentJunction>()
             .Chain<CreateShipmentJunction>()
             .Resolve();
 }
 ```
 
-A train departs with its cargo (`Activate`), visits each stop along the route (`.Chain<T>`), and arrives at its destination (`Resolve`). If `CheckInventoryJunction` throws, the train derails and `ChargePaymentJunction` and `CreateShipmentJunction` are never reached. The exception propagates through the chain automatically.
+A train picks up its cargo, visits each stop along the route (`.Chain<T>`), and arrives at its destination (`Resolve`). If `CheckInventoryJunction` throws, the train derails and `ChargePaymentJunction` and `CreateShipmentJunction` are never reached. The exception propagates through the chain automatically.
 
 ```
 Main Track:     Input → [Stop 1] → [Stop 2] → [Stop 3] → Output
@@ -86,16 +102,15 @@ public class ValidateEmailJunction(IUserRepository repo) : Junction<CreateUserRe
 ```csharp
 public class CreateUserTrain : Train<CreateUserRequest, User>
 {
-    protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
-        => Activate(input)
-            .Chain<ValidateEmailJunction>()
+    protected override Task<Either<Exception, User>> Junctions() =>
+        Chain<ValidateEmailJunction>()
             .Chain<CreateUserInDatabaseJunction>()
             .Chain<SendWelcomeEmailJunction>()
             .Resolve();
 }
 ```
 
-`Activate` loads the initial cargo and the train departs. At each stop, `.Chain<T>` picks up the cargo `T` needs from what the train is carrying, runs the junction, and loads the output back on. `Resolve` unloads the final delivery at the destination.
+When the train is run with an input, the cargo is loaded automatically. At each stop, `.Chain<T>` picks up the cargo `T` needs from what the train is carrying, runs the junction, and loads the output back on. `Resolve` unloads the final delivery at the destination.
 
 The train carries all of this in **Memory**, a type-keyed store that accumulates as the train moves through its route. Each stop can use anything a previous stop produced.
 
@@ -125,22 +140,9 @@ Inlay hint extensions show `TIn → TOut` types inline for each `.Chain<TJunctio
 - **VSCode**: [Trax.Core Chain Hints](https://marketplace.visualstudio.com/items?itemName=Trax.Core.trax-hints) on the Marketplace
 - **Rider / ReSharper**: Search for **Trax.Core Chain Hints** in JetBrains Marketplace
 
-## Part of Trax
+## Next Layer
 
-Trax is a layered framework. Each package builds on the one below it, so stop at whatever layer solves your problem.
-
-```
-Trax.Core          ← you are here
-└→ Trax.Effect         + execution logging, DI, pluggable storage
-   └→ Trax.Mediator       + decoupled dispatch via TrainBus
-      └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues
-         └→ Trax.Api             + GraphQL API for remote access
-            └→ Trax.Dashboard       + Blazor monitoring UI
-```
-
-**Next layer:** When you need execution logging, DI, or persistent metadata, add [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/).
-
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
+When you need execution logging, DI, or persistent metadata, move up to [Trax.Effect](https://github.com/TraxSharp/Trax.Effect).
 
 ## License
 
