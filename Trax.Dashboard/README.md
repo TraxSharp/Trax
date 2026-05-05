@@ -6,6 +6,23 @@
 
 Operations control room for [Trax](https://www.nuget.org/packages/Trax.Effect/). A Blazor Server dashboard for monitoring train journeys, timetables, dead letters, and live station service configuration.
 
+## The Trax Stack
+
+Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Dashboard.**
+
+| Repo | Adds |
+|------|------|
+| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Pipelines, junctions, railway error propagation |
+| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | Execution logging, DI, pluggable storage |
+| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | Decoupled dispatch via `TrainBus` |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron schedules, retries, dead-letter queues |
+| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL API for remote access |
+| **[Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard)** | Blazor monitoring UI |
+| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | `trax-cli` project scaffolding tool |
+| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Sample apps and a `dotnet new` template |
+
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
+
 ## What This Does
 
 Drop a control room into any ASP.NET Core application that uses Trax. Two lines of code give you a full operations dashboard for watching train journeys in real time, browsing the timetable, inspecting lost shipments, and toggling station services without restarting.
@@ -77,21 +94,6 @@ Trax.Dashboard is a Razor Class Library built on Blazor Server with [Radzen](htt
 - Interactive Server render mode enabled (Blazor Server)
 
 The dashboard handles its own static assets and routing, so you don't need to configure Radzen separately.
-
-## Part of Trax
-
-Trax is a layered framework. Each package builds on the one below it, so stop at whatever layer solves your problem.
-
-```
-Trax.Core              pipelines, junctions, railway error propagation
-└→ Trax.Effect         + execution logging, DI, pluggable storage
-   └→ Trax.Mediator       + decoupled dispatch via TrainBus
-      └→ Trax.Scheduler      + cron schedules, retries, dead-letter queues
-         └→ Trax.Api             + GraphQL API for remote access
-            └→ Trax.Dashboard  ← you are here
-```
-
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
 
 ## License
 
