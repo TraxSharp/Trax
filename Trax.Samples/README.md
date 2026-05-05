@@ -6,6 +6,23 @@
 
 Sample applications and a `dotnet new` project template for getting started with [Trax](https://www.nuget.org/packages/Trax.Core/).
 
+## The Trax Stack
+
+Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Samples.**
+
+| Repo | Adds |
+|------|------|
+| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Pipelines, junctions, railway error propagation |
+| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | Execution logging, DI, pluggable storage |
+| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | Decoupled dispatch via `TrainBus` |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron schedules, retries, dead-letter queues |
+| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL API for remote access |
+| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | Blazor monitoring UI |
+| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | `trax-cli` project scaffolding tool |
+| **[Trax.Samples](https://github.com/TraxSharp/Trax.Samples)** | Sample apps and a `dotnet new` template |
+
+Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
+
 ## Project Template
 
 Scaffold a new Trax server with the control room, timetable, and PostgreSQL persistence already wired up:
@@ -58,18 +75,6 @@ The sample includes:
 ### Flowthru Spaceflights
 
 A data pipeline sample using the [Flowthru](https://github.com/chaoticgoodcomputing/flowthru) project conventions, demonstrating Trax trains in an ML-style pipeline context.
-
-## Related Packages
-
-| Package | Purpose |
-|---------|---------|
-| [Trax.Core](https://www.nuget.org/packages/Trax.Core/) | The locomotive — `Train`, junctions, railway programming |
-| [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/) | `ServiceTrain` with journey logging and station services |
-| [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/) | Dispatch station — route cargo to the right train via `TrainBus` |
-| [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler/) | Timetables — recurring trains with retries and dead-lettering |
-| [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard/) | Control room — monitor every journey on the network |
-
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs)
 
 ## License
 
