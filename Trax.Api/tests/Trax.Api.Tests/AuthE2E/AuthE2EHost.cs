@@ -33,8 +33,10 @@ public static class AuthE2EHost
 {
     // Pin pool size and prune idle connections aggressively so the long
     // sequence of fresh hosts in CI can't exhaust Postgres' max_connections.
-    public const string ConnectionString =
-        "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123;"
+    // Each AuthE2E test class passes its own database name to keep migrations
+    // and advisory locks isolated; CI provisions the per-class DBs upfront.
+    public static string ConnectionString(string database) =>
+        $"Host=localhost;Port=5432;Database={database};Username=trax;Password=trax123;"
         + "Maximum Pool Size=4;Minimum Pool Size=0;Connection Idle Lifetime=1;Connection Pruning Interval=1";
 
     public const string JwtIssuer = "https://trax-e2e-tests";
@@ -53,8 +55,9 @@ public static class AuthE2EHost
         Jwt = 2,
     }
 
-    public static async Task<IHost> StartAsync(Schemes schemes)
+    public static async Task<IHost> StartAsync(Schemes schemes, string database)
     {
+        var connectionString = ConnectionString(database);
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
@@ -89,7 +92,7 @@ public static class AuthE2EHost
                         // assembly so the test trains are registered.
                         services.AddTrax(trax =>
                             trax.AddEffects(effects =>
-                                    effects.UsePostgres(ConnectionString).AddJson()
+                                    effects.UsePostgres(connectionString).AddJson()
                                 )
                                 .AddMediator(typeof(AuthE2EHost).Assembly)
                         );
@@ -97,7 +100,7 @@ public static class AuthE2EHost
                         services.AddTraxApi();
 
                         services.AddDbContextFactory<TestDbContext>(o =>
-                            o.UseNpgsql(ConnectionString)
+                            o.UseNpgsql(connectionString)
                         );
 
                         services.AddTraxGraphQL(graphql =>

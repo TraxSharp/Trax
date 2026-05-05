@@ -18,7 +18,7 @@ public class TraxHealthServiceTests
     // Pin pool size and prune idle connections aggressively so a long fixture
     // run can't exhaust Postgres' max_connections in CI.
     private const string ConnectionString =
-        "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123;"
+        "Host=localhost;Port=5432;Database=trax_api_health;Username=trax;Password=trax123;"
         + "Maximum Pool Size=4;Minimum Pool Size=0;Connection Idle Lifetime=1;Connection Pruning Interval=1";
 
     private ServiceProvider _provider = null!;

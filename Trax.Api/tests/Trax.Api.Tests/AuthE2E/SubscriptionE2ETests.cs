@@ -18,6 +18,11 @@ namespace Trax.Api.Tests.AuthE2E;
 [NonParallelizable]
 public class SubscriptionE2ETests
 {
+    private const string Database = "trax_api_auth_sub";
+
+    private static Task<Microsoft.Extensions.Hosting.IHost> StartAsync(Schemes s) =>
+        AuthE2EHost.StartAsync(s, Database);
+
     private const string WsUri = "ws://localhost/trax/graphql";
 
     // ── ApiKey scheme ────────────────────────────────────────────────────

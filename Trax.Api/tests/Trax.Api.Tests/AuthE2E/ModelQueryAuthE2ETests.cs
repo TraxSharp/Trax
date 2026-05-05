@@ -21,8 +21,14 @@ namespace Trax.Api.Tests.AuthE2E;
 [NonParallelizable]
 public class ModelQueryAuthE2ETests
 {
+    private const string Database = "trax_api_auth_model";
+
+    private static Task<Microsoft.Extensions.Hosting.IHost> StartAsync(Schemes s) =>
+        AuthE2EHost.StartAsync(s, Database);
+
     [OneTimeSetUp]
-    public void SeedDatabase() => TestDbContext.EnsureSeeded(AuthE2EHost.ConnectionString);
+    public void SeedDatabase() =>
+        TestDbContext.EnsureSeeded(AuthE2EHost.ConnectionString(Database));
 
     // ── Queries ───────────────────────────────────────────────────────────
 

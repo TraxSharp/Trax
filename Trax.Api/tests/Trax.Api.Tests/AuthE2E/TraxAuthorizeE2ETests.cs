@@ -21,6 +21,11 @@ namespace Trax.Api.Tests.AuthE2E;
 [NonParallelizable]
 public class TraxAuthorizeE2ETests
 {
+    private const string Database = "trax_api_auth_authorize";
+
+    private static Task<Microsoft.Extensions.Hosting.IHost> StartAsync(Schemes s) =>
+        AuthE2EHost.StartAsync(s, Database);
+
     private const string AdminLookupQuery = """
         query AdminLookup {
           discover { admin { adminLookup(input: { target: "x" }) { secret } } }
