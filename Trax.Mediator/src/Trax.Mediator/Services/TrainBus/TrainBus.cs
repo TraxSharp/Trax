@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using LanguageExt;
 using LanguageExt.ClassInstances;
@@ -115,6 +116,31 @@ public class TrainBus(
     }
 
     /// <summary>
+    /// Throw helper for the unreachable "Run method not found on a ServiceTrain" path.
+    /// </summary>
+    /// <remarks>
+    /// Each cache lookup below knows it's looking up a method that, by the type system,
+    /// must exist on <see cref="ServiceTrain{TIn,TOut}"/>. The fallthrough is a defense
+    /// against a misregistered train type. Excluded from coverage because it is genuinely
+    /// unreachable through the public API.
+    /// </remarks>
+    [ExcludeFromCodeCoverage]
+    private static T MissingMethod<T>(string variant, string typeName) =>
+        throw new TrainException($"Failed to find {variant} method for train type ({typeName})");
+
+    /// <summary>
+    /// Throw helper for the unreachable "MethodInfo.Invoke returned null" path.
+    /// </summary>
+    /// <remarks>
+    /// The cached methods all return <c>Task</c> or <c>Task&lt;TOut&gt;</c>; CLR-level
+    /// invocation will not return null for those signatures. Excluded from coverage as
+    /// genuinely unreachable.
+    /// </remarks>
+    [ExcludeFromCodeCoverage]
+    private static T InvocationNull<T>(string variant, string typeName) =>
+        throw new TrainException($"Failed to invoke {variant} method for train type ({typeName})");
+
+    /// <summary>
     /// Resolves and initializes a train from a specific service provider.
     /// Used by <c>RunAsync</c> to resolve trains from child scopes, and by
     /// <see cref="InitializeTrain"/> for backward-compatible resolution from the TrainBus's own scope.
@@ -190,22 +216,13 @@ public class TrainBus(
                             x.GetParameters()[1].ParameterType == typeof(Metadata)
                         );
 
-                    if (method == null)
-                        throw new TrainException(
-                            $"Failed to find Run(input, metadata) method for train type ({type.Name})"
-                        );
-
-                    return method;
+                    return method ?? MissingMethod<MethodInfo>("Run(input, metadata)", type.Name);
                 }
             );
 
-            var taskWithMetadata = (Task<TOut>?)
-                runWithMetadataMethod.Invoke(trainService, [trainInput, metadata]);
-
-            if (taskWithMetadata is null)
-                throw new TrainException(
-                    $"Failed to invoke Run(input, metadata) method for train type ({trainType.Name})"
-                );
+            var taskWithMetadata =
+                (Task<TOut>?)runWithMetadataMethod.Invoke(trainService, [trainInput, metadata])
+                ?? InvocationNull<Task<TOut>>("Run(input, metadata)", trainType.Name);
 
             return await taskWithMetadata;
         }
@@ -229,23 +246,14 @@ public class TrainBus(
                     // We want the one from Trax.Effect
                     .FirstOrDefault(x => x.Module.Name.Contains("Effect"));
 
-                if (method == null)
-                    throw new TrainException(
-                        $"Failed to find Run method for train type ({type.Name})"
-                    );
-
-                return method;
+                return method ?? MissingMethod<MethodInfo>("Run", type.Name);
             }
         );
 
         // And finally run the train, casting the return type to preserve type safety.
-        var taskRunMethod = (Task<TOut>?)
-            runMethod.Invoke(trainService, [trainInput, CancellationToken.None]);
-
-        if (taskRunMethod is null)
-            throw new TrainException(
-                $"Failed to invoke Run method for train type ({trainService.GetType().Name})"
-            );
+        var taskRunMethod =
+            (Task<TOut>?)runMethod.Invoke(trainService, [trainInput, CancellationToken.None])
+            ?? InvocationNull<Task<TOut>>("Run", trainService.GetType().Name);
 
         return await taskRunMethod;
     }
@@ -284,25 +292,18 @@ public class TrainBus(
                             && x.GetParameters()[2].ParameterType == typeof(CancellationToken)
                         );
 
-                    if (method == null)
-                        throw new TrainException(
-                            $"Failed to find Run(input, metadata, ct) method for train type ({type.Name})"
-                        );
-
-                    return method;
+                    return method
+                        ?? MissingMethod<MethodInfo>("Run(input, metadata, ct)", type.Name);
                 }
             );
 
-            var taskWithMetadata = (Task<TOut>?)
-                runWithMetadataCtMethod.Invoke(
-                    trainService,
-                    [trainInput, metadata, cancellationToken]
-                );
-
-            if (taskWithMetadata is null)
-                throw new TrainException(
-                    $"Failed to invoke Run(input, metadata, ct) method for train type ({trainType.Name})"
-                );
+            var taskWithMetadata =
+                (Task<TOut>?)
+                    runWithMetadataCtMethod.Invoke(
+                        trainService,
+                        [trainInput, metadata, cancellationToken]
+                    )
+                ?? InvocationNull<Task<TOut>>("Run(input, metadata, ct)", trainType.Name);
 
             return await taskWithMetadata;
         }
@@ -320,22 +321,13 @@ public class TrainBus(
                         && x.Module.Name.Contains("Effect")
                     );
 
-                if (method == null)
-                    throw new TrainException(
-                        $"Failed to find Run(input, ct) method for train type ({type.Name})"
-                    );
-
-                return method;
+                return method ?? MissingMethod<MethodInfo>("Run(input, ct)", type.Name);
             }
         );
 
-        var taskRunMethod = (Task<TOut>?)
-            runWithCtMethod.Invoke(trainService, [trainInput, cancellationToken]);
-
-        if (taskRunMethod is null)
-            throw new TrainException(
-                $"Failed to invoke Run(input, ct) method for train type ({trainType.Name})"
-            );
+        var taskRunMethod =
+            (Task<TOut>?)runWithCtMethod.Invoke(trainService, [trainInput, cancellationToken])
+            ?? InvocationNull<Task<TOut>>("Run(input, ct)", trainType.Name);
 
         return await taskRunMethod;
     }
@@ -364,20 +356,13 @@ public class TrainBus(
                             x.GetParameters()[1].ParameterType == typeof(Metadata)
                         );
 
-                    if (m == null)
-                        throw new TrainException(
-                            $"Failed to find Run(input, metadata) method for train type ({type.Name})"
-                        );
-
-                    return m;
+                    return m ?? MissingMethod<MethodInfo>("Run(input, metadata)", type.Name);
                 }
             );
 
             var task =
                 (Task?)method.Invoke(trainService, [trainInput, metadata])
-                ?? throw new TrainException(
-                    $"Failed to invoke Run(input, metadata) method for train type ({trainType.Name})"
-                );
+                ?? InvocationNull<Task>("Run(input, metadata)", trainType.Name);
 
             await task;
             return;
@@ -397,20 +382,13 @@ public class TrainBus(
                     })
                     .FirstOrDefault(x => x.Module.Name.Contains("Effect"));
 
-                if (m == null)
-                    throw new TrainException(
-                        $"Failed to find Run method for train type ({type.Name})"
-                    );
-
-                return m;
+                return m ?? MissingMethod<MethodInfo>("Run", type.Name);
             }
         );
 
         var taskRun =
             (Task?)runMethod.Invoke(trainService, [trainInput, CancellationToken.None])
-            ?? throw new TrainException(
-                $"Failed to invoke Run method for train type ({trainService.GetType().Name})"
-            );
+            ?? InvocationNull<Task>("Run", trainService.GetType().Name);
 
         await taskRun;
     }
@@ -444,20 +422,13 @@ public class TrainBus(
                             && x.GetParameters()[2].ParameterType == typeof(CancellationToken)
                         );
 
-                    if (m == null)
-                        throw new TrainException(
-                            $"Failed to find Run(input, metadata, ct) method for train type ({type.Name})"
-                        );
-
-                    return m;
+                    return m ?? MissingMethod<MethodInfo>("Run(input, metadata, ct)", type.Name);
                 }
             );
 
             var task =
                 (Task?)method.Invoke(trainService, [trainInput, metadata, cancellationToken])
-                ?? throw new TrainException(
-                    $"Failed to invoke Run(input, metadata, ct) method for train type ({trainType.Name})"
-                );
+                ?? InvocationNull<Task>("Run(input, metadata, ct)", trainType.Name);
 
             await task;
             return;
@@ -475,20 +446,13 @@ public class TrainBus(
                         && x.Module.Name.Contains("Effect")
                     );
 
-                if (m == null)
-                    throw new TrainException(
-                        $"Failed to find Run(input, ct) method for train type ({type.Name})"
-                    );
-
-                return m;
+                return m ?? MissingMethod<MethodInfo>("Run(input, ct)", type.Name);
             }
         );
 
         var taskRun =
             (Task?)runMethod.Invoke(trainService, [trainInput, cancellationToken])
-            ?? throw new TrainException(
-                $"Failed to invoke Run(input, ct) method for train type ({trainType.Name})"
-            );
+            ?? InvocationNull<Task>("Run(input, ct)", trainType.Name);
 
         await taskRun;
     }
