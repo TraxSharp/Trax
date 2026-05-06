@@ -101,6 +101,62 @@ public class GenerateCommandTests
         Environment.ExitCode.Should().Be(1);
     }
 
+    [Test]
+    public void Handle_HappyPathGraphQL_ParsesAndGenerates()
+    {
+        if (!IsTraxHubTemplateInstalled())
+            Assert.Ignore("trax-hub template is not installed (Trax.Samples.Templates).");
+
+        var schema = new FileInfo(FixturePath("simple.graphql"));
+        var output = new DirectoryInfo(Path.Combine(_tempDir, "happy-graphql"));
+
+        var stdout = CaptureStdout(() =>
+            GenerateCommand.Handle(schema, output, "HappyGraphQL", null, false)
+        );
+
+        Environment.ExitCode.Should().Be(0);
+        stdout.Should().Contain("from graphql schema");
+        stdout.Should().Contain("Generated Trax project at:");
+        stdout.Should().Contain("Next steps");
+        Directory.Exists(Path.Combine(output.FullName, "HappyGraphQL.Hub")).Should().BeTrue();
+        Directory.Exists(Path.Combine(output.FullName, "HappyGraphQL.Trains")).Should().BeTrue();
+    }
+
+    [Test]
+    public void Handle_HappyPathOpenApi_ParsesAndGenerates()
+    {
+        if (!IsTraxHubTemplateInstalled())
+            Assert.Ignore("trax-hub template is not installed (Trax.Samples.Templates).");
+
+        var schema = new FileInfo(FixturePath("petstore.json"));
+        var output = new DirectoryInfo(Path.Combine(_tempDir, "happy-openapi"));
+
+        var stdout = CaptureStdout(() =>
+            GenerateCommand.Handle(schema, output, "HappyOpenApi", null, false)
+        );
+
+        Environment.ExitCode.Should().Be(0);
+        stdout.Should().Contain("from openapi schema");
+        stdout.Should().Contain("Generated Trax project at:");
+    }
+
+    private static bool IsTraxHubTemplateInstalled()
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo("dotnet", "new list trax-hub")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        using var p = System.Diagnostics.Process.Start(psi)!;
+        var stdout = p.StandardOutput.ReadToEnd();
+        p.WaitForExit();
+        return stdout.Contains("trax-hub");
+    }
+
+    private static string FixturePath(string name) =>
+        Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Schemas", name);
+
     private static string CaptureStderr(Action action)
     {
         var originalErr = Console.Error;
@@ -113,6 +169,22 @@ public class GenerateCommandTests
         finally
         {
             Console.SetError(originalErr);
+        }
+        return writer.ToString();
+    }
+
+    private static string CaptureStdout(Action action)
+    {
+        var originalOut = Console.Out;
+        using var writer = new StringWriter();
+        Console.SetOut(writer);
+        try
+        {
+            action();
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
         }
         return writer.ToString();
     }
