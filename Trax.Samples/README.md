@@ -1,8 +1,13 @@
 # Trax.Samples
 
+[![Build](https://github.com/TraxSharp/Trax.Samples/actions/workflows/nuget_release.yml/badge.svg)](https://github.com/TraxSharp/Trax.Samples/actions/workflows/nuget_release.yml)
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Samples.Templates)](https://www.nuget.org/packages/Trax.Samples.Templates/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Samples.Templates)](https://www.nuget.org/packages/Trax.Samples.Templates/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Samples)](https://github.com/TraxSharp/Trax.Samples/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Samples/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Samples)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 Sample applications and a `dotnet new` project template for getting started with [Trax](https://www.nuget.org/packages/Trax.Core/).
 
