@@ -1,8 +1,13 @@
 # Trax.Cli
 
+[![Build](https://github.com/TraxSharp/Trax.Cli/actions/workflows/nuget_release.yml/badge.svg)](https://github.com/TraxSharp/Trax.Cli/actions/workflows/nuget_release.yml)
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Cli)](https://www.nuget.org/packages/Trax.Cli/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Cli)](https://www.nuget.org/packages/Trax.Cli/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Cli)](https://github.com/TraxSharp/Trax.Cli/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Cli/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Cli)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 CLI tool for [Trax](https://www.nuget.org/packages/Trax.Effect/). Generates Trax API projects from GraphQL or OpenAPI schemas.
 
