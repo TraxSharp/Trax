@@ -22,6 +22,32 @@ jobs:
       issues: write
       pull-requests: write
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: trax
+          POSTGRES_PASSWORD: trax123
+          POSTGRES_DB: trax
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U trax"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      rabbitmq:
+        image: rabbitmq:4-management
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd="rabbitmq-diagnostics -q ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - name: Generate token
         id: app-token
@@ -52,6 +78,14 @@ jobs:
 
       - name: Build
         run: dotnet build --configuration Release
+
+      - name: Create test databases
+        env:
+          PGPASSWORD: trax123
+        run: |
+          for db in trax_e2e_tests chat_e2e_tests energyhub_e2e_tests jobhunt_e2e_tests; do
+            psql -h localhost -U trax -d trax -c "CREATE DATABASE \"$db\";"
+          done
 
       - name: Test
         run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
