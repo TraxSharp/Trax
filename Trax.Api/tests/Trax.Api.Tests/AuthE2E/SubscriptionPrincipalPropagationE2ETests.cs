@@ -264,10 +264,35 @@ public class SubscriptionPrincipalPropagationE2ETests
 
     private static async Task<JsonElement> ReceiveAsync(WebSocket ws)
     {
+        // Receive a full WebSocket message, accumulating fragmented frames and
+        // surfacing close frames with a useful diagnostic instead of letting
+        // the empty buffer fall through to a confusing JsonReaderException.
+        // The previous version called ReceiveAsync once and parsed whatever
+        // came back, which fails non-deterministically when the host sends a
+        // text message in multiple frames or returns a zero-length frame
+        // before the actual payload.
         var buffer = new byte[16 * 1024];
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var result = await ws.ReceiveAsync(buffer, cts.Token);
-        var text = Encoding.UTF8.GetString(buffer, 0, result.Count);
+        using var ms = new MemoryStream();
+
+        while (true)
+        {
+            var result = await ws.ReceiveAsync(buffer, cts.Token);
+
+            if (result.MessageType == WebSocketMessageType.Close)
+                throw new InvalidOperationException(
+                    $"WebSocket closed unexpectedly while waiting for a message. "
+                        + $"Status: {result.CloseStatus}, Description: {result.CloseStatusDescription}"
+                );
+
+            if (result.Count > 0)
+                ms.Write(buffer, 0, result.Count);
+
+            if (result.EndOfMessage && ms.Length > 0)
+                break;
+        }
+
+        var text = Encoding.UTF8.GetString(ms.ToArray());
         return JsonDocument.Parse(text).RootElement.Clone();
     }
 
@@ -281,13 +306,32 @@ public class SubscriptionPrincipalPropagationE2ETests
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var buffer = new byte[16 * 1024];
+
         while (!cts.IsCancellationRequested)
         {
-            var result = await ws.ReceiveAsync(buffer, cts.Token);
-            if (result.Count == 0)
+            // Accumulate one full message across fragmented frames before parsing.
+            using var ms = new MemoryStream();
+            while (!cts.IsCancellationRequested)
+            {
+                var result = await ws.ReceiveAsync(buffer, cts.Token);
+
+                if (result.MessageType == WebSocketMessageType.Close)
+                    throw new InvalidOperationException(
+                        $"WebSocket closed unexpectedly while waiting for subscription {subscriptionId}. "
+                            + $"Status: {result.CloseStatus}, Description: {result.CloseStatusDescription}"
+                    );
+
+                if (result.Count > 0)
+                    ms.Write(buffer, 0, result.Count);
+
+                if (result.EndOfMessage)
+                    break;
+            }
+
+            if (ms.Length == 0)
                 continue;
 
-            var text = Encoding.UTF8.GetString(buffer, 0, result.Count);
+            var text = Encoding.UTF8.GetString(ms.ToArray());
             var msg = JsonDocument.Parse(text).RootElement;
             var type = msg.GetProperty("type").GetString();
 

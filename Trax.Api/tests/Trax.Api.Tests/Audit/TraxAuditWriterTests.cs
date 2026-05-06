@@ -36,6 +36,26 @@ public class TraxAuditWriterTests
         }
     }
 
+    /// <summary>
+    /// Polls <paramref name="predicate"/> until it returns true or
+    /// <paramref name="timeout"/> elapses. Use instead of fixed
+    /// <c>Task.Delay</c>s when waiting for the audit writer to flush a batch
+    /// or accumulate retry attempts: CI scheduling can stretch flush-loop
+    /// timing well past historical local timings, which races a fixed sleep.
+    /// Polling on the actual completion condition finishes as soon as it
+    /// appears with the timeout serving only as a safety ceiling.
+    /// </summary>
+    private static async Task WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (predicate())
+                return;
+            await Task.Delay(20);
+        }
+    }
+
     private static (TraxAuditChannel channel, TraxAuditWriter writer, ServiceProvider sp) Build(
         ITraxAuditSink sink,
         TraxAuditOptions opts
@@ -80,10 +100,10 @@ public class TraxAuditWriterTests
             channel.TryEnqueue(SampleEntry("b"));
             channel.TryEnqueue(SampleEntry("c"));
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             var writerTask = writer.StartAsync(cts.Token);
             await writerTask;
-            await Task.Delay(300, cts.Token);
+            await WaitUntilAsync(() => sink.Batches.Count >= 1, TimeSpan.FromSeconds(10));
 
             sink.Batches.Should().ContainSingle();
             sink.Batches[0].Select(e => e.PrincipalId).Should().BeEquivalentTo(["a", "b"]);
@@ -107,13 +127,16 @@ public class TraxAuditWriterTests
         );
         using (sp)
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await writer.StartAsync(cts.Token);
 
             channel.TryEnqueue(SampleEntry("a"));
             channel.TryEnqueue(SampleEntry("b"));
 
-            await Task.Delay(500, cts.Token);
+            await WaitUntilAsync(
+                () => sink.Batches.SelectMany(b => b).Count() >= 2,
+                TimeSpan.FromSeconds(10)
+            );
             sink.Batches.Should().NotBeEmpty();
             sink.Batches.SelectMany(b => b).Select(e => e.PrincipalId).Should().Contain(["a", "b"]);
 
@@ -149,13 +172,13 @@ public class TraxAuditWriterTests
         );
         using (sp)
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await writer.StartAsync(cts.Token);
             channel.TryEnqueue(SampleEntry("a"));
 
             // Wait for the writer to exhaust retries and drop the batch.
             // (MaxRetries=2 means 3 total attempts before dropping.)
-            await Task.Delay(800, cts.Token);
+            await WaitUntilAsync(() => sink.Attempts >= 3, TimeSpan.FromSeconds(10));
 
             sink.Attempts.Should().BeGreaterThanOrEqualTo(3);
 
@@ -234,11 +257,11 @@ public class TraxAuditWriterTests
         );
         using (sp)
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await writer.StartAsync(cts.Token);
             channel.TryEnqueue(SampleEntry("a"));
 
-            await Task.Delay(800, cts.Token);
+            await WaitUntilAsync(() => sink.Attempts >= 3, TimeSpan.FromSeconds(10));
 
             sink.Attempts.Should().BeGreaterThanOrEqualTo(3);
 

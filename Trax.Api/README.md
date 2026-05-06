@@ -1,8 +1,13 @@
 # Trax.Api
 
+[![Build](https://github.com/TraxSharp/Trax.Api/actions/workflows/nuget_release.yml/badge.svg)](https://github.com/TraxSharp/Trax.Api/actions/workflows/nuget_release.yml)
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Api.GraphQL)](https://www.nuget.org/packages/Trax.Api.GraphQL/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Api.GraphQL)](https://www.nuget.org/packages/Trax.Api.GraphQL/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Api)](https://github.com/TraxSharp/Trax.Api/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Api/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Api)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 GraphQL API for [Trax](https://www.nuget.org/packages/Trax.Effect/). Exposes train discovery, execution, and scheduler operations over HTTP via HotChocolate.
 
