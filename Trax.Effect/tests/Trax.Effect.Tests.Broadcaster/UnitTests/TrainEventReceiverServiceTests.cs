@@ -265,12 +265,18 @@ public class TrainEventReceiverServiceTests
             });
 
         var service = CreateService();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
 
         await service.StartAsync(cts.Token);
 
-        // The initial retry delay is 5s — wait long enough for at least one retry
-        await Task.Delay(TimeSpan.FromSeconds(7));
+        // The initial retry delay is 5s, so a second StartAsync invocation
+        // should land within ~5-6s of the first. Poll for the actual second
+        // call instead of sleeping a fixed window: the test then reflects the
+        // service's real retry timing rather than racing GitHub Actions
+        // scheduling overhead.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        while (DateTime.UtcNow < deadline && callCount <= 1)
+            await Task.Delay(100);
 
         // Should not have crashed the host — service retries
         callCount.Should().BeGreaterThan(1, "the service should retry after connection failure");

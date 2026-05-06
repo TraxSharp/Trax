@@ -192,8 +192,23 @@ public class DataContextLoggingProviderTests
         for (var i = 0; i < 5; i++)
             logger.Log(LogLevel.Information, default, i, null, (s, _) => $"msg {s}");
 
-        // Wait for the 1-second flush timer to tick once.
-        await Task.Delay(1500);
+        // Poll for the flush loop to land at least one batch instead of waiting
+        // a fixed window past the 1-second timer tick. CI scheduling can stretch
+        // the timer's wakeup well past 1.5s; once any log is persisted we know
+        // the flush path is working and can stop waiting.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var landed = 0;
+        while (DateTime.UtcNow < deadline)
+        {
+            context.Reset();
+            landed = await context
+                .Logs.AsNoTracking()
+                .Where(l => l.Category == "TestCategory")
+                .CountAsync();
+            if (landed >= 1)
+                break;
+            await Task.Delay(50);
+        }
         provider.Dispose();
 
         context.Reset();
