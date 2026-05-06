@@ -99,6 +99,27 @@ public class ServiceExtensionsRouteTests
         target.Dep.Should().BeSameAs(existing);
     }
 
+    [Test]
+    public void InjectProperties_IEnumerableProperty_FillsFromProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IDependency, ConcreteDependency>();
+        services.AddSingleton<IDependency, ConcreteDependency>();
+        using var provider = services.BuildServiceProvider();
+
+        var target = new HasEnumerableInject();
+        provider.InjectProperties(target);
+
+        target.Deps.Should().NotBeNull();
+        target.Deps!.Should().HaveCount(2);
+    }
+
+    public class HasEnumerableInject
+    {
+        [Inject]
+        public IEnumerable<IDependency>? Deps { get; set; }
+    }
+
     public interface IFakeRoute
     {
         string? CanonicalName { get; set; }

@@ -285,6 +285,43 @@ public class TrainEventReceiverServiceTests
     }
 
     [Test]
+    public async Task ConnectionFailure_StopAsyncThrows_StillRetries()
+    {
+        // Covers the best-effort try/catch around _receiver.StopAsync in the retry path.
+        var startCount = 0;
+
+        _receiver
+            .StartAsync(
+                Arg.Any<Func<TrainLifecycleEventMessage, CancellationToken, Task>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(_ =>
+            {
+                startCount++;
+                throw new InvalidOperationException("Connection refused");
+            });
+
+        _receiver
+            .StopAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("stop also broken")));
+
+        var service = CreateService();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+
+        await service.StartAsync(cts.Token);
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        while (DateTime.UtcNow < deadline && startCount <= 1)
+            await Task.Delay(100);
+
+        startCount.Should().BeGreaterThan(1);
+
+        // Reset the throwing StopAsync so the final teardown StopAsync does not re-throw.
+        _receiver.StopAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Test]
     public async Task EventWithNullExecutor_IsNotConsideredLocal()
     {
         Func<TrainLifecycleEventMessage, CancellationToken, Task>? capturedHandler = null;

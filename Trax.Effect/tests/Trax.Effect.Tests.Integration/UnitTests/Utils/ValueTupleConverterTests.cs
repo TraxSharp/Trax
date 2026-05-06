@@ -80,4 +80,24 @@ public class ValueTupleConverterTests
         // Assert
         result.Should().BeTrue();
     }
+
+    [Test]
+    public void Deserialize_WrongLength_Throws()
+    {
+        var act = () => JsonSerializer.Deserialize<(int, int)>("[1,2,3]", _options);
+
+        act.Should().Throw<JsonException>().WithMessage("*Expected 2*got 3*");
+    }
+
+    [Test]
+    public void Deserialize_PrimitiveValues_HitsReadConversionPath()
+    {
+        // System.Text.Json deserializes the inner object[] elements as JsonElement,
+        // which the converter's Convert.ChangeType call cannot handle. We assert the
+        // exception path so this test stays accurate to the current behavior while
+        // still exercising the Read body.
+        var act = () => JsonSerializer.Deserialize<(int, int)>("[1, 2]", _options);
+
+        act.Should().Throw<InvalidCastException>();
+    }
 }

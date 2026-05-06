@@ -138,6 +138,36 @@ public class ParameterEffectTests
     }
 
     [Test]
+    public async Task Track_InputContainsDisposedJsonDocument_FallsBackToPlaceholderJson()
+    {
+        var effect = NewEffect();
+        var doc = JsonDocument.Parse("{\"x\":1}");
+        doc.Dispose();
+        var meta = NewMetadata();
+        meta.Input = null;
+        meta.SetInputObject(doc);
+
+        await effect.Track(meta);
+
+        meta.Input.Should().Contain("_disposed");
+    }
+
+    [Test]
+    public async Task Track_OutputContainsDisposedJsonDocument_FallsBackToPlaceholderJson()
+    {
+        var effect = NewEffect();
+        var doc = JsonDocument.Parse("{\"x\":1}");
+        doc.Dispose();
+        var meta = NewMetadata();
+        meta.Output = null;
+        meta.SetOutputObject(doc);
+
+        await effect.Track(meta);
+
+        meta.Output.Should().Contain("_disposed");
+    }
+
+    [Test]
     public void Dispose_ClearsTrackedAndDetachesObjects()
     {
         var effect = NewEffect();

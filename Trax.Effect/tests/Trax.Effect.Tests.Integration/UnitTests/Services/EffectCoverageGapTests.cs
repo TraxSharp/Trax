@@ -270,6 +270,45 @@ public class EffectCoverageGapTests
     }
 
     [Test]
+    public void AddJunctionEffect_WithIAndConcreteFactory_ResolvesAllInterfacesToSameInstance()
+    {
+        var instance = new FakeJunctionEffectProviderFactory();
+        var services = ServicesWithEffectsConfigured(b =>
+            b.AddJunctionEffect<
+                IFakeJunctionEffectProviderFactory,
+                FakeJunctionEffectProviderFactory
+            >(instance)
+        );
+        using var provider = services.BuildServiceProvider();
+
+        var concrete = provider.GetRequiredService<FakeJunctionEffectProviderFactory>();
+        var iJunctionEffect = provider.GetRequiredService<IJunctionEffectProviderFactory>();
+        var iFakeFactory = provider.GetRequiredService<IFakeJunctionEffectProviderFactory>();
+
+        concrete.Should().BeSameAs(instance);
+        iJunctionEffect.Should().BeSameAs(instance);
+        iFakeFactory.Should().BeSameAs(instance);
+    }
+
+    [Test]
+    public void AddLifecycleHook_WithIAndConcreteFactory_ResolvesAllInterfacesToSameInstance()
+    {
+        var factory = new FakeLifecycleHookFactory();
+        var services = ServicesWithEffectsConfigured(b =>
+            b.AddLifecycleHook<IFakeLifecycleHookFactory, FakeLifecycleHookFactory>(factory)
+        );
+        using var provider = services.BuildServiceProvider();
+
+        var concrete = provider.GetRequiredService<FakeLifecycleHookFactory>();
+        var iTrain = provider.GetRequiredService<ITrainLifecycleHookFactory>();
+        var iFake = provider.GetRequiredService<IFakeLifecycleHookFactory>();
+
+        concrete.Should().BeSameAs(factory);
+        iTrain.Should().BeSameAs(factory);
+        iFake.Should().BeSameAs(factory);
+    }
+
+    [Test]
     public void AddScopedTraxJunction_RuntimeTypes_RegistersInterfaceAsScoped()
     {
         var services = new ServiceCollection();
