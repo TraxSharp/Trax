@@ -1,8 +1,13 @@
 # Trax.Core
 
+[![Build](https://github.com/TraxSharp/Trax.Core/actions/workflows/nuget_release.yml/badge.svg)](https://github.com/TraxSharp/Trax.Core/actions/workflows/nuget_release.yml)
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Core)](https://www.nuget.org/packages/Trax.Core/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Core)](https://www.nuget.org/packages/Trax.Core/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Core)](https://github.com/TraxSharp/Trax.Core/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Core/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Core)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 Railway Oriented Programming for .NET. Build trains that carry data through a sequence of stops, with automatic derailment handling when something goes wrong.
 
