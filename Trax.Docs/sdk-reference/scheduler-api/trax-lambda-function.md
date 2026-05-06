@@ -23,6 +23,7 @@ public abstract class TraxLambdaFunction
 {
     protected abstract void ConfigureServices(IServiceCollection services, IConfiguration configuration);
     protected virtual void ConfigureLogging(ILoggingBuilder logging);
+    protected virtual IServiceProvider BuildServiceProvider();
 
     public Task<object?> FunctionHandler(
         LambdaEnvelope envelope,
@@ -30,6 +31,7 @@ public abstract class TraxLambdaFunction
     );
 
     public Task RunLocalAsync(string[] args);
+    internal void ConfigureRoutes(IEndpointRouteBuilder routes);
 }
 ```
 
@@ -39,6 +41,7 @@ public abstract class TraxLambdaFunction
 |--------|----------|-------------|
 | `ConfigureServices(IServiceCollection, IConfiguration)` | Yes | Register your Trax effects, mediator, data contexts, and application services. `IConfiguration` is loaded from `appsettings.json` (if present) and environment variables. Do **not** call `AddTraxJobRunner()` because the base class does this automatically. |
 | `ConfigureLogging(ILoggingBuilder)` | No | Customize logging. Default: console logging at `Information` level. |
+| `BuildServiceProvider()` | No | Replace the entire DI graph. The default builds `IConfiguration`, registers logging, calls `ConfigureServices`, and finishes with `AddTraxJobRunner()`. Override only when you need full control (test harnesses are the typical case). Production code should override `ConfigureServices`, not this. |
 
 ## Envelope Dispatching
 
@@ -128,6 +131,33 @@ This enables a smooth development workflow:
 
 The local server reads its port from `appsettings.json` (via Kestrel configuration) and exposes the same endpoints that the Lambda would handle in production.
 
+Internally `RunLocalAsync` delegates the route mapping to an internal `ConfigureRoutes(IEndpointRouteBuilder)` method. Tests can host the Lambda's HTTP surface against `Microsoft.AspNetCore.TestHost` by calling `ConfigureRoutes` directly, without spinning up a real Kestrel listener.
+
+## Testing
+
+Two extension points exist specifically for tests:
+
+1. Override `BuildServiceProvider` to swap in a fake `ITraxRequestHandler` (or any other dependency) without exercising `AddTraxJobRunner` and the full effect/mediator stack.
+2. Call `ConfigureRoutes` from a `TestServer`-hosted pipeline to exercise the `/trax/execute` and `/trax/run` endpoints in-process. `ConfigureRoutes` is `internal`, made visible to the Trax test assemblies via `InternalsVisibleTo`.
+
+```csharp
+// Unit test: stub the request handler.
+private sealed class FakeFunction : TraxLambdaFunction
+{
+    public ITraxRequestHandler Handler { get; } = new RecordingHandler();
+
+    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration) { }
+
+    protected override IServiceProvider BuildServiceProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(Handler);
+        return services.BuildServiceProvider();
+    }
+}
+```
+
 ## Configuration
 
 The base class automatically builds an `IConfiguration` from:
@@ -158,6 +188,7 @@ To minimize cold start time:
    - Calls `ConfigureServices()` (your code)
    - Calls `AddTraxJobRunner()` (automatic)
    - Builds and caches the `IServiceProvider`
+   - The whole method is `protected virtual`, so test harnesses can replace it wholesale.
 3. Each invocation creates a new DI scope and resolves `ITraxRequestHandler`
 4. Cancellation is derived from `ILambdaContext.RemainingTime`
 5. The `LambdaEnvelope.Type` field determines which handler method is called
