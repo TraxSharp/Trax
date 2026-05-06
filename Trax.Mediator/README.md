@@ -1,8 +1,13 @@
 # Trax.Mediator
 
+[![Build](https://github.com/TraxSharp/Trax.Mediator/actions/workflows/nuget_release.yml/badge.svg)](https://github.com/TraxSharp/Trax.Mediator/actions/workflows/nuget_release.yml)
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Mediator)](https://www.nuget.org/packages/Trax.Mediator/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Mediator)](https://www.nuget.org/packages/Trax.Mediator/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Mediator)](https://github.com/TraxSharp/Trax.Mediator/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Mediator/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Mediator)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 Dispatch station for [Trax](https://www.nuget.org/packages/Trax.Effect/) trains. Hand it the cargo and it routes it to the right train, no need to know which train handles what.
 
