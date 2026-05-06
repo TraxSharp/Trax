@@ -1,6 +1,8 @@
 # Trax.Website
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Website)](https://github.com/TraxSharp/Trax.Website/commits/main)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 Source for [traxsharp.net](https://traxsharp.net), the documentation and marketing site for the Trax .NET framework.
 
