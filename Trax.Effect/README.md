@@ -1,8 +1,13 @@
 # Trax.Effect
 
+[![Build](https://github.com/TraxSharp/Trax.Effect/actions/workflows/nuget_release.yml/badge.svg)](https://github.com/TraxSharp/Trax.Effect/actions/workflows/nuget_release.yml)
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect)](https://www.nuget.org/packages/Trax.Effect/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Effect)](https://www.nuget.org/packages/Trax.Effect/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Effect)](https://github.com/TraxSharp/Trax.Effect/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Effect/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Effect)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 Effect system for [Trax.Core](https://www.nuget.org/packages/Trax.Core/). Upgrades a bare locomotive into a full commercial train service with journey logging, station services, and dependency injection.
 
