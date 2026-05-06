@@ -1,0 +1,121 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Coverage Gaps", "version": "1.0" },
+  "paths": {
+    "/widgets": {
+      "get": {
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/things/{thingId}": {
+      "get": {
+        "operationId": "getThing",
+        "parameters": [
+          { "name": "thingId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/things/{thingId}/copy": {
+      "get": {
+        "operationId": "getThing",
+        "parameters": [
+          { "name": "thingId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/things/{thingId}/twin": {
+      "get": {
+        "operationId": "getThing",
+        "parameters": [
+          { "name": "thingId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/empties": {
+      "get": {
+        "operationId": "listEmpties",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "single": { "$ref": "#/components/schemas/EmptyShape" },
+                    "many": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/EmptyShape" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/inline-promote": {
+      "post": {
+        "operationId": "submitPayload",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "payload": {
+                    "type": "object",
+                    "properties": {
+                      "value": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/inline-promote/again": {
+      "post": {
+        "operationId": "submitAnother",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "payload": {
+                    "type": "object",
+                    "properties": {
+                      "value": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "ok" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Widgets": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" }
+        }
+      },
+      "EmptyShape": {
+        "type": "object"
+      }
+    }
+  }
+}
