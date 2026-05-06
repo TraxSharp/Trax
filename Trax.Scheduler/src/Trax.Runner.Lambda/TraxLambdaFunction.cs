@@ -2,6 +2,7 @@ using System.Text.Json;
 using Amazon.Lambda.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -143,8 +144,18 @@ public abstract class TraxLambdaFunction
     {
         var builder = WebApplication.CreateBuilder(args);
         var app = builder.Build();
+        ConfigureRoutes(app);
+        await app.RunAsync();
+    }
 
-        app.MapPost(
+    /// <summary>
+    /// Maps the local-development HTTP endpoints (<c>POST /trax/execute</c>, <c>POST /trax/run</c>)
+    /// onto the supplied route builder. Exposed for test hosting; production code uses
+    /// <see cref="RunLocalAsync"/>.
+    /// </summary>
+    internal void ConfigureRoutes(IEndpointRouteBuilder routes)
+    {
+        routes.MapPost(
             "/trax/execute",
             async (HttpContext ctx) =>
             {
@@ -163,7 +174,7 @@ public abstract class TraxLambdaFunction
             }
         );
 
-        app.MapPost(
+        routes.MapPost(
             "/trax/run",
             async (HttpContext ctx) =>
             {
@@ -181,8 +192,6 @@ public abstract class TraxLambdaFunction
                 await ctx.Response.WriteAsync(JsonSerializer.Serialize(result));
             }
         );
-
-        await app.RunAsync();
     }
 
     private static async Task<RemoteJobResponse> HandleExecute(
@@ -241,7 +250,13 @@ public abstract class TraxLambdaFunction
         }
     }
 
-    private IServiceProvider BuildServiceProvider()
+    /// <summary>
+    /// Builds the service provider used by all Lambda invocations. Override only when you need
+    /// full control over DI (e.g. test harnesses). The default loads <c>appsettings.json</c>
+    /// plus environment variables, registers logging, calls <see cref="ConfigureServices"/>,
+    /// and finalises with <c>AddTraxJobRunner()</c>.
+    /// </summary>
+    protected virtual IServiceProvider BuildServiceProvider()
     {
         var configuration = new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)

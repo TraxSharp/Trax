@@ -482,7 +482,11 @@ public class LocalWorkerServiceTests : TestSetup
         );
 
         var workerTask = workerService.StartAsync(cts.Token);
-        await Task.Delay(3000);
+        // Poll for queue drain instead of waiting a fixed wall-clock duration.
+        // 5 jobs at 100ms polling needs ~500ms minimum, but CI scheduling can stretch
+        // each job's effect-runner pass well past that. Generous upper bound prevents
+        // flake without slowing the happy case.
+        var drained = await WaitForJobCount(0, TimeSpan.FromSeconds(15));
         cts.Cancel();
 
         try
@@ -492,9 +496,24 @@ public class LocalWorkerServiceTests : TestSetup
         catch (OperationCanceledException) { }
 
         // Assert - All 5 jobs should have been processed
+        drained.Should().BeTrue("all jobs should be processed with BatchSize=1");
         DataContext.Reset();
         var remaining = await DataContext.BackgroundJobs.CountAsync();
         remaining.Should().Be(0, "all jobs should be processed with BatchSize=1");
+    }
+
+    private async Task<bool> WaitForJobCount(int expected, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            DataContext.Reset();
+            var count = await DataContext.BackgroundJobs.CountAsync();
+            if (count == expected)
+                return true;
+            await Task.Delay(50);
+        }
+        return false;
     }
 
     [Test]

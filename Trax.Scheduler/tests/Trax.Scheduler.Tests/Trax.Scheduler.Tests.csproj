@@ -14,6 +14,7 @@
     <PackageReference Include="FluentAssertions" Version="8.8.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="Npgsql" Version="10.0.1" />
     <PackageReference Include="NUnit" Version="4.4.0" />
@@ -30,6 +31,7 @@
     <ProjectReference Include="../../src/Trax.Scheduler.Lambda/Trax.Scheduler.Lambda.csproj" />
     <ProjectReference Include="../../src/Trax.Runner.Lambda/Trax.Runner.Lambda.csproj" />
     <PackageReference Include="Amazon.Lambda.Core" Version="2.*" />
+    <PackageReference Include="Amazon.Lambda.TestUtilities" Version="2.*" />
     <PackageReference Include="Trax.Mediator" Version="1.*" />
   </ItemGroup>
 </Project>
