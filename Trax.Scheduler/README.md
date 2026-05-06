@@ -1,8 +1,13 @@
 # Trax.Scheduler
 
+[![Build](https://github.com/TraxSharp/Trax.Scheduler/actions/workflows/nuget_release.yml/badge.svg)](https://github.com/TraxSharp/Trax.Scheduler/actions/workflows/nuget_release.yml)
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Scheduler)](https://www.nuget.org/packages/Trax.Scheduler/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Scheduler)](https://www.nuget.org/packages/Trax.Scheduler/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Scheduler)](https://github.com/TraxSharp/Trax.Scheduler/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Scheduler/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Scheduler)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 Timetable management for [Trax](https://www.nuget.org/packages/Trax.Effect/) trains — recurring schedules, automatic retries, dead-letter handling, and dependent departures.
 
