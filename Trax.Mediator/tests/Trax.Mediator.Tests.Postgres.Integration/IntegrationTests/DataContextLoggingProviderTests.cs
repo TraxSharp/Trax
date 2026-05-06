@@ -265,11 +265,16 @@ public class DataContextLoggingProviderTests : TestSetup
             for (var i = 0; i < logCount; i++)
                 logger.LogInformation("Overflow log {Index}", i);
 
-            // Wait for flush loop to drain what it can (generous timeout)
-            await Task.Delay(5000);
-
-            using var context = (IDataContext)factory.Create();
-            var count = await context.Logs.Where(l => l.Category == "Test.DropOldest").CountAsync();
+            // Poll until at least one log lands. The flush loop's first persist
+            // proves it is making progress; counts above logCount are impossible
+            // (dropped messages cannot be persisted), so the BeLessThan invariant
+            // is naturally guaranteed without waiting for any specific stable count.
+            var count = await WaitForLogCount(
+                factory,
+                "Test.DropOldest",
+                expectedCount: 1,
+                timeout: TimeSpan.FromSeconds(15)
+            );
 
             count.Should().BeGreaterThan(0, "some logs should survive");
             count
