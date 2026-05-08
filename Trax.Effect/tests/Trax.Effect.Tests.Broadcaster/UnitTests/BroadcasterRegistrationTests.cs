@@ -75,7 +75,7 @@ public class BroadcasterRegistrationTests
         var builder = new TraxBuilder(services, registry);
 
         builder.AddEffects(effects =>
-            effects.UseBroadcaster(b => b.UseRabbitMq("amqp://guest:guest@localhost:5672"))
+            effects.UseBroadcaster(b => b.UseRabbitMq("amqp://trax:trax123@localhost:5672"))
         );
 
         services.Should().Contain(sd => sd.ServiceType == typeof(RabbitMqBroadcasterOptions));

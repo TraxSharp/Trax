@@ -9,13 +9,16 @@ namespace Trax.Effect.Tests.Broadcaster.UnitTests;
 /// <summary>
 /// Integration tests that exercise <see cref="RabbitMqTrainEventBroadcaster"/> and
 /// <see cref="RabbitMqTrainEventReceiver"/> against a real RabbitMQ broker.
-/// CI provisions a rabbitmq:3 service container; locally a developer-mode broker
-/// listens on amqp://guest:guest@localhost:5672/.
+/// CI provisions a rabbitmq:4-management service container with a dedicated
+/// 'trax' user (default 'guest' is restricted to localhost in RabbitMQ, and CI
+/// service containers route through port forwarding so the broker sees
+/// non-localhost connections). The Trax.Samples docker-compose broker is
+/// configured the same way for local parity.
 /// </summary>
 [TestFixture]
 public class RabbitMqBroadcasterIntegrationTests
 {
-    private const string AmqpUri = "amqp://guest:guest@localhost:5672/";
+    private const string AmqpUri = "amqp://trax:trax123@localhost:5672/";
 
     private static RabbitMqBroadcasterOptions Options(string suffix) =>
         new()
