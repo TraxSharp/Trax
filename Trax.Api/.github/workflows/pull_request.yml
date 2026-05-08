@@ -26,7 +26,14 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       rabbitmq:
+        # Default 'guest' user is restricted to localhost in RabbitMQ.
+        # GitHub Actions service containers route through port forwarding,
+        # so the broker sees connections as non-localhost and rejects
+        # 'guest'. Override with a dedicated test user.
         image: rabbitmq:4-management
+        env:
+          RABBITMQ_DEFAULT_USER: trax
+          RABBITMQ_DEFAULT_PASS: trax123
         ports:
           - 5672:5672
           - 15672:15672
@@ -34,7 +41,7 @@ jobs:
           --health-cmd "rabbitmq-diagnostics -q ping"
           --health-interval 5s
           --health-timeout 5s
-          --health-retries 10
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

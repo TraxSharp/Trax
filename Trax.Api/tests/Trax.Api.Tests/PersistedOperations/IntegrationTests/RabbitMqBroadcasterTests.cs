@@ -16,7 +16,11 @@ namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 [Category("Integration")]
 public class RabbitMqBroadcasterTests
 {
-    private const string AmqpUri = "amqp://guest:guest@localhost:5672/";
+    // Both the docker-compose dev broker (Trax.Samples/docker-compose.yml)
+    // and the CI service container (.github/workflows/pull_request.yml) are
+    // configured with these credentials. Default 'guest' would work locally
+    // but RabbitMQ rejects it from non-localhost in CI's port-forwarded setup.
+    private const string AmqpUri = "amqp://trax:trax123@localhost:5672/";
 
     private static bool IsRabbitMqReachable()
     {
