@@ -99,6 +99,16 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
 
     public DbSet<SchedulerConfig> SchedulerConfigs { get; set; }
 
+    /// <summary>
+    /// Gets or sets the DbSet for persisted GraphQL operation manifest rows.
+    /// </summary>
+    public DbSet<Effect.Models.PersistedOperation.PersistedOperation> PersistedOperations { get; set; }
+
+    /// <summary>
+    /// Gets or sets the DbSet for persisted-operation audit history.
+    /// </summary>
+    public DbSet<Effect.Models.PersistedOperationHistory.PersistedOperationHistory> PersistedOperationHistories { get; set; }
+
     #endregion
 
     /// <summary>
@@ -120,6 +130,14 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.ApplyEntityOnModelCreating();
+
+        // Persisted-operation entities use a string composite primary key,
+        // so they do not implement IModel and are not discovered by
+        // ApplyEntityOnModelCreating. Map them explicitly.
+        Models.PersistedOperation.PersistentPersistedOperation.OnModelCreating(modelBuilder);
+        Models.PersistedOperationHistory.PersistentPersistedOperationHistory.OnModelCreating(
+            modelBuilder
+        );
     }
 
     /// <summary>

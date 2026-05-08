@@ -585,6 +585,245 @@ public class SqliteProviderTests : TestSetup
 
     #endregion
 
+    #region Entity Type Tests - PersistedOperation
+
+    [Test]
+    public async Task PersistedOperation_RoundTrip_PersistsAllColumns()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        await context.PersistedOperationHistories.ExecuteDeleteAsync();
+        await context.PersistedOperations.ExecuteDeleteAsync();
+
+        var now = DateTime.UtcNow;
+        var row = new Effect.Models.PersistedOperation.PersistedOperation
+        {
+            TenantKey = "tenant-rt",
+            Id = "userProfile_v3",
+            OperationName = "UserProfile",
+            Version = 3,
+            Document = "query UserProfile($id: Int!) { user(id: $id) { id name email } }",
+            ShapeFingerprint = new string('a', 64),
+            IsActive = false,
+            DeprecationReason = "broken filter",
+            Description = "manifest entry for v3",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        context.PersistedOperations.Add(row);
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var found = await context.PersistedOperations.FirstOrDefaultAsync(p =>
+            p.TenantKey == "tenant-rt" && p.Id == "userProfile_v3"
+        );
+
+        found.Should().NotBeNull();
+        found!.OperationName.Should().Be("UserProfile");
+        found.Version.Should().Be(3);
+        found.Document.Should().Contain("$id: Int!");
+        found.ShapeFingerprint.Should().Be(new string('a', 64));
+        found.IsActive.Should().BeFalse();
+        found.DeprecationReason.Should().Be("broken filter");
+        found.Description.Should().Be("manifest entry for v3");
+        found.CreatedAt.Should().BeCloseTo(now, TimeSpan.FromSeconds(1));
+        found.UpdatedAt.Should().BeCloseTo(now, TimeSpan.FromSeconds(1));
+    }
+
+    [Test]
+    public async Task PersistedOperation_NullableColumnsRoundTripAsNull()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        await context.PersistedOperationHistories.ExecuteDeleteAsync();
+        await context.PersistedOperations.ExecuteDeleteAsync();
+
+        var row = new Effect.Models.PersistedOperation.PersistedOperation
+        {
+            TenantKey = "",
+            Id = "nulls_v1",
+            OperationName = "Nulls",
+            Version = 1,
+            Document = "{ x }",
+            ShapeFingerprint = "fp",
+            DeprecationReason = null,
+            Description = null,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        context.PersistedOperations.Add(row);
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var found = await context.PersistedOperations.FirstOrDefaultAsync(p => p.Id == "nulls_v1");
+        found.Should().NotBeNull();
+        // tenant_key is on the composite PK; "" is the sentinel for "no tenant".
+        found!.TenantKey.Should().Be(string.Empty);
+        found.DeprecationReason.Should().BeNull();
+        found.Description.Should().BeNull();
+    }
+
+    [Test]
+    public async Task PersistedOperation_CompositeKey_AllowsSameIdAcrossTenants()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        await context.PersistedOperationHistories.ExecuteDeleteAsync();
+        await context.PersistedOperations.ExecuteDeleteAsync();
+
+        context.PersistedOperations.AddRange(
+            new Effect.Models.PersistedOperation.PersistedOperation
+            {
+                TenantKey = "a",
+                Id = "shared_v1",
+                OperationName = "Shared",
+                Version = 1,
+                Document = "query Shared { a }",
+                ShapeFingerprint = "h1",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            },
+            new Effect.Models.PersistedOperation.PersistedOperation
+            {
+                TenantKey = "b",
+                Id = "shared_v1",
+                OperationName = "Shared",
+                Version = 1,
+                Document = "query Shared { b }",
+                ShapeFingerprint = "h2",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            }
+        );
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var rows = await context
+            .PersistedOperations.Where(p => p.Id == "shared_v1")
+            .OrderBy(p => p.TenantKey)
+            .ToListAsync();
+
+        rows.Should().HaveCount(2);
+        rows[0].Document.Should().Contain("a");
+        rows[1].Document.Should().Contain("b");
+    }
+
+    [Test]
+    public async Task PersistedOperationHistory_RoundTrip_PersistsAllColumnsAndAssignsHistoryId()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        await context.PersistedOperationHistories.ExecuteDeleteAsync();
+
+        var now = DateTime.UtcNow;
+        var entry = new Effect.Models.PersistedOperationHistory.PersistedOperationHistory
+        {
+            TenantKey = "tenant-h",
+            Id = "history_v1",
+            Document = "query H { z }",
+            ShapeFingerprint = new string('b', 64),
+            ChangeType = "Upsert",
+            ChangedAt = now,
+            ChangedReason = "initial",
+        };
+
+        context.PersistedOperationHistories.Add(entry);
+        await context.SaveChanges(CancellationToken.None);
+        entry.HistoryId.Should().BeGreaterThan(0, "the surrogate key is DB-generated");
+
+        context.Reset();
+
+        var found = await context.PersistedOperationHistories.FirstOrDefaultAsync(h =>
+            h.Id == "history_v1"
+        );
+        found.Should().NotBeNull();
+        found!.TenantKey.Should().Be("tenant-h");
+        found.Document.Should().Be("query H { z }");
+        found.ShapeFingerprint.Should().Be(new string('b', 64));
+        found.ChangeType.Should().Be("Upsert");
+        found.ChangedReason.Should().Be("initial");
+        found.ChangedAt.Should().BeCloseTo(now, TimeSpan.FromSeconds(1));
+    }
+
+    [Test]
+    public async Task PersistedOperationHistory_OrderedByChangedAtDesc_ReturnsMostRecentFirst()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        await context.PersistedOperationHistories.ExecuteDeleteAsync();
+
+        for (var i = 0; i < 3; i++)
+        {
+            context.PersistedOperationHistories.Add(
+                new Effect.Models.PersistedOperationHistory.PersistedOperationHistory
+                {
+                    TenantKey = "",
+                    Id = "ordered_v1",
+                    Document = $"v{i}",
+                    ShapeFingerprint = "fp",
+                    ChangeType = "Upsert",
+                    ChangedAt = DateTime.UtcNow.AddMinutes(i),
+                    ChangedReason = $"step{i}",
+                }
+            );
+        }
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var rows = await context
+            .PersistedOperationHistories.Where(h => h.Id == "ordered_v1")
+            .OrderByDescending(h => h.ChangedAt)
+            .Select(h => h.Document)
+            .ToListAsync();
+
+        rows.Should().Equal("v2", "v1", "v0");
+    }
+
+    [Test]
+    public async Task PersistedOperation_FilterByIsActive_ReturnsOnlyActive()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        await context.PersistedOperationHistories.ExecuteDeleteAsync();
+        await context.PersistedOperations.ExecuteDeleteAsync();
+
+        context.PersistedOperations.AddRange(
+            new Effect.Models.PersistedOperation.PersistedOperation
+            {
+                TenantKey = "",
+                Id = "active_v1",
+                OperationName = "Active",
+                Version = 1,
+                Document = "{ x }",
+                ShapeFingerprint = "fp",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            },
+            new Effect.Models.PersistedOperation.PersistedOperation
+            {
+                TenantKey = "",
+                Id = "inactive_v1",
+                OperationName = "Inactive",
+                Version = 1,
+                Document = "{ x }",
+                ShapeFingerprint = "fp",
+                IsActive = false,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            }
+        );
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var actives = await context.PersistedOperations.Where(p => p.IsActive).ToListAsync();
+        actives.Select(p => p.Id).Should().ContainSingle().Which.Should().Be("active_v1");
+    }
+
+    #endregion
+
     #region Entity Type Tests - ManifestGroup
 
     [Test]

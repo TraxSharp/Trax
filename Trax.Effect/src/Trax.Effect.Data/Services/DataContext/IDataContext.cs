@@ -98,6 +98,18 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     /// </summary>
     DbSet<SchedulerConfig> SchedulerConfigs { get; }
 
+    /// <summary>
+    /// Persisted GraphQL operation manifest rows. Maps a build-time-stable
+    /// operation id to the document text the server resolves it to.
+    /// </summary>
+    DbSet<Effect.Models.PersistedOperation.PersistedOperation> PersistedOperations { get; }
+
+    /// <summary>
+    /// Append-only audit history for every persisted-operation upsert,
+    /// deactivate, and restore.
+    /// </summary>
+    DbSet<Effect.Models.PersistedOperationHistory.PersistedOperationHistory> PersistedOperationHistories { get; }
+
     #endregion
 
     /// <summary>

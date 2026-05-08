@@ -280,6 +280,186 @@ public class InMemoryProviderTests : TestSetup
         found.MetadataCleanupRetention.Should().Be(TimeSpan.FromHours(3));
     }
 
+    #endregion
+
+    #region Entity Type Tests - PersistedOperation
+
+    [Test]
+    public async Task PersistedOperation_RoundTrip_PersistsAllColumns()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        // InMemory provider doesn't support ExecuteDeleteAsync; remove rows individually.
+        foreach (var existing in await context.PersistedOperations.ToListAsync())
+            ((Microsoft.EntityFrameworkCore.DbContext)context).Remove(existing);
+        await context.SaveChanges(CancellationToken.None);
+
+        var now = DateTime.UtcNow;
+        var row = new Effect.Models.PersistedOperation.PersistedOperation
+        {
+            TenantKey = "tenant-rt",
+            Id = "userProfile_v3",
+            OperationName = "UserProfile",
+            Version = 3,
+            Document = "query UserProfile($id: Int!) { user(id: $id) { id name email } }",
+            ShapeFingerprint = new string('a', 64),
+            IsActive = false,
+            DeprecationReason = "broken filter",
+            Description = "manifest entry for v3",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        context.PersistedOperations.Add(row);
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var found = await context.PersistedOperations.FirstOrDefaultAsync(p =>
+            p.TenantKey == "tenant-rt" && p.Id == "userProfile_v3"
+        );
+
+        found.Should().NotBeNull();
+        found!.OperationName.Should().Be("UserProfile");
+        found.Version.Should().Be(3);
+        found.Document.Should().Contain("$id: Int!");
+        found.ShapeFingerprint.Should().Be(new string('a', 64));
+        found.IsActive.Should().BeFalse();
+        found.DeprecationReason.Should().Be("broken filter");
+        found.Description.Should().Be("manifest entry for v3");
+        found.CreatedAt.Should().BeCloseTo(now, TimeSpan.FromSeconds(1));
+        found.UpdatedAt.Should().BeCloseTo(now, TimeSpan.FromSeconds(1));
+    }
+
+    [Test]
+    public async Task PersistedOperation_NullableColumnsRoundTripAsNull()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        var row = new Effect.Models.PersistedOperation.PersistedOperation
+        {
+            TenantKey = "",
+            Id = "nulls_v1",
+            OperationName = "Nulls",
+            Version = 1,
+            Document = "{ x }",
+            ShapeFingerprint = "fp",
+            DeprecationReason = null,
+            Description = null,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        context.PersistedOperations.Add(row);
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var found = await context.PersistedOperations.FirstOrDefaultAsync(p => p.Id == "nulls_v1");
+        found.Should().NotBeNull();
+        // tenant_key is part of the composite PK; the schema stores ''
+        // for "no tenant". The C#-facing IPersistedOperationStore normalizes
+        // null<->"" at the boundary, but at the EF layer the value is "".
+        found!.TenantKey.Should().Be(string.Empty);
+        found.DeprecationReason.Should().BeNull();
+        found.Description.Should().BeNull();
+    }
+
+    [Test]
+    public async Task PersistedOperationHistory_RoundTrip_PersistsAllColumnsAndAssignsHistoryId()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        foreach (var existing in await context.PersistedOperationHistories.ToListAsync())
+            ((Microsoft.EntityFrameworkCore.DbContext)context).Remove(existing);
+        await context.SaveChanges(CancellationToken.None);
+
+        var now = DateTime.UtcNow;
+        var entry = new Effect.Models.PersistedOperationHistory.PersistedOperationHistory
+        {
+            TenantKey = "tenant-h",
+            Id = "history_v1",
+            Document = "query H { z }",
+            ShapeFingerprint = new string('b', 64),
+            ChangeType = "Upsert",
+            ChangedAt = now,
+            ChangedReason = "initial",
+        };
+
+        context.PersistedOperationHistories.Add(entry);
+        await context.SaveChanges(CancellationToken.None);
+        entry.HistoryId.Should().BeGreaterThan(0, "the EF model assigns a surrogate key on insert");
+
+        context.Reset();
+
+        var found = await context.PersistedOperationHistories.FirstOrDefaultAsync(h =>
+            h.Id == "history_v1"
+        );
+        found.Should().NotBeNull();
+        found!.TenantKey.Should().Be("tenant-h");
+        found.Document.Should().Be("query H { z }");
+        found.ShapeFingerprint.Should().Be(new string('b', 64));
+        found.ChangeType.Should().Be("Upsert");
+        found.ChangedReason.Should().Be("initial");
+        found.ChangedAt.Should().BeCloseTo(now, TimeSpan.FromSeconds(1));
+    }
+
+    [Test]
+    public async Task PersistedOperation_QueryByLinq_FiltersCorrectly()
+    {
+        // Proves the entity is queryable via EF LINQ — the GraphQL hot path
+        // and IPersistedOperationStore.GetAsync both rely on this.
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        foreach (var existing in await context.PersistedOperations.ToListAsync())
+            ((Microsoft.EntityFrameworkCore.DbContext)context).Remove(existing);
+        await context.SaveChanges(CancellationToken.None);
+
+        context.PersistedOperations.AddRange(
+            new Effect.Models.PersistedOperation.PersistedOperation
+            {
+                TenantKey = "",
+                Id = "active_v1",
+                OperationName = "Active",
+                Version = 1,
+                Document = "{ x }",
+                ShapeFingerprint = "fp",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            },
+            new Effect.Models.PersistedOperation.PersistedOperation
+            {
+                TenantKey = "",
+                Id = "inactive_v1",
+                OperationName = "Inactive",
+                Version = 1,
+                Document = "{ x }",
+                ShapeFingerprint = "fp",
+                IsActive = false,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            }
+        );
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var actives = await context.PersistedOperations.Where(p => p.IsActive).ToListAsync();
+        actives.Select(p => p.Id).Should().ContainSingle().Which.Should().Be("active_v1");
+
+        var byOpName = await context
+            .PersistedOperations.Where(p => p.OperationName == "Inactive")
+            .Select(p => p.Id)
+            .ToListAsync();
+        byOpName.Should().ContainSingle().Which.Should().Be("inactive_v1");
+    }
+
+    #endregion
+
+    #region SchedulerConfig - additional
+
     [Test]
     public async Task SchedulerConfig_NullableColumnsRoundTripAsNull()
     {
