@@ -373,6 +373,157 @@ mutation {
 
 ---
 
+### config (nested namespace)
+
+The `operations.config` namespace patches scheduler runtime settings. Writes go to both the in-memory `SchedulerConfiguration` singleton (immediate effect on running services) and the persisted `trax.scheduler_config` row (survives restarts via the `SchedulerConfigBootstrapHostedService`).
+
+#### updateScheduler
+
+Patches one or more fields. Fields left out of `input` are unchanged. The persisted row's `updatedAt` only moves on real changes (no-op patches are ignored at the DB layer).
+
+```graphql
+mutation {
+  operations {
+    config {
+      updateScheduler(input: {
+        defaultMaxRetries: 5
+        defaultJobTimeout: "00:30:00"
+      }) { success count message }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `input` | `UpdateSchedulerConfigInput!` | Yes | Patch payload (fields below) |
+
+#### UpdateSchedulerConfigInput fields
+
+Every field defaults to `null` and means "no change". To clear `maxActiveJobs` (set to "no per-group cap") or `localWorkerCount` (reset to `Environment.ProcessorCount`), set the corresponding `clear*` flag to `true`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `manifestManagerEnabled` | `Boolean` | |
+| `jobDispatcherEnabled` | `Boolean` | |
+| `manifestManagerPollingInterval` | `TimeSpan` | |
+| `jobDispatcherPollingInterval` | `TimeSpan` | |
+| `maxActiveJobs` | `Int` | |
+| `clearMaxActiveJobs` | `Boolean` | When `true`, sets `maxActiveJobs` to null |
+| `defaultMaxRetries` | `Int` | |
+| `defaultRetryDelay` | `TimeSpan` | |
+| `retryBackoffMultiplier` | `Float` | |
+| `maxRetryDelay` | `TimeSpan` | |
+| `defaultJobTimeout` | `TimeSpan` | |
+| `stalePendingTimeout` | `TimeSpan` | |
+| `recoverStuckJobsOnStartup` | `Boolean` | |
+| `deadLetterRetentionPeriod` | `TimeSpan` | |
+| `autoPurgeDeadLetters` | `Boolean` | |
+| `localWorkerCount` | `Int` | Ignored when `UseLocalWorkers()` is not configured |
+| `clearLocalWorkerCount` | `Boolean` | Resets `localWorkerCount` to `Environment.ProcessorCount` |
+| `metadataCleanupInterval` | `TimeSpan` | Ignored when metadata cleanup is not configured |
+| `metadataCleanupRetention` | `TimeSpan` | Ignored when metadata cleanup is not configured |
+
+**Returns**: `OperationResponse`. `count` is the number of fields actually changed (zero if every supplied value already matched).
+
+---
+
+### manifestGroups (nested namespace)
+
+The `operations.manifestGroups` namespace patches mutable fields on a manifest group. The dashboard's group settings panel calls the same underlying service, so a save from either surface produces an identical write.
+
+#### updateManifestGroup
+
+Patches one or more fields on a manifest group. Fields left out of `input` are unchanged; `updatedAt` is bumped only when at least one field actually changed.
+
+```graphql
+mutation {
+  operations {
+    manifestGroups {
+      updateManifestGroup(id: 7, input: {
+        priority: 5
+        isEnabled: false
+      }) { success count message }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `Long!` | Yes | The manifest group's database ID |
+| `input` | `UpdateManifestGroupInput!` | Yes | Patch payload (fields below) |
+
+#### UpdateManifestGroupInput fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `maxActiveJobs` | `Int` | `null` | New per-group concurrency limit. `null` means "no change". To clear the limit, use `clearMaxActiveJobs` instead |
+| `clearMaxActiveJobs` | `Boolean` | `false` | When `true`, sets `maxActiveJobs` to `null` (removes the per-group limit). Takes precedence if both this and `maxActiveJobs` are set |
+| `priority` | `Int` | `null` | New priority. `null` = no change |
+| `isEnabled` | `Boolean` | `null` | Whether the group is active. `null` = no change |
+
+**Returns**: `OperationResponse`. On success, `count` is the number of fields actually changed (zero if every supplied value already matched the persisted row). On failure (group not found), `success` is `false` and `message` explains.
+
+---
+
+### workQueue (nested namespace)
+
+The `operations.workQueue` namespace lets the dashboard (and other API clients) put work into the queue and cancel it. Reads live under [operations.workQueue in queries.md](/docs/sdk-reference/graphql-api/queries#workqueue-nested-under-operations).
+
+#### queueTrain
+
+Creates a new work queue entry. The dispatcher picks it up on its next poll. Validation happens before any DB write: an unknown `trainName`, malformed `inputJson`, or JSON that deserializes to `null` returns `OperationResponse(success: false, message: ...)` and inserts nothing.
+
+```graphql
+mutation {
+  operations {
+    workQueue {
+      queueTrain(input: {
+        trainName: "Trax.Samples.GameServer.Trains.Combat.IResolveCombatTrain"
+        inputJson: "{\"attackerId\":\"player-1\",\"defenderId\":\"player-2\"}"
+        priority: 10
+      }) {
+        success
+        count
+        message
+      }
+    }
+  }
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `trainName` | `String!` | Yes | N/A | Train interface FullName (matches the `serviceTypeName` returned by `operations.trains`) |
+| `inputJson` | `String` | No | `null` | JSON payload that deserializes to the train's input type. Use `null` for trains with `Unit` input |
+| `priority` | `Int` | No | `0` | Dispatch priority 0-31. Values outside that range are clamped |
+| `scheduledAt` | `DateTime` | No | `null` | Earliest UTC time the entry should be picked up. Null means dispatch immediately |
+
+**Returns**: `OperationResponse`. On success, `count` is `1` and `message` includes the new entry's ID.
+
+#### cancelWorkQueueEntry
+
+Cancels a queued entry. Only entries with `status: QUEUED` can be cancelled. Already-dispatched or already-cancelled entries return `OperationResponse(success: false, ...)` without modifying the row.
+
+```graphql
+mutation {
+  operations {
+    workQueue {
+      cancelWorkQueueEntry(id: 1234) { success message }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `Long!` | Yes | The work queue entry's database ID |
+
+**Returns**: `OperationResponse`.
+
+---
+
 ### deadLetters (nested namespace)
 
 The `operations.deadLetters` namespace exposes dead-letter requeue and acknowledge mutations: `requeueDeadLetter`, `acknowledgeDeadLetter`, batch variants (`requeueDeadLetters`, `acknowledgeDeadLetters`), and "all" variants (`requeueAllDeadLetters`, `acknowledgeAllDeadLetters`). See [scheduler/dead-letters-and-cleanup](/docs/scheduler/dead-letters-and-cleanup) for full details and examples.
