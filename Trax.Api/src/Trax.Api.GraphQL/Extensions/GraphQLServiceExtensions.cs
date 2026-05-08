@@ -140,6 +140,11 @@ public static class GraphQLServiceExtensions
         {
             graphqlBuilder.AddType(new ObjectType<OperationsQueries>());
             graphqlBuilder.AddType(new ObjectType<DeadLetterQueries>());
+            graphqlBuilder.AddType(new ObjectType<WorkQueueQueries>());
+            graphqlBuilder.AddType(new ObjectType<ManifestGroupQueries>());
+            graphqlBuilder.AddType(new ObjectType<LogQueries>());
+            graphqlBuilder.AddType(new ObjectType<MetricsQueries>());
+            graphqlBuilder.AddType(new ObjectType<ConfigQueries>());
             graphqlBuilder.AddTypeExtension(
                 new ObjectTypeExtension(d =>
                 {
@@ -155,6 +160,9 @@ public static class GraphQLServiceExtensions
         {
             graphqlBuilder.AddType(new ObjectType<OperationsMutations>());
             graphqlBuilder.AddType(new ObjectType<DeadLetterMutations>());
+            graphqlBuilder.AddType(new ObjectType<WorkQueueMutations>());
+            graphqlBuilder.AddType(new ObjectType<ManifestGroupMutations>());
+            graphqlBuilder.AddType(new ObjectType<ConfigMutations>());
             graphqlBuilder.AddTypeExtension(
                 new ObjectTypeExtension(d =>
                 {

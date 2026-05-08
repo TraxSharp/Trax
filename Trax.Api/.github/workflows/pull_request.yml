@@ -38,7 +38,7 @@ jobs:
         env:
           PGPASSWORD: trax123
         run: |
-          for db in trax_api_operations trax_api_health \
+          for db in trax_api_operations trax_api_workqueue trax_api_logs trax_api_health \
                     trax_api_auth_http trax_api_auth_model trax_api_auth_sub \
                     trax_api_auth_subprop trax_api_auth_authorize; do
             psql -h localhost -U trax -d trax -c "CREATE DATABASE $db;"

@@ -4,6 +4,7 @@ using Trax.Api.DTOs;
 using Trax.Api.Services.HealthCheck;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Configuration;
 
 namespace Trax.Api.GraphQL.Queries;
 
@@ -18,6 +19,33 @@ public class OperationsQueries
     /// </summary>
     public DeadLetterQueries DeadLetters() => new();
 
+    /// <summary>
+    /// Nested namespace exposing work queue queries (<c>workQueues</c>, <c>workQueue</c>).
+    /// </summary>
+    public WorkQueueQueries WorkQueue() => new();
+
+    /// <summary>
+    /// Nested namespace exposing manifest group queries (<c>graph</c>).
+    /// </summary>
+    public ManifestGroupQueries ManifestGroups() => new();
+
+    /// <summary>
+    /// Nested namespace exposing log queries (paginated reads of <c>trax.log</c>).
+    /// </summary>
+    public LogQueries Logs() => new();
+
+    /// <summary>
+    /// Nested namespace exposing dashboard / server metrics. Same data the dashboard
+    /// Index page renders.
+    /// </summary>
+    public MetricsQueries Metrics() => new();
+
+    /// <summary>
+    /// Nested namespace exposing live scheduler runtime config (what the dashboard's
+    /// ServerSettingsPage reads).
+    /// </summary>
+    public ConfigQueries Config() => new();
+
     public async Task<HealthStatus> GetHealth(
         [Service] ITraxHealthService healthService,
         CancellationToken ct
@@ -26,10 +54,22 @@ public class OperationsQueries
         return await healthService.GetHealthAsync(ct);
     }
 
-    public IReadOnlyList<TrainInfo> GetTrains([Service] ITrainDiscoveryService discoveryService)
+    public IReadOnlyList<TrainInfo> GetTrains(
+        [Service] ITrainDiscoveryService discoveryService,
+        bool hideAdminTrains = false
+    )
     {
-        return discoveryService
-            .DiscoverTrains()
+        IEnumerable<TrainRegistration> registrations = discoveryService.DiscoverTrains();
+
+        // AdminTrains.FullNames is the canonical list (interface FullName, per CLAUDE.md
+        // naming rules). Compare against ServiceType.FullName for an exact match.
+        if (hideAdminTrains)
+        {
+            var adminNames = AdminTrains.FullNames.ToHashSet();
+            registrations = registrations.Where(r => !adminNames.Contains(r.ServiceType.FullName!));
+        }
+
+        return registrations
             .Select(r => new TrainInfo(
                 r.ServiceTypeName,
                 r.ImplementationTypeName,

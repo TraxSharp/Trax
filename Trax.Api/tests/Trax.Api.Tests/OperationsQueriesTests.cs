@@ -335,6 +335,75 @@ public class OperationsQueriesTests
     }
 
     [Test]
+    public void GetTrains_HideAdminTrains_FiltersOutFrameworkTrains()
+    {
+        // The IManifestManagerTrain is a framework admin train listed in
+        // AdminTrains.FullNames. With hideAdminTrains=true it should not appear.
+        var discovery =
+            NSubstitute.Substitute.For<Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService>();
+        var registrations = new List<Trax.Mediator.Services.TrainDiscovery.TrainRegistration>
+        {
+            FakeRegistration(typeof(Trax.Scheduler.Trains.ManifestManager.IManifestManagerTrain)),
+            FakeRegistration(typeof(IUserTrain)),
+        };
+        NSubstitute.SubstituteExtensions.Returns(discovery.DiscoverTrains(), registrations);
+        var queries = new OperationsQueries();
+
+        var unfiltered = queries.GetTrains(discovery);
+        var filtered = queries.GetTrains(discovery, hideAdminTrains: true);
+
+        unfiltered.Should().HaveCount(2);
+        filtered.Should().HaveCount(1);
+        filtered.Single().ServiceTypeName.Should().NotContain("ManifestManager");
+    }
+
+    [Test]
+    public void GetTrains_HideAdminTrainsFalse_ReturnsAll()
+    {
+        var discovery =
+            NSubstitute.Substitute.For<Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService>();
+        var registrations = new List<Trax.Mediator.Services.TrainDiscovery.TrainRegistration>
+        {
+            FakeRegistration(typeof(Trax.Scheduler.Trains.ManifestManager.IManifestManagerTrain)),
+            FakeRegistration(typeof(IUserTrain)),
+        };
+        NSubstitute.SubstituteExtensions.Returns(discovery.DiscoverTrains(), registrations);
+        var queries = new OperationsQueries();
+
+        queries.GetTrains(discovery, hideAdminTrains: false).Should().HaveCount(2);
+    }
+
+    private static Trax.Mediator.Services.TrainDiscovery.TrainRegistration FakeRegistration(
+        Type serviceType
+    )
+    {
+        return new Trax.Mediator.Services.TrainDiscovery.TrainRegistration
+        {
+            ServiceType = serviceType,
+            ImplementationType = serviceType,
+            InputType = typeof(FakeInput),
+            OutputType = typeof(FakeOutput),
+            Lifetime = Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped,
+            ServiceTypeName = serviceType.Name,
+            ImplementationTypeName = serviceType.Name,
+            InputTypeName = typeof(FakeInput).FullName!,
+            OutputTypeName = typeof(FakeOutput).FullName!,
+            RequiredPolicies = Array.Empty<string>(),
+            RequiredRoles = Array.Empty<string>(),
+            IsQuery = false,
+            IsMutation = false,
+            IsBroadcastEnabled = false,
+            IsRemote = false,
+            GraphQLOperations =
+                Trax.Effect.Attributes.GraphQLOperation.Run
+                | Trax.Effect.Attributes.GraphQLOperation.Queue,
+        };
+    }
+
+    private interface IUserTrain
+        : Trax.Effect.Services.ServiceTrain.IServiceTrain<FakeInput, FakeOutput> { }
+
+    [Test]
     public void DeadLettersNamespace_ReturnsNewInstance()
     {
         var queries = new OperationsQueries();

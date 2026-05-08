@@ -14,6 +14,21 @@ public class OperationsMutations
     /// </summary>
     public DeadLetterMutations DeadLetters() => new();
 
+    /// <summary>
+    /// Nested namespace exposing work queue mutations (queue a train, cancel queued entries).
+    /// </summary>
+    public WorkQueueMutations WorkQueue() => new();
+
+    /// <summary>
+    /// Nested namespace exposing manifest group mutations (<c>updateManifestGroup</c>).
+    /// </summary>
+    public ManifestGroupMutations ManifestGroups() => new();
+
+    /// <summary>
+    /// Nested namespace exposing scheduler config mutations (<c>updateScheduler</c>).
+    /// </summary>
+    public ConfigMutations Config() => new();
+
     public async Task<OperationResponse> TriggerManifest(
         string externalId,
         [Service] ITraxScheduler scheduler,
