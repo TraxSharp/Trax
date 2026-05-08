@@ -3,8 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Radzen;
 using Trax.Dashboard.Components.Shared;
 using Trax.Effect.Data.Services.IDataContextFactory;
-using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
+using Trax.Scheduler.Services.Operations;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
@@ -13,6 +13,9 @@ public partial class WorkQueueDetailPage
 {
     [Inject]
     private IDataContextProviderFactory DataContextFactory { get; set; } = default!;
+
+    [Inject]
+    private IOperationsService OperationsService { get; set; } = default!;
 
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
@@ -47,30 +50,24 @@ public partial class WorkQueueDetailPage
 
         try
         {
-            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-            var entry = await context.WorkQueues.FirstOrDefaultAsync(q => q.Id == WorkQueueId);
+            var result = await OperationsService.CancelWorkQueueEntryAsync(
+                WorkQueueId,
+                DisposalToken
+            );
 
-            if (entry is null)
+            if (!result.Success)
             {
-                _error = "Work queue entry not found.";
+                _error = result.Message;
                 return;
             }
 
-            if (entry.Status != WorkQueueStatus.Queued)
-            {
-                _error = $"Cannot cancel entry with status '{entry.Status}'.";
-                return;
-            }
-
-            entry.Status = WorkQueueStatus.Cancelled;
-            await context.SaveChanges(DisposalToken);
-
-            _entry = entry;
+            // Reload so the UI reflects the new status without a full page navigation.
+            await LoadDataAsync(DisposalToken);
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
                 "Entry Cancelled",
-                $"Work queue entry {entry.Id} has been cancelled.",
+                $"Work queue entry {WorkQueueId} has been cancelled.",
                 duration: 4000
             );
         }

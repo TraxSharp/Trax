@@ -11,6 +11,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
+using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
@@ -29,6 +30,9 @@ public partial class ManifestGroupDetailPage
 
     [Inject]
     private ITraxScheduler TraxScheduler { get; set; } = default!;
+
+    [Inject]
+    private IOperationsService OperationsService { get; set; } = default!;
 
     [Inject]
     private IServiceProvider ServiceProvider { get; set; } = default!;
@@ -207,93 +211,37 @@ public partial class ManifestGroupDetailPage
         CancellationToken cancellationToken
     )
     {
-        var currentManifestIdsQuery = context
-            .Manifests.Where(m => m.ManifestGroupId == ManifestGroupId)
-            .Select(m => m.Id);
+        // Source the graph from the shared OperationsService so the dashboard's DAG and
+        // the GraphQL `operations.manifestGroups.graph` query produce identical results.
+        // The IDataContext parameter is retained for signature compatibility but the
+        // service opens its own context.
+        _ = context;
 
-        if (!await currentManifestIdsQuery.AnyAsync(cancellationToken))
+        var graph = await OperationsService.GetManifestGroupDependencyGraphAsync(
+            ManifestGroupId,
+            cancellationToken
+        );
+
+        // Single-node graphs (focal group only, no cross-group dependencies) collapse to
+        // null here so the UI hides the DAG section entirely, matching the previous
+        // dashboard behaviour where an isolated group rendered nothing.
+        if (graph is null || graph.Edges.Count == 0)
         {
             _dagLayout = null;
             return;
         }
 
-        // Upstream: groups containing manifests that our manifests depend on
-        var upstreamGroupIds = await context
-            .Manifests.AsNoTracking()
-            .Where(m => m.ManifestGroupId == ManifestGroupId && m.DependsOnManifestId != null)
-            .Join(
-                context.Manifests.AsNoTracking(),
-                dependent => dependent.DependsOnManifestId,
-                parent => (long?)parent.Id,
-                (dependent, parent) => parent.ManifestGroupId
-            )
-            .Where(parentGroupId => parentGroupId != ManifestGroupId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        // Downstream: groups containing manifests that depend on our manifests
-        var downstreamGroupIds = await context
-            .Manifests.AsNoTracking()
-            .Where(m =>
-                m.DependsOnManifestId != null
-                && currentManifestIdsQuery.Contains(m.DependsOnManifestId.Value)
-                && m.ManifestGroupId != ManifestGroupId
-            )
-            .Select(m => m.ManifestGroupId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        var neighborGroupIds = upstreamGroupIds.Union(downstreamGroupIds).ToHashSet();
-
-        if (neighborGroupIds.Count == 0)
-        {
-            _dagLayout = null;
-            return;
-        }
-
-        var allRelevantGroupIds = neighborGroupIds.Append(ManifestGroupId).ToList();
-
-        var neighborGroups = await context
-            .ManifestGroups.AsNoTracking()
-            .Where(g => allRelevantGroupIds.Contains(g.Id))
-            .Select(g => new { g.Id, g.Name })
-            .ToListAsync(cancellationToken);
-
-        var dagNodes = neighborGroups
-            .Select(g => new DagNode
+        var dagNodes = graph
+            .Nodes.Select(n => new DagNode
             {
-                Id = g.Id,
-                Label = g.Name,
-                IsHighlighted = g.Id == ManifestGroupId,
+                Id = n.Id,
+                Label = n.Name,
+                IsHighlighted = n.IsHighlighted,
             })
             .ToList();
 
-        // Edges between all relevant groups
-        var crossGroupEdges = await context
-            .Manifests.AsNoTracking()
-            .Where(m =>
-                m.DependsOnManifestId != null && allRelevantGroupIds.Contains(m.ManifestGroupId)
-            )
-            .Join(
-                context.Manifests.AsNoTracking(),
-                dependent => dependent.DependsOnManifestId,
-                parent => (long?)parent.Id,
-                (dependent, parent) =>
-                    new
-                    {
-                        ParentGroupId = parent.ManifestGroupId,
-                        DependentGroupId = dependent.ManifestGroupId,
-                    }
-            )
-            .Where(e =>
-                e.ParentGroupId != e.DependentGroupId
-                && allRelevantGroupIds.Contains(e.ParentGroupId)
-            )
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        var dagEdges = crossGroupEdges
-            .Select(e => new DagEdge { FromId = e.ParentGroupId, ToId = e.DependentGroupId })
+        var dagEdges = graph
+            .Edges.Select(e => new DagEdge { FromId = e.FromId, ToId = e.ToId })
             .ToList();
 
         _dagLayout = DagLayoutEngine.ComputeLayout(dagNodes, dagEdges);
@@ -318,27 +266,46 @@ public partial class ManifestGroupDetailPage
 
         try
         {
-            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
+            // Translate the dirty in-memory edits into a patch input for the shared
+            // service. MaxActiveJobs needs the explicit Clear flag because int? can't
+            // distinguish "unset" from "set to null" in the patch record.
+            var maxActiveJobsChanged = _group.MaxActiveJobs != _savedMaxActiveJobs;
+            var input = new UpdateManifestGroupInput(
+                MaxActiveJobs: maxActiveJobsChanged ? _group.MaxActiveJobs : null,
+                ClearMaxActiveJobs: maxActiveJobsChanged && _group.MaxActiveJobs is null,
+                Priority: _group.Priority != _savedPriority ? _group.Priority : null,
+                IsEnabled: _group.IsEnabled != _savedIsEnabled ? _group.IsEnabled : null
+            );
 
-            var entity = await context.ManifestGroups.FindAsync(_group.Id);
-            if (entity is null)
+            var result = await OperationsService.UpdateManifestGroupAsync(
+                _group.Id,
+                input,
+                DisposalToken
+            );
+
+            if (!result.Success)
+            {
+                NotificationService.Notify(
+                    new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Error,
+                        Summary = "Save Failed",
+                        Detail = result.Message ?? "Update failed.",
+                        Duration = 6000,
+                    }
+                );
                 return;
+            }
 
-            entity.MaxActiveJobs = _group.MaxActiveJobs;
-            entity.Priority = _group.Priority;
-            entity.IsEnabled = _group.IsEnabled;
-            entity.UpdatedAt = DateTime.UtcNow;
-
-            await context.SaveChanges(DisposalToken);
-
-            SnapshotSettings();
+            // Reload to pick up the bumped UpdatedAt and confirm persistence.
+            await LoadDataAsync(DisposalToken);
 
             NotificationService.Notify(
                 new NotificationMessage
                 {
                     Severity = NotificationSeverity.Success,
                     Summary = "Settings Saved",
-                    Detail = $"Group \"{_group.Name}\" settings updated.",
+                    Detail = $"Group \"{_group?.Name}\" settings updated.",
                     Duration = 4000,
                 }
             );

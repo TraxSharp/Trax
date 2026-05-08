@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Components.Pages.Settings;
 
@@ -13,6 +14,9 @@ public partial class ServerSettingsPage
 
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
+
+    [Inject]
+    private IOperationsService OperationsService { get; set; } = default!;
 
     // ── Scheduler state ──
     private SchedulerConfiguration? _schedulerConfig;
@@ -173,24 +177,41 @@ public partial class ServerSettingsPage
         }
     }
 
-    private void SaveScheduler()
+    private async Task SaveScheduler()
     {
         if (_schedulerConfig is null)
             return;
 
-        _schedulerConfig.ManifestManagerPollingInterval = _pollingInterval.ToTimeSpan();
-        _schedulerConfig.JobDispatcherPollingInterval = _pollingInterval.ToTimeSpan();
-        _schedulerConfig.DefaultRetryDelay = _defaultRetryDelay.ToTimeSpan();
-        _schedulerConfig.MaxRetryDelay = _maxRetryDelay.ToTimeSpan();
-        _schedulerConfig.DefaultJobTimeout = _defaultJobTimeout.ToTimeSpan();
-        _schedulerConfig.StalePendingTimeout = _stalePendingTimeout.ToTimeSpan();
-        _schedulerConfig.DeadLetterRetentionPeriod = _deadLetterRetentionPeriod.ToTimeSpan();
+        // Route through the shared IOperationsService so the dashboard save and the
+        // GraphQL operations.config.updateScheduler mutation produce the same write.
+        // The service mutates the in-memory singleton AND persists the row.
+        var pollingInterval = _pollingInterval.ToTimeSpan();
+        var input = new UpdateSchedulerConfigInput(
+            ManifestManagerEnabled: _schedulerConfig.ManifestManagerEnabled,
+            JobDispatcherEnabled: _schedulerConfig.JobDispatcherEnabled,
+            ManifestManagerPollingInterval: pollingInterval,
+            JobDispatcherPollingInterval: pollingInterval,
+            MaxActiveJobs: _schedulerConfig.MaxActiveJobs,
+            ClearMaxActiveJobs: _schedulerConfig.MaxActiveJobs is null,
+            DefaultMaxRetries: _schedulerConfig.DefaultMaxRetries,
+            DefaultRetryDelay: _defaultRetryDelay.ToTimeSpan(),
+            RetryBackoffMultiplier: _schedulerConfig.RetryBackoffMultiplier,
+            MaxRetryDelay: _maxRetryDelay.ToTimeSpan(),
+            DefaultJobTimeout: _defaultJobTimeout.ToTimeSpan(),
+            StalePendingTimeout: _stalePendingTimeout.ToTimeSpan(),
+            RecoverStuckJobsOnStartup: _schedulerConfig.RecoverStuckJobsOnStartup,
+            DeadLetterRetentionPeriod: _deadLetterRetentionPeriod.ToTimeSpan(),
+            AutoPurgeDeadLetters: _schedulerConfig.AutoPurgeDeadLetters,
+            LocalWorkerCount: _localWorkerOptions?.WorkerCount,
+            MetadataCleanupInterval: _schedulerConfig.MetadataCleanup is not null
+                ? _cleanupInterval.ToTimeSpan()
+                : null,
+            MetadataCleanupRetention: _schedulerConfig.MetadataCleanup is not null
+                ? _cleanupRetentionPeriod.ToTimeSpan()
+                : null
+        );
 
-        if (_schedulerConfig.MetadataCleanup is not null)
-        {
-            _schedulerConfig.MetadataCleanup.CleanupInterval = _cleanupInterval.ToTimeSpan();
-            _schedulerConfig.MetadataCleanup.RetentionPeriod = _cleanupRetentionPeriod.ToTimeSpan();
-        }
+        await OperationsService.UpdateSchedulerConfigAsync(input, CancellationToken.None);
 
         SnapshotSchedulerState();
     }
@@ -295,10 +316,10 @@ public partial class ServerSettingsPage
 
     // ── Combined actions ──
 
-    private void Save()
+    private async Task Save()
     {
         if (_schedulerAvailable)
-            SaveScheduler();
+            await SaveScheduler();
 
         if (_loggingAvailable)
             SaveLogging();

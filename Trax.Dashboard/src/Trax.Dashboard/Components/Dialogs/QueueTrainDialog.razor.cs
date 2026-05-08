@@ -4,12 +4,8 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
 using Radzen;
-using Trax.Effect.Configuration.TraxEffectConfiguration;
-using Trax.Effect.Data.Services.IDataContextFactory;
-using Trax.Effect.Models.WorkQueue;
-using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
@@ -18,7 +14,7 @@ public partial class QueueTrainDialog : IDisposable
     private readonly CancellationTokenSource _cts = new();
 
     [Inject]
-    private IDataContextProviderFactory DataContextFactory { get; set; } = default!;
+    private IOperationsService OperationsService { get; set; } = default!;
 
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
@@ -70,48 +66,29 @@ public partial class QueueTrainDialog : IDisposable
 
         try
         {
-            var input =
-                _selectedTab == 0
-                    ? BuildInputFromForm()
-                    : JsonSerializer.Deserialize(
-                        _jsonInput,
-                        Registration.InputType,
-                        TraxEffectConfiguration.StaticSystemJsonSerializerOptions
-                    );
+            // The form-builder tab produces strongly typed values; the JSON tab is already
+            // a JSON string. Either way we end up with a JSON string to hand the shared
+            // IOperationsService, which performs the actual deserialization + validation.
+            string? inputJson = _selectedTab == 0 ? BuildInputJsonFromForm() : _jsonInput;
 
-            if (input is null)
+            var result = await OperationsService.QueueTrainAsync(
+                new QueueTrainInput(
+                    TrainName: Registration.ServiceType.FullName!,
+                    InputJson: inputJson,
+                    Priority: _priority
+                ),
+                _cts.Token
+            );
+
+            if (!result.Success)
             {
-                _error =
-                    $"Deserialization returned null. Ensure the input matches {Registration.InputTypeName}.";
+                _error = result.Message;
                 return;
             }
 
-            var serializedInput = JsonSerializer.Serialize(
-                input,
-                Registration.InputType,
-                TraxJsonSerializationOptions.ManifestProperties
-            );
-
-            var entry = WorkQueue.Create(
-                new CreateWorkQueue
-                {
-                    TrainName = Registration.ServiceType.FullName!,
-                    Input = serializedInput,
-                    InputTypeName = Registration.InputType.FullName,
-                    Priority = _priority,
-                }
-            );
-
-            using var dataContext = await DataContextFactory.CreateDbContextAsync(_cts.Token);
-            await dataContext.Track(entry);
-            await dataContext.SaveChanges(_cts.Token);
-
             DialogService.Close();
-            Navigation.NavigateTo($"trax/data/work-queue/{entry.Id}");
-        }
-        catch (JsonException je)
-        {
-            _error = $"Invalid JSON: {je.Message}";
+            if (result.Id is { } id)
+                Navigation.NavigateTo($"trax/data/work-queue/{id}");
         }
         catch (Exception ex)
         {
@@ -123,7 +100,7 @@ public partial class QueueTrainDialog : IDisposable
         }
     }
 
-    private object? BuildInputFromForm()
+    private string BuildInputJsonFromForm()
     {
         var jsonObj = new JsonObject();
 
@@ -133,11 +110,7 @@ public partial class QueueTrainDialog : IDisposable
             jsonObj[prop.Name] = ToJsonNode(value, prop.PropertyType);
         }
 
-        return JsonSerializer.Deserialize(
-            jsonObj.ToJsonString(),
-            Registration.InputType,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-        );
+        return jsonObj.ToJsonString();
     }
 
     private static JsonNode? ToJsonNode(object? value, Type targetType)
