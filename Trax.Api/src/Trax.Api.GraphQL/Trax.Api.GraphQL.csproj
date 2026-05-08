@@ -11,6 +11,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Api.Tests" />
     <InternalsVisibleTo Include="Trax.Api.GraphQL.Audit" />
+    <InternalsVisibleTo Include="Trax.Api.GraphQL.PersistedOperations" />
   </ItemGroup>
 
   <ItemGroup>

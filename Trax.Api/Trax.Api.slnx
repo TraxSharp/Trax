@@ -7,6 +7,7 @@
     <Project Path="src/Trax.Api.Auth.Oidc/Trax.Api.Auth.Oidc.csproj" />
     <Project Path="src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
     <Project Path="src/Trax.Api.GraphQL.Audit/Trax.Api.GraphQL.Audit.csproj" />
+    <Project Path="src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Api.Tests/Trax.Api.Tests.csproj" />
