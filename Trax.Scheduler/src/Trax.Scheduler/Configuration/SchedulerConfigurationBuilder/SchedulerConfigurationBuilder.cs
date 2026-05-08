@@ -9,6 +9,7 @@ using Trax.Scheduler.Services.JobDispatcherPollingService;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
+using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.SchedulerStartupService;
 using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.JobDispatcher;
@@ -113,6 +114,14 @@ public partial class SchedulerConfigurationBuilder
 
         // Register ITraxScheduler
         _parentBuilder.ServiceCollection.AddScoped<ITraxScheduler, TraxScheduler>();
+
+        // Register IOperationsService — shared between dashboard UI and GraphQL operations
+        // mutations so both surfaces have identical validation and persistence behaviour.
+        _parentBuilder.ServiceCollection.AddScoped<IOperationsService, OperationsService>();
+
+        // Reads the persisted scheduler_config row at startup and applies it to the
+        // in-memory SchedulerConfiguration singleton.
+        _parentBuilder.ServiceCollection.AddHostedService<SchedulerConfigBootstrapHostedService>();
 
         // Register IDormantDependentContext with forwarding so both concrete type
         // (for RunScheduledTrainJunction.Initialize) and interface (for user steps)
