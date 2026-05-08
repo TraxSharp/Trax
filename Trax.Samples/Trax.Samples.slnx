@@ -34,6 +34,11 @@
   <Folder Name="/samples/ApiAudit/">
     <Project Path="samples/ApiAudit/Trax.Samples.ApiAudit/Trax.Samples.ApiAudit.csproj" />
   </Folder>
+  <Folder Name="/samples/PersistedOperations/">
+    <Project Path="samples/PersistedOperations/Trax.Samples.PersistedOperations/Trax.Samples.PersistedOperations.csproj" />
+    <Project Path="samples/PersistedOperations/Trax.Samples.PersistedOperations.Api/Trax.Samples.PersistedOperations.Api.csproj" />
+    <Project Path="samples/PersistedOperations/Trax.Samples.PersistedOperations.Client/Trax.Samples.PersistedOperations.Client.csproj" />
+  </Folder>
   <Folder Name="/samples/TestRunner/">
     <Project Path="samples/TestRunner/Trax.Samples.TestRunner/Trax.Samples.TestRunner.csproj" />
     <Project Path="samples/TestRunner/Trax.Samples.TestRunner.Hub/Trax.Samples.TestRunner.Hub.csproj" />
@@ -46,6 +51,7 @@
     <Project Path="tests/Trax.Samples.EnergyHub.E2E/Trax.Samples.EnergyHub.E2E.csproj" />
     <Project Path="tests/Trax.Samples.JobHunt.Tests/Trax.Samples.JobHunt.Tests.csproj" />
     <Project Path="tests/Trax.Samples.JobHunt.E2E/Trax.Samples.JobHunt.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.PersistedOperations.E2E/Trax.Samples.PersistedOperations.E2E.csproj" />
   </Folder>
   <Folder Name="/templates/">
     <Project Path="templates/Trax.Samples.Templates.csproj" />

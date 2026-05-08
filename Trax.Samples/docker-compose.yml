@@ -22,8 +22,8 @@ services:
     image: rabbitmq:4-management
     restart: always
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: trax
+      RABBITMQ_DEFAULT_PASS: trax123
     ports:
       - "5672:5672"
       - "15672:15672"
