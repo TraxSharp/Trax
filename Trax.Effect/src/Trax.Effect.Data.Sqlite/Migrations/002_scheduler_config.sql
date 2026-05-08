@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS scheduler_config (
+    id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    manifest_manager_enabled INTEGER NOT NULL DEFAULT 1,
+    job_dispatcher_enabled INTEGER NOT NULL DEFAULT 1,
+    manifest_manager_polling_interval TEXT NOT NULL DEFAULT '00:00:05',
+    job_dispatcher_polling_interval TEXT NOT NULL DEFAULT '00:00:02',
+    max_active_jobs INTEGER,
+    default_max_retries INTEGER NOT NULL DEFAULT 3,
+    default_retry_delay TEXT NOT NULL DEFAULT '00:05:00',
+    retry_backoff_multiplier REAL NOT NULL DEFAULT 2.0,
+    max_retry_delay TEXT NOT NULL DEFAULT '01:00:00',
+    default_job_timeout TEXT NOT NULL DEFAULT '00:20:00',
+    stale_pending_timeout TEXT NOT NULL DEFAULT '00:20:00',
+    recover_stuck_jobs_on_startup INTEGER NOT NULL DEFAULT 1,
+    dead_letter_retention_period TEXT NOT NULL DEFAULT '30.00:00:00',
+    auto_purge_dead_letters INTEGER NOT NULL DEFAULT 1,
+    local_worker_count INTEGER,
+    metadata_cleanup_interval TEXT,
+    metadata_cleanup_retention TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

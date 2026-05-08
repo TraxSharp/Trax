@@ -458,6 +458,133 @@ public class SqliteProviderTests : TestSetup
 
     #endregion
 
+    #region Entity Type Tests - SchedulerConfig
+
+    [Test]
+    public async Task SchedulerConfig_RoundTrip_PersistsAllColumns()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        // Singleton-row table: ensure no leftover row from a prior test in the fixture.
+        await context.SchedulerConfigs.ExecuteDeleteAsync();
+
+        // SchedulerConfig is a singleton row (id always = 1) and the model initialiser
+        // sets Id = 1 in its ctor. The shared OperationsService uses DbSet.Add directly
+        // for inserts because IDataContext.Track infers Added/Modified from `Id > 0`,
+        // which would misclassify the singleton as an update on first persist.
+        var row = new Effect.Models.SchedulerConfig.SchedulerConfig
+        {
+            ManifestManagerEnabled = false,
+            JobDispatcherEnabled = false,
+            ManifestManagerPollingInterval = TimeSpan.FromSeconds(15),
+            JobDispatcherPollingInterval = TimeSpan.FromSeconds(20),
+            MaxActiveJobs = 50,
+            DefaultMaxRetries = 7,
+            DefaultRetryDelay = TimeSpan.FromMinutes(10),
+            RetryBackoffMultiplier = 3.5,
+            MaxRetryDelay = TimeSpan.FromHours(2),
+            DefaultJobTimeout = TimeSpan.FromMinutes(45),
+            StalePendingTimeout = TimeSpan.FromMinutes(30),
+            RecoverStuckJobsOnStartup = false,
+            DeadLetterRetentionPeriod = TimeSpan.FromDays(60),
+            AutoPurgeDeadLetters = false,
+            LocalWorkerCount = 8,
+            MetadataCleanupInterval = TimeSpan.FromMinutes(7),
+            MetadataCleanupRetention = TimeSpan.FromHours(3),
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        context.SchedulerConfigs.Add(row);
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var found = await context.SchedulerConfigs.FirstOrDefaultAsync(x =>
+            x.Id == Effect.Models.SchedulerConfig.SchedulerConfig.SingletonId
+        );
+
+        found.Should().NotBeNull();
+        found!.ManifestManagerEnabled.Should().BeFalse();
+        found.JobDispatcherEnabled.Should().BeFalse();
+        found.ManifestManagerPollingInterval.Should().Be(TimeSpan.FromSeconds(15));
+        found.JobDispatcherPollingInterval.Should().Be(TimeSpan.FromSeconds(20));
+        found.MaxActiveJobs.Should().Be(50);
+        found.DefaultMaxRetries.Should().Be(7);
+        found.DefaultRetryDelay.Should().Be(TimeSpan.FromMinutes(10));
+        found.RetryBackoffMultiplier.Should().Be(3.5);
+        found.MaxRetryDelay.Should().Be(TimeSpan.FromHours(2));
+        found.DefaultJobTimeout.Should().Be(TimeSpan.FromMinutes(45));
+        found.StalePendingTimeout.Should().Be(TimeSpan.FromMinutes(30));
+        found.RecoverStuckJobsOnStartup.Should().BeFalse();
+        found.DeadLetterRetentionPeriod.Should().Be(TimeSpan.FromDays(60));
+        found.AutoPurgeDeadLetters.Should().BeFalse();
+        found.LocalWorkerCount.Should().Be(8);
+        found.MetadataCleanupInterval.Should().Be(TimeSpan.FromMinutes(7));
+        found.MetadataCleanupRetention.Should().Be(TimeSpan.FromHours(3));
+    }
+
+    [Test]
+    public async Task SchedulerConfig_NullableColumnsRoundTripAsNull()
+    {
+        // Defaults: MaxActiveJobs is set to 10 by the model initialiser; the rest of the
+        // nullable columns (LocalWorkerCount, MetadataCleanup*) default to null. Verify
+        // each round-trips correctly when explicitly null.
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        await context.SchedulerConfigs.ExecuteDeleteAsync();
+
+        var row = new Effect.Models.SchedulerConfig.SchedulerConfig
+        {
+            MaxActiveJobs = null,
+            LocalWorkerCount = null,
+            MetadataCleanupInterval = null,
+            MetadataCleanupRetention = null,
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        context.SchedulerConfigs.Add(row);
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var found = await context.SchedulerConfigs.FirstOrDefaultAsync();
+        found.Should().NotBeNull();
+        found!.MaxActiveJobs.Should().BeNull();
+        found.LocalWorkerCount.Should().BeNull();
+        found.MetadataCleanupInterval.Should().BeNull();
+        found.MetadataCleanupRetention.Should().BeNull();
+    }
+
+    [Test]
+    public async Task SchedulerConfig_UpdateExistingRow_UpdatesNotInserts()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        await context.SchedulerConfigs.ExecuteDeleteAsync();
+
+        // Insert
+        context.SchedulerConfigs.Add(
+            new Effect.Models.SchedulerConfig.SchedulerConfig
+            {
+                DefaultMaxRetries = 5,
+                UpdatedAt = DateTime.UtcNow,
+            }
+        );
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        // Update
+        var existing = await context.SchedulerConfigs.FirstAsync();
+        existing.DefaultMaxRetries = 11;
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        // Still exactly one row, with the updated value.
+        var rows = await context.SchedulerConfigs.ToListAsync();
+        rows.Should().ContainSingle();
+        rows[0].DefaultMaxRetries.Should().Be(11);
+    }
+
+    #endregion
+
     #region Entity Type Tests - ManifestGroup
 
     [Test]

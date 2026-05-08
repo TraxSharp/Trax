@@ -225,6 +225,95 @@ public class InMemoryProviderTests : TestSetup
 
     #endregion
 
+    #region Entity Type Tests - SchedulerConfig
+
+    [Test]
+    public async Task SchedulerConfig_RoundTrip_PersistsAllColumns()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        // InMemory provider doesn't support ExecuteDeleteAsync; remove rows individually.
+        foreach (var existing in await context.SchedulerConfigs.ToListAsync())
+            ((Microsoft.EntityFrameworkCore.DbContext)context).Remove(existing);
+        await context.SaveChanges(CancellationToken.None);
+
+        // Singleton row with id = 1. Use DbSet.Add directly — see the comment in
+        // OperationsService.PersistAsync for why IDataContext.Track misclassifies this.
+        var row = new Effect.Models.SchedulerConfig.SchedulerConfig
+        {
+            ManifestManagerEnabled = false,
+            JobDispatcherEnabled = false,
+            ManifestManagerPollingInterval = TimeSpan.FromSeconds(15),
+            JobDispatcherPollingInterval = TimeSpan.FromSeconds(20),
+            MaxActiveJobs = 50,
+            DefaultMaxRetries = 7,
+            DefaultRetryDelay = TimeSpan.FromMinutes(10),
+            RetryBackoffMultiplier = 3.5,
+            MaxRetryDelay = TimeSpan.FromHours(2),
+            DefaultJobTimeout = TimeSpan.FromMinutes(45),
+            StalePendingTimeout = TimeSpan.FromMinutes(30),
+            RecoverStuckJobsOnStartup = false,
+            DeadLetterRetentionPeriod = TimeSpan.FromDays(60),
+            AutoPurgeDeadLetters = false,
+            LocalWorkerCount = 8,
+            MetadataCleanupInterval = TimeSpan.FromMinutes(7),
+            MetadataCleanupRetention = TimeSpan.FromHours(3),
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        context.SchedulerConfigs.Add(row);
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var found = await context.SchedulerConfigs.FirstOrDefaultAsync(x =>
+            x.Id == Effect.Models.SchedulerConfig.SchedulerConfig.SingletonId
+        );
+
+        found.Should().NotBeNull();
+        found!.ManifestManagerEnabled.Should().BeFalse();
+        found.MaxActiveJobs.Should().Be(50);
+        found.RetryBackoffMultiplier.Should().Be(3.5);
+        found.DeadLetterRetentionPeriod.Should().Be(TimeSpan.FromDays(60));
+        found.LocalWorkerCount.Should().Be(8);
+        found.MetadataCleanupInterval.Should().Be(TimeSpan.FromMinutes(7));
+        found.MetadataCleanupRetention.Should().Be(TimeSpan.FromHours(3));
+    }
+
+    [Test]
+    public async Task SchedulerConfig_NullableColumnsRoundTripAsNull()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+
+        // InMemory provider doesn't support ExecuteDeleteAsync; remove rows individually.
+        foreach (var existing in await context.SchedulerConfigs.ToListAsync())
+            ((Microsoft.EntityFrameworkCore.DbContext)context).Remove(existing);
+        await context.SaveChanges(CancellationToken.None);
+
+        var row = new Effect.Models.SchedulerConfig.SchedulerConfig
+        {
+            MaxActiveJobs = null,
+            LocalWorkerCount = null,
+            MetadataCleanupInterval = null,
+            MetadataCleanupRetention = null,
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        context.SchedulerConfigs.Add(row);
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var found = await context.SchedulerConfigs.FirstOrDefaultAsync();
+        found.Should().NotBeNull();
+        found!.MaxActiveJobs.Should().BeNull();
+        found.LocalWorkerCount.Should().BeNull();
+        found.MetadataCleanupInterval.Should().BeNull();
+        found.MetadataCleanupRetention.Should().BeNull();
+    }
+
+    #endregion
+
     #region Transaction Tests
 
     [Test]

@@ -10,6 +10,7 @@ using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.SchedulerConfig;
 using Trax.Effect.Models.WorkQueue;
 
 namespace Trax.Effect.Data.Services.DataContext;
@@ -95,6 +96,8 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     public DbSet<ManifestGroup> ManifestGroups { get; set; }
 
     public DbSet<BackgroundJob> BackgroundJobs { get; set; }
+
+    public DbSet<SchedulerConfig> SchedulerConfigs { get; set; }
 
     #endregion
 

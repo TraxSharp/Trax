@@ -8,6 +8,7 @@ using Trax.Effect.Models.DeadLetter.DTOs;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.ManifestGroup;
+using Trax.Effect.Models.SchedulerConfig;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 
@@ -158,6 +159,62 @@ public class ModelToStringTests
         job.MetadataId.Should().Be(99);
         job.InputType.Should().Be("Sample");
         job.ToString().Should().NotBeNullOrEmpty().And.Contain("99");
+    }
+
+    [Test]
+    public void SchedulerConfig_DefaultsAndPropertiesAndToString()
+    {
+        // Bare ctor + every property accessor exercised so coverage measurement on the
+        // POCO model (which is otherwise only used through its persisted representation
+        // in Trax.Scheduler) reflects what's actually shipped.
+        var cfg = new SchedulerConfig();
+
+        cfg.Id.Should().Be(SchedulerConfig.SingletonId);
+        cfg.ManifestManagerEnabled.Should().BeTrue();
+        cfg.JobDispatcherEnabled.Should().BeTrue();
+        cfg.ManifestManagerPollingInterval.Should().Be(TimeSpan.FromSeconds(5));
+        cfg.JobDispatcherPollingInterval.Should().Be(TimeSpan.FromSeconds(2));
+        cfg.MaxActiveJobs.Should().Be(10);
+        cfg.DefaultMaxRetries.Should().Be(3);
+        cfg.DefaultRetryDelay.Should().Be(TimeSpan.FromMinutes(5));
+        cfg.RetryBackoffMultiplier.Should().Be(2.0);
+        cfg.MaxRetryDelay.Should().Be(TimeSpan.FromHours(1));
+        cfg.DefaultJobTimeout.Should().Be(TimeSpan.FromMinutes(20));
+        cfg.StalePendingTimeout.Should().Be(TimeSpan.FromMinutes(20));
+        cfg.RecoverStuckJobsOnStartup.Should().BeTrue();
+        cfg.DeadLetterRetentionPeriod.Should().Be(TimeSpan.FromDays(30));
+        cfg.AutoPurgeDeadLetters.Should().BeTrue();
+        cfg.LocalWorkerCount.Should().BeNull();
+        cfg.MetadataCleanupInterval.Should().BeNull();
+        cfg.MetadataCleanupRetention.Should().BeNull();
+        cfg.UpdatedAt.Should().Be(default);
+
+        var when = DateTime.UtcNow;
+        cfg.Id = 1;
+        cfg.ManifestManagerEnabled = false;
+        cfg.JobDispatcherEnabled = false;
+        cfg.ManifestManagerPollingInterval = TimeSpan.FromSeconds(15);
+        cfg.JobDispatcherPollingInterval = TimeSpan.FromSeconds(20);
+        cfg.MaxActiveJobs = 50;
+        cfg.DefaultMaxRetries = 7;
+        cfg.DefaultRetryDelay = TimeSpan.FromMinutes(10);
+        cfg.RetryBackoffMultiplier = 3.5;
+        cfg.MaxRetryDelay = TimeSpan.FromHours(2);
+        cfg.DefaultJobTimeout = TimeSpan.FromMinutes(45);
+        cfg.StalePendingTimeout = TimeSpan.FromMinutes(30);
+        cfg.RecoverStuckJobsOnStartup = false;
+        cfg.DeadLetterRetentionPeriod = TimeSpan.FromDays(60);
+        cfg.AutoPurgeDeadLetters = false;
+        cfg.LocalWorkerCount = 8;
+        cfg.MetadataCleanupInterval = TimeSpan.FromMinutes(7);
+        cfg.MetadataCleanupRetention = TimeSpan.FromHours(3);
+        cfg.UpdatedAt = when;
+
+        cfg.MaxActiveJobs.Should().Be(50);
+        cfg.LocalWorkerCount.Should().Be(8);
+        cfg.UpdatedAt.Should().Be(when);
+
+        cfg.ToString().Should().NotBeNullOrEmpty().And.Contain("50");
     }
 
     private sealed record Sample : IManifestProperties

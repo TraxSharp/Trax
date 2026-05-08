@@ -15,6 +15,7 @@ public class SqliteMigrationTests
         "manifest",
         "manifest_group",
         "metadata",
+        "scheduler_config",
         "work_queue",
     ];
 

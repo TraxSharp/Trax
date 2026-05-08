@@ -9,6 +9,7 @@ using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.SchedulerConfig;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.EffectProvider;
 
@@ -89,6 +90,13 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     DbSet<ManifestGroup> ManifestGroups { get; }
 
     DbSet<BackgroundJob> BackgroundJobs { get; }
+
+    /// <summary>
+    /// Singleton-row table holding persisted scheduler runtime settings (the
+    /// dashboard-editable subset of <c>SchedulerConfiguration</c>). Always contains
+    /// zero or one rows.
+    /// </summary>
+    DbSet<SchedulerConfig> SchedulerConfigs { get; }
 
     #endregion
 
