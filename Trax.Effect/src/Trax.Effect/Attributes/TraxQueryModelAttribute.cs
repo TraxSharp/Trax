@@ -74,4 +74,19 @@ public class TraxQueryModelAttribute : Attribute
     /// instead of directly under <c>discover { field }</c>.
     /// </summary>
     public string? Namespace { get; init; }
+
+    /// <summary>
+    /// Exposes the entity in GraphQL using the property set declared by the supplied
+    /// interface (typically a scalar-only <c>I{Model}Reference</c> projection used for
+    /// cross-schema or cross-domain reads). The entity class must implement the interface
+    /// implicitly. Only properties declared on the interface (and its inherited interfaces)
+    /// appear in the schema; filter and sort input types are constrained to the same set
+    /// unless a custom <c>FilterInputType</c> / <c>SortInputType</c> is supplied via
+    /// <c>AddFilterType</c> / <c>AddSortType</c>.
+    /// </summary>
+    /// <remarks>
+    /// Mutually exclusive with <see cref="BindFields"/> = <see cref="FieldBindingBehavior.Explicit"/>.
+    /// Both restrict the exposed property set, so combining them is rejected at build time.
+    /// </remarks>
+    public Type? ExposeAs { get; init; }
 }
