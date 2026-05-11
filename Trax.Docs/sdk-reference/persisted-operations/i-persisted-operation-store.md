@@ -38,13 +38,15 @@ public interface IPersistedOperationStore
 |---|---|---|
 | `TenantKey` | `string?` | Tenant scope for multi-tenant deployments. Null targets the single-tenant row set. |
 | `Description` | `string?` | Operator-facing note recorded on the row. |
-| `BypassShapeDiff` | `bool` | Reserved for the v1.1 dashboard `--force` path. Currently a no-op. |
+| `BypassShapeDiff` | `bool` | When true, skips the shape-diff guardrail on an edit. Use only when the operator has verified the change is shape-safe. |
+| `Version` | `int` | Operator-controlled metadata stored on the row. Not used for request routing. Defaults to `0`. |
 
 ## Behavior
 
 - `GetAsync` returns null for missing or deactivated rows.
 - `ListAsync` returns active and deactivated rows for the tenant.
-- `UpsertAsync` parses the id (`name_vN`), computes the response-shape fingerprint, writes both the live row and a history row in a single transaction, invalidates the local cache, and publishes a broadcast event when the broadcaster is configured.
+- `UpsertAsync` runs the document through [IPersistedOperationValidator](/docs/sdk-reference/persisted-operations/i-persisted-operation-validator) (HotChocolate-backed when `UsePersistedOperations` is wired in), extracts the GraphQL operation name from the document's operation definition, computes the response-shape fingerprint, writes both the live row and a history row in a single transaction, invalidates the local cache, and publishes a broadcast event when the broadcaster is configured.
+- Validation throws one of the structured [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions) subclasses. No row is written and no broadcast fires when validation rejects the document.
 - `DeactivateAsync` and `RestoreAsync` throw `InvalidOperationException` when the id does not exist.
 - All mutations append a row to `trax.persisted_operation_history`.
 

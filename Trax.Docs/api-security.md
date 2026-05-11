@@ -168,7 +168,7 @@ No `IHttpContextAccessor` plumbing. Every Trax auth scheme registers a scoped `T
 
 ```csharp
 services.AddTraxGraphQL(graphql => graphql
-    .MaxExecutionDepth(8)                   // default: 4
+    .MaxExecutionDepth(8)                   // default: 15
     .MaxOperationsPerRequest(25)            // default: 50
     .AllowIntrospection(ctx => IsInternalIp(ctx))   // default: Development only
     .ConfigureCost(opts => opts.MaxFieldCost = 2000)); // default: 1000
@@ -176,7 +176,7 @@ services.AddTraxGraphQL(graphql => graphql
 
 | Guard | Default | Purpose |
 |---|---|---|
-| `MaxExecutionDepth` | 4 | Rejects nested queries deeper than this (introspection fields excluded). |
+| `MaxExecutionDepth` | 15 | Rejects nested queries deeper than this (introspection fields excluded). |
 | `MaxFieldCost` | 1000 | HotChocolate cost-analyzer ceiling. Prevents expensive field combinations. |
 | `DefaultResolverCost` | 10 | Base cost applied to each resolver in the cost analyzer. |
 | Introspection | On in Development, off elsewhere | Prevents anonymous schema enumeration in production. |

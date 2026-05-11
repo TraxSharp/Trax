@@ -25,6 +25,30 @@ Or in your `.csproj`:
 <PackageReference Include="Trax.Dashboard" Version="1.*" />
 ```
 
+### Required: `RequiresAspNetWebAssets`
+
+Every host that calls `UseTraxDashboard()` must set this property in its csproj `<PropertyGroup>`:
+
+```xml
+<PropertyGroup>
+  <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
+</PropertyGroup>
+```
+
+Without it, the build omits `_framework/blazor.web.js`, the Blazor Server circuit never establishes, and the dashboard renders but **every button click is a no-op**. The page looks fine; nothing reacts.
+
+**Why isn't this automatic?** The Trax.Dashboard package can't propagate the property transitively. NuGet auto-imports `build/$PackageId.props`, but the Razor SDK overwrites that file during pack with static-asset imports, wiping anything we put there. Putting it in a `.targets` file is too late — the SDK reads `RequiresAspNetWebAssets` during the props phase, before NuGet targets are imported. It has to live in the consumer's csproj.
+
+**Verifying it took effect.** After building your host:
+
+```bash
+curl -I http://localhost:5000/trax/_framework/blazor.web.js
+# HTTP/1.1 200 OK   ← good
+# HTTP/1.1 404      ← property not set, dashboard will be dead
+```
+
+If you see a 404, your csproj is missing the property. Set it and rebuild.
+
 ### Configuration
 
 Two lines in `Program.cs`:
@@ -161,6 +185,10 @@ Clicking a group opens a detail page with two sections:
 - **Group Data**: lists every manifest in the group along with their recent executions.
 
 Per-group `MaxActiveJobs` prevents starvation: when a high-priority group hits its concurrency cap, lower-priority groups can still dispatch. This is configured from the dashboard, not from code.
+
+### Persisted Operations (optional)
+
+When the host wires [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) into the Trax GraphQL builder, the dashboard exposes a **Persisted Operations** entry under **Data**. The page lists every row in `trax.persisted_operation` and supports Upload, Edit, Deactivate, and Restore. The editor renders parse, schema-validation, and shape-diff errors inline. The sidebar entry is hidden when `UsePersistedOperations` was not called; direct navigation renders a "not enabled on this server" panel.
 
 ## How Discovery Works
 

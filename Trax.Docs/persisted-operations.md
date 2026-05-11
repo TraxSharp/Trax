@@ -44,7 +44,9 @@ The shape-diff guardrail enforces this contract on every edit (see [Shape-Diff G
 
 ## Versioning
 
-Ids follow `<name>_v<N>` (e.g. `userProfile_v1`). The version is bumped manually when a breaking shape change is required: ship `userProfile_v2` alongside `userProfile_v1` and migrate clients over time.
+Ids are opaque strings. There is no parse rule — `userProfile_v1`, `userProfile`, or `userProfile-2026-05` are all valid. The convention `<name>_v<N>` is recommended for readability but not enforced.
+
+The `version` field on the row is operator-controlled metadata, set via `UpsertOptions.Version` (or the `version` input on the GraphQL mutation). It is **not used for request routing** — the id is the contract with shipped clients. Bump the version when shipping a new client that requests a new id; both ids coexist in the database for the rollover period.
 
 The convention is built-time stable, not content-derived. Apollo's automatic-persisted-queries (APQ) hash the document text and produce a different id whenever the text changes, defeating the hot-fix property; persisted operations do the opposite.
 
@@ -127,9 +129,64 @@ opts.AllowOperationsMatching(id => id.StartsWith("dev_"))
 
 Introspection requests (`IntrospectionQuery`, or any query whose top-level selection set is purely `__schema` / `__type`) bypass enforcement automatically. Disable with `DisableIntrospection()` for tight prod.
 
-## Programmatic management
+## Managing operations
 
-`IPersistedOperationStore` is the admin surface, registered automatically when the package is configured. Use it from CI manifest uploaders, custom dashboards, or tests:
+There are three surfaces, all backed by the same `IPersistedOperationStore` and the same shape-diff and schema-validation guardrails.
+
+### From the dashboard
+
+When `UsePersistedOperations(...)` is wired into the API host, the Trax dashboard exposes a **Persisted Operations** entry under **Data**. The page lists every row in `trax.persisted_operation`, supports filtering, and offers Upload / Edit / Deactivate / Restore actions. The editor renders parse, schema-validation, and shape-diff errors inline so the operator never has to read a stack trace.
+
+If `UsePersistedOperations(...)` was not called, the sidebar entry is hidden and direct navigation to `/trax/data/persisted-operations` renders a "not enabled on this server" panel. The dashboard probes the runtime via `IServiceProvider.GetService<IPersistedOperationsCapability>()`.
+
+### Via GraphQL mutations
+
+Three mutations and three queries are added to the schema by `UsePersistedOperations(...)`, under the `operations.persistedOperations` namespace (matching the convention for every other Trax management feature, like `operations.manifestGroups` and `operations.deadLetters`):
+
+| Field | Purpose |
+|---|---|
+| `mutation operations.persistedOperations.uploadPersistedOperation` | Insert or update an operation. Runs schema validation and the shape-diff guardrail. |
+| `mutation operations.persistedOperations.deactivatePersistedOperation` | Soft-delete; subsequent requests for the id resolve to null. Reason is required. |
+| `mutation operations.persistedOperations.restorePersistedOperation` | Reactivate a deactivated row. |
+| `query operations.persistedOperations.persistedOperations` | Paginated list. Filterable by active, tenant, id prefix. |
+| `query operations.persistedOperations.persistedOperation` | Single row by id. |
+| `query operations.persistedOperations.persistedOperationHistory` | Audit log, most-recent-first. |
+
+Mutations never throw to the client. Failures come back as a payload `errors[]` entry with a stable `code`:
+
+| Code | Meaning |
+|---|---|
+| `PARSE_FAILED` | Document failed to parse. The error carries `locations { line column }`. |
+| `SCHEMA_VALIDATION_FAILED` | Document references a field, type, or variable the server schema does not have. The error carries one entry per failure with `message` and (when available) `locations`. |
+| `SHAPE_DIFF_VIOLATION` | The edit would change the response shape of an existing id. The error carries `oldFingerprint` and `newFingerprint`. Pass `bypassShapeDiff: true` when the change is verified safe. |
+| `NOT_FOUND` | Deactivate or restore against an unknown id. |
+| `INVALID_INPUT` | `id` or required fields were empty. |
+
+Example upload:
+
+```graphql
+mutation Upload($input: UploadPersistedOperationInput!) {
+  operations {
+    persistedOperations {
+      uploadPersistedOperation(input: $input) {
+        success
+        operation { id shapeFingerprint isActive }
+        errors { code message locations { line column } oldFingerprint newFingerprint }
+      }
+    }
+  }
+}
+```
+
+```json
+{ "input": { "id": "userProfile_v1", "document": "query UserProfile($id: Int!) { user(id: $id) { id name email } }" } }
+```
+
+The management mutations and queries always bypass the enforcement middleware (their names are intrinsic to the subsystem; persisting them by id would be a chicken-and-egg). They are protected only by whatever ASP.NET auth middleware sits in front of the GraphQL endpoint.
+
+### Programmatically
+
+`IPersistedOperationStore` is the in-process admin surface, registered automatically when the package is configured. Useful for tests, custom tooling, or one-off scripts:
 
 ```csharp
 var store = serviceProvider.GetRequiredService<IPersistedOperationStore>();
@@ -142,6 +199,22 @@ await store.UpsertAsync(
 ```
 
 Every upsert / deactivate / restore writes a row to `trax.persisted_operation_history` for audit and rollback.
+
+## Validation
+
+Every upsert runs the candidate document through HotChocolate's standard validation rules against the live schema before any row is written. The same rules HotChocolate runs at request time, so anything that passes here will execute at runtime (modulo runtime data shape).
+
+`IPersistedOperationStore.UpsertAsync` throws one of three structured exceptions on failure:
+
+| Exception | When |
+|---|---|
+| `PersistedOperationParseException` | Syntax error. Carries `Line`, `Column`, `OriginalMessage`. |
+| `PersistedOperationValidationException` | Schema mismatch (unknown field, wrong variable type, etc.). Carries `IReadOnlyList<ValidationFailure>`. |
+| `ShapeDiffViolationException` | Edit changes the response shape of an existing id. Carries `OldFingerprint`, `NewFingerprint`. |
+
+All three inherit `PersistedOperationException`. The GraphQL mutations and the dashboard editor project them into structured error payloads with the codes documented above.
+
+Hosts using `AddPersistedOperationStore(...)` (admin tooling without a HotChocolate schema in process) get a no-op validator instead. The shape-diff guardrail still runs.
 
 ## Shape-diff guardrail
 
@@ -156,10 +229,12 @@ The fingerprint considers these the same shape: whitespace, field reordering, ar
 | `trax.persisted_operation` | Postgres `trax` | Live id -> document mapping |
 | `trax.persisted_operation_history` | Postgres `trax` | Append-only audit of every change |
 | `IPersistedOperationStore` | DI | Programmatic CRUD |
+| `IPersistedOperationValidator` | DI | Schema validation at upsert time (HotChocolate-backed when `UsePersistedOperations`, no-op for `AddPersistedOperationStore`) |
+| `IPersistedOperationsCapability` | DI | Marker registered by `UsePersistedOperations`; dashboard probes for it to gate the management UI |
 | `IOperationDocumentStorage` | HotChocolate hot path | Resolves id to document for the request executor |
 | `PersistedOperationsMiddleware` | ASP.NET pipeline | Enforces inline-query rejection / shadow logging / allowlist |
 | `IPersistedOperationBroadcaster` | DI | Multi-node cache invalidation (no-op default) |
 
 ## SDK Reference
 
-> [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) | [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) | [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store) | [PersistedOperation](/docs/sdk-reference/persisted-operations/persisted-operation) | [PersistedOperationsDbContext](/docs/sdk-reference/persisted-operations/persisted-operations-db-context) | [ShapeFingerprintComputer](/docs/sdk-reference/persisted-operations/shape-fingerprint-computer)
+> [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) | [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) | [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store) | [IPersistedOperationValidator](/docs/sdk-reference/persisted-operations/i-persisted-operation-validator) | [PersistedOperationExceptions](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions) | [Management mutations](/docs/sdk-reference/persisted-operations/management-mutations) | [PersistedOperation](/docs/sdk-reference/persisted-operations/persisted-operation) | [PersistedOperationsDbContext](/docs/sdk-reference/persisted-operations/persisted-operations-db-context) | [ShapeFingerprintComputer](/docs/sdk-reference/persisted-operations/shape-fingerprint-computer)

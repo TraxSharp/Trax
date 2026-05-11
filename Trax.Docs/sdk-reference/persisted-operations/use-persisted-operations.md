@@ -57,8 +57,12 @@ See [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persis
 | `PersistedOperationReceiverService` | Hosted (when broadcaster is RabbitMQ) | Subscribes to the fanout exchange and clears local cache on broadcast. |
 | `IPersistedOperationStore` -> `DbPersistedOperationStorage` | Singleton | Programmatic CRUD. |
 | `IOperationDocumentStorage` -> `DbPersistedOperationStorage` | Singleton | HotChocolate hot-path lookup. |
+| `IPersistedOperationValidator` -> `HotChocolateSchemaValidator` | Singleton (Replace) | Runs HotChocolate validation against the live schema before every upsert. Overrides the no-op default from `AddPersistedOperationStore`. |
+| `IPersistedOperationsCapability` | Singleton | Marker probed by the dashboard to gate the management UI. |
 | `AllowlistMatcher` | Singleton | Used by the enforcement middleware. |
 | `TimeProvider` | Singleton (TryAdd) | Default `TimeProvider.System`; override for tests. |
+
+Also extends the GraphQL schema with the [management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations), and calls `ExposeOperationQueries()` / `ExposeOperationMutations()` on the builder so `RootQuery` and `RootMutation` are emitted even when the host has not registered any train-backed queries or mutations.
 
 ## Validation
 
