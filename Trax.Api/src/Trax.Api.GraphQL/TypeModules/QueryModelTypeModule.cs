@@ -1,6 +1,9 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq.Expressions;
 using System.Reflection;
 using HotChocolate.Data;
+using HotChocolate.Data.Filters;
+using HotChocolate.Data.Sorting;
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Language;
 using HotChocolate.Types;
@@ -166,17 +169,58 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
         if (attr.Filtering)
         {
             if (reg.FilterInputType is not null)
+            {
                 field.UseFiltering(reg.FilterInputType);
+            }
+            else if (attr.ExposeAs is { } exposeAs)
+            {
+                // Restrict the auto-generated filter input type to the
+                // interface's property set so consumers cannot filter on
+                // hidden navigation properties.
+                var allowedProps = GetExposedEntityProperties<TEntity>(exposeAs);
+                field.UseFiltering<TEntity>(descriptor =>
+                {
+                    descriptor.BindFieldsExplicitly();
+                    foreach (var prop in allowedProps)
+                    {
+                        var selector = BuildPropertySelector<TEntity>(prop);
+                        FilterFieldGeneric
+                            .MakeGenericMethod(typeof(TEntity), prop.PropertyType)
+                            .Invoke(null, [descriptor, selector]);
+                    }
+                });
+            }
             else
+            {
                 field.UseFiltering<TEntity>();
+            }
         }
 
         if (attr.Sorting)
         {
             if (reg.SortInputType is not null)
+            {
                 field.UseSorting(reg.SortInputType);
+            }
+            else if (attr.ExposeAs is { } exposeAs)
+            {
+                var allowedProps = GetExposedEntityProperties<TEntity>(exposeAs);
+                field.UseSorting<TEntity>(descriptor =>
+                {
+                    descriptor.BindFieldsExplicitly();
+                    foreach (var prop in allowedProps)
+                    {
+                        var selector = BuildPropertySelector<TEntity>(prop);
+                        SortFieldGeneric
+                            .MakeGenericMethod(typeof(TEntity), prop.PropertyType)
+                            .Invoke(null, [descriptor, selector]);
+                    }
+                });
+            }
             else
+            {
                 field.UseSorting<TEntity>();
+            }
         }
 
         field.Resolve(ctx =>
@@ -189,6 +233,35 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
     private static ObjectType<TEntity> CreateObjectType<TEntity>(TraxQueryModelAttribute attr)
         where TEntity : class
     {
+        // ExposeAs takes precedence: build the GraphQL type from the supplied
+        // interface's property set, not the entity's full public surface.
+        // The combination ExposeAs + BindFields.Explicit is rejected at build
+        // time (see TraxGraphQLBuilder.Build), so we don't need to consider it here.
+        if (attr.ExposeAs is { } exposeAs)
+        {
+            var allowedNames = GetExposedPropertyNames(exposeAs);
+
+            return new ObjectType<TEntity>(descriptor =>
+            {
+                descriptor.BindFieldsExplicitly();
+
+                foreach (
+                    var prop in typeof(TEntity).GetProperties(
+                        BindingFlags.Public | BindingFlags.Instance
+                    )
+                )
+                {
+                    // Property names on the entity that also appear on the
+                    // exposed interface get bound; everything else is hidden.
+                    // Explicit interface implementations don't have matching
+                    // public properties on the entity and are silently skipped
+                    // (the build-time validator surfaces this as an error).
+                    if (allowedNames.Contains(prop.Name))
+                        descriptor.Field(prop);
+                }
+            });
+        }
+
         if (attr.BindFields != FieldBindingBehavior.Explicit)
             return new ObjectType<TEntity>();
 
@@ -206,6 +279,69 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
                     descriptor.Field(prop);
             }
         });
+    }
+
+    private static readonly MethodInfo FilterFieldGeneric = typeof(QueryModelTypeModule).GetMethod(
+        nameof(AddFilterField),
+        BindingFlags.NonPublic | BindingFlags.Static
+    )!;
+
+    private static readonly MethodInfo SortFieldGeneric = typeof(QueryModelTypeModule).GetMethod(
+        nameof(AddSortField),
+        BindingFlags.NonPublic | BindingFlags.Static
+    )!;
+
+    private static void AddFilterField<TEntity, TField>(
+        IFilterInputTypeDescriptor<TEntity> descriptor,
+        Expression<Func<TEntity, TField>> selector
+    ) => descriptor.Field(selector);
+
+    private static void AddSortField<TEntity, TField>(
+        ISortInputTypeDescriptor<TEntity> descriptor,
+        Expression<Func<TEntity, TField>> selector
+    ) => descriptor.Field(selector);
+
+    private static object BuildPropertySelector<TEntity>(PropertyInfo prop)
+    {
+        var param = Expression.Parameter(typeof(TEntity), "x");
+        var body = Expression.Property(param, prop);
+        var funcType = typeof(Func<,>).MakeGenericType(typeof(TEntity), prop.PropertyType);
+        return Expression.Lambda(funcType, body, param);
+    }
+
+    private static IReadOnlyList<PropertyInfo> GetExposedEntityProperties<TEntity>(Type exposeAs)
+    {
+        var allowed = GetExposedPropertyNames(exposeAs);
+        return typeof(TEntity)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => allowed.Contains(p.Name))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Returns the set of property names declared on <paramref name="exposeAs"/>
+    /// and every interface it inherits from (transitively).
+    /// <see cref="Type.GetProperties()"/> on an interface only returns members
+    /// declared directly on that interface, so we walk <see cref="Type.GetInterfaces"/>
+    /// to flatten the hierarchy.
+    /// </summary>
+    internal static HashSet<string> GetExposedPropertyNames(Type exposeAs)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+
+        void Collect(Type iface)
+        {
+            foreach (var prop in iface.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                names.Add(prop.Name);
+            }
+
+            foreach (var parent in iface.GetInterfaces())
+                Collect(parent);
+        }
+
+        Collect(exposeAs);
+        return names;
     }
 
     /// <summary>
