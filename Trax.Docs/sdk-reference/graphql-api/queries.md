@@ -265,50 +265,7 @@ query {
 
 ### manifestGroups
 
-Returns a paginated list of manifest groups, ordered by ID descending. Supports both offset-based and keyset cursor pagination.
-
-```graphql
-query {
-  operations {
-    manifestGroups(skip: 0, take: 10) {
-      items {
-        id
-        name
-        maxActiveJobs
-        priority
-        isEnabled
-        createdAt
-        updatedAt
-      }
-      totalCount
-      isEstimatedCount
-      skip
-      take
-      nextCursor
-    }
-  }
-}
-```
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `skip` | `Int` | `0` | Number of records to skip (offset pagination) |
-| `take` | `Int` | `25` | Number of records to return |
-| `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. See [Pagination](#pagination) |
-
-**Returns**: `PagedResult<ManifestGroupSummary>`
-
-#### ManifestGroupSummary fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `Long!` | Database ID |
-| `name` | `String!` | Group name |
-| `maxActiveJobs` | `Int` | Concurrency limit for the group (null = unlimited) |
-| `priority` | `Int!` | Default priority for manifests in this group |
-| `isEnabled` | `Boolean!` | Whether the group is active |
-| `createdAt` | `DateTime!` | When the group was created |
-| `updatedAt` | `DateTime!` | When the group was last modified |
+Manifest group queries live under the `operations.manifestGroups` namespace, not at the top level. The namespace holds the paged list (`groups`), single-group lookup (`group`), and cross-group dependency graph (`graph`). See [manifestGroups (nested under operations)](#manifestgroups-nested-under-operations).
 
 ---
 
@@ -679,7 +636,82 @@ When any filter or `afterId` is supplied, the count is exact (`isEstimatedCount:
 
 ## manifestGroups (nested under operations)
 
-The `operations.manifestGroups` namespace exposes queries scoped to manifest groups beyond the top-level `manifestGroups` paged list. Currently this is the cross-group dependency graph that the dashboard renders as a DAG.
+The `operations.manifestGroups` namespace exposes every read scoped to manifest groups: the paged list, single-group lookup, and the cross-group dependency graph the dashboard renders as a DAG. The list lives here (rather than as a sibling of `manifests` at the operations root) because both the namespace and a sibling `manifestGroups` field would camelCase to the same name in the schema, and HotChocolate would silently drop one.
+
+### groups
+
+Returns a paginated list of manifest groups, ordered by ID descending. Supports both offset-based and keyset cursor pagination.
+
+```graphql
+query {
+  operations {
+    manifestGroups {
+      groups(skip: 0, take: 10) {
+        items {
+          id
+          name
+          maxActiveJobs
+          priority
+          isEnabled
+          createdAt
+          updatedAt
+        }
+        totalCount
+        isEstimatedCount
+        skip
+        take
+        nextCursor
+      }
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `skip` | `Int` | `0` | Number of records to skip (offset pagination) |
+| `take` | `Int` | `25` | Number of records to return |
+| `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. See [Pagination](#pagination) |
+
+**Returns**: `PagedResult<ManifestGroupSummary>`
+
+#### ManifestGroupSummary fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Long!` | Database ID |
+| `name` | `String!` | Group name |
+| `maxActiveJobs` | `Int` | Concurrency limit for the group (null = unlimited) |
+| `priority` | `Int!` | Default priority for manifests in this group |
+| `isEnabled` | `Boolean!` | Whether the group is active |
+| `createdAt` | `DateTime!` | When the row was created |
+| `updatedAt` | `DateTime!` | Last patch via `updateManifestGroup` |
+
+### group
+
+Single-group lookup by ID. Used by dashboards to pre-populate the group settings form before sending an `updateManifestGroup` patch.
+
+```graphql
+query {
+  operations {
+    manifestGroups {
+      group(id: 7) {
+        id
+        name
+        maxActiveJobs
+        priority
+        isEnabled
+      }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `Long!` | Yes | Manifest group database ID |
+
+**Returns**: `ManifestGroupSummary` (nullable; `null` when the group does not exist).
 
 ### graph
 
