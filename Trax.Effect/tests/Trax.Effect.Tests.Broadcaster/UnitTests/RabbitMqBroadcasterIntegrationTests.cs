@@ -150,4 +150,29 @@ public class RabbitMqBroadcasterIntegrationTests
 
         await broadcaster.DisposeAsync();
     }
+
+    [Test]
+    public async Task Broadcaster_DisposeAsync_CalledTwice_IsIdempotent()
+    {
+        // Regression guard for CI flake observed in
+        // Trax.Samples.EnergyHub.E2E.HubTests.SharedHubSetup teardown:
+        // when the host shuts down and disposes the channel before our
+        // own DisposeAsync runs (autorecovery cleanup, connection loss,
+        // or a parallel teardown path), the second close on the same
+        // channel/connection throws ObjectDisposedException. Disposal of
+        // an IAsyncDisposable must be idempotent — a second dispose is
+        // a no-op.
+        var opts = Options("double-dispose");
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
+            opts,
+            NullLogger<RabbitMqTrainEventBroadcaster>.Instance
+        );
+
+        // Publish to ensure channel + connection are actually opened.
+        await broadcaster.PublishAsync(SampleMessage("idempotent"), CancellationToken.None);
+
+        await broadcaster.DisposeAsync();
+        Func<Task> secondDispose = async () => await broadcaster.DisposeAsync();
+        await secondDispose.Should().NotThrowAsync();
+    }
 }
