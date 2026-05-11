@@ -1,0 +1,177 @@
+@using Microsoft.Extensions.DependencyInjection
+@using Trax.Api.GraphQL.PersistedOperations
+@using Trax.Api.GraphQL.PersistedOperations.Storage
+@using Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions
+@inject IPersistedOperationStore Store
+@inject DialogService DialogService
+
+<RadzenStack Gap="0.75rem">
+    @if (string.IsNullOrEmpty(ExistingId))
+    {
+        <RadzenFormField Text="Id" Variant="Variant.Outlined" Style="width: 100%;">
+            <ChildContent>
+                <RadzenTextBox @bind-Value="_id" Placeholder="e.g. greet_v1" />
+            </ChildContent>
+        </RadzenFormField>
+    }
+    else
+    {
+        <RadzenText><strong>Id:</strong> <code>@ExistingId</code></RadzenText>
+    }
+
+    <RadzenFormField Text="Description (optional)" Variant="Variant.Outlined" Style="width: 100%;">
+        <ChildContent>
+            <RadzenTextBox @bind-Value="_description" />
+        </ChildContent>
+    </RadzenFormField>
+
+    <RadzenFormField Text="Version (optional metadata)" Variant="Variant.Outlined" Style="width: 100%;">
+        <ChildContent>
+            <RadzenNumeric TValue="int" @bind-Value="_version" Min="0" />
+        </ChildContent>
+    </RadzenFormField>
+
+    <RadzenFormField Text="Document" Variant="Variant.Outlined" Style="width: 100%;">
+        <ChildContent>
+            <RadzenTextArea @bind-Value="_document"
+                            Rows="12"
+                            Style="font-family: monospace; width: 100%;" />
+        </ChildContent>
+    </RadzenFormField>
+
+    @if (ShowBypassShapeDiff)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+            <RadzenCheckBox @bind-Value="_bypassShapeDiff" Name="BypassShapeDiff" />
+            <RadzenLabel Text="Bypass shape-diff guardrail" Component="BypassShapeDiff" />
+        </RadzenStack>
+        @if (_bypassShapeDiff)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+                Bypass only when the shape change is known to be safe for shipped clients. The change is recorded in the audit log.
+            </RadzenAlert>
+        }
+    }
+
+    @if (_parseError is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false">
+            <strong>Parse error</strong>
+            @if (_parseError.Line.HasValue && _parseError.Column.HasValue)
+            {
+                <span> at line @_parseError.Line, column @_parseError.Column</span>
+            }
+            <div>@_parseError.OriginalMessage</div>
+        </RadzenAlert>
+    }
+    @if (_validationFailures is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false">
+            <strong>Schema validation failed</strong>
+            <ul style="margin: 0.5rem 0 0 1rem;">
+                @foreach (var f in _validationFailures)
+                {
+                    <li>
+                        @f.Message
+                        @if (f.Locations.Count > 0)
+                        {
+                            <em> (line @f.Locations[0].Line)</em>
+                        }
+                    </li>
+                }
+            </ul>
+        </RadzenAlert>
+    }
+    @if (_shapeDiff is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false">
+            <strong>Shape change rejected</strong>
+            <div>Old fingerprint: <code>@_shapeDiff.OldFingerprint.Substring(0, 16)…</code></div>
+            <div>New fingerprint: <code>@_shapeDiff.NewFingerprint.Substring(0, 16)…</code></div>
+            <div>Tick "Bypass shape-diff guardrail" if the change is verified safe.</div>
+        </RadzenAlert>
+    }
+    @if (_otherError is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false">@_otherError</RadzenAlert>
+    }
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton Text="Cancel" Variant="Variant.Outlined" Click="@Cancel" Disabled="@_submitting" />
+        <RadzenButton Text="Save" ButtonStyle="ButtonStyle.Primary" Click="@Save" Disabled="@_submitting" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter] public string? ExistingId { get; set; }
+    [Parameter] public string? ExistingDocument { get; set; }
+    [Parameter] public string? ExistingDescription { get; set; }
+    [Parameter] public int ExistingVersion { get; set; }
+    [Parameter] public bool ShowBypassShapeDiff { get; set; }
+
+    private string _id = "";
+    private string _document = "";
+    private string _description = "";
+    private int _version;
+    private bool _bypassShapeDiff;
+    private bool _submitting;
+
+    private PersistedOperationParseException? _parseError;
+    private IReadOnlyList<ValidationFailure>? _validationFailures;
+    private ShapeDiffViolationException? _shapeDiff;
+    private string? _otherError;
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrEmpty(ExistingId)) _id = ExistingId;
+        if (ExistingDocument is not null) _document = ExistingDocument;
+        if (ExistingDescription is not null) _description = ExistingDescription;
+        _version = ExistingVersion;
+    }
+
+    private void Cancel() => DialogService.Close(false);
+
+    private async Task Save()
+    {
+        _parseError = null;
+        _validationFailures = null;
+        _shapeDiff = null;
+        _otherError = null;
+        _submitting = true;
+        try
+        {
+            await Store.UpsertAsync(
+                _id,
+                _document,
+                new UpsertOptions
+                {
+                    Description = string.IsNullOrWhiteSpace(_description) ? null : _description,
+                    BypassShapeDiff = _bypassShapeDiff,
+                    Version = _version,
+                },
+                CancellationToken.None
+            );
+            DialogService.Close(true);
+        }
+        catch (PersistedOperationParseException ex)
+        {
+            _parseError = ex;
+        }
+        catch (PersistedOperationValidationException ex)
+        {
+            _validationFailures = ex.Failures;
+        }
+        catch (ShapeDiffViolationException ex)
+        {
+            _shapeDiff = ex;
+        }
+        catch (Exception ex)
+        {
+            _otherError = ex.Message;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

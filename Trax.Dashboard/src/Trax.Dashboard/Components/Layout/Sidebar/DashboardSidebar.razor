@@ -28,6 +28,12 @@
             <RadzenPanelMenuItem Text="Logs"
                                 Path="@($"{Options.RoutePrefix.TrimStart('/')}/data/logs")"
                                 Icon="list_alt" />
+            @if (_persistedOperationsAvailable)
+            {
+                <RadzenPanelMenuItem Text="Persisted Operations"
+                                    Path="@($"{Options.RoutePrefix.TrimStart('/')}/data/persisted-operations")"
+                                    Icon="bookmark" />
+            }
         </RadzenPanelMenuItem>
         <RadzenPanelMenuItem Text="Settings" Icon="settings" @bind-Expanded="_settingsExpanded">
             <RadzenPanelMenuItem Text="User"

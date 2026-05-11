@@ -13,6 +13,7 @@
     <PackageReference Include="Trax.Effect.Data" Version="1.*" />
     <PackageReference Include="Trax.Mediator" Version="1.*" />
     <PackageReference Include="Trax.Scheduler" Version="1.*" />
+    <PackageReference Include="Trax.Api.GraphQL.PersistedOperations" Version="1.*" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,6 +21,15 @@
     <PackageReference Include="Radzen.Blazor" Version="6.*" />
   </ItemGroup>
 
-  <!-- build/Trax.Dashboard.props and buildTransitive/Trax.Dashboard.props are automatically
-       packed by the Razor SDK to propagate RequiresAspNetWebAssets to NuGet consumers. -->
+  <!--
+    Known limitation: the Razor SDK overwrites the package's build/Trax.Dashboard.props
+    (and the buildTransitive/ chain) during pack with static-asset imports,
+    wiping anything we set there. Targets-file workarounds run too late
+    because the SDK reads RequiresAspNetWebAssets during the props phase.
+    Net effect: every host that calls UseTraxDashboard() MUST set
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets> in its own csproj.
+    Without it, _framework/blazor.web.js is missing from the build output,
+    the Blazor Server circuit never establishes, and the dashboard renders
+    but every button click is a no-op.
+  -->
 </Project>

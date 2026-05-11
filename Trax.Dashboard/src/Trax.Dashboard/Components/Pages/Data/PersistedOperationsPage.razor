@@ -1,0 +1,114 @@
+@page "/trax/data/persisted-operations"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.DependencyInjection
+@using Trax.Api.GraphQL.PersistedOperations
+@using Trax.Api.GraphQL.PersistedOperations.Storage
+@using Trax.Effect.Data.Services.IDataContextFactory
+@using Trax.Effect.Models.PersistedOperation
+@inject IDataContextProviderFactory DataContextFactory
+@inject NavigationManager Navigation
+@inject IServiceProvider ServiceProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">Persisted Operations</RadzenText>
+    @if (_available)
+    {
+        <RadzenButton Text="Upload"
+                      Icon="upload"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Size="ButtonSize.Small"
+                      Style="margin-left: auto;"
+                      Click="@OpenEditor" />
+    }
+</RadzenStack>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    Server-managed GraphQL operations resolved by stable id.
+</RadzenText>
+
+@if (!_available)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter">
+        Persisted Operations is not enabled on this server. Call <code>UsePersistedOperations(...)</code> on the Trax GraphQL builder to enable management.
+    </RadzenAlert>
+}
+else if (_loading)
+{
+    <RadzenProgressBarCircular IsIndeterminate="true" />
+}
+else if (_items.Count == 0)
+{
+    <RadzenCard Style="padding: 1.5rem; text-align: center;">
+        <RadzenText TextStyle="TextStyle.Body1" Style="margin-bottom: 1rem;">No persisted operations yet.</RadzenText>
+        <RadzenButton Text="Upload" Icon="upload" ButtonStyle="ButtonStyle.Primary" Click="@OpenEditor" />
+    </RadzenCard>
+}
+else
+{
+    <RadzenDataGrid Data="@_items" TItem="PersistedOperation" AllowFiltering="true" AllowPaging="true" PageSize="25">
+        <Columns>
+            <RadzenDataGridColumn TItem="PersistedOperation"
+                                  Title=""
+                                  Width="50px"
+                                  Sortable="false"
+                                  Filterable="false"
+                                  Frozen="true"
+                                  TextAlign="TextAlign.Center">
+                <Template Context="r">
+                    <RadzenButton Icon="visibility"
+                                  Variant="Variant.Text"
+                                  Size="ButtonSize.Small"
+                                  Click="@(() => Navigation.NavigateTo($"trax/data/persisted-operations/{r.Id}"))" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="PersistedOperation" Property="Id" Title="Id" Width="240px" />
+            <RadzenDataGridColumn TItem="PersistedOperation" Property="OperationName" Title="Operation" Width="200px" />
+            <RadzenDataGridColumn TItem="PersistedOperation" Property="Version" Title="Version" Width="100px" />
+            <RadzenDataGridColumn TItem="PersistedOperation" Property="IsActive" Title="Active" Width="100px" />
+            <RadzenDataGridColumn TItem="PersistedOperation" Property="UpdatedAt" Title="Updated" Width="180px" FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+            <RadzenDataGridColumn TItem="PersistedOperation" Property="Description" Title="Description" />
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@code {
+    private bool _available;
+    private bool _loading = true;
+    private List<PersistedOperation> _items = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _available = ServiceProvider.GetService<IPersistedOperationsCapability>() is not null;
+        if (_available)
+            await LoadAsync();
+        _loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        using var ctx = await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        _items = await ctx.PersistedOperations
+            .AsNoTracking()
+            .OrderByDescending(p => p.UpdatedAt)
+            .Take(500)
+            .ToListAsync();
+        _loading = false;
+    }
+
+    private async Task OpenEditor()
+    {
+        var result = await DialogService.OpenAsync<PersistedOperationEditor>(
+            "Upload persisted operation",
+            parameters: new Dictionary<string, object>(),
+            options: new DialogOptions { Width = "720px", Height = "auto", Resizable = false }
+        );
+        if (result is true)
+        {
+            NotificationService.Notify(NotificationSeverity.Success, "Saved", "Operation uploaded.", duration: 3000);
+            await LoadAsync();
+        }
+    }
+}

@@ -1,0 +1,183 @@
+@page "/trax/data/persisted-operations/{Id}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.DependencyInjection
+@using Trax.Api.GraphQL.PersistedOperations
+@using Trax.Api.GraphQL.PersistedOperations.Storage
+@using Trax.Effect.Data.Services.IDataContextFactory
+@using Trax.Effect.Models.PersistedOperation
+@using Trax.Effect.Models.PersistedOperationHistory
+@inject IDataContextProviderFactory DataContextFactory
+@inject IPersistedOperationStore Store
+@inject NavigationManager Navigation
+@inject IServiceProvider ServiceProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
+    <RadzenButton Icon="arrow_back" Variant="Variant.Text" Click="@(() => Navigation.NavigateTo("trax/data/persisted-operations"))" />
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">@Id</RadzenText>
+    @if (_row is not null)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Style="margin-left: auto;">
+            <RadzenButton Text="Edit" Icon="edit" Size="ButtonSize.Small" Click="@OpenEditor" />
+            @if (_row.IsActive)
+            {
+                <RadzenButton Text="Deactivate" Icon="block" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.Small" Click="@Deactivate" />
+            }
+            else
+            {
+                <RadzenButton Text="Restore" Icon="restart_alt" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" Click="@Restore" />
+            }
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@if (!_available)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter">
+        Persisted Operations is not enabled on this server.
+    </RadzenAlert>
+}
+else if (_loading)
+{
+    <RadzenProgressBarCircular IsIndeterminate="true" />
+}
+else if (_row is null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">Persisted operation '@Id' not found.</RadzenAlert>
+}
+else
+{
+    <RadzenCard class="rz-mb-3">
+        <RadzenStack Gap="0.5rem">
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Operation</strong></RadzenColumn>
+                <RadzenColumn Size="9">@_row.OperationName (v@_row.Version)</RadzenColumn>
+            </RadzenRow>
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Active</strong></RadzenColumn>
+                <RadzenColumn Size="9">@_row.IsActive</RadzenColumn>
+            </RadzenRow>
+            @if (!_row.IsActive)
+            {
+                <RadzenRow>
+                    <RadzenColumn Size="3"><strong>Deprecation reason</strong></RadzenColumn>
+                    <RadzenColumn Size="9">@_row.DeprecationReason</RadzenColumn>
+                </RadzenRow>
+            }
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Shape fingerprint</strong></RadzenColumn>
+                <RadzenColumn Size="9"><code>@_row.ShapeFingerprint</code></RadzenColumn>
+            </RadzenRow>
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Description</strong></RadzenColumn>
+                <RadzenColumn Size="9">@(_row.Description ?? "—")</RadzenColumn>
+            </RadzenRow>
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Updated</strong></RadzenColumn>
+                <RadzenColumn Size="9">@_row.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")</RadzenColumn>
+            </RadzenRow>
+        </RadzenStack>
+    </RadzenCard>
+
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Document</RadzenText>
+    <RadzenCard class="rz-mb-3">
+        <pre style="margin: 0; white-space: pre-wrap; font-family: monospace;">@_row.Document</pre>
+    </RadzenCard>
+
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">History</RadzenText>
+    <RadzenDataGrid Data="@_history" TItem="PersistedOperationHistory" PageSize="20" AllowPaging="true">
+        <Columns>
+            <RadzenDataGridColumn TItem="PersistedOperationHistory" Property="ChangedAt" Title="When" Width="180px" FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+            <RadzenDataGridColumn TItem="PersistedOperationHistory" Property="ChangeType" Title="Change" Width="140px" />
+            <RadzenDataGridColumn TItem="PersistedOperationHistory" Property="ShapeFingerprint" Title="Shape" Width="220px">
+                <Template Context="h">
+                    <code>@h.ShapeFingerprint.Substring(0, 12)…</code>
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="PersistedOperationHistory" Property="ChangedReason" Title="Reason" />
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = "";
+
+    private bool _available;
+    private bool _loading = true;
+    private PersistedOperation? _row;
+    private List<PersistedOperationHistory> _history = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _available = ServiceProvider.GetService<IPersistedOperationsCapability>() is not null;
+        if (_available)
+            await LoadAsync();
+        _loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        using var ctx = await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
+        _row = await ctx.PersistedOperations
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => (p.TenantKey == "" || p.TenantKey == null) && p.Id == Id);
+        _history = await ctx.PersistedOperationHistories
+            .AsNoTracking()
+            .Where(h => (h.TenantKey == "" || h.TenantKey == null) && h.Id == Id)
+            .OrderByDescending(h => h.HistoryId)
+            .Take(100)
+            .ToListAsync();
+        _loading = false;
+    }
+
+    private async Task OpenEditor()
+    {
+        if (_row is null) return;
+        var parameters = new Dictionary<string, object>
+        {
+            ["ExistingId"] = _row.Id,
+            ["ExistingDocument"] = _row.Document,
+            ["ExistingDescription"] = _row.Description ?? "",
+            ["ExistingVersion"] = _row.Version,
+            ["ShowBypassShapeDiff"] = true,
+        };
+        var result = await DialogService.OpenAsync<PersistedOperationEditor>(
+            $"Edit {_row.Id}",
+            parameters,
+            options: new DialogOptions { Width = "720px", Height = "auto", Resizable = false }
+        );
+        if (result is true)
+        {
+            NotificationService.Notify(NotificationSeverity.Success, "Saved", "Operation updated.", duration: 3000);
+            await LoadAsync();
+        }
+    }
+
+    private async Task Deactivate()
+    {
+        if (_row is null) return;
+        var reason = await DialogService.OpenAsync<DeactivationReasonDialog>(
+            "Deactivate persisted operation",
+            parameters: new Dictionary<string, object>(),
+            options: new DialogOptions { Width = "520px", Height = "auto" }
+        );
+        if (reason is string r && !string.IsNullOrWhiteSpace(r))
+        {
+            await Store.DeactivateAsync(_row.Id, null, r, CancellationToken.None);
+            NotificationService.Notify(NotificationSeverity.Success, "Deactivated", _row.Id, duration: 3000);
+            await LoadAsync();
+        }
+    }
+
+    private async Task Restore()
+    {
+        if (_row is null) return;
+        await Store.RestoreAsync(_row.Id, null, CancellationToken.None);
+        NotificationService.Notify(NotificationSeverity.Success, "Restored", _row.Id, duration: 3000);
+        await LoadAsync();
+    }
+}
