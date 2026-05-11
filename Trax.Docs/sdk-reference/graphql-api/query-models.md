@@ -80,6 +80,7 @@ public class TraxQueryModelAttribute : Attribute
     public bool Sorting { get; init; } = true;
     public bool Projection { get; init; } = true;
     public FieldBindingBehavior BindFields { get; init; } = FieldBindingBehavior.Implicit;
+    public Type? ExposeAs { get; init; }
 }
 ```
 
@@ -96,6 +97,7 @@ public class TraxQueryModelAttribute : Attribute
 | `Sorting` | `bool` | `true` | Enables sorting via an `order` argument. HotChocolate generates sort input types for all entity properties. |
 | `Projection` | `bool` | `true` | Enables field projection. Only the columns requested by the GraphQL client are selected from the database. |
 | `BindFields` | `FieldBindingBehavior` | `Implicit` | Controls how fields are bound on the generated GraphQL ObjectType. When `Explicit`, only properties with `[Column]` are exposed; `[NotMapped]`, methods, and non-column members are excluded. |
+| `ExposeAs` | `Type?` | `null` | Restricts the GraphQL surface to the property set declared by the supplied interface. The entity must implement the interface implicitly. Filter and sort input types are constrained to the same set unless a custom override is supplied. Mutually exclusive with `BindFields = Explicit`. |
 
 ## Feature Configuration
 
@@ -147,6 +149,61 @@ With `BindFields = FieldBindingBehavior.Explicit`, only `Id` and `DisplayName` a
 | `Explicit` | Only properties with `[Column]` are exposed |
 
 FK fields added via `ObjectTypeExtension` (from custom TypeModules registered with `AddTypeModule<T>()`) still work when using explicit binding, since extensions are separate from the base type's field set.
+
+## ExposeAs
+
+When an entity is shared across DbContexts (typical pattern: a "reference" projection of a cross-schema entity), the entity class carries every column required by every owning context, but consumers reading it through a non-owning context cannot navigate the relationships. `ExposeAs` constrains the GraphQL schema to a separately-declared interface so the schema reflects what the consumer can actually query, rather than auto-binding every public property on the entity.
+
+```csharp
+public interface IBookReference
+{
+    int Id { get; }
+    string Title { get; }
+    string Author { get; }
+    int Rating { get; }
+}
+
+[TraxQueryModel(ExposeAs = typeof(IBookReference))]
+public class Book : IBookReference
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = "";
+    public string Author { get; set; } = "";
+    public int Rating { get; set; }
+
+    // Owned only by the authoring context; not on IBookReference, so
+    // it is hidden from the GraphQL schema produced here.
+    public ICollection<Review>? Reviews { get; set; }
+}
+```
+
+The generated schema contains only the four interface fields. `reviews` does not appear on the object type, in the `FilterInput`, or in the `SortInput`. Queries referencing it fail at schema validation, not at LINQ-translation time.
+
+| Aspect | Behavior |
+|--------|----------|
+| **GraphQL type name** | Still derived from the entity (`Book`), not the interface. Consumers see `type Book { ... }`. |
+| **Object type fields** | The intersection of the entity's public properties and the interface's property names. |
+| **Filter input type** | Restricted to the same property set. Filtering on hidden properties produces a schema-validation error. |
+| **Sort input type** | Restricted to the same property set. |
+| **Custom filter/sort overrides** | When `AddFilterType<T>` or `AddSortType<T>` is registered, the override wins and `ExposeAs` is not consulted for that input type. |
+| **Interface inheritance** | The full inherited interface graph is walked. Properties declared on parent interfaces are exposed. |
+| **Field metadata** | Description, deprecation, and other attributes are read from the **entity** property (interface declarations cannot carry attributes that influence the schema). |
+
+### Validation
+
+The configuration is validated at `Build()` time. Each failure mode throws `InvalidOperationException` with a message that names both the entity and the interface.
+
+| Misconfiguration | Error |
+|------------------|-------|
+| `ExposeAs` combined with `BindFields = Explicit` | Both restrict the field set; pick one. |
+| `ExposeAs` references a class instead of an interface | Must be an interface. |
+| Entity does not implement the interface | Add the interface to the entity declaration. |
+| Interface declares no properties | A GraphQL type with no fields is invalid. |
+| Interface declares a property the entity implements explicitly | `ExposeAs` cannot bind explicit-interface implementations; make it implicit. |
+
+### Mutations
+
+`ExposeAs` only applies to `[TraxQueryModel]` (the query surface). Mutations are trains, not query models, and are not affected.
 
 ## Name Derivation
 
