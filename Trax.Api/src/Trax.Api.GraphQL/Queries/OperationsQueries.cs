@@ -175,57 +175,6 @@ public class OperationsQueries
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<PagedResult<ManifestGroupSummary>> GetManifestGroups(
-        [Service] IDataContextProviderFactory dataContextFactory,
-        CancellationToken ct,
-        int skip = 0,
-        int take = 25,
-        long? afterId = null
-    )
-    {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
-
-        var baseQuery = db.ManifestGroups.AsNoTracking().OrderByDescending(g => g.Id);
-
-        var (totalCount, isEstimate) = afterId.HasValue
-            ? (await baseQuery.CountAsync(ct), false)
-            : await CountEstimator.EstimateOrCountAsync(
-                db,
-                "manifest_group",
-                () => baseQuery.CountAsync(ct),
-                ct
-            );
-
-        var query = afterId.HasValue ? baseQuery.Where(g => g.Id < afterId.Value) : baseQuery;
-
-        if (!afterId.HasValue && skip > 0)
-            query = query.Skip(skip);
-
-        var items = await query
-            .Take(take)
-            .Select(g => new ManifestGroupSummary(
-                g.Id,
-                g.Name,
-                g.MaxActiveJobs,
-                g.Priority,
-                g.IsEnabled,
-                g.CreatedAt,
-                g.UpdatedAt
-            ))
-            .ToListAsync(ct);
-
-        var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
-
-        return new PagedResult<ManifestGroupSummary>(
-            items,
-            totalCount,
-            afterId.HasValue ? 0 : skip,
-            take,
-            isEstimate,
-            nextCursor
-        );
-    }
-
     public async Task<PagedResult<ExecutionSummary>> GetExecutions(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,

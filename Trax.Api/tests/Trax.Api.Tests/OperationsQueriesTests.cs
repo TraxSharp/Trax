@@ -222,36 +222,53 @@ public class OperationsQueriesTests
     }
 
     [Test]
-    public async Task GetManifestGroups_PaginatesAndExposesCursor()
+    public async Task GetGroups_PaginatesAndExposesCursor()
     {
         await SeedManifestGroup("g1");
         await SeedManifestGroup("g2");
         await SeedManifestGroup("g3");
-        var queries = new OperationsQueries();
+        var queries = new ManifestGroupQueries();
 
-        var result = await queries.GetManifestGroups(_factory, default, take: 2);
+        var result = await queries.GetGroups(_factory, default, take: 2);
 
         result.Items.Should().HaveCount(2);
         result.NextCursor.Should().NotBeNull();
     }
 
     [Test]
-    public async Task GetManifestGroups_AfterIdCursor_FiltersAndUsesExactCount()
+    public async Task GetGroups_AfterIdCursor_FiltersAndUsesExactCount()
     {
         await SeedManifestGroup("g1");
         await SeedManifestGroup("g2");
         await SeedManifestGroup("g3");
-        var queries = new OperationsQueries();
-        var first = await queries.GetManifestGroups(_factory, default, take: 1);
+        var queries = new ManifestGroupQueries();
+        var first = await queries.GetGroups(_factory, default, take: 1);
 
-        var page2 = await queries.GetManifestGroups(
-            _factory,
-            default,
-            take: 2,
-            afterId: first.NextCursor
-        );
+        var page2 = await queries.GetGroups(_factory, default, take: 2, afterId: first.NextCursor);
 
         page2.Items.Should().HaveCount(2);
+    }
+
+    [Test]
+    public async Task GetGroup_ReturnsSingleRecord_WhenIdMatches()
+    {
+        var seededId = await SeedManifestGroup("only");
+        var queries = new ManifestGroupQueries();
+
+        var fetched = await queries.GetGroup(seededId, _factory, default);
+
+        fetched.Should().NotBeNull();
+        fetched!.Name.Should().Be("only");
+    }
+
+    [Test]
+    public async Task GetGroup_ReturnsNull_WhenIdDoesNotExist()
+    {
+        var queries = new ManifestGroupQueries();
+
+        var fetched = await queries.GetGroup(999_999, _factory, default);
+
+        fetched.Should().BeNull();
     }
 
     [Test]
