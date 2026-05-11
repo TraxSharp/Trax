@@ -298,7 +298,7 @@ public static class GraphQLServiceExtensions
         GraphQLConfiguration config
     )
     {
-        // G1 — Max execution depth. Defaults to 4 unless the consumer overrides.
+        // G1 — Max execution depth. Defaults to 15 unless the consumer overrides.
         graphqlBuilder.AddMaxExecutionDepthRule(
             config.MaxExecutionDepth,
             skipIntrospectionFields: true

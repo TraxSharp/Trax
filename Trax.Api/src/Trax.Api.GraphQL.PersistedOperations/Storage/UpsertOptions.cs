@@ -25,4 +25,12 @@ public sealed record UpsertOptions
     /// intentionally a breaking version bump).
     /// </summary>
     public bool BypassShapeDiff { get; init; }
+
+    /// <summary>
+    /// Operator-controlled metadata. Stored on the row and surfaced on the
+    /// dashboard for lifecycle tracking. Not used for request routing — the
+    /// id is the contract with shipped clients. Defaults to <c>0</c>; bump
+    /// it explicitly when shipping a new client that requests a new id.
+    /// </summary>
+    public int Version { get; init; }
 }

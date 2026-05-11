@@ -1,9 +1,11 @@
 using HotChocolate.Execution;
+using HotChocolate.Language;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.ShapeDiff;
+using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.PersistedOperation;
 using Trax.Effect.Models.PersistedOperationHistory;
@@ -31,6 +33,7 @@ internal sealed class DbPersistedOperationStorage
     private readonly PersistedOperationsOptions _options;
     private readonly IPersistedOperationCache _cache;
     private readonly IPersistedOperationBroadcaster _broadcaster;
+    private readonly IPersistedOperationValidator _validator;
     private readonly TimeProvider _clock;
     private readonly ILogger<DbPersistedOperationStorage> _logger;
 
@@ -39,6 +42,7 @@ internal sealed class DbPersistedOperationStorage
         PersistedOperationsOptions options,
         IPersistedOperationCache cache,
         IPersistedOperationBroadcaster broadcaster,
+        IPersistedOperationValidator validator,
         TimeProvider clock,
         ILogger<DbPersistedOperationStorage> logger
     )
@@ -47,12 +51,14 @@ internal sealed class DbPersistedOperationStorage
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(broadcaster);
+        ArgumentNullException.ThrowIfNull(validator);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(logger);
         _factory = factory;
         _options = options;
         _cache = cache;
         _broadcaster = broadcaster;
+        _validator = validator;
         _clock = clock;
         _logger = logger;
     }
@@ -176,7 +182,17 @@ internal sealed class DbPersistedOperationStorage
         ArgumentException.ThrowIfNullOrEmpty(id);
         ArgumentException.ThrowIfNullOrEmpty(document);
 
-        var (operationName, version) = PersistedOperationIdParser.Parse(id);
+        // Validate against the live schema before any DB work; the validator
+        // throws structured exceptions that callers project into form errors
+        // or GraphQL error payloads. No row is written and no broadcast fires
+        // if validation fails.
+        await _validator.ValidateAsync(document, ct).ConfigureAwait(false);
+
+        // OperationName is taken from the document's operation definition
+        // (the GraphQL spec sense). The id is opaque — no parse rule.
+        // Version is operator-controlled metadata via UpsertOptions.
+        var operationName = ExtractOperationName(document);
+        var version = options?.Version ?? 0;
         // Convention: each persisted document holds exactly one operation, so
         // the fingerprint computer disambiguates by "the only operation".
         var fingerprint = ShapeFingerprintComputer.Compute(document);
@@ -408,6 +424,28 @@ internal sealed class DbPersistedOperationStorage
 
     private static string Normalize(string? tenantKey) =>
         string.IsNullOrEmpty(tenantKey) ? NoTenantSentinel : tenantKey;
+
+    /// <summary>
+    /// Returns the GraphQL operation definition's name from the document, or
+    /// the empty string when the operation is anonymous. Convention: each
+    /// persisted document holds exactly one operation, so picking the first
+    /// definition is unambiguous.
+    /// </summary>
+    private static string ExtractOperationName(string document)
+    {
+        try
+        {
+            var parsed = Utf8GraphQLParser.Parse(document);
+            var op = parsed.Definitions.OfType<OperationDefinitionNode>().FirstOrDefault();
+            return op?.Name?.Value ?? string.Empty;
+        }
+        catch
+        {
+            // Validator already ran; if parse fails here it's surprising.
+            // Fall back to empty rather than crash the upsert.
+            return string.Empty;
+        }
+    }
 
     private static PersistedOperation Denormalize(PersistedOperation row) =>
         new()

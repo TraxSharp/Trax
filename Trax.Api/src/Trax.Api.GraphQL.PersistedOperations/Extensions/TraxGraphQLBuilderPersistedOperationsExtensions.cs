@@ -9,6 +9,7 @@ using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Middleware;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Extensions;
 
@@ -88,6 +89,27 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
                 NoOpPersistedOperationBroadcaster
             >();
         }
+
+        // Validator: HotChocolate-backed in this path (we have a schema in process).
+        // Replace overrides the no-op default from AddPersistedOperationStore if it
+        // was also called.
+        services.Replace(
+            ServiceDescriptor.Singleton<IPersistedOperationValidator>(
+                sp => new HotChocolateSchemaValidator(sp)
+            )
+        );
+
+        // Capability marker: presence in DI signals to consumers (dashboard)
+        // that the full persisted-operations subsystem is wired in.
+        services.AddSingleton<IPersistedOperationsCapability, PersistedOperationsCapability>();
+
+        // Management mutations + queries. Scanned via the existing
+        // TraxGraphQLBuilder.AddTypeExtensions helper. Also flip the
+        // operations-exposed flags so AddTraxGraphQL emits the OperationsQueries
+        // and OperationsMutations namespaces that our type extensions graft onto.
+        builder.ExposeOperationQueries();
+        builder.ExposeOperationMutations();
+        builder.AddTypeExtensions(typeof(GraphQL.PersistedOperationMutations).Assembly);
 
         // Storage: implements both IPersistedOperationStore and the HC hot-path.
         services.AddSingleton<DbPersistedOperationStorage>();

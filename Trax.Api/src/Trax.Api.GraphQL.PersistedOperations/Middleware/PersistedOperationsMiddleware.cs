@@ -107,6 +107,9 @@ internal sealed class PersistedOperationsMiddleware
         if (_allowlist.IsAllowed(parsed.OperationName, parsed.DocumentId))
             return Decision.PassThrough;
 
+        if (IsManagementOperation(parsed.Query))
+            return Decision.PassThrough;
+
         if (_options.AllowIntrospection && IsIntrospection(parsed))
             return Decision.PassThrough;
 
@@ -131,6 +134,20 @@ internal sealed class PersistedOperationsMiddleware
         return contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase)
             || contentType.StartsWith("application/graphql", StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// The management mutations and queries this package adds to the schema
+    /// always bypass enforcement. They live under <c>operations.persistedOperations</c>
+    /// (matching the convention for every other Trax management feature, e.g.
+    /// <c>operations.deadLetters</c>). Persisting them by id would create a
+    /// chicken-and-egg problem; they are already protected by whatever
+    /// ASP.NET auth middleware sits in front of the GraphQL endpoint.
+    /// Detection: the document must select the <c>persistedOperations</c>
+    /// namespace, which is unique to this management surface.
+    /// </summary>
+    private static bool IsManagementOperation(string? document) =>
+        !string.IsNullOrEmpty(document)
+        && document.Contains("persistedOperations", StringComparison.Ordinal);
 
     private static bool IsIntrospection(GraphQLRequestShape req) =>
         IntrospectionDetector.LooksLikeIntrospectionByName(req.OperationName)

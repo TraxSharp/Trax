@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Extensions;
 
@@ -44,6 +45,7 @@ public static class ServiceCollectionPersistedOperationsExtensions
             IPersistedOperationBroadcaster,
             NoOpPersistedOperationBroadcaster
         >();
+        services.TryAddSingleton<IPersistedOperationValidator, NoOpPersistedOperationValidator>();
 
         services.AddSingleton<DbPersistedOperationStorage>();
         services.AddSingleton<IPersistedOperationStore>(sp =>

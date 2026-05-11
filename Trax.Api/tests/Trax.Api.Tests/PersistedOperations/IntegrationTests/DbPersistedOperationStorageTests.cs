@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.PersistedOperation;
 
@@ -47,6 +48,7 @@ public class DbPersistedOperationStorageTests
             options,
             cache,
             _broadcaster,
+            new NoOpPersistedOperationValidator(),
             TimeProvider.System,
             NullLogger<DbPersistedOperationStorage>.Instance
         );
@@ -60,17 +62,49 @@ public class DbPersistedOperationStorageTests
         var row = await _storage.UpsertAsync(
             "greet_v1",
             doc,
-            options: null,
+            options: new UpsertOptions { Version = 1 },
             CancellationToken.None
         );
 
         row.Id.Should().Be("greet_v1");
-        row.OperationName.Should().Be("greet");
+        // OperationName is taken from the document's operation definition,
+        // not parsed out of the id.
+        row.OperationName.Should().Be("Greet");
         row.Version.Should().Be(1);
         row.Document.Should().Be(doc);
         row.IsActive.Should().BeTrue();
         row.ShapeFingerprint.Should().HaveLength(64);
         row.TenantKey.Should().BeNull();
+    }
+
+    [Test]
+    public async Task Upsert_AnonymousOperation_StoresEmptyOperationName()
+    {
+        var row = await _storage.UpsertAsync(
+            "anon_v1",
+            "{ greeting }",
+            options: null,
+            CancellationToken.None
+        );
+
+        row.OperationName.Should().BeEmpty();
+        row.Version.Should().Be(0);
+    }
+
+    [Test]
+    public async Task Upsert_ArbitraryId_DoesNotThrow()
+    {
+        // Ids are opaque strings; there is no parse rule.
+        var row = await _storage.UpsertAsync(
+            "this-is-an-opaque/id::v0",
+            "query Greet { greeting }",
+            null,
+            CancellationToken.None
+        );
+
+        row.Id.Should().Be("this-is-an-opaque/id::v0");
+        row.OperationName.Should().Be("Greet");
+        row.Version.Should().Be(0);
     }
 
     [Test]
@@ -248,6 +282,7 @@ public class DbPersistedOperationStorageTests
             options,
             new NoOpPersistedOperationCache(),
             throwing,
+            new NoOpPersistedOperationValidator(),
             TimeProvider.System,
             NullLogger<DbPersistedOperationStorage>.Instance
         );
@@ -544,15 +579,6 @@ public class DbPersistedOperationStorageTests
     private readonly record struct WrapResult(bool Success, string? Document, Exception? Exception);
 
     [Test]
-    public async Task Upsert_InvalidIdFormat_Throws()
-    {
-        Func<Task> act = () =>
-            _storage.UpsertAsync("not-versioned", "query { x }", null, CancellationToken.None);
-
-        await act.Should().ThrowAsync<FormatException>();
-    }
-
-    [Test]
     public async Task Upsert_EmptyDocument_Throws()
     {
         Func<Task> act = () =>
@@ -578,6 +604,7 @@ public class DbPersistedOperationStorageTests
             new PersistedOperationsBuilder().UseDatabase(PostgresFixture.ConnectionString).Build(),
             memCache,
             new NoOpPersistedOperationBroadcaster(),
+            new NoOpPersistedOperationValidator(),
             TimeProvider.System,
             NullLogger<DbPersistedOperationStorage>.Instance
         );

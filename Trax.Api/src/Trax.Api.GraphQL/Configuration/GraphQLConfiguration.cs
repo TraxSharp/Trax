@@ -39,7 +39,7 @@ public class GraphQLConfiguration
     internal HashSet<string> RegisteredNamespaceTypes { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Max GraphQL execution depth (default 4). Queries deeper than this are rejected
+    /// Max GraphQL execution depth (default 15). Queries deeper than this are rejected
     /// during validation.
     /// </summary>
     public int MaxExecutionDepth { get; }
@@ -94,7 +94,7 @@ public class GraphQLConfiguration
         IReadOnlyList<Type> additionalTypeModules,
         IReadOnlyList<Action<IRequestExecutorBuilder>> schemaConfigurations,
         IReadOnlyList<Type> additionalTypeExtensions,
-        int maxExecutionDepth = 4,
+        int maxExecutionDepth = 15,
         Action<CostOptions>? costOverride = null,
         Predicate<HttpContext>? introspectionPredicate = null,
         int maxOperationsPerRequest = 50,

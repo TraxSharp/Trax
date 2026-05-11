@@ -114,10 +114,9 @@ public static class AuthE2EHost
 
                         services.AddTraxGraphQL(graphql =>
                             graphql
-                                // Model-query chain (discover/namespace/entity/nodes/field)
-                                // needs depth 6; default is 4. Tests are explicit about
-                                // their shape so raising the cap here is safe.
-                                .MaxExecutionDepth(8)
+                                // Default is generous (15) and covers the
+                                // discover/namespace/entity/nodes/field chain
+                                // without needing an explicit override.
                                 .AddDbContext<TestDbContext>()
                                 .AddTypeExtensions(typeof(AuthE2EHost).Assembly)
                                 // Add custom subscription + mutation type

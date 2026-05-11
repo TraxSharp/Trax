@@ -124,6 +124,47 @@ public class PersistedOperationsMiddlewareTests
     }
 
     [Test]
+    public async Task InlineQuery_ManagementMutation_BypassesEnforcement()
+    {
+        // The management mutations (uploadPersistedOperation et al.) and
+        // queries (persistedOperations, persistedOperationHistory) live under
+        // operations.persistedOperations and MUST bypass RequirePersisted —
+        // persisting the upload mutation by id is a chicken-and-egg. The
+        // bypass detects any document referencing the persistedOperations
+        // namespace.
+        var (mw, calls) = Build(b => b.RequirePersisted(true));
+        var ctx = BuildContext(
+            query: """
+            mutation {
+              operations {
+                persistedOperations {
+                  uploadPersistedOperation(input: { id: "x", document: "{ x }" }) { success }
+                }
+              }
+            }
+            """,
+            operationName: null
+        );
+
+        await mw.InvokeAsync(ctx);
+
+        calls.NextCalls.Should().Be(1, "the management mutation must reach the GraphQL endpoint");
+    }
+
+    [Test]
+    public async Task InlineQuery_ManagementQuery_BypassesEnforcement()
+    {
+        var (mw, calls) = Build(b => b.RequirePersisted(true));
+        var ctx = BuildContext(
+            query: "query { operations { persistedOperations { persistedOperations { totalCount } } } }"
+        );
+
+        await mw.InvokeAsync(ctx);
+
+        calls.NextCalls.Should().Be(1);
+    }
+
+    [Test]
     public async Task InlineQuery_AllowlistedByPredicate_PassesThrough()
     {
         var (mw, calls) = Build(b =>

@@ -10,7 +10,7 @@ namespace Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 /// </summary>
 public partial class TraxGraphQLBuilder
 {
-    internal int MaxExecutionDepthValue { get; private set; } = 4;
+    internal int MaxExecutionDepthValue { get; private set; } = 15;
     internal bool MaxExecutionDepthWasOverridden { get; private set; }
 
     internal Action<CostOptions>? CostOverride { get; private set; }
@@ -24,11 +24,12 @@ public partial class TraxGraphQLBuilder
     internal string? AuthorizationPolicy { get; private set; }
 
     /// <summary>
-    /// Sets the maximum GraphQL query depth. The default is <c>4</c>.
-    /// Callers that legitimately need deeper queries (e.g. model projections
-    /// with several foreign-key hops) should raise this deliberately; the
-    /// default is deep enough for train-shaped operations but rejects
-    /// resource-exhaustion probes.
+    /// Sets the maximum GraphQL query depth. The default is <c>15</c>.
+    /// Tighten this when running a public-facing schema where you want to
+    /// reject deeply nested resource-exhaustion probes; loosen it (or keep
+    /// the default) when consumers legitimately need deep model projections
+    /// across several foreign-key hops or nested management namespaces like
+    /// <c>operations.persistedOperations</c>.
     /// </summary>
     public TraxGraphQLBuilder MaxExecutionDepth(int depth)
     {

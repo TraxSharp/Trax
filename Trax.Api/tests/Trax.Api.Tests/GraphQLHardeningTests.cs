@@ -17,11 +17,11 @@ public class GraphQLHardeningTests
     #region Builder defaults
 
     [Test]
-    public void MaxExecutionDepth_DefaultIs4()
+    public void MaxExecutionDepth_DefaultIs15()
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
 
-        builder.MaxExecutionDepthValue.Should().Be(4);
+        builder.MaxExecutionDepthValue.Should().Be(15);
         builder.MaxExecutionDepthWasOverridden.Should().BeFalse();
     }
 
@@ -225,7 +225,7 @@ public class GraphQLHardeningTests
 
         var config = builder.Build();
 
-        config.MaxExecutionDepth.Should().Be(4);
+        config.MaxExecutionDepth.Should().Be(15);
         config.MaxOperationsPerRequest.Should().Be(50);
     }
 

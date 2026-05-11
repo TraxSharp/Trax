@@ -1,3 +1,5 @@
+using Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
+
 namespace Trax.Api.GraphQL.PersistedOperations.Storage;
 
 /// <summary>
@@ -7,8 +9,14 @@ namespace Trax.Api.GraphQL.PersistedOperations.Storage;
 /// (the dashboard <c>--force</c> path) when the operator has verified
 /// the change is shape-safe.
 /// </summary>
-public sealed class ShapeDiffViolationException : InvalidOperationException
+public sealed class ShapeDiffViolationException : PersistedOperationException
 {
+    /// <summary>Stable code surfaced via <see cref="Code"/>.</summary>
+    public const string CodeValue = "SHAPE_DIFF_VIOLATION";
+
+    /// <inheritdoc />
+    public override string Code => CodeValue;
+
     /// <summary>
     /// The id of the operation whose shape would change.
     /// </summary>
