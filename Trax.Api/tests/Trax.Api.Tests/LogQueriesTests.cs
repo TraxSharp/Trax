@@ -15,10 +15,15 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class LogQueriesTests
 {
-    // Reuse the same per-class DB convention as the other operations tests.
+    // Pool tuning matches the AuthE2E hardening from PR #41 after the same
+    // class of CI flake here: aggressive Connection Pruning Interval=1 +
+    // Idle Lifetime=1 forced every SetUp to pay TCP+auth and timed out under
+    // contention. Pool Size=8 across the four test fixtures in this assembly
+    // stays well under Postgres's default max_connections=100.
     private const string ConnectionString =
         "Host=localhost;Port=5432;Database=trax_api_logs;Username=trax;Password=trax123;"
-        + "Maximum Pool Size=4;Minimum Pool Size=0;Connection Idle Lifetime=1;Connection Pruning Interval=1";
+        + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
+        + "Timeout=30;Tcp Keepalive=true";
 
     private ServiceProvider _provider = null!;
     private IDataContextProviderFactory _factory = null!;
