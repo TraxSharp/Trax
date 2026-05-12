@@ -5,6 +5,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <!-- Required by Trax.Dashboard. The dashboard package cannot propagate
+         this transitively because the Razor SDK overwrites its NuGet build
+         props with static-asset imports during pack. Every host that calls
+         UseTraxDashboard() must set this themselves. Without it, the build
+         omits _framework/blazor.web.js and the Blazor Server circuit never
+         establishes (the page renders but every button click is a no-op). -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +22,8 @@
     <PackageReference Include="Trax.Api" Version="1.*" />
     <PackageReference Include="Trax.Api.GraphQL" Version="1.*" />
     <PackageReference Include="Trax.Api.GraphQL.PersistedOperations" Version="1.*" />
+    <PackageReference Include="Trax.Dashboard" Version="1.*" />
+    <PackageReference Include="Trax.Scheduler" Version="1.*" />
     <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
   </ItemGroup>
 </Project>

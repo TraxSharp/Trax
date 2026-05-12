@@ -17,10 +17,12 @@
 
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
+using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.PersistedOperations;
+using Trax.Scheduler.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,12 +32,14 @@ var connectionString =
 
 builder.Services.AddAuthorization();
 
-// Trax: Postgres effects + mediator (which discovers trains in the library
-// assembly). No scheduler — every train in this sample is a query handled
-// directly on the API server via GraphQL.
+// Trax: Postgres effects + mediator + scheduler. The persisted-operations
+// sample is GraphQL-only (no queued work), but the dashboard's existing
+// pages (manifest groups, work queue, dead letters) depend on the scheduler
+// services even when no jobs are dispatched.
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects => effects.UsePostgres(connectionString))
         .AddMediator(typeof(GraphQLNamespaces).Assembly)
+        .AddScheduler(scheduler => scheduler)
 );
 
 // GraphQL schema with persisted-operations enforcement enabled. AddTraxGraphQL
@@ -53,15 +57,26 @@ builder.Services.AddTraxGraphQL(graphql =>
     )
 );
 
+// Dashboard: mounts the operations control room (including the Persisted
+// Operations management page) under /trax. The page only shows up because
+// IPersistedOperationsCapability is in DI thanks to UsePersistedOperations
+// above.
+builder.AddTraxDashboard();
+
 var app = builder.Build();
 
-// Persisted-op enforcement runs before the GraphQL endpoint. In a real
-// deployment, ASP.NET authentication middleware sits in front of this and
-// the persisted-op lookup happens AFTER Trax's auth interceptor inside the
-// HC pipeline.
-app.UsePersistedOperationsEnforcement();
 app.UseRouting();
+
+// Persisted-op enforcement only applies to the GraphQL endpoint. Scoping
+// with UseWhen keeps it off Blazor's SignalR circuit (/_blazor/*) and the
+// dashboard's static asset endpoints, so dashboard interactivity is not
+// affected by the middleware's body buffering.
+app.UseWhen(
+    ctx => ctx.Request.Path.StartsWithSegments("/trax/graphql"),
+    branch => branch.UsePersistedOperationsEnforcement()
+);
 app.UseTraxGraphQL();
+app.UseTraxDashboard();
 
 app.Run();
 

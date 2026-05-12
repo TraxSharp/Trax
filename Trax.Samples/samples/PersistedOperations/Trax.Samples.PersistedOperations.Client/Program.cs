@@ -1,47 +1,36 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Trax Persisted Operations sample — Client
 //
-// 1. Connects to the same Trax Postgres as the API process.
-// 2. Uploads the manifest of (id, document) pairs through IPersistedOperationStore.
+// 1. Reads the manifest of (id, document) pairs.
+// 2. Uploads each through the uploadPersistedOperation GraphQL mutation.
 // 3. Sends GraphQL requests by id only — the server resolves to the stored
 //    document and dispatches the call to the underlying train.
 // 4. Demonstrates the hot-fix flow by re-uploading a shape-preserving
 //    edit; the next request runs the new document without redeploying the
 //    client.
 //
-// Run after starting Trax.Samples.PersistedOperations.Api.
+// Notes:
+// - The client no longer touches the database. All admin actions go through
+//   the GraphQL mutations exposed by the server's persisted-operations
+//   subsystem. The same mutations are what the Trax dashboard calls.
+// - Run after starting Trax.Samples.PersistedOperations.Api.
 // ─────────────────────────────────────────────────────────────────────────────
 
 using System.Net.Http.Json;
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Trax.Api.GraphQL.PersistedOperations.Extensions;
-using Trax.Api.GraphQL.PersistedOperations.Storage;
-using Trax.Effect.Data.Postgres.Extensions;
-using Trax.Effect.Extensions;
 
-const string ConnectionString =
-    "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123";
 const string ApiUrl = "http://localhost:5000/trax/graphql/";
 
-await using var services = new ServiceCollection()
-    .AddLogging(b => b.AddSimpleConsole())
-    .AddTrax(trax => trax.AddEffects(effects => effects.UsePostgres(ConnectionString)))
-    .AddPersistedOperationStore(ConnectionString)
-    .BuildServiceProvider();
+using var http = new HttpClient { BaseAddress = new Uri(ApiUrl) };
 
-var store = services.GetRequiredService<IPersistedOperationStore>();
-
-// 1. Upload the manifest.
+// 1. Upload the manifest via the mutation.
 foreach (var op in LoadManifest())
 {
-    await store.UpsertAsync(op.Id, op.Document, options: null, CancellationToken.None);
+    await UploadAsync(http, op.Id, op.Document);
     Console.WriteLine($"Uploaded {op.Id}");
 }
 
 // 2. Call greet_v1 by id.
-using var http = new HttpClient { BaseAddress = new Uri(ApiUrl) };
 Console.WriteLine("\n--- greet_v1 (Alice) ---");
 Console.WriteLine(await PostByIdAsync(http, "greet_v1", new { input = new { name = "Alice" } }));
 
@@ -51,16 +40,12 @@ Console.WriteLine(
     await PostByIdAsync(http, "lookupUser_v1", new { input = new { userId = "user-42" } })
 );
 
-// 4. Hot-fix demo: rewrite greet_v1 with a shape-preserving change. In a
-//    real fix you might swap to a different train or change a filter; here
-//    we change a static argument to demonstrate that the server-side change
-//    flows through without touching the client. The shape-diff guardrail
-//    permits this because the response shape is unchanged.
-await store.UpsertAsync(
+// 4. Hot-fix demo: rewrite greet_v1 with a shape-preserving change.
+await UploadAsync(
+    http,
     "greet_v1",
     "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting greetedAt } } } }",
-    options: new UpsertOptions { Description = "demo hot-fix (shape-preserving rewrite)" },
-    CancellationToken.None
+    description: "demo hot-fix (shape-preserving rewrite)"
 );
 Console.WriteLine("\nHot-fixed greet_v1 (no client redeploy needed).");
 
@@ -72,6 +57,52 @@ static async Task<string> PostByIdAsync(HttpClient http, string id, object varia
     var body = new { id, variables };
     var resp = await http.PostAsJsonAsync(string.Empty, body);
     return await resp.Content.ReadAsStringAsync();
+}
+
+static async Task UploadAsync(
+    HttpClient http,
+    string id,
+    string document,
+    string? description = null,
+    bool bypassShapeDiff = false
+)
+{
+    const string mutation = """
+        mutation Upload($input: UploadPersistedOperationInput!) {
+          operations {
+            persistedOperations {
+              uploadPersistedOperation(input: $input) {
+                success
+                errors { code message }
+              }
+            }
+          }
+        }
+        """;
+    var input = new Dictionary<string, object?>
+    {
+        ["id"] = id,
+        ["document"] = document,
+        ["bypassShapeDiff"] = bypassShapeDiff,
+    };
+    if (description is not null)
+        input["description"] = description;
+
+    var body = new { query = mutation, variables = new { input } };
+    var resp = await http.PostAsJsonAsync(string.Empty, body);
+    var raw = await resp.Content.ReadAsStringAsync();
+    using var doc = JsonDocument.Parse(raw);
+    var payload = doc
+        .RootElement.GetProperty("data")
+        .GetProperty("operations")
+        .GetProperty("persistedOperations")
+        .GetProperty("uploadPersistedOperation");
+    if (!payload.GetProperty("success").GetBoolean())
+    {
+        var errors = payload.GetProperty("errors");
+        var first = errors.GetArrayLength() > 0 ? errors[0].GetRawText() : "(no error)";
+        throw new InvalidOperationException($"uploadPersistedOperation failed for '{id}': {first}");
+    }
 }
 
 static IEnumerable<ManifestEntry> LoadManifest()
