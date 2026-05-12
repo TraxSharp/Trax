@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: trax
       POSTGRES_PASSWORD: trax123
       POSTGRES_DB: trax
-      POSTGRES_MULTIPLE_DATABASES: trax_scheduler_tests,trax_data_tests,trax_e2e_tests,chat_e2e_tests,energyhub_e2e_tests,jobhunt,jobhunt_e2e_tests
+      POSTGRES_MULTIPLE_DATABASES: trax_scheduler_tests,trax_data_tests,trax_e2e_tests,chat_e2e_tests,energyhub_e2e_tests,jobhunt,jobhunt_e2e_tests,trax_api_operations,trax_api_workqueue,trax_api_logs,trax_api_health,trax_api_auth_http,trax_api_auth_model,trax_api_auth_sub,trax_api_auth_subprop,trax_api_auth_authorize
     tty: true
     ports:
       - "5432:5432"

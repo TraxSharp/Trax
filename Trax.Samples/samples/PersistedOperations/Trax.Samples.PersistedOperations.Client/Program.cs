@@ -40,17 +40,33 @@ Console.WriteLine(
     await PostByIdAsync(http, "lookupUser_v1", new { input = new { userId = "user-42" } })
 );
 
-// 4. Hot-fix demo: rewrite greet_v1 with a shape-preserving change.
+// 4. Hot-fix demo: rewrite greet_v1 with a GENUINELY different document
+//    that produces a visibly different response. The new document adds an
+//    extra `__typename` field inside the greet selection, which changes
+//    the response shape, so BypassShapeDiff is required. Before the
+//    invalidation fix in Trax.Api.GraphQL.PersistedOperations, the
+//    HotChocolate request pipeline kept serving the previous compiled
+//    operation until the process restarted; with the fix in place the
+//    next request runs the new document.
 await UploadAsync(
     http,
     "greet_v1",
-    "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting greetedAt } } } }",
-    description: "demo hot-fix (shape-preserving rewrite)"
+    "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting greetedAt __typename } } } }",
+    description: "demo hot-fix (adds __typename)",
+    bypassShapeDiff: true
 );
 Console.WriteLine("\nHot-fixed greet_v1 (no client redeploy needed).");
 
 Console.WriteLine("\n--- greet_v1 after hot-fix (Alice) ---");
-Console.WriteLine(await PostByIdAsync(http, "greet_v1", new { input = new { name = "Alice" } }));
+var afterHotFix = await PostByIdAsync(http, "greet_v1", new { input = new { name = "Alice" } });
+Console.WriteLine(afterHotFix);
+if (!afterHotFix.Contains("__typename"))
+    throw new InvalidOperationException(
+        "Hot-fix did not take effect: response is missing __typename. "
+            + "This indicates HotChocolate's IDocumentCache / IPreparedOperationCache "
+            + "were not invalidated when the persisted operation was upserted."
+    );
+Console.WriteLine("Hot-fix verified: __typename present in response.");
 
 static async Task<string> PostByIdAsync(HttpClient http, string id, object variables)
 {
