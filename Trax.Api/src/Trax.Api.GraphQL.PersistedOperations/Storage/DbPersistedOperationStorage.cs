@@ -34,6 +34,7 @@ internal sealed class DbPersistedOperationStorage
     private readonly IPersistedOperationCache _cache;
     private readonly IPersistedOperationBroadcaster _broadcaster;
     private readonly IPersistedOperationValidator _validator;
+    private readonly HotChocolateOperationCacheInvalidator _hcInvalidator;
     private readonly TimeProvider _clock;
     private readonly ILogger<DbPersistedOperationStorage> _logger;
 
@@ -43,6 +44,7 @@ internal sealed class DbPersistedOperationStorage
         IPersistedOperationCache cache,
         IPersistedOperationBroadcaster broadcaster,
         IPersistedOperationValidator validator,
+        HotChocolateOperationCacheInvalidator hcInvalidator,
         TimeProvider clock,
         ILogger<DbPersistedOperationStorage> logger
     )
@@ -52,6 +54,7 @@ internal sealed class DbPersistedOperationStorage
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(broadcaster);
         ArgumentNullException.ThrowIfNull(validator);
+        ArgumentNullException.ThrowIfNull(hcInvalidator);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(logger);
         _factory = factory;
@@ -59,6 +62,7 @@ internal sealed class DbPersistedOperationStorage
         _cache = cache;
         _broadcaster = broadcaster;
         _validator = validator;
+        _hcInvalidator = hcInvalidator;
         _clock = clock;
         _logger = logger;
     }
@@ -273,6 +277,7 @@ internal sealed class DbPersistedOperationStorage
             await ctx.SaveChanges(ct).ConfigureAwait(false);
 
             _cache.Invalidate(tenantKey, id);
+            await _hcInvalidator.InvalidateAsync(ct).ConfigureAwait(false);
             await PublishAsync(tenantKey, id, PersistedOperationChangeType.Upsert, ct)
                 .ConfigureAwait(false);
 
@@ -330,6 +335,7 @@ internal sealed class DbPersistedOperationStorage
             await ctx.SaveChanges(ct).ConfigureAwait(false);
 
             _cache.Invalidate(tenantKey, id);
+            await _hcInvalidator.InvalidateAsync(ct).ConfigureAwait(false);
             await PublishAsync(tenantKey, id, PersistedOperationChangeType.Deactivate, ct)
                 .ConfigureAwait(false);
         }
@@ -379,6 +385,7 @@ internal sealed class DbPersistedOperationStorage
             await ctx.SaveChanges(ct).ConfigureAwait(false);
 
             _cache.Invalidate(tenantKey, id);
+            await _hcInvalidator.InvalidateAsync(ct).ConfigureAwait(false);
             await PublishAsync(tenantKey, id, PersistedOperationChangeType.Restore, ct)
                 .ConfigureAwait(false);
         }

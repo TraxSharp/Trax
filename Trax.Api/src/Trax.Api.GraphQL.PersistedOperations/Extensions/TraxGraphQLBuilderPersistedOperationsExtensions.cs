@@ -111,6 +111,11 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         builder.ExposeOperationMutations();
         builder.AddTypeExtensions(typeof(GraphQL.PersistedOperationMutations).Assembly);
 
+        // HotChocolate cache invalidator. The schema name is captured below
+        // inside ConfigureSchema so the invalidator can resolve the right
+        // executor when clearing IPreparedOperationCache.
+        services.AddSingleton<HotChocolateOperationCacheInvalidator>();
+
         // Storage: implements both IPersistedOperationStore and the HC hot-path.
         services.AddSingleton<DbPersistedOperationStorage>();
         services.AddSingleton<IPersistedOperationStore>(sp =>
@@ -133,6 +138,12 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
                 sc.AddSingleton<IOperationDocumentStorage>(sp =>
                 {
                     var root = sp.GetRequiredService<HotChocolate.IApplicationServiceProvider>();
+                    // Capture the schema name on the invalidator the first
+                    // time the schema services are built. ConfigureSchemaServices
+                    // runs lazily during executor build, by which time the root
+                    // provider has the singleton ready.
+                    root.GetRequiredService<HotChocolateOperationCacheInvalidator>()
+                        .SetSchemaName(schema.Name);
                     return root.GetRequiredService<DbPersistedOperationStorage>();
                 })
             );

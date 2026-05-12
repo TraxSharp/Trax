@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
@@ -62,6 +63,7 @@ public class RabbitMqBroadcasterTests
         var receiver = new PersistedOperationReceiverService(
             options,
             cache,
+            NoOpInvalidator(),
             NullLogger<PersistedOperationReceiverService>.Instance
         );
 
@@ -114,11 +116,13 @@ public class RabbitMqBroadcasterTests
         var receiverA = new PersistedOperationReceiverService(
             options,
             cacheA,
+            NoOpInvalidator(),
             NullLogger<PersistedOperationReceiverService>.Instance
         );
         var receiverB = new PersistedOperationReceiverService(
             options,
             cacheB,
+            NoOpInvalidator(),
             NullLogger<PersistedOperationReceiverService>.Instance
         );
 
@@ -171,6 +175,7 @@ public class RabbitMqBroadcasterTests
         var svc = new PersistedOperationReceiverService(
             options,
             cache,
+            NoOpInvalidator(),
             NullLogger<PersistedOperationReceiverService>.Instance
         );
 
@@ -214,6 +219,7 @@ public class RabbitMqBroadcasterTests
         var svc = new PersistedOperationReceiverService(
             options,
             new RecordingCache(),
+            NoOpInvalidator(),
             NullLogger<PersistedOperationReceiverService>.Instance
         );
         await svc.StartAsync(CancellationToken.None);
@@ -241,6 +247,7 @@ public class RabbitMqBroadcasterTests
         var svc = new PersistedOperationReceiverService(
             options,
             cache,
+            NoOpInvalidator(),
             NullLogger<PersistedOperationReceiverService>.Instance
         );
         await svc.StartAsync(CancellationToken.None);
@@ -293,6 +300,17 @@ public class RabbitMqBroadcasterTests
             );
         act.Should().Throw<InvalidOperationException>();
     }
+
+    /// <summary>
+    /// Builds an invalidator backed by an empty service provider. The
+    /// invalidator's HC-cache lookups all return null, so it is effectively
+    /// a no-op for tests that only care about the RabbitMQ receive path.
+    /// </summary>
+    private static HotChocolateOperationCacheInvalidator NoOpInvalidator() =>
+        new(
+            new ServiceCollection().BuildServiceProvider(),
+            NullLogger<HotChocolateOperationCacheInvalidator>.Instance
+        );
 
     private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {

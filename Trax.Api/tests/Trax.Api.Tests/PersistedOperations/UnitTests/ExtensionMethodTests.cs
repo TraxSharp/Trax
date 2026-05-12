@@ -282,6 +282,7 @@ public class ExtensionMethodTests
         var svc = new PersistedOperationReceiverService(
             options,
             new NoOpPersistedOperationCache(),
+            NoOpInvalidator(),
             NullLogger<PersistedOperationReceiverService>.Instance
         );
 
@@ -310,6 +311,7 @@ public class ExtensionMethodTests
                     _ = new PersistedOperationReceiverService(
                         null!,
                         new NoOpPersistedOperationCache(),
+                        NoOpInvalidator(),
                         NullLogger<PersistedOperationReceiverService>.Instance
                     )
             )
@@ -321,6 +323,20 @@ public class ExtensionMethodTests
                 () =>
                     _ = new PersistedOperationReceiverService(
                         options,
+                        null!,
+                        NoOpInvalidator(),
+                        NullLogger<PersistedOperationReceiverService>.Instance
+                    )
+            )
+        )
+            .Should()
+            .Throw<ArgumentNullException>();
+        (
+            (Action)(
+                () =>
+                    _ = new PersistedOperationReceiverService(
+                        options,
+                        new NoOpPersistedOperationCache(),
                         null!,
                         NullLogger<PersistedOperationReceiverService>.Instance
                     )
@@ -334,6 +350,7 @@ public class ExtensionMethodTests
                     _ = new PersistedOperationReceiverService(
                         options,
                         new NoOpPersistedOperationCache(),
+                        NoOpInvalidator(),
                         null!
                     )
             )
@@ -341,4 +358,10 @@ public class ExtensionMethodTests
             .Should()
             .Throw<ArgumentNullException>();
     }
+
+    private static HotChocolateOperationCacheInvalidator NoOpInvalidator() =>
+        new(
+            new ServiceCollection().BuildServiceProvider(),
+            NullLogger<HotChocolateOperationCacheInvalidator>.Instance
+        );
 }

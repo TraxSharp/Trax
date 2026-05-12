@@ -22,6 +22,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
 {
     private readonly PersistedOperationsOptions _options;
     private readonly IPersistedOperationCache _cache;
+    private readonly HotChocolateOperationCacheInvalidator _hcInvalidator;
     private readonly ILogger<PersistedOperationReceiverService> _logger;
 
     private IConnection? _connection;
@@ -31,14 +32,17 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
     public PersistedOperationReceiverService(
         PersistedOperationsOptions options,
         IPersistedOperationCache cache,
+        HotChocolateOperationCacheInvalidator hcInvalidator,
         ILogger<PersistedOperationReceiverService> logger
     )
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(cache);
+        ArgumentNullException.ThrowIfNull(hcInvalidator);
         ArgumentNullException.ThrowIfNull(logger);
         _options = options;
         _cache = cache;
+        _hcInvalidator = hcInvalidator;
         _logger = logger;
     }
 
@@ -117,7 +121,10 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
             );
 
             if (message is not null)
+            {
                 _cache.Invalidate(message.TenantKey, message.Id);
+                await _hcInvalidator.InvalidateAsync(CancellationToken.None).ConfigureAwait(false);
+            }
 
             await _channel
                 .BasicAckAsync(ea.DeliveryTag, multiple: false, CancellationToken.None)

@@ -49,6 +49,7 @@ public class DbPersistedOperationStorageTests
             cache,
             _broadcaster,
             new NoOpPersistedOperationValidator(),
+            NoOpInvalidator(),
             TimeProvider.System,
             NullLogger<DbPersistedOperationStorage>.Instance
         );
@@ -283,6 +284,7 @@ public class DbPersistedOperationStorageTests
             new NoOpPersistedOperationCache(),
             throwing,
             new NoOpPersistedOperationValidator(),
+            NoOpInvalidator(),
             TimeProvider.System,
             NullLogger<DbPersistedOperationStorage>.Instance
         );
@@ -605,6 +607,7 @@ public class DbPersistedOperationStorageTests
             memCache,
             new NoOpPersistedOperationBroadcaster(),
             new NoOpPersistedOperationValidator(),
+            NoOpInvalidator(),
             TimeProvider.System,
             NullLogger<DbPersistedOperationStorage>.Instance
         );
@@ -637,6 +640,17 @@ public class DbPersistedOperationStorageTests
         second.Should().NotBeNull();
         second!.ToString().Should().Contain("hello");
     }
+
+    /// <summary>
+    /// Invalidator over an empty service provider: HC cache lookups all
+    /// return null so this is effectively a no-op for tests that exercise
+    /// the storage outside a real HotChocolate schema.
+    /// </summary>
+    private static HotChocolateOperationCacheInvalidator NoOpInvalidator() =>
+        new(
+            new ServiceCollection().BuildServiceProvider(),
+            NullLogger<HotChocolateOperationCacheInvalidator>.Instance
+        );
 
     private sealed class RecordingBroadcaster : IPersistedOperationBroadcaster
     {
