@@ -99,6 +99,15 @@ The cache is a pure optimization. The default behavior (DB hit per request) is c
 
 The RabbitMQ broadcaster publishes a `PersistedOperationChangedMessage` on every upsert, deactivate, and restore. Each node binds an exclusive auto-delete queue to a fanout exchange (`trax.persisted_operations.invalidation`) and clears its local cache entry on receipt.
 
+### HotChocolate cache invalidation
+
+Upsert, deactivate, and restore each clear HotChocolate's request-pipeline caches in addition to Trax's optional `IPersistedOperationCache`:
+
+- `IDocumentCache` (root-scoped, keyed by persisted-operation id) holds the parsed `DocumentNode`.
+- `IPreparedOperationCache` (schema-scoped, keyed by `{schema}-{executorVersion}-{documentId}+{operationName}`) holds the compiled operation.
+
+Without this, a re-uploaded document text would be visible from `IPersistedOperationStore.GetAsync` but the request executor would keep serving the previously compiled operation until the process restarted. Cross-node invalidation via `UseRabbitMqInvalidation(...)` triggers the same HotChocolate cache clear on every receiver. Neither HC cache exposes per-id removal, so each invalidation clears the cache entirely; persisted-operation edits are operator-driven and rare, so the cache-warm cost on the next handful of requests is acceptable.
+
 ## Phased rollout
 
 A consumer flipping enforcement on for the first time will reject every shipped client that hasn't had its manifest uploaded. Use shadow mode to observe the gap before enforcing:
