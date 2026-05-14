@@ -181,6 +181,21 @@ public static class GraphQLServiceExtensions
             services.AddSingleton<QueryModelTypeModule>();
             graphqlBuilder.AddTypeModule<QueryModelTypeModule>();
 
+            // Wire HotChocolate's @authorize directive handler whenever any
+            // model entity carries [TraxAuthorize]. The directive runs against
+            // ASP.NET Core's IAuthorizationService, so RequireRole / policy
+            // definitions registered via services.AddAuthorization(...) apply.
+            // Wiring is conditional so the dependency is opt-in for hosts that
+            // expose no gated models (the directive handler pulls in ASP.NET
+            // Core authorization machinery).
+            if (config.ModelRegistrations.Any(r => r.AuthorizeAttributes.Count > 0))
+            {
+                graphqlBuilder.AddAuthorization();
+                graphqlBuilder.AddHttpRequestInterceptor<QueryModelAuthenticationInterceptor>();
+                services.AddHostedService<QueryModelAuthorizationValidator>();
+                services.AddHostedService<QueryModelAuthorizationSchemaValidator>();
+            }
+
             // Register DiscoverQueries base type and discover field on RootQuery.
             // TrainTypeModule will skip creating these when it detects model registrations.
             graphqlBuilder.AddType(new ObjectType<DiscoverQueries>());

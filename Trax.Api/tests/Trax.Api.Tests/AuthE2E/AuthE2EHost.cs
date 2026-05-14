@@ -32,7 +32,10 @@ namespace Trax.Api.Tests.AuthE2E;
 public static class AuthE2EHost
 {
     // Each AuthE2E test class passes its own database name to keep migrations
-    // and advisory locks isolated; CI provisions the per-class DBs upfront.
+    // and advisory locks isolated; the database is provisioned on demand by
+    // EnsureDatabaseExists below (called from StartAsync and from the seeder
+    // helpers on the TestDbContexts), so no changes to CI workflows are
+    // required when a new fixture is added.
     //
     // Connection knobs:
     //   - Timeout=30 — CI runners occasionally need >15s (the Npgsql default)
@@ -47,6 +50,50 @@ public static class AuthE2EHost
         $"Host=localhost;Port=5432;Database={database};Username=trax;Password=trax123;"
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
+
+    /// <summary>
+    /// Idempotently creates the per-fixture test database. Each AuthE2E test
+    /// class uses its own database name so migrations and advisory locks stay
+    /// isolated; rather than pushing that list of names into the CI workflow
+    /// (where it would drift the moment someone adds a new fixture and forgets
+    /// to update the YAML), the host provisions on demand.
+    /// </summary>
+    /// <remarks>
+    /// Connects to the cluster's maintenance database <c>trax</c> (which is
+    /// guaranteed to exist by the docker-compose entrypoint / CI service
+    /// image) and runs <c>CREATE DATABASE</c>. Catches the duplicate-database
+    /// SQLState (<c>42P04</c>) so re-runs are no-ops.
+    /// </remarks>
+    public static void EnsureDatabaseExists(string database)
+    {
+        const string maintenanceConnectionString =
+            "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123;Timeout=30";
+
+        using var connection = new Npgsql.NpgsqlConnection(maintenanceConnectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        // Database names are validated against an allowlist of characters here
+        // because the CREATE DATABASE statement does not support parameter
+        // binding for identifiers. The test fixtures always pass compile-time
+        // literals, but enforce the shape defensively to make accidental
+        // misuse loud.
+        if (!System.Text.RegularExpressions.Regex.IsMatch(database, "^[a-z_][a-z0-9_]*$"))
+            throw new ArgumentException(
+                $"Database name '{database}' contains characters outside [a-z0-9_]. "
+                    + "Test fixtures must use snake_case ASCII identifiers.",
+                nameof(database)
+            );
+
+        command.CommandText = $"CREATE DATABASE \"{database}\"";
+        try
+        {
+            command.ExecuteNonQuery();
+        }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P04")
+        {
+            // Database already exists — idempotent no-op.
+        }
+    }
 
     public const string JwtIssuer = "https://trax-e2e-tests";
     public const string JwtAudience = "trax-e2e";
@@ -66,6 +113,7 @@ public static class AuthE2EHost
 
     public static async Task<IHost> StartAsync(Schemes schemes, string database)
     {
+        EnsureDatabaseExists(database);
         var connectionString = ConnectionString(database);
         var host = new HostBuilder()
             .ConfigureWebHost(web =>
@@ -112,12 +160,23 @@ public static class AuthE2EHost
                             o.UseNpgsql(connectionString)
                         );
 
+                        // Second DbContext for [TraxAuthorize]-on-[TraxQueryModel]
+                        // coverage. Lives in the `test_authz` schema so it does
+                        // not interfere with the unauthorized fixtures. Only the
+                        // QueryModelAuthorize E2E suite seeds it; the other
+                        // suites tolerate its presence because none of their
+                        // queries touch its fields.
+                        services.AddDbContextFactory<AuthzTestDbContext>(o =>
+                            o.UseNpgsql(connectionString)
+                        );
+
                         services.AddTraxGraphQL(graphql =>
                             graphql
                                 // Default is generous (15) and covers the
                                 // discover/namespace/entity/nodes/field chain
                                 // without needing an explicit override.
                                 .AddDbContext<TestDbContext>()
+                                .AddDbContext<AuthzTestDbContext>()
                                 .AddTypeExtensions(typeof(AuthE2EHost).Assembly)
                                 // Add custom subscription + mutation type
                                 // extensions for principal-propagation tests.

@@ -6,17 +6,19 @@ namespace Trax.Api.GraphQL.Startup;
 
 /// <summary>
 /// Warns at host start when a GraphQL schema exposes <c>AddDbContext</c>-driven
-/// model queries without an endpoint-level authorization gate. The model-query
-/// surface has no per-field authorization hook; anonymous clients can read every
-/// registered entity unless the consumer gates the endpoint explicitly via the
-/// <c>configure</c> callback on <c>UseTraxGraphQL</c>.
+/// model queries that are NOT individually gated by <c>[TraxAuthorize]</c>. The
+/// ungated model surface relies entirely on endpoint-level authorization; if the
+/// endpoint is anonymous, every authenticated caller can read every ungated
+/// registered entity.
 /// </summary>
 /// <remarks>
 /// Emits at <see cref="LogLevel.Warning"/> only — it is a reminder, not a fatal
 /// misconfiguration. Teams that intentionally ship public model-query endpoints
 /// can ignore the log or filter it out. Teams that did not intend public reads
-/// should either add <c>RequireAuthorization(...)</c> to the endpoint or gate
-/// specific queries with <c>[TraxAuthorize]</c> (when that surface lands).
+/// should either add <c>RequireAuthorization(...)</c> to the endpoint or attach
+/// <c>[TraxAuthorize]</c> to the sensitive entity classes so the directive runs
+/// at type level (and is enforced even when the entity is reached transitively
+/// via a navigation property on an ungated parent).
 /// </remarks>
 internal sealed class GraphQLModelExposureWarningService(
     GraphQLConfiguration configuration,
@@ -28,12 +30,22 @@ internal sealed class GraphQLModelExposureWarningService(
         if (configuration.ModelRegistrations.Count == 0)
             return Task.CompletedTask;
 
+        var ungated = configuration
+            .ModelRegistrations.Where(r => r.AuthorizeAttributes.Count == 0)
+            .Count();
+
+        if (ungated == 0)
+            return Task.CompletedTask;
+
         logger.LogWarning(
-            "Trax GraphQL: {Count} model query registration(s) are active. "
-                + "AddDbContext-backed model queries currently have no per-field authorization. "
-                + "Unless you gate the endpoint via `UseTraxGraphQL(configure: e => e.RequireAuthorization(...))` "
-                + "or accept that every authenticated caller can read every registered entity, "
-                + "review this surface before shipping to production.",
+            "Trax GraphQL: {Ungated} of {Total} model query registration(s) carry no "
+                + "[TraxAuthorize]. Ungated model queries are exposed to every caller that "
+                + "reaches the endpoint. Either gate the endpoint via "
+                + "`UseTraxGraphQL(configure: e => e.RequireAuthorization(...))`, attach "
+                + "[TraxAuthorize] to the sensitive entity classes (which enforces at type "
+                + "level, including transitively through navigation properties), or accept "
+                + "the public-read posture intentionally.",
+            ungated,
             configuration.ModelRegistrations.Count
         );
 

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq.Expressions;
 using System.Reflection;
+using HotChocolate.Authorization;
 using HotChocolate.Data;
 using HotChocolate.Data.Filters;
 using HotChocolate.Data.Sorting;
@@ -23,7 +24,7 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// field under <c>discover</c> with optional cursor pagination, filtering,
 /// sorting, and projection based on the attribute configuration.
 /// </summary>
-public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModule
+public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModule
 {
     /// <summary>
     /// Discovers all registered query model entities and generates the GraphQL schema types:
@@ -49,7 +50,7 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
                 var objectType = (ITypeSystemMember)
                     CreateObjectTypeMethod
                         .MakeGenericMethod(reg.EntityType)
-                        .Invoke(null, [reg.Attribute])!;
+                        .Invoke(null, [reg.Attribute, reg.AuthorizeAttributes])!;
                 types.Add(objectType);
             }
         }
@@ -154,6 +155,16 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
     {
         var attr = reg.Attribute;
 
+        // Apply [TraxAuthorize] at field level so the entry point itself is
+        // gated. Type-level @authorize alone leaves a hole: a request that
+        // selects only Connection-shaped scalars like `totalCount` or
+        // `pageInfo.hasNextPage` never resolves a node of the entity type,
+        // so the type-level directive does not fire. Field-level enforcement
+        // blocks the entry point unconditionally; type-level enforcement
+        // (in CreateObjectType) covers transitive navigation from ungated
+        // parents.
+        ApplyAuthorizeDirectives(field, reg.AuthorizeAttributes);
+
         // Apply features in the correct middleware pipeline order:
         // Paging > Projection > Filtering > Sorting
         if (attr.Paging)
@@ -230,7 +241,10 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
         });
     }
 
-    private static ObjectType<TEntity> CreateObjectType<TEntity>(TraxQueryModelAttribute attr)
+    private static ObjectType<TEntity> CreateObjectType<TEntity>(
+        TraxQueryModelAttribute attr,
+        IReadOnlyList<TraxAuthorizeAttribute> authorizeAttributes
+    )
         where TEntity : class
     {
         // ExposeAs takes precedence: build the GraphQL type from the supplied
@@ -259,11 +273,20 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
                     if (allowedNames.Contains(prop.Name))
                         descriptor.Field(prop);
                 }
+
+                ApplyAuthorizeDirectives(descriptor, authorizeAttributes);
             });
         }
 
         if (attr.BindFields != FieldBindingBehavior.Explicit)
-            return new ObjectType<TEntity>();
+        {
+            if (authorizeAttributes.Count == 0)
+                return new ObjectType<TEntity>();
+
+            return new ObjectType<TEntity>(descriptor =>
+                ApplyAuthorizeDirectives(descriptor, authorizeAttributes)
+            );
+        }
 
         return new ObjectType<TEntity>(descriptor =>
         {
@@ -278,7 +301,95 @@ public class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModu
                 if (prop.GetCustomAttribute<ColumnAttribute>() is not null)
                     descriptor.Field(prop);
             }
+
+            ApplyAuthorizeDirectives(descriptor, authorizeAttributes);
         });
+    }
+
+    /// <summary>
+    /// Attaches HotChocolate <c>@authorize</c> directives to an <see cref="IObjectTypeDescriptor"/>
+    /// according to the supplied <see cref="TraxAuthorizeAttribute"/> set. The directive
+    /// is applied at <em>type</em> level (not field level) so any field whose return
+    /// type is this object enforces the gate, including navigation properties reached
+    /// transitively from an ungated parent type.
+    ///
+    /// <para>
+    /// Combinator semantics mirror <see cref="Trax.Effect.Attributes.TraxAuthorizeAttribute"/>'s
+    /// documented behavior for trains:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>Bare <c>[TraxAuthorize]</c> with no policy or roles is materialised by
+    /// emitting an empty <c>@authorize</c> directive, which the HotChocolate authorization
+    /// middleware treats as "require authenticated user."</item>
+    /// <item>Every <see cref="TraxAuthorizeAttribute.Policy"/> becomes its own directive;
+    /// HotChocolate evaluates them with AND semantics.</item>
+    /// <item>All <see cref="TraxAuthorizeAttribute.Roles"/> values across every attached
+    /// attribute are unioned (CSV split, trimmed, distinct) and emitted as a single
+    /// directive — the principal must hold at least one. Multiple role directives would
+    /// AND the OR-sets together, which is not the documented contract.</item>
+    /// </list>
+    /// </summary>
+    private static void ApplyAuthorizeDirectives<TEntity>(
+        IObjectTypeDescriptor<TEntity> descriptor,
+        IReadOnlyList<TraxAuthorizeAttribute> attributes
+    )
+        where TEntity : class
+    {
+        ExtractRules(attributes, out var policies, out var roles);
+
+        foreach (var policy in policies)
+            descriptor.Authorize(policy, ApplyPolicy.BeforeResolver);
+
+        if (roles.Length > 0)
+            descriptor.Authorize(roles);
+        else if (policies.Length == 0 && attributes.Count > 0)
+            descriptor.Authorize(ApplyPolicy.BeforeResolver);
+    }
+
+    private static void ApplyAuthorizeDirectives(
+        IObjectFieldDescriptor descriptor,
+        IReadOnlyList<TraxAuthorizeAttribute> attributes
+    )
+    {
+        ExtractRules(attributes, out var policies, out var roles);
+
+        foreach (var policy in policies)
+            descriptor.Authorize(policy, ApplyPolicy.BeforeResolver);
+
+        if (roles.Length > 0)
+            descriptor.Authorize(roles);
+        else if (policies.Length == 0 && attributes.Count > 0)
+            descriptor.Authorize(ApplyPolicy.BeforeResolver);
+    }
+
+    /// <summary>
+    /// Reduces a set of <see cref="TraxAuthorizeAttribute"/> instances into the
+    /// distinct policy and role lists used to emit <c>@authorize</c> directives.
+    /// Policies AND across attributes; roles OR within an attribute (CSV split)
+    /// and OR across attributes (unioned). The semantics mirror
+    /// <see cref="Trax.Api.Services.Authorization.TrainAuthorizationService"/>'s
+    /// train-side enforcement so a model and a train that declare the same
+    /// <c>[TraxAuthorize]</c> shape have identical access rules.
+    /// </summary>
+    private static void ExtractRules(
+        IReadOnlyList<TraxAuthorizeAttribute> attributes,
+        out string[] policies,
+        out string[] roles
+    )
+    {
+        roles = attributes
+            .Where(a => a.Roles is not null)
+            .SelectMany(a => a.Roles!.Split(',', StringSplitOptions.TrimEntries))
+            .Where(r => !string.IsNullOrEmpty(r))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        policies = attributes
+            .Select(a => a.Policy)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static readonly MethodInfo FilterFieldGeneric = typeof(QueryModelTypeModule).GetMethod(

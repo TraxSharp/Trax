@@ -31,13 +31,17 @@ public partial class TraxGraphQLBuilder
                 FilterTypeOverrides.TryGetValue(entityType, out var filterType);
                 SortTypeOverrides.TryGetValue(entityType, out var sortType);
 
+                var authorizeAttributes = DiscoverAuthorizeAttributes(entityType);
+                ValidateAuthorizeAttributeShapes(entityType, authorizeAttributes);
+
                 modelRegistrations.Add(
                     new QueryModelRegistration(
                         entityType,
                         dbContextType,
                         attr,
                         filterType,
-                        sortType
+                        sortType,
+                        authorizeAttributes
                     )
                 );
             }
@@ -57,6 +61,70 @@ public partial class TraxGraphQLBuilder
             OperationQueriesExposed,
             OperationMutationsExposed
         );
+    }
+
+    /// <summary>
+    /// Collects every <see cref="TraxAuthorizeAttribute"/> declared on the entity type
+    /// (including any inherited via base classes or interfaces). De-duplicates by
+    /// reference identity so a single attribute instance is not counted twice when the
+    /// CLR returns it via multiple inheritance paths.
+    /// </summary>
+    private static IReadOnlyList<TraxAuthorizeAttribute> DiscoverAuthorizeAttributes(
+        Type entityType
+    )
+    {
+        var seen = new HashSet<TraxAuthorizeAttribute>(ReferenceEqualityComparer.Instance);
+        var ordered = new List<TraxAuthorizeAttribute>();
+
+        // The entity class itself, plus every interface it implements. `Inherited = true`
+        // on the attribute already walks the base-class chain.
+        var carriers = new List<Type> { entityType };
+        carriers.AddRange(entityType.GetInterfaces());
+
+        foreach (var carrier in carriers)
+        {
+            foreach (var attr in carrier.GetCustomAttributes<TraxAuthorizeAttribute>(inherit: true))
+            {
+                if (seen.Add(attr))
+                    ordered.Add(attr);
+            }
+        }
+
+        return ordered;
+    }
+
+    /// <summary>
+    /// Build-time shape validation for <see cref="TraxAuthorizeAttribute"/> on a query
+    /// model entity. Mirrors the train-side validator at
+    /// <c>AuthorizationRegistrationValidator.ValidateAttributeShapes</c>: whitespace
+    /// Policy and Roles values are caught here rather than producing a runtime gate
+    /// that silently denies everyone.
+    /// </summary>
+    private static void ValidateAuthorizeAttributeShapes(
+        Type entityType,
+        IReadOnlyList<TraxAuthorizeAttribute> attributes
+    )
+    {
+        foreach (var attribute in attributes)
+        {
+            if (attribute.Policy is not null && string.IsNullOrWhiteSpace(attribute.Policy))
+                throw new InvalidOperationException(
+                    $"[TraxAuthorize] on '{entityType.FullName}' has an empty or whitespace "
+                        + "Policy value. Remove the parameter or provide a real policy name."
+                );
+
+            if (
+                attribute.Roles is not null
+                && attribute
+                    .Roles.Split(',', StringSplitOptions.TrimEntries)
+                    .All(string.IsNullOrEmpty)
+            )
+                throw new InvalidOperationException(
+                    $"[TraxAuthorize(Roles=\"{attribute.Roles}\")] on '{entityType.FullName}' "
+                        + "parsed to zero roles after splitting on ','. Remove the Roles "
+                        + "argument or provide one or more non-empty role names."
+                );
+        }
     }
 
     private static void ValidateExposeAs(Type entityType, TraxQueryModelAttribute attr)

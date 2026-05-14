@@ -71,9 +71,10 @@ jobs:
         env:
           PGPASSWORD: trax123
         run: |
-          for db in trax_api_operations trax_api_workqueue trax_api_logs trax_api_health \
-                    trax_api_auth_http trax_api_auth_model trax_api_auth_sub \
-                    trax_api_auth_subprop trax_api_auth_authorize; do
+          # AuthE2E fixtures self-provision via AuthE2EHost.EnsureDatabaseExists,
+          # so new test classes in that suite require no changes here. Other
+          # E2E test categories still rely on this explicit list.
+          for db in trax_api_operations trax_api_workqueue trax_api_logs trax_api_health; do
             psql -h localhost -U trax -d trax -c "CREATE DATABASE $db;"
           done
 

@@ -50,6 +50,10 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
     /// </summary>
     public static void EnsureSeeded(string connectionString)
     {
+        AuthE2EHost.EnsureDatabaseExists(
+            new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Database!
+        );
+
         var opts = new DbContextOptionsBuilder<TestDbContext>().UseNpgsql(connectionString).Options;
         using var db = new TestDbContext(opts);
 

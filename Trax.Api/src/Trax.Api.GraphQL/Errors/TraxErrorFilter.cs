@@ -47,6 +47,16 @@ internal class TraxErrorFilter : IErrorFilter
 {
     public IError OnError(IError error)
     {
+        // HotChocolate's @authorize directive (used by [TraxAuthorize] on
+        // [TraxQueryModel] entities) raises errors without an attached
+        // exception — they carry only a code. Normalise both authentication-
+        // and authorization-failure codes to the Trax public shape so callers
+        // see a single uniform error regardless of which path failed.
+        if (error.Code is "AUTH_NOT_AUTHENTICATED" or "AUTH_NOT_AUTHORIZED")
+            return error
+                .WithMessage(TrainAuthorizationException.PublicMessage)
+                .WithCode("TRAX_AUTHORIZATION");
+
         if (error.Exception is null)
             return error;
 
