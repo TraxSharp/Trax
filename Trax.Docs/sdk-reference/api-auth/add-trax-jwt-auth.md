@@ -37,6 +37,18 @@ public static AuthenticationBuilder AddTraxJwtAuth<TResolver>(
     this IServiceCollection services,
     Action<JwtBuilder> configure)
     where TResolver : class, ITraxPrincipalResolver<JwtTokenInput>;
+
+// Named-scheme overloads: register more than one JWT issuer side by side.
+public static AuthenticationBuilder AddTraxJwtAuth(
+    this IServiceCollection services,
+    string schemeName,
+    Action<JwtBuilder> configure);
+
+public static AuthenticationBuilder AddTraxJwtAuth<TResolver>(
+    this IServiceCollection services,
+    string schemeName,
+    Action<JwtBuilder> configure)
+    where TResolver : class, ITraxPrincipalResolver<JwtTokenInput>;
 ```
 
 | Overload | Use when | Resolver lifetime |
@@ -45,6 +57,8 @@ public static AuthenticationBuilder AddTraxJwtAuth<TResolver>(
 | `AddTraxJwtAuth<TResolver>(authority, audience)` | OIDC-backed API, resolver enriches from DB / cache. | Scoped, resolved from DI per request. |
 | `AddTraxJwtAuth(Action<JwtBuilder>)` | Symmetric key, custom validation, or event handlers. | Singleton `DefaultJwtPrincipalResolver`. |
 | `AddTraxJwtAuth<TResolver>(Action<JwtBuilder>)` | All of the above + custom resolver. | Scoped, resolved from DI per request. |
+| `AddTraxJwtAuth(schemeName, Action<JwtBuilder>)` | Accept tokens from more than one issuer. | Singleton `DefaultJwtPrincipalResolver` for this scheme. |
+| `AddTraxJwtAuth<TResolver>(schemeName, Action<JwtBuilder>)` | Multi-issuer setup with a custom resolver per scheme. | Scoped per request, resolved per scheme. |
 
 The positional overload is sugar for `AddTraxJwtAuth(jwt => jwt.UseAuthority(authority, audience))`. Reach for the builder when you need symmetric keys, clock-skew tweaks, or `OnChallenge`/`OnAuthenticationFailed` handlers.
 
@@ -201,9 +215,37 @@ app.UseTraxGraphQL(configure: endpoint => endpoint
 
 Combining JWT with API-key or OIDC routes credentials through whichever scheme the presented header matches.
 
+## Multiple issuers
+
+Pass a scheme name to register more than one JWT validator on the same host. Each call registers an independent `JwtBearer` scheme, its own per-scheme policy (`{schemeName}-JwtPolicy`), and contributes its scheme to the combined `TraxAuthPolicy`. Each scheme can use its own resolver, audience, signing key, and authority.
+
+```csharp
+// External customers signing in via Cognito.
+services.AddTraxJwtAuth<MyCognitoResolver>("cognito", jwt =>
+    jwt.UseAuthority("https://cognito-idp.us-east-1.amazonaws.com/us-east-1_ABC", "mobile-client"));
+
+// Internal service-to-service tokens minted by another backend.
+services.AddTraxJwtAuth<MyInternalResolver>("internal", jwt =>
+    jwt.UseSymmetricKey("nwyc-web", "nwyc-trax", internalSecretBytes));
+```
+
+Endpoints can then require either scheme:
+
+```csharp
+// Only Cognito tokens.
+app.MapGet("/customers", ...).RequireAuthorization("cognito-JwtPolicy");
+
+// Either scheme.
+app.MapGet("/internal", ...).RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
+```
+
+When an endpoint can accept either, callers either name the scheme explicitly per request or wire [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher) to pick the scheme by inspecting the inbound token's `iss` claim.
+
+The default-scheme overloads (`AddTraxJwtAuth(authority, audience)`, `AddTraxJwtAuth(Action<JwtBuilder>)`) register under `JwtDefaults.SchemeName` and remain the right choice when there is only one issuer.
+
 ## Subscriptions
 
-When `Trax.Api.GraphQL` is also present, `AddTraxJwtAuth` auto-registers `TraxJwtSocketInterceptor`. Subscriptions receive the token through the `connection_init` payload:
+When `Trax.Api.GraphQL` is also present and one JWT scheme is registered under `JwtDefaults.SchemeName`, `AddTraxJwtAuth` auto-registers `TraxJwtSocketInterceptor`. Subscriptions receive the token through the `connection_init` payload:
 
 ```js
 ws.send(JSON.stringify({
@@ -213,3 +255,5 @@ ws.send(JSON.stringify({
 ```
 
 The interceptor validates against the same `JwtBearerOptions` as the HTTP handler (signature, issuer, audience, lifetime, clock skew), then runs the principal resolver and attaches the result to `HttpContext.User` for the socket lifetime. Rejected connections close before any subscription operation runs.
+
+In a multi-issuer setup, the socket interceptor only validates against the default-scheme options. Hosts that need subscriptions across more than one issuer must either route every browser connection through one scheme or write a custom `ISocketSessionInterceptor`.

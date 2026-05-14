@@ -10,12 +10,15 @@ has_children: true
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-Reference for `Trax.Api.Auth` (core principal abstraction), `Trax.Api.Auth.ApiKey` (API-key scheme), `Trax.Api.Auth.Jwt` (JWT bearer scheme), and `Trax.Api.Auth.Oidc` (OpenID Connect scheme).
+Reference for `Trax.Api.Auth` (core principal abstraction), `Trax.Api.Auth.ApiKey` (API-key scheme), `Trax.Api.Auth.Jwt` (JWT bearer scheme), `Trax.Api.Auth.Jwt.Cognito` (Cognito-specific helpers), `Trax.Api.Auth.Jwt.Testing` (test fixtures), and `Trax.Api.Auth.Oidc` (OpenID Connect scheme).
 
 Pages:
 
 - [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth)
 - [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth)
+- [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher)
+- [UseCognito](/docs/sdk-reference/api-auth/use-cognito)
+- [JWT Testing](/docs/sdk-reference/api-auth/jwt-testing)
 - [AddTraxOidcAuth](/docs/sdk-reference/api-auth/add-trax-oidc-auth)
 - [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal)
 - [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal)
