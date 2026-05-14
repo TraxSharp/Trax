@@ -205,6 +205,23 @@ The configuration is validated at `Build()` time. Each failure mode throws `Inva
 
 `ExposeAs` only applies to `[TraxQueryModel]` (the query surface). Mutations are trains, not query models, and are not affected.
 
+## Authorization
+
+Apply `[TraxAuthorize]` to a `[TraxQueryModel]` entity to gate access. The directive attaches at GraphQL type level *and* at the entry field, so the gate enforces uniformly:
+
+- the top-level field under `discover` (including Connection-shaped scalars like `totalCount` and `pageInfo`),
+- any other field elsewhere in the schema whose return type is this entity (e.g. a navigation property on an ungated parent).
+
+```csharp
+[TraxQueryModel(Namespace = "library")]
+[TraxAuthorize(Roles = "Subscriber")]
+public class Article { ... }
+```
+
+Combinator semantics, role normalization, and inheritance behavior match the per-train `[TraxAuthorize]` surface. Policy names referenced by a `[TraxQueryModel]` entity must be registered with `services.AddAuthorization(...)`; a `QueryModelAuthorizationValidator` hosted service throws at host start if any policy is missing.
+
+See the [Authorization guide — Per-Model Authorization](/docs/authorization#per-model-authorization) for the full semantics table and limitations (no field-level gating, no row-level filtering).
+
 ## Name Derivation
 
 When `Name` is null, the field name is derived automatically:

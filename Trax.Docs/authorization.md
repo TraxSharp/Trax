@@ -9,12 +9,13 @@ section: Guides
 
 # Authorization
 
-Trax supports two levels of authorization for the API layer:
+Trax supports three levels of authorization for the API layer:
 
 - **Endpoint-level**: gate all Trax endpoints behind a single policy using the `configure` callback on `UseTraxGraphQL`. This is standard ASP.NET Core endpoint authorization.
 - **Per-train**: restrict individual trains using the `[TraxAuthorize]` attribute on the train class. When a request comes in to run or queue a train, Trax checks the attribute against the current HTTP user before executing anything.
+- **Per-model**: restrict `[TraxQueryModel]`-exposed entities using the same `[TraxAuthorize]` attribute on the entity class. The directive is enforced at GraphQL type level, so the gate also applies when the entity is reached transitively through a navigation property on an ungated parent.
 
-Endpoint-level auth answers "can this user access the Trax API at all?" Per-train auth answers "can this user execute *this particular* train?"
+Endpoint-level auth answers "can this user reach the Trax API at all?" Per-train auth answers "can this user execute *this particular* train?" Per-model auth answers "can this user read rows of *this particular* type, regardless of how they navigated to it?"
 
 ## Per-Train Authorization
 
@@ -86,6 +87,66 @@ public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrai
 ```
 
 The caller must pass the `MustBeInternal` policy and hold either `Admin` or `Manager`.
+
+## Per-Model Authorization
+
+Decorate any `[TraxQueryModel]` entity with `[TraxAuthorize]` to gate the auto-generated GraphQL query. The combinator semantics, role normalization, and inheritance behavior all match the per-train surface above. The only difference is enforcement: Trax attaches HotChocolate's native `@authorize` directive to the generated `ObjectType` *and* to the entry field under `discover`, so the gate fires in two places:
+
+- **Direct entry**: a top-level `discover.<namespace>.<modelField>` request runs the field-level directive before the resolver. Connection-shaped scalars like `totalCount` and `pageInfo` are blocked too; an unauthorized caller cannot enumerate the cardinality of a gated entity.
+- **Transitive navigation**: a request that reaches the entity through a navigation property on an ungated parent (`discover.publicOwners.nodes[].privateBooks`) triggers the type-level directive when each child node is materialized. The parent's data is still selected from the database, but the unauthorized response substitutes an error for the gated branch and never returns the row payload to the client.
+
+```csharp
+using System.ComponentModel.DataAnnotations.Schema;
+using Trax.Effect.Attributes;
+
+[TraxQueryModel(Namespace = "library")]
+[TraxAuthorize(Roles = "Subscriber")]
+[Table("articles", Schema = "content")]
+public class Article
+{
+    public long Id { get; set; }
+    public string Title { get; set; } = "";
+    public string Body { get; set; } = "";
+}
+```
+
+Anonymous and non-subscriber callers hitting `discover.library.articles` (or any field elsewhere in the schema whose return type is `Article`) receive a `TRAX_AUTHORIZATION` error with the public message `"Not authorized."`.
+
+### Combinator Semantics
+
+Identical to the per-train surface. The table below repeats them for reference; see [Per-Train Authorization](#per-train-authorization) for the prose explanation.
+
+| Attribute(s) on the entity | Meaning |
+|----------------------------|---------|
+| `[TraxAuthorize]` (bare) | Be authenticated. |
+| `[TraxAuthorize("P")]` | Policy `P` must pass. |
+| `[TraxAuthorize(Roles = "A,B")]` | Hold role `A` OR role `B`. |
+| `[TraxAuthorize("P1")] [TraxAuthorize("P2")]` | Both `P1` and `P2` must pass. Policies AND across attributes. |
+| `[TraxAuthorize(Roles = "A")] [TraxAuthorize(Roles = "B")]` | Hold role `A` OR role `B`. Roles union OR across attributes. |
+| `[TraxAuthorize("P")] [TraxAuthorize(Roles = "A")]` | Policy `P` must pass AND hold role `A`. |
+
+### Startup Validation
+
+`QueryModelAuthorizationValidator` runs as a hosted service at host start. It throws if any entity references an authorization policy that has not been registered via `services.AddAuthorization(...)`. This catches typoed policy names (`"AdmnPolicy"`) before the first request rather than turning the gate into a silent deny-all in production. Roles are not validated against the principal store (Trax has no view of what roles can exist); attribute shape (empty or whitespace-only `Policy`, all-empty `Roles` CSV) is validated at `TraxGraphQLBuilder.Build` time.
+
+### Authentication for Per-Model Gating
+
+Per-model `[TraxAuthorize]` enforcement runs HotChocolate's `@authorize` directive, which evaluates against `HttpContext.User`. ASP.NET Core's `UseAuthentication()` middleware only populates `HttpContext.User` from the **default authentication scheme**, so multi-scheme hosts (api-key + JWT, api-key + cookie, etc.) where no scheme is configured as the default would otherwise leave HC seeing an anonymous principal.
+
+Trax handles this automatically. When any registered `[TraxQueryModel]` entity carries `[TraxAuthorize]`, `AddTraxGraphQL` wires a HotChocolate `IHttpRequestInterceptor` (`QueryModelAuthenticationInterceptor`) that runs before each GraphQL HTTP request. The interceptor:
+
+1. Returns early if the request is already authenticated by upstream middleware or endpoint-level `RequireAuthorization`.
+2. Otherwise, walks every registered authentication scheme and attempts `AuthenticateAsync` against each. The first successful scheme wins; the resulting principal is assigned to `HttpContext.User` for the duration of the request.
+3. If no scheme matches the request's credentials, the principal stays anonymous — gated queries will then reject with `TRAX_AUTHORIZATION`.
+
+The interceptor runs only for GraphQL HTTP execution requests, so the Banana Cake Pop tool page and WebSocket subscription upgrades are not affected. Subscriptions authenticate separately via the per-scheme socket interceptors (`TraxApiKeySocketInterceptor`, `TraxJwtSocketInterceptor`).
+
+No consumer configuration is required.
+
+### Limitations
+
+- **Field-level gating inside an entity is not supported.** `[TraxAuthorize]` on a property is ignored. If `User.email` must be admin-only but `User.displayName` must be public, use a custom train rather than `[TraxQueryModel]`, or split the entity into two types via `ExposeAs`.
+- **Row-level filtering is not supported.** `[TraxAuthorize]` answers "can this user read *this type*", not "which rows of this type." For per-row scoping (tenancy, ownership, subscription tier), use EF Core global query filters that read the current `ClaimsPrincipal` from a scoped service.
 
 ## Registering Policies
 
@@ -202,4 +263,4 @@ The interface is defined in `Trax.Mediator`, so your implementation doesn't need
 
 ## SDK Reference
 
-> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
+> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models)
