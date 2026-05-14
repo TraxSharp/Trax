@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <AssemblyName>Trax.Api.Auth.Jwt.Cognito</AssemblyName>
+    <PackageDescription>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md. Amazon Cognito helpers for Trax JWT auth: claim normalization (cognito:groups, identities[], identity_provider) and a builder extension that wires both ID-token and access-token validation against a Cognito user pool.</PackageDescription>
+    <PackageReleaseNotes>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageReleaseNotes>
+    <PackageTags>trax;auth;jwt;cognito;aws;security</PackageTags>
+    <PackageReadmeFile>SECURITY-DISCLAIMER.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Api.Auth.Jwt/Trax.Api.Auth.Jwt.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\SECURITY-DISCLAIMER.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

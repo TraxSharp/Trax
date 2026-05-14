@@ -106,13 +106,26 @@ public sealed class JwtBuilder
     /// <summary>
     /// Hook for additional <see cref="TokenValidationParameters"/> tweaks
     /// (custom lifetime validators, audience lists, type validation, etc.).
-    /// Called after Trax sets issuer, audience, signing key, and clock skew,
-    /// so this is the last writer.
+    /// Called after Trax sets issuer, audience, signing key, and clock skew.
+    /// Multiple calls chain: each callback runs in registration order, so
+    /// helpers (e.g. <c>UseCognito</c>) and consumer overrides can compose.
     /// </summary>
     public JwtBuilder CustomizeTokenValidation(Action<TokenValidationParameters> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        TokenValidationCustomizer = configure;
+        if (TokenValidationCustomizer is null)
+        {
+            TokenValidationCustomizer = configure;
+        }
+        else
+        {
+            var previous = TokenValidationCustomizer;
+            TokenValidationCustomizer = tvp =>
+            {
+                previous(tvp);
+                configure(tvp);
+            };
+        }
         return this;
     }
 
@@ -120,12 +133,25 @@ public sealed class JwtBuilder
     /// Hook for raw <see cref="JwtBearerOptions"/> access (event handlers for
     /// <c>OnChallenge</c>, <c>OnAuthenticationFailed</c>, etc.). Runs after
     /// Trax has wired <c>OnTokenValidated</c> to the principal resolver, so
-    /// do not overwrite the events collection wholesale.
+    /// do not overwrite the events collection wholesale. Multiple calls
+    /// chain in registration order.
     /// </summary>
     public JwtBuilder CustomizeBearerOptions(Action<JwtBearerOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        BearerOptionsCustomizer = configure;
+        if (BearerOptionsCustomizer is null)
+        {
+            BearerOptionsCustomizer = configure;
+        }
+        else
+        {
+            var previous = BearerOptionsCustomizer;
+            BearerOptionsCustomizer = options =>
+            {
+                previous(options);
+                configure(options);
+            };
+        }
         return this;
     }
 

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <AssemblyName>Trax.Api.Auth.Jwt.Testing</AssemblyName>
+    <PackageDescription>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md. Test fixtures for Trax JWT auth: a self-hosted JWKS server, RS256/HS256 token minters, and helpers to mint Cognito-shaped tokens for use in integration tests.</PackageDescription>
+    <PackageReleaseNotes>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageReleaseNotes>
+    <PackageTags>trax;auth;jwt;testing;jwks</PackageTags>
+    <PackageReadmeFile>SECURITY-DISCLAIMER.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Api.Auth.Jwt/Trax.Api.Auth.Jwt.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\SECURITY-DISCLAIMER.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

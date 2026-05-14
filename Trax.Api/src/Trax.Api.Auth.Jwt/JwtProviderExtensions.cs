@@ -7,8 +7,8 @@ namespace Trax.Api.Auth.Jwt;
 /// Convenience wrappers around <see cref="JwtAuthServiceCollectionExtensions.AddTraxJwtAuth(IServiceCollection, string, string)"/>
 /// that bake in the authority URLs and (where relevant) audience semantics for
 /// common identity providers. Each method is a one-liner for the common case
-/// plus a <typeparamref name="TResolver"/> overload for hosts that need
-/// claim-to-principal enrichment beyond the default resolver.
+/// plus a generic <c>TResolver</c> overload for hosts that need claim-to-principal
+/// enrichment beyond the default resolver.
 /// </summary>
 /// <remarks>
 /// NO WARRANTY. Trax auth is plumbing, not a security product. You are solely

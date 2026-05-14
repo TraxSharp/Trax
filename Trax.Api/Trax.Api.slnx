@@ -4,6 +4,8 @@
     <Project Path="src/Trax.Api.Auth/Trax.Api.Auth.csproj" />
     <Project Path="src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
     <Project Path="src/Trax.Api.Auth.Jwt/Trax.Api.Auth.Jwt.csproj" />
+    <Project Path="src/Trax.Api.Auth.Jwt.Cognito/Trax.Api.Auth.Jwt.Cognito.csproj" />
+    <Project Path="src/Trax.Api.Auth.Jwt.Testing/Trax.Api.Auth.Jwt.Testing.csproj" />
     <Project Path="src/Trax.Api.Auth.Oidc/Trax.Api.Auth.Oidc.csproj" />
     <Project Path="src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
     <Project Path="src/Trax.Api.GraphQL.Audit/Trax.Api.GraphQL.Audit.csproj" />

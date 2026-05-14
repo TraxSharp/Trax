@@ -109,4 +109,55 @@ public class JwtBuilderTests
 
         act.Should().Throw<ArgumentNullException>();
     }
+
+    [Test]
+    public void CustomizeTokenValidation_Null_Throws()
+    {
+        var builder = new JwtBuilder();
+
+        var act = () => builder.CustomizeTokenValidation(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Test]
+    public void CustomizeTokenValidation_MultipleCalls_ChainInRegistrationOrder()
+    {
+        var builder = new JwtBuilder();
+        var sequence = new List<int>();
+
+        builder.CustomizeTokenValidation(_ => sequence.Add(1));
+        builder.CustomizeTokenValidation(_ => sequence.Add(2));
+        builder.CustomizeTokenValidation(_ => sequence.Add(3));
+
+        var tvp = new Microsoft.IdentityModel.Tokens.TokenValidationParameters();
+        builder.TokenValidationCustomizer!(tvp);
+
+        sequence.Should().Equal(1, 2, 3);
+    }
+
+    [Test]
+    public void CustomizeBearerOptions_Null_Throws()
+    {
+        var builder = new JwtBuilder();
+
+        var act = () => builder.CustomizeBearerOptions(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Test]
+    public void CustomizeBearerOptions_MultipleCalls_ChainInRegistrationOrder()
+    {
+        var builder = new JwtBuilder();
+        var sequence = new List<int>();
+
+        builder.CustomizeBearerOptions(_ => sequence.Add(1));
+        builder.CustomizeBearerOptions(_ => sequence.Add(2));
+
+        var options = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions();
+        builder.BearerOptionsCustomizer!(options);
+
+        sequence.Should().Equal(1, 2);
+    }
 }
