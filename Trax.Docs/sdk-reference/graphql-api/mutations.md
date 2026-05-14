@@ -107,6 +107,8 @@ type BanPlayerResponse {
 | `output` | `{OutputType}` | RUN mode, only for trains with non-`Unit` output |
 | `workQueueId` | `Long` | QUEUE mode. Database ID of the created WorkQueue entry |
 
+The wrapper is named `{TrainName}Response` by default. If the train's output CLR class is also named `{TrainName}Response` (for example `IAddressValidationTrain` returning `AddressValidationResponse`), the wrapper falls back to `{TrainName}MutationResponse` so the schema can build without a name collision. Trains whose output type follows a different naming convention are unaffected.
+
 ### Run + Queue Mode (Default)
 
 When no operations are specified (or both `GraphQLOperation.Run` and `GraphQLOperation.Queue` are passed), the mutation includes a `mode` parameter:
