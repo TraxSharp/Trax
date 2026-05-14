@@ -43,6 +43,19 @@ public partial class TrainTypeModule(
         var queryFields = new List<(TrainRegistration Registration, string TrainName)>();
         var needsExecutionModeEnum = false;
 
+        // Pre-compute the set of GraphQL names that will be claimed by output ObjectType<T>
+        // registrations. Used below to avoid a name collision when the synthesized mutation
+        // response wrapper "{trainName}Response" matches a user output class named the same
+        // (e.g. IAddressValidationTrain → "AddressValidation" + "Response" collides with the
+        // output CLR class AddressValidationResponse). When that happens we fall back to
+        // "{trainName}MutationResponse" instead.
+        var outputTypeGraphQLNames = new HashSet<string>(
+            registrations
+                .Where(r => (r.IsQuery || r.IsMutation) && HasTypedOutput(r))
+                .Select(r => r.OutputType.Name),
+            StringComparer.OrdinalIgnoreCase
+        );
+
         foreach (var reg in registrations)
         {
             if (!reg.IsQuery && !reg.IsMutation)
@@ -92,8 +105,14 @@ public partial class TrainTypeModule(
             }
             else
             {
-                // Every mutation train gets a response type
-                types.Add(BuildResponseType(trainName, reg));
+                // Every mutation train gets a response type. Default name is "{trainName}Response";
+                // if that collides with an output ObjectType name we fall back to
+                // "{trainName}MutationResponse" to keep the schema build from failing.
+                var defaultResponseName = $"{trainName}Response";
+                var responseTypeName = outputTypeGraphQLNames.Contains(defaultResponseName)
+                    ? $"{trainName}MutationResponse"
+                    : defaultResponseName;
+                types.Add(BuildResponseType(responseTypeName, reg));
 
                 if (
                     reg.GraphQLOperations.HasFlag(GraphQLOperation.Run)
@@ -243,9 +262,11 @@ public partial class TrainTypeModule(
     /// externalId (non-null). Other fields (metadataId, output, workQueueId) are nullable
     /// and populated based on the execution mode.
     /// </summary>
-    private static ObjectType BuildResponseType(string trainName, TrainRegistration registration)
+    private static ObjectType BuildResponseType(
+        string responseTypeName,
+        TrainRegistration registration
+    )
     {
-        var responseTypeName = $"{trainName}Response";
         var hasTypedOutput = HasTypedOutput(registration);
 
         return new ObjectType(d =>

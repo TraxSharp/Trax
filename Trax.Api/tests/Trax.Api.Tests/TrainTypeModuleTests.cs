@@ -1,4 +1,6 @@
 using FluentAssertions;
+using HotChocolate;
+using HotChocolate.Execution;
 using HotChocolate.Types;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
@@ -580,6 +582,177 @@ public class TrainTypeModuleTests
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
         GetNonGenericObjectTypes(types).Should().HaveCount(1);
+    }
+
+    #endregion
+
+    #region Response Type Name Collision
+
+    // The mutation response wrapper is normally named "{trainName}Response". When a user's
+    // output CLR class happens to be named "{trainName}Response" (e.g. IAddressValidationTrain
+    // returning AddressValidationResponse), HotChocolate gets two type registrations both
+    // claiming the same GraphQL name — schema build fails with "type registered twice."
+    // The fix: detect the collision and rename the wrapper to "{trainName}MutationResponse".
+
+    [Test]
+    public async Task CreateTypesAsync_OutputClassNameMatchesResponseWrapperName_UsesFallbackName()
+    {
+        // OutputType.Name = "AddressValidationResponse"; trainName = "AddressValidation";
+        // default wrapper name "AddressValidationResponse" collides with the output ObjectType.
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                trainName: "AddressValidationTrain",
+                outputType: typeof(AddressValidationResponse),
+                name: "AddressValidation",
+                serviceTypeName: "IAddressValidationTrain",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+        var module = new TrainTypeModule(discovery);
+
+        var types = await module.CreateTypesAsync(null!, CancellationToken.None);
+
+        // Both types should still be present: the output ObjectType<AddressValidationResponse>
+        // (HC-named "AddressValidationResponse") AND the renamed wrapper ObjectType
+        // (descriptor-named "AddressValidationMutationResponse").
+        GetGenericObjectTypes(types)
+            .Should()
+            .ContainSingle(t =>
+                t.GetType().GetGenericArguments()[0] == typeof(AddressValidationResponse)
+            );
+        GetNonGenericObjectTypes(types).Should().HaveCount(1);
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_OutputClassNameMatchesResponseWrapperName_SchemaBuildsSuccessfully()
+    {
+        // End-to-end regression: the bug surfaces as a SchemaException during schema build.
+        // We build a real schema and assert both types end up in it under non-colliding names.
+        var schema = await BuildSchemaWithDiscoveryAsync([
+            CreateRegistration<TypedInput>(
+                trainName: "AddressValidationTrain",
+                outputType: typeof(AddressValidationResponse),
+                name: "AddressValidation",
+                serviceTypeName: "IAddressValidationTrain",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+
+        // HotChocolate derives the output ObjectType's name from the CLR class name.
+        schema.Types.Should().Contain(t => t.Name == "AddressValidationResponse");
+        // The wrapper falls back to "{trainName}MutationResponse" to avoid the collision.
+        schema.Types.Should().Contain(t => t.Name == "AddressValidationMutationResponse");
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_OutputClassNameDoesNotMatchResponseWrapperName_UsesDefaultName()
+    {
+        // Sanity check: the rename only fires on collision. Normal trains keep "{trainName}Response".
+        var schema = await BuildSchemaWithDiscoveryAsync([
+            CreateRegistration<TypedInput>(
+                trainName: "CreatePlayerTrain",
+                outputType: typeof(TypedOutput),
+                name: "CreatePlayer",
+                serviceTypeName: "ICreatePlayerTrain",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+
+        schema.Types.Should().Contain(t => t.Name == "CreatePlayerResponse");
+        schema.Types.Should().NotContain(t => t.Name == "CreatePlayerMutationResponse");
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_CollisionAcrossDifferentTrains_StillRenamesWrapper()
+    {
+        // The collision can also be cross-train: TrainA's wrapper name matches TrainB's
+        // output class name. The pre-pass collects all output-type names, so both cases
+        // are caught the same way.
+        var schema = await BuildSchemaWithDiscoveryAsync([
+            CreateRegistration<TypedInput>(
+                trainName: "AddressValidationTrain",
+                outputType: typeof(TypedOutput),
+                name: "AddressValidation",
+                serviceTypeName: "IAddressValidationTrain",
+                operations: GraphQLOperation.Run
+            ),
+            CreateRegistration<TypedInput2>(
+                trainName: "FetchAddressTrain",
+                outputType: typeof(AddressValidationResponse),
+                name: "FetchAddress",
+                serviceTypeName: "IFetchAddressTrain",
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+
+        // Output class wins the natural name; the AddressValidation wrapper renames itself.
+        schema.Types.Should().Contain(t => t.Name == "AddressValidationResponse");
+        schema.Types.Should().Contain(t => t.Name == "AddressValidationMutationResponse");
+        schema.Types.Should().Contain(t => t.Name == "FetchAddressResponse");
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_QueryTrainWithCollidingOutputName_NoRename()
+    {
+        // Query trains do not get a response wrapper at all — there's nothing to collide with.
+        // Verify the output type is still registered under its natural name and no
+        // "MutationResponse" sneaks in.
+        var schema = await BuildSchemaWithDiscoveryAsync([
+            CreateRegistration<TypedInput>(
+                trainName: "AddressValidationTrain",
+                outputType: typeof(AddressValidationResponse),
+                name: "AddressValidation",
+                serviceTypeName: "IAddressValidationTrain",
+                isQuery: true,
+                operations: GraphQLOperation.Run
+            ),
+        ]);
+
+        schema.Types.Should().Contain(t => t.Name == "AddressValidationResponse");
+        schema.Types.Should().NotContain(t => t.Name == "AddressValidationMutationResponse");
+    }
+
+    private static async Task<ISchema> BuildSchemaWithDiscoveryAsync(
+        IReadOnlyList<TrainRegistration> registrations
+    )
+    {
+        var services = new ServiceCollection();
+        var discovery = new StubDiscoveryService(registrations);
+
+        services.AddSingleton<ITrainDiscoveryService>(discovery);
+        services.AddSingleton<TrainTypeModule>();
+
+        // Minimum schema scaffolding for HotChocolate. RootQuery needs at least one field;
+        // RootMutation is added when the registrations include a mutation, so we add a
+        // RootMutation extension with a sentinel field too. The TypeModule layers its
+        // extensions on top of RootMutation/DispatchMutations.
+        var gql = services
+            .AddGraphQLServer("trax")
+            .AddQueryType(d =>
+                d.Name("RootQuery").Field("_ping").Type<StringType>().Resolve("pong")
+            )
+            .AddTypeModule<TrainTypeModule>();
+
+        if (registrations.Any(r => r.IsMutation))
+        {
+            gql.AddType<RootMutation>()
+                .AddTypeExtension(
+                    new ObjectTypeExtension(d =>
+                        d.Name("RootMutation").Field("_ping").Type<StringType>().Resolve("pong")
+                    )
+                );
+        }
+
+        var sp = services.BuildServiceProvider();
+        var resolver = sp.GetRequiredService<IRequestExecutorResolver>();
+        var executor = await resolver.GetRequestExecutorAsync("trax");
+        return executor.Schema;
+    }
+
+    public record AddressValidationResponse
+    {
+        public bool IsValid { get; init; }
+        public string[] Errors { get; init; } = Array.Empty<string>();
     }
 
     #endregion
