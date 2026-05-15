@@ -10,6 +10,7 @@
   </Folder>
   <Folder Name="/src/broadcaster/">
     <Project Path="src/Trax.Effect.Broadcaster.RabbitMQ/Trax.Effect.Broadcaster.RabbitMQ.csproj" />
+    <Project Path="src/Trax.Effect.Broadcaster.SignalR/Trax.Effect.Broadcaster.SignalR.csproj" />
   </Folder>
   <Folder Name="/src/providers/">
     <Project Path="src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
@@ -20,6 +21,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Effect.Tests.ArrayLogger/Trax.Effect.Tests.ArrayLogger.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Broadcaster/Trax.Effect.Tests.Broadcaster.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Broadcaster.SignalR/Trax.Effect.Tests.Broadcaster.SignalR.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Integration/Trax.Effect.Tests.Integration.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Json.Integration/Trax.Effect.Tests.Json.Integration.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Data.InMemory.Integration/Trax.Effect.Tests.Data.InMemory.Integration.csproj" />

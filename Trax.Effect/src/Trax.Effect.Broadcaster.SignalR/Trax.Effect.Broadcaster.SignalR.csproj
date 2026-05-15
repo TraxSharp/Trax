@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageDescription>SignalR transport for Trax lifecycle event broadcasting to Blazor and JS clients.</PackageDescription>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <AssemblyName>Trax.Effect.Broadcaster.SignalR</AssemblyName>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>
