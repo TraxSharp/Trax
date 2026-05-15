@@ -120,6 +120,16 @@ effects.UseBroadcaster(b =>
 )
 ```
 
+### SignalR
+
+```csharp
+effects.UseBroadcaster(b => b.UseSignalRHub())
+```
+
+SignalR is a **sink**, not a transport. It pushes events to connected browser or JS clients in real time. Compose it alongside a transport like RabbitMQ for cross-process delivery, or use it on its own when producer and consumer run in the same process.
+
+See [UseSignalRHub](/docs/sdk-reference/configuration/use-signalr-hub) for filtering and projection options, and [MapTraxTrainEventHub](/docs/sdk-reference/configuration/map-trax-train-event-hub) for the endpoint mapping that browsers connect to.
+
 ## Example: Distributed Workers
 
 Both the hub (API + scheduler) and worker processes call `UseBroadcaster()` with the same RabbitMQ connection:
@@ -208,4 +218,5 @@ public static BroadcasterBuilder UseMyTransport(
 ```
 dotnet add package Trax.Effect                        # Abstractions
 dotnet add package Trax.Effect.Broadcaster.RabbitMQ    # RabbitMQ transport
+dotnet add package Trax.Effect.Broadcaster.SignalR     # SignalR sink for browsers
 ```

@@ -170,6 +170,7 @@ No factory class needed. Trax creates one internally and resolves your hook's co
 |------|---------|-------------|
 | `GraphQLSubscriptionHook` | `Trax.Api.GraphQL` | Publishes lifecycle events to GraphQL [subscriptions](/docs/sdk-reference/graphql-api/subscriptions). Automatically registered by `AddTraxGraphQL()`. |
 | `BroadcastLifecycleHook` | `Trax.Effect` | Publishes lifecycle events to a message bus for cross-process delivery. Automatically registered by [`UseBroadcaster()`](/docs/sdk-reference/configuration/use-broadcaster). |
+| `SignalRTrainEventDispatcher` | `Trax.Effect.Broadcaster.SignalR` | Pushes lifecycle events to connected SignalR clients (Blazor, JS). Automatically registered by [`UseSignalRHub()`](/docs/sdk-reference/configuration/use-signalr-hub) as both a lifecycle hook (local path) and an `ITrainEventHandler` (remote path). |
 
 ## Per-Train Lifecycle Hooks
 
