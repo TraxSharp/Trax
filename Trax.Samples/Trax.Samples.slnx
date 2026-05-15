@@ -9,6 +9,9 @@
     <Project Path="samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub/Trax.Samples.EnergyHub.Hub.csproj" />
     <Project Path="samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker/Trax.Samples.EnergyHub.Worker.csproj" />
   </Folder>
+  <Folder Name="/samples/SignalRDashboard/">
+    <Project Path="samples/SignalRDashboard/Trax.Samples.SignalRDashboard/Trax.Samples.SignalRDashboard.csproj" />
+  </Folder>
   <!-- DataPipeline samples excluded: KedroSpaceflights depends on unpublished Flowthru.* packages -->
   <!--
   <Folder Name="/samples/DataPipeline/">

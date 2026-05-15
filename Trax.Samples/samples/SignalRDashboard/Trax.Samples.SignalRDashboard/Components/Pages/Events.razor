@@ -1,0 +1,101 @@
+@page "/events"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.SignalR.Client
+@using Trax.Effect.Broadcaster.SignalR.Models
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+<h2>Live Train Events</h2>
+
+<p style="color: #555;">
+    Status: <strong>@_status</strong>.
+    Received <strong>@_events.Count</strong> event(s).
+</p>
+
+@if (_events.Count == 0)
+{
+    <p><em>Waiting for the first event… the scheduler fires PingTrain every 10 seconds.</em></p>
+}
+else
+{
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid #ccc;">
+                <th style="padding: 0.25rem 0.5rem;">Timestamp (UTC)</th>
+                <th style="padding: 0.25rem 0.5rem;">Event</th>
+                <th style="padding: 0.25rem 0.5rem;">Train</th>
+                <th style="padding: 0.25rem 0.5rem;">External Id</th>
+                <th style="padding: 0.25rem 0.5rem;">Failure</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var evt in _events)
+            {
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 0.25rem 0.5rem;">@evt.Timestamp.ToString("HH:mm:ss.fff")</td>
+                    <td style="padding: 0.25rem 0.5rem;"><strong>@evt.EventType</strong></td>
+                    <td style="padding: 0.25rem 0.5rem; font-family: monospace;">@ShortName(evt.TrainName)</td>
+                    <td style="padding: 0.25rem 0.5rem; font-family: monospace;">@evt.ExternalId</td>
+                    <td style="padding: 0.25rem 0.5rem; color: #b00;">@evt.FailureReason</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private const int MaxRows = 50;
+    private HubConnection? _hub;
+    private readonly LinkedList<TraxClientEvent> _events = new();
+    private string _status = "connecting";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hub = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/hubs/trax-events"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hub.On<TraxClientEvent>(
+            "TrainEvent",
+            async evt =>
+            {
+                _events.AddFirst(evt);
+                while (_events.Count > MaxRows)
+                {
+                    _events.RemoveLast();
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        );
+
+        _hub.Closed += async _ =>
+        {
+            _status = "disconnected";
+            await InvokeAsync(StateHasChanged);
+        };
+
+        _hub.Reconnected += async _ =>
+        {
+            _status = "connected";
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await _hub.StartAsync();
+        _status = "connected";
+    }
+
+    private static string ShortName(string fullName)
+    {
+        var lastDot = fullName.LastIndexOf('.');
+        return lastDot >= 0 ? fullName[(lastDot + 1)..] : fullName;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null)
+        {
+            await _hub.DisposeAsync();
+        }
+    }
+}

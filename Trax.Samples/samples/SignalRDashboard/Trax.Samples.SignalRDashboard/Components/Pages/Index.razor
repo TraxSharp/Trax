@@ -1,0 +1,13 @@
+@page "/"
+@rendermode InteractiveServer
+
+<h2>Welcome</h2>
+<p>
+    This sample wires Trax + SignalR end-to-end. The scheduler queues a
+    <code>PingTrain</code> every 10 seconds and an in-process worker executes it.
+    Every lifecycle event flows through the SignalR sink to connected browsers.
+</p>
+<ul>
+    <li><a href="/events">Open the live event feed</a></li>
+    <li><a href="/trax">Open the Trax dashboard</a></li>
+</ul>
