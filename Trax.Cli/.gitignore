@@ -150,3 +150,6 @@ node_modules/
 # Generated projects (local CLI output)
 projects/*
 !projects/.gitkeep
+
+# MSBuild static graph restore cache
+*.csproj.lscache
