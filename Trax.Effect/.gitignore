@@ -146,3 +146,6 @@ BenchmarkDotNet.Artifacts/
 
 # Node modules (semantic-release)
 node_modules/
+
+# MSBuild static graph restore cache
+*.csproj.lscache
