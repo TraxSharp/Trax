@@ -41,6 +41,13 @@
     <ProjectReference Include="../../src/Trax.Api.Auth.Oidc/Trax.Api.Auth.Oidc.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL.Audit/Trax.Api.GraphQL.Audit.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.GraphQL.Client/Trax.Api.GraphQL.Client.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.GraphQL.Client.Trax/Trax.Api.GraphQL.Client.Trax.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.GraphQL.Client.Typed/Trax.Api.GraphQL.Client.Typed.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="GraphQLClient/**/*.graphql" />
   </ItemGroup>
 </Project>

@@ -9,6 +9,9 @@
     <Project Path="src/Trax.Api.Auth.Oidc/Trax.Api.Auth.Oidc.csproj" />
     <Project Path="src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
     <Project Path="src/Trax.Api.GraphQL.Audit/Trax.Api.GraphQL.Audit.csproj" />
+    <Project Path="src/Trax.Api.GraphQL.Client/Trax.Api.GraphQL.Client.csproj" />
+    <Project Path="src/Trax.Api.GraphQL.Client.Trax/Trax.Api.GraphQL.Client.Trax.csproj" />
+    <Project Path="src/Trax.Api.GraphQL.Client.Typed/Trax.Api.GraphQL.Client.Typed.csproj" />
     <Project Path="src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
   </Folder>
   <Folder Name="/tests/">

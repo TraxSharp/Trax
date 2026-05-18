@@ -1,0 +1,10 @@
+mutation RenameByResource($input: RenamePlayerInput!) {
+  renamePlayer(input: $input) {
+    id
+    name
+    level
+    rank
+    guild { id name }
+    inventory { id name category }
+  }
+}
