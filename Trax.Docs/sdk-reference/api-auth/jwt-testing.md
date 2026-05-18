@@ -41,11 +41,44 @@ The server listens on a random loopback port and disposes cleanly. Each instance
 
 | Member | Description |
 |---|---|
-| `Issuer` | `http://127.0.0.1:{port}` — the `iss` claim minted tokens carry. |
+| `Issuer` | The `iss` claim minted tokens carry. Defaults to `http://127.0.0.1:{port}`; override with `TestJwksServerOptions.IssuerOverride`. |
 | `JwksUri` | `{Issuer}/.well-known/jwks.json` |
-| `SigningKey` | The published `RsaSecurityKey` (public + private). |
-| `SigningCredentials` | RS256 credentials backed by the same key. |
-| `CreateIssuer(audience)` | Returns a `TestTokenIssuer` pre-configured for this server. |
+| `SigningKey` | The published `RsaSecurityKey` for the current key (most-recently-added). |
+| `SigningCredentials` | RS256 credentials for the current key. |
+| `SigningKeyIds` | List of every `kid` currently published in the JWKS document. |
+| `SigningCredentialsByKid` | Snapshot of every published credential keyed by `kid`. |
+| `CreateIssuer(audience)` | Returns a `TestTokenIssuer` pre-configured for this server. Calls to `WithSigningKey(kid)` on the returned issuer switch which key signs. |
+| `AddSigningKey(rsa?)` | Publish another signing key and make it current. Returns the assigned `kid`. |
+| `RemoveSigningKey(kid)` | Remove a previously-added key from the JWKS. |
+
+### `TestJwksServerOptions`
+
+| Option | Default | Purpose |
+|---|---|---|
+| `ListenUrl` | `http://127.0.0.1:0` | Kestrel bind URL. Use `http://+:8080` to bind a fixed port. |
+| `IssuerOverride` | null | Replace the `iss` value advertised in discovery. Useful when reverse-proxied or when matching a production issuer URL shape. |
+| `PathPrefix` | `""` | Mount JWKS and discovery under a path prefix (e.g. `/local_us-east-1_xxx`). Must start with `/` if non-empty. |
+
+### JWKS rotation
+
+```csharp
+await using var jwks = await TestJwksServer.StartAsync();
+
+// Publish a second key. New tokens sign with this one by default;
+// the original key stays in the JWKS so previously-issued tokens
+// still validate.
+var newKid = jwks.AddSigningKey();
+
+var issuer = jwks.CreateIssuer("test-aud");
+var oldToken = issuer.WithSigningKey(jwks.SigningKeyIds.First(k => k != newKid))
+    .Mint(b => b.WithSubject("alice"));
+var newToken = issuer.Mint(b => b.WithSubject("bob")); // signed with newKid
+
+// Retire the old key. Tokens signed with it now fail validation.
+jwks.RemoveSigningKey(jwks.SigningKeyIds.First(k => k != newKid));
+```
+
+The JWT bearer handler refreshes its JWKS cache on `kid` miss, so tokens signed with a freshly-added key validate without restarting the host.
 
 ## `TestTokenIssuer`
 
@@ -97,7 +130,9 @@ var token = jwks.CreateIssuer("test-aud").Mint(b =>
     b.WithSubject("alice").WithExpires(DateTime.UtcNow.AddMinutes(-5)));
 ```
 
-**Mock JWKS rotation**: stand up a new `TestJwksServer` (different `kid`), point the host at it, send a token signed by the new server. Verifies that the framework's JWKS cache refreshes correctly.
+**JWKS rotation in place**: call `AddSigningKey()` on a running server, mint with the new key, send through the same host. The bearer handler refreshes its JWKS cache on `kid` miss and accepts the new token. See the rotation snippet above.
+
+**Cognito-shaped tokens**: pair the server with [`CognitoTokenIssuer`](/docs/sdk-reference/api-auth/cognito-issuer) via `jwks.CreateCognitoIssuer()` to mint tokens that round-trip through `UseCognito` to a Cognito-shaped `TraxPrincipal`.
 
 ## Caveats
 
@@ -107,4 +142,4 @@ var token = jwks.CreateIssuer("test-aud").Mint(b =>
 
 ## SDK Reference
 
-> [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [UseCognito](/docs/sdk-reference/api-auth/use-cognito) | [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher)
+> [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [UseCognito](/docs/sdk-reference/api-auth/use-cognito) | [Cognito Issuer](/docs/sdk-reference/api-auth/cognito-issuer) | [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher)

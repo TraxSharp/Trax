@@ -74,6 +74,10 @@ Cognito user pools can broker Google, Apple, SAML, and arbitrary OIDC providers.
 
 Hosts that need a stable user identity across federated providers should configure account linking in Cognito (typically via a `PreSignUp` Lambda trigger that calls `AdminLinkProviderForUser`). The Trax side stays the same: validate the token, look up the user by Cognito `sub`.
 
+## Local development
+
+To run Trax against a Cognito stand-in (a Docker service speaking the user-pool dialect, an integration-test harness, etc.), use [`Trax.Api.Auth.Jwt.Cognito.Issuer`](/docs/sdk-reference/api-auth/cognito-issuer). It mints tokens with the same claim shapes Cognito emits, so the same `UseCognito` validator handles both real and local tokens without conditional code.
+
 ## Caveats
 
 - The `LifetimeValidator` installed by `UseCognito` replaces the framework default. If you need additional lifetime checks, chain them via a follow-up `CustomizeTokenValidation` call.
@@ -82,4 +86,4 @@ Hosts that need a stable user identity across federated providers should configu
 
 ## SDK Reference
 
-> [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher) | [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver)
+> [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher) | [Cognito Issuer](/docs/sdk-reference/api-auth/cognito-issuer) | [JWT Testing](/docs/sdk-reference/api-auth/jwt-testing) | [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver)
