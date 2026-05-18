@@ -153,3 +153,6 @@ BenchmarkDotNet.Artifacts/
 node_modules/
 dist/
 tsconfig.tsbuildinfo
+
+# MSBuild static graph restore cache
+*.csproj.lscache

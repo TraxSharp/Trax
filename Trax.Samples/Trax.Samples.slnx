@@ -12,6 +12,9 @@
   <Folder Name="/samples/SignalRDashboard/">
     <Project Path="samples/SignalRDashboard/Trax.Samples.SignalRDashboard/Trax.Samples.SignalRDashboard.csproj" />
   </Folder>
+  <Folder Name="/samples/GraphQLClient/">
+    <Project Path="samples/GraphQLClient/Trax.Samples.GraphQLClient/Trax.Samples.GraphQLClient.csproj" />
+  </Folder>
   <!-- DataPipeline samples excluded: KedroSpaceflights depends on unpublished Flowthru.* packages -->
   <!--
   <Folder Name="/samples/DataPipeline/">

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Trax.Samples.GraphQLClient</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HotChocolate.AspNetCore" Version="15.*" />
+    <PackageReference Include="Trax.Api.GraphQL.Client" Version="1.*" />
+    <PackageReference Include="Trax.Api.GraphQL.Client.Trax" Version="1.*" />
+    <PackageReference Include="Trax.Api.GraphQL.Client.Typed" Version="1.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="**/*.graphql" />
+  </ItemGroup>
+</Project>
