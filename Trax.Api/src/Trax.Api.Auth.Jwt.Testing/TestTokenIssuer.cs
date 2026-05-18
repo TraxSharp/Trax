@@ -16,6 +16,7 @@ namespace Trax.Api.Auth.Jwt.Testing;
 public sealed class TestTokenIssuer
 {
     private readonly SigningCredentials _credentials;
+    private readonly IReadOnlyDictionary<string, SigningCredentials>? _keyset;
 
     /// <summary>Issuer URL placed in the <c>iss</c> claim by default.</summary>
     public string Issuer { get; }
@@ -23,8 +24,26 @@ public sealed class TestTokenIssuer
     /// <summary>Default audience placed in <c>aud</c> when not overridden per call.</summary>
     public string DefaultAudience { get; }
 
+    /// <summary>Current signing credentials. Switch with <see cref="WithSigningKey"/>.</summary>
+    public SigningCredentials Credentials => _credentials;
+
     /// <summary>Construct an issuer that signs with the given credentials.</summary>
     public TestTokenIssuer(string issuer, string defaultAudience, SigningCredentials credentials)
+        : this(issuer, defaultAudience, credentials, keyset: null) { }
+
+    /// <summary>
+    /// Construct an issuer that signs with <paramref name="credentials"/> by
+    /// default but can switch to any other entry in <paramref name="keyset"/>
+    /// via <see cref="WithSigningKey"/>. Used by
+    /// <see cref="TestJwksServer.CreateIssuer"/> to enable kid rotation in
+    /// tests.
+    /// </summary>
+    public TestTokenIssuer(
+        string issuer,
+        string defaultAudience,
+        SigningCredentials credentials,
+        IReadOnlyDictionary<string, SigningCredentials>? keyset
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(issuer);
         ArgumentException.ThrowIfNullOrWhiteSpace(defaultAudience);
@@ -32,6 +51,30 @@ public sealed class TestTokenIssuer
         Issuer = issuer;
         DefaultAudience = defaultAudience;
         _credentials = credentials;
+        _keyset = keyset;
+    }
+
+    /// <summary>
+    /// Return a new issuer that signs with the key identified by
+    /// <paramref name="kid"/>. Throws if no key with that kid is in the
+    /// issuer's keyset (only issuers minted via
+    /// <see cref="TestJwksServer.CreateIssuer"/> have a populated keyset).
+    /// </summary>
+    public TestTokenIssuer WithSigningKey(string kid)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(kid);
+        if (_keyset is null)
+            throw new InvalidOperationException(
+                "WithSigningKey requires an issuer constructed with a keyset. "
+                    + "Use TestJwksServer.CreateIssuer(audience) to obtain one."
+            );
+        if (!_keyset.TryGetValue(kid, out var creds))
+            throw new ArgumentException(
+                $"No signing key with kid '{kid}' is registered on this issuer. "
+                    + $"Known kids: [{string.Join(", ", _keyset.Keys)}]",
+                nameof(kid)
+            );
+        return new TestTokenIssuer(Issuer, DefaultAudience, creds, _keyset);
     }
 
     /// <summary>
