@@ -355,6 +355,37 @@ using (var scope = app.Services.CreateScope())
         );
 
         db.SaveChanges();
+
+        // PublicAnnouncement seed: the first announcement intentionally links
+        // to a real MatchRecord so the AllowAnonymous E2E suite exercises the
+        // cascade-into-gated path (anonymous can read the announcement, but
+        // traversing into relatedMatch must be rejected).
+        var firstMatch = db.Matches.OrderBy(m => m.Id).First();
+        db.Announcements.AddRange(
+            new PublicAnnouncement
+            {
+                Title = "Patch 2.7 Live",
+                Body = "New map, new ranks, ratings reset.",
+                PublishedAt = DateTime.UtcNow.AddHours(-6),
+                RelatedMatchId = null,
+            },
+            new PublicAnnouncement
+            {
+                Title = "Replay of the Week",
+                Body = "Watch the closing minutes of the latest grand-final upset.",
+                PublishedAt = DateTime.UtcNow.AddHours(-3),
+                RelatedMatchId = firstMatch.Id,
+            },
+            new PublicAnnouncement
+            {
+                Title = "Server Maintenance Tomorrow",
+                Body = "EU servers offline 02:00-04:00 UTC.",
+                PublishedAt = DateTime.UtcNow.AddHours(-1),
+                RelatedMatchId = null,
+            }
+        );
+
+        db.SaveChanges();
     }
 }
 

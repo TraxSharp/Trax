@@ -12,6 +12,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 {
     public DbSet<PlayerRecord> Players { get; set; } = null!;
     public DbSet<MatchRecord> Matches { get; set; } = null!;
+    public DbSet<PublicAnnouncement> Announcements { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,6 +30,17 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
             entity.HasIndex(e => e.MatchId).IsUnique();
+        });
+
+        modelBuilder.Entity<PublicAnnouncement>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity
+                .HasOne(p => p.RelatedMatch)
+                .WithMany()
+                .HasForeignKey(p => p.RelatedMatchId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

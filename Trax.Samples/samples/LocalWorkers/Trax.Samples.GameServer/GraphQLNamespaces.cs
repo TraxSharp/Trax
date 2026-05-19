@@ -10,4 +10,5 @@ public static class GraphQLNamespaces
     public const string Players = "players";
     public const string Matches = "matches";
     public const string Leaderboard = "leaderboard";
+    public const string Public = "public";
 }
