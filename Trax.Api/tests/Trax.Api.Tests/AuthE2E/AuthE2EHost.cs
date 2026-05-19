@@ -183,6 +183,8 @@ public static class AuthE2EHost
                                 .ConfigureSchema(b =>
                                     b.AddTypeExtension<TestSubscriptions>()
                                         .AddTypeExtension<TestMutations>()
+                                        .AddTypeExtension<TraxCallerProbeQueries>()
+                                        .AddTypeExtension<TraxCallerProbeMutations>()
                                 )
                         );
                     })

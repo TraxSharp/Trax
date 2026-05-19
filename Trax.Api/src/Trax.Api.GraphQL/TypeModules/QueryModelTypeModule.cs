@@ -50,7 +50,10 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
                 var objectType = (ITypeSystemMember)
                     CreateObjectTypeMethod
                         .MakeGenericMethod(reg.EntityType)
-                        .Invoke(null, [reg.Attribute, reg.AuthorizeAttributes])!;
+                        .Invoke(
+                            null,
+                            [reg.Attribute, reg.AuthorizeAttributes, reg.AllowAnonymous]
+                        )!;
                 types.Add(objectType);
             }
         }
@@ -163,7 +166,15 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
         // blocks the entry point unconditionally; type-level enforcement
         // (in CreateObjectType) covers transitive navigation from ungated
         // parents.
-        ApplyAuthorizeDirectives(field, reg.AuthorizeAttributes);
+        //
+        // [TraxAllowAnonymous] short-circuits both gates: the entity is
+        // explicitly anonymous-readable, so emitting @authorize on its entry
+        // field would defeat the opt-in. The mutual-exclusion guard at
+        // TraxGraphQLBuilder.Build() guarantees AllowAnonymous and any
+        // [TraxAuthorize] attribute cannot both be set, so this check is
+        // mutually exclusive with the directive emission below.
+        if (!reg.AllowAnonymous)
+            ApplyAuthorizeDirectives(field, reg.AuthorizeAttributes);
 
         // Apply features in the correct middleware pipeline order:
         // Paging > Projection > Filtering > Sorting
@@ -243,7 +254,8 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
 
     private static ObjectType<TEntity> CreateObjectType<TEntity>(
         TraxQueryModelAttribute attr,
-        IReadOnlyList<TraxAuthorizeAttribute> authorizeAttributes
+        IReadOnlyList<TraxAuthorizeAttribute> authorizeAttributes,
+        bool allowAnonymous
     )
         where TEntity : class
     {
@@ -251,6 +263,13 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
         // interface's property set, not the entity's full public surface.
         // The combination ExposeAs + BindFields.Explicit is rejected at build
         // time (see TraxGraphQLBuilder.Build), so we don't need to consider it here.
+        //
+        // [TraxAllowAnonymous] short-circuits @authorize emission in all three
+        // branches below. The build-time mutual-exclusion guard guarantees
+        // AllowAnonymous and [TraxAuthorize] cannot both be set, but the
+        // explicit `!allowAnonymous` checks make the intent visible in code
+        // so a future refactor of ApplyAuthorizeDirectives cannot accidentally
+        // re-emit the directive on an anonymous entity.
         if (attr.ExposeAs is { } exposeAs)
         {
             var allowedNames = GetExposedPropertyNames(exposeAs);
@@ -274,13 +293,14 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
                         descriptor.Field(prop);
                 }
 
-                ApplyAuthorizeDirectives(descriptor, authorizeAttributes);
+                if (!allowAnonymous)
+                    ApplyAuthorizeDirectives(descriptor, authorizeAttributes);
             });
         }
 
         if (attr.BindFields != FieldBindingBehavior.Explicit)
         {
-            if (authorizeAttributes.Count == 0)
+            if (allowAnonymous || authorizeAttributes.Count == 0)
                 return new ObjectType<TEntity>();
 
             return new ObjectType<TEntity>(descriptor =>
@@ -302,7 +322,8 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
                     descriptor.Field(prop);
             }
 
-            ApplyAuthorizeDirectives(descriptor, authorizeAttributes);
+            if (!allowAnonymous)
+                ApplyAuthorizeDirectives(descriptor, authorizeAttributes);
         });
     }
 

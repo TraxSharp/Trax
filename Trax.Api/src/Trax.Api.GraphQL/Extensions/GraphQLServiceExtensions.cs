@@ -188,11 +188,23 @@ public static class GraphQLServiceExtensions
             // Wiring is conditional so the dependency is opt-in for hosts that
             // expose no gated models (the directive handler pulls in ASP.NET
             // Core authorization machinery).
-            if (config.ModelRegistrations.Any(r => r.AuthorizeAttributes.Count > 0))
+            var hasGated = config.ModelRegistrations.Any(r => r.AuthorizeAttributes.Count > 0);
+            var hasAnonymous = config.ModelRegistrations.Any(r => r.AllowAnonymous);
+
+            if (hasGated)
             {
                 graphqlBuilder.AddAuthorization();
                 graphqlBuilder.AddHttpRequestInterceptor<QueryModelAuthenticationInterceptor>();
                 services.AddHostedService<QueryModelAuthorizationValidator>();
+            }
+
+            // Schema validator covers both positive (gated has @authorize) and
+            // inverse ([TraxAllowAnonymous] has no @authorize) invariants. Run
+            // it whenever either flavor of entity is present so a stray
+            // ConfigureSchema callback can be caught at host start in either
+            // direction.
+            if (hasGated || hasAnonymous)
+            {
                 services.AddHostedService<QueryModelAuthorizationSchemaValidator>();
             }
 

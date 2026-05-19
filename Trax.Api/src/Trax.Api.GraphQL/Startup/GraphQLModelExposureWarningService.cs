@@ -30,8 +30,11 @@ internal sealed class GraphQLModelExposureWarningService(
         if (configuration.ModelRegistrations.Count == 0)
             return Task.CompletedTask;
 
+        // Entities marked [TraxAllowAnonymous] are intentionally opened, not
+        // ungated by omission. Excluding them keeps the warning focused on
+        // entities the developer may have forgotten to gate.
         var ungated = configuration
-            .ModelRegistrations.Where(r => r.AuthorizeAttributes.Count == 0)
+            .ModelRegistrations.Where(r => r.AuthorizeAttributes.Count == 0 && !r.AllowAnonymous)
             .Count();
 
         if (ungated == 0)

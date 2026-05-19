@@ -28,6 +28,14 @@ public class Owner
     public string Name { get; set; } = "";
 
     public List<OwnedBook> Books { get; set; } = new();
+
+    /// <summary>
+    /// Navigation to anonymous-readable bulletin entries owned by this Owner.
+    /// Owner is itself ungated; reaching <see cref="PublicBook"/> through this
+    /// navigation must succeed for anonymous callers because both sides allow
+    /// anonymous access.
+    /// </summary>
+    public List<PublicBook> PublicBooks { get; set; } = new();
 }
 
 /// <summary>
@@ -108,6 +116,48 @@ public class MemberArea
     public string Name { get; set; } = "";
 }
 
+/// <summary>
+/// Entity opened to anonymous reads with <c>[TraxAllowAnonymous]</c>. The
+/// E2E suite exercises three compositions that exist only because this entity
+/// is anonymously readable:
+/// <list type="bullet">
+/// <item>Direct anonymous read of <c>publicBooks</c> succeeds.</item>
+/// <item>Transitive <c>publicBook.linkedOwnedBook</c> still rejects anonymous —
+/// the gated child's <c>@authorize</c> directive fires regardless of how the
+/// parent opened the cascade. This is the Option B no-cascade contract.</item>
+/// <item>Transitive <c>owner.publicBooks</c> succeeds for anonymous callers —
+/// reaching an anonymous target through an ungated parent does not raise the
+/// gate.</item>
+/// </list>
+/// </summary>
+[TraxQueryModel(Namespace = "vault", Description = "Public bulletin (anonymous-readable).")]
+[TraxAllowAnonymous]
+[Table("public_books", Schema = "test_authz")]
+public class PublicBook
+{
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
+
+    [Column("owner_id")]
+    public long OwnerId { get; set; }
+
+    [Column("title")]
+    public string Title { get; set; } = "";
+
+    /// <summary>
+    /// Nullable FK to a gated OwnedBook. The transitive-from-anonymous test
+    /// requires at least one PublicBook with a real link; rows without a link
+    /// prove the resolver does not over-eagerly join.
+    /// </summary>
+    [Column("linked_owned_book_id")]
+    public long? LinkedOwnedBookId { get; set; }
+
+    public Owner Owner { get; set; } = null!;
+
+    public OwnedBook? LinkedOwnedBook { get; set; }
+}
+
 public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : DbContext(options)
 {
     public DbSet<Owner> Owners { get; set; } = null!;
@@ -115,6 +165,7 @@ public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : 
     public DbSet<Memo> Memos { get; set; } = null!;
     public DbSet<RestrictedDoc> RestrictedDocs { get; set; } = null!;
     public DbSet<MemberArea> MemberAreas { get; set; } = null!;
+    public DbSet<PublicBook> PublicBooks { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -125,6 +176,7 @@ public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : 
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
             entity.HasMany(e => e.Books).WithOne(b => b.Owner).HasForeignKey(b => b.OwnerId);
+            entity.HasMany(e => e.PublicBooks).WithOne(p => p.Owner).HasForeignKey(p => p.OwnerId);
         });
 
         modelBuilder.Entity<OwnedBook>(entity =>
@@ -132,6 +184,18 @@ public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : 
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
             entity.HasIndex(e => e.OwnerId);
+        });
+
+        modelBuilder.Entity<PublicBook>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.HasIndex(e => e.OwnerId);
+            entity
+                .HasOne(p => p.LinkedOwnedBook)
+                .WithMany()
+                .HasForeignKey(p => p.LinkedOwnedBookId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Memo>(entity =>
@@ -170,21 +234,16 @@ public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : 
             .Options;
         using var db = new AuthzTestDbContext(opts);
 
-        db.Database.ExecuteSqlRaw("CREATE SCHEMA IF NOT EXISTS test_authz");
-        try
-        {
-            db.Database.ExecuteSqlRaw(db.Database.GenerateCreateScript());
-        }
-        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07")
-        {
-            // Already exists.
-        }
-
-        db.Database.ExecuteSqlRaw("TRUNCATE TABLE test_authz.owned_books RESTART IDENTITY CASCADE");
-        db.Database.ExecuteSqlRaw("TRUNCATE TABLE test_authz.owners RESTART IDENTITY CASCADE");
-        db.Database.ExecuteSqlRaw("TRUNCATE TABLE test_authz.memos RESTART IDENTITY");
-        db.Database.ExecuteSqlRaw("TRUNCATE TABLE test_authz.restricted_docs RESTART IDENTITY");
-        db.Database.ExecuteSqlRaw("TRUNCATE TABLE test_authz.member_areas RESTART IDENTITY");
+        // Drop and recreate the schema. Tests reseed every run, so retaining
+        // tables across runs has no value, and the drop makes EnsureSeeded
+        // robust against schema evolution: a CI database created against an
+        // older fixture set (e.g., before PublicBook was added) would have
+        // missing tables that the prior CREATE-then-TRUNCATE flow could not
+        // recover from. Drop CASCADE clears every dependent object so the
+        // create script always runs from clean state.
+        db.Database.ExecuteSqlRaw("DROP SCHEMA IF EXISTS test_authz CASCADE");
+        db.Database.ExecuteSqlRaw("CREATE SCHEMA test_authz");
+        db.Database.ExecuteSqlRaw(db.Database.GenerateCreateScript());
 
         var alice = new Owner
         {
@@ -205,6 +264,33 @@ public class AuthzTestDbContext(DbContextOptions<AuthzTestDbContext> options) : 
         db.Memos.AddRange(new Memo { Body = "memo-1" }, new Memo { Body = "memo-2" });
         db.RestrictedDocs.Add(new RestrictedDoc { Payload = "restricted-1" });
         db.MemberAreas.Add(new MemberArea { Name = "lounge" });
+
+        db.SaveChanges();
+
+        // PublicBook seed runs after the Owner/OwnedBook seed so the FKs
+        // resolve. Alice's first PublicBook intentionally links to one of her
+        // OwnedBooks to exercise the cascade-from-anonymous-to-gated path.
+        var aliceFirstBook = db.OwnedBooks.OrderBy(b => b.Id).First(b => b.OwnerId == alice.Id);
+        db.PublicBooks.AddRange(
+            new PublicBook
+            {
+                OwnerId = alice.Id,
+                Title = "Alice's Public Notice",
+                LinkedOwnedBookId = aliceFirstBook.Id,
+            },
+            new PublicBook
+            {
+                OwnerId = alice.Id,
+                Title = "Alice's Other Public Notice",
+                LinkedOwnedBookId = null,
+            },
+            new PublicBook
+            {
+                OwnerId = bob.Id,
+                Title = "Bob's Public Notice",
+                LinkedOwnedBookId = null,
+            }
+        );
 
         db.SaveChanges();
     }

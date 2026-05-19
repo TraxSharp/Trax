@@ -46,8 +46,9 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
         var gated = configuration
             .ModelRegistrations.Where(r => r.AuthorizeAttributes.Count > 0)
             .ToList();
+        var anonymous = configuration.ModelRegistrations.Where(r => r.AllowAnonymous).ToList();
 
-        if (gated.Count == 0)
+        if (gated.Count == 0 && anonymous.Count == 0)
             return;
 
         // Materialise the schema. Building it now (a) catches any other schema
@@ -64,6 +65,12 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
         {
             VerifyTypeLevelDirective(schema, reg);
             VerifyEntryFieldDirective(queryType, reg);
+        }
+
+        foreach (var reg in anonymous)
+        {
+            VerifyTypeLevelDirectiveAbsent(schema, reg);
+            VerifyEntryFieldDirectiveAbsent(queryType, reg);
         }
     }
 
@@ -153,6 +160,86 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
                     + "A ConfigureSchema callback has stripped the directive — "
                     + "remove the override, or remove [TraxAuthorize] from the "
                     + "entity if the exposure is intentional."
+            );
+    }
+
+    /// <summary>
+    /// Inverse of <see cref="VerifyTypeLevelDirective"/>: confirms that the
+    /// <c>ObjectType</c> for a <c>[TraxAllowAnonymous]</c> entity carries no
+    /// <c>@authorize</c> directive. A directive there would silently re-lock
+    /// the type the developer explicitly opened — almost always from a hostile
+    /// or buggy <c>ConfigureSchema</c> callback.
+    /// </summary>
+    private static void VerifyTypeLevelDirectiveAbsent(ISchema schema, QueryModelRegistration reg)
+    {
+        var objectType = schema
+            .Types.OfType<ObjectType>()
+            .FirstOrDefault(t => t.RuntimeType == reg.EntityType);
+
+        // Absence of the ObjectType itself is fine for an anonymous entity —
+        // unlike the gated case, there is no gate to verify, so a removed
+        // type just means no exposure. The positive validator (above) already
+        // reports a missing ObjectType for gated entities, which is the
+        // security-critical direction.
+        if (objectType is null)
+            return;
+
+        if (HasAuthorizeDirective(objectType.Directives))
+            throw new InvalidOperationException(
+                $"[TraxAllowAnonymous] invariant violated: ObjectType for "
+                    + $"'{reg.EntityType.FullName}' has an @authorize directive in "
+                    + "the built schema. The entity is marked anonymously-readable, "
+                    + "but a ConfigureSchema callback has reattached the directive — "
+                    + "this would re-lock the type the developer explicitly opened. "
+                    + "Remove the override, or remove [TraxAllowAnonymous] from the "
+                    + "entity if it should be gated."
+            );
+    }
+
+    /// <summary>
+    /// Inverse of <see cref="VerifyEntryFieldDirective"/>: confirms the entry
+    /// field for a <c>[TraxAllowAnonymous]</c> entity carries no
+    /// <c>@authorize</c> directive. A leaked field-level directive would deny
+    /// anonymous callers even when the <c>ObjectType</c> itself is open, which
+    /// is the more confusing failure mode (the schema looks open in
+    /// introspection but every request gets <c>"Not authorized."</c>).
+    /// </summary>
+    private static void VerifyEntryFieldDirectiveAbsent(
+        IObjectType rootQuery,
+        QueryModelRegistration reg
+    )
+    {
+        var discoverField = rootQuery.Fields.FirstOrDefault(f => f.Name == "discover");
+        if (discoverField is null)
+            return; // Nothing to verify when the discover surface is absent.
+
+        var discoverType = (IObjectType)discoverField.Type.NamedType();
+        var container = discoverType;
+
+        if (reg.Attribute.Namespace is not null)
+        {
+            var nsFieldName = TrainTypeModule.CamelCase(reg.Attribute.Namespace);
+            var nsField = discoverType.Fields.FirstOrDefault(f => f.Name == nsFieldName);
+            if (nsField is null)
+                return;
+            container = (IObjectType)nsField.Type.NamedType();
+        }
+
+        var fieldName =
+            reg.Attribute.Name ?? QueryModelTypeModule.DeriveModelName(reg.EntityType.Name);
+        var entryField = container.Fields.FirstOrDefault(f => f.Name == fieldName);
+        if (entryField is null)
+            return;
+
+        if (HasAuthorizeDirective(entryField.Directives))
+            throw new InvalidOperationException(
+                $"[TraxAllowAnonymous] invariant violated: entry field '{fieldName}' "
+                    + $"for '{reg.EntityType.FullName}' has an @authorize directive in "
+                    + "the built schema. The entity is marked anonymously-readable, "
+                    + "but a ConfigureSchema callback has reattached the directive — "
+                    + "anonymous callers would receive 'Not authorized.' even though "
+                    + "the type itself is open. Remove the override, or remove "
+                    + "[TraxAllowAnonymous] from the entity if it should be gated."
             );
     }
 

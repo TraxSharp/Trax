@@ -47,6 +47,11 @@ public static class TraxAuthServiceCollectionExtensions
 
             throw new TraxPrincipalNotAvailableException();
         });
+
+        // Always-present caller context for code that runs in both authenticated
+        // and anonymous flows. Lifetime is scoped so HttpContextAccessor flows
+        // correctly per request; the trusted-scope dependency is a singleton.
+        services.TryAddScoped<TraxCaller>();
         return services;
     }
 }

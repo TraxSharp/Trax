@@ -17,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Trax.Mediator" Version="1.*" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\..\SECURITY-DISCLAIMER.md" Pack="true" PackagePath="\" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>

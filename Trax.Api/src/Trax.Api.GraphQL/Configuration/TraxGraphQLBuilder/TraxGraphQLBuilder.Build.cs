@@ -34,6 +34,9 @@ public partial class TraxGraphQLBuilder
                 var authorizeAttributes = DiscoverAuthorizeAttributes(entityType);
                 ValidateAuthorizeAttributeShapes(entityType, authorizeAttributes);
 
+                var allowAnonymous = DiscoverAllowAnonymous(entityType);
+                ValidateAllowAnonymousConflict(entityType, allowAnonymous, authorizeAttributes);
+
                 modelRegistrations.Add(
                     new QueryModelRegistration(
                         entityType,
@@ -41,7 +44,8 @@ public partial class TraxGraphQLBuilder
                         attr,
                         filterType,
                         sortType,
-                        authorizeAttributes
+                        authorizeAttributes,
+                        allowAnonymous
                     )
                 );
             }
@@ -125,6 +129,53 @@ public partial class TraxGraphQLBuilder
                         + "argument or provide one or more non-empty role names."
                 );
         }
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when the entity carries <see cref="TraxAllowAnonymousAttribute"/>
+    /// directly, via a base class, or via any implemented interface. Mirrors the
+    /// walk in <see cref="DiscoverAuthorizeAttributes"/> so the two attributes
+    /// have symmetric discovery semantics.
+    /// </summary>
+    private static bool DiscoverAllowAnonymous(Type entityType)
+    {
+        if (entityType.GetCustomAttribute<TraxAllowAnonymousAttribute>(inherit: true) is not null)
+            return true;
+
+        foreach (var iface in entityType.GetInterfaces())
+        {
+            if (iface.GetCustomAttribute<TraxAllowAnonymousAttribute>(inherit: true) is not null)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Rejects an entity that declares both <see cref="TraxAllowAnonymousAttribute"/>
+    /// and <see cref="TraxAuthorizeAttribute"/>. The two attributes have opposite
+    /// intents; allowing them to coexist would force a runtime decision about which
+    /// one wins (and would silently re-lock or re-open the entity depending on
+    /// the choice). Fail at build with a message naming the entity so the
+    /// misconfiguration surfaces during host startup, not when a request lands.
+    /// </summary>
+    private static void ValidateAllowAnonymousConflict(
+        Type entityType,
+        bool allowAnonymous,
+        IReadOnlyList<TraxAuthorizeAttribute> authorizeAttributes
+    )
+    {
+        if (!allowAnonymous || authorizeAttributes.Count == 0)
+            return;
+
+        throw new InvalidOperationException(
+            $"'{entityType.FullName}' declares both [TraxAllowAnonymous] and "
+                + "[TraxAuthorize] (directly or via base/interface). The two attributes "
+                + "are mutually exclusive: [TraxAllowAnonymous] opens the entity to "
+                + "anonymous reads, while [TraxAuthorize] gates it. Pick one. If the "
+                + "intent is to require some callers to authenticate while letting "
+                + "anonymous reads through, omit both and rely on row-level filtering."
+        );
     }
 
     private static void ValidateExposeAs(Type entityType, TraxQueryModelAttribute attr)
