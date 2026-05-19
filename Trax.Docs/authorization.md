@@ -15,6 +15,8 @@ Trax supports three levels of authorization for the API layer:
 - **Per-train**: restrict individual trains using the `[TraxAuthorize]` attribute on the train class. When a request comes in to run or queue a train, Trax checks the attribute against the current HTTP user before executing anything.
 - **Per-model**: restrict `[TraxQueryModel]`-exposed entities using the same `[TraxAuthorize]` attribute on the entity class. The directive is enforced at GraphQL type level, so the gate also applies when the entity is reached transitively through a navigation property on an ungated parent.
 
+A `[TraxQueryModel]` entity can also be explicitly opened to anonymous reads with `[TraxAllowAnonymous]`. See [Anonymous Access via TraxAllowAnonymous](#anonymous-access-via-traxallowanonymous) below.
+
 Endpoint-level auth answers "can this user reach the Trax API at all?" Per-train auth answers "can this user execute *this particular* train?" Per-model auth answers "can this user read rows of *this particular* type, regardless of how they navigated to it?"
 
 ## Per-Train Authorization
@@ -147,6 +149,69 @@ No consumer configuration is required.
 
 - **Field-level gating inside an entity is not supported.** `[TraxAuthorize]` on a property is ignored. If `User.email` must be admin-only but `User.displayName` must be public, use a custom train rather than `[TraxQueryModel]`, or split the entity into two types via `ExposeAs`.
 - **Row-level filtering is not supported.** `[TraxAuthorize]` answers "can this user read *this type*", not "which rows of this type." For per-row scoping (tenancy, ownership, subscription tier), use EF Core global query filters that read the current `ClaimsPrincipal` from a scoped service.
+
+## Anonymous Access via [TraxAllowAnonymous]
+
+`[TraxAllowAnonymous]` is the explicit opt-in counterpart to `[TraxAuthorize]` on a query model. Decorating a `[TraxQueryModel]` entity with it opens that entity to unauthenticated GraphQL reads.
+
+```csharp
+using Trax.Effect.Attributes;
+
+[TraxQueryModel(Namespace = "public")]
+[TraxAllowAnonymous]
+[Table("announcements", Schema = "content")]
+public class PublicAnnouncement
+{
+    public long Id { get; set; }
+    public string Title { get; set; } = "";
+    public string Body { get; set; } = "";
+}
+```
+
+Any caller, with or without authentication, can read `discover.public.announcements`. Authenticated callers are not excluded; the attribute just removes the gate.
+
+### Cascade Behavior
+
+`[TraxAllowAnonymous]` is local to the decorated entity. A navigation property whose target type carries `[TraxAuthorize]` still enforces that gate, even when reached through the anonymous parent:
+
+```csharp
+[TraxQueryModel(Namespace = "public")]
+[TraxAllowAnonymous]
+public class PublicAnnouncement
+{
+    public long Id { get; set; }
+    public string Title { get; set; } = "";
+
+    public long? RelatedMatchId { get; set; }
+    public MatchRecord? RelatedMatch { get; set; }  // gated below
+}
+
+[TraxQueryModel(Namespace = "matches")]
+[TraxAuthorize(Roles = "Admin")]
+public class MatchRecord
+{
+    public long Id { get; set; }
+    public string MatchId { get; set; } = "";
+}
+```
+
+An anonymous query for `discover.public.announcements { title }` succeeds. The same query selecting `relatedMatch { matchId }` fires the gated child's directive and returns `TRAX_AUTHORIZATION`. The anonymous parent does not propagate openness to its gated children.
+
+### Mutual Exclusion with [TraxAuthorize]
+
+`[TraxAllowAnonymous]` and `[TraxAuthorize]` on the same entity (directly, or via inheritance from a base class or interface) is rejected at `TraxGraphQLBuilder.Build()` with a message naming the entity. The two attributes have opposite intents and cannot coexist on a single type.
+
+### Endpoint-Level Auth Still Applies
+
+If the GraphQL endpoint itself is gated, e.g. `UseTraxGraphQL(configure: e => e.RequireAuthorization(...))`, requests are rejected at the HTTP layer before HotChocolate ever runs. `[TraxAllowAnonymous]` does not override endpoint-level checks; it only relaxes the per-model gate. This matches HotChocolate's own `[AllowAnonymous]` behavior.
+
+### Schema Validator Coverage
+
+The same hosted-service invariant check that asserts `@authorize` is present on gated entities also asserts it is *absent* on `[TraxAllowAnonymous]` entities. A custom `ConfigureSchema` callback that reattaches the directive to an anonymous entity throws at host start with a message naming the entity. The opt-in cannot be silently re-locked.
+
+### Exposure Warning Excludes Anonymous Entities
+
+The model-exposure warning service at host start counts ungated `[TraxQueryModel]` entities and emits a `LogLevel.Warning` when any are present. `[TraxAllowAnonymous]` entities are excluded from that count because opting in is intentional and would otherwise nag forever.
 
 ## Registering Policies
 
