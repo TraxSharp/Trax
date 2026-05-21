@@ -44,9 +44,9 @@ The shape-diff guardrail enforces this contract on every edit (see [Shape-Diff G
 
 ## Versioning
 
-Ids are opaque strings. There is no parse rule — `userProfile_v1`, `userProfile`, or `userProfile-2026-05` are all valid. The convention `<name>_v<N>` is recommended for readability but not enforced.
+Ids are opaque strings. There is no parse rule - `userProfile_v1`, `userProfile`, or `userProfile-2026-05` are all valid. The convention `<name>_v<N>` is recommended for readability but not enforced.
 
-The `version` field on the row is operator-controlled metadata, set via `UpsertOptions.Version` (or the `version` input on the GraphQL mutation). It is **not used for request routing** — the id is the contract with shipped clients. Bump the version when shipping a new client that requests a new id; both ids coexist in the database for the rollover period.
+The `version` field on the row is operator-controlled metadata, set via `UpsertOptions.Version` (or the `version` input on the GraphQL mutation). It is **not used for request routing** - the id is the contract with shipped clients. Bump the version when shipping a new client that requests a new id; both ids coexist in the database for the rollover period.
 
 The convention is built-time stable, not content-derived. Apollo's automatic-persisted-queries (APQ) hash the document text and produce a different id whenever the text changes, defeating the hot-fix property; persisted operations do the opposite.
 

@@ -19,7 +19,7 @@ Insert or update an operation. Runs schema validation, then the shape-diff guard
 
 | Input field | Type | Required | Notes |
 |---|---|---|---|
-| `id` | `String!` | yes | Build-time-stable identifier. Opaque string — no parse rule. The `<name>_v<N>` convention is recommended for readability. |
+| `id` | `String!` | yes | Build-time-stable identifier. Opaque string - no parse rule. The `<name>_v<N>` convention is recommended for readability. |
 | `document` | `String!` | yes | The GraphQL document the id resolves to. |
 | `description` | `String` | no | Operator-facing note recorded on the row. |
 | `bypassShapeDiff` | `Boolean` | no | When true, allows an edit that changes the response shape. Default false. |

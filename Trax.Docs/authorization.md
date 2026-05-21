@@ -64,7 +64,7 @@ The attribute supports two properties:
 
 The attribute works on classes, interfaces, and base classes. Trax unions the attributes it finds across the implementation type's interface chain and base chain, so `[TraxAuthorize("Admin")]` on an `IMyTrain` interface is honored even when the implementing class carries no attribute. Decorator-wrapped trains inherit their authorization requirements through the same mechanism.
 
-Role comparison is case-insensitive. `[TraxAuthorize(Roles = "admin")]` matches a principal carrying `ClaimTypes.Role = "Admin"` and vice-versa — both sides are normalized to upper-invariant.
+Role comparison is case-insensitive. `[TraxAuthorize(Roles = "admin")]` matches a principal carrying `ClaimTypes.Role = "Admin"` and vice-versa - both sides are normalized to upper-invariant.
 
 ## How Policies and Roles Combine
 
@@ -139,7 +139,7 @@ Trax handles this automatically. When any registered `[TraxQueryModel]` entity c
 
 1. Returns early if the request is already authenticated by upstream middleware or endpoint-level `RequireAuthorization`.
 2. Otherwise, walks every registered authentication scheme and attempts `AuthenticateAsync` against each. The first successful scheme wins; the resulting principal is assigned to `HttpContext.User` for the duration of the request.
-3. If no scheme matches the request's credentials, the principal stays anonymous — gated queries will then reject with `TRAX_AUTHORIZATION`.
+3. If no scheme matches the request's credentials, the principal stays anonymous - gated queries will then reject with `TRAX_AUTHORIZATION`.
 
 The interceptor runs only for GraphQL HTTP execution requests, so the Banana Cake Pop tool page and WebSocket subscription upgrades are not affected. Subscriptions authenticate separately via the per-scheme socket interceptors (`TraxApiKeySocketInterceptor`, `TraxJwtSocketInterceptor`).
 

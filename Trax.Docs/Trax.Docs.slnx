@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.Docs.Tests/Trax.Docs.Tests.csproj" />
+  </Folder>
+</Solution>

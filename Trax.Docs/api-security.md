@@ -15,9 +15,9 @@ This page covers authentication, audit logging, and operational hygiene for Trax
 
 Trax ships three pluggable authentication schemes, all feeding the same [`TraxPrincipal`](/docs/sdk-reference/api-auth/trax-principal) abstraction:
 
-- `Trax.Api.Auth.ApiKey` — header-based API keys for service-to-service calls.
-- `Trax.Api.Auth.Jwt` — JWT bearer tokens for SPA and machine-to-machine API clients.
-- `Trax.Api.Auth.Oidc` — OpenID Connect code flow for interactive browser sign-in.
+- `Trax.Api.Auth.ApiKey` - header-based API keys for service-to-service calls.
+- `Trax.Api.Auth.Jwt` - JWT bearer tokens for SPA and machine-to-machine API clients.
+- `Trax.Api.Auth.Oidc` - OpenID Connect code flow for interactive browser sign-in.
 
 Multiple schemes can coexist in a single host. Every `AddTrax*Auth` call contributes its scheme to the combined `TraxAuthClaimTypes.TraxAuthPolicy`, so endpoints protected by that policy accept credentials from any registered scheme.
 
@@ -134,7 +134,7 @@ ws.onopen = () => ws.send(JSON.stringify({
 }));
 ```
 
-`AddTraxJwtAuth` auto-registers `TraxJwtSocketInterceptor` when the Trax GraphQL schema is present. The interceptor validates the token against the same `JwtBearerOptions` (signature, issuer, audience, lifetime, clock skew) the HTTP handler uses — the WS and HTTP paths cannot diverge. It then runs `ITraxPrincipalResolver<JwtTokenInput>` and attaches the resulting principal.
+`AddTraxJwtAuth` auto-registers `TraxJwtSocketInterceptor` when the Trax GraphQL schema is present. The interceptor validates the token against the same `JwtBearerOptions` (signature, issuer, audience, lifetime, clock skew) the HTTP handler uses - the WS and HTTP paths cannot diverge. It then runs `ITraxPrincipalResolver<JwtTokenInput>` and attaches the resulting principal.
 
 ### OIDC cookie
 
@@ -146,7 +146,7 @@ No extra code required. The browser attaches the session cookie (`trax.oidc`) to
 
 ### Error Messages are Generic
 
-Trax deliberately never leaks which train a request tried to reach, which policy failed, or which role was required. A denied request returns a GraphQL error with code `TRAX_AUTHORIZATION` and the message `"Not authorized."` — nothing more. A request for an unknown train name returns `TRAX_TRAIN_NOT_FOUND` with a generic message; the requested name never echoes back. Diagnostic detail lives only in server-side logs.
+Trax deliberately never leaks which train a request tried to reach, which policy failed, or which role was required. A denied request returns a GraphQL error with code `TRAX_AUTHORIZATION` and the message `"Not authorized."` - nothing more. A request for an unknown train name returns `TRAX_TRAIN_NOT_FOUND` with a generic message; the requested name never echoes back. Diagnostic detail lives only in server-side logs.
 
 ## Accessing the Current User
 

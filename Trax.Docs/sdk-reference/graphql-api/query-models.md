@@ -220,9 +220,9 @@ public class Article { ... }
 
 Combinator semantics, role normalization, and inheritance behavior match the per-train `[TraxAuthorize]` surface. Policy names referenced by a `[TraxQueryModel]` entity must be registered with `services.AddAuthorization(...)`; a `QueryModelAuthorizationValidator` hosted service throws at host start if any policy is missing.
 
-The inverse opt-in, `[TraxAllowAnonymous]`, opens an entity to unauthenticated reads. It is mutually exclusive with `[TraxAuthorize]` and does not cascade through navigation properties to gated children. See [Authorization guide — Anonymous Access via TraxAllowAnonymous](/docs/authorization#anonymous-access-via-traxallowanonymous).
+The inverse opt-in, `[TraxAllowAnonymous]`, opens an entity to unauthenticated reads. It is mutually exclusive with `[TraxAuthorize]` and does not cascade through navigation properties to gated children. See [Authorization guide - Anonymous Access via TraxAllowAnonymous](/docs/authorization#anonymous-access-via-traxallowanonymous).
 
-See the [Authorization guide — Per-Model Authorization](/docs/authorization#per-model-authorization) for the full semantics table and limitations (no field-level gating, no row-level filtering).
+See the [Authorization guide - Per-Model Authorization](/docs/authorization#per-model-authorization) for the full semantics table and limitations (no field-level gating, no row-level filtering).
 
 ## Name Derivation
 

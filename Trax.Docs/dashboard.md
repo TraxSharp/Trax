@@ -37,7 +37,7 @@ Every host that calls `UseTraxDashboard()` must set this property in its csproj 
 
 Without it, the build omits `_framework/blazor.web.js`, the Blazor Server circuit never establishes, and the dashboard renders but **every button click is a no-op**. The page looks fine; nothing reacts.
 
-**Why isn't this automatic?** The Trax.Dashboard package can't propagate the property transitively. NuGet auto-imports `build/$PackageId.props`, but the Razor SDK overwrites that file during pack with static-asset imports, wiping anything we put there. Putting it in a `.targets` file is too late — the SDK reads `RequiresAspNetWebAssets` during the props phase, before NuGet targets are imported. It has to live in the consumer's csproj.
+**Why isn't this automatic?** The Trax.Dashboard package can't propagate the property transitively. NuGet auto-imports `build/$PackageId.props`, but the Razor SDK overwrites that file during pack with static-asset imports, wiping anything we put there. Putting it in a `.targets` file is too late - the SDK reads `RequiresAspNetWebAssets` during the props phase, before NuGet targets are imported. It has to live in the consumer's csproj.
 
 **Verifying it took effect.** After building your host:
 

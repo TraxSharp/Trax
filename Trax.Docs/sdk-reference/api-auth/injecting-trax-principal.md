@@ -44,7 +44,7 @@ Scoping means every injection within the same request scope returns the same ins
 - There is no `HttpContext` at all (scheduler path, background service, test code that doesn't set up the accessor)
 - The `ClaimsPrincipal` on the request came from a non-Trax scheme (missing the `trax:principal-id` claim)
 
-In practice this should never surprise you: if your junction injects `TraxPrincipal`, gate the upstream endpoint with `[TraxAuthorize]`. The authorization check rejects anonymous callers with a 401 before the junction is constructed. If the exception does fire, it's a configuration mistake — you forgot to gate the endpoint.
+In practice this should never surprise you: if your junction injects `TraxPrincipal`, gate the upstream endpoint with `[TraxAuthorize]`. The authorization check rejects anonymous callers with a 401 before the junction is constructed. If the exception does fire, it's a configuration mistake - you forgot to gate the endpoint.
 
 ## Dual-path junctions (API + scheduler)
 

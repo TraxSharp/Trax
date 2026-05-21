@@ -72,17 +72,17 @@ services.AddTraxJwtAuth("https://login.example.com", "my-api");
 Authority URLs for the common identity providers have non-obvious shapes. These wrappers in `Trax.Api.Auth.Jwt` hide them:
 
 ```csharp
-// Google — authority baked to https://accounts.google.com
+// Google - authority baked to https://accounts.google.com
 services.AddTraxGoogleJwtAuth(oauthClientId);
 
-// Auth0 — authority baked to https://{domain}/ (trailing slash required by Auth0)
+// Auth0 - authority baked to https://{domain}/ (trailing slash required by Auth0)
 services.AddTraxAuth0JwtAuth("my-tenant.auth0.com", "https://api.example.com");
 
-// Microsoft Entra (v2.0) — authority baked to
+// Microsoft Entra (v2.0) - authority baked to
 // https://login.microsoftonline.com/{tenantId}/v2.0
 services.AddTraxEntraJwtAuth(tenantId, "api://my-app");
 
-// Amazon Cognito — authority baked to
+// Amazon Cognito - authority baked to
 // https://cognito-idp.{region}.amazonaws.com/{userPoolId}
 services.AddTraxCognitoJwtAuth("us-east-1", "us-east-1_AbCdEfGhI", "app-client-id");
 ```
@@ -96,7 +96,7 @@ services.AddTraxCognitoJwtAuth("us-east-1", "us-east-1_AbCdEfGhI", "app-client-i
 
 Each helper has a `<TResolver>` overload when you need claim-to-principal enrichment beyond the default. Behind the scenes they delegate to `AddTraxJwtAuth(authority, audience)`, so the combined `TraxAuthPolicy`, subscription interceptor, and everything else on this page applies.
 
-The Auth0 helper normalizes the `domain` argument: strips `https://` / `http://` prefixes, strips a trailing slash, re-wraps to `https://{domain}/`. Pass `my-tenant.auth0.com`, `https://my-tenant.auth0.com`, or `my-tenant.auth0.com/` — all resolve identically.
+The Auth0 helper normalizes the `domain` argument: strips `https://` / `http://` prefixes, strips a trailing slash, re-wraps to `https://{domain}/`. Pass `my-tenant.auth0.com`, `https://my-tenant.auth0.com`, or `my-tenant.auth0.com/` - all resolve identically.
 
 Entra's `tenantId` can be a directory GUID, a verified domain (`contoso.onmicrosoft.com`), or one of the multi-tenant sentinels (`common`, `organizations`). The sentinels come with their own signing-key validation rules; prefer a specific tenant unless you explicitly need multi-tenancy.
 
@@ -147,7 +147,7 @@ If your provider emits those claims (Google, Auth0, Entra, Cognito, Okta all do)
 Reach for a custom resolver only when one of these is true:
 
 - **Roles live in a non-standard claim.** Entra app roles, Okta group URIs, namespaced Auth0 claims.
-- **You need database enrichment.** Look up the user's tenant, permissions, feature flags — anything that isn't already in the token.
+- **You need database enrichment.** Look up the user's tenant, permissions, feature flags - anything that isn't already in the token.
 - **You need to reject unknown subjects.** Allow-list of provisioned users, revocation cache, account suspension check.
 - **You need to transform claims.** Strip a namespace prefix, coerce numeric subjects to strings, merge multiple role sources into one.
 
