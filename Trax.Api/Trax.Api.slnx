@@ -17,5 +17,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Api.Tests/Trax.Api.Tests.csproj" />
+    <Project Path="tests/Trax.Api.Tests.Meta/Trax.Api.Tests.Meta.csproj" />
   </Folder>
 </Solution>

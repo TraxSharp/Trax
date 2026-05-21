@@ -1,0 +1,237 @@
+namespace Trax.Api.DTOs
+{
+    public class DeadLetterSummary : System.IEquatable<Trax.Api.DTOs.DeadLetterSummary>
+    {
+        public DeadLetterSummary(long Id, long ManifestId, string ManifestName, Trax.Effect.Enums.DeadLetterStatus Status, System.DateTime DeadLetteredAt, string Reason, int RetryCountAtDeadLetter, System.DateTime? ResolvedAt, string? ResolutionNote, long? RetryMetadataId) { }
+        public System.DateTime DeadLetteredAt { get; init; }
+        public long Id { get; init; }
+        public long ManifestId { get; init; }
+        public string ManifestName { get; init; }
+        public string Reason { get; init; }
+        public string? ResolutionNote { get; init; }
+        public System.DateTime? ResolvedAt { get; init; }
+        public int RetryCountAtDeadLetter { get; init; }
+        public long? RetryMetadataId { get; init; }
+        public Trax.Effect.Enums.DeadLetterStatus Status { get; init; }
+    }
+    public class ExecutionSummary : System.IEquatable<Trax.Api.DTOs.ExecutionSummary>
+    {
+        public ExecutionSummary(long Id, string ExternalId, string Name, Trax.Effect.Enums.TrainState TrainState, System.DateTime StartTime, System.DateTime? EndTime, string? FailureJunction, string? FailureReason, long? ManifestId, bool CancellationRequested, string? HostName = null, string? HostEnvironment = null, string? HostInstanceId = null) { }
+        public bool CancellationRequested { get; init; }
+        public System.DateTime? EndTime { get; init; }
+        public string ExternalId { get; init; }
+        public string? FailureJunction { get; init; }
+        public string? FailureReason { get; init; }
+        public string? HostEnvironment { get; init; }
+        public string? HostInstanceId { get; init; }
+        public string? HostName { get; init; }
+        public long Id { get; init; }
+        public long? ManifestId { get; init; }
+        public string Name { get; init; }
+        public System.DateTime StartTime { get; init; }
+        public Trax.Effect.Enums.TrainState TrainState { get; init; }
+    }
+    public class HealthStatus : System.IEquatable<Trax.Api.DTOs.HealthStatus>
+    {
+        public HealthStatus(string Status, string Description, int QueueDepth, int InProgress, int FailedLastHour, int DeadLetters) { }
+        public int DeadLetters { get; init; }
+        public string Description { get; init; }
+        public int FailedLastHour { get; init; }
+        public int InProgress { get; init; }
+        public int QueueDepth { get; init; }
+        public string Status { get; init; }
+    }
+    public class InputPropertySchema : System.IEquatable<Trax.Api.DTOs.InputPropertySchema>
+    {
+        public InputPropertySchema(string Name, string TypeName, bool IsNullable) { }
+        public bool IsNullable { get; init; }
+        public string Name { get; init; }
+        public string TypeName { get; init; }
+    }
+    public class LogEntry : System.IEquatable<Trax.Api.DTOs.LogEntry>
+    {
+        public LogEntry(long Id, long MetadataId, int EventId, Microsoft.Extensions.Logging.LogLevel Level, string Category, string Message, string? Exception, string? StackTrace) { }
+        public string Category { get; init; }
+        public int EventId { get; init; }
+        public string? Exception { get; init; }
+        public long Id { get; init; }
+        public Microsoft.Extensions.Logging.LogLevel Level { get; init; }
+        public string Message { get; init; }
+        public long MetadataId { get; init; }
+        public string? StackTrace { get; init; }
+    }
+    public class ManifestGroupSummary : System.IEquatable<Trax.Api.DTOs.ManifestGroupSummary>
+    {
+        public ManifestGroupSummary(long Id, string Name, int? MaxActiveJobs, int Priority, bool IsEnabled, System.DateTime CreatedAt, System.DateTime UpdatedAt) { }
+        public System.DateTime CreatedAt { get; init; }
+        public long Id { get; init; }
+        public bool IsEnabled { get; init; }
+        public int? MaxActiveJobs { get; init; }
+        public string Name { get; init; }
+        public int Priority { get; init; }
+        public System.DateTime UpdatedAt { get; init; }
+    }
+    public class ManifestSummary : System.IEquatable<Trax.Api.DTOs.ManifestSummary>
+    {
+        public ManifestSummary(long Id, string ExternalId, string Name, bool IsEnabled, Trax.Effect.Enums.ScheduleType ScheduleType, string? CronExpression, int? IntervalSeconds, int MaxRetries, int? TimeoutSeconds, System.DateTime? LastSuccessfulRun, long ManifestGroupId, long? DependsOnManifestId, int Priority) { }
+        public string? CronExpression { get; init; }
+        public long? DependsOnManifestId { get; init; }
+        public string ExternalId { get; init; }
+        public long Id { get; init; }
+        public int? IntervalSeconds { get; init; }
+        public bool IsEnabled { get; init; }
+        public System.DateTime? LastSuccessfulRun { get; init; }
+        public long ManifestGroupId { get; init; }
+        public int MaxRetries { get; init; }
+        public string Name { get; init; }
+        public int Priority { get; init; }
+        public Trax.Effect.Enums.ScheduleType ScheduleType { get; init; }
+        public int? TimeoutSeconds { get; init; }
+    }
+    public class OperationResponse : System.IEquatable<Trax.Api.DTOs.OperationResponse>
+    {
+        public OperationResponse(bool Success, int? Count = default, string? Message = null) { }
+        public int? Count { get; init; }
+        public string? Message { get; init; }
+        public bool Success { get; init; }
+    }
+    public class PagedResult<T> : System.IEquatable<Trax.Api.DTOs.PagedResult<T>>
+    {
+        public PagedResult(System.Collections.Generic.IReadOnlyList<T> Items, int TotalCount, int Skip, int Take, bool IsEstimatedCount = false, long? NextCursor = default) { }
+        public bool IsEstimatedCount { get; init; }
+        public System.Collections.Generic.IReadOnlyList<T> Items { get; init; }
+        public long? NextCursor { get; init; }
+        public int Skip { get; init; }
+        public int Take { get; init; }
+        public int TotalCount { get; init; }
+    }
+    public class QueueTrainRequest : System.IEquatable<Trax.Api.DTOs.QueueTrainRequest>
+    {
+        public QueueTrainRequest(string TrainName, System.Text.Json.JsonElement Input, int? Priority = default) { }
+        public System.Text.Json.JsonElement Input { get; init; }
+        public int? Priority { get; init; }
+        public string TrainName { get; init; }
+    }
+    public class RunTrainRequest : System.IEquatable<Trax.Api.DTOs.RunTrainRequest>
+    {
+        public RunTrainRequest(string TrainName, System.Text.Json.JsonElement Input) { }
+        public System.Text.Json.JsonElement Input { get; init; }
+        public string TrainName { get; init; }
+    }
+    public class RunTrainResponse : System.IEquatable<Trax.Api.DTOs.RunTrainResponse>
+    {
+        public RunTrainResponse(long MetadataId) { }
+        public long MetadataId { get; init; }
+    }
+    public class ScheduleOnceRequest : System.IEquatable<Trax.Api.DTOs.ScheduleOnceRequest>
+    {
+        public ScheduleOnceRequest(string TrainName, System.Text.Json.JsonElement Input, System.TimeSpan Delay) { }
+        public System.TimeSpan Delay { get; init; }
+        public System.Text.Json.JsonElement Input { get; init; }
+        public string TrainName { get; init; }
+    }
+    public class ScheduleOnceResponse : System.IEquatable<Trax.Api.DTOs.ScheduleOnceResponse>
+    {
+        public ScheduleOnceResponse(long ManifestId, string ExternalId) { }
+        public string ExternalId { get; init; }
+        public long ManifestId { get; init; }
+    }
+    public class TrainInfo : System.IEquatable<Trax.Api.DTOs.TrainInfo>
+    {
+        public TrainInfo(string ServiceTypeName, string ImplementationTypeName, string InputTypeName, string OutputTypeName, string Lifetime, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.InputPropertySchema> InputSchema, System.Collections.Generic.IReadOnlyList<string> RequiredPolicies, System.Collections.Generic.IReadOnlyList<string> RequiredRoles, bool IsQuery, bool IsMutation, string? GraphQLName, bool IsBroadcastEnabled) { }
+        public string? GraphQLName { get; init; }
+        public string ImplementationTypeName { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.InputPropertySchema> InputSchema { get; init; }
+        public string InputTypeName { get; init; }
+        public bool IsBroadcastEnabled { get; init; }
+        public bool IsMutation { get; init; }
+        public bool IsQuery { get; init; }
+        public string Lifetime { get; init; }
+        public string OutputTypeName { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> RequiredPolicies { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> RequiredRoles { get; init; }
+        public string ServiceTypeName { get; init; }
+    }
+    public class TrainLifecycleEvent : System.IEquatable<Trax.Api.DTOs.TrainLifecycleEvent>
+    {
+        public TrainLifecycleEvent(long MetadataId, string ExternalId, string TrainName, Trax.Effect.Enums.TrainState TrainState, System.DateTime Timestamp, string? FailureJunction, string? FailureReason, string? Output, string? HostName = null, string? HostEnvironment = null) { }
+        public string ExternalId { get; init; }
+        public string? FailureJunction { get; init; }
+        public string? FailureReason { get; init; }
+        public string? HostEnvironment { get; init; }
+        public string? HostName { get; init; }
+        public long MetadataId { get; init; }
+        public string? Output { get; init; }
+        public System.DateTime Timestamp { get; init; }
+        public string TrainName { get; init; }
+        public Trax.Effect.Enums.TrainState TrainState { get; init; }
+    }
+    public class TriggerDelayedRequest : System.IEquatable<Trax.Api.DTOs.TriggerDelayedRequest>
+    {
+        public TriggerDelayedRequest(System.TimeSpan Delay) { }
+        public System.TimeSpan Delay { get; init; }
+    }
+    public class WorkQueueSummary : System.IEquatable<Trax.Api.DTOs.WorkQueueSummary>
+    {
+        public WorkQueueSummary(long Id, string ExternalId, string TrainName, Trax.Effect.Enums.WorkQueueStatus Status, System.DateTime CreatedAt, System.DateTime? DispatchedAt, System.DateTime? ScheduledAt, int Priority, int DispatchAttempts, long? ManifestId, long? MetadataId, long? DeadLetterId, string? InputTypeName) { }
+        public System.DateTime CreatedAt { get; init; }
+        public long? DeadLetterId { get; init; }
+        public int DispatchAttempts { get; init; }
+        public System.DateTime? DispatchedAt { get; init; }
+        public string ExternalId { get; init; }
+        public long Id { get; init; }
+        public string? InputTypeName { get; init; }
+        public long? ManifestId { get; init; }
+        public long? MetadataId { get; init; }
+        public int Priority { get; init; }
+        public System.DateTime? ScheduledAt { get; init; }
+        public Trax.Effect.Enums.WorkQueueStatus Status { get; init; }
+        public string TrainName { get; init; }
+    }
+}
+namespace Trax.Api.Exceptions
+{
+    public class TrainAuthorizationException : System.UnauthorizedAccessException
+    {
+        public const string PublicMessage = "Not authorized.";
+        public TrainAuthorizationException(string trainName, string reason) { }
+        public string Reason { get; }
+        public string TrainName { get; }
+    }
+}
+namespace Trax.Api.Extensions
+{
+    public static class ApiServiceExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxApi(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
+    }
+    public static class HealthCheckExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IHealthChecksBuilder AddTraxHealthCheck(this Microsoft.Extensions.DependencyInjection.IHealthChecksBuilder builder, string name = "trax", params string[] tags) { }
+    }
+}
+namespace Trax.Api.Services.Authorization
+{
+    public class TrainAuthorizationService : Trax.Mediator.Services.TrainAuthorization.ITrainAuthorizationService
+    {
+        public TrainAuthorizationService(Microsoft.AspNetCore.Http.IHttpContextAccessor httpContextAccessor, Microsoft.AspNetCore.Authorization.IAuthorizationService authorizationService, Trax.Mediator.Services.TrustedExecution.ITrustedExecutionScope trustedScope, Microsoft.Extensions.Logging.ILogger<Trax.Api.Services.Authorization.TrainAuthorizationService> logger) { }
+        public System.Threading.Tasks.Task AuthorizeAsync(Trax.Mediator.Services.TrainDiscovery.TrainRegistration registration, System.Threading.CancellationToken ct = default) { }
+    }
+}
+namespace Trax.Api.Services.HealthCheck
+{
+    public interface ITraxHealthService
+    {
+        System.Threading.Tasks.Task<Trax.Api.DTOs.HealthStatus> GetHealthAsync(System.Threading.CancellationToken ct = default);
+    }
+    public class TraxHealthCheck : Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck
+    {
+        public TraxHealthCheck(Trax.Api.Services.HealthCheck.ITraxHealthService healthService) { }
+        public System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult> CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext context, System.Threading.CancellationToken ct = default) { }
+    }
+    public class TraxHealthService : Trax.Api.Services.HealthCheck.ITraxHealthService
+    {
+        public TraxHealthService(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory) { }
+        public System.Threading.Tasks.Task<Trax.Api.DTOs.HealthStatus> GetHealthAsync(System.Threading.CancellationToken ct = default) { }
+    }
+}

@@ -1,0 +1,44 @@
+namespace Trax.Api.Auth
+{
+    public interface ITraxPrincipalResolver<in TInput>
+    {
+        System.Threading.Tasks.ValueTask<Trax.Api.Auth.TraxPrincipal?> ResolveAsync(TInput input, System.Threading.CancellationToken ct);
+    }
+    public static class TraxAuthClaimTypes
+    {
+        public const string PrincipalId = "trax:principal-id";
+        public const string PrincipalType = "trax:principal-type";
+        public const string TraxAuthPolicy = "TraxAuthPolicy";
+    }
+    public static class TraxAuthServiceCollectionExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxPrincipalAccessor(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
+    }
+    public sealed class TraxCaller
+    {
+        public TraxCaller(Microsoft.AspNetCore.Http.IHttpContextAccessor httpContextAccessor, Trax.Mediator.Services.TrustedExecution.ITrustedExecutionScope trustedScope) { }
+        public bool IsAuthenticated { get; }
+        public bool IsTrusted { get; }
+        public Trax.Api.Auth.TraxPrincipal? Principal { get; }
+    }
+    public class TraxPrincipal : System.IEquatable<Trax.Api.Auth.TraxPrincipal>
+    {
+        public TraxPrincipal(string Id, string DisplayName, System.Collections.Generic.IReadOnlyList<string> Roles, System.Collections.Generic.IReadOnlyDictionary<string, string>? Claims = null, string? PrincipalType = null) { }
+        public System.Collections.Generic.IReadOnlyDictionary<string, string>? Claims { get; init; }
+        public string DisplayName { get; init; }
+        public string Id { get; init; }
+        public string? PrincipalType { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Roles { get; init; }
+    }
+    public static class TraxPrincipalExtensions
+    {
+        public static System.Security.Claims.ClaimsPrincipal ToClaimsPrincipal(this Trax.Api.Auth.TraxPrincipal principal, string authenticationType) { }
+        public static bool TryGetPrincipalId(this System.Security.Claims.ClaimsPrincipal claimsPrincipal, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? id) { }
+        public static bool TryGetTraxPrincipal(this System.Security.Claims.ClaimsPrincipal claimsPrincipal, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Trax.Api.Auth.TraxPrincipal? principal) { }
+    }
+    public sealed class TraxPrincipalNotAvailableException : System.InvalidOperationException
+    {
+        public TraxPrincipalNotAvailableException() { }
+        public TraxPrincipalNotAvailableException(string message) { }
+    }
+}

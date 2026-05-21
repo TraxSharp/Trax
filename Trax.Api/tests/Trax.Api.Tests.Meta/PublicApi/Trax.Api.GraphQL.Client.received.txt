@@ -1,0 +1,158 @@
+namespace Trax.Api.GraphQL.Client
+{
+    public class FileSchemaProvider : Trax.Api.GraphQL.Client.ISchemaProvider
+    {
+        public FileSchemaProvider(string path) { }
+        public System.Threading.Tasks.Task<GraphQL.Types.ISchema> GetSchemaAsync(System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public class GraphQLClientConfiguration : System.IDisposable, Trax.Api.GraphQL.Client.IGraphQLClientConfiguration
+    {
+        public GraphQLClientConfiguration(System.Uri baseAddress, GraphQL.Client.Abstractions.Websocket.IGraphQLWebsocketJsonSerializer jsonSerializer, GraphQL.Client.Http.GraphQLHttpClientOptions graphQLHttpClientOptions, System.Text.Json.JsonSerializerOptions jsonSerializerOptions, bool disposeHttpClient, bool removeSubscriptionsFromSchema, Trax.Api.GraphQL.Client.ResponseStrictness responseStrictness, System.Net.Http.HttpClient httpClient) { }
+        public System.Uri BaseAddress { get; }
+        public bool DisposeHttpClient { get; }
+        public GraphQL.Client.Http.GraphQLHttpClientOptions GraphQLClientOptions { get; }
+        public GraphQL.Client.Http.GraphQLHttpClient GraphQLHttpClient { get; }
+        public System.Net.Http.HttpClient HttpClient { get; }
+        public System.Text.Json.JsonSerializerOptions JsonSerializerOptions { get; }
+        public bool RemoveSubscriptionsFromSchema { get; }
+        public Trax.Api.GraphQL.Client.ResponseStrictness ResponseStrictness { get; }
+        public GraphQL.Client.Abstractions.Websocket.IGraphQLWebsocketJsonSerializer WebsocketJsonSerializer { get; }
+        public void Dispose() { }
+    }
+    public class GraphQLClientConfigurationBuilder
+    {
+        public GraphQLClientConfigurationBuilder(System.Uri baseAddress) { }
+        public bool DisposeHttpClient { get; set; }
+        public GraphQL.Client.Http.GraphQLHttpClientOptions GraphQLClientOptions { get; set; }
+        public System.Net.Http.HttpClient HttpClient { get; set; }
+        public System.Text.Json.JsonSerializerOptions JsonSerializerOptions { get; set; }
+        public bool RemoveSubscriptionsFromSchema { get; set; }
+        public Trax.Api.GraphQL.Client.ResponseStrictness ResponseStrictness { get; set; }
+        public bool ValidateAssemblies { get; set; }
+        public GraphQL.Client.Abstractions.Websocket.IGraphQLWebsocketJsonSerializer WebsocketJsonSerializer { get; set; }
+        public Trax.Api.GraphQL.Client.GraphQLClientConfiguration Build() { }
+    }
+    public class GraphQLClientExecutor : Trax.Api.GraphQL.Client.IGraphQLClientExecutor
+    {
+        public GraphQLClientExecutor(Trax.Api.GraphQL.Client.IGraphQLClientValidator validator, Trax.Api.GraphQL.Client.IGraphQLClientConfiguration configuration, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Client.GraphQLClientExecutor>? logger = null) { }
+        public System.Threading.Tasks.Task<TReturn> Run<TReturn>(Trax.Api.GraphQL.Client.IGraphQLClientRequest<TReturn> request, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public class GraphQLClientValidator : Trax.Api.GraphQL.Client.IGraphQLClientValidator
+    {
+        public GraphQLClientValidator(Trax.Api.GraphQL.Client.ISchemaProvider schemaProvider) { }
+        public System.Threading.Tasks.Task<GraphQLParser.AST.OperationType> ValidateAsync(string query, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public static class GraphQLClientValidatorExtensions
+    {
+        public static System.Threading.Tasks.Task ValidateAssembliesAsync(this Trax.Api.GraphQL.Client.IGraphQLClientValidator validator, System.Collections.Generic.IEnumerable<System.Reflection.Assembly> assemblies, System.Threading.CancellationToken cancellationToken = default) { }
+        public static System.Threading.Tasks.Task ValidateAssembliesAsync(this Trax.Api.GraphQL.Client.IGraphQLClientValidator validator, System.Collections.Generic.IEnumerable<System.Reflection.Assembly> assemblies, System.Func<System.Type, bool>? typeFilter, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public class GraphQLExecutionException : System.Exception
+    {
+        public GraphQLExecutionException(System.Collections.Generic.IReadOnlyList<GraphQL.GraphQLError> errors) { }
+        public GraphQLExecutionException(string message, System.Exception inner) { }
+        public System.Collections.Generic.IReadOnlyList<GraphQL.GraphQLError> Errors { get; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    public sealed class GraphQLQueryResourceAttribute : System.Attribute
+    {
+        public GraphQLQueryResourceAttribute(string resourceName) { }
+        public string ResourceName { get; }
+    }
+    public abstract class GraphQLResourceRequest<TResponse> : Trax.Api.GraphQL.Client.IGenericGraphQLClientRequest, Trax.Api.GraphQL.Client.IGraphQLClientRequest<TResponse>
+    {
+        protected GraphQLResourceRequest() { }
+        public virtual string Query { get; }
+        public virtual object? Variables { get; }
+    }
+    public class GraphQLResponseShapeException : System.Exception
+    {
+        public GraphQLResponseShapeException(System.Type targetType, System.Collections.Generic.IReadOnlyList<string> extraJsonFields, System.Collections.Generic.IReadOnlyList<string> missingJsonFields) { }
+        public System.Collections.Generic.IReadOnlyList<string> ExtraJsonFields { get; }
+        public System.Collections.Generic.IReadOnlyList<string> MissingJsonFields { get; }
+        public System.Type TargetType { get; }
+    }
+    public class GraphQLSchemaIntrospectionException : System.Exception
+    {
+        public GraphQLSchemaIntrospectionException(string message) { }
+        public GraphQLSchemaIntrospectionException(string message, System.Exception inner) { }
+    }
+    public class GraphQLValidationException : System.Exception
+    {
+        public GraphQLValidationException(string query, System.Collections.Generic.IReadOnlyList<GraphQL.ExecutionError> errors) { }
+        public GraphQLValidationException(string query, System.Collections.Generic.IReadOnlyList<GraphQL.ExecutionError> errors, string detail) { }
+        public System.Collections.Generic.IReadOnlyList<GraphQL.ExecutionError> Errors { get; }
+        public string Query { get; }
+    }
+    public interface IGenericGraphQLClientRequest
+    {
+        string Query { get; }
+        object? Variables { get; }
+    }
+    public interface IGraphQLClientConfiguration
+    {
+        System.Uri BaseAddress { get; }
+        bool DisposeHttpClient { get; }
+        GraphQL.Client.Http.GraphQLHttpClientOptions GraphQLClientOptions { get; }
+        GraphQL.Client.Http.GraphQLHttpClient GraphQLHttpClient { get; }
+        System.Net.Http.HttpClient HttpClient { get; }
+        System.Text.Json.JsonSerializerOptions JsonSerializerOptions { get; }
+        bool RemoveSubscriptionsFromSchema { get; }
+        Trax.Api.GraphQL.Client.ResponseStrictness ResponseStrictness { get; }
+        GraphQL.Client.Abstractions.Websocket.IGraphQLWebsocketJsonSerializer WebsocketJsonSerializer { get; }
+    }
+    public interface IGraphQLClientExecutor
+    {
+        System.Threading.Tasks.Task<TReturn> Run<TReturn>(Trax.Api.GraphQL.Client.IGraphQLClientRequest<TReturn> request, System.Threading.CancellationToken cancellationToken = default);
+    }
+    public interface IGraphQLClientRequest<out TResponse> : Trax.Api.GraphQL.Client.IGenericGraphQLClientRequest
+    {
+        bool UsesDefaultExtractor { get; }
+        TResponse Extract(System.Text.Json.JsonElement data, System.Text.Json.JsonSerializerOptions options);
+        System.Text.Json.JsonElement UnwrapDataElement(System.Text.Json.JsonElement data);
+    }
+    public interface IGraphQLClientValidator
+    {
+        System.Threading.Tasks.Task<GraphQLParser.AST.OperationType> ValidateAsync(string query, System.Threading.CancellationToken cancellationToken = default);
+    }
+    public interface ISchemaProvider
+    {
+        System.Threading.Tasks.Task<GraphQL.Types.ISchema> GetSchemaAsync(System.Threading.CancellationToken cancellationToken = default);
+    }
+    public class IntrospectingSchemaProvider : Trax.Api.GraphQL.Client.ISchemaProvider
+    {
+        public IntrospectingSchemaProvider(Trax.Api.GraphQL.Client.IGraphQLClientConfiguration configuration) { }
+        public System.Threading.Tasks.Task<GraphQL.Types.ISchema> GetSchemaAsync(System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public enum ResponseStrictness
+    {
+        Lenient = 0,
+        WarnOnDrift = 1,
+        ThrowOnDrift = 2,
+    }
+    public static class ServiceExtensions
+    {
+        public static Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder AddTraxGraphQLClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Uri baseAddress) { }
+        public static System.Threading.Tasks.Task ValidateGraphQLClientAssembliesAsync(this System.IServiceProvider services, params System.Reflection.Assembly[] assemblies) { }
+    }
+    public sealed class TraxGraphQLClientBuilder
+    {
+        public Microsoft.Extensions.DependencyInjection.IServiceCollection Services { get; }
+        public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder Configure(System.Action<Trax.Api.GraphQL.Client.GraphQLClientConfigurationBuilder> mutate) { }
+        public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder ConfigureHttpClient(System.Net.Http.HttpClient httpClient) { }
+        public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder ConfigureJson(System.Text.Json.JsonSerializerOptions options) { }
+        public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder DisposeHttpClient(bool dispose = true) { }
+        public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder UseFileSchema(string sdlPath) { }
+        public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder UseIntrospection() { }
+        public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder WithStrictness(Trax.Api.GraphQL.Client.ResponseStrictness strictness) { }
+    }
+}
+namespace Trax.Api.GraphQL.Client.Utils.Converters
+{
+    public class DateOnlyConverter : System.Text.Json.Serialization.JsonConverter<System.DateOnly>
+    {
+        public DateOnlyConverter() { }
+        public override System.DateOnly Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, System.DateOnly value, System.Text.Json.JsonSerializerOptions options) { }
+    }
+}
