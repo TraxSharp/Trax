@@ -263,6 +263,9 @@ public class CancellationTokenTests : TestSetup
     {
         public override async Task<string> Run(string input)
         {
+            // determinism: this delay exists to be cancelled by the supplied CancellationToken.
+            // The test verifies that cancelling the token shortcuts the delay, so the duration
+            // is an upper bound, not a fixed wait.
             await Task.Delay(TimeSpan.FromSeconds(10), CancellationToken);
             return input;
         }

@@ -10,5 +10,6 @@
     <Project Path="tests/Trax.Core.Tests.Unit/Trax.Core.Tests.Unit.csproj" />
     <Project Path="tests/Trax.Core.Tests.Integration/Trax.Core.Tests.Integration.csproj" />
     <Project Path="tests/Trax.Core.Tests.Analyzers/Trax.Core.Tests.Analyzers.csproj" />
+    <Project Path="tests/Trax.Core.Tests.Meta/Trax.Core.Tests.Meta.csproj" />
   </Folder>
 </Solution>
