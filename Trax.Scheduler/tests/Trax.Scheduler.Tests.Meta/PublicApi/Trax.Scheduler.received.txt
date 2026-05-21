@@ -1,0 +1,843 @@
+namespace Trax.Scheduler.Configuration
+{
+    public static class AdminTrains
+    {
+        public static readonly System.Collections.Generic.IReadOnlyList<string> FullNames;
+        public static readonly System.Collections.Generic.IReadOnlyList<string> ShortNames;
+        public static readonly System.Collections.Generic.IReadOnlyList<System.Type> Types;
+    }
+    public class HttpRetryOptions
+    {
+        public HttpRetryOptions() { }
+        public System.TimeSpan BaseDelay { get; set; }
+        public System.TimeSpan MaxDelay { get; set; }
+        public int MaxRetries { get; set; }
+    }
+    public class LocalWorkerOptions
+    {
+        public LocalWorkerOptions() { }
+        public int BatchSize { get; set; }
+        public System.TimeSpan PollingInterval { get; set; }
+        public System.TimeSpan ShutdownTimeout { get; set; }
+        public System.TimeSpan VisibilityTimeout { get; set; }
+        public int WorkerCount { get; set; }
+    }
+    public class ManifestGroupOptions
+    {
+        public ManifestGroupOptions() { }
+        public Trax.Scheduler.Configuration.ManifestGroupOptions Enabled(bool enabled) { }
+        public Trax.Scheduler.Configuration.ManifestGroupOptions MaxActiveJobs(int? max) { }
+        public Trax.Scheduler.Configuration.ManifestGroupOptions Priority(int priority) { }
+    }
+    public sealed class ManifestItem : System.IEquatable<Trax.Scheduler.Configuration.ManifestItem>
+    {
+        public ManifestItem(string Id, Trax.Effect.Models.Manifest.IManifestProperties Input, string? DependsOn = null) { }
+        public string? DependsOn { get; init; }
+        public string Id { get; init; }
+        public Trax.Effect.Models.Manifest.IManifestProperties Input { get; init; }
+    }
+    public class ManifestOptions
+    {
+        public ManifestOptions() { }
+        public System.Collections.Generic.List<Trax.Effect.Models.Manifest.Exclusion> Exclusions { get; set; }
+        public bool IsDormant { get; set; }
+        public bool IsEnabled { get; set; }
+        public int MaxRetries { get; set; }
+        public Trax.Effect.Enums.MisfirePolicy? MisfirePolicy { get; set; }
+        public System.TimeSpan? MisfireThreshold { get; set; }
+        public int Priority { get; set; }
+        public System.TimeSpan? Timeout { get; set; }
+        public System.TimeSpan? Variance { get; set; }
+    }
+    public class MetadataCleanupConfiguration
+    {
+        public MetadataCleanupConfiguration() { }
+        public System.TimeSpan CleanupInterval { get; set; }
+        public int? DeleteBatchSize { get; set; }
+        public System.TimeSpan RetentionPeriod { get; set; }
+        public void AddTrainType(string trainTypeName) { }
+        public void AddTrainType<TTrain>()
+            where TTrain :  class { }
+    }
+    public class RemoteRunOptions
+    {
+        public RemoteRunOptions() { }
+        public string BaseUrl { get; set; }
+        public System.Action<System.Net.Http.HttpClient>? ConfigureHttpClient { get; set; }
+        public Trax.Scheduler.Configuration.HttpRetryOptions Retry { get; set; }
+        public System.TimeSpan Timeout { get; set; }
+    }
+    public class RemoteWorkerOptions
+    {
+        public RemoteWorkerOptions() { }
+        public string BaseUrl { get; set; }
+        public System.Action<System.Net.Http.HttpClient>? ConfigureHttpClient { get; set; }
+        public Trax.Scheduler.Configuration.HttpRetryOptions Retry { get; set; }
+        public System.TimeSpan Timeout { get; set; }
+    }
+    public class RoutedSubmitterRegistration : System.IEquatable<Trax.Scheduler.Configuration.RoutedSubmitterRegistration>
+    {
+        public RoutedSubmitterRegistration(Trax.Scheduler.Configuration.SubmitterRouting Routing, System.Type SubmitterType, System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection> Register) { }
+        public System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection> Register { get; init; }
+        public Trax.Scheduler.Configuration.SubmitterRouting Routing { get; init; }
+        public System.Type SubmitterType { get; init; }
+    }
+    public class ScheduleOptions
+    {
+        public ScheduleOptions() { }
+        public Trax.Scheduler.Configuration.ScheduleOptions Dormant() { }
+        public Trax.Scheduler.Configuration.ScheduleOptions Enabled(bool enabled) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions Exclude(Trax.Effect.Models.Manifest.Exclusion exclusion) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions Group(System.Action<Trax.Scheduler.Configuration.ManifestGroupOptions> configure) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions Group(string groupId, System.Action<Trax.Scheduler.Configuration.ManifestGroupOptions>? configure = null) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions MaxRetries(int retries) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions MisfireThreshold(System.TimeSpan threshold) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions OnMisfire(Trax.Effect.Enums.MisfirePolicy policy) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions Priority(int priority) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions PrunePrefix(string prefix) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions Timeout(System.TimeSpan timeout) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions Variance(System.TimeSpan variance) { }
+    }
+    public class SchedulerConfiguration
+    {
+        public SchedulerConfiguration() { }
+        public bool AutoPurgeDeadLetters { get; set; }
+        public System.TimeSpan DeadLetterCleanupInterval { get; set; }
+        public System.TimeSpan DeadLetterRetentionPeriod { get; set; }
+        public System.TimeSpan DefaultJobTimeout { get; set; }
+        public int DefaultMaxRetries { get; set; }
+        public Trax.Effect.Enums.MisfirePolicy DefaultMisfirePolicy { get; set; }
+        public System.TimeSpan DefaultMisfireThreshold { get; set; }
+        public System.TimeSpan DefaultRetryDelay { get; set; }
+        public int DependentPriorityBoost { get; set; }
+        public bool JobDispatcherEnabled { get; set; }
+        public System.TimeSpan JobDispatcherPollingInterval { get; set; }
+        public bool ManifestManagerEnabled { get; set; }
+        public System.TimeSpan ManifestManagerPollingInterval { get; set; }
+        public int? MaxActiveJobs { get; set; }
+        public int MaxConcurrentDispatch { get; set; }
+        public int MaxDispatchAttempts { get; set; }
+        public int? MaxQueuedJobsPerCycle { get; set; }
+        public System.TimeSpan MaxRetryDelay { get; set; }
+        public int? MaxWorkQueueEntriesPerCycle { get; set; }
+        public Trax.Scheduler.Configuration.MetadataCleanupConfiguration? MetadataCleanup { get; set; }
+        public bool PruneOrphanedManifests { get; set; }
+        public bool RecoverStuckJobsOnStartup { get; set; }
+        public double RetryBackoffMultiplier { get; set; }
+        public System.TimeSpan StaleInProgressTimeout { get; set; }
+        public System.TimeSpan StalePendingTimeout { get; set; }
+    }
+    public class SchedulerConfigurationBuilder
+    {
+        public SchedulerConfigurationBuilder(Trax.Mediator.Configuration.TraxBuilderWithMediator parentBuilder) { }
+        public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder AddMetadataCleanup(System.Action<Trax.Scheduler.Configuration.MetadataCleanupConfiguration>? configure = null) { }
+        public void AddRoutedSubmitter(Trax.Scheduler.Configuration.RoutedSubmitterRegistration registration) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ConfigureLocalWorkers(System.Action<Trax.Scheduler.Configuration.LocalWorkerOptions> configure) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder DefaultJobTimeout(System.TimeSpan timeout) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder DefaultMaxRetries(int maxRetries) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder DefaultMisfirePolicy(Trax.Effect.Enums.MisfirePolicy policy) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder DefaultMisfireThreshold(System.TimeSpan threshold) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder DefaultRetryDelay(System.TimeSpan delay) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder DependentPriorityBoost(int boost) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ExcludeFromMaxActiveJobs<TTrain>()
+            where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder Include<TTrain>(string externalId, Trax.Effect.Models.Manifest.IManifestProperties input, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder Include<TTrain, TInput, TOutput>(string externalId, TInput input, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder IncludeMany<TTrain>(System.Collections.Generic.IEnumerable<Trax.Scheduler.Configuration.ManifestItem> items, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder IncludeMany<TTrain>(string name, System.Collections.Generic.IEnumerable<Trax.Scheduler.Configuration.ManifestItem> items, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TOutput, TSource>(System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "ExternalId",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TOutput, TSource>(System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "ExternalId",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, System.Func<TSource, string> dependsOn, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TOutput, TSource>(string name, System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "Suffix",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder IncludeMany<TTrain, TInput, TOutput, TSource>(string name, System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "Suffix",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, System.Func<TSource, string> dependsOn, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder JobDispatcherPollingInterval(System.TimeSpan interval) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ManifestManagerPollingInterval(System.TimeSpan interval) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder MaxActiveJobs(int? maxJobs) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder MaxConcurrentDispatch(int maxConcurrent) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder MaxDispatchAttempts(int maxAttempts) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder MaxQueuedJobsPerCycle(int? limit) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder MaxRetryDelay(System.TimeSpan maxDelay) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder MaxWorkQueueEntriesPerCycle(int? limit) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder OverrideSubmitter(System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection> registration) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder PollingInterval(System.TimeSpan interval) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder PruneOrphanedManifests(bool prune = true) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder RecoverStuckJobsOnStartup(bool recover = true) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder RetryBackoffMultiplier(double multiplier) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder Schedule<TTrain>(string externalId, Trax.Effect.Models.Manifest.IManifestProperties input, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder Schedule<TTrain, TInput, TOutput>(string externalId, TInput input, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ScheduleMany<TTrain>(System.Collections.Generic.IEnumerable<Trax.Scheduler.Configuration.ManifestItem> items, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ScheduleMany<TTrain>(string name, System.Collections.Generic.IEnumerable<Trax.Scheduler.Configuration.ManifestItem> items, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TOutput, TSource>(System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "ExternalId",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TOutput, TSource>(string name, System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "Suffix",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ScheduleOnce<TTrain>(string externalId, Trax.Effect.Models.Manifest.IManifestProperties input, System.TimeSpan delay, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ScheduleOnce<TTrain, TInput, TOutput>(string externalId, TInput input, System.TimeSpan delay, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public void SetRemoteRunRegistration(System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection> registration) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder StaleInProgressTimeout(System.TimeSpan timeout) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder StalePendingTimeout(System.TimeSpan timeout) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ThenInclude<TTrain>(string externalId, Trax.Effect.Models.Manifest.IManifestProperties input, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ThenInclude<TTrain, TInput, TOutput>(string externalId, TInput input, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ThenIncludeMany<TTrain>(System.Collections.Generic.IEnumerable<Trax.Scheduler.Configuration.ManifestItem> items, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ThenIncludeMany<TTrain>(string name, System.Collections.Generic.IEnumerable<Trax.Scheduler.Configuration.ManifestItem> items, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
+            where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ThenIncludeMany<TTrain, TInput, TOutput, TSource>(System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "ExternalId",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, System.Func<TSource, string> dependsOn, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ThenIncludeMany<TTrain, TInput, TOutput, TSource>(string name, System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "Suffix",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, System.Func<TSource, string> dependsOn, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder UseRemoteRun(System.Action<Trax.Scheduler.Configuration.RemoteRunOptions> configure) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder UseRemoteWorkers(System.Action<Trax.Scheduler.Configuration.RemoteWorkerOptions> configure, System.Action<Trax.Scheduler.Configuration.SubmitterRouting>? routing = null) { }
+    }
+    public class SubmitterRouting
+    {
+        public SubmitterRouting() { }
+        public Trax.Scheduler.Configuration.SubmitterRouting ForTrain<TTrain>()
+            where TTrain :  class { }
+    }
+}
+namespace Trax.Scheduler.Extensions
+{
+    public static class DataContextExtensions
+    {
+        public static System.Threading.Tasks.Task<long> EnsureManifestGroupAsync(this Trax.Effect.Data.Services.DataContext.IDataContext context, string groupName, int priority, int? maxActiveJobs = default, bool isEnabled = true, System.Threading.CancellationToken ct = default) { }
+        public static System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> UpsertDependentManifestAsync<TTrain, TInput, TOutput>(this Trax.Effect.Data.Services.DataContext.IDataContext context, string externalId, TInput input, long dependsOnManifestId, Trax.Scheduler.Configuration.ManifestOptions options, string groupId, int groupPriority, int? groupMaxActiveJobs = default, bool groupIsEnabled = true, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public static System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> UpsertManifestAsync<TTrain, TInput, TOutput>(this Trax.Effect.Data.Services.DataContext.IDataContext context, string externalId, TInput input, Trax.Scheduler.Services.Scheduling.Schedule schedule, Trax.Scheduler.Configuration.ManifestOptions options, string groupId, int groupPriority, int? groupMaxActiveJobs = default, bool groupIsEnabled = true, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public static System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> UpsertOnceManifestAsync<TTrain, TInput, TOutput>(this Trax.Effect.Data.Services.DataContext.IDataContext context, string externalId, TInput input, System.DateTime scheduledAt, Trax.Scheduler.Configuration.ManifestOptions options, string groupId, int groupPriority, int? groupMaxActiveJobs = default, bool groupIsEnabled = true, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+    }
+    public static class JobRunnerExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxJobRunner(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
+        public static Microsoft.AspNetCore.Builder.RouteHandlerBuilder UseTraxJobRunner(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string route = "/trax/execute") { }
+        public static Microsoft.AspNetCore.Builder.RouteHandlerBuilder UseTraxRunEndpoint(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string route = "/trax/run") { }
+    }
+    public static class SchedulerExtensions
+    {
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddScheduler(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder) { }
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddScheduler(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder, System.Func<Trax.Scheduler.Configuration.SchedulerConfigurationBuilder, Trax.Scheduler.Configuration.SchedulerConfigurationBuilder> configure) { }
+    }
+    public static class TrainRegistryExtensions
+    {
+        public static void ValidateTrainRegistration<TInput>(this Trax.Mediator.Services.TrainRegistry.ITrainRegistry registry) { }
+    }
+    public static class WorkerExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxWorker(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Scheduler.Configuration.LocalWorkerOptions>? configure = null) { }
+    }
+}
+namespace Trax.Scheduler.Services.CancellationRegistry
+{
+    public interface ICancellationRegistry
+    {
+        void Register(long metadataId, System.Threading.CancellationTokenSource cts);
+        bool TryCancel(long metadataId);
+        void Unregister(long metadataId);
+    }
+}
+namespace Trax.Scheduler.Services.DormantDependentContext
+{
+    public interface IDormantDependentContext
+    {
+        System.Threading.Tasks.Task ActivateAsync<TTrain, TInput, TOutput>(string externalId, TInput input, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties;
+        System.Threading.Tasks.Task ActivateManyAsync<TTrain, TInput, TOutput>([System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "ExternalId",
+                "Input"})] System.Collections.Generic.IEnumerable<System.ValueTuple<string, TInput>> activations, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties;
+    }
+}
+namespace Trax.Scheduler.Services.JobSubmitter
+{
+    public class HttpJobSubmitter : Trax.Scheduler.Services.JobSubmitter.IJobSubmitter
+    {
+        public HttpJobSubmitter(System.Net.Http.HttpClient httpClient, Trax.Scheduler.Configuration.RemoteWorkerOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.JobSubmitter.HttpJobSubmitter> logger) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, object input) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, object input, System.Threading.CancellationToken cancellationToken) { }
+    }
+    public interface IJobSubmitter
+    {
+        System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId);
+        System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, object input);
+        System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, int priority, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, object input, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, object input, int priority, System.Threading.CancellationToken cancellationToken);
+    }
+    public class InMemoryJobSubmitter : Trax.Scheduler.Services.JobSubmitter.IJobSubmitter
+    {
+        public InMemoryJobSubmitter(Trax.Scheduler.Trains.JobRunner.IJobRunnerTrain jobRunnerTrain) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, object input) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, object input, System.Threading.CancellationToken cancellationToken) { }
+    }
+    public class PostgresJobSubmitter : Trax.Scheduler.Services.JobSubmitter.IJobSubmitter
+    {
+        public PostgresJobSubmitter(Trax.Effect.Data.Services.DataContext.IDataContext dataContext) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, object input) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, int priority, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, object input, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task<string> EnqueueAsync(long metadataId, object input, int priority, System.Threading.CancellationToken cancellationToken) { }
+    }
+    public class RemoteJobRequest : System.IEquatable<Trax.Scheduler.Services.JobSubmitter.RemoteJobRequest>
+    {
+        public RemoteJobRequest(long MetadataId, string? Input = null, string? InputType = null) { }
+        public string? Input { get; init; }
+        public string? InputType { get; init; }
+        public long MetadataId { get; init; }
+    }
+    public class RemoteJobResponse : System.IEquatable<Trax.Scheduler.Services.JobSubmitter.RemoteJobResponse>
+    {
+        public RemoteJobResponse(long MetadataId, bool IsError = false, string? ErrorMessage = null, string? ExceptionType = null, string? StackTrace = null) { }
+        public string? ErrorMessage { get; init; }
+        public string? ExceptionType { get; init; }
+        public bool IsError { get; init; }
+        public long MetadataId { get; init; }
+        public string? StackTrace { get; init; }
+    }
+}
+namespace Trax.Scheduler.Services.Lambda
+{
+    public class LambdaEnvelope : System.IEquatable<Trax.Scheduler.Services.Lambda.LambdaEnvelope>
+    {
+        public LambdaEnvelope(Trax.Scheduler.Services.Lambda.LambdaRequestType Type, string PayloadJson) { }
+        public string PayloadJson { get; init; }
+        public Trax.Scheduler.Services.Lambda.LambdaRequestType Type { get; init; }
+    }
+    public enum LambdaRequestType
+    {
+        Execute = 0,
+        Run = 1,
+    }
+}
+namespace Trax.Scheduler.Services.Operations
+{
+    public class DashboardKpis : System.IEquatable<Trax.Scheduler.Services.Operations.DashboardKpis>
+    {
+        public DashboardKpis(int ExecutionsToday, double SuccessRate, int CurrentlyRunning, int UnresolvedDeadLetters) { }
+        public int CurrentlyRunning { get; init; }
+        public int ExecutionsToday { get; init; }
+        public double SuccessRate { get; init; }
+        public int UnresolvedDeadLetters { get; init; }
+    }
+    public class DashboardMetrics : System.IEquatable<Trax.Scheduler.Services.Operations.DashboardMetrics>
+    {
+        public DashboardMetrics(Trax.Scheduler.Services.Operations.DashboardKpis Kpis, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.ExecutionsBucket> ExecutionsOverTime, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.TrainFailureCount> TopFailures, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.TrainAverageDuration> TopAverageDurations, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.ThroughputSeries> ThroughputSeries) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.ExecutionsBucket> ExecutionsOverTime { get; init; }
+        public Trax.Scheduler.Services.Operations.DashboardKpis Kpis { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.ThroughputSeries> ThroughputSeries { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.TrainAverageDuration> TopAverageDurations { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.TrainFailureCount> TopFailures { get; init; }
+    }
+    public class DependencyGraphEdge : System.IEquatable<Trax.Scheduler.Services.Operations.DependencyGraphEdge>
+    {
+        public DependencyGraphEdge(long FromId, long ToId) { }
+        public long FromId { get; init; }
+        public long ToId { get; init; }
+    }
+    public class DependencyGraphNode : System.IEquatable<Trax.Scheduler.Services.Operations.DependencyGraphNode>
+    {
+        public DependencyGraphNode(long Id, string Name, bool IsHighlighted) { }
+        public long Id { get; init; }
+        public bool IsHighlighted { get; init; }
+        public string Name { get; init; }
+    }
+    public class ExecutionsBucket : System.IEquatable<Trax.Scheduler.Services.Operations.ExecutionsBucket>
+    {
+        public ExecutionsBucket(System.DateTime Timestamp, int Completed, int Failed, int Cancelled) { }
+        public int Cancelled { get; init; }
+        public int Completed { get; init; }
+        public int Failed { get; init; }
+        public System.DateTime Timestamp { get; init; }
+    }
+    public interface IOperationsService
+    {
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> CancelWorkQueueEntryAsync(long id, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DashboardMetrics> GetDashboardMetricsAsync(Trax.Scheduler.Services.Operations.MetricsRange range, bool hideAdminTrains, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph?> GetManifestGroupDependencyGraphAsync(long groupId, System.Threading.CancellationToken ct);
+        Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig();
+        Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics();
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestGroupAsync(long id, Trax.Scheduler.Services.Operations.UpdateManifestGroupInput input, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateSchedulerConfigAsync(Trax.Scheduler.Services.Operations.UpdateSchedulerConfigInput input, System.Threading.CancellationToken ct);
+    }
+    public class ManifestGroupDependencyGraph : System.IEquatable<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph>
+    {
+        public ManifestGroupDependencyGraph(System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.DependencyGraphNode> Nodes, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.DependencyGraphEdge> Edges) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.DependencyGraphEdge> Edges { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.DependencyGraphNode> Nodes { get; init; }
+    }
+    public enum MetricsRange
+    {
+        Last60Minutes = 0,
+        Last24Hours = 1,
+    }
+    public class OperationResult : System.IEquatable<Trax.Scheduler.Services.Operations.OperationResult>
+    {
+        public OperationResult(bool Success, long? Id = default, int? Count = default, string? Message = null) { }
+        public int? Count { get; init; }
+        public long? Id { get; init; }
+        public string? Message { get; init; }
+        public bool Success { get; init; }
+    }
+    public class OperationsService : Trax.Scheduler.Services.Operations.IOperationsService
+    {
+        public OperationsService(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Scheduler.Configuration.SchedulerConfiguration schedulerConfiguration, Trax.Scheduler.Configuration.LocalWorkerOptions? localWorkerOptions = null) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> CancelWorkQueueEntryAsync(long id, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DashboardMetrics> GetDashboardMetricsAsync(Trax.Scheduler.Services.Operations.MetricsRange range, bool hideAdminTrains, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph?> GetManifestGroupDependencyGraphAsync(long groupId, System.Threading.CancellationToken ct) { }
+        public Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig() { }
+        public Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics() { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestGroupAsync(long id, Trax.Scheduler.Services.Operations.UpdateManifestGroupInput input, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateSchedulerConfigAsync(Trax.Scheduler.Services.Operations.UpdateSchedulerConfigInput input, System.Threading.CancellationToken ct) { }
+    }
+    public class QueueTrainInput : System.IEquatable<Trax.Scheduler.Services.Operations.QueueTrainInput>
+    {
+        public QueueTrainInput(string TrainName, string? InputJson = null, int Priority = 0, System.DateTime? ScheduledAt = default) { }
+        public string? InputJson { get; init; }
+        public int Priority { get; init; }
+        public System.DateTime? ScheduledAt { get; init; }
+        public string TrainName { get; init; }
+    }
+    public class SchedulerConfigBootstrapHostedService : Microsoft.Extensions.Hosting.IHostedService
+    {
+        public SchedulerConfigBootstrapHostedService(System.IServiceProvider services, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.Operations.SchedulerConfigBootstrapHostedService> logger) { }
+        public System.Threading.Tasks.Task StartAsync(System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken cancellationToken) { }
+    }
+    public class SchedulerConfigSnapshot : System.IEquatable<Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot>
+    {
+        public SchedulerConfigSnapshot(
+                    bool ManifestManagerEnabled,
+                    bool JobDispatcherEnabled,
+                    System.TimeSpan ManifestManagerPollingInterval,
+                    System.TimeSpan JobDispatcherPollingInterval,
+                    int? MaxActiveJobs,
+                    int DefaultMaxRetries,
+                    System.TimeSpan DefaultRetryDelay,
+                    double RetryBackoffMultiplier,
+                    System.TimeSpan MaxRetryDelay,
+                    System.TimeSpan DefaultJobTimeout,
+                    System.TimeSpan StalePendingTimeout,
+                    bool RecoverStuckJobsOnStartup,
+                    System.TimeSpan DeadLetterRetentionPeriod,
+                    bool AutoPurgeDeadLetters,
+                    int? LocalWorkerCount,
+                    System.TimeSpan? MetadataCleanupInterval,
+                    System.TimeSpan? MetadataCleanupRetention) { }
+        public bool AutoPurgeDeadLetters { get; init; }
+        public System.TimeSpan DeadLetterRetentionPeriod { get; init; }
+        public System.TimeSpan DefaultJobTimeout { get; init; }
+        public int DefaultMaxRetries { get; init; }
+        public System.TimeSpan DefaultRetryDelay { get; init; }
+        public bool JobDispatcherEnabled { get; init; }
+        public System.TimeSpan JobDispatcherPollingInterval { get; init; }
+        public int? LocalWorkerCount { get; init; }
+        public bool ManifestManagerEnabled { get; init; }
+        public System.TimeSpan ManifestManagerPollingInterval { get; init; }
+        public int? MaxActiveJobs { get; init; }
+        public System.TimeSpan MaxRetryDelay { get; init; }
+        public System.TimeSpan? MetadataCleanupInterval { get; init; }
+        public System.TimeSpan? MetadataCleanupRetention { get; init; }
+        public bool RecoverStuckJobsOnStartup { get; init; }
+        public double RetryBackoffMultiplier { get; init; }
+        public System.TimeSpan StalePendingTimeout { get; init; }
+    }
+    public class ServerMetrics : System.IEquatable<Trax.Scheduler.Services.Operations.ServerMetrics>
+    {
+        public ServerMetrics(System.DateTime ProcessStartTimeUtc, double UptimeSeconds, long WorkingSetBytes, long GcHeapBytes) { }
+        public long GcHeapBytes { get; init; }
+        public System.DateTime ProcessStartTimeUtc { get; init; }
+        public double UptimeSeconds { get; init; }
+        public long WorkingSetBytes { get; init; }
+    }
+    public class ThroughputBucket : System.IEquatable<Trax.Scheduler.Services.Operations.ThroughputBucket>
+    {
+        public ThroughputBucket(System.DateTime Timestamp, int Count) { }
+        public int Count { get; init; }
+        public System.DateTime Timestamp { get; init; }
+    }
+    public class ThroughputSeries : System.IEquatable<Trax.Scheduler.Services.Operations.ThroughputSeries>
+    {
+        public ThroughputSeries(string TrainName, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.ThroughputBucket> Buckets) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.ThroughputBucket> Buckets { get; init; }
+        public string TrainName { get; init; }
+    }
+    public class TrainAverageDuration : System.IEquatable<Trax.Scheduler.Services.Operations.TrainAverageDuration>
+    {
+        public TrainAverageDuration(string TrainName, double AverageMilliseconds) { }
+        public double AverageMilliseconds { get; init; }
+        public string TrainName { get; init; }
+    }
+    public class TrainFailureCount : System.IEquatable<Trax.Scheduler.Services.Operations.TrainFailureCount>
+    {
+        public TrainFailureCount(string TrainName, int Count) { }
+        public int Count { get; init; }
+        public string TrainName { get; init; }
+    }
+    public class UpdateManifestGroupInput : System.IEquatable<Trax.Scheduler.Services.Operations.UpdateManifestGroupInput>
+    {
+        public UpdateManifestGroupInput(int? MaxActiveJobs = default, bool ClearMaxActiveJobs = false, int? Priority = default, bool? IsEnabled = default) { }
+        public bool ClearMaxActiveJobs { get; init; }
+        public bool? IsEnabled { get; init; }
+        public int? MaxActiveJobs { get; init; }
+        public int? Priority { get; init; }
+    }
+    public class UpdateSchedulerConfigInput : System.IEquatable<Trax.Scheduler.Services.Operations.UpdateSchedulerConfigInput>
+    {
+        public UpdateSchedulerConfigInput(
+                    bool? ManifestManagerEnabled = default,
+                    bool? JobDispatcherEnabled = default,
+                    System.TimeSpan? ManifestManagerPollingInterval = default,
+                    System.TimeSpan? JobDispatcherPollingInterval = default,
+                    int? MaxActiveJobs = default,
+                    bool ClearMaxActiveJobs = false,
+                    int? DefaultMaxRetries = default,
+                    System.TimeSpan? DefaultRetryDelay = default,
+                    double? RetryBackoffMultiplier = default,
+                    System.TimeSpan? MaxRetryDelay = default,
+                    System.TimeSpan? DefaultJobTimeout = default,
+                    System.TimeSpan? StalePendingTimeout = default,
+                    bool? RecoverStuckJobsOnStartup = default,
+                    System.TimeSpan? DeadLetterRetentionPeriod = default,
+                    bool? AutoPurgeDeadLetters = default,
+                    int? LocalWorkerCount = default,
+                    bool ClearLocalWorkerCount = false,
+                    System.TimeSpan? MetadataCleanupInterval = default,
+                    System.TimeSpan? MetadataCleanupRetention = default) { }
+        public bool? AutoPurgeDeadLetters { get; init; }
+        public bool ClearLocalWorkerCount { get; init; }
+        public bool ClearMaxActiveJobs { get; init; }
+        public System.TimeSpan? DeadLetterRetentionPeriod { get; init; }
+        public System.TimeSpan? DefaultJobTimeout { get; init; }
+        public int? DefaultMaxRetries { get; init; }
+        public System.TimeSpan? DefaultRetryDelay { get; init; }
+        public bool? JobDispatcherEnabled { get; init; }
+        public System.TimeSpan? JobDispatcherPollingInterval { get; init; }
+        public int? LocalWorkerCount { get; init; }
+        public bool? ManifestManagerEnabled { get; init; }
+        public System.TimeSpan? ManifestManagerPollingInterval { get; init; }
+        public int? MaxActiveJobs { get; init; }
+        public System.TimeSpan? MaxRetryDelay { get; init; }
+        public System.TimeSpan? MetadataCleanupInterval { get; init; }
+        public System.TimeSpan? MetadataCleanupRetention { get; init; }
+        public bool? RecoverStuckJobsOnStartup { get; init; }
+        public double? RetryBackoffMultiplier { get; init; }
+        public System.TimeSpan? StalePendingTimeout { get; init; }
+    }
+}
+namespace Trax.Scheduler.Services.RequestHandler
+{
+    public class ExecuteJobResult : System.IEquatable<Trax.Scheduler.Services.RequestHandler.ExecuteJobResult>
+    {
+        public ExecuteJobResult(long MetadataId) { }
+        public long MetadataId { get; init; }
+    }
+    public interface ITraxRequestHandler
+    {
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.RequestHandler.ExecuteJobResult> ExecuteJobAsync(Trax.Scheduler.Services.JobSubmitter.RemoteJobRequest request, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.RunExecutor.RemoteRunResponse> RunTrainAsync(Trax.Scheduler.Services.RunExecutor.RemoteRunRequest request, System.Threading.CancellationToken ct = default);
+    }
+}
+namespace Trax.Scheduler.Services.RunExecutor
+{
+    public class HttpRunExecutor : Trax.Mediator.Services.RunExecutor.IRunExecutor
+    {
+        public HttpRunExecutor(System.Net.Http.HttpClient httpClient, Trax.Scheduler.Configuration.RemoteRunOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.RunExecutor.HttpRunExecutor> logger) { }
+        public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> ExecuteAsync(string trainName, object input, System.Type outputType, System.Threading.CancellationToken ct = default) { }
+    }
+    public class RemoteRunRequest : System.IEquatable<Trax.Scheduler.Services.RunExecutor.RemoteRunRequest>
+    {
+        public RemoteRunRequest(string TrainName, string InputJson, string InputType) { }
+        public string InputJson { get; init; }
+        public string InputType { get; init; }
+        public string TrainName { get; init; }
+    }
+    public class RemoteRunResponse : System.IEquatable<Trax.Scheduler.Services.RunExecutor.RemoteRunResponse>
+    {
+        public RemoteRunResponse(long MetadataId, string? ExternalId = null, string? OutputJson = null, string? OutputType = null, bool IsError = false, string? ErrorMessage = null, string? ExceptionType = null, string? FailureJunction = null, string? StackTrace = null) { }
+        public string? ErrorMessage { get; init; }
+        public string? ExceptionType { get; init; }
+        public string? ExternalId { get; init; }
+        public string? FailureJunction { get; init; }
+        public bool IsError { get; init; }
+        public long MetadataId { get; init; }
+        public string? OutputJson { get; init; }
+        public string? OutputType { get; init; }
+        public string? StackTrace { get; init; }
+    }
+}
+namespace Trax.Scheduler.Services.Scheduling
+{
+    public static class Cron
+    {
+        public static Trax.Scheduler.Services.Scheduling.Schedule Daily(int hour = 0, int minute = 0, int second = 0) { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule Expression(string cronExpression) { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule Hourly(int minute = 0, int second = 0) { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule Minutely() { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule Minutely(int second) { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule Monthly(int day = 1, int hour = 0, int minute = 0, int second = 0) { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule Secondly() { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule Weekly(System.DayOfWeek day, int hour = 0, int minute = 0, int second = 0) { }
+    }
+    public static class Every
+    {
+        public static Trax.Scheduler.Services.Scheduling.Schedule Days(int days) { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule Hours(int hours) { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule Minutes(int minutes) { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule Seconds(int seconds) { }
+    }
+    public class Schedule : System.IEquatable<Trax.Scheduler.Services.Scheduling.Schedule>
+    {
+        public Schedule() { }
+        public string? CronExpression { get; init; }
+        public System.TimeSpan? Interval { get; init; }
+        public Trax.Effect.Enums.ScheduleType Type { get; init; }
+        public System.TimeSpan? Variance { get; init; }
+        public string ToCronExpression() { }
+        public Trax.Scheduler.Services.Scheduling.Schedule WithVariance(System.TimeSpan variance) { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule FromCron(string expression) { }
+        public static Trax.Scheduler.Services.Scheduling.Schedule FromInterval(System.TimeSpan interval) { }
+    }
+}
+namespace Trax.Scheduler.Services.TraxScheduler
+{
+    public class BatchDeadLetterResult : System.IEquatable<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult>
+    {
+        public BatchDeadLetterResult(int Count, string Message) { }
+        public int Count { get; init; }
+        public string Message { get; init; }
+    }
+    public class DeadLetterOperationResult : System.IEquatable<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult>
+    {
+        public DeadLetterOperationResult(bool Success, long? WorkQueueId, string Message) { }
+        public string Message { get; init; }
+        public bool Success { get; init; }
+        public long? WorkQueueId { get; init; }
+    }
+    public interface ITraxScheduler
+    {
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> AcknowledgeAllDeadLettersAsync(string note, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult> AcknowledgeDeadLetterAsync(long deadLetterId, string note, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> AcknowledgeDeadLettersAsync(long[] deadLetterIds, string note, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<int> CancelAsync(string externalId, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<int> CancelGroupAsync(long groupId, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task DisableAsync(string externalId, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task EnableAsync(string externalId, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueAllDeadLettersAsync(System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult> RequeueDeadLetterAsync(long deadLetterId, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueDeadLettersAsync(long[] deadLetterIds, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> ScheduleAsync<TTrain, TInput, TOutput>(string externalId, TInput input, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties;
+        System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> ScheduleDependentAsync<TTrain, TInput, TOutput>(string externalId, TInput input, string dependsOnExternalId, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties;
+        System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Models.Manifest.Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource>(System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "ExternalId",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties;
+        System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Models.Manifest.Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "ExternalId",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, System.Func<TSource, string> dependsOn, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties;
+        System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(TInput input, System.TimeSpan delay, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties;
+        System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(string externalId, TInput input, System.TimeSpan delay, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties;
+        System.Threading.Tasks.Task TriggerAsync(string externalId, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task TriggerAsync(string externalId, System.TimeSpan delay, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<int> TriggerGroupAsync(long groupId, System.Threading.CancellationToken ct = default);
+    }
+    public class TraxScheduler : Trax.Scheduler.Services.TraxScheduler.ITraxScheduler
+    {
+        public TraxScheduler(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Mediator.Services.TrainRegistry.ITrainRegistry trainRegistry, Trax.Scheduler.Services.CancellationRegistry.ICancellationRegistry cancellationRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.TraxScheduler.TraxScheduler> logger) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> AcknowledgeAllDeadLettersAsync(string note, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult> AcknowledgeDeadLetterAsync(long deadLetterId, string note, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> AcknowledgeDeadLettersAsync(long[] deadLetterIds, string note, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<int> CancelAsync(string externalId, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<int> CancelGroupAsync(long groupId, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task DisableAsync(string externalId, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task EnableAsync(string externalId, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueAllDeadLettersAsync(System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult> RequeueDeadLetterAsync(long deadLetterId, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueDeadLettersAsync(long[] deadLetterIds, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> ScheduleAsync<TTrain, TInput, TOutput>(string externalId, TInput input, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> ScheduleDependentAsync<TTrain, TInput, TOutput>(string externalId, TInput input, string dependsOnExternalId, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Models.Manifest.Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource>(System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "ExternalId",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Models.Manifest.Manifest>> ScheduleManyDependentAsync<TTrain, TInput, TOutput, TSource>(System.Collections.Generic.IEnumerable<TSource> sources, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "ExternalId",
+                "Input"})] System.Func<TSource, System.ValueTuple<string, TInput>> map, System.Func<TSource, string> dependsOn, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Action<TSource, Trax.Scheduler.Configuration.ManifestOptions>? configureEach = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(TInput input, System.TimeSpan delay, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(string externalId, TInput input, System.TimeSpan delay, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public System.Threading.Tasks.Task TriggerAsync(string externalId, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task TriggerAsync(string externalId, System.TimeSpan delay, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<int> TriggerGroupAsync(long groupId, System.Threading.CancellationToken ct = default) { }
+    }
+}
+namespace Trax.Scheduler.Trains.DeadLetterCleanup
+{
+    public class DeadLetterCleanupRequest : System.IEquatable<Trax.Scheduler.Trains.DeadLetterCleanup.DeadLetterCleanupRequest>
+    {
+        public DeadLetterCleanupRequest() { }
+    }
+    public class DeadLetterCleanupTrain : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Scheduler.Trains.DeadLetterCleanup.DeadLetterCleanupRequest, LanguageExt.Unit>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.DeadLetterCleanup.DeadLetterCleanupRequest, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.DeadLetterCleanup.DeadLetterCleanupRequest, LanguageExt.Unit>, Trax.Scheduler.Trains.DeadLetterCleanup.IDeadLetterCleanupTrain
+    {
+        public DeadLetterCleanupTrain() { }
+        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, LanguageExt.Unit>> RunInternal(Trax.Scheduler.Trains.DeadLetterCleanup.DeadLetterCleanupRequest input) { }
+    }
+    public interface IDeadLetterCleanupTrain : System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.DeadLetterCleanup.DeadLetterCleanupRequest, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.DeadLetterCleanup.DeadLetterCleanupRequest, LanguageExt.Unit> { }
+}
+namespace Trax.Scheduler.Trains.JobDispatcher
+{
+    public interface IJobDispatcherTrain : System.IDisposable, Trax.Core.Route.IRoute<LanguageExt.Unit, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<LanguageExt.Unit, LanguageExt.Unit> { }
+    public class JobDispatcherTrain : Trax.Effect.Services.ServiceTrain.ServiceTrain<LanguageExt.Unit, LanguageExt.Unit>, System.IDisposable, Trax.Core.Route.IRoute<LanguageExt.Unit, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<LanguageExt.Unit, LanguageExt.Unit>, Trax.Scheduler.Trains.JobDispatcher.IJobDispatcherTrain
+    {
+        public JobDispatcherTrain() { }
+        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, LanguageExt.Unit>> RunInternal(LanguageExt.Unit input) { }
+    }
+}
+namespace Trax.Scheduler.Trains.JobRunner
+{
+    public interface IJobRunnerTrain : System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.JobRunner.RunJobRequest, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.JobRunner.RunJobRequest, LanguageExt.Unit> { }
+    public class JobRunnerTrain : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Scheduler.Trains.JobRunner.RunJobRequest, LanguageExt.Unit>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.JobRunner.RunJobRequest, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.JobRunner.RunJobRequest, LanguageExt.Unit>, Trax.Scheduler.Trains.JobRunner.IJobRunnerTrain
+    {
+        public JobRunnerTrain() { }
+        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, LanguageExt.Unit>> RunInternal(Trax.Scheduler.Trains.JobRunner.RunJobRequest input) { }
+    }
+    public class ResolvedTrainInput : System.IEquatable<Trax.Scheduler.Trains.JobRunner.ResolvedTrainInput>
+    {
+        public ResolvedTrainInput(object Value) { }
+        public object Value { get; init; }
+    }
+    public class RunJobRequest : System.IEquatable<Trax.Scheduler.Trains.JobRunner.RunJobRequest>
+    {
+        public RunJobRequest(long MetadataId, object? Input = null) { }
+        public object? Input { get; init; }
+        public long MetadataId { get; init; }
+    }
+}
+namespace Trax.Scheduler.Trains.ManifestManager
+{
+    public interface IManifestManagerTrain : System.IDisposable, Trax.Core.Route.IRoute<LanguageExt.Unit, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<LanguageExt.Unit, LanguageExt.Unit> { }
+    public class InMemoryManifestManagerTrain : Trax.Effect.Services.ServiceTrain.ServiceTrain<LanguageExt.Unit, LanguageExt.Unit>, System.IDisposable, Trax.Core.Route.IRoute<LanguageExt.Unit, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<LanguageExt.Unit, LanguageExt.Unit>, Trax.Scheduler.Trains.ManifestManager.IManifestManagerTrain
+    {
+        public InMemoryManifestManagerTrain() { }
+        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, LanguageExt.Unit>> RunInternal(LanguageExt.Unit input) { }
+    }
+    public class ManifestManagerTrain : Trax.Effect.Services.ServiceTrain.ServiceTrain<LanguageExt.Unit, LanguageExt.Unit>, System.IDisposable, Trax.Core.Route.IRoute<LanguageExt.Unit, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<LanguageExt.Unit, LanguageExt.Unit>, Trax.Scheduler.Trains.ManifestManager.IManifestManagerTrain
+    {
+        public ManifestManagerTrain() { }
+        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, LanguageExt.Unit>> RunInternal(LanguageExt.Unit input) { }
+    }
+}
+namespace Trax.Scheduler.Trains.MetadataCleanup
+{
+    public interface IMetadataCleanupTrain : System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest, LanguageExt.Unit> { }
+    public class MetadataCleanupRequest : System.IEquatable<Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest>
+    {
+        public MetadataCleanupRequest() { }
+    }
+    public class MetadataCleanupTrain : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest, LanguageExt.Unit>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest, LanguageExt.Unit>, Trax.Scheduler.Trains.MetadataCleanup.IMetadataCleanupTrain
+    {
+        public MetadataCleanupTrain() { }
+        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, LanguageExt.Unit>> RunInternal(Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest input) { }
+    }
+}
+namespace Trax.Scheduler.Utilities
+{
+    public static class DagValidator
+    {
+        public static Trax.Scheduler.Utilities.TopologicalSortResult<TKey> TopologicalSort<TKey>(System.Collections.Generic.IEnumerable<TKey> nodes, [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "From",
+                "To"})] System.Collections.Generic.IEnumerable<System.ValueTuple<TKey, TKey>> edges)
+            where TKey :  notnull { }
+    }
+    public class TopologicalSortResult<TKey>
+        where TKey :  notnull
+    {
+        public TopologicalSortResult() { }
+        public System.Collections.Generic.IReadOnlySet<TKey> CycleMembers { get; init; }
+        public bool IsAcyclic { get; init; }
+        public System.Collections.Generic.IReadOnlyList<TKey> Sorted { get; init; }
+    }
+    public static class TypeResolver
+    {
+        public static System.Type ResolveType(string typeName) { }
+    }
+}

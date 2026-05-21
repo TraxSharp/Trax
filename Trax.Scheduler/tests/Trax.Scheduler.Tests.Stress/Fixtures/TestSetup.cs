@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -137,11 +138,11 @@ public abstract class TestSetup
         await action();
         sw.Stop();
 
-        Assert.That(
-            sw.Elapsed,
-            Is.LessThan(limit),
-            $"Query took {sw.Elapsed.TotalMilliseconds:F0}ms, exceeding {limit.TotalMilliseconds:F0}ms limit"
-        );
+        sw.Elapsed.Should()
+            .BeLessThan(
+                limit,
+                $"query took {sw.Elapsed.TotalMilliseconds:F0}ms, exceeding {limit.TotalMilliseconds:F0}ms limit"
+            );
 
         return sw.Elapsed;
     }
