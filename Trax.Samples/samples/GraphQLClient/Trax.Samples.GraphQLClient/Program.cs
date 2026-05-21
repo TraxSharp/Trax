@@ -11,7 +11,8 @@ using Trax.Samples.GraphQLClient.Schema;
 // Single-process sample: hosts the GraphQL server, then makes outbound calls to itself
 // through the client. Demonstrates that mode A (raw string), mode E (.graphql resource),
 // and mode D (POCO-derived) all converge on the same response when pointed at the same
-// real schema.
+// real schema. Mode D also illustrates the Path attribute for querying through nested
+// envelopes like Trax's own discover.{namespace} grouping.
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,6 +58,12 @@ Print("E: .graphql   ", modeE);
 
 var modeD = await executor.Run(new GetPlayerByTypedRequest { Id = "player-1" });
 PrintTyped("D: POCO-typed", modeD);
+
+// Same player, fetched through the Trax-style discover.{namespace} envelope. The Path
+// attribute on the request keeps the consumer in typed mode for nested schemas instead
+// of forcing a raw-string fallback.
+var modeDNested = await executor.Run(new LookupPlayerByNestedPathRequest { Id = "player-1" });
+PrintTyped("D: nested path", modeDNested!);
 
 Console.WriteLine();
 var aeMatch =

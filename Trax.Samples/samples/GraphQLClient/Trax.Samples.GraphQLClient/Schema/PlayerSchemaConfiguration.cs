@@ -89,6 +89,21 @@ public class PlayerQuery
             new Item("item-2", "Shield", ItemCategory.Armor),
             new Item("item-3", "Potion", ItemCategory.Consumable),
         };
+
+    // The discover.{namespace} envelope mirrors the shape Trax itself produces server-side
+    // when trains are decorated with [TraxQuery(Namespace = "...")]. Clients query through
+    // [GraphQLOperation(Path = "discover.players", RootField = "...")].
+    public DiscoverQueries Discover() => new();
+}
+
+public class DiscoverQueries
+{
+    public PlayersQueries Players() => new();
+}
+
+public class PlayersQueries
+{
+    public Player? LookupPlayer(string id, [Service] PlayerStore store) => store.Get(id);
 }
 
 public class PlayerMutation
