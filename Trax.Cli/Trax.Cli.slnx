@@ -4,5 +4,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Cli.Tests/Trax.Cli.Tests.csproj" />
+    <Project Path="tests/Trax.Cli.Tests.Meta/Trax.Cli.Tests.Meta.csproj" />
   </Folder>
 </Solution>

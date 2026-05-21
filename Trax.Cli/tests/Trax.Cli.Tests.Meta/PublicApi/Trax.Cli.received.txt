@@ -1,0 +1,146 @@
+namespace Trax.Cli.Commands
+{
+    public static class GenerateCommand
+    {
+        public static System.CommandLine.Command Create() { }
+    }
+}
+namespace Trax.Cli.Generator
+{
+    public class CodeRenderer
+    {
+        public CodeRenderer() { }
+        public string RenderEnum(Trax.Cli.Models.ApiEnum apiEnum, string projectName) { }
+        public string RenderGraphQLNamespaces(System.Collections.Generic.IEnumerable<string> groups, string projectName) { }
+        public string RenderInput(Trax.Cli.Models.ApiOperation operation, string projectName) { }
+        public string RenderJunction(Trax.Cli.Models.ApiOperation operation, string projectName) { }
+        public string RenderManifestNames(System.Collections.Generic.List<Trax.Cli.Models.ApiOperation> operations, string projectName) { }
+        public string RenderOutput(Trax.Cli.Models.ApiOperation operation, string projectName) { }
+        public string RenderTrainImplementation(Trax.Cli.Models.ApiOperation operation, string projectName) { }
+        public string RenderTrainInterface(Trax.Cli.Models.ApiOperation operation, string projectName) { }
+        public string RenderTrainsCsproj() { }
+        public string RenderTypeRecord(Trax.Cli.Models.ApiType type, string projectName, string? group) { }
+        public void SetModelsNamespace(string modelsNamespace) { }
+    }
+    public static class NamingConventions
+    {
+        public static string DeriveGroupName(string operationName) { }
+        public static string SanitizeIdentifier(string name) { }
+        public static string SimplifySchemaName(string name) { }
+        public static string StripHttpVerbPrefix(string name) { }
+        public static string ToCamelCase(string name) { }
+        public static string ToKebabCase(string name) { }
+        public static string ToPascalCase(string name) { }
+    }
+    public class TraxProjectGenerator
+    {
+        public TraxProjectGenerator() { }
+        public void Generate(Trax.Cli.Models.ApiSchema schema, string outputDir, string projectName, bool force) { }
+        public static bool IsDotnetAvailable() { }
+    }
+}
+namespace Trax.Cli.Models
+{
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class ApiEnum
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public ApiEnum() { }
+        public string? Description { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string Name { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public System.Collections.Generic.List<string> Values { get; init; }
+    }
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class ApiField
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public ApiField() { }
+        public string? Description { get; init; }
+        public bool IsNullable { get; init; }
+        public bool IsRequired { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string Name { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string TypeName { get; set; }
+    }
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class ApiOperation
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public ApiOperation() { }
+        public string? Description { get; init; }
+        public string? Group { get; init; }
+        public string? HttpMethod { get; init; }
+        public string? HttpPath { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public Trax.Cli.Models.ApiType InputType { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public Trax.Cli.Models.OperationKind Kind { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string Name { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public Trax.Cli.Models.ApiType OutputType { get; init; }
+    }
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class ApiSchema
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public ApiSchema() { }
+        public System.Collections.Generic.List<Trax.Cli.Models.ApiEnum> Enums { get; init; }
+        public System.Collections.Generic.List<Trax.Cli.Models.ApiOperation> Operations { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string SchemaType { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string SourceFile { get; init; }
+        public System.Collections.Generic.List<Trax.Cli.Models.ApiType> Types { get; init; }
+    }
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class ApiType
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public ApiType() { }
+        public System.Collections.Generic.List<Trax.Cli.Models.ApiField> Fields { get; init; }
+        public bool IsBuiltIn { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string Name { get; init; }
+    }
+    public enum OperationKind
+    {
+        Query = 0,
+        Mutation = 1,
+    }
+}
+namespace Trax.Cli.Schema.GraphQL
+{
+    public class GraphQLSchemaParser : Trax.Cli.Schema.ISchemaParser
+    {
+        public GraphQLSchemaParser() { }
+        public Trax.Cli.Models.ApiSchema Parse(string filePath) { }
+    }
+}
+namespace Trax.Cli.Schema
+{
+    public interface ISchemaParser
+    {
+        Trax.Cli.Models.ApiSchema Parse(string filePath);
+    }
+    public static class SchemaDetector
+    {
+        public static string Detect(string filePath, string? explicitType = null) { }
+    }
+}
+namespace Trax.Cli.Schema.OpenApi
+{
+    public class OpenApiSchemaParser : Trax.Cli.Schema.ISchemaParser
+    {
+        public OpenApiSchemaParser() { }
+        public Trax.Cli.Models.ApiSchema Parse(string filePath) { }
+    }
+}
