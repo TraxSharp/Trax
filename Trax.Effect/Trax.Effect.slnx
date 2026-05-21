@@ -27,5 +27,6 @@
     <Project Path="tests/Trax.Effect.Tests.Data.InMemory.Integration/Trax.Effect.Tests.Data.InMemory.Integration.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Data.Sqlite.Integration/Trax.Effect.Tests.Data.Sqlite.Integration.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Benchmarks/Trax.Effect.Tests.Benchmarks.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Meta/Trax.Effect.Tests.Meta.csproj" />
   </Folder>
 </Solution>

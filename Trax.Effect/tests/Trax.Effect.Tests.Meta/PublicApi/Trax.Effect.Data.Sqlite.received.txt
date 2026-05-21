@@ -1,0 +1,38 @@
+namespace Trax.Effect.Data.Sqlite
+{
+    public static class AssemblyMarker { }
+}
+namespace Trax.Effect.Data.Sqlite.Extensions
+{
+    public static class ServiceExtensions
+    {
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData UseSqlite(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder, string connectionString) { }
+    }
+}
+namespace Trax.Effect.Data.Sqlite.Services.SqliteContext
+{
+    public class SqliteContext : Trax.Effect.Data.Services.DataContext.DataContext<Trax.Effect.Data.Sqlite.Services.SqliteContext.SqliteContext>
+    {
+        public SqliteContext(Microsoft.EntityFrameworkCore.DbContextOptions<Trax.Effect.Data.Sqlite.Services.SqliteContext.SqliteContext> options) { }
+        protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
+    }
+}
+namespace Trax.Effect.Data.Sqlite.Services.SqliteContextFactory
+{
+    public class SqliteContextProviderFactory : Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
+    {
+        public SqliteContextProviderFactory(Microsoft.EntityFrameworkCore.IDbContextFactory<Trax.Effect.Data.Sqlite.Services.SqliteContext.SqliteContext> dbContextFactory) { }
+        public int Count { get; }
+        public Trax.Effect.Services.EffectProvider.IEffectProvider Create() { }
+        public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContext.IDataContext> CreateDbContextAsync(System.Threading.CancellationToken cancellationToken) { }
+    }
+}
+namespace Trax.Effect.Data.Sqlite.Utils
+{
+    public class DatabaseMigrator
+    {
+        public DatabaseMigrator() { }
+        public static DbUp.Engine.UpgradeEngine CreateEngineWithEmbeddedScripts(string connectionString) { }
+        public static System.Threading.Tasks.Task Migrate(string connectionString) { }
+    }
+}

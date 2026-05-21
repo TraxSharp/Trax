@@ -1,0 +1,23 @@
+namespace Trax.Effect.Data.InMemory.Extensions
+{
+    public static class ServiceExtensions
+    {
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData UseInMemory(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder) { }
+    }
+}
+namespace Trax.Effect.Data.InMemory.Services.InMemoryContext
+{
+    public class InMemoryContext : Trax.Effect.Data.Services.DataContext.DataContext<Trax.Effect.Data.InMemory.Services.InMemoryContext.InMemoryContext>
+    {
+        public InMemoryContext(Microsoft.EntityFrameworkCore.DbContextOptions<Trax.Effect.Data.InMemory.Services.InMemoryContext.InMemoryContext> options) { }
+    }
+}
+namespace Trax.Effect.Data.InMemory.Services.InMemoryContextFactory
+{
+    public class InMemoryContextProviderFactory : Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
+    {
+        public InMemoryContextProviderFactory(Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot databaseRoot) { }
+        public Trax.Effect.Data.Services.DataContext.IDataContext Create() { }
+        public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContext.IDataContext> CreateDbContextAsync(System.Threading.CancellationToken cancellationToken) { }
+    }
+}

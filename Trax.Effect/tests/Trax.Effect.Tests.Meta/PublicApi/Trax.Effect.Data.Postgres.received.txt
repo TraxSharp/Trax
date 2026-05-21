@@ -1,0 +1,50 @@
+namespace Trax.Effect.Data.Postgres
+{
+    public class AssemblyMarker
+    {
+        public AssemblyMarker() { }
+    }
+}
+namespace Trax.Effect.Data.Postgres.Extensions
+{
+    public static class ModelBuilderExtensions
+    {
+        public static Microsoft.EntityFrameworkCore.ModelBuilder AddPostgresEnums(this Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
+        public static void ApplyUtcDateTimeConverter(this Microsoft.EntityFrameworkCore.ModelBuilder builder) { }
+        public static Npgsql.NpgsqlDataSource BuildDataSource(string connectionString) { }
+        public static Npgsql.NpgsqlDataSource BuildDataSource(string connectionString, System.Action<Npgsql.NpgsqlDataSourceBuilder>? configure) { }
+    }
+    public static class ServiceExtensions
+    {
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder SkipMigrations(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder builder) { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData UsePostgres(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder, string connectionString) { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData UsePostgres(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder, string connectionString, System.Action<Npgsql.NpgsqlDataSourceBuilder>? configureDataSource) { }
+    }
+}
+namespace Trax.Effect.Data.Postgres.Services.PostgresContext
+{
+    public class PostgresContext : Trax.Effect.Data.Services.DataContext.DataContext<Trax.Effect.Data.Postgres.Services.PostgresContext.PostgresContext>
+    {
+        public PostgresContext(Microsoft.EntityFrameworkCore.DbContextOptions<Trax.Effect.Data.Postgres.Services.PostgresContext.PostgresContext> options) { }
+        protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
+    }
+}
+namespace Trax.Effect.Data.Postgres.Services.PostgresContextFactory
+{
+    public class PostgresContextProviderFactory : Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
+    {
+        public PostgresContextProviderFactory(Microsoft.EntityFrameworkCore.IDbContextFactory<Trax.Effect.Data.Postgres.Services.PostgresContext.PostgresContext> dbContextFactory) { }
+        public int Count { get; }
+        public Trax.Effect.Services.EffectProvider.IEffectProvider Create() { }
+        public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContext.IDataContext> CreateDbContextAsync(System.Threading.CancellationToken cancellationToken) { }
+    }
+}
+namespace Trax.Effect.Data.Postgres.Utils
+{
+    public class DatabaseMigrator
+    {
+        public DatabaseMigrator() { }
+        public static DbUp.Engine.UpgradeEngine CreateEngineWithEmbeddedScripts(string connectionString) { }
+        public static System.Threading.Tasks.Task Migrate(string connectionString) { }
+    }
+}

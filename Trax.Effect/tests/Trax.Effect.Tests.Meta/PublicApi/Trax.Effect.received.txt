@@ -1,0 +1,1204 @@
+namespace Trax.Effect.Attributes
+{
+    public enum FieldBindingBehavior
+    {
+        Implicit = 0,
+        Explicit = 1,
+    }
+    [System.Flags]
+    public enum GraphQLOperation
+    {
+        Run = 1,
+        Queue = 2,
+    }
+    [System.AttributeUsage(System.AttributeTargets.Property)]
+    public class InjectAttribute : System.Attribute
+    {
+        public InjectAttribute() { }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Interface, AllowMultiple=false, Inherited=true)]
+    public sealed class TraxAllowAnonymousAttribute : System.Attribute
+    {
+        public TraxAllowAnonymousAttribute() { }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Interface, AllowMultiple=true, Inherited=true)]
+    public class TraxAuthorizeAttribute : System.Attribute
+    {
+        public TraxAuthorizeAttribute() { }
+        public TraxAuthorizeAttribute(string policy) { }
+        public string? Policy { get; init; }
+        public string? Roles { get; init; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=true)]
+    public class TraxBroadcastAttribute : System.Attribute
+    {
+        public TraxBroadcastAttribute() { }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=true)]
+    public class TraxConcurrencyLimitAttribute : System.Attribute
+    {
+        public TraxConcurrencyLimitAttribute(int maxConcurrent) { }
+        public int MaxConcurrent { get; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=true)]
+    public class TraxMutationAttribute : System.Attribute
+    {
+        public TraxMutationAttribute(params Trax.Effect.Attributes.GraphQLOperation[] operations) { }
+        public string? DeprecationReason { get; init; }
+        public string? Description { get; init; }
+        public string? Name { get; init; }
+        public string? Namespace { get; init; }
+        public Trax.Effect.Attributes.GraphQLOperation Operations { get; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=true)]
+    public class TraxQueryAttribute : System.Attribute
+    {
+        public TraxQueryAttribute() { }
+        public string? DeprecationReason { get; init; }
+        public string? Description { get; init; }
+        public string? Name { get; init; }
+        public string? Namespace { get; init; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=true)]
+    public class TraxQueryModelAttribute : System.Attribute
+    {
+        public TraxQueryModelAttribute() { }
+        public Trax.Effect.Attributes.FieldBindingBehavior BindFields { get; init; }
+        public string? DeprecationReason { get; init; }
+        public string? Description { get; init; }
+        public System.Type? ExposeAs { get; init; }
+        public bool Filtering { get; init; }
+        public string? Name { get; init; }
+        public string? Namespace { get; init; }
+        public bool Paging { get; init; }
+        public bool Projection { get; init; }
+        public bool Sorting { get; init; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=true)]
+    public class TraxRemoteAttribute : System.Attribute
+    {
+        public TraxRemoteAttribute() { }
+    }
+}
+namespace Trax.Effect.Configuration.BroadcasterBuilder
+{
+    public class BroadcasterBuilder
+    {
+        public Trax.Effect.Services.EffectRegistry.IEffectRegistry? EffectRegistry { get; }
+        public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
+    }
+}
+namespace Trax.Effect.Configuration.TraxBuilder
+{
+    public class TraxBuilder
+    {
+        public TraxBuilder(Microsoft.Extensions.DependencyInjection.IServiceCollection services, Trax.Effect.Services.EffectRegistry.IEffectRegistry registry) { }
+        public bool HasDataProvider { get; set; }
+        public bool HasDatabaseProvider { get; set; }
+        public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
+        public Trax.Effect.Configuration.TraxBuilder.TraxBuilder AddHostLabel(string key, string value) { }
+        public Trax.Effect.Configuration.TraxBuilder.TraxBuilder AddHostLabels(System.Collections.Generic.Dictionary<string, string> labels) { }
+        public Trax.Effect.Configuration.TraxBuilder.TraxBuilder SetHostEnvironment(string environment) { }
+        public Trax.Effect.Configuration.TraxBuilder.TraxBuilder SetHostInstanceId(string instanceId) { }
+    }
+    public class TraxBuilderWithEffects
+    {
+        public TraxBuilderWithEffects(Trax.Effect.Configuration.TraxBuilder.TraxBuilder root) { }
+        public bool HasDataProvider { get; }
+        public bool HasDatabaseProvider { get; }
+        public Trax.Effect.Configuration.TraxBuilder.TraxBuilder Root { get; }
+        public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
+    }
+    public sealed class TraxMarker
+    {
+        public TraxMarker() { }
+    }
+}
+namespace Trax.Effect.Configuration.TraxEffectBuilder
+{
+    public class TraxEffectBuilder
+    {
+        public bool DataContextLoggingEffectEnabled { get; set; }
+        public Trax.Effect.Services.EffectRegistry.IEffectRegistry? EffectRegistry { get; }
+        public bool HasDataProvider { get; set; }
+        public bool HasDatabaseProvider { get; set; }
+        public bool JunctionProgressEnabled { get; set; }
+        public Microsoft.Extensions.Logging.LogLevel LogLevel { get; set; }
+        public bool MigrationsDisabled { get; set; }
+        public bool SerializeJunctionData { get; set; }
+        public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
+        public System.Text.Json.JsonSerializerOptions TrainParameterJsonSerializerOptions { get; set; }
+    }
+    public class TraxEffectBuilderWithData : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder
+    {
+        public TraxEffectBuilderWithData(Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder source) { }
+    }
+}
+namespace Trax.Effect.Configuration.TraxEffectConfiguration
+{
+    public interface ITraxEffectConfiguration
+    {
+        Microsoft.Extensions.Logging.LogLevel LogLevel { get; }
+        bool SerializeJunctionData { get; }
+        System.Text.Json.JsonSerializerOptions SystemJsonSerializerOptions { get; }
+    }
+    public class TraxEffectConfiguration : Trax.Effect.Configuration.TraxEffectConfiguration.ITraxEffectConfiguration
+    {
+        public TraxEffectConfiguration() { }
+        public Microsoft.Extensions.Logging.LogLevel LogLevel { get; set; }
+        public bool SerializeJunctionData { get; set; }
+        public System.Text.Json.JsonSerializerOptions SystemJsonSerializerOptions { get; set; }
+        public static System.Text.Json.JsonSerializerOptions StaticSystemJsonSerializerOptions { get; set; }
+    }
+}
+namespace Trax.Effect.Enums
+{
+    public enum DeadLetterStatus
+    {
+        AwaitingIntervention = 0,
+        Retried = 1,
+        Acknowledged = 2,
+    }
+    public enum MisfirePolicy
+    {
+        FireOnceNow = 0,
+        DoNothing = 1,
+    }
+    public enum ScheduleType
+    {
+        None = 0,
+        Cron = 1,
+        Interval = 2,
+        OnDemand = 3,
+        Dependent = 4,
+        DormantDependent = 5,
+        Once = 6,
+    }
+    public enum TrainState
+    {
+        Pending = 0,
+        Completed = 1,
+        Failed = 2,
+        InProgress = 3,
+        Cancelled = 4,
+    }
+    public enum WorkQueueStatus
+    {
+        Queued = 0,
+        Dispatched = 1,
+        Cancelled = 2,
+    }
+}
+namespace Trax.Effect.Extensions
+{
+    public static class AssemblyExtensions
+    {
+        public static string GetAssemblyProject(this System.Reflection.Assembly assembly) { }
+    }
+    public static class BroadcasterExtensions
+    {
+        public static TBuilder UseBroadcaster<TBuilder>(this TBuilder builder, System.Action<Trax.Effect.Configuration.BroadcasterBuilder.BroadcasterBuilder> configure)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+    }
+    public static class DisposableExtensions
+    {
+        public static bool IsDisposed(this System.IDisposable disposable) { }
+    }
+    public static class EnumerableExtensions
+    {
+        public static void RunAll<T>(this System.Collections.Generic.IEnumerable<T> source, System.Action<T> action) { }
+        public static System.Collections.Generic.List<TResult> RunAll<T, TResult>(this System.Collections.Generic.IEnumerable<T> source, System.Func<T, TResult> func) { }
+        public static System.Threading.Tasks.Task RunAllAsync<T>(this System.Collections.Generic.IEnumerable<T> source, System.Func<T, System.Threading.Tasks.Task> func) { }
+        public static System.Threading.Tasks.Task<System.Collections.Generic.List<TResult>> RunAllAsync<T, TResult>(this System.Collections.Generic.IEnumerable<T> source, System.Func<T, System.Threading.Tasks.Task<TResult>> func) { }
+    }
+    public static class ServiceExtensions
+    {
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder AddEffect<TEffectProviderFactory>(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder builder, bool toggleable = true)
+            where TEffectProviderFactory :  class, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder AddEffect<TEffectProviderFactory>(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder builder, TEffectProviderFactory factory, bool toggleable = true)
+            where TEffectProviderFactory :  class, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder builder, bool toggleable = true)
+            where TIEffectProviderFactory :  class, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
+            where TEffectProviderFactory :  class, TIEffectProviderFactory { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder builder, TEffectProviderFactory factory, bool toggleable = true)
+            where TIEffectProviderFactory :  class, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
+            where TEffectProviderFactory :  class, TIEffectProviderFactory { }
+        public static Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects AddEffects(this Trax.Effect.Configuration.TraxBuilder.TraxBuilder builder) { }
+        public static Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects AddEffects(this Trax.Effect.Configuration.TraxBuilder.TraxBuilder builder, System.Func<Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder, Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder> configure) { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder AddJunctionEffect<TJunctionEffectProviderFactory>(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder builder, bool toggleable = true)
+            where TJunctionEffectProviderFactory :  class, Trax.Effect.Services.JunctionEffectProviderFactory.IJunctionEffectProviderFactory { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder AddJunctionEffect<TJunctionEffectProviderFactory>(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder builder, TJunctionEffectProviderFactory factory, bool toggleable = true)
+            where TJunctionEffectProviderFactory :  class, Trax.Effect.Services.JunctionEffectProviderFactory.IJunctionEffectProviderFactory { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder AddJunctionEffect<TIJunctionEffectProviderFactory, TJunctionEffectProviderFactory>(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder builder, TJunctionEffectProviderFactory factory, bool toggleable = true)
+            where TIJunctionEffectProviderFactory :  class, Trax.Effect.Services.JunctionEffectProviderFactory.IJunctionEffectProviderFactory
+            where TJunctionEffectProviderFactory :  class, TIJunctionEffectProviderFactory { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder AddLifecycleHook<T>(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder builder, bool toggleable = true)
+            where T :  class { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder AddLifecycleHook<TLifecycleHookFactory>(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder builder, TLifecycleHookFactory factory, bool toggleable = true)
+            where TLifecycleHookFactory :  class, Trax.Effect.Services.TrainLifecycleHookFactory.ITrainLifecycleHookFactory { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder AddLifecycleHook<TILifecycleHookFactory, TLifecycleHookFactory>(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder builder, TLifecycleHookFactory factory, bool toggleable = true)
+            where TILifecycleHookFactory :  class, Trax.Effect.Services.TrainLifecycleHookFactory.ITrainLifecycleHookFactory
+            where TLifecycleHookFactory :  class, TILifecycleHookFactory { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddScopedTraxJunction(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Type serviceInterface, System.Type serviceImplementation) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddScopedTraxJunction<TService, TImplementation>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+            where TService :  class
+            where TImplementation :  class, TService { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddScopedTraxRoute(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Type serviceInterface, System.Type serviceImplementation) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddScopedTraxRoute<TService, TImplementation>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+            where TService :  class
+            where TImplementation :  class, TService { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddSingletonTraxJunction(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Type serviceInterface, System.Type serviceImplementation) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddSingletonTraxJunction<TService, TImplementation>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+            where TService :  class
+            where TImplementation :  class, TService { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddSingletonTraxRoute(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Type serviceInterface, System.Type serviceImplementation) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddSingletonTraxRoute<TService, TImplementation>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+            where TService :  class
+            where TImplementation :  class, TService { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTransientTraxJunction(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Type serviceInterface, System.Type serviceImplementation) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTransientTraxJunction<TService, TImplementation>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+            where TService :  class
+            where TImplementation :  class, TService { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTransientTraxRoute(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Type serviceInterface, System.Type serviceImplementation) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTransientTraxRoute<TService, TImplementation>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+            where TService :  class
+            where TImplementation :  class, TService { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTrax(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Effect.Configuration.TraxBuilder.TraxBuilder> configure) { }
+        public static void InjectProperties(this System.IServiceProvider serviceProvider, object instance) { }
+    }
+    public static class TraxEffectBuilderExtensions
+    {
+        public static TBuilder SetEffectLogLevel<TBuilder>(this TBuilder builder, Microsoft.Extensions.Logging.LogLevel logLevel)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+    }
+}
+namespace Trax.Effect.Models.BackgroundJob
+{
+    public class BackgroundJob : Trax.Effect.Models.IModel
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public BackgroundJob() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
+        public System.DateTime CreatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("fetched_at")]
+        public System.DateTime? FetchedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("input")]
+        public string? Input { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("input_type")]
+        public string? InputType { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("metadata_id")]
+        public long MetadataId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("priority")]
+        public int Priority { get; set; }
+        public override string ToString() { }
+        public static Trax.Effect.Models.BackgroundJob.BackgroundJob Create(Trax.Effect.Models.BackgroundJob.DTOs.CreateBackgroundJob dto) { }
+    }
+}
+namespace Trax.Effect.Models.BackgroundJob.DTOs
+{
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class CreateBackgroundJob
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public CreateBackgroundJob() { }
+        public string? Input { get; set; }
+        public string? InputType { get; set; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public long MetadataId { get; set; }
+        public int Priority { get; set; }
+    }
+}
+namespace Trax.Effect.Models.DeadLetter.DTOs
+{
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class CreateDeadLetter
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public CreateDeadLetter() { }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public Trax.Effect.Models.Manifest.Manifest Manifest { get; set; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string Reason { get; set; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public int RetryCount { get; set; }
+    }
+}
+namespace Trax.Effect.Models.DeadLetter
+{
+    public class DeadLetter : Trax.Effect.Models.IModel
+    {
+        public DeadLetter() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("dead_lettered_at")]
+        public System.DateTime DeadLetteredAt { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; }
+        public Trax.Effect.Models.Manifest.Manifest? Manifest { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("manifest_id")]
+        public long ManifestId { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("reason")]
+        public string Reason { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("resolution_note")]
+        public string? ResolutionNote { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("resolved_at")]
+        public System.DateTime? ResolvedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("retry_count_at_dead_letter")]
+        public int RetryCountAtDeadLetter { get; }
+        public Trax.Effect.Models.Metadata.Metadata? RetryMetadata { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("retry_metadata_id")]
+        public long? RetryMetadataId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("status")]
+        public Trax.Effect.Enums.DeadLetterStatus Status { get; set; }
+        public void Acknowledge(string note) { }
+        public void LinkRetryMetadata(long retryMetadataId) { }
+        public void MarkRetried(long retryMetadataId) { }
+        public void Requeue(string note) { }
+        public override string ToString() { }
+        public static Trax.Effect.Models.DeadLetter.DeadLetter Create(Trax.Effect.Models.DeadLetter.DTOs.CreateDeadLetter createDeadLetter) { }
+    }
+}
+namespace Trax.Effect.Models.Host
+{
+    public class TraxHostInfo : System.IEquatable<Trax.Effect.Models.Host.TraxHostInfo>
+    {
+        public TraxHostInfo() { }
+        public string HostEnvironment { get; init; }
+        public string HostInstanceId { get; init; }
+        public string HostName { get; init; }
+        public System.Collections.Generic.Dictionary<string, string> Labels { get; init; }
+        public static Trax.Effect.Models.Host.TraxHostInfo? Current { get; set; }
+        public static Trax.Effect.Models.Host.TraxHostInfo AutoDetect() { }
+    }
+}
+namespace Trax.Effect.Models
+{
+    public interface IModel
+    {
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        long Id { get; }
+        string ToString();
+    }
+}
+namespace Trax.Effect.Models.JunctionMetadata.DTOs
+{
+    public class CreateJunctionMetadata
+    {
+        public CreateJunctionMetadata() { }
+        public System.DateTime? EndTimeUtc { get; set; }
+        public string ExternalId { get; set; }
+        public System.Type InputType { get; set; }
+        public string Name { get; set; }
+        public System.Type OutputType { get; set; }
+        public System.DateTime? StartTimeUtc { get; set; }
+        public LanguageExt.EitherStatus State { get; set; }
+    }
+}
+namespace Trax.Effect.Models.JunctionMetadata
+{
+    public class JunctionMetadata : Trax.Effect.Models.IModel
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public JunctionMetadata() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("end_time_utc")]
+        public System.DateTime? EndTimeUtc { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("external_id")]
+        public string ExternalId { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("has_ran")]
+        public bool HasRan { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("input_type")]
+        public System.Type InputType { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("name")]
+        public string Name { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("output_json")]
+        public string? OutputJson { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("output_type")]
+        public System.Type OutputType { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("start_time_utc")]
+        public System.DateTime? StartTimeUtc { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("state")]
+        public LanguageExt.EitherStatus State { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("train_external_id")]
+        public string TrainExternalId { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("train_name")]
+        public string TrainName { get; }
+        public override string ToString() { }
+        public static Trax.Effect.Models.JunctionMetadata.JunctionMetadata Create(Trax.Effect.Models.JunctionMetadata.DTOs.CreateJunctionMetadata junctionMetadata, Trax.Effect.Models.Metadata.Metadata metadata) { }
+    }
+}
+namespace Trax.Effect.Models.Log.DTOs
+{
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class CreateLog
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public CreateLog() { }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string CategoryName { get; set; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public int EventId { get; set; }
+        public System.Exception? Exception { get; set; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public Microsoft.Extensions.Logging.LogLevel Level { get; set; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string Message { get; set; }
+    }
+}
+namespace Trax.Effect.Models.Log
+{
+    public interface ILog : Trax.Effect.Models.IModel
+    {
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        new long Id { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("level")]
+        Microsoft.Extensions.Logging.LogLevel Level { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("message")]
+        string Message { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("metadata_id")]
+        [System.Text.Json.Serialization.JsonInclude]
+        long MetadataId { get; }
+    }
+    public class Log : Trax.Effect.Models.IModel, Trax.Effect.Models.Log.ILog
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public Log() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("category")]
+        [System.Text.Json.Serialization.JsonPropertyName("category")]
+        public string Category { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("event_id")]
+        [System.Text.Json.Serialization.JsonPropertyName("event_id")]
+        public int EventId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("exception")]
+        [System.Text.Json.Serialization.JsonPropertyName("exception")]
+        public string? Exception { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public long Id { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("level")]
+        [System.Text.Json.Serialization.JsonPropertyName("level")]
+        public Microsoft.Extensions.Logging.LogLevel Level { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("message")]
+        [System.Text.Json.Serialization.JsonPropertyName("message")]
+        public string Message { get; set; }
+        public Trax.Effect.Models.Metadata.Metadata Metadata { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("metadata_id")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("metadata_id")]
+        public long MetadataId { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("stack_trace")]
+        [System.Text.Json.Serialization.JsonPropertyName("stack_trace")]
+        public string? StackTrace { get; set; }
+        public override string ToString() { }
+        public static Trax.Effect.Models.Log.Log Create(Trax.Effect.Models.Log.DTOs.CreateLog createLog) { }
+    }
+}
+namespace Trax.Effect.Models.Manifest.DTOs
+{
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class CreateManifest
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public CreateManifest() { }
+        public string? CronExpression { get; set; }
+        public long? DependsOnManifestId { get; set; }
+        public string? Exclusions { get; set; }
+        public int? IntervalSeconds { get; set; }
+        public bool IsEnabled { get; set; }
+        public int MaxRetries { get; set; }
+        public Trax.Effect.Enums.MisfirePolicy MisfirePolicy { get; set; }
+        public int? MisfireThresholdSeconds { get; set; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public System.Type Name { get; set; }
+        public int Priority { get; set; }
+        public Trax.Effect.Models.Manifest.IManifestProperties? Properties { get; set; }
+        public Trax.Effect.Enums.ScheduleType ScheduleType { get; set; }
+        public System.DateTime? ScheduledAt { get; set; }
+        public int? TimeoutSeconds { get; set; }
+        public int? VarianceSeconds { get; set; }
+    }
+}
+namespace Trax.Effect.Models.Manifest
+{
+    public static class Exclude
+    {
+        public static Trax.Effect.Models.Manifest.Exclusion DateRange(System.DateOnly start, System.DateOnly end) { }
+        public static Trax.Effect.Models.Manifest.Exclusion Dates(params System.DateOnly[] dates) { }
+        public static Trax.Effect.Models.Manifest.Exclusion DaysOfWeek(params System.DayOfWeek[] days) { }
+        public static Trax.Effect.Models.Manifest.Exclusion TimeWindow(System.TimeOnly start, System.TimeOnly end) { }
+    }
+    public class Exclusion
+    {
+        public Exclusion() { }
+        public System.Collections.Generic.List<System.DateOnly>? Dates { get; set; }
+        public System.Collections.Generic.List<System.DayOfWeek>? DaysOfWeek { get; set; }
+        public System.DateOnly? EndDate { get; set; }
+        public System.TimeOnly? EndTime { get; set; }
+        public System.DateOnly? StartDate { get; set; }
+        public System.TimeOnly? StartTime { get; set; }
+        public Trax.Effect.Models.Manifest.ExclusionType Type { get; set; }
+        public bool IsExcluded(System.DateTime utcNow) { }
+    }
+    [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
+    public enum ExclusionType
+    {
+        DaysOfWeek = 0,
+        Dates = 1,
+        DateRange = 2,
+        TimeWindow = 3,
+    }
+    public interface IManifestProperties { }
+    public class Manifest : Trax.Effect.Models.IModel
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public Manifest() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("cron_expression")]
+        public string? CronExpression { get; set; }
+        public System.Collections.Generic.ICollection<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetters { get; }
+        public Trax.Effect.Models.Manifest.Manifest? DependsOnManifest { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("depends_on_manifest_id")]
+        public long? DependsOnManifestId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("exclusions")]
+        public string? Exclusions { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("external_id")]
+        public string ExternalId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("interval_seconds")]
+        public int? IntervalSeconds { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("is_enabled")]
+        public bool IsEnabled { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("last_successful_run")]
+        public System.DateTime? LastSuccessfulRun { get; set; }
+        public Trax.Effect.Models.ManifestGroup.ManifestGroup ManifestGroup { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("manifest_group_id")]
+        public long ManifestGroupId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("max_retries")]
+        public int MaxRetries { get; set; }
+        public System.Collections.Generic.ICollection<Trax.Effect.Models.Metadata.Metadata> Metadatas { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("misfire_policy")]
+        public Trax.Effect.Enums.MisfirePolicy MisfirePolicy { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("misfire_threshold_seconds")]
+        public int? MisfireThresholdSeconds { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("name")]
+        public string Name { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public System.Type NameType { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("next_scheduled_run")]
+        public System.DateTime? NextScheduledRun { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("priority")]
+        public int Priority { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("properties")]
+        public string? Properties { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public System.Type PropertyType { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("property_type")]
+        public string? PropertyTypeName { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("schedule_type")]
+        public Trax.Effect.Enums.ScheduleType ScheduleType { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("scheduled_at")]
+        public System.DateTime? ScheduledAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("timeout_seconds")]
+        public int? TimeoutSeconds { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("variance_seconds")]
+        public int? VarianceSeconds { get; set; }
+        public System.Collections.Generic.ICollection<Trax.Effect.Models.WorkQueue.WorkQueue> WorkQueues { get; }
+        public System.Collections.Generic.List<Trax.Effect.Models.Manifest.Exclusion> GetExclusions() { }
+        public object GetProperties(System.Type propertyType) { }
+        public TProperty GetProperties<TProperty>()
+            where TProperty : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public object GetPropertiesUntyped() { }
+        public void SetExclusions(System.Collections.Generic.List<Trax.Effect.Models.Manifest.Exclusion> exclusions) { }
+        public LanguageExt.Unit SetProperties(Trax.Effect.Models.Manifest.IManifestProperties properties) { }
+        public override string ToString() { }
+        public static Trax.Effect.Models.Manifest.Manifest Create(Trax.Effect.Models.Manifest.DTOs.CreateManifest manifest) { }
+    }
+}
+namespace Trax.Effect.Models.ManifestGroup
+{
+    public class ManifestGroup : Trax.Effect.Models.IModel
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public ManifestGroup() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
+        public System.DateTime CreatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("is_enabled")]
+        public bool IsEnabled { get; set; }
+        public System.Collections.Generic.ICollection<Trax.Effect.Models.Manifest.Manifest> Manifests { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("max_active_jobs")]
+        public int? MaxActiveJobs { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("name")]
+        public string Name { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("priority")]
+        public int Priority { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("updated_at")]
+        public System.DateTime UpdatedAt { get; set; }
+        public override string ToString() { }
+    }
+}
+namespace Trax.Effect.Models.Metadata.DTOs
+{
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class CreateMetadata
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public CreateMetadata() { }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string ExternalId { get; set; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public object? Input { get; set; }
+        public long? ManifestId { get; set; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string Name { get; set; }
+        public long? ParentId { get; set; }
+    }
+}
+namespace Trax.Effect.Models.Metadata
+{
+    public class Metadata : System.IDisposable, Trax.Effect.Models.IModel
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public Metadata() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("cancel_requested")]
+        public bool CancellationRequested { get; set; }
+        public System.Collections.Generic.ICollection<Trax.Effect.Models.Metadata.Metadata> Children { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("currently_running_junction")]
+        public string? CurrentlyRunningJunction { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("end_time")]
+        public System.DateTime? EndTime { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("executor")]
+        public string? Executor { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("external_id")]
+        public string ExternalId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("failure_exception")]
+        public string? FailureException { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("failure_junction")]
+        public string? FailureJunction { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("failure_reason")]
+        public string? FailureReason { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("host_environment")]
+        public string? HostEnvironment { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("host_instance_id")]
+        public string? HostInstanceId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("host_labels")]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? HostLabels { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("host_name")]
+        public string? HostName { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public long Id { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("input")]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? Input { get; set; }
+        public bool IsChild { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("junction_started_at")]
+        public System.DateTime? JunctionStartedAt { get; set; }
+        public System.Collections.Generic.ICollection<Trax.Effect.Models.Log.Log> Logs { get; }
+        public Trax.Effect.Models.Manifest.Manifest? Manifest { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("manifest_id")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("manifest_id")]
+        public long? ManifestId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("name")]
+        public string Name { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("output")]
+        public string? Output { get; set; }
+        public Trax.Effect.Models.Metadata.Metadata Parent { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("parent_id")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("parent_id")]
+        public long? ParentId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("scheduled_time")]
+        public System.DateTime? ScheduledTime { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("stack_trace")]
+        public string? StackTrace { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("start_time")]
+        public System.DateTime StartTime { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("train_state")]
+        public Trax.Effect.Enums.TrainState TrainState { get; set; }
+        public LanguageExt.Unit AddException(System.Exception trainException) { }
+        public void Dispose() { }
+        public T? GetInput<T>() { }
+        public dynamic? GetInputObject() { }
+        public T? GetOutput<T>() { }
+        public dynamic? GetOutputObject() { }
+        public void SetInputObject(dynamic? value) { }
+        public void SetOutputObject(dynamic? value) { }
+        public override string ToString() { }
+        public static Trax.Effect.Models.Metadata.Metadata Create(Trax.Effect.Models.Metadata.DTOs.CreateMetadata metadata) { }
+    }
+}
+namespace Trax.Effect.Models.PersistedOperation
+{
+    public class PersistedOperation
+    {
+        public PersistedOperation() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
+        public System.DateTime CreatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("deprecation_reason")]
+        public string? DeprecationReason { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("description")]
+        public string? Description { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("document")]
+        public string Document { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public string Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("is_active")]
+        public bool IsActive { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("operation_name")]
+        public string OperationName { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("shape_fingerprint")]
+        public string ShapeFingerprint { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("tenant_key")]
+        public string? TenantKey { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("updated_at")]
+        public System.DateTime UpdatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("version")]
+        public int Version { get; set; }
+    }
+}
+namespace Trax.Effect.Models.PersistedOperationHistory
+{
+    public class PersistedOperationHistory
+    {
+        public PersistedOperationHistory() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("change_type")]
+        public string ChangeType { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("changed_at")]
+        public System.DateTime ChangedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("changed_reason")]
+        public string? ChangedReason { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("document")]
+        public string Document { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("history_id")]
+        public long HistoryId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public string Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("shape_fingerprint")]
+        public string ShapeFingerprint { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("tenant_key")]
+        public string? TenantKey { get; set; }
+    }
+}
+namespace Trax.Effect.Models.SchedulerConfig
+{
+    public class SchedulerConfig : Trax.Effect.Models.IModel
+    {
+        public const long SingletonId = 1;
+        [System.Text.Json.Serialization.JsonConstructor]
+        public SchedulerConfig() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("auto_purge_dead_letters")]
+        public bool AutoPurgeDeadLetters { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("dead_letter_retention_period")]
+        public System.TimeSpan DeadLetterRetentionPeriod { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("default_job_timeout")]
+        public System.TimeSpan DefaultJobTimeout { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("default_max_retries")]
+        public int DefaultMaxRetries { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("default_retry_delay")]
+        public System.TimeSpan DefaultRetryDelay { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("job_dispatcher_enabled")]
+        public bool JobDispatcherEnabled { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("job_dispatcher_polling_interval")]
+        public System.TimeSpan JobDispatcherPollingInterval { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("local_worker_count")]
+        public int? LocalWorkerCount { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("manifest_manager_enabled")]
+        public bool ManifestManagerEnabled { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("manifest_manager_polling_interval")]
+        public System.TimeSpan ManifestManagerPollingInterval { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("max_active_jobs")]
+        public int? MaxActiveJobs { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("max_retry_delay")]
+        public System.TimeSpan MaxRetryDelay { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("metadata_cleanup_interval")]
+        public System.TimeSpan? MetadataCleanupInterval { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("metadata_cleanup_retention")]
+        public System.TimeSpan? MetadataCleanupRetention { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("recover_stuck_jobs_on_startup")]
+        public bool RecoverStuckJobsOnStartup { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("retry_backoff_multiplier")]
+        public double RetryBackoffMultiplier { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("stale_pending_timeout")]
+        public System.TimeSpan StalePendingTimeout { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("updated_at")]
+        public System.DateTime UpdatedAt { get; set; }
+        public override string ToString() { }
+    }
+}
+namespace Trax.Effect.Models.WorkQueue.DTOs
+{
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class CreateWorkQueue
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public CreateWorkQueue() { }
+        public long? DeadLetterId { get; set; }
+        public string? Input { get; set; }
+        public string? InputTypeName { get; set; }
+        public long? ManifestId { get; set; }
+        public int Priority { get; set; }
+        public System.DateTime? ScheduledAt { get; set; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string TrainName { get; set; }
+    }
+}
+namespace Trax.Effect.Models.WorkQueue
+{
+    public class WorkQueue : Trax.Effect.Models.IModel
+    {
+        public const int MaxPriority = 31;
+        public const int MinPriority = 0;
+        [System.Text.Json.Serialization.JsonConstructor]
+        public WorkQueue() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
+        public System.DateTime CreatedAt { get; set; }
+        public Trax.Effect.Models.DeadLetter.DeadLetter? DeadLetter { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("dead_letter_id")]
+        public long? DeadLetterId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("dispatch_attempts")]
+        public int DispatchAttempts { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("dispatched_at")]
+        public System.DateTime? DispatchedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("external_id")]
+        public string ExternalId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("input")]
+        public string? Input { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("input_type_name")]
+        public string? InputTypeName { get; set; }
+        public Trax.Effect.Models.Manifest.Manifest? Manifest { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("manifest_id")]
+        public long? ManifestId { get; set; }
+        public Trax.Effect.Models.Metadata.Metadata? Metadata { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("metadata_id")]
+        public long? MetadataId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("priority")]
+        public int Priority { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("scheduled_at")]
+        public System.DateTime? ScheduledAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("status")]
+        public Trax.Effect.Enums.WorkQueueStatus Status { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("train_name")]
+        public string TrainName { get; set; }
+        public override string ToString() { }
+        public static Trax.Effect.Models.WorkQueue.WorkQueue Create(Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue dto) { }
+    }
+}
+namespace Trax.Effect.Services.EffectJunction
+{
+    public abstract class EffectJunction<TIn, TOut> : Trax.Core.Junction.Junction<TIn, TOut>, Trax.Core.Junction.IJunction<TIn, TOut>, Trax.Effect.Services.EffectJunction.IEffectJunction<TIn, TOut>
+    {
+        protected EffectJunction() { }
+        public Trax.Effect.Models.JunctionMetadata.JunctionMetadata? Metadata { get; }
+        public override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(LanguageExt.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
+        public System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(LanguageExt.Either<System.Exception, TIn> previousOutput, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain) { }
+        public abstract override System.Threading.Tasks.Task<TOut> Run(TIn input) { }
+    }
+    public interface IEffectJunction<TIn, TOut> : Trax.Core.Junction.IJunction<TIn, TOut>
+    {
+        System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(LanguageExt.Either<System.Exception, TIn> previousOutput, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain);
+    }
+}
+namespace Trax.Effect.Services.EffectProvider
+{
+    public interface IEffectProvider : System.IDisposable
+    {
+        System.Threading.Tasks.Task SaveChanges(System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task Track(Trax.Effect.Models.IModel model);
+        System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model);
+    }
+}
+namespace Trax.Effect.Services.EffectProviderFactory
+{
+    public interface IConfigurableEffectProviderFactory<TConfiguration> : Trax.Effect.Services.EffectProviderFactory.IConfigurableProviderFactory, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
+        where TConfiguration :  class
+    {
+        TConfiguration Configuration { get; }
+    }
+    public interface IConfigurableProviderFactory
+    {
+        object GetConfiguration();
+        System.Type GetConfigurationType();
+    }
+    public interface IEffectProviderFactory
+    {
+        Trax.Effect.Services.EffectProvider.IEffectProvider Create();
+    }
+}
+namespace Trax.Effect.Services.EffectRegistry
+{
+    public class EffectRegistry : Trax.Effect.Services.EffectRegistry.IEffectRegistry
+    {
+        public EffectRegistry() { }
+        public void Disable(System.Type factoryType) { }
+        public void Disable<TFactory>() { }
+        public void Enable(System.Type factoryType) { }
+        public void Enable<TFactory>() { }
+        public System.Collections.Generic.IReadOnlyDictionary<System.Type, bool> GetAll() { }
+        public System.Collections.Generic.IReadOnlyDictionary<System.Type, bool> GetToggleable() { }
+        public bool IsEnabled(System.Type factoryType) { }
+        public bool IsEnabled<TFactory>() { }
+        public bool IsToggleable(System.Type factoryType) { }
+        public bool IsToggleable<TFactory>() { }
+        public void Register(System.Type factoryType, bool enabled = true, bool toggleable = true) { }
+    }
+    public interface IEffectRegistry
+    {
+        void Disable(System.Type factoryType);
+        void Disable<TFactory>();
+        void Enable(System.Type factoryType);
+        void Enable<TFactory>();
+        System.Collections.Generic.IReadOnlyDictionary<System.Type, bool> GetAll();
+        System.Collections.Generic.IReadOnlyDictionary<System.Type, bool> GetToggleable();
+        bool IsEnabled(System.Type factoryType);
+        bool IsEnabled<TFactory>();
+        bool IsToggleable(System.Type factoryType);
+        bool IsToggleable<TFactory>();
+        void Register(System.Type factoryType, bool enabled = true, bool toggleable = true);
+    }
+}
+namespace Trax.Effect.Services.EffectRunner
+{
+    public class EffectRunner : System.IDisposable, Trax.Effect.Services.EffectRunner.IEffectRunner
+    {
+        public EffectRunner(System.Collections.Generic.IEnumerable<Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory> effectProviderFactories, Trax.Effect.Services.EffectRegistry.IEffectRegistry effectRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.EffectRunner.EffectRunner>? logger = null) { }
+        public void Dispose() { }
+        public System.Threading.Tasks.Task SaveChanges(System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task Track(Trax.Effect.Models.IModel model) { }
+        public System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model) { }
+    }
+    public interface IEffectRunner : System.IDisposable
+    {
+        System.Threading.Tasks.Task SaveChanges(System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task Track(Trax.Effect.Models.IModel model);
+        System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model);
+    }
+}
+namespace Trax.Effect.Services.JunctionEffectProvider
+{
+    public interface IJunctionEffectProvider : System.IDisposable
+    {
+        System.Threading.Tasks.Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken);
+    }
+}
+namespace Trax.Effect.Services.JunctionEffectProviderFactory
+{
+    public interface IConfigurableJunctionEffectProviderFactory<TConfiguration> : Trax.Effect.Services.EffectProviderFactory.IConfigurableProviderFactory, Trax.Effect.Services.JunctionEffectProviderFactory.IJunctionEffectProviderFactory
+        where TConfiguration :  class
+    {
+        TConfiguration Configuration { get; }
+    }
+    public interface IJunctionEffectProviderFactory
+    {
+        Trax.Effect.Services.JunctionEffectProvider.IJunctionEffectProvider Create();
+    }
+}
+namespace Trax.Effect.Services.JunctionEffectRunner
+{
+    public interface IJunctionEffectRunner : System.IDisposable
+    {
+        System.Threading.Tasks.Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken);
+    }
+    public class JunctionEffectRunner : System.IDisposable, Trax.Effect.Services.JunctionEffectRunner.IJunctionEffectRunner
+    {
+        public JunctionEffectRunner(System.Collections.Generic.IEnumerable<Trax.Effect.Services.JunctionEffectProviderFactory.IJunctionEffectProviderFactory> junctionEffectProviderFactories, Trax.Effect.Services.EffectRegistry.IEffectRegistry effectRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.JunctionEffectRunner.JunctionEffectRunner>? logger = null) { }
+        public System.Threading.Tasks.Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
+        public void Dispose() { }
+    }
+}
+namespace Trax.Effect.Services.LifecycleHookRunner
+{
+    public interface ILifecycleHookRunner : System.IDisposable
+    {
+        System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task OnFailed(Trax.Effect.Models.Metadata.Metadata metadata, System.Exception exception, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task OnStarted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task OnStateChanged(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct);
+    }
+    public class LifecycleHookRunner : System.IDisposable, Trax.Effect.Services.LifecycleHookRunner.ILifecycleHookRunner
+    {
+        public LifecycleHookRunner(System.Collections.Generic.IEnumerable<Trax.Effect.Services.TrainLifecycleHookFactory.ITrainLifecycleHookFactory> hookFactories, Trax.Effect.Services.EffectRegistry.IEffectRegistry effectRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.LifecycleHookRunner.LifecycleHookRunner>? logger = null) { }
+        public void Dispose() { }
+        public System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task OnFailed(Trax.Effect.Models.Metadata.Metadata metadata, System.Exception exception, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task OnStarted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task OnStateChanged(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+    }
+}
+namespace Trax.Effect.Services.ServiceTrain
+{
+    public interface IServiceTrain<in TIn, TOut> : System.IDisposable, Trax.Core.Route.IRoute<TIn, TOut>
+    {
+        Trax.Effect.Models.Metadata.Metadata? Metadata { get; }
+        new System.Threading.Tasks.Task<TOut> Run(TIn input, System.Threading.CancellationToken cancellationToken = default);
+    }
+    public abstract class ServiceTrain<TIn, TOut> : Trax.Core.Train.Train<TIn, TOut>, System.IDisposable, Trax.Core.Route.IRoute<TIn, TOut>, Trax.Effect.Services.ServiceTrain.IServiceTrain<TIn, TOut>
+    {
+        protected ServiceTrain() { }
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? CanonicalName { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Trax.Effect.Attributes.Inject]
+        public Trax.Effect.Services.EffectRunner.IEffectRunner? EffectRunner { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Trax.Effect.Attributes.Inject]
+        public Trax.Effect.Services.JunctionEffectRunner.IJunctionEffectRunner? JunctionEffectRunner { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Trax.Effect.Attributes.Inject]
+        public Trax.Effect.Services.LifecycleHookRunner.ILifecycleHookRunner? LifecycleHookRunner { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Trax.Effect.Attributes.Inject]
+        public Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.ServiceTrain.ServiceTrain<TIn, TOut>>? Logger { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        public Trax.Effect.Models.Metadata.Metadata? Metadata { get; }
+        public long? ParentId { get; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Trax.Effect.Attributes.Inject]
+        public System.IServiceProvider? ServiceProvider { get; set; }
+        protected TIn TrainInput { get; }
+        public string TrainName { get; }
+        protected TOut TrainOutput { get; }
+        public new Trax.Core.Monad.Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs) { }
+        public void Dispose() { }
+        protected virtual System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+        protected virtual System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+        protected virtual System.Threading.Tasks.Task OnFailed(Trax.Effect.Models.Metadata.Metadata metadata, System.Exception exception, System.Threading.CancellationToken ct) { }
+        protected virtual System.Threading.Tasks.Task OnStarted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+        public override System.Threading.Tasks.Task<TOut> Run(TIn input, System.Threading.CancellationToken cancellationToken = default) { }
+        public virtual System.Threading.Tasks.Task<TOut> Run(TIn input, Trax.Effect.Models.Metadata.Metadata metadata) { }
+        public virtual System.Threading.Tasks.Task<TOut> Run(TIn input, Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken cancellationToken) { }
+        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RunInternal(TIn input) { }
+    }
+}
+namespace Trax.Effect.Services.TrainEventBroadcaster
+{
+    public class BroadcastLifecycleHook : Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook
+    {
+        public BroadcastLifecycleHook(Trax.Effect.Services.TrainEventBroadcaster.ITrainEventBroadcaster broadcaster, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.TrainEventBroadcaster.BroadcastLifecycleHook>? logger = null) { }
+        public System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task OnFailed(Trax.Effect.Models.Metadata.Metadata metadata, System.Exception exception, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task OnStarted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task OnStateChanged(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+    }
+    public interface ITrainEventBroadcaster
+    {
+        System.Threading.Tasks.Task PublishAsync(Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage message, System.Threading.CancellationToken ct);
+    }
+    public interface ITrainEventHandler
+    {
+        System.Threading.Tasks.Task HandleAsync(Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage message, System.Threading.CancellationToken ct);
+    }
+    public interface ITrainEventReceiver : System.IAsyncDisposable
+    {
+        System.Threading.Tasks.Task StartAsync(System.Func<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage, System.Threading.CancellationToken, System.Threading.Tasks.Task> handler, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken ct);
+    }
+    public class TrainEventReceiverService : Microsoft.Extensions.Hosting.BackgroundService
+    {
+        public TrainEventReceiverService(Trax.Effect.Services.TrainEventBroadcaster.ITrainEventReceiver receiver, System.IServiceProvider serviceProvider, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.TrainEventBroadcaster.TrainEventReceiverService>? logger = null) { }
+        protected override System.Threading.Tasks.Task ExecuteAsync(System.Threading.CancellationToken stoppingToken) { }
+        public override System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken cancellationToken) { }
+    }
+    public class TrainLifecycleEventMessage : System.IEquatable<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage>
+    {
+        public TrainLifecycleEventMessage(long MetadataId, string ExternalId, string TrainName, string TrainState, System.DateTime Timestamp, string? FailureJunction, string? FailureReason, string EventType, string? Executor, string? Output, string? HostName = null, string? HostEnvironment = null) { }
+        [System.Text.Json.Serialization.JsonPropertyName("eventType")]
+        public string EventType { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("executor")]
+        public string? Executor { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("externalId")]
+        public string ExternalId { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("failureJunction")]
+        public string? FailureJunction { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("failureReason")]
+        public string? FailureReason { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("hostEnvironment")]
+        public string? HostEnvironment { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("hostName")]
+        public string? HostName { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("metadataId")]
+        public long MetadataId { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("output")]
+        public string? Output { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("timestamp")]
+        public System.DateTime Timestamp { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("trainName")]
+        public string TrainName { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("trainState")]
+        public string TrainState { get; init; }
+    }
+}
+namespace Trax.Effect.Services.TrainLifecycleHook
+{
+    public interface ITrainLifecycleHook
+    {
+        System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task OnFailed(Trax.Effect.Models.Metadata.Metadata metadata, System.Exception exception, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task OnStarted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task OnStateChanged(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct);
+    }
+}
+namespace Trax.Effect.Services.TrainLifecycleHookFactory
+{
+    public interface ITrainLifecycleHookFactory
+    {
+        Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook Create();
+    }
+    public class LifecycleHookFactory<THook> : Trax.Effect.Services.TrainLifecycleHookFactory.ITrainLifecycleHookFactory
+        where THook :  class, Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook
+    {
+        public LifecycleHookFactory(System.IServiceProvider serviceProvider) { }
+        public Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook Create() { }
+    }
+}
+namespace Trax.Effect.Utils
+{
+    public sealed class DisposableConverter : System.Text.Json.Serialization.JsonConverter<object>
+    {
+        public DisposableConverter() { }
+        public override bool CanConvert(System.Type typeToConvert) { }
+        public override object Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, object value, System.Text.Json.JsonSerializerOptions options) { }
+    }
+    public class SystemTypeConverter : System.Text.Json.Serialization.JsonConverter<System.Type>
+    {
+        public SystemTypeConverter() { }
+        public override System.Type? Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, System.Type value, System.Text.Json.JsonSerializerOptions options) { }
+    }
+    public static class TraxJsonSerializationOptions
+    {
+        public static System.Text.Json.JsonSerializerOptions Default { get; set; }
+        public static System.Text.Json.JsonSerializerOptions JunctionLogging { get; set; }
+        public static System.Text.Json.JsonSerializerOptions ManifestProperties { get; set; }
+    }
+    public class ValueTupleConverter : System.Text.Json.Serialization.JsonConverterFactory
+    {
+        public ValueTupleConverter() { }
+        public override bool CanConvert(System.Type typeToConvert) { }
+        public override System.Text.Json.Serialization.JsonConverter? CreateConverter(System.Type type, System.Text.Json.JsonSerializerOptions options) { }
+    }
+}
