@@ -225,6 +225,10 @@ All three inherit `PersistedOperationException`. The GraphQL mutations and the d
 
 Hosts using `AddPersistedOperationStore(...)` (admin tooling without a HotChocolate schema in process) get a no-op validator instead. The shape-diff guardrail still runs.
 
+### Coexistence with `@authorize`
+
+The HotChocolate-backed validator runs the same rules HotChocolate runs at request time, including the authorize-rule aggregator that fires whenever `services.AddAuthorization()` has been wired into the GraphQL builder (which Trax does automatically as soon as any `[TraxQueryModel]` carries `[TraxAuthorize]`). The validator resolves `IAuthorizationHandler` from the host service provider and seeds it into the validation context so the rule passes; no upload-time auth check actually fires (Trax uses `ApplyPolicy.BeforeResolver`, so the authorize directive is invoked at execution time only). Hosts that have not wired authorization at all keep using the validator as before.
+
 ## Shape-diff guardrail
 
 Every `UpsertAsync` computes a canonicalized structural hash (sha-256) of the response shape using the document AST. The fingerprint is stored in the row alongside the document. The dashboard editor (v1.1) will compare old vs new fingerprints and refuse a save that changes the response shape unless the operator passes `--force`.
