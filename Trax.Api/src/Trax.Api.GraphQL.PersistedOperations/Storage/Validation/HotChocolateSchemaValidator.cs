@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using HotChocolate;
+using HotChocolate.Authorization;
 using HotChocolate.Execution;
 using HotChocolate.Language;
 using HotChocolate.Validation;
@@ -16,6 +17,14 @@ namespace Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
 /// </summary>
 public sealed class HotChocolateSchemaValidator : IPersistedOperationValidator
 {
+    // HotChocolate's AuthorizeValidationResultAggregator reads the handler
+    // from the validator's contextData under this exact string key. At
+    // request time the AuthorizationContextEnricher populates it, but the
+    // persisted-operation validator bypasses the request pipeline so we
+    // have to seed it ourselves.
+    private const string AuthorizationHandlerContextKey =
+        "HotChocolate.Authorization.AuthorizationHandler";
+
     private readonly IServiceProvider _services;
     private readonly string _schemaName;
 
@@ -59,12 +68,24 @@ public sealed class HotChocolateSchemaValidator : IPersistedOperationValidator
 
         var entry = await GetExecutorAsync(ct).ConfigureAwait(false);
 
+        // IAuthorizationHandler is registered as scoped by AddAuthorization,
+        // so we resolve it through a per-call scope. GetService (not
+        // GetRequiredService) keeps the validator usable for hosts that
+        // never wire @authorize.
+        await using var scope = _services.CreateAsyncScope();
+        var contextData = new Dictionary<string, object?>();
+        var authorizationHandler = scope.ServiceProvider.GetService<IAuthorizationHandler>();
+        if (authorizationHandler is not null)
+        {
+            contextData[AuthorizationHandlerContextKey] = authorizationHandler;
+        }
+
         var result = await entry
             .Validator.ValidateAsync(
                 entry.Schema,
                 parsed,
                 documentId: new OperationDocumentId("trax-po-validator"),
-                contextData: new Dictionary<string, object?>()!,
+                contextData: contextData!,
                 onlyNonCacheable: false,
                 cancellationToken: ct
             )

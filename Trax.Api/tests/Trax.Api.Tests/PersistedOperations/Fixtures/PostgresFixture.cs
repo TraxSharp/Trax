@@ -43,6 +43,12 @@ public class PostgresFixture
         if (_services is not null)
             return;
 
+        // Skip when Postgres isn't reachable. Integration tests further down
+        // call Assert.Ignore themselves; unit tests under this namespace
+        // shouldn't be blocked by a connection failure here.
+        if (!IsPostgresReachable())
+            return;
+
         await _initLock.WaitAsync();
         try
         {
