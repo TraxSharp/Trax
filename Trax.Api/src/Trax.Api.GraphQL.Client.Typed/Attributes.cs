@@ -28,6 +28,15 @@ public sealed class GraphQLOperationAttribute : Attribute
     /// the schema field is <c>player</c>.
     /// </summary>
     public string? RootField { get; init; }
+
+    /// <summary>
+    /// Optional dot-separated path of wrapper field names that nest above <see cref="RootField"/>.
+    /// Set to <c>"discover.netsuite"</c> when the schema groups fields under
+    /// <c>query { discover { netsuite { rootField { ... } } } }</c>. This matches the envelope
+    /// the Trax server produces for trains decorated with <c>[TraxQuery(Namespace = "netsuite")]</c>.
+    /// When omitted, the root field is emitted directly under the Query type.
+    /// </summary>
+    public string? Path { get; init; }
 }
 
 public enum OperationType

@@ -20,7 +20,9 @@ internal static class TypedQueryGenerator
         string Query,
         string OperationName,
         OperationType OperationType,
-        IReadOnlyList<ArgumentBinding> Arguments
+        IReadOnlyList<ArgumentBinding> Arguments,
+        IReadOnlyList<string> PathSegments,
+        string RootField
     );
 
     public sealed record ArgumentBinding(
@@ -40,6 +42,7 @@ internal static class TypedQueryGenerator
 
         var operationName = opAttr.Name ?? StripRequestSuffix(requestType.Name);
         var rootField = opAttr.RootField ?? CamelCase(operationName);
+        var pathSegments = ParsePath(opAttr.Path, requestType);
 
         var args = CollectArguments(requestType);
 
@@ -73,7 +76,19 @@ internal static class TypedQueryGenerator
             sb.Append(')');
         }
 
-        sb.Append(" {\n  ").Append(rootField);
+        // Wrapper fields (e.g. `discover { netsuite { ... } }`) sit between the operation body
+        // and the root field. Their indent grows with depth so the formatted output stays
+        // readable. The root field's own indent is 2 spaces per nesting level above its baseline.
+        sb.Append(" {\n");
+
+        var rootIndent = 2;
+        for (var i = 0; i < pathSegments.Count; i++)
+        {
+            sb.Append(new string(' ', rootIndent)).Append(pathSegments[i]).Append(" {\n");
+            rootIndent += 2;
+        }
+
+        sb.Append(new string(' ', rootIndent)).Append(rootField);
 
         if (args.Count > 0)
         {
@@ -91,10 +106,63 @@ internal static class TypedQueryGenerator
         }
 
         sb.Append(" {\n");
-        WriteSelectionSet(sb, elementResultType, indent: 4);
-        sb.Append("  }\n}\n");
+        WriteSelectionSet(sb, elementResultType, indent: rootIndent + 2);
+        sb.Append(new string(' ', rootIndent)).Append("}\n");
 
-        return new GeneratedQuery(sb.ToString(), operationName, opAttr.OperationType, args);
+        for (var i = pathSegments.Count - 1; i >= 0; i--)
+        {
+            rootIndent -= 2;
+            sb.Append(new string(' ', rootIndent)).Append("}\n");
+        }
+
+        sb.Append("}\n");
+
+        return new GeneratedQuery(
+            sb.ToString(),
+            operationName,
+            opAttr.OperationType,
+            args,
+            pathSegments,
+            rootField
+        );
+    }
+
+    private static IReadOnlyList<string> ParsePath(string? path, Type requestType)
+    {
+        if (path is null)
+            return Array.Empty<string>();
+
+        // Empty is operator error: setting Path at all means you intend to nest. The way to
+        // opt out is to omit the property, which leaves it null.
+        if (path.Length == 0)
+            throw new InvalidOperationException(
+                $"[GraphQLOperation] on '{requestType.FullName}' has Path = \"\". "
+                    + "To opt out of nesting, omit the Path property entirely. "
+                    + "To nest, set Path to a dot-separated chain such as Path = \"discover.netsuite\"."
+            );
+
+        var segments = path.Split('.');
+        for (var i = 0; i < segments.Length; i++)
+        {
+            var seg = segments[i];
+            if (seg.Length == 0)
+                throw new InvalidOperationException(
+                    $"[GraphQLOperation] on '{requestType.FullName}' has malformed Path = \"{path}\" "
+                        + "(empty segment from a leading, trailing, or doubled dot). "
+                        + "Each dot-separated segment must be a non-empty GraphQL field name, e.g. \"discover.netsuite\"."
+                );
+
+            for (var c = 0; c < seg.Length; c++)
+            {
+                if (char.IsWhiteSpace(seg[c]))
+                    throw new InvalidOperationException(
+                        $"[GraphQLOperation] on '{requestType.FullName}' has whitespace in Path = \"{path}\". "
+                            + "Path segments must be valid GraphQL field names with no whitespace, e.g. \"discover.netsuite\"."
+                    );
+            }
+        }
+
+        return segments;
     }
 
     private static IReadOnlyList<ArgumentBinding> CollectArguments(Type requestType)

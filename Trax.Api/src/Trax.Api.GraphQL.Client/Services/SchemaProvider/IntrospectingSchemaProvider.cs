@@ -158,9 +158,30 @@ public class IntrospectingSchemaProvider : ISchemaProvider
 
         var sdl = IntrospectionSdlBuilder.Build(parsed.__Schema);
 
+        // Collect custom scalar names. graphql-dotnet ships built-in types for String, Int,
+        // Float, Boolean, ID but treats anything else (Any, DateTime, Uuid, JSON, ...) as
+        // unresolved — failing schema initialization the moment a field references one.
+        // Register a permissive scalar instance for each, keyed on the SDL name.
+        var customScalars = new List<IGraphType>();
+        foreach (var type in parsed.__Schema.Types)
+        {
+            if (
+                type.Kind == "SCALAR"
+                && type.Name is { Length: > 0 } name
+                && !IntrospectionSdlBuilder.IsBuiltinScalar(name)
+                && !name.StartsWith("__", StringComparison.Ordinal)
+            )
+            {
+                customScalars.Add(new PermissiveScalarGraphType(name));
+            }
+        }
+
         try
         {
-            return Schema.For(sdl);
+            var schema = Schema.For(sdl);
+            if (customScalars.Count > 0)
+                schema.RegisterTypes(customScalars.ToArray());
+            return schema;
         }
         catch (Exception ex)
         {

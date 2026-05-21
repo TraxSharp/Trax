@@ -25,6 +25,14 @@ internal static class IntrospectionSdlBuilder
         "ID",
     };
 
+    /// <summary>
+    /// Returns true for GraphQL's five spec-defined scalars. Used by
+    /// <see cref="IntrospectingSchemaProvider"/> to decide which scalars need a
+    /// runtime <c>IGraphType</c> registration — the built-ins ship with graphql-dotnet,
+    /// everything else (Any, DateTime, Uuid, JSON, ...) does not.
+    /// </summary>
+    internal static bool IsBuiltinScalar(string name) => BuiltinScalars.Contains(name);
+
     public static string Build(IntrospectionSchema schema)
     {
         var sb = new StringBuilder();

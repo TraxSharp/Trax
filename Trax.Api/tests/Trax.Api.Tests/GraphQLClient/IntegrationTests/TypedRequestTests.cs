@@ -148,4 +148,106 @@ public class TypedRequestTests
         : Trax.Api.GraphQL.Client.Typed.TypedRequest<TypedItemSummary> { }
 
     public sealed record PocoWithoutGraphQLType(string Id, string Name);
+
+    #region Path (nested envelope) end-to-end
+
+    [Test]
+    public async Task NestedPath_TypedRequest_ExecutesAgainstRealServer()
+    {
+        // The schema exposes discover.netsuite.typedCustomer; the request's Path declares
+        // exactly that nesting. A regression in either the generator or the extractor
+        // surfaces here as a request that the server can't validate or a response the
+        // client can't deserialize.
+        var result = await _executor.Run(new GetNestedCustomerByEmailRequest { Email = "Aragorn" });
+
+        result.Should().NotBeNull();
+        result!.Id.Should().Be("player-1");
+        result.Name.Should().Be("Aragorn");
+        result.Rank.Should().Be("GOLD");
+    }
+
+    [Test]
+    public async Task NestedPath_NoArguments_ExecutesAgainstRealServer()
+    {
+        var result = await _executor.Run(new GetNestedCustomersRequest());
+
+        result.Should().HaveCount(2);
+        result.Select(i => i.Id).Should().BeEquivalentTo(["cust-1", "cust-2"]);
+    }
+
+    [Test]
+    public async Task NestedPath_DifferentNamespace_ExecutesAgainstRealServer()
+    {
+        // Same client, different namespace under discover. Proves the generator doesn't
+        // bake one specific namespace into the output and the executor handles each
+        // request's Path independently.
+        var result = await _executor.Run(new GetNestedPlayerByRankRequest { Rank = "GOLD" });
+
+        result.Should().NotBeNull();
+        result!.Rank.Should().Be("GOLD");
+    }
+
+    [Test]
+    public async Task NestedPath_NullLeaf_ReturnsNull()
+    {
+        // The schema returns null when no customer matches. The extractor must propagate
+        // null through the nested envelope rather than throwing.
+        var result = await _executor.Run(
+            new GetNestedCustomerByEmailRequest { Email = "no-such-name" }
+        );
+
+        result.Should().BeNull();
+    }
+
+    [Test]
+    public void NestedPath_GeneratedQuery_IsCachedPerType()
+    {
+        // Per-type caching matters because the generator parses Path on every cache miss.
+        // If caching keyed on something else (e.g., type name without namespace), two
+        // requests sharing a name would clobber each other.
+        var first = new GetNestedCustomerByEmailRequest { Email = "a" };
+        var second = new GetNestedCustomerByEmailRequest { Email = "b" };
+
+        ReferenceEquals(first.Query, second.Query).Should().BeTrue();
+    }
+
+    [Test]
+    public void NestedPath_Mutation_GeneratorEmitsMutationKeyword()
+    {
+        // The generator branches on OperationType. A regression that hardcoded the keyword
+        // to "query" would produce a query-shaped string for a mutation request, which the
+        // server would either reject as an unknown root field or, worse, silently route to
+        // the wrong root type.
+        var request = new RenameNestedCustomerRequest
+        {
+            Input = new RenamePlayerInput("player-1", "x"),
+        };
+
+        var query = request.Query;
+
+        query.Should().StartWith("mutation RenameNestedCustomer");
+        query.Should().Contain("dispatch {");
+        query.Should().Contain("netsuite {");
+        query.Should().Contain("renameCustomer(input: $input)");
+    }
+
+    [Test]
+    public async Task NestedPath_Mutation_ExecutesAgainstRealServer()
+    {
+        // Same end-to-end path as a nested query, but exercising the mutation branch of
+        // every component: generator (mutation keyword), HotChocolate routing (RootMutation
+        // vs RootQuery), and the executor's mutation HTTP path.
+        var result = await _executor.Run(
+            new RenameNestedCustomerRequest
+            {
+                Input = new RenamePlayerInput("player-2", "Bilbo Baggins"),
+            }
+        );
+
+        result.Should().NotBeNull();
+        result.Id.Should().Be("player-2");
+        result.Name.Should().Be("Bilbo Baggins");
+    }
+
+    #endregion
 }

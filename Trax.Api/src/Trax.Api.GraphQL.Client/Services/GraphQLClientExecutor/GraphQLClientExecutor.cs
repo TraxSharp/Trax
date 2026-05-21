@@ -68,7 +68,7 @@ public class GraphQLClientExecutor : IGraphQLClientExecutor
         )
         {
             ResponseShapeValidator.Validate(
-                UnwrapForShapeCheck(response.Data),
+                request.UnwrapDataElement(response.Data),
                 typeof(TReturn),
                 _configuration.ResponseStrictness,
                 _configuration.JsonSerializerOptions,
@@ -77,28 +77,5 @@ public class GraphQLClientExecutor : IGraphQLClientExecutor
         }
 
         return request.Extract(response.Data, _configuration.JsonSerializerOptions);
-    }
-
-    /// <summary>
-    /// Mirrors the unwrap step in <see cref="IGraphQLClientRequest{T}.Extract"/> so strict-shape
-    /// checks see the same JSON object the deserializer will see. If <c>data</c> has a single
-    /// top-level property and the request uses the default extractor, the strict check applies
-    /// to the unwrapped element. Custom extractors are excluded earlier via
-    /// <see cref="IGraphQLClientRequest{T}.UsesDefaultExtractor"/>.
-    /// </summary>
-    private static JsonElement UnwrapForShapeCheck(JsonElement data)
-    {
-        if (data.ValueKind != JsonValueKind.Object)
-            return data;
-
-        var enumerator = data.EnumerateObject();
-        if (!enumerator.MoveNext())
-            return data;
-
-        var first = enumerator.Current;
-        if (enumerator.MoveNext())
-            return data;
-
-        return first.Value;
     }
 }

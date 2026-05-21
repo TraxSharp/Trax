@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Trax;
+using Trax.Api.GraphQL.Client.Typed;
 
 namespace Trax.Api.Tests.GraphQLClient.UnitTests;
 
@@ -68,7 +69,48 @@ public class OutboundQueryDiscoveryEdgePathsTests
 
         entries.Should().NotContain(e => e.RequestType == typeof(AbstractTaggedRequest));
     }
+
+    [Test]
+    public void Discover_TypedRequestWithPath_ParsesOuterOperationName()
+    {
+        // Nested-path requests still produce a top-level `query Op($var: T!) { ... }` signature,
+        // so the discovery's operation-name parser must continue to pick them up. A regression
+        // that treated path-wrappers as if they ate the operation name would silently drop
+        // every typed Trax-targeting request from the dashboard's outbound view.
+        var entries = OutboundQueryDiscovery.Discover(typeof(NestedPathRequest).Assembly);
+
+        entries
+            .Single(e => e.RequestType == typeof(NestedPathRequest))
+            .QueryName.Should()
+            .Be("NestedPath");
+    }
+
+    [Test]
+    public void Generator_NestedPathFakeProducesQuery()
+    {
+        // Diagnostic: surface whatever the generator throws so we know whether the discovery
+        // failure is upstream (Generate exception) or downstream (parser doesn't match).
+        var generated = TypedQueryGenerator.Generate(
+            typeof(NestedPathRequest),
+            typeof(NestedPathPayload)
+        );
+        generated.Query.Should().StartWith("query NestedPath");
+    }
 }
+
+// Non-file scope: the `file` modifier mangles Type.Name with a per-file hash, which would
+// break TypedQueryGenerator's name-based operation derivation (StripRequestSuffix). Other
+// fakes in this file are file-scoped because they hard-code their Query strings and don't
+// go through the generator.
+[TraxOutboundQuery("Nested")]
+[GraphQLOperation(OperationType.Query, Path = "discover.netsuite", RootField = "thing")]
+internal sealed class NestedPathRequest : TypedRequest<NestedPathPayload>
+{
+    // No-op; the discovery only reads the Query string.
+}
+
+[GraphQLType("Thing")]
+internal sealed record NestedPathPayload(string Id);
 
 [TraxOutboundQuery("Anon")]
 file sealed class AnonymousQuery : IGraphQLClientRequest<object>

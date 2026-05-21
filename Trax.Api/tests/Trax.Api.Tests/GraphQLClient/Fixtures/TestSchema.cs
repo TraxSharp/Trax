@@ -51,11 +51,64 @@ public class TestQuery
             new Item("item-2", "Shield", ItemCategory.Armor),
             new Item("item-3", "Potion", ItemCategory.Consumable),
         };
+
+    // Mirrors the Trax server's discover.{namespace} envelope so the typed client can be
+    // exercised against the exact nesting shape Trax itself produces. The non-discover
+    // fields above keep the flat-path tests honest; the discover branch is new surface.
+    public DiscoverQueries Discover() => new();
+}
+
+public class DiscoverQueries
+{
+    public NetsuiteQueries Netsuite() => new();
+
+    public PlayersQueries Players() => new();
+}
+
+public class NetsuiteQueries
+{
+    public Player? TypedCustomer(string email, [Service] TestPlayerStore store) =>
+        store.All().FirstOrDefault(p => p.Name.Equals(email, StringComparison.OrdinalIgnoreCase));
+
+    public IReadOnlyList<Item> TypedCustomers() =>
+        new[]
+        {
+            new Item("cust-1", "Acme", ItemCategory.Consumable),
+            new Item("cust-2", "Beta", ItemCategory.Consumable),
+        };
+}
+
+public class PlayersQueries
+{
+    public Player? TypedPlayerByRank(Rank rank, [Service] TestPlayerStore store) =>
+        store.All().FirstOrDefault(p => p.Rank == rank);
 }
 
 public class TestMutation
 {
     public Player RenamePlayer(RenamePlayerInput input, [Service] TestPlayerStore store)
+    {
+        var existing =
+            store.Get(input.Id) ?? throw new GraphQLException($"Player '{input.Id}' not found.");
+        var updated = existing with { Name = input.NewName };
+        store.Put(updated);
+        return updated;
+    }
+
+    // Mirrors the Trax server's dispatch.{namespace} envelope for mutations. Pairs with
+    // the discover.{namespace} surface on TestQuery so the typed client can be exercised
+    // against both halves of the Trax convention.
+    public DispatchMutations Dispatch() => new();
+}
+
+public class DispatchMutations
+{
+    public NetsuiteMutations Netsuite() => new();
+}
+
+public class NetsuiteMutations
+{
+    public Player RenameCustomer(RenamePlayerInput input, [Service] TestPlayerStore store)
     {
         var existing =
             store.Get(input.Id) ?? throw new GraphQLException($"Player '{input.Id}' not found.");

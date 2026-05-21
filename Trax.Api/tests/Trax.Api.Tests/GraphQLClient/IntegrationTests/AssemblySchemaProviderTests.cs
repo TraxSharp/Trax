@@ -68,6 +68,49 @@ public class AssemblySchemaProviderTests
     }
 
     [Test]
+    public async Task ValidatorBackedByAssemblyProvider_ValidatesNestedPathQuery()
+    {
+        // The Path-emitting generator produces multi-level selections like
+        // `discover { netsuite { typedCustomer(...) { ... } } }`. The validator must
+        // walk those nested types through the assembly-built schema correctly. Without
+        // this test, a regression could pass the introspecting-provider tests (which
+        // also nest) while breaking only the assembly-built variant (different code
+        // paths inside HotChocolate's schema-builder vs introspection-deserializer).
+        var provider = new AssemblySchemaProvider(ConfigureTestSchema);
+        var validator = new GraphQLClientValidator(provider);
+
+        var query = new GetNestedCustomerByEmailRequest { Email = "x" }.Query;
+        var op = await validator.ValidateAsync(query);
+
+        op.Should().Be(GraphQLParser.AST.OperationType.Query);
+    }
+
+    [Test]
+    public async Task AssemblySchemaClient_RunsNestedPathTypedRequest()
+    {
+        // End-to-end through UseAssemblySchema: the schema is built in-process from the
+        // same delegate the server uses. If the generator emits nested selections that
+        // the assembly-built schema can't validate (or the response doesn't shape the
+        // way the extractor walks), this test fails. Proves Path works against the
+        // strongest schema source the client supports, not just introspection.
+        using var fixture = new GraphQLTestServerFixture();
+        var services = new ServiceCollection();
+        services
+            .AddTraxGraphQLClient(fixture.BaseAddress)
+            .ConfigureHttpClient(fixture.CreateHttpClient())
+            .UseAssemblySchema(ConfigureTestSchema);
+
+        await using var sp = services.BuildServiceProvider();
+        var executor = sp.GetRequiredService<IGraphQLClientExecutor>();
+
+        var result = await executor.Run(new GetNestedCustomerByEmailRequest { Email = "Aragorn" });
+
+        result.Should().NotBeNull();
+        result!.Id.Should().Be("player-1");
+        result.Name.Should().Be("Aragorn");
+    }
+
+    [Test]
     public async Task CrossProvider_SameQueryValidatesIdenticallyThroughBoth()
     {
         // Critical invariant: schema providers are interchangeable. A query that validates
