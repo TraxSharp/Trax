@@ -158,6 +158,8 @@ mutation {
 
 Trains without `Namespace` remain at the root level of `discover` or `dispatch`. Both namespaced and non-namespaced trains can coexist. The `[TraxQueryModel]` attribute also supports `Namespace` for entity queries.
 
+Typed GraphQL clients targeting a namespaced train pair `Namespace` with the client's `Path` property on `[GraphQLOperation]`. For the schema above, a typed client would use `Path = "discover.players"` and `RootField = "lookupPlayer"`. See the [GraphQL Client docs](/docs/api-graphql-client#nested-envelopes-path).
+
 ## Examples
 
 ### Query train (read-only, synchronous)

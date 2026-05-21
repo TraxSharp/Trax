@@ -80,7 +80,57 @@ You get real GraphQL syntax highlighting from any IDE, the C# file shrinks to a 
 
 ### Mode D: POCO-derived queries
 
-See `Trax.Api.GraphQL.Client.Typed`. The POCO declares the shape; the library generates the query at startup. Documented separately.
+```csharp
+[GraphQLType("Player")]
+public sealed record TypedPlayer(string Id, string Name, int? Level, string Rank);
+
+[GraphQLOperation(OperationType.Query, RootField = "player")]
+public sealed class GetPlayerRequest : TypedRequest<TypedPlayer>
+{
+    [GraphQLArgument("String!", VariableName = "id")]
+    public required string Id { get; init; }
+}
+```
+
+The POCO declares the shape; `TypedQueryGenerator` walks the properties at startup and emits the query. Refactor a property, the query updates with it. Ships in `Trax.Api.GraphQL.Client.Typed`.
+
+| `[GraphQLOperation]` property | Purpose |
+|---|---|
+| `OperationType` (positional) | `Query` or `Mutation`. |
+| `Name` | Override the operation name. Defaults to the request type name with a trailing `Request` stripped. |
+| `RootField` | Override the schema field selected at the top of the operation. Defaults to the camel-cased operation name. |
+| `Path` | Dot-separated chain of wrapper field names above `RootField`. Set when the schema groups fields under a multi-level envelope. |
+
+#### Nested envelopes (`Path`)
+
+Trax servers expose namespaced trains under `query { discover { {namespace} { {field} } } }`. To query through that envelope from a typed request, set `Path`:
+
+```csharp
+[GraphQLOperation(OperationType.Query, Path = "discover.netsuite", RootField = "typedCustomer")]
+public sealed class FindCustomerByEmailRequest : TypedRequest<TypedCustomer?>
+{
+    [GraphQLArgument("String!", VariableName = "email")]
+    public required string Email { get; init; }
+}
+```
+
+Generates:
+
+```graphql
+query FindCustomerByEmail($email: String!) {
+  discover {
+    netsuite {
+      typedCustomer(email: $email) {
+        id
+        email
+        ...
+      }
+    }
+  }
+}
+```
+
+The default extractor walks the same path before deserializing, so consumers stay in typed mode for nested schemas instead of falling back to raw-string with a custom `Extract`. Path values must be dot-separated field names with no whitespace; empty strings, leading/trailing dots, and doubled dots throw at startup.
 
 ## Schema Providers
 
