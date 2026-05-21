@@ -58,6 +58,7 @@
     <Project Path="tests/Trax.Samples.JobHunt.Tests/Trax.Samples.JobHunt.Tests.csproj" />
     <Project Path="tests/Trax.Samples.JobHunt.E2E/Trax.Samples.JobHunt.E2E.csproj" />
     <Project Path="tests/Trax.Samples.PersistedOperations.E2E/Trax.Samples.PersistedOperations.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.Tests.Meta/Trax.Samples.Tests.Meta.csproj" />
   </Folder>
   <Folder Name="/templates/">
     <Project Path="templates/Trax.Samples.Templates.csproj" />
