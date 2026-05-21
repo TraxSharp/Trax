@@ -1,0 +1,234 @@
+namespace Trax.Mediator.Configuration
+{
+    public class MediatorConfiguration
+    {
+        public MediatorConfiguration() { }
+        public bool AllowMissingAuthorizationService { get; }
+        public System.Reflection.Assembly[] Assemblies { get; }
+        public int? GlobalMaxConcurrentRun { get; }
+        public int MaxInputJsonBytes { get; }
+        public int? PerPrincipalMaxConcurrentRun { get; }
+        public Microsoft.Extensions.DependencyInjection.ServiceLifetime TrainLifetime { get; }
+    }
+    public class TraxBuilderWithMediator
+    {
+        public TraxBuilderWithMediator(Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects effectsBuilder) { }
+        public bool HasDataProvider { get; }
+        public bool HasDatabaseProvider { get; }
+        public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
+    }
+    public class TraxMediatorBuilder
+    {
+        public Trax.Mediator.Configuration.TraxMediatorBuilder AllowMissingAuthorizationService() { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder ConcurrentRunLimit<TTrain>(int maxConcurrent)
+            where TTrain :  class { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder GlobalConcurrentRunLimit(int maxConcurrent) { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder PerPrincipalMaxConcurrentRun(int limit) { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder ScanAssemblies(params System.Reflection.Assembly[] assemblies) { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder TrainLifetime(Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder WithMaxInputJsonBytes(int bytes) { }
+    }
+}
+namespace Trax.Mediator.Exceptions
+{
+    public class AmbiguousTrainNameException : System.InvalidOperationException
+    {
+        public AmbiguousTrainNameException(string requestedName, System.Collections.Generic.IReadOnlyList<string> candidateFullNames) { }
+        public System.Collections.Generic.IReadOnlyList<string> CandidateFullNames { get; }
+        public string RequestedName { get; }
+    }
+    public class TrainInputValidationException : System.InvalidOperationException
+    {
+        public TrainInputValidationException(string trainName, int observedBytes, int maxBytes) { }
+        public int MaxBytes { get; }
+        public int ObservedBytes { get; }
+        public string TrainName { get; }
+    }
+    public class TrainNotFoundException : System.InvalidOperationException
+    {
+        public TrainNotFoundException(string requestedName) { }
+        public string RequestedName { get; }
+    }
+}
+namespace Trax.Mediator.Extensions
+{
+    public static class ServiceExtensions
+    {
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects builder, System.Func<Trax.Mediator.Configuration.TraxMediatorBuilder, Trax.Mediator.Configuration.TraxMediatorBuilder> configure) { }
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects builder, params System.Reflection.Assembly[] assemblies) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddServiceTrainBus(this Microsoft.Extensions.DependencyInjection.IServiceCollection serviceCollection, Microsoft.Extensions.DependencyInjection.ServiceLifetime serviceTrainLifetime = 2, params System.Reflection.Assembly[] assemblies) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection RegisterServiceTrains(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, Microsoft.Extensions.DependencyInjection.ServiceLifetime serviceLifetime = 2, params System.Reflection.Assembly[] assemblies) { }
+    }
+}
+namespace Trax.Mediator.Services.ConcurrencyLimiter
+{
+    public class ConcurrencyLimiter : Trax.Mediator.Services.ConcurrencyLimiter.IConcurrencyLimiter
+    {
+        public ConcurrencyLimiter(Trax.Mediator.Configuration.MediatorConfiguration configuration, Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Mediator.Services.Principal.ICurrentPrincipalProvider principalProvider) { }
+        public System.Threading.Tasks.Task<System.IDisposable> AcquireAsync(string trainFullName, System.Threading.CancellationToken ct) { }
+    }
+    public interface IConcurrencyLimiter
+    {
+        System.Threading.Tasks.Task<System.IDisposable> AcquireAsync(string trainFullName, System.Threading.CancellationToken ct);
+    }
+}
+namespace Trax.Mediator.Services.Principal
+{
+    public interface ICurrentPrincipalProvider
+    {
+        string? GetCurrentPrincipalId();
+    }
+}
+namespace Trax.Mediator.Services.RunExecutor
+{
+    public interface IRunExecutor
+    {
+        System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> ExecuteAsync(string trainName, object input, System.Type outputType, System.Threading.CancellationToken ct = default);
+    }
+    public class LocalRunExecutor : Trax.Mediator.Services.RunExecutor.IRunExecutor
+    {
+        public LocalRunExecutor(Trax.Mediator.Services.TrainBus.ITrainBus trainBus, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory) { }
+        public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> ExecuteAsync(string trainName, object input, System.Type outputType, System.Threading.CancellationToken ct = default) { }
+    }
+}
+namespace Trax.Mediator.Services.TrainAuthorization
+{
+    public interface ITrainAuthorizationService
+    {
+        System.Threading.Tasks.Task AuthorizeAsync(Trax.Mediator.Services.TrainDiscovery.TrainRegistration registration, System.Threading.CancellationToken ct = default);
+    }
+}
+namespace Trax.Mediator.Services.TrainBus
+{
+    public interface ITrainBus
+    {
+        object InitializeTrain(object trainInput);
+        System.Threading.Tasks.Task RunAsync(object trainInput, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+        System.Threading.Tasks.Task RunAsync(object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+        System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+        System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+    }
+    public class TrainBus : Trax.Mediator.Services.TrainBus.ITrainBus
+    {
+        public TrainBus(System.IServiceProvider serviceProvider, Microsoft.Extensions.DependencyInjection.IServiceScopeFactory scopeFactory, Trax.Mediator.Services.TrainRegistry.ITrainRegistry registryService) { }
+        public object InitializeTrain(object trainInput) { }
+        public System.Threading.Tasks.Task RunAsync(object trainInput, Trax.Effect.Models.Metadata.Metadata? metadata = null) { }
+        public System.Threading.Tasks.Task RunAsync(object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null) { }
+        public System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, Trax.Effect.Models.Metadata.Metadata? metadata = null) { }
+        public System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null) { }
+        public static void ClearMethodCache() { }
+        public static int GetMethodCacheSize() { }
+    }
+}
+namespace Trax.Mediator.Services.TrainDiscovery
+{
+    public interface ITrainDiscoveryService
+    {
+        System.Collections.Generic.IReadOnlyList<Trax.Mediator.Services.TrainDiscovery.TrainRegistration> DiscoverTrains();
+    }
+    public class TrainDiscoveryService : Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService
+    {
+        public TrainDiscoveryService(Microsoft.Extensions.DependencyInjection.IServiceCollection serviceCollection) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Mediator.Services.TrainDiscovery.TrainRegistration> DiscoverTrains() { }
+    }
+    [System.Runtime.CompilerServices.RequiredMember]
+    public class TrainRegistration
+    {
+        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
+            "your compiler.", true)]
+        public TrainRegistration() { }
+        public string? GraphQLDeprecationReason { get; init; }
+        public string? GraphQLDescription { get; init; }
+        public string? GraphQLName { get; init; }
+        public string? GraphQLNamespace { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public Trax.Effect.Attributes.GraphQLOperation GraphQLOperations { get; init; }
+        public bool HasAuthorizeAttribute { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public System.Type ImplementationType { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string ImplementationTypeName { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public System.Type InputType { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string InputTypeName { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public bool IsBroadcastEnabled { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public bool IsMutation { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public bool IsQuery { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public bool IsRemote { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public Microsoft.Extensions.DependencyInjection.ServiceLifetime Lifetime { get; init; }
+        public int? MaxConcurrentRun { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public System.Type OutputType { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string OutputTypeName { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public System.Collections.Generic.IReadOnlyList<string> RequiredPolicies { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public System.Collections.Generic.IReadOnlyList<string> RequiredRoles { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public System.Type ServiceType { get; init; }
+        [System.Runtime.CompilerServices.RequiredMember]
+        public string ServiceTypeName { get; init; }
+    }
+}
+namespace Trax.Mediator.Services.TrainExecution
+{
+    public interface ITrainExecutionService
+    {
+        System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.QueueTrainResult> QueueAsync(string trainName, string inputJson, int priority = 0, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> RunAsync(string trainName, string inputJson, System.Threading.CancellationToken ct = default);
+    }
+    public class QueueTrainResult : System.IEquatable<Trax.Mediator.Services.TrainExecution.QueueTrainResult>
+    {
+        public QueueTrainResult(long WorkQueueId, string ExternalId) { }
+        public string ExternalId { get; init; }
+        public long WorkQueueId { get; init; }
+    }
+    public class RunTrainResult : System.IEquatable<Trax.Mediator.Services.TrainExecution.RunTrainResult>
+    {
+        public RunTrainResult(long MetadataId, string ExternalId, object? Output = null) { }
+        public string ExternalId { get; init; }
+        public long MetadataId { get; init; }
+        public object? Output { get; init; }
+    }
+    public class TrainExecutionService : Trax.Mediator.Services.TrainExecution.ITrainExecutionService
+    {
+        public TrainExecutionService(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Mediator.Services.RunExecutor.IRunExecutor runExecutor, Trax.Mediator.Services.ConcurrencyLimiter.IConcurrencyLimiter concurrencyLimiter, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Mediator.Configuration.MediatorConfiguration mediatorConfiguration, System.IServiceProvider serviceProvider) { }
+        public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.QueueTrainResult> QueueAsync(string trainName, string inputJson, int priority = 0, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> RunAsync(string trainName, string inputJson, System.Threading.CancellationToken ct = default) { }
+    }
+}
+namespace Trax.Mediator.Services.TrainRegistry
+{
+    public interface ITrainRegistry
+    {
+        System.Collections.Generic.Dictionary<System.Type, System.Type> InputTypeToTrain { get; set; }
+    }
+    public class TrainRegistry : Trax.Mediator.Services.TrainRegistry.ITrainRegistry
+    {
+        public TrainRegistry(params System.Reflection.Assembly[] assemblies) { }
+        public System.Collections.Generic.Dictionary<System.Type, System.Type> InputTypeToTrain { get; set; }
+    }
+}
+namespace Trax.Mediator.Services.TrustedExecution
+{
+    public interface ITrustedExecutionScope
+    {
+        string? CurrentReason { get; }
+        bool IsTrusted { get; }
+        System.IDisposable BeginTrusted(string reason);
+    }
+    public sealed class TrustedExecutionScope : Trax.Mediator.Services.TrustedExecution.ITrustedExecutionScope
+    {
+        public TrustedExecutionScope() { }
+        public string? CurrentReason { get; }
+        public bool IsTrusted { get; }
+        public System.IDisposable BeginTrusted(string reason) { }
+    }
+}
