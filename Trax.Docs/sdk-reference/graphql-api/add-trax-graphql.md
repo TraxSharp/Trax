@@ -35,6 +35,7 @@ builder.Services.AddTraxGraphQL(graphql => graphql
     .AddDbContext<GameDbContext>()
     .AddFilterType<Player, PlayerFilterInputType>()
     .AddSortType<Player, PlayerSortInputType>()
+    .ConfigureFiltering(filter => filter.AddCaseInsensitiveStringOperations())
     .AddTypeModule<RelationshipTypeModule>()
     .AddTypeExtension<PlayerStatsExtension>()
     .AddTypeExtensions(typeof(PlayerStatsExtension).Assembly)
@@ -52,6 +53,7 @@ builder.Services.AddTraxGraphQL(graphql => graphql
 | `AddTypeModule<TTypeModule>()` | Registers an additional HotChocolate `TypeModule` on the Trax schema. Use this to add custom resolvers, DataLoader-backed relationship fields, or `ObjectTypeExtension`s on entities already registered by `[TraxQueryModel]`. The module is registered as a singleton in DI. |
 | `AddFilterType<TEntity, TFilter>()` | Overrides the auto-generated `FilterInputType` for a specific entity. `TFilter` must extend `FilterInputType<TEntity>`. See [custom filter and sort types](/docs/sdk-reference/graphql-api/query-models#custom-filter-and-sort-types). |
 | `AddSortType<TEntity, TSort>()` | Overrides the auto-generated `SortInputType` for a specific entity. `TSort` must extend `SortInputType<TEntity>`. See [custom filter and sort types](/docs/sdk-reference/graphql-api/query-models#custom-filter-and-sort-types). |
+| `ConfigureFiltering(Func<TraxFilterBuilder, TraxFilterBuilder>)` | Layers opt-in operators onto HotChocolate's filter convention. Today: `AddCaseInsensitiveStringOperations()` adds `icontains` and `ieq` to every string filter input. Stock filtering is the default; nothing changes unless this is called. See [configure filtering](/docs/sdk-reference/graphql-api/configure-filtering). |
 | `AddTypeExtension<T>()` | Registers a single HotChocolate type extension class (e.g., a class decorated with `[ExtendObjectType]`) on the Trax schema. `T` must be a class. Use this for explicit per-type registration. |
 | `AddTypeExtensions(params Assembly[])` | Scans the given assemblies for all non-abstract classes decorated with `[ExtendObjectType]` and registers them on the Trax schema. Mirrors the `AddMediator` assembly-scanning pattern: add a new type extension class and it's auto-discovered. |
 | `ConfigureSchema(Action<IRequestExecutorBuilder>)` | Applies arbitrary configuration to the underlying HotChocolate `IRequestExecutorBuilder`. Use this for settings that Trax doesn't expose directly (custom conventions, error handling, etc.). Callbacks run after all standard Trax configuration. |

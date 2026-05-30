@@ -276,6 +276,18 @@ public class PlayerSortInputType : SortInputType<Player>
 
 When an override is registered, it replaces the default for that entity only. Entities without overrides continue to use the auto-generated types.
 
+## Case-Insensitive Filtering
+
+The auto-generated string filters (`contains`, `eq`, `startsWith`, ...) are case-sensitive, since they map to plain `LIKE` / `=` on a deterministic collation. To add case-insensitive operators, opt in with `ConfigureFiltering`:
+
+```csharp
+builder.Services.AddTraxGraphQL(graphql => graphql
+    .AddDbContext<GameDbContext>()
+    .ConfigureFiltering(filter => filter.AddCaseInsensitiveStringOperations()));
+```
+
+This adds `icontains` (case-insensitive substring) and `ieq` (case-insensitive equality) to every string filter input, including `ExposeAs`-projected and custom filter types. The existing case-sensitive operators are unchanged; a client opts in per query by choosing the operator. See [ConfigureFiltering](/docs/sdk-reference/graphql-api/configure-filtering) for the translation, indexing, and extension details.
+
 ## AddDbContext
 
 Register one or more DbContext types whose `DbSet<T>` properties contain attributed entities:
@@ -305,4 +317,4 @@ Both appear under the `discover` namespace in the GraphQL schema.
 
 ## SDK Reference
 
-> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
+> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ConfigureFiltering](/docs/sdk-reference/graphql-api/configure-filtering)
