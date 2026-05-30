@@ -2,7 +2,7 @@ namespace Trax.Api.GraphQL.Configuration
 {
     public class GraphQLConfiguration
     {
-        public GraphQLConfiguration(System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Configuration.QueryModelRegistration> modelRegistrations, System.Collections.Generic.IReadOnlyList<System.Type> additionalTypeModules, System.Collections.Generic.IReadOnlyList<System.Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder>> schemaConfigurations, System.Collections.Generic.IReadOnlyList<System.Type> additionalTypeExtensions, int maxExecutionDepth = 15, System.Action<HotChocolate.CostAnalysis.CostOptions>? costOverride = null, System.Predicate<Microsoft.AspNetCore.Http.HttpContext>? introspectionPredicate = null, int maxOperationsPerRequest = 50, bool authorizationRequired = false, string? authorizationPolicy = null, bool operationQueriesExposed = false, bool operationMutationsExposed = false) { }
+        public GraphQLConfiguration(System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Configuration.QueryModelRegistration> modelRegistrations, System.Collections.Generic.IReadOnlyList<System.Type> additionalTypeModules, System.Collections.Generic.IReadOnlyList<System.Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder>> schemaConfigurations, System.Collections.Generic.IReadOnlyList<System.Type> additionalTypeExtensions, int maxExecutionDepth = 15, System.Action<HotChocolate.CostAnalysis.CostOptions>? costOverride = null, System.Predicate<Microsoft.AspNetCore.Http.HttpContext>? introspectionPredicate = null, int maxOperationsPerRequest = 50, bool authorizationRequired = false, string? authorizationPolicy = null, bool operationQueriesExposed = false, bool operationMutationsExposed = false, System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Filtering.ITraxFilterModule>? filterModules = null) { }
         public int MaxExecutionDepth { get; }
         public int MaxOperationsPerRequest { get; }
         public System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Configuration.QueryModelRegistration> ModelRegistrations { get; }
@@ -19,6 +19,14 @@ namespace Trax.Api.GraphQL.Configuration
         public System.Type EntityType { get; init; }
         public System.Type? FilterInputType { get; init; }
         public System.Type? SortInputType { get; init; }
+    }
+}
+namespace Trax.Api.GraphQL.Configuration.TraxFilterBuilder
+{
+    public class TraxFilterBuilder
+    {
+        public TraxFilterBuilder() { }
+        public Trax.Api.GraphQL.Configuration.TraxFilterBuilder.TraxFilterBuilder AddCaseInsensitiveStringOperations() { }
     }
 }
 namespace Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder
@@ -41,6 +49,7 @@ namespace Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder
             where TTypeModule : HotChocolate.Execution.Configuration.TypeModule { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder AllowIntrospection(System.Predicate<Microsoft.AspNetCore.Http.HttpContext> predicate) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ConfigureCost(System.Action<HotChocolate.CostAnalysis.CostOptions> configure) { }
+        public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ConfigureFiltering(System.Func<Trax.Api.GraphQL.Configuration.TraxFilterBuilder.TraxFilterBuilder, Trax.Api.GraphQL.Configuration.TraxFilterBuilder.TraxFilterBuilder> configure) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ConfigureSchema(System.Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder> configure) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ExposeOperationMutations() { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ExposeOperationQueries() { }
@@ -56,6 +65,18 @@ namespace Trax.Api.GraphQL.Extensions
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxGraphQL(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxGraphQL(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Func<Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder, Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder> configure) { }
         public static Microsoft.AspNetCore.Builder.WebApplication UseTraxGraphQL(this Microsoft.AspNetCore.Builder.WebApplication app, string routePrefix = "/trax/graphql", System.Action<Microsoft.AspNetCore.Builder.IEndpointConventionBuilder>? configure = null) { }
+    }
+}
+namespace Trax.Api.GraphQL.Filtering
+{
+    public sealed class CaseInsensitiveStringFilterModule : Trax.Api.GraphQL.Filtering.ITraxFilterModule
+    {
+        public CaseInsensitiveStringFilterModule() { }
+        public void Apply(HotChocolate.Data.Filters.IFilterConventionDescriptor descriptor) { }
+    }
+    public interface ITraxFilterModule
+    {
+        void Apply(HotChocolate.Data.Filters.IFilterConventionDescriptor descriptor);
     }
 }
 namespace Trax.Api.GraphQL.Hooks

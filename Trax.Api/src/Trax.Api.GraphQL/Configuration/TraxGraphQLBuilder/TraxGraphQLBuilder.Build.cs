@@ -51,6 +51,18 @@ public partial class TraxGraphQLBuilder
             }
         }
 
+        // ConfigureFiltering(...) modules attach to HotChocolate's filtering convention,
+        // which Trax only adds when at least one entity has filtering enabled. Without
+        // that, the modules would be silently dropped, so fail loud at build time.
+        if (FilterModules.Count > 0 && !modelRegistrations.Any(r => r.Attribute.Filtering))
+            throw new InvalidOperationException(
+                "ConfigureFiltering(...) registered custom filter operations, but no "
+                    + "[TraxQueryModel] entity has filtering enabled. The filtering "
+                    + "convention is never added, so the operations would be dropped. "
+                    + "Enable filtering on at least one entity (it is on by default) or "
+                    + "remove the ConfigureFiltering(...) call."
+            );
+
         return new GraphQLConfiguration(
             modelRegistrations,
             AdditionalTypeModules,
@@ -63,7 +75,8 @@ public partial class TraxGraphQLBuilder
             AuthorizationRequired,
             AuthorizationPolicy,
             OperationQueriesExposed,
-            OperationMutationsExposed
+            OperationMutationsExposed,
+            FilterModules
         );
     }
 

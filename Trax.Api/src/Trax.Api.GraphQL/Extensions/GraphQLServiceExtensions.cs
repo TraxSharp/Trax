@@ -222,7 +222,20 @@ public static class GraphQLServiceExtensions
             );
 
             if (config.ModelRegistrations.Any(r => r.Attribute.Filtering))
-                graphqlBuilder.AddFiltering();
+            {
+                if (config.FilterModules.Count > 0)
+                    graphqlBuilder.AddFiltering(convention =>
+                    {
+                        // Supplying a configure action replaces HotChocolate's default
+                        // convention wiring, so re-establish the stock operations and
+                        // queryable provider before layering the opt-in modules on top.
+                        convention.AddDefaults();
+                        foreach (var module in config.FilterModules)
+                            module.Apply(convention);
+                    });
+                else
+                    graphqlBuilder.AddFiltering();
+            }
 
             if (config.ModelRegistrations.Any(r => r.Attribute.Sorting))
                 graphqlBuilder.AddSorting();
