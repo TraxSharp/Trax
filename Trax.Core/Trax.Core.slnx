@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Trax.Core/Trax.Core.csproj" />
+    <Project Path="src/Trax.Core.Testing/Trax.Core.Testing.csproj" />
   </Folder>
   <Folder Name="/src/analyzers/">
     <Project Path="src/Trax.Core.Analyzers/Trax.Core.Analyzers.csproj" />
@@ -11,5 +12,6 @@
     <Project Path="tests/Trax.Core.Tests.Integration/Trax.Core.Tests.Integration.csproj" />
     <Project Path="tests/Trax.Core.Tests.Analyzers/Trax.Core.Tests.Analyzers.csproj" />
     <Project Path="tests/Trax.Core.Tests.Meta/Trax.Core.Tests.Meta.csproj" />
+    <Project Path="tests/Trax.Core.Testing.Tests/Trax.Core.Testing.Tests.csproj" />
   </Folder>
 </Solution>
