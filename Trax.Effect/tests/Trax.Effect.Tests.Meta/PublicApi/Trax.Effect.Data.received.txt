@@ -18,6 +18,7 @@ namespace Trax.Effect.Data.Extensions
     public static class ModelBuilderExtensions
     {
         public static Microsoft.EntityFrameworkCore.ModelBuilder ApplyEntityOnModelCreating(this Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
+        public static Microsoft.EntityFrameworkCore.ModelBuilder ApplyUtcDateTimeConverter(this Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
     }
     public static class ServiceExtensions
     {
@@ -53,6 +54,10 @@ namespace Trax.Effect.Data.Models.DeadLetter
     {
         public PersistentDeadLetter() { }
     }
+}
+namespace Trax.Effect.Data.Models
+{
+    public interface IEntityReference { }
 }
 namespace Trax.Effect.Data.Models.Log
 {
@@ -207,6 +212,30 @@ namespace Trax.Effect.Data.Services.DataContextTransaction
     {
         System.Threading.Tasks.Task Commit();
         System.Threading.Tasks.Task Rollback();
+    }
+}
+namespace Trax.Effect.Data.Services.DomainContext
+{
+    public static class DomainDataContextServiceCollectionExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddDomainDataContext<TInterface, TContext>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Microsoft.EntityFrameworkCore.DbContextOptionsBuilder> configureProvider)
+            where TInterface :  class
+            where TContext : Microsoft.EntityFrameworkCore.DbContext, TInterface { }
+        public static System.Threading.Tasks.Task EnsureSchemaCreatedAsync<TContext>(this System.IServiceProvider services, System.Threading.CancellationToken cancellationToken = default)
+            where TContext : Microsoft.EntityFrameworkCore.DbContext { }
+    }
+    public abstract class DomainDataContext<TSelf> : Microsoft.EntityFrameworkCore.DbContext, Trax.Effect.Data.Services.DomainContext.IDomainDataContext
+        where TSelf : Microsoft.EntityFrameworkCore.DbContext
+    {
+        protected DomainDataContext(Microsoft.EntityFrameworkCore.DbContextOptions<TSelf> options) { }
+        protected abstract string Schema { get; }
+        protected abstract void ConfigureModel(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder);
+        protected override sealed void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
+        public TSelf Raw() { }
+    }
+    public interface IDomainDataContext
+    {
+        System.Threading.Tasks.Task<int> SaveChangesAsync(System.Threading.CancellationToken cancellationToken = default);
     }
 }
 namespace Trax.Effect.Data.Services.IDataContextFactory

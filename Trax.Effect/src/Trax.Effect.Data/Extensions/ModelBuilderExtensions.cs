@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using Trax.Effect.Data.Utils;
 using Trax.Effect.Models;
 
 namespace Trax.Effect.Data.Extensions;
@@ -67,6 +68,29 @@ public static class ModelBuilderExtensions
                 throw new Exception($"{entityType.Name}.OnModelCreating is the wrong signature");
 
             method.Invoke(null, [modelBuilder]);
+        }
+
+        return modelBuilder;
+    }
+
+    /// <summary>
+    /// Applies <see cref="UtcValueConverter"/> to every <see cref="DateTime"/> / <c>DateTime?</c>
+    /// property in the model so all timestamps round-trip as UTC. Provider-agnostic; used by
+    /// <see cref="Trax.Effect.Data.Services.DomainContext.DomainDataContext{TSelf}"/>.
+    /// </summary>
+    /// <param name="modelBuilder">The model builder to configure.</param>
+    /// <returns>The configured model builder for chaining.</returns>
+    public static ModelBuilder ApplyUtcDateTimeConverter(this ModelBuilder modelBuilder)
+    {
+        ArgumentNullException.ThrowIfNull(modelBuilder);
+
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var property in entityType.GetProperties())
+            {
+                if (property.ClrType == typeof(DateTime) || property.ClrType == typeof(DateTime?))
+                    property.SetValueConverter(new UtcValueConverter());
+            }
         }
 
         return modelBuilder;

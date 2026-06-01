@@ -4,6 +4,7 @@
   </Folder>
   <Folder Name="/src/data/">
     <Project Path="src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <Project Path="src/Trax.Effect.Data.Testing/Trax.Effect.Data.Testing.csproj" />
     <Project Path="src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
     <Project Path="src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
     <Project Path="src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
@@ -28,5 +29,6 @@
     <Project Path="tests/Trax.Effect.Tests.Data.Sqlite.Integration/Trax.Effect.Tests.Data.Sqlite.Integration.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Benchmarks/Trax.Effect.Tests.Benchmarks.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Meta/Trax.Effect.Tests.Meta.csproj" />
+    <Project Path="tests/Trax.Effect.Data.Testing.Tests/Trax.Effect.Data.Testing.Tests.csproj" />
   </Folder>
 </Solution>
