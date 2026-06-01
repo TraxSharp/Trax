@@ -1,9 +1,11 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Trax.Mediator/Trax.Mediator.csproj" />
+    <Project Path="src/Trax.Mediator.Testing/Trax.Mediator.Testing.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Mediator.Tests.ArrayLogger/Trax.Mediator.Tests.ArrayLogger.csproj" />
+    <Project Path="tests/Trax.Mediator.Testing.Tests/Trax.Mediator.Testing.Tests.csproj" />
     <Project Path="tests/Trax.Mediator.Tests.Postgres.Integration/Trax.Mediator.Tests.Postgres.Integration.csproj" />
     <Project Path="tests/Trax.Mediator.Tests.MemoryLeak.Integration/Trax.Mediator.Tests.MemoryLeak.Integration.csproj" />
     <Project Path="tests/Trax.Mediator.Tests.Meta/Trax.Mediator.Tests.Meta.csproj" />

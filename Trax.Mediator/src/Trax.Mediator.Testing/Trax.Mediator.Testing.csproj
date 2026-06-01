@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Trax.Mediator.Testing</AssemblyName>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageDescription>Architecture-guard checkers for Trax trains: every ServiceTrain has its companion I{Name} interface. Framework-agnostic: returns offender lists you assert on.</PackageDescription>
+    <PackageTags>trax;testing;architecture;guards;trains;mediator</PackageTags>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Mediator</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Core.Testing" Version="1.*" />
+    <PackageReference Include="NUnit" Version="4.4.0" />
+  </ItemGroup>
+</Project>
