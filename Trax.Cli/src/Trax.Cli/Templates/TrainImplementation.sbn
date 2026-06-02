@@ -15,6 +15,10 @@ namespace {{ Namespace }};
 /// {{ Description }}
 /// </summary>
 [{{ Attribute }}({{ if GraphQLNamespace }}Namespace = GraphQLNamespaces.{{ GraphQLNamespace }}, {{ end }}Description = "{{ Description }}")]
+// Exposed anonymously so the scaffold runs out of the box. Swap for
+// [TraxAuthorize(...)] once you wire up authentication, or gate the whole
+// endpoint with UseTraxGraphQL(configure: e => e.RequireAuthorization(...)).
+[TraxAllowAnonymous]
 public class {{ TrainName }}Train
     : ServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>,
         I{{ TrainName }}Train

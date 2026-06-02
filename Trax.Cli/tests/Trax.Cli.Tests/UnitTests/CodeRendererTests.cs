@@ -116,6 +116,19 @@ public class CodeRendererTests
         result.Should().Contain("[TraxQuery");
     }
 
+    [Test]
+    public void RenderTrainImplementation_DeclaresAnExposurePostureMarker()
+    {
+        // An exposed train must declare [TraxAuthorize] or [TraxAllowAnonymous] or the
+        // scaffolded host fails at startup. The generator emits [TraxAllowAnonymous] so
+        // the project runs out of the box; the user swaps it when they add auth.
+        var op = MakeOperation("GetPlayer", OperationKind.Query);
+
+        var result = _renderer.RenderTrainImplementation(op, "MyApi");
+
+        result.Should().Contain("[TraxAllowAnonymous]");
+    }
+
     #endregion
 
     #region RenderInput
