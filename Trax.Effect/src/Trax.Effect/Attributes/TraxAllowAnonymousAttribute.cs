@@ -1,32 +1,37 @@
 namespace Trax.Effect.Attributes;
 
 /// <summary>
-/// Opens a <see cref="TraxQueryModelAttribute"/>-decorated entity to anonymous
-/// GraphQL access. Mirrors HotChocolate's <c>[AllowAnonymous]</c> in spirit:
-/// the directly decorated entity is reachable without authentication, while
-/// any navigation property whose target type carries
-/// <see cref="TraxAuthorizeAttribute"/> still enforces that gate.
+/// Declares a GraphQL-exposed surface as intentionally public. Apply it to a
+/// <see cref="TraxQueryModelAttribute"/>-decorated entity or to a train carrying
+/// <see cref="TraxQueryAttribute"/> / <see cref="TraxMutationAttribute"/>. It is the
+/// explicit opt-in counterpart to <see cref="TraxAuthorizeAttribute"/>: an exposed
+/// surface must declare one or the other, so anonymous access is always a deliberate
+/// choice rather than the result of a forgotten gate.
 /// </summary>
 /// <remarks>
-/// The cascade does not break: HotChocolate's <c>@authorize</c> directive lives
-/// on the target type, so reaching a gated entity through an anonymous parent
-/// still rejects the request. The contract is intentionally local — the
-/// attribute opens this entity, nothing else.
+/// On a query-model entity it also mirrors HotChocolate's <c>[AllowAnonymous]</c>:
+/// the directly decorated entity is reachable without authentication, while any
+/// navigation property whose target type carries <see cref="TraxAuthorizeAttribute"/>
+/// still enforces that gate. The cascade does not break, because HotChocolate's
+/// <c>@authorize</c> directive lives on the target type, so reaching a gated entity
+/// through an anonymous parent still rejects the request.
 /// <para>
-/// Mutually exclusive with <see cref="TraxAuthorizeAttribute"/>. Declaring both
-/// on the same entity (directly or via inheritance) fails at
-/// <c>TraxGraphQLBuilder.Build()</c> with a message naming the entity.
+/// On a train the attribute carries no runtime directive (train authorization is
+/// enforced imperatively, not via schema directives). Its role is to satisfy the
+/// exposure check: a <c>[TraxQuery]</c>/<c>[TraxMutation]</c> train that declares
+/// neither this attribute nor <see cref="TraxAuthorizeAttribute"/> fails host startup.
 /// </para>
 /// <para>
-/// Endpoint-level authorization is unaffected. If the GraphQL endpoint itself
-/// is gated (e.g. <c>UseTraxGraphQL(...).RequireAuthorization(...)</c>),
-/// requests are rejected at the HTTP layer before HotChocolate ever runs,
-/// matching the behavior of HotChocolate's own <c>[AllowAnonymous]</c>.
+/// Mutually exclusive with <see cref="TraxAuthorizeAttribute"/>. Declaring both on the
+/// same surface (directly or via inheritance) fails at host startup with a message
+/// naming it.
 /// </para>
 /// <para>
-/// Entities decorated with this attribute are excluded from the "ungated
-/// model surface" warning emitted at host start by the model-exposure warning
-/// service. Opting in is explicit, so no nagging.
+/// Contradictory with an endpoint-level gate. If the GraphQL endpoint is gated (e.g.
+/// <c>UseTraxGraphQL(configure: e =&gt; e.RequireAuthorization(...))</c>), the HTTP layer
+/// rejects unauthenticated callers before the surface is ever reached, so this attribute
+/// can never take effect. Declaring it on any exposed surface while the endpoint is gated
+/// fails host startup; remove one or the other.
 /// </para>
 /// </remarks>
 [AttributeUsage(
