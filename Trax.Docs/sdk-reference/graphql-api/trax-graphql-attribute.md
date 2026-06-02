@@ -162,10 +162,13 @@ Typed GraphQL clients targeting a namespaced train pair `Namespace` with the cli
 
 ## Examples
 
+A `[TraxQuery]`/`[TraxMutation]` train is exposed via GraphQL, so it must declare its authorization posture explicitly: `[TraxAuthorize]` to gate it or `[TraxAllowAnonymous]` to open it. A train with neither fails at host startup (`AddTraxGraphQL`), unless the endpoint is gated with `RequireAuthorization()`. See [Authorization guide - Required Exposure Posture](/docs/authorization#required-exposure-posture).
+
 ### Query train (read-only, synchronous)
 
 ```csharp
 [TraxQuery(Description = "Looks up a player profile")]
+[TraxAllowAnonymous]
 public class LookupPlayerTrain
     : ServiceTrain<LookupPlayerInput, LookupPlayerOutput>, ILookupPlayerTrain
 {

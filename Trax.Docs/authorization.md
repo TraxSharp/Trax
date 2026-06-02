@@ -15,9 +15,24 @@ Trax supports three levels of authorization for the API layer:
 - **Per-train**: restrict individual trains using the `[TraxAuthorize]` attribute on the train class. When a request comes in to run or queue a train, Trax checks the attribute against the current HTTP user before executing anything.
 - **Per-model**: restrict `[TraxQueryModel]`-exposed entities using the same `[TraxAuthorize]` attribute on the entity class. The directive is enforced at GraphQL type level, so the gate also applies when the entity is reached transitively through a navigation property on an ungated parent.
 
-A `[TraxQueryModel]` entity can also be explicitly opened to anonymous reads with `[TraxAllowAnonymous]`. See [Anonymous Access via TraxAllowAnonymous](#anonymous-access-via-traxallowanonymous) below.
+A surface exposed via GraphQL can also be explicitly opened to anonymous access with `[TraxAllowAnonymous]`. See [Anonymous Access via TraxAllowAnonymous](#anonymous-access-via-traxallowanonymous) below.
 
 Endpoint-level auth answers "can this user reach the Trax API at all?" Per-train auth answers "can this user execute *this particular* train?" Per-model auth answers "can this user read rows of *this particular* type, regardless of how they navigated to it?"
+
+## Required Exposure Posture
+
+Every surface exposed via GraphQL must state its authorization posture explicitly. A `[TraxQuery]`/`[TraxMutation]` train or a `[TraxQueryModel]` entity must declare **either** `[TraxAuthorize]` (gated) **or** `[TraxAllowAnonymous]` (intentionally public). A surface that declares neither fails at host startup, so a forgotten gate can never silently ship as a public endpoint. The check runs in `AddTraxGraphQL` (trains) and `TraxGraphQLBuilder.Build()` (query models); the failure message names every offending type.
+
+The one relaxation is endpoint-level gating: `RequireAuthorization()` on the GraphQL builder covers every surface at the transport layer, so a per-surface marker is no longer required. Because nothing is reachable anonymously under that gate, `[TraxAllowAnonymous]` becomes a contradiction there and is rejected.
+
+| Endpoint posture | neither marker | `[TraxAuthorize]` | `[TraxAllowAnonymous]` | both |
+|---|---|---|---|---|
+| Open (default) | fails startup (implicitly public) | gated | intentionally public | fails startup (conflict) |
+| Gated (`RequireAuthorization()`) | allowed (gate covers it) | allowed (adds finer policy/role) | fails startup (contradiction) | fails startup (conflict) |
+
+`RequireAuthorization()` and `[TraxAuthorize]` are not redundant: the endpoint gate is a single transport-level check ("must be authenticated / satisfy this one policy"), while `[TraxAuthorize]` adds per-surface policy and role requirements on top. They compose as defense in depth.
+
+This rule applies only to surfaces that are actually exposed via GraphQL. A train with no `[TraxQuery]`/`[TraxMutation]` (run only through the scheduler, a remote worker, or `ITrainBus` directly) is never reachable over GraphQL and needs no marker.
 
 ## Per-Train Authorization
 
@@ -48,7 +63,9 @@ public class GenerateReportTrain : ServiceTrain<ReportInput, ReportOutput>, IGen
     protected override ReportOutput Junctions() => Chain<GenerateReportJunction>();
 }
 
-// No attribute, no per-train auth check
+// No attribute, no per-train auth check. Valid only because this train is not
+// exposed via GraphQL (no [TraxQuery]/[TraxMutation]). A GraphQL-exposed train
+// with no marker fails startup (see Required Exposure Posture above).
 public class PingTrain : ServiceTrain<PingInput, PongOutput>, IPingTrain
 {
     protected override PongOutput Junctions() => Chain<PingJunction>();
@@ -152,7 +169,25 @@ No consumer configuration is required.
 
 ## Anonymous Access via [TraxAllowAnonymous]
 
-`[TraxAllowAnonymous]` is the explicit opt-in counterpart to `[TraxAuthorize]` on a query model. Decorating a `[TraxQueryModel]` entity with it opens that entity to unauthenticated GraphQL reads.
+`[TraxAllowAnonymous]` is the explicit opt-in counterpart to `[TraxAuthorize]`. It declares a GraphQL-exposed surface intentionally public and satisfies the [Required Exposure Posture](#required-exposure-posture) rule. It applies to both `[TraxQueryModel]` entities and `[TraxQuery]`/`[TraxMutation]` trains.
+
+On a query-model entity it opens that entity to unauthenticated GraphQL reads (and, as below, mirrors HotChocolate's `[AllowAnonymous]` cascade behavior). On a train it carries no runtime gate of its own (train authorization is enforced imperatively, not via schema directives); its only effect is to declare the train intentionally public so it passes the exposure check.
+
+```csharp
+using Trax.Effect.Attributes;
+
+// An intentionally public train.
+[TraxQuery(Namespace = "public")]
+[TraxAllowAnonymous]
+public class LookupAnnouncementTrain
+    : ServiceTrain<LookupAnnouncementInput, AnnouncementOutput>, ILookupAnnouncementTrain
+{
+    protected override Task<Either<Exception, AnnouncementOutput>> Junctions() =>
+        Chain<LookupAnnouncementJunction>().Resolve();
+}
+```
+
+Decorating a `[TraxQueryModel]` entity with it opens that entity to unauthenticated GraphQL reads.
 
 ```csharp
 using Trax.Effect.Attributes;
@@ -199,19 +234,15 @@ An anonymous query for `discover.public.announcements { title }` succeeds. The s
 
 ### Mutual Exclusion with [TraxAuthorize]
 
-`[TraxAllowAnonymous]` and `[TraxAuthorize]` on the same entity (directly, or via inheritance from a base class or interface) is rejected at `TraxGraphQLBuilder.Build()` with a message naming the entity. The two attributes have opposite intents and cannot coexist on a single type.
+`[TraxAllowAnonymous]` and `[TraxAuthorize]` on the same surface (directly, or via inheritance from a base class or interface) is rejected at host startup with a message naming the type. The two attributes have opposite intents and cannot coexist.
 
-### Endpoint-Level Auth Still Applies
+### Contradicts an Endpoint-Level Gate
 
-If the GraphQL endpoint itself is gated, e.g. `UseTraxGraphQL(configure: e => e.RequireAuthorization(...))`, requests are rejected at the HTTP layer before HotChocolate ever runs. `[TraxAllowAnonymous]` does not override endpoint-level checks; it only relaxes the per-model gate. This matches HotChocolate's own `[AllowAnonymous]` behavior.
+If the GraphQL endpoint is gated with `RequireAuthorization()`, the HTTP layer rejects unauthenticated callers before HotChocolate ever runs, so a surface can never be reached anonymously. `[TraxAllowAnonymous]` would be a promise the endpoint structurally cannot keep, so declaring it on any exposed surface while the builder opted into `RequireAuthorization()` fails at host startup. Remove one or the other: drop the attribute, or drop the endpoint-level gate if the surface should be publicly reachable. (Standard ASP.NET Core endpoint authorization applied separately on the mapped route, rather than via the Trax builder, does not trip this check, matching HotChocolate's own `[AllowAnonymous]` behavior.)
 
 ### Schema Validator Coverage
 
-The same hosted-service invariant check that asserts `@authorize` is present on gated entities also asserts it is *absent* on `[TraxAllowAnonymous]` entities. A custom `ConfigureSchema` callback that reattaches the directive to an anonymous entity throws at host start with a message naming the entity. The opt-in cannot be silently re-locked.
-
-### Exposure Warning Excludes Anonymous Entities
-
-The model-exposure warning service at host start counts ungated `[TraxQueryModel]` entities and emits a `LogLevel.Warning` when any are present. `[TraxAllowAnonymous]` entities are excluded from that count because opting in is intentional and would otherwise nag forever.
+For query-model entities, the same hosted-service invariant check that asserts `@authorize` is present on gated entities also asserts it is *absent* on `[TraxAllowAnonymous]` entities. A custom `ConfigureSchema` callback that reattaches the directive to an anonymous entity throws at host start with a message naming the entity. The opt-in cannot be silently re-locked.
 
 ## Registering Policies
 
@@ -230,14 +261,15 @@ Trax evaluates these policies at runtime using ASP.NET Core's `IAuthorizationSer
 
 ## How It Works
 
-1. `ITrainDiscoveryService` reads `[TraxAuthorize]` attributes across the implementation, its base chain, and every implemented interface. Roles are normalized to upper-invariant; policies are deduplicated. The requirements are stored on each `TrainRegistration`.
-2. At host start, `AuthorizationRegistrationValidator` runs as a hosted service. It throws if any train carries `[TraxAuthorize]` but no `ITrainAuthorizationService` is registered (this can be opted out of per below), and it throws on malformed attribute shapes (empty policy strings, whitespace-only roles) so typos are caught before traffic arrives.
-3. When `ITrainExecutionService.QueueAsync()` or `RunAsync()` runs, it invokes the registered `ITrainAuthorizationService`.
-4. The default implementation (`TrainAuthorizationService` from `Trax.Api`) is fail-closed. It grabs the current user from `IHttpContextAccessor` and evaluates each requirement:
+1. `ITrainDiscoveryService` reads `[TraxAuthorize]` and `[TraxAllowAnonymous]` attributes across the implementation, its base chain, and every implemented interface. Roles are normalized to upper-invariant; policies are deduplicated. The requirements (and a `HasAllowAnonymousAttribute` flag) are stored on each `TrainRegistration`.
+2. `AddTraxGraphQL` enforces the [Required Exposure Posture](#required-exposure-posture) for every exposed train, and `TraxGraphQLBuilder.Build()` does the same for every `[TraxQueryModel]` entity. Both share one rule: a surface with neither marker (on an open endpoint), both markers, or `[TraxAllowAnonymous]` under `RequireAuthorization()` fails startup with a message naming the offending types.
+3. At host start, `AuthorizationRegistrationValidator` runs as a hosted service. It throws if any train carries `[TraxAuthorize]` but no `ITrainAuthorizationService` is registered (this can be opted out of per below), and it throws on malformed attribute shapes (empty policy strings, whitespace-only roles) so typos are caught before traffic arrives.
+4. When `ITrainExecutionService.QueueAsync()` or `RunAsync()` runs, it invokes the registered `ITrainAuthorizationService`.
+5. The default implementation (`TrainAuthorizationService` from `Trax.Api`) is fail-closed. It grabs the current user from `IHttpContextAccessor` and evaluates each requirement:
    - **Policy**: calls `IAuthorizationService.AuthorizeAsync(user, policyName)`.
    - **Roles**: compares the upper-invariant `ClaimTypes.Role` claims against the normalized required set.
-5. If any check fails, `TrainAuthorizationException` is thrown. Its public `Message` is always the generic string `"Not authorized."`; the train name, failing policy, and required roles live only on the exception's `TrainName` and `Reason` properties for server-side logging.
-6. GraphQL surfaces the error with code `TRAX_AUTHORIZATION` and the same generic message. The train name, policy name, and role names never cross the wire.
+6. If any check fails, `TrainAuthorizationException` is thrown. Its public `Message` is always the generic string `"Not authorized."`; the train name, failing policy, and required roles live only on the exception's `TrainName` and `Reason` properties for server-side logging.
+7. GraphQL surfaces the error with code `TRAX_AUTHORIZATION` and the same generic message. The train name, policy name, and role names never cross the wire.
 
 ### Fail-Closed Behavior
 

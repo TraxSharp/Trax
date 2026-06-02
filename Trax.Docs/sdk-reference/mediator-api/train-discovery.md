@@ -47,6 +47,8 @@ public class TrainRegistration
 
     public required IReadOnlyList<string> RequiredPolicies { get; init; }
     public required IReadOnlyList<string> RequiredRoles { get; init; }
+    public bool HasAuthorizeAttribute { get; init; }
+    public bool HasAllowAnonymousAttribute { get; init; }
 
     public required bool IsQuery { get; init; }
     public required bool IsMutation { get; init; }
@@ -73,6 +75,8 @@ public class TrainRegistration
 | `OutputTypeName` | `string` | Friendly display name for `OutputType` |
 | `RequiredPolicies` | `IReadOnlyList<string>` | Authorization policy names from `[TraxAuthorize]` attributes on the implementation class. Empty if no auth required. |
 | `RequiredRoles` | `IReadOnlyList<string>` | Role names from `[TraxAuthorize(Roles = "...")]` attributes. Empty if no roles required. |
+| `HasAuthorizeAttribute` | `bool` | Whether the train carries any `[TraxAuthorize]` (including the bare form). |
+| `HasAllowAnonymousAttribute` | `bool` | Whether the train carries `[TraxAllowAnonymous]`. On a GraphQL-exposed train this is the explicit "intentionally public" marker that satisfies the exposure check; it carries no runtime gate of its own. Mutually exclusive with `HasAuthorizeAttribute` on an exposed train. |
 | `IsQuery` | `bool` | Whether the train has a `[TraxQuery]` attribute and will be exposed as a typed GraphQL query. |
 | `IsMutation` | `bool` | Whether the train has a `[TraxMutation]` attribute and will be exposed as typed GraphQL mutation(s). |
 | `IsBroadcastEnabled` | `bool` | Whether the train has a `[TraxBroadcast]` attribute and will broadcast lifecycle events to subscribers. |
@@ -88,7 +92,7 @@ public class TrainRegistration
 3. Skips concrete-type registrations that come from the dual-registration pattern (`AddScopedTraxRoute` registers both `TImplementation` and `TService`).
 4. Extracts `InputType` and `OutputType` from the generic arguments.
 5. **Deduplicates by `InputType`**: when multiple registrations share the same input type (interface + concrete from dual-registration), prefers the interface as `ServiceType` and the concrete class as `ImplementationType`.
-6. Reads `[TraxAuthorize]` attributes from the implementation type and extracts policy and role requirements into `RequiredPolicies` and `RequiredRoles`.
+6. Reads `[TraxAuthorize]` attributes from the implementation type and extracts policy and role requirements into `RequiredPolicies` and `RequiredRoles`, and sets `HasAuthorizeAttribute`. Reads `[TraxAllowAnonymous]` (across the base chain and interfaces) into `HasAllowAnonymousAttribute`. Discovery is permissive; the mutual-exclusion and exposure-posture checks run at host startup.
 6b. Reads `[TraxQuery]` and `[TraxMutation]` attributes from the implementation type and populates `IsQuery`, `IsMutation`, `GraphQLName`, `GraphQLDescription`, `GraphQLDeprecationReason`, and `GraphQLOperations`.
 6c. Reads the `[TraxBroadcast]` attribute and populates `IsBroadcastEnabled`.
 7. Caches the result. The list is computed once and reused for the lifetime of the service.

@@ -207,6 +207,8 @@ The configuration is validated at `Build()` time. Each failure mode throws `Inva
 
 ## Authorization
 
+A `[TraxQueryModel]` entity is exposed via GraphQL, so it must declare its authorization posture explicitly: `[TraxAuthorize]` to gate it or `[TraxAllowAnonymous]` to open it. An entity with neither fails at `TraxGraphQLBuilder.Build()` (unless the endpoint is gated with `RequireAuthorization()`, which covers it). See [Authorization guide - Required Exposure Posture](/docs/authorization#required-exposure-posture).
+
 Apply `[TraxAuthorize]` to a `[TraxQueryModel]` entity to gate access. The directive attaches at GraphQL type level *and* at the entry field, so the gate enforces uniformly:
 
 - the top-level field under `discover` (including Connection-shaped scalars like `totalCount` and `pageInfo`),

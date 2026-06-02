@@ -135,7 +135,7 @@ Endpoint-level auth answers "can this user access the API?" For finer control, d
 public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrain { ... }
 ```
 
-When the API receives a request to run or queue this train, it checks the current user against the policy before executing. Trains without `[TraxAuthorize]` have no per-train restriction. See the [Authorization](/docs/authorization) guide for details.
+When the API receives a request to run or queue this train, it checks the current user against the policy before executing. A GraphQL-exposed train (`[TraxQuery]`/`[TraxMutation]`) must declare either `[TraxAuthorize]` or `[TraxAllowAnonymous]`, or the host fails at startup; `[TraxAllowAnonymous]` runs with no per-train restriction. See the [Authorization](/docs/authorization) guide for details.
 
 ## Named GraphQL Schema
 
