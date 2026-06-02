@@ -14,6 +14,9 @@
   </Folder>
   <Folder Name="/samples/GraphQLClient/">
     <Project Path="samples/GraphQLClient/Trax.Samples.GraphQLClient/Trax.Samples.GraphQLClient.csproj" />
+    <Project Path="samples/GraphQLClient/Trax.Samples.GraphQLClient.InventoryServer/Trax.Samples.GraphQLClient.InventoryServer.csproj" />
+    <Project Path="samples/GraphQLClient/Trax.Samples.GraphQLClient.BillingServer/Trax.Samples.GraphQLClient.BillingServer.csproj" />
+    <Project Path="samples/GraphQLClient/Trax.Samples.GraphQLClient.Gateway/Trax.Samples.GraphQLClient.Gateway.csproj" />
   </Folder>
   <!-- DataPipeline samples excluded: KedroSpaceflights depends on unpublished Flowthru.* packages -->
   <!--
@@ -70,6 +73,7 @@
     <Project Path="tests/Trax.Samples.JobHunt.Tests/Trax.Samples.JobHunt.Tests.csproj" />
     <Project Path="tests/Trax.Samples.JobHunt.E2E/Trax.Samples.JobHunt.E2E.csproj" />
     <Project Path="tests/Trax.Samples.PersistedOperations.E2E/Trax.Samples.PersistedOperations.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.GraphQLClient.E2E/Trax.Samples.GraphQLClient.E2E.csproj" />
     <Project Path="tests/Trax.Samples.Tests.Meta/Trax.Samples.Tests.Meta.csproj" />
   </Folder>
   <Folder Name="/templates/">
