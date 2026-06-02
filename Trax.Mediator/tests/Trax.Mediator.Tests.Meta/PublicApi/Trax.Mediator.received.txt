@@ -143,6 +143,7 @@ namespace Trax.Mediator.Services.TrainDiscovery
         public string? GraphQLNamespace { get; init; }
         [System.Runtime.CompilerServices.RequiredMember]
         public Trax.Effect.Attributes.GraphQLOperation GraphQLOperations { get; init; }
+        public bool HasAllowAnonymousAttribute { get; init; }
         public bool HasAuthorizeAttribute { get; init; }
         [System.Runtime.CompilerServices.RequiredMember]
         public System.Type ImplementationType { get; init; }

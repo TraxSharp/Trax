@@ -49,6 +49,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                 ?? descriptor.ServiceType;
 
             var (hasAuthorize, policies, roles) = GetAuthorizationRequirements(implementationType);
+            var hasAllowAnonymous = HasAllowAnonymousAttribute(implementationType);
             var graphql = GetGraphQLMetadata(implementationType);
             var broadcastEnabled = HasBroadcastAttribute(implementationType);
             var isRemote = HasRemoteAttribute(implementationType);
@@ -69,6 +70,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     RequiredPolicies = policies,
                     RequiredRoles = roles,
                     HasAuthorizeAttribute = hasAuthorize,
+                    HasAllowAnonymousAttribute = hasAllowAnonymous,
                     IsQuery = graphql.IsQuery,
                     IsMutation = graphql.IsMutation,
                     IsBroadcastEnabled = broadcastEnabled,
@@ -95,6 +97,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
 
                 var implType = concreteReg?.ImplementationType ?? preferred.ImplementationType;
                 var (hasAuthorize, policies, roles) = GetAuthorizationRequirements(implType);
+                var hasAllowAnonymous = HasAllowAnonymousAttribute(implType);
                 var graphql = GetGraphQLMetadata(implType);
                 var broadcastEnabled = HasBroadcastAttribute(implType);
                 var isRemote = HasRemoteAttribute(implType);
@@ -115,6 +118,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     RequiredPolicies = policies,
                     RequiredRoles = roles,
                     HasAuthorizeAttribute = hasAuthorize,
+                    HasAllowAnonymousAttribute = hasAllowAnonymous,
                     IsQuery = graphql.IsQuery,
                     IsMutation = graphql.IsMutation,
                     IsBroadcastEnabled = broadcastEnabled,
@@ -239,6 +243,22 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         }
 
         return (false, false, null, null, null, GraphQLOperation.Run, null);
+    }
+
+    private static bool HasAllowAnonymousAttribute(Type implementationType)
+    {
+        // Match the carrier-union walk in GetAuthorizationRequirements: an interface
+        // attribute does not flow to the implementing type via inherit: true, so check
+        // the implementation (plus its base chain) and every interface it implements.
+        if (
+            implementationType.GetCustomAttribute<TraxAllowAnonymousAttribute>(inherit: true)
+            is not null
+        )
+            return true;
+
+        return implementationType
+            .GetInterfaces()
+            .Any(i => i.GetCustomAttribute<TraxAllowAnonymousAttribute>(inherit: true) is not null);
     }
 
     private static bool HasBroadcastAttribute(Type implementationType) =>

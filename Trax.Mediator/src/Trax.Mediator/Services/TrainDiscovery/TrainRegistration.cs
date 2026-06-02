@@ -30,6 +30,15 @@ public class TrainRegistration
     public bool HasAuthorizeAttribute { get; init; }
 
     /// <summary>
+    /// True when the implementation carries <see cref="TraxAllowAnonymousAttribute"/> directly,
+    /// via a base class, or via any implemented interface. On a GraphQL-exposed train this is the
+    /// explicit "intentionally public" marker that satisfies the exposure check; it carries no
+    /// runtime gate of its own (train authorization is enforced via <see cref="HasAuthorizeAttribute"/>).
+    /// Mutually exclusive with <see cref="HasAuthorizeAttribute"/> on an exposed train.
+    /// </summary>
+    public bool HasAllowAnonymousAttribute { get; init; }
+
+    /// <summary>
     /// Whether this train is exposed as a typed GraphQL query field under <c>discover</c>.
     /// True when the implementation class has a <see cref="TraxQueryAttribute"/>.
     /// </summary>
