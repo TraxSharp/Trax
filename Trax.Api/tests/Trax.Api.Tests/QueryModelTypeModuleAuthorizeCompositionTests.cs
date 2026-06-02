@@ -31,6 +31,7 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
 {
     // ── DeprecationReason wiring ────────────────────────────────────────
 
+    [TraxAllowAnonymous]
     [TraxQueryModel(DeprecationReason = "use NewThing instead")]
     [Table("legacy_things", Schema = "test_tm")]
     private class LegacyThing

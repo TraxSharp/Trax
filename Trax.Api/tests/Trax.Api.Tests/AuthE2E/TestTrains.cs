@@ -6,7 +6,7 @@ using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Api.Tests.AuthE2E;
 
-#region Query train (no per-train auth)
+#region Query train (explicitly anonymous)
 
 public record EchoInput : IManifestProperties
 {
@@ -21,6 +21,7 @@ public record EchoOutput
 public interface IEchoTrain : IServiceTrain<EchoInput, EchoOutput>;
 
 [TraxQuery(Namespace = "audit", Description = "Echoes input back.")]
+[TraxAllowAnonymous]
 public class EchoTrain : ServiceTrain<EchoInput, EchoOutput>, IEchoTrain
 {
     protected override Task<Either<Exception, EchoOutput>> Junctions() =>
@@ -35,7 +36,7 @@ internal sealed class EchoJunction : Junction<EchoInput, EchoOutput>
 
 #endregion
 
-#region Mutation train (no per-train auth)
+#region Mutation train (explicitly anonymous)
 
 public record NotifyInput : IManifestProperties
 {
@@ -51,6 +52,7 @@ public record NotifyOutput
 public interface INotifyTrain : IServiceTrain<NotifyInput, NotifyOutput>;
 
 [TraxMutation(Namespace = "audit", Description = "Notifies a topic.")]
+[TraxAllowAnonymous]
 public class NotifyTrain : ServiceTrain<NotifyInput, NotifyOutput>, INotifyTrain
 {
     protected override Task<Either<Exception, NotifyOutput>> Junctions() =>

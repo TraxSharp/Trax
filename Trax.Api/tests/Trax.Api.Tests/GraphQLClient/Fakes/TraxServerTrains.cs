@@ -28,6 +28,7 @@ public record LookupCustomerOutput
 
 public interface ILookupCustomerTrain : IServiceTrain<LookupCustomerInput, LookupCustomerOutput>;
 
+[TraxAllowAnonymous]
 [TraxQuery(Namespace = "netsuiteClient", Description = "Looks up a customer by email.")]
 public class LookupCustomerTrain
     : ServiceTrain<LookupCustomerInput, LookupCustomerOutput>,
@@ -66,6 +67,7 @@ public record UpdateCreditLimitOutput
 public interface IUpdateCreditLimitTrain
     : IServiceTrain<UpdateCreditLimitInput, UpdateCreditLimitOutput>;
 
+[TraxAllowAnonymous]
 [TraxMutation(Namespace = "netsuiteClient", Description = "Updates a customer's credit limit.")]
 public class UpdateCreditLimitTrain
     : ServiceTrain<UpdateCreditLimitInput, UpdateCreditLimitOutput>,

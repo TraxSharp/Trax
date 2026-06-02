@@ -43,8 +43,11 @@ public class QueryModelAllowAnonymousDiscoveryTests
     [Test]
     public void Build_EntityWithoutAllowAnonymous_RegistrationAllowAnonymousIsFalse()
     {
+        // A bare entity (no marker) is only valid when the endpoint is gated, so
+        // gate the builder to isolate the discovery flag from the exposure rule.
         var sut = new TraxGraphQLBuilder(new ServiceCollection());
-        sut.AddDbContext<DiscoveryContext>();
+        sut.RequireAuthorization();
+        sut.AddDbContext<BareContext>();
 
         var config = sut.Build();
 
@@ -194,10 +197,16 @@ public class QueryModelAllowAnonymousDiscoveryTests
 
     public class DiscoveryContext(DbContextOptions<DiscoveryContext> options) : DbContext(options)
     {
-        public DbSet<BareRow> BareRows { get; set; } = null!;
         public DbSet<AnonRow> AnonRows { get; set; } = null!;
         public DbSet<InheritedAnonRow> InheritedAnonRows { get; set; } = null!;
         public DbSet<ImplementsAnonInterfaceRow> ImplementsAnonInterfaceRows { get; set; } = null!;
+    }
+
+    // BareRow lives in its own context: a no-marker entity trips the exposure
+    // rule on an open endpoint, so tests that need it build a gated endpoint.
+    public class BareContext(DbContextOptions<BareContext> options) : DbContext(options)
+    {
+        public DbSet<BareRow> BareRows { get; set; } = null!;
     }
 
     [TraxQueryModel(Name = "conflictedRows")]

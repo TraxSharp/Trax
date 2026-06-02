@@ -555,6 +555,7 @@ public class CaseInsensitiveFilterTests
 
 #region Test entities, contexts, and filter types
 
+[TraxAllowAnonymous]
 [TraxQueryModel(Name = "people")]
 public class Person
 {
@@ -583,6 +584,7 @@ public interface IMemberReference
     string Name { get; }
 }
 
+[TraxAllowAnonymous]
 [TraxQueryModel(Name = "memberRefs", ExposeAs = typeof(IMemberReference))]
 public class MemberRef : IMemberReference
 {
@@ -599,6 +601,7 @@ public class MemberRefDbContext(DbContextOptions<MemberRefDbContext> options) : 
     public DbSet<MemberRef> Members => Set<MemberRef>();
 }
 
+[TraxAllowAnonymous]
 [TraxQueryModel(Name = "noFilter", Filtering = false)]
 public class NoFilterPerson
 {

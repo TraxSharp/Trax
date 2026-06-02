@@ -147,6 +147,7 @@ public class QueryModelAuthorizeDiscoveryTests
 
     // ── Test entities ────────────────────────────────────────────────────
 
+    [TraxAllowAnonymous]
     [TraxQueryModel(Name = "openRows")]
     [Table("open_rows", Schema = "test_disc")]
     public class OpenRow

@@ -621,6 +621,7 @@ public class QueryModelTypeModuleTests
 
 #region Test Entities and DbContexts
 
+[TraxAllowAnonymous]
 [TraxQueryModel(Description = "Test players")]
 public class TestPlayer
 {
@@ -634,6 +635,7 @@ public class TestIgnored
     public string Value { get; set; } = "";
 }
 
+[TraxAllowAnonymous]
 [TraxQueryModel(Filtering = false, Sorting = false)]
 public class ToggleEntity
 {
@@ -641,6 +643,7 @@ public class ToggleEntity
 }
 
 [TraxQueryModel(Description = "Test items")]
+[TraxAllowAnonymous]
 public class TestItem
 {
     public int Id { get; set; }
@@ -690,6 +693,7 @@ public record StubOutput
     public string Result { get; init; } = "";
 }
 
+[TraxAllowAnonymous]
 [TraxQueryModel(BindFields = FieldBindingBehavior.Explicit)]
 public class ExplicitEntity
 {

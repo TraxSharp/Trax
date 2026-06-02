@@ -86,15 +86,6 @@ public static class GraphQLServiceExtensions
         var config = builder.Build();
         services.AddSingleton(config);
 
-        services.AddTraxApi();
-        services.AddSingleton<TrainTypeModule>();
-        services.AddTransient<GraphQLSubscriptionHook>();
-        services
-            .AddSingleton<LifecycleHookFactory<GraphQLSubscriptionHook>>()
-            .AddSingleton<ITrainLifecycleHookFactory>(sp =>
-                sp.GetRequiredService<LifecycleHookFactory<GraphQLSubscriptionHook>>()
-            );
-
         // Detect train queries/mutations registered before us so we can decide whether
         // RootQuery / RootMutation will have any fields by the time HotChocolate builds
         // the schema. Trains registered AFTER AddTraxGraphQL won't be picked up here —
@@ -105,6 +96,19 @@ public static class GraphQLServiceExtensions
         var trainRegistrations = ResolveTrainDiscoveryService(services).DiscoverTrains();
         var hasTrainQueries = trainRegistrations.Any(r => r.IsQuery);
         var hasTrainMutations = trainRegistrations.Any(r => r.IsMutation);
+
+        // Fail fast (before any HotChocolate wiring) when an exposed train has not declared
+        // its authorization posture. Runs against the same rule as the query-model side.
+        ValidateTrainExposureAuthorization(trainRegistrations, config.AuthorizationRequired);
+
+        services.AddTraxApi();
+        services.AddSingleton<TrainTypeModule>();
+        services.AddTransient<GraphQLSubscriptionHook>();
+        services
+            .AddSingleton<LifecycleHookFactory<GraphQLSubscriptionHook>>()
+            .AddSingleton<ITrainLifecycleHookFactory>(sp =>
+                sp.GetRequiredService<LifecycleHookFactory<GraphQLSubscriptionHook>>()
+            );
 
         var hasQueryRoot =
             config.OperationQueriesExposed
@@ -409,10 +413,48 @@ public static class GraphQLServiceExtensions
                 new OperationCountValidatorRule(config.MaxOperationsPerRequest)
             )
         );
+    }
 
-        // G9 — Startup warning when model queries exist and the exposure surface is
-        // not gated explicitly. Only logs once, at host start.
-        if (config.ModelRegistrations.Count > 0)
-            services.AddHostedService<GraphQLModelExposureWarningService>();
+    /// <summary>
+    /// Enforces the GraphQL exposure authorization rule for every train exposed via
+    /// <c>[TraxQuery]</c>/<c>[TraxMutation]</c>: it must declare <c>[TraxAuthorize]</c> or
+    /// <c>[TraxAllowAnonymous]</c> (never both), and <c>[TraxAllowAnonymous]</c> is contradictory
+    /// when the endpoint is gated via <c>RequireAuthorization()</c>. Shares the decision with the
+    /// query-model side via <see cref="ExposureAuthorizationRule"/>. Collects every offending train
+    /// so a single host-startup failure lists them all rather than surfacing one at a time.
+    /// </summary>
+    private static void ValidateTrainExposureAuthorization(
+        IReadOnlyList<TrainRegistration> registrations,
+        bool endpointGated
+    )
+    {
+        var violations = new List<string>();
+
+        foreach (var reg in registrations.Where(r => r.IsQuery || r.IsMutation))
+        {
+            var violation = ExposureAuthorizationRule.Evaluate(
+                hasAuthorize: reg.HasAuthorizeAttribute,
+                hasAllowAnonymous: reg.HasAllowAnonymousAttribute,
+                endpointGated: endpointGated
+            );
+
+            if (violation != ExposureViolation.None)
+                violations.Add(
+                    ExposureAuthorizationRule.BuildMessage(
+                        "GraphQL-exposed train",
+                        reg.ServiceType.FullName!,
+                        violation
+                    )
+                );
+        }
+
+        if (violations.Count == 0)
+            return;
+
+        throw new InvalidOperationException(
+            "Trax GraphQL exposure authorization check failed:"
+                + Environment.NewLine
+                + string.Join(Environment.NewLine, violations.Select(v => "  - " + v))
+        );
     }
 }

@@ -35,7 +35,12 @@ public partial class TraxGraphQLBuilder
                 ValidateAuthorizeAttributeShapes(entityType, authorizeAttributes);
 
                 var allowAnonymous = DiscoverAllowAnonymous(entityType);
-                ValidateAllowAnonymousConflict(entityType, allowAnonymous, authorizeAttributes);
+                ValidateExposureAuthorization(
+                    entityType,
+                    allowAnonymous,
+                    authorizeAttributes,
+                    AuthorizationRequired
+                );
 
                 modelRegistrations.Add(
                     new QueryModelRegistration(
@@ -165,29 +170,36 @@ public partial class TraxGraphQLBuilder
     }
 
     /// <summary>
-    /// Rejects an entity that declares both <see cref="TraxAllowAnonymousAttribute"/>
-    /// and <see cref="TraxAuthorizeAttribute"/>. The two attributes have opposite
-    /// intents; allowing them to coexist would force a runtime decision about which
-    /// one wins (and would silently re-lock or re-open the entity depending on
-    /// the choice). Fail at build with a message naming the entity so the
-    /// misconfiguration surfaces during host startup, not when a request lands.
+    /// Enforces the GraphQL exposure authorization rule for a <see cref="TraxQueryModelAttribute"/>
+    /// entity: an exposed surface must declare <see cref="TraxAuthorizeAttribute"/> or
+    /// <see cref="TraxAllowAnonymousAttribute"/> (never both), and <see cref="TraxAllowAnonymousAttribute"/>
+    /// is contradictory when the endpoint is gated via <c>RequireAuthorization()</c>. Shares the
+    /// decision with the train-side validator via <see cref="ExposureAuthorizationRule"/>. Fails at
+    /// build with a message naming the entity so the misconfiguration surfaces during host startup,
+    /// not when a request lands.
     /// </summary>
-    private static void ValidateAllowAnonymousConflict(
+    private static void ValidateExposureAuthorization(
         Type entityType,
         bool allowAnonymous,
-        IReadOnlyList<TraxAuthorizeAttribute> authorizeAttributes
+        IReadOnlyList<TraxAuthorizeAttribute> authorizeAttributes,
+        bool endpointGated
     )
     {
-        if (!allowAnonymous || authorizeAttributes.Count == 0)
+        var violation = ExposureAuthorizationRule.Evaluate(
+            hasAuthorize: authorizeAttributes.Count > 0,
+            hasAllowAnonymous: allowAnonymous,
+            endpointGated: endpointGated
+        );
+
+        if (violation == ExposureViolation.None)
             return;
 
         throw new InvalidOperationException(
-            $"'{entityType.FullName}' declares both [TraxAllowAnonymous] and "
-                + "[TraxAuthorize] (directly or via base/interface). The two attributes "
-                + "are mutually exclusive: [TraxAllowAnonymous] opens the entity to "
-                + "anonymous reads, while [TraxAuthorize] gates it. Pick one. If the "
-                + "intent is to require some callers to authenticate while letting "
-                + "anonymous reads through, omit both and rely on row-level filtering."
+            ExposureAuthorizationRule.BuildMessage(
+                "[TraxQueryModel] entity",
+                entityType.FullName!,
+                violation
+            )
         );
     }
 

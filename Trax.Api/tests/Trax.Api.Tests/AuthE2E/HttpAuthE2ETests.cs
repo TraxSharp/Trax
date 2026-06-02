@@ -262,8 +262,8 @@ public class HttpAuthE2ETests
 
         using var doc = await host.PostGraphQLAsync(EchoQuery);
 
-        // Unprotected endpoint + train without [TraxAuthorize] ⇒ anonymous
-        // access is deliberately allowed. Regression guard.
+        // Unprotected endpoint + train explicitly marked [TraxAllowAnonymous] ⇒
+        // anonymous access is deliberately allowed. Regression guard.
         doc.RootElement.TryGetProperty("errors", out _).Should().BeFalse();
     }
 }

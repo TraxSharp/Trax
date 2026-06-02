@@ -648,6 +648,7 @@ public interface IBookExplicit
 
 #region Test entities
 
+[TraxAllowAnonymous]
 [TraxQueryModel(Name = "bookRefs", ExposeAs = typeof(IBookReference))]
 public class BookRef : IBookReference
 {
@@ -660,6 +661,7 @@ public class BookRef : IBookReference
     public string InternalNotes { get; set; } = "";
 }
 
+[TraxAllowAnonymous]
 [TraxQueryModel(Name = "auditedBookRefs", ExposeAs = typeof(IBookReferenceWithAudit))]
 public class AuditedBookRef : IBookReferenceWithAudit
 {
@@ -672,6 +674,7 @@ public class AuditedBookRef : IBookReferenceWithAudit
     public string InternalNotes { get; set; } = "";
 }
 
+[TraxAllowAnonymous]
 [TraxQueryModel(Name = "unrestrictedBookRefs")]
 public class UnrestrictedBookRef
 {

@@ -254,7 +254,14 @@ public class QueryModelAuthorizeSchemaValidatorTests
         // Build a configuration whose entity carries [TraxQueryModel] but
         // no [TraxAuthorize]. The validator should never touch the service
         // provider, so an empty provider is sufficient to prove it.
-        var config = new TraxGraphQLBuilder(services).AddDbContext<UngatedDbContext>().Build();
+        // The endpoint is gated (RequireAuthorization) so a marker-less entity is
+        // a valid exposure: this keeps the entity ungated (no [TraxAuthorize], no
+        // [TraxAllowAnonymous]) so the validator has zero gated AND zero anonymous
+        // entities and must short-circuit without resolving the schema.
+        var config = new TraxGraphQLBuilder(services)
+            .RequireAuthorization()
+            .AddDbContext<UngatedDbContext>()
+            .Build();
         config.ModelRegistrations.Should().NotBeEmpty("the test fixture must register a model");
         config
             .ModelRegistrations.Single()

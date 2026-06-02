@@ -10,6 +10,7 @@ namespace Trax.Api.Tests.AuthE2E;
 /// the isolated <c>test_auth</c> schema so it can coexist with the sample
 /// tables without stepping on them.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxQueryModel(Namespace = "library", Description = "Test books for E2E auth coverage.")]
 [Table("book_records", Schema = "test_auth")]
 public class BookRecord

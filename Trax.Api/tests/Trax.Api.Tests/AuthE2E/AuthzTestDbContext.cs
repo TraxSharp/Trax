@@ -16,6 +16,7 @@ namespace Trax.Api.Tests.AuthE2E;
 /// and the E2E suite verifies that a Player principal cannot reach the child
 /// through the parent's <c>books</c> navigation property.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxQueryModel(Namespace = "vault", Description = "Owners of vault items (ungated).")]
 [Table("owners", Schema = "test_authz")]
 public class Owner
