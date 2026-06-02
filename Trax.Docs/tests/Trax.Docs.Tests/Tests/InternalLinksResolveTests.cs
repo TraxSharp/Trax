@@ -20,13 +20,15 @@ public class InternalLinksResolveTests
         // api-graphql-client.md SDK Reference block points at /docs/sdk-reference/graphql-client/*
         // pages that have not been written yet (the SDK reference for the GraphQL client is still
         // tracked under sdk-reference/graphql-api/). Until those pages exist, exempt them here so
-        // CI doesn't block on tech debt that pre-dates this lint.
-        "api-graphql-client.md:187 -> /docs/sdk-reference/graphql-client/add-trax-graphql-client",
-        "api-graphql-client.md:187 -> /docs/sdk-reference/graphql-client/builder",
-        "api-graphql-client.md:187 -> /docs/sdk-reference/graphql-client/validate-assemblies",
-        "api-graphql-client.md:187 -> /docs/sdk-reference/graphql-client/i-graphql-client-request",
-        "api-graphql-client.md:187 -> /docs/sdk-reference/graphql-client/graphql-resource-request",
-        "api-graphql-client.md:187 -> /docs/sdk-reference/graphql-client/response-strictness",
+        // CI doesn't block on tech debt that pre-dates this lint. add-keyed-trax-graphql-client is
+        // the same pending-page tech debt for the keyed registration overload.
+        "api-graphql-client.md:226 -> /docs/sdk-reference/graphql-client/add-trax-graphql-client",
+        "api-graphql-client.md:226 -> /docs/sdk-reference/graphql-client/add-keyed-trax-graphql-client",
+        "api-graphql-client.md:226 -> /docs/sdk-reference/graphql-client/builder",
+        "api-graphql-client.md:226 -> /docs/sdk-reference/graphql-client/validate-assemblies",
+        "api-graphql-client.md:226 -> /docs/sdk-reference/graphql-client/i-graphql-client-request",
+        "api-graphql-client.md:226 -> /docs/sdk-reference/graphql-client/graphql-resource-request",
+        "api-graphql-client.md:226 -> /docs/sdk-reference/graphql-client/response-strictness",
         // The scheduler SDK reference lives at sdk-reference/scheduler-api/ now; this link was not
         // updated when the page was reorganized.
         "cross-cutting/e2e-testing.md:225 -> /docs/sdk-reference/scheduler/scheduler-configuration-builder",

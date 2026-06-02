@@ -147,6 +147,45 @@ services.AddTraxGraphQLClient(uri).UseFileSchema("schema.graphql");
 services.AddTraxGraphQLClient(uri).UseAssemblySchema(PlayerSchema.Configure);  // .Trax package
 ```
 
+## Talking to multiple servers
+
+One `AddTraxGraphQLClient` call registers a single client. To call two servers with different
+schemas from the same container, register each under a key with `AddKeyedTraxGraphQLClient` and
+resolve by key:
+
+```csharp
+services.AddKeyedTraxGraphQLClient("serverB", new Uri("https://b.example.com/graphql"))
+        .UseFileSchema("b.graphql");
+services.AddKeyedTraxGraphQLClient("serverC", new Uri("https://c.example.com/graphql"))
+        .UseFileSchema("c.graphql");
+```
+
+```csharp
+public class CrossServerTrain(
+    [FromKeyedServices("serverB")] IGraphQLClientExecutor b,
+    [FromKeyedServices("serverC")] IGraphQLClientExecutor c)
+{
+    // b talks to server B, c talks to server C.
+}
+```
+
+The key names the downstream server. It is arbitrary (the library never inspects it) and
+independent of the server-side `Namespace` that shows up in a request's `Path`. Each key gets
+its own configuration, `HttpClient`, schema provider, and validator cache, so a request meant
+for one server fails schema validation if you run it through the other server's key.
+
+Without keying, a second `AddTraxGraphQLClient` call overrides the first (last registration
+wins) and both clients validate against a single schema. Keying keeps them isolated. Every
+builder method works the same on a keyed registration (`UseFileSchema`, `UseAssemblySchema`,
+`WithStrictness`, `ConfigureHttpClient`, `UseStartupValidation`), and the validation helper has
+a keyed overload:
+
+```csharp
+await app.Services.ValidateGraphQLClientAssembliesAsync("serverB", typeof(Program).Assembly);
+```
+
+The single-server `AddTraxGraphQLClient` is unchanged. Use it when you talk to one server.
+
 ## Response Strictness
 
 Strict-extract catches "I added a field to the query but forgot to add it to the POCO" on the first response, not the hundredth bug report. Validation runs once per request type (cached) and only when the request uses the default `Extract`.
@@ -184,4 +223,4 @@ External consumers install only `Trax.Api.GraphQL.Client` and never see these me
 
 ## SDK Reference
 
-> [AddTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-trax-graphql-client) | [TraxGraphQLClientBuilder](/docs/sdk-reference/graphql-client/builder) | [ValidateGraphQLClientAssembliesAsync](/docs/sdk-reference/graphql-client/validate-assemblies) | [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request) | [GraphQLResourceRequest](/docs/sdk-reference/graphql-client/graphql-resource-request) | [ResponseStrictness](/docs/sdk-reference/graphql-client/response-strictness)
+> [AddTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-trax-graphql-client) | [AddKeyedTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-keyed-trax-graphql-client) | [TraxGraphQLClientBuilder](/docs/sdk-reference/graphql-client/builder) | [ValidateGraphQLClientAssembliesAsync](/docs/sdk-reference/graphql-client/validate-assemblies) | [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request) | [GraphQLResourceRequest](/docs/sdk-reference/graphql-client/graphql-resource-request) | [ResponseStrictness](/docs/sdk-reference/graphql-client/response-strictness)
