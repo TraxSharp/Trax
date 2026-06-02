@@ -132,8 +132,10 @@ namespace Trax.Api.GraphQL.Client
     }
     public static class ServiceExtensions
     {
+        public static Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder AddKeyedTraxGraphQLClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, object serviceKey, System.Uri baseAddress) { }
         public static Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder AddTraxGraphQLClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Uri baseAddress) { }
         public static System.Threading.Tasks.Task ValidateGraphQLClientAssembliesAsync(this System.IServiceProvider services, params System.Reflection.Assembly[] assemblies) { }
+        public static System.Threading.Tasks.Task ValidateGraphQLClientAssembliesAsync(this System.IServiceProvider services, object serviceKey, params System.Reflection.Assembly[] assemblies) { }
     }
     public sealed class TraxGraphQLClientBuilder
     {

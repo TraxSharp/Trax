@@ -36,7 +36,7 @@ public static class TraxBuilderExtensions
         ArgumentNullException.ThrowIfNull(configureSchema);
 
         var provider = new AssemblySchemaProvider(configureSchema);
-        builder.Services.Replace(ServiceDescriptor.Singleton<ISchemaProvider>(provider));
+        builder.ReplaceSchemaProvider(_ => provider);
         return builder;
     }
 
@@ -61,7 +61,7 @@ public static class TraxBuilderExtensions
             );
 
         builder.Services.AddHostedService(sp => new GraphQLClientStartupValidator(
-            sp.GetRequiredService<IGraphQLClientValidator>(),
+            builder.ResolveValidator(sp),
             assemblies,
             typeFilter: null,
             sp.GetService<ILogger<GraphQLClientStartupValidator>>()

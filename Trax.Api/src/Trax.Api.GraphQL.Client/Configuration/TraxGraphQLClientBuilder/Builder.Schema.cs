@@ -1,6 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-
 namespace Trax.Api.GraphQL.Client;
 
 public sealed partial class TraxGraphQLClientBuilder
@@ -12,9 +9,7 @@ public sealed partial class TraxGraphQLClientBuilder
     /// </summary>
     public TraxGraphQLClientBuilder UseIntrospection()
     {
-        Services.Replace(
-            ServiceDescriptor.Singleton<ISchemaProvider, IntrospectingSchemaProvider>()
-        );
+        ReplaceSchemaProvider(sp => new IntrospectingSchemaProvider(ResolveConfiguration(sp)));
         return this;
     }
 
@@ -32,9 +27,7 @@ public sealed partial class TraxGraphQLClientBuilder
     public TraxGraphQLClientBuilder UseFileSchema(string sdlPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sdlPath);
-        Services.Replace(
-            ServiceDescriptor.Singleton<ISchemaProvider>(_ => new FileSchemaProvider(sdlPath))
-        );
+        ReplaceSchemaProvider(_ => new FileSchemaProvider(sdlPath));
         return this;
     }
 }
