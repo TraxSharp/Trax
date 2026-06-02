@@ -98,6 +98,62 @@ builder.Services.AddTrax(trax => trax
 
 Different executables add different capabilities on top of the same trains. That's the entire pattern.
 
+## The Data Layer Pattern
+
+Samples that own relational data follow a strict rule: **one project, one PostgreSQL schema, one DbContext** (1:1:1). The `Bookworm` sample is the reference implementation, with a `catalog` domain (books, authors) and a `lending` domain (members, loans) in separate projects, each owning its own schema.
+
+A domain context derives a shared base, `DomainDataContext<TSelf>`, which applies the default schema (on PostgreSQL), a UTC datetime converter, and seals `OnModelCreating` so the conventions cannot be skipped:
+
+```csharp
+public class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
+    : DomainDataContext<CatalogDbContext>(options), ICatalogDbContext
+{
+    public DbSet<Book> Books => Set<Book>();
+    public DbSet<Author> Authors => Set<Author>();
+
+    protected override string Schema => CatalogSchema.Name; // "catalog"
+
+    protected override void ConfigureModel(ModelBuilder modelBuilder) { /* keys, indexes, relationships */ }
+}
+```
+
+Each context ships a companion `I{Name}DbContext` interface; application code (junctions, services) depends on the interface, never the concrete type. Registration goes through `AddDomainDataContext<TInterface, TContext>` (from Trax.Effect.Data), which uses a pooled context factory plus a scoped resolver.
+
+### Crossing schema boundaries
+
+A domain never references another domain. A loan's reference to a catalog book is a plain integer column, not an EF navigation:
+
+```csharp
+[Table("loans")]
+public class Loan
+{
+    [Column("book_id")]
+    public int BookId { get; set; } // points at catalog.books; resolved cross-schema in GraphQL
+}
+```
+
+The GraphQL `loan.book` field is resolved by a **batched cross-schema data loader** that lives in its own project (`Bookworm.CrossSchema`), the one place allowed to reference more than one domain context. EF Core cannot JOIN across two contexts, so the loader collects every requested book id in a request and issues a single `WHERE id IN (...)` against the catalog context, avoiding an N+1:
+
+```csharp
+[ExtendObjectType(typeof(Loan))]
+public sealed class LoanToBookEdge
+{
+    public async Task<Book?> GetBook(
+        [Parent] Loan loan,
+        CrossSchemaLoader<CatalogDbContext, Book> books,
+        CancellationToken ct
+    ) => await books.LoadAsync(loan.BookId, ct);
+}
+```
+
+Edges are declared in a single manifest (`CrossSchemaEdges.All`) that meta-tests reflect over to verify each edge has a real integer foreign key, a target owned by the declared context, and a registered loader.
+
+When a context genuinely needs to read another schema's table at the EF level (rather than only at the GraphQL layer), the foreign entity exposes a static `OnCrossSchemaModelCreating(ModelBuilder, string schema)` that pins it to the foreign schema and **ignores every navigation**, so EF Core never walks the foreign model graph into the consuming context. The entity is exposed there through a scalar-only `I{Entity}Reference` interface via explicit interface implementation, which keeps it out of GraphQL discovery (discovery only enumerates public `DbSet<T>` properties), so the owning domain stays the single GraphQL owner.
+
+### Guarding the pattern
+
+The conventions above are enforced by meta-tests so they survive future changes. `Trax.Samples.Tests.Meta` scans source on disk (every domain context derives the base and has a companion interface, every `OnCrossSchemaModelCreating` has the standard signature, cross-schema edge resolvers live only in a `*.CrossSchema` project and always go through the loader). `Trax.Samples.Tests.Reflection` references the built assemblies and checks what only the EF model and type graph can prove (each context owns a distinct non-null schema, every edge in the manifest maps to a real foreign key and a registered loader, every train has its `I{Name}Train` interface). Allowlists carry a justification per entry and fail when they go stale.
+
 ## Deployment Models
 
 The sample directories show six deployment topologies, each built on the same pattern.
@@ -390,6 +446,23 @@ mutation { dispatch { runTests(input: { projectName: "Trax.Core.Tests.Unit", pro
 # with test results in the output field (Total, Passed, Failed, FailedTests, etc.)
 ```
 
+### Bookworm (Multi-Schema with Cross-Schema GraphQL)
+
+```bash
+# Start Postgres, then run the API
+cd Trax.Samples && docker compose up -d
+dotnet run --project samples/Bookworm/Trax.Samples.Bookworm.Api
+```
+
+```bash
+# Resolve every loan's catalog book across schemas in one batched query
+curl -H "X-Api-Key: member-key-do-not-use-in-production" \
+     -X POST http://localhost:5210/trax/graphql -H "Content-Type: application/json" \
+     -d '{"query":"{ discover { lending { loans { nodes { id bookId book { title isbn } } } } } }"}'
+```
+
+The `loans` query lives in the `lending` schema; the nested `book` is resolved from the `catalog` schema by the batched cross-schema loader.
+
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [TraxBroadcast](/docs/sdk-reference/graphql-api/trax-broadcast-attribute)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [TraxBroadcast](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) | [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models)
