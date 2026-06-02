@@ -16,11 +16,13 @@ Each package lives in the repo that owns the concern it checks, and depends only
 | Package | Owns | Guards |
 |---|---|---|
 | `Trax.Core.Testing` | Infrastructure + hygiene | `RepoRoot` / `SourceFiles` / `SourceText`, `ArchitectureGuardOptions`, `GuardResult`; `HygieneGuards` (no `[Ignore]`, no legacy asserts, no fixed delays); `RepoConventionGuards` (`Directory.Build.props` version, cross-repo `Version="1.*"`) |
-| `Trax.Effect.Data.Testing` | Data layer | `DomainContextsDeriveBase`, `CompanionInterfaces`, `OneSchemaPerContext` |
+| `Trax.Effect.Data.Testing` | Data layer | `DomainContextsDeriveBase`, `CompanionInterfaces`, `OneSchemaPerContext`, `NoPendingModelChanges` |
 | `Trax.Api.GraphQL.Testing` | GraphQL | `EdgeManifestIsValid`, `EdgeResolversUseLoader` |
 | `Trax.Mediator.Testing` | Trains | `EveryTrainHasInterface` |
 
 A checker returns a `GuardResult` with the offenders it found, how many items it inspected, and a ready-to-use failure message.
+
+Most guards scan source on disk. `NoPendingModelChanges` is the exception: it builds each migration-based context offline (no database) and asserts its EF model matches the latest migration snapshot, catching a model edit that shipped without `dotnet ef migrations add` before it trips `PendingModelChangesWarning` at host startup.
 
 ## Consuming the guards
 
@@ -32,6 +34,8 @@ public sealed class MyDataLayerGuards : DomainDataLayerGuardFixture
 {
     protected override ArchitectureGuardOptions Options => new() { SourceScanRoots = ["libs", "apps"] };
     protected override IReadOnlyList<Type> DomainContexts => [typeof(CatalogDbContext), typeof(LendingDbContext)];
+    // Only contexts that use EF migrations; omit any bootstrapped with EnsureSchemaCreatedAsync.
+    protected override IReadOnlyList<Type> MigrationContexts => [typeof(CatalogDbContext)];
 }
 
 [TestFixture]
@@ -48,7 +52,7 @@ public sealed class MyTrainGuards : TrainGuardFixture
 }
 ```
 
-That is the whole test project. `dotnet test` discovers the inherited `[Test]` methods through your subclasses. Subclass only the fixtures for concerns you have; type-list members (`DomainContexts`, `Edges`, `TrainAssemblies`) default to empty, so a guard you do not configure passes vacuously. The `[TestFixture]` attribute on each subclass is required for the runner to discover the inherited tests.
+That is the whole test project. `dotnet test` discovers the inherited `[Test]` methods through your subclasses. Subclass only the fixtures for concerns you have; type-list members (`DomainContexts`, `MigrationContexts`, `Edges`, `TrainAssemblies`) default to empty, so a guard you do not configure passes vacuously. The `[TestFixture]` attribute on each subclass is required for the runner to discover the inherited tests.
 
 `ArchitectureGuardOptions` carries the per-repo configuration: scan roots, allowlists, and the expected versions. Allowlist entries are repo-relative paths; the source guards walk up from the test assembly to the nearest `*.slnx` to find the repo root.
 
