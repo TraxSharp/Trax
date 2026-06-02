@@ -19,6 +19,7 @@ namespace Trax.Effect.Data.Testing;
 /// {
 ///     protected override ArchitectureGuardOptions Options => new() { SourceScanRoots = ["libs", "apps"] };
 ///     protected override IReadOnlyList&lt;Type&gt; DomainContexts => [typeof(CatalogDbContext), typeof(LendingDbContext)];
+///     protected override IReadOnlyList&lt;Type&gt; MigrationContexts => [typeof(CatalogDbContext)];
 /// }
 /// </code>
 /// </remarks>
@@ -33,6 +34,13 @@ public abstract class DomainDataLayerGuardFixture
     /// passes vacuously); override to enable it.
     /// </summary>
     protected virtual IReadOnlyList<Type> DomainContexts => [];
+
+    /// <summary>
+    /// The repo's migration-based context types, for the snapshot-drift check. Defaults to empty (the
+    /// check passes vacuously); override with the contexts that use migrations. Do not list contexts
+    /// bootstrapped with <c>EnsureSchemaCreatedAsync</c>: they have no snapshot to compare against.
+    /// </summary>
+    protected virtual IReadOnlyList<Type> MigrationContexts => [];
 
     /// <summary>The shared base type name the source guards look for. Defaults to <c>DomainDataContext</c>.</summary>
     protected virtual string BaseTypeName => "DomainDataContext";
@@ -55,6 +63,13 @@ public abstract class DomainDataLayerGuardFixture
     public void Each_domain_context_owns_a_distinct_schema()
     {
         var result = DataLayerGuards.OneSchemaPerContext(DomainContexts);
+        Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
+    }
+
+    [Test]
+    public void Each_migration_context_matches_its_snapshot()
+    {
+        var result = DataLayerGuards.NoPendingModelChanges(MigrationContexts);
         Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
     }
 }

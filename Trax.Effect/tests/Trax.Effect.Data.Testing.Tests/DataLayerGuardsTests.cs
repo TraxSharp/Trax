@@ -94,4 +94,38 @@ public class DataLayerGuardsTests
     }
 
     #endregion
+
+    #region NoPendingModelChanges
+
+    [Test]
+    public void NoPendingModelChanges_PassesVacuouslyForEmptyList()
+    {
+        var result = DataLayerGuards.NoPendingModelChanges([]);
+
+        result.Passed.Should().BeTrue();
+        result.Inspected.Should().Be(0);
+    }
+
+    [Test]
+    public void NoPendingModelChanges_PassesWhenModelMatchesSnapshot()
+    {
+        // AlphaContext maps no entities, so its (empty) model has no tables the absent snapshot is
+        // missing: no pending changes.
+        var result = DataLayerGuards.NoPendingModelChanges([typeof(AlphaContext)]);
+
+        result.Passed.Should().BeTrue(result.FailureMessage);
+        result.Inspected.Should().Be(1);
+    }
+
+    [Test]
+    public void NoPendingModelChanges_FlagsContextWithUnmigratedModel()
+    {
+        // PendingChangesContext maps a table but ships no migration capturing it.
+        var result = DataLayerGuards.NoPendingModelChanges([typeof(PendingChangesContext)]);
+
+        result.Passed.Should().BeFalse();
+        result.Offenders.Should().ContainSingle(o => o.Contains(nameof(PendingChangesContext)));
+    }
+
+    #endregion
 }

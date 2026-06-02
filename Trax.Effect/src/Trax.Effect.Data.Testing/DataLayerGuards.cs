@@ -137,7 +137,49 @@ public static class DataLayerGuards
         return new GuardResult(offenders, contextTypes.Count, message);
     }
 
+    /// <summary>
+    /// Each migration-based context's EF model must match its latest migration snapshot. A model edit
+    /// committed without a matching migration makes <c>MigrateAsync</c> trip EF's
+    /// <c>PendingModelChangesWarning</c> at startup, taking down every test that boots the host. Built
+    /// offline against PostgreSQL (no database connection); the check compares the model to the
+    /// snapshot in memory.
+    /// </summary>
+    /// <param name="migrationContextTypes">
+    /// Only contexts that use migrations. A context bootstrapped with <c>EnsureSchemaCreatedAsync</c>
+    /// has no snapshot, so every table reads as pending; do not pass those here.
+    /// </param>
+    public static GuardResult NoPendingModelChanges(IReadOnlyList<Type> migrationContextTypes)
+    {
+        ArgumentNullException.ThrowIfNull(migrationContextTypes);
+
+        var offenders = new List<string>();
+        foreach (var contextType in migrationContextTypes)
+        {
+            using var context = BuildOffline(contextType);
+            if (context.Database.HasPendingModelChanges())
+                offenders.Add(contextType.Name);
+        }
+
+        var message =
+            "Each migration-based context's model must match its latest migration snapshot, or "
+            + "MigrateAsync trips PendingModelChangesWarning at host startup. Run "
+            + "`dotnet ef migrations add <Name>` to capture the change for each. Offenders:\n  "
+            + string.Join("\n  ", offenders);
+
+        return new GuardResult(offenders, migrationContextTypes.Count, message);
+    }
+
     private static string? SchemaOf(Type contextType)
+    {
+        using var context = BuildOffline(contextType);
+        return context.Model.GetDefaultSchema();
+    }
+
+    /// <summary>
+    /// Builds a context instance offline (PostgreSQL provider, no connection) via its
+    /// <c>DbContextOptions</c> constructor, for reflection-only model inspection.
+    /// </summary>
+    private static DbContext BuildOffline(Type contextType)
     {
         var builderType = typeof(DbContextOptionsBuilder<>).MakeGenericType(contextType);
         var builder = (DbContextOptionsBuilder)Activator.CreateInstance(builderType)!;
@@ -153,8 +195,7 @@ public static class DataLayerGuards
                     | System.Reflection.BindingFlags.DeclaredOnly
             )!
             .GetValue(builder);
-        using var context = (DbContext)Activator.CreateInstance(contextType, options)!;
-        return context.Model.GetDefaultSchema();
+        return (DbContext)Activator.CreateInstance(contextType, options)!;
     }
 
     private static string Rel(string root, string file) =>

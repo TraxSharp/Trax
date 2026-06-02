@@ -24,6 +24,10 @@ public sealed class DomainDataLayerGuardFixtureSelfTest : DomainDataLayerGuardFi
     protected override IReadOnlyList<Type> DomainContexts =>
         [typeof(AlphaContext), typeof(BetaContext)];
 
+    // AlphaContext maps no entities, so it has nothing outstanding against its snapshot; this drives
+    // the inherited migration-snapshot guard down a real (non-vacuous) path.
+    protected override IReadOnlyList<Type> MigrationContexts => [typeof(AlphaContext)];
+
     [OneTimeSetUp]
     public void CreateConformingRepo() =>
         _repo = new TempRepo()
