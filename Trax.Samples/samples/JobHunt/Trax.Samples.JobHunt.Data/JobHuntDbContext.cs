@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Effect.Data.Services.DomainContext;
 using Trax.Samples.JobHunt.Data.Entities;
 
 namespace Trax.Samples.JobHunt.Data;
 
-public class JobHuntDbContext(DbContextOptions<JobHuntDbContext> options) : DbContext(options)
+public class JobHuntDbContext(DbContextOptions<JobHuntDbContext> options)
+    : DomainDataContext<JobHuntDbContext>(options),
+        IJobHuntDbContext
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<Job> Jobs => Set<Job>();
@@ -16,7 +19,11 @@ public class JobHuntDbContext(DbContextOptions<JobHuntDbContext> options) : DbCo
     public DbSet<EmailSent> EmailsSent => Set<EmailSent>();
     public DbSet<WatchedCompany> WatchedCompanies => Set<WatchedCompany>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    // One project : one schema : one context. The domain owns the "jobhunt" schema; the Trax
+    // framework tables live in their own "trax" schema, so the two never collide.
+    protected override string Schema => "jobhunt";
+
+    protected override void ConfigureModel(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<User>(entity =>
         {

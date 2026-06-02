@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trax.Samples.Bookworm\Trax.Samples.Bookworm.csproj" />
+    <ProjectReference Include="..\Trax.Samples.Bookworm.CrossSchema\Trax.Samples.Bookworm.CrossSchema.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
+    <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
+    <PackageReference Include="Trax.Api" Version="1.*" />
+    <PackageReference Include="Trax.Api.Auth.ApiKey" Version="1.*" />
+    <PackageReference Include="Trax.Api.GraphQL" Version="1.*" />
+  </ItemGroup>
+</Project>

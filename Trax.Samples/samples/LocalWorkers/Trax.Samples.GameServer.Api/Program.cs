@@ -184,6 +184,10 @@ builder.Services.AddTraxGraphQL(graphql =>
     graphql
         .MaxExecutionDepth(6)
         .AddDbContext<GameDbContext>()
+        // Add case-insensitive string operators (icontains, ieq) on top of the stock
+        // filters, so player searches like displayName: { icontains: "blade" } match
+        // "ShadowBlade" without the caller having to know the exact casing.
+        .ConfigureFiltering(filter => filter.AddCaseInsensitiveStringOperations())
         .AddTypeExtensions(typeof(Program).Assembly)
         // The web UI surfaces health, manifests, executions, and dead letters
         // for the in-browser ops dashboard, and lets operators trigger /

@@ -83,7 +83,7 @@ jobs:
         env:
           PGPASSWORD: trax123
         run: |
-          for db in trax_e2e_tests chat_e2e_tests energyhub_e2e_tests jobhunt_e2e_tests; do
+          for db in trax_e2e_tests chat_e2e_tests energyhub_e2e_tests jobhunt_e2e_tests bookworm_e2e_tests; do
             psql -h localhost -U trax -d trax -c "CREATE DATABASE \"$db\";"
           done
 

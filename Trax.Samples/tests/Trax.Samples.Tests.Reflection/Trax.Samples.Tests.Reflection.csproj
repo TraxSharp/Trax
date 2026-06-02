@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <!-- Consumes the framework guard packages and runs them against the Bookworm flagship: thin
+       [Test] wrappers over the reflection checkers, proving a real consumer can adopt the guards. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\samples\Bookworm\Trax.Samples.Bookworm\Trax.Samples.Bookworm.csproj" />
+    <ProjectReference Include="..\..\samples\Bookworm\Trax.Samples.Bookworm.Catalog\Trax.Samples.Bookworm.Catalog.csproj" />
+    <ProjectReference Include="..\..\samples\Bookworm\Trax.Samples.Bookworm.Lending\Trax.Samples.Bookworm.Lending.csproj" />
+    <ProjectReference Include="..\..\samples\Bookworm\Trax.Samples.Bookworm.CrossSchema\Trax.Samples.Bookworm.CrossSchema.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Effect.Data.Testing" Version="1.*" />
+    <PackageReference Include="Trax.Api.GraphQL.Testing" Version="1.*" />
+    <PackageReference Include="Trax.Mediator.Testing" Version="1.*" />
+    <PackageReference Include="FluentAssertions" Version="8.*" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.*" />
+    <PackageReference Include="NUnit" Version="4.*" />
+    <PackageReference Include="NUnit3TestAdapter" Version="6.*" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.*" />
+    <PackageReference Include="coverlet.collector" Version="6.*" />
+  </ItemGroup>
+</Project>

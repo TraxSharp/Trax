@@ -30,6 +30,8 @@
 //   EF Core InMemory — In-memory database provider (MIT, https://github.com/dotnet/efcore)
 // ---------------------------------------------------------------------------
 
+using Microsoft.EntityFrameworkCore;
+using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Dashboard.Extensions;
@@ -39,6 +41,8 @@ using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
+using Trax.Samples.Hub.Auth;
+using Trax.Samples.Hub.Data;
 using Trax.Samples.Hub.Trains.HelloWorld;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Scheduling;
@@ -46,6 +50,11 @@ using Trax.Scheduler.Services.Scheduling;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddLogging(logging => logging.AddConsole());
+
+// -- Authentication (NO WARRANTY, demo key only) -----------------------------
+// Send the key as the X-Api-Key header. Per-operation gates use [TraxAuthorize].
+builder.Services.AddTraxApiKeyAuth(keys => keys.Add(DemoKeys.DemoKey, id: "demo", "User"));
+builder.Services.AddAuthorization();
 
 // -- Trax Effect + Mediator + Scheduler --------------------------------------
 builder.Services.AddTrax(trax =>
@@ -60,17 +69,34 @@ builder.Services.AddTrax(trax =>
         )
 );
 
+// -- Application data context (one project : one schema : one context) -------
+// Swap UseInMemoryDatabase for UseNpgsql(connectionString) (and add Trax.Effect.Data.Postgres)
+// to get real schema isolation.
+builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseInMemoryDatabase("app"));
+builder.Services.AddScoped<IAppDbContext>(sp =>
+    sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext()
+);
+
 // -- Dashboard ---------------------------------------------------------------
 builder.AddTraxDashboard();
 
 // -- GraphQL API -------------------------------------------------------------
-builder.Services.AddAuthorization();
-builder.Services.AddTraxGraphQL();
+builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<AppDbContext>());
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
 
+// -- Ensure the application tables exist (demo bootstrap) --------------------
+using (var scope = app.Services.CreateScope())
+{
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+    using var db = factory.CreateDbContext();
+    db.Database.EnsureCreated();
+}
+
 // -- Map endpoints -----------------------------------------------------------
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseTraxDashboard();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");

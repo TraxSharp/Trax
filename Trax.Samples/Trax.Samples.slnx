@@ -49,7 +49,19 @@
     <Project Path="samples/TestRunner/Trax.Samples.TestRunner/Trax.Samples.TestRunner.csproj" />
     <Project Path="samples/TestRunner/Trax.Samples.TestRunner.Hub/Trax.Samples.TestRunner.Hub.csproj" />
   </Folder>
+  <Folder Name="/samples/Bookworm/">
+    <Project Path="samples/Bookworm/Trax.Samples.Bookworm.Catalog/Trax.Samples.Bookworm.Catalog.csproj" />
+    <Project Path="samples/Bookworm/Trax.Samples.Bookworm.Lending/Trax.Samples.Bookworm.Lending.csproj" />
+    <Project Path="samples/Bookworm/Trax.Samples.Bookworm.CrossSchema/Trax.Samples.Bookworm.CrossSchema.csproj" />
+    <Project Path="samples/Bookworm/Trax.Samples.Bookworm/Trax.Samples.Bookworm.csproj" />
+    <Project Path="samples/Bookworm/Trax.Samples.Bookworm.Api/Trax.Samples.Bookworm.Api.csproj" />
+  </Folder>
+  <Folder Name="/lib/">
+    <Project Path="lib/Trax.Samples.Shared.Testing/Trax.Samples.Shared.Testing.csproj" />
+  </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Trax.Samples.Bookworm.E2E/Trax.Samples.Bookworm.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.Tests.Reflection/Trax.Samples.Tests.Reflection.csproj" />
     <Project Path="tests/Trax.Samples.ChatService.Tests/Trax.Samples.ChatService.Tests.csproj" />
     <Project Path="tests/Trax.Samples.TestRunner.Tests/Trax.Samples.TestRunner.Tests.csproj" />
     <Project Path="tests/Trax.Samples.GameServer.E2E/Trax.Samples.GameServer.E2E.csproj" />

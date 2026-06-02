@@ -18,6 +18,7 @@
     <PackageReference Include="Trax.Scheduler" Version="1.*" />
     <PackageReference Include="Trax.Dashboard" Version="1.*" />
     <PackageReference Include="Trax.Api" Version="1.*" />
+    <PackageReference Include="Trax.Api.Auth.ApiKey" Version="1.*" />
     <PackageReference Include="Trax.Api.GraphQL" Version="1.*" />
   </ItemGroup>
 </Project>

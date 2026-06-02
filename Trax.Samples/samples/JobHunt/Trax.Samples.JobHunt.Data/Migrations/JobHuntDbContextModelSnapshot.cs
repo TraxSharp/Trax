@@ -17,6 +17,7 @@ namespace Trax.Samples.JobHunt.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
+                .HasDefaultSchema("jobhunt")
                 .HasAnnotation("ProductVersion", "10.0.3")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -49,7 +50,7 @@ namespace Trax.Samples.JobHunt.Data.Migrations
 
                     b.HasIndex("UserId", "Status");
 
-                    b.ToTable("Applications");
+                    b.ToTable("Applications", "jobhunt");
                 });
 
             modelBuilder.Entity("Trax.Samples.JobHunt.Data.Entities.Artifact", b =>
@@ -84,7 +85,7 @@ namespace Trax.Samples.JobHunt.Data.Migrations
 
                     b.HasIndex("JobId", "UserId");
 
-                    b.ToTable("Artifacts");
+                    b.ToTable("Artifacts", "jobhunt");
                 });
 
             modelBuilder.Entity("Trax.Samples.JobHunt.Data.Entities.Contact", b =>
@@ -118,7 +119,7 @@ namespace Trax.Samples.JobHunt.Data.Migrations
 
                     b.HasIndex("JobId");
 
-                    b.ToTable("Contacts");
+                    b.ToTable("Contacts", "jobhunt");
                 });
 
             modelBuilder.Entity("Trax.Samples.JobHunt.Data.Entities.EmailDraft", b =>
@@ -146,7 +147,7 @@ namespace Trax.Samples.JobHunt.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("EmailDrafts");
+                    b.ToTable("EmailDrafts", "jobhunt");
                 });
 
             modelBuilder.Entity("Trax.Samples.JobHunt.Data.Entities.EmailSent", b =>
@@ -171,7 +172,7 @@ namespace Trax.Samples.JobHunt.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("EmailsSent");
+                    b.ToTable("EmailsSent", "jobhunt");
                 });
 
             modelBuilder.Entity("Trax.Samples.JobHunt.Data.Entities.Job", b =>
@@ -215,7 +216,7 @@ namespace Trax.Samples.JobHunt.Data.Migrations
 
                     b.HasIndex("UserId", "Status");
 
-                    b.ToTable("Jobs");
+                    b.ToTable("Jobs", "jobhunt");
                 });
 
             modelBuilder.Entity("Trax.Samples.JobHunt.Data.Entities.JobSnapshot", b =>
@@ -245,7 +246,7 @@ namespace Trax.Samples.JobHunt.Data.Migrations
 
                     b.HasIndex("JobId", "FetchedAt");
 
-                    b.ToTable("JobSnapshots");
+                    b.ToTable("JobSnapshots", "jobhunt");
                 });
 
             modelBuilder.Entity("Trax.Samples.JobHunt.Data.Entities.Profile", b =>
@@ -278,7 +279,7 @@ namespace Trax.Samples.JobHunt.Data.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("Profiles");
+                    b.ToTable("Profiles", "jobhunt");
                 });
 
             modelBuilder.Entity("Trax.Samples.JobHunt.Data.Entities.User", b =>
@@ -303,7 +304,7 @@ namespace Trax.Samples.JobHunt.Data.Migrations
                     b.HasIndex("ApiKey")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", "jobhunt");
                 });
 
             modelBuilder.Entity("Trax.Samples.JobHunt.Data.Entities.WatchedCompany", b =>
@@ -337,7 +338,7 @@ namespace Trax.Samples.JobHunt.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("WatchedCompanies");
+                    b.ToTable("WatchedCompanies", "jobhunt");
                 });
 #pragma warning restore 612, 618
         }

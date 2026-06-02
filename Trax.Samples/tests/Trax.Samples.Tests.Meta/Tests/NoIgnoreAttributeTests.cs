@@ -50,4 +50,32 @@ public class NoIgnoreAttributeTests
                     + string.Join("\n  ", offenders)
             );
     }
+
+    [Test]
+    public void KnownExceptions_AreNotStale()
+    {
+        var stale = new List<string>();
+
+        foreach (var rel in KnownExceptions)
+        {
+            var absolute = RepoRoot.Combine(rel.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(absolute))
+            {
+                stale.Add($"{rel} (file no longer exists)");
+                continue;
+            }
+
+            var stripped = SourceText.StripCommentsAndStrings(File.ReadAllText(absolute));
+            if (!IgnoreAttribute.IsMatch(stripped))
+                stale.Add($"{rel} (no [Ignore] left — exception no longer needed)");
+        }
+
+        stale
+            .Should()
+            .BeEmpty(
+                "A KnownExceptions entry is stale: the file is gone or no longer uses [Ignore]. "
+                    + "Remove the entry so the allowlist reflects reality:\n  "
+                    + string.Join("\n  ", stale)
+            );
+    }
 }
