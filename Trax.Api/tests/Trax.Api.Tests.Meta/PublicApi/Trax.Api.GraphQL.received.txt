@@ -58,6 +58,31 @@ namespace Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder RequireAuthorization(string? policy = null) { }
     }
 }
+namespace Trax.Api.GraphQL.DataLoaders.CrossSchema
+{
+    public sealed class CrossSchemaEdge : System.IEquatable<Trax.Api.GraphQL.DataLoaders.CrossSchema.CrossSchemaEdge>
+    {
+        public CrossSchemaEdge(System.Type Source, string Fk, System.Type Target, System.Type TargetContext, string FieldName) { }
+        public string FieldName { get; init; }
+        public string Fk { get; init; }
+        public System.Type Source { get; init; }
+        public System.Type Target { get; init; }
+        public System.Type TargetContext { get; init; }
+    }
+    public sealed class CrossSchemaLoader<TContext, TEntity> : GreenDonut.BatchDataLoader<int, TEntity>
+        where TContext : Microsoft.EntityFrameworkCore.DbContext
+        where TEntity :  class
+    {
+        public CrossSchemaLoader(Microsoft.EntityFrameworkCore.IDbContextFactory<TContext> contextFactory, GreenDonut.IBatchScheduler batchScheduler, GreenDonut.DataLoaderOptions options) { }
+        protected override System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyDictionary<int, TEntity>> LoadBatchAsync(System.Collections.Generic.IReadOnlyList<int> keys, System.Threading.CancellationToken cancellationToken) { }
+    }
+    public static class CrossSchemaServiceCollectionExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddCrossSchemaLoader<TContext, TEntity>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+            where TContext : Microsoft.EntityFrameworkCore.DbContext
+            where TEntity :  class { }
+    }
+}
 namespace Trax.Api.GraphQL.Extensions
 {
     public static class GraphQLServiceExtensions

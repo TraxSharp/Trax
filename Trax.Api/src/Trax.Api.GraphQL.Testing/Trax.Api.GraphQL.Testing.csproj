@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <AssemblyName>Trax.Api.GraphQL.Testing</AssemblyName>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageDescription>Architecture-guard checkers for Trax GraphQL: cross-schema edge manifest validity and edge-resolver placement / loader use. Framework-agnostic: returns offender lists you assert on.</PackageDescription>
+    <PackageTags>trax;testing;architecture;guards;graphql;hotchocolate</PackageTags>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Api</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Core.Testing" Version="1.*" />
+    <PackageReference Include="NUnit" Version="4.4.0" />
+  </ItemGroup>
+</Project>
