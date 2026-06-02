@@ -10,6 +10,7 @@ namespace Trax.Samples.Bookworm.Lending.Models.Loans;
 /// navigation: the lending domain stays isolated from the catalog domain. The GraphQL <c>book</c>
 /// field that resolves the referenced book is added by the cross-schema edge project, not here.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxQueryModel(Namespace = GraphQLNamespaces.Lending, Description = "Book loans")]
 [Table("loans")]
 public class Loan

@@ -5,6 +5,7 @@ using Trax.Samples.ChatService.Trains.GetChatRooms.Junctions;
 
 namespace Trax.Samples.ChatService.Trains.GetChatRooms;
 
+[TraxAllowAnonymous]
 [TraxQuery(Description = "Lists chat rooms the user participates in")]
 public class GetChatRoomsTrain
     : ServiceTrain<GetChatRoomsInput, GetChatRoomsOutput>,

@@ -7,6 +7,7 @@ namespace Trax.Samples.Bookworm.Catalog.Models.Authors;
 /// <summary>
 /// A book author. Owned by the catalog domain and exposed as a GraphQL query model.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxQueryModel(Namespace = GraphQLNamespaces.Catalog, Description = "Authors in the catalog")]
 [Table("authors")]
 public class Author

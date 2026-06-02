@@ -11,6 +11,7 @@ namespace Trax.Samples.Bookworm.Catalog.Models.Books;
 /// <see cref="IBookReference"/> (scalar fields only) so the <see cref="Author"/> navigation does not
 /// leak into the schema, and so the cross-schema edge from a loan resolves to a stable scalar shape.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxQueryModel(
     Namespace = GraphQLNamespaces.Catalog,
     Description = "Books in the catalog",

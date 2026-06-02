@@ -5,6 +5,7 @@ using Trax.Samples.ChatService.Trains.GetChatHistory.Junctions;
 
 namespace Trax.Samples.ChatService.Trains.GetChatHistory;
 
+[TraxAllowAnonymous]
 [TraxQuery(Description = "Retrieves message history for a chat room")]
 public class GetChatHistoryTrain
     : ServiceTrain<GetChatHistoryInput, GetChatHistoryOutput>,

@@ -9,6 +9,7 @@ namespace Trax.Samples.Hub.Trains.HelloWorld;
 /// A mutation train that logs a greeting. Also scheduled to run every 20 seconds.
 /// Exposed as a typed mutation field under mutation { dispatch { runHelloWorld(...) } }.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxMutation(GraphQLOperation.Run, Description = "Runs a hello world greeting")]
 public class HelloWorldTrain : ServiceTrain<HelloWorldInput, Unit>, IHelloWorldTrain
 {

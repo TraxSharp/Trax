@@ -10,6 +10,7 @@ namespace Trax.Samples.GameServer.Trains.Leaderboard.RecalculateLeaderboard;
 /// Scheduled to run every 5 minutes on the scheduler.
 /// GenerateSeasonReport depends on this train via ThenInclude.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxMutation(
     GraphQLOperation.Queue,
     Namespace = GraphQLNamespaces.Leaderboard,

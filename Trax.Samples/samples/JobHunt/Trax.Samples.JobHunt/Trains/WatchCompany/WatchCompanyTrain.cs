@@ -5,6 +5,7 @@ using Trax.Samples.JobHunt.Trains.WatchCompany.Junctions;
 
 namespace Trax.Samples.JobHunt.Trains.WatchCompany;
 
+[TraxAllowAnonymous]
 [TraxMutation(Description = "Starts watching a company's careers page")]
 public class WatchCompanyTrain
     : ServiceTrain<WatchCompanyInput, WatchCompanyOutput>,

@@ -8,6 +8,7 @@ namespace Trax.Samples.Api.Data.Models;
 /// A sample entity, automatically exposed as a paginated, filterable, sortable GraphQL query via
 /// [TraxQueryModel]. Replace it with your own domain entities.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxQueryModel(Namespace = "app", Description = "Notes")]
 [Table("notes")]
 public class Note

@@ -5,6 +5,7 @@ using Trax.Effect.Attributes;
 namespace Trax.Samples.Bookworm.Lending.Models.Members;
 
 /// <summary>A library member. Owned by the lending domain.</summary>
+[TraxAllowAnonymous]
 [TraxQueryModel(Namespace = GraphQLNamespaces.Lending, Description = "Library members")]
 [Table("members")]
 public class Member

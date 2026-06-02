@@ -11,6 +11,7 @@ namespace Trax.Samples.PersistedOperations.Trains.Greeting.Greet;
 /// The persisted-operation manifest binds an id (e.g. <c>greet_v1</c>) to
 /// a GraphQL document that calls this train.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxQuery(Namespace = GraphQLNamespaces.Greeting, Description = "Builds a greeting for a name")]
 public class GreetTrain : ServiceTrain<GreetInput, GreetOutput>, IGreetTrain
 {

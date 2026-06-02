@@ -5,6 +5,7 @@ using Trax.Samples.JobHunt.Trains.GenerateApplicationMaterials.Junctions;
 
 namespace Trax.Samples.JobHunt.Trains.GenerateApplicationMaterials;
 
+[TraxAllowAnonymous]
 [TraxMutation(Description = "Generates a tailored resume and cover letter for a job via Ollama")]
 [TraxBroadcast]
 public class GenerateApplicationMaterialsTrain

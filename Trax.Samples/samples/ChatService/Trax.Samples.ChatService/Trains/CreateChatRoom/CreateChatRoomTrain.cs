@@ -5,6 +5,7 @@ using Trax.Samples.ChatService.Trains.CreateChatRoom.Junctions;
 
 namespace Trax.Samples.ChatService.Trains.CreateChatRoom;
 
+[TraxAllowAnonymous]
 [TraxMutation(Description = "Creates a new chat room and adds the creator as a participant")]
 [TraxBroadcast]
 public class CreateChatRoomTrain

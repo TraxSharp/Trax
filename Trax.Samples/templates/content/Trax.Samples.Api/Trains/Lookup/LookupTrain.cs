@@ -9,6 +9,7 @@ namespace Trax.Samples.Api.Trains.Lookup;
 /// A query train that looks up a record by ID.
 /// Exposed as a typed query field under query { discover { lookup(...) } }.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxQuery(Description = "Looks up a record by ID")]
 public class LookupTrain : ServiceTrain<LookupInput, LookupOutput>, ILookupTrain
 {

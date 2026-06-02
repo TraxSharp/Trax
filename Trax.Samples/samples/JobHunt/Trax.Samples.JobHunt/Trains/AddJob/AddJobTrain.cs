@@ -5,6 +5,7 @@ using Trax.Samples.JobHunt.Trains.AddJob.Junctions;
 
 namespace Trax.Samples.JobHunt.Trains.AddJob;
 
+[TraxAllowAnonymous]
 [TraxMutation(Description = "Adds a job posting from URL or pasted text")]
 [TraxBroadcast]
 public class AddJobTrain : ServiceTrain<AddJobInput, AddJobOutput>, IAddJobTrain

@@ -9,6 +9,7 @@ namespace Trax.Samples.Api.Trains.HelloWorld;
 /// A simple mutation train that logs a greeting.
 /// Exposed as a typed mutation field under mutation { dispatch { runHelloWorld(...) } }.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxMutation(GraphQLOperation.Run, Description = "Runs a hello world greeting")]
 public class HelloWorldTrain : ServiceTrain<HelloWorldInput, Unit>, IHelloWorldTrain
 {

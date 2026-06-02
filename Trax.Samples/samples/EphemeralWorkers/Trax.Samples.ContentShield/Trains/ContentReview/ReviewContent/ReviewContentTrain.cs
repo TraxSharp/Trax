@@ -13,6 +13,7 @@ namespace Trax.Samples.ContentShield.Trains.ContentReview.ReviewContent;
 /// Dispatched to the ephemeral Runner via HTTP (UseRemoteWorkers).
 /// </summary>
 [TraxConcurrencyLimit(15)]
+[TraxAllowAnonymous]
 [TraxMutation(
     GraphQLOperation.Queue,
     Namespace = "moderation",

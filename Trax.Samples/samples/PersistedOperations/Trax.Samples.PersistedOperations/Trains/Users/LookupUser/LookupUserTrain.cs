@@ -9,6 +9,7 @@ namespace Trax.Samples.PersistedOperations.Trains.Users.LookupUser;
 /// Resolves a user profile by id. Exposed as
 /// <c>discover { users { lookupUser(input: { userId: ... }) { ... } } }</c>.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxQuery(Namespace = GraphQLNamespaces.Users, Description = "Looks up a user profile by id")]
 public class LookupUserTrain : ServiceTrain<LookupUserInput, UserProfile>, ILookupUserTrain
 {

@@ -10,6 +10,7 @@ namespace Trax.Samples.EnergyHub.Trains.ChargingSessions.ProcessChargingSession;
 /// Scheduled per zone via ScheduleMany every 2 minutes.
 /// Collects session data, calculates costs at $0.14/kWh, and updates billing.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxMutation(Description = "Processes a completed EV charging session")]
 [TraxBroadcast]
 public class ProcessChargingSessionTrain

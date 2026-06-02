@@ -5,6 +5,7 @@ using Trax.Samples.JobHunt.Trains.GetArtifacts.Junctions;
 
 namespace Trax.Samples.JobHunt.Trains.GetArtifacts;
 
+[TraxAllowAnonymous]
 [TraxQuery(Description = "Lists generated artifacts (resume, cover letter) for a job")]
 public class GetArtifactsTrain
     : ServiceTrain<GetArtifactsInput, GetArtifactsOutput>,

@@ -5,6 +5,7 @@ using Trax.Samples.ChatService.Trains.MarkChatAsRead.Junctions;
 
 namespace Trax.Samples.ChatService.Trains.MarkChatAsRead;
 
+[TraxAllowAnonymous]
 [TraxMutation(Description = "Marks a chat room as read for a user")]
 public class MarkChatAsReadTrain : ServiceTrain<MarkChatAsReadInput, Unit>, IMarkChatAsReadTrain
 {

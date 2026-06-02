@@ -5,6 +5,7 @@ using Trax.Samples.JobHunt.Trains.ListJobs.Junctions;
 
 namespace Trax.Samples.JobHunt.Trains.ListJobs;
 
+[TraxAllowAnonymous]
 [TraxQuery(Description = "Lists jobs for a user, optionally filtered by status")]
 public class ListJobsTrain : ServiceTrain<ListJobsInput, ListJobsOutput>, IListJobsTrain
 {

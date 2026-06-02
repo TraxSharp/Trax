@@ -5,6 +5,7 @@ using Trax.Samples.JobHunt.Trains.ListWatchedCompanies.Junctions;
 
 namespace Trax.Samples.JobHunt.Trains.ListWatchedCompanies;
 
+[TraxAllowAnonymous]
 [TraxQuery(Description = "Lists all watched companies for a user")]
 public class ListWatchedCompaniesTrain
     : ServiceTrain<ListWatchedCompaniesInput, ListWatchedCompaniesOutput>,

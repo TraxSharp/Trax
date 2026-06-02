@@ -10,6 +10,7 @@ namespace Trax.Samples.EnergyHub.Trains.BatteryStorage.ManageBatteryStorage;
 /// Depends on MonitorSolarProduction via ThenInclude — runs after
 /// solar data is collected to make informed charge decisions.
 /// </summary>
+[TraxAllowAnonymous]
 [TraxMutation(
     GraphQLOperation.Queue,
     Namespace = "battery",
