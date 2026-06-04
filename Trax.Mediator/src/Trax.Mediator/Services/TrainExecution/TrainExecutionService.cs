@@ -1,10 +1,16 @@
+using System.Collections.Concurrent;
+using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Utils;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
@@ -24,6 +30,14 @@ public class TrainExecutionService(
     IServiceProvider serviceProvider
 ) : ITrainExecutionService
 {
+    /// <summary>
+    /// Per-train-type cache of the concrete train's overridden <c>OnQueue</c> method, or null when
+    /// the train does not override it. Trains that do not override it (the common case) skip
+    /// resolution entirely, so the enqueue path stays as light as it was before the hook existed.
+    /// The reflection runs once per type.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Type, MethodInfo?> OnQueueOverrideCache = new();
+
     public async Task<QueueTrainResult> QueueAsync(
         string trainName,
         string inputJson,
@@ -53,6 +67,12 @@ public class TrainExecutionService(
                 Priority = priority,
             }
         );
+
+        // Queue-time hook: fire OnQueue before the work queue row is inserted, so a consumer
+        // can perform a side-effect (e.g. an optimistic shadow write) the moment the mutation
+        // is accepted. The entry's ExternalId is the correlation key — the eventual run executes
+        // under the same ExternalId. Exceptions propagate and abort the enqueue.
+        await InvokeQueueHookAsync(registration, input, entry.ExternalId, ct);
 
         using var dataContext = await dataContextFactory.CreateDbContextAsync(ct);
         await dataContext.Track(entry);
@@ -86,6 +106,76 @@ public class TrainExecutionService(
             ct
         );
     }
+
+    /// <summary>
+    /// Invokes the train's <c>OnQueue</c> hook if the concrete train overrides it. Resolves the
+    /// train through its service interface (so <c>[Inject]</c> properties and <c>CanonicalName</c>
+    /// are populated exactly as a normal run would), then calls the hook with a non-persisted
+    /// metadata carrying the input, canonical name, and the work queue entry's ExternalId.
+    /// Exceptions are intentionally not caught: a failed <c>OnQueue</c> aborts the enqueue.
+    /// </summary>
+    /// <remarks>
+    /// The hook is invoked via reflection rather than a marker interface on purpose: a non-generic
+    /// interface on <c>ServiceTrain&lt;,&gt;</c> would collide with the canonical-interface
+    /// selection in train discovery (it picks the first non-generic interface), so every train
+    /// could register under the marker instead of its own interface.
+    /// </remarks>
+    private async Task InvokeQueueHookAsync(
+        TrainRegistration registration,
+        object input,
+        string externalId,
+        CancellationToken ct
+    )
+    {
+        var onQueue = ResolveOnQueueOverride(registration.ImplementationType);
+        if (onQueue is null)
+            return;
+
+        var train = serviceProvider.GetRequiredService(registration.ServiceType);
+
+        var hookMetadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = registration.ServiceType.FullName!,
+                ExternalId = externalId,
+                Input = input,
+            }
+        );
+
+        try
+        {
+            await (Task)onQueue.Invoke(train, [hookMetadata, ct])!;
+        }
+        catch (TargetInvocationException ex)
+        {
+            // MethodInfo.Invoke wraps a synchronous throw from the hook. Unwrap so callers see
+            // the hook's real exception (with its original stack trace), not the reflection wrapper.
+            ExceptionDispatchInfo.Throw(ex.InnerException ?? ex);
+        }
+    }
+
+    /// <summary>
+    /// Returns the train's overridden <c>OnQueue</c> method, or null when the train does not
+    /// override the no-op <c>ServiceTrain&lt;,&gt;.OnQueue</c>. Cached per type; the reflection
+    /// runs once.
+    /// </summary>
+    private static MethodInfo? ResolveOnQueueOverride(Type implementationType) =>
+        OnQueueOverrideCache.GetOrAdd(
+            implementationType,
+            static type =>
+            {
+                var method = type.GetMethod(
+                    "OnQueue",
+                    BindingFlags.Instance | BindingFlags.NonPublic
+                );
+
+                var declaringType = method?.DeclaringType;
+                if (declaringType is { IsGenericType: true })
+                    declaringType = declaringType.GetGenericTypeDefinition();
+
+                return declaringType != typeof(ServiceTrain<,>) ? method : null;
+            }
+        );
 
     private async Task AuthorizeAsync(TrainRegistration registration, CancellationToken ct)
     {
