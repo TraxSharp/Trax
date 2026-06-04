@@ -26,6 +26,7 @@ public class TrainLifecycleOverrideTests : TestSetup
             .AddScopedTraxRoute<IOutputRecordingTrain, OutputRecordingTrain>()
             .AddScopedTraxRoute<ITypedAccessTrain, TypedAccessTrain>()
             .AddScopedTraxRoute<IFailingTypedAccessTrain, FailingTypedAccessTrain>()
+            .AddScopedTraxRoute<IQueueRecordingTrain, QueueRecordingTrain>()
             .BuildServiceProvider();
 
     #region OnStarted
@@ -381,6 +382,20 @@ public class TrainLifecycleOverrideTests : TestSetup
     #region TypedAccess
 
     [Test]
+    public async Task Run_OnStarted_TrainInputIsTyped()
+    {
+        // Regression guard: OnStarted must observe the input. The input object is set
+        // before the OnStarted hooks fire, so TrainInput/GetInput<T>() are populated there
+        // just like in OnCompleted/OnFailed.
+        var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
+
+        await train.Run("hello");
+
+        train.CapturedStartedInput.Should().Be("hello");
+        train.CapturedStartedMetadataInput.Should().Be("hello");
+    }
+
+    [Test]
     public async Task Run_OnCompleted_TrainInputIsTyped()
     {
         var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
@@ -455,6 +470,50 @@ public class TrainLifecycleOverrideTests : TestSetup
         await train.Run("hello");
 
         train.CapturedWrongTypeInput.Should().Be(0);
+    }
+
+    #endregion
+
+    #region OnQueue
+
+    [Test]
+    public async Task OnQueue_Override_ReceivesMetadataWithInputAndExternalId()
+    {
+        var train = (QueueRecordingTrain)
+            Scope.ServiceProvider.GetRequiredService<IQueueRecordingTrain>();
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(IQueueRecordingTrain).FullName!,
+                ExternalId = "ext-queue-1",
+                Input = "hello",
+            }
+        );
+
+        await train.InvokeOnQueueAsync(metadata, CancellationToken.None);
+
+        train.QueueCalled.Should().BeTrue();
+        train.QueuedExternalId.Should().Be("ext-queue-1");
+        train.QueuedInput.Should().Be("hello");
+    }
+
+    [Test]
+    public async Task OnQueue_ThrowingOverride_PropagatesException()
+    {
+        var train = (QueueRecordingTrain)
+            Scope.ServiceProvider.GetRequiredService<IQueueRecordingTrain>();
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(IQueueRecordingTrain).FullName!,
+                ExternalId = "boom",
+                Input = "throw",
+            }
+        );
+
+        var act = async () => await train.InvokeOnQueueAsync(metadata, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*OnQueue*");
     }
 
     #endregion
@@ -690,9 +749,18 @@ public class TrainLifecycleOverrideTests : TestSetup
         public string? CapturedMetadataInput { get; private set; }
         public TestOutputDto? CapturedMetadataOutput { get; private set; }
         public int CapturedWrongTypeInput { get; private set; }
+        public string? CapturedStartedInput { get; private set; }
+        public string? CapturedStartedMetadataInput { get; private set; }
 
         protected override async Task<Either<Exception, TestOutputDto>> RunInternal(string input) =>
             new TestOutputDto($"processed:{input}", 42);
+
+        protected override Task OnStarted(Metadata metadata, CancellationToken ct)
+        {
+            CapturedStartedInput = TrainInput;
+            CapturedStartedMetadataInput = metadata.GetInput<string>();
+            return Task.CompletedTask;
+        }
 
         protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
         {
@@ -726,6 +794,35 @@ public class TrainLifecycleOverrideTests : TestSetup
             CapturedInput = TrainInput;
             CapturedOutput = TrainOutput;
             return Task.CompletedTask;
+        }
+    }
+
+    private interface IQueueRecordingTrain : IServiceTrain<string, string> { }
+
+    private class QueueRecordingTrain : ServiceTrain<string, string>, IQueueRecordingTrain
+    {
+        public bool QueueCalled { get; private set; }
+        public string? QueuedExternalId { get; private set; }
+        public string? QueuedInput { get; private set; }
+
+        protected override async Task<Either<Exception, string>> RunInternal(string input) => input;
+
+        // OnQueue is protected; expose it so the test can drive it directly the same way the
+        // mediator's queue path does (via reflection).
+        public Task InvokeOnQueueAsync(Metadata metadata, CancellationToken ct) =>
+            OnQueue(metadata, ct);
+
+        protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
+        {
+            // Exercise the base no-op, then record.
+            await base.OnQueue(metadata, ct);
+
+            QueueCalled = true;
+            QueuedExternalId = metadata.ExternalId;
+            QueuedInput = metadata.GetInput<string>();
+
+            if (QueuedInput == "throw")
+                throw new InvalidOperationException("OnQueue rejected the enqueue");
         }
     }
 

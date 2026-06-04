@@ -135,6 +135,29 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         Task.CompletedTask;
 
     /// <summary>
+    /// Called synchronously at ENQUEUE time (inside the mediator's queue path), BEFORE the
+    /// work queue row is inserted. Does NOT fire on the synchronous run path, and does NOT
+    /// fire again when the background dispatcher later runs the train.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="OnStarted"/>/<see cref="OnCompleted"/>/<see cref="OnFailed"/>, an
+    /// exception thrown here is NOT swallowed: it propagates out of the enqueue call and
+    /// aborts the enqueue (no work queue row is written). Use this only for work that must
+    /// succeed for the mutation to be accepted.
+    ///
+    /// Idempotency: the deferred background run re-executes the full <c>Junctions()</c> chain,
+    /// so any effect you perform here will be performed again by the chain when the job runs.
+    /// Make it idempotent.
+    ///
+    /// The train is not initialized at enqueue time, so <see cref="Metadata"/> and
+    /// <c>TrainInput</c> are unavailable. Read everything from the passed <paramref name="metadata"/>:
+    /// the input via <c>metadata.GetInput&lt;T&gt;()</c>, and <c>metadata.ExternalId</c> to
+    /// correlate with the eventual run (the run executes under the same ExternalId). <c>Id</c>,
+    /// <c>ManifestId</c>, and <c>ScheduledTime</c> are unset because no run exists yet.
+    /// </remarks>
+    protected virtual Task OnQueue(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
     /// Overrides the base Train Run method to add database tracking and logging capabilities.
     /// </summary>
     /// <param name="input">The input data for the train</param>
@@ -155,6 +178,12 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         Metadata.AssertLoaded();
         await EffectRunner.SaveChanges(CancellationToken);
 
+        // Make the typed input available to lifecycle hooks before any of them fire, so
+        // OnStarted observes the same input as OnCompleted/OnFailed. This sets the in-memory
+        // object only; the input column is persisted later, so the initial Pending row above
+        // is unchanged.
+        Metadata.SetInputObject(input);
+
         try
         {
             await LifecycleHookRunner.OnStarted(Metadata, CancellationToken);
@@ -173,7 +202,6 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             }
 
             Logger?.LogTrace("Running Train: ({TrainName})", TrainName);
-            Metadata.SetInputObject(input);
             var result = await RunInternal(input);
 
             if (result.IsLeft)

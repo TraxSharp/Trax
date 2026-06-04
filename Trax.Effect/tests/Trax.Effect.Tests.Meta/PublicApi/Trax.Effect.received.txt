@@ -1084,6 +1084,7 @@ namespace Trax.Effect.Services.ServiceTrain
         protected virtual System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         protected virtual System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         protected virtual System.Threading.Tasks.Task OnFailed(Trax.Effect.Models.Metadata.Metadata metadata, System.Exception exception, System.Threading.CancellationToken ct) { }
+        protected virtual System.Threading.Tasks.Task OnQueue(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         protected virtual System.Threading.Tasks.Task OnStarted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         public override System.Threading.Tasks.Task<TOut> Run(TIn input, System.Threading.CancellationToken cancellationToken = default) { }
         public virtual System.Threading.Tasks.Task<TOut> Run(TIn input, Trax.Effect.Models.Metadata.Metadata metadata) { }
