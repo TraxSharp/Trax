@@ -101,7 +101,7 @@ Trax treats cancellation as a first-class state. A cancelled train transitions t
 
 | Feature | Trax | Quartz.NET | Hangfire |
 |---|---|---|---|
-| Lifecycle hooks | `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled` | `IJobListener`, `ITriggerListener`, `ISchedulerListener` | `IElectStateFilter`, `IApplyStateFilter` |
+| Lifecycle hooks | `OnQueue`, `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled` | `IJobListener`, `ITriggerListener`, `ISchedulerListener` | `IElectStateFilter`, `IApplyStateFilter` |
 | Junction-level progress | Yes, real-time "currently running junction" via `AddJunctionProgress()` | No (single-unit jobs) | No (single-unit jobs) |
 | Real-time subscriptions | GraphQL subscriptions via `GraphQLSubscriptionHook` | No | SignalR via community packages |
 

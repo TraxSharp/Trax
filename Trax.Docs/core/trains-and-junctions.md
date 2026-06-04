@@ -265,9 +265,43 @@ public class CreateUserTrain(ISlackClient slack)
 }
 ```
 
-Available overrides: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. All default to no-op. Exceptions in overrides are caught and logged and never cause the train to fail.
+Available overrides: `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`. All default to no-op. Exceptions in overrides are caught and logged and never cause the train to fail. Each hook receives the metadata populated with everything known at that point: `OnStarted` sees the typed input (via `TrainInput` or `metadata.GetInput<T>()`); `OnCompleted` additionally sees the output; `OnFailed`/`OnCancelled` see the failure state.
 
 These work alongside [global lifecycle hooks](/docs/sdk-reference/configuration/add-lifecycle-hook). Global hooks fire first, then per-train overrides.
+
+### OnQueue (enqueue-time hook)
+
+`OnQueue` is a fifth override that fires at a different moment from the others: synchronously inside the mediator's QUEUE path (`ITrainExecutionService.QueueAsync`), **before** the work queue row is inserted. The other four fire when the train *runs*; `OnQueue` fires when a QUEUE mutation is *accepted*, before the train is scheduled. It does not fire on the synchronous RUN path, and it does not fire again when the scheduler later runs the train.
+
+Use it to perform a side-effect the instant a mutation is accepted, instead of waiting for the deferred run. A common case is an optimistic write: persist a provisional row so the change is visible immediately, then let the real run reconcile it.
+
+```csharp
+public class ProcessMatchResultTrain
+    : ServiceTrain<ProcessMatchResultInput, ProcessMatchResultOutput>, IProcessMatchResultTrain
+{
+    [Inject]
+    public IDbContextFactory<GameDbContext>? GameDbFactory { get; set; }
+
+    protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
+    {
+        var input = metadata.GetInput<ProcessMatchResultInput>();
+        if (input is null || GameDbFactory is null)
+            return;
+
+        await using var db = await GameDbFactory.CreateDbContextAsync(ct);
+        db.Matches.Add(new MatchRecord { MatchId = input.MatchId, Region = input.Region });
+        await db.SaveChangesAsync(ct);
+    }
+}
+```
+
+`OnQueue` differs from the other four hooks in three ways:
+
+- **Exceptions propagate.** A throw is not swallowed: it aborts the enqueue and no work queue row is written. Use it only for work that must succeed for the mutation to be accepted.
+- **The train is not initialized.** `this.Metadata` and `TrainInput` are unavailable. Read everything from the passed `metadata`: the input via `metadata.GetInput<T>()`, and `metadata.ExternalId` to correlate with the eventual run, which executes under the same ExternalId. `Id`, `ManifestId`, and `ScheduledTime` are unset because no run exists yet.
+- **It must be idempotent.** The deferred run re-executes the full `Junctions()` chain, so any effect the chain also performs will happen again. Write `OnQueue` so running it plus the chain is safe.
+
+Property dependencies marked `[Inject]` (like `GameDbFactory` above) are populated before `OnQueue` is called, the same as during a normal run. Trains that do not override `OnQueue` skip resolution entirely, so the enqueue path is unaffected.
 
 ## SDK Reference
 

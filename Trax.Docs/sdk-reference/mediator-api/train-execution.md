@@ -67,6 +67,7 @@ Task<QueueTrainResult> QueueAsync(
 - `InvalidOperationException` if no train is registered with the given name. The message includes a hint to use `ITrainDiscoveryService.DiscoverTrains()` to list available trains.
 - `InvalidOperationException` if JSON deserialization returns null.
 - `TrainAuthorizationException` if the train has `[TraxAuthorize]` requirements that the current user does not satisfy. Only applies when `ITrainAuthorizationService` is registered (i.e., the API layer is in use).
+- Any exception thrown by the train's [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) hook, if the train overrides it. The hook fires before the entry is persisted, so a throw aborts the enqueue and no entry is written.
 
 ### What it does
 
@@ -75,8 +76,9 @@ Task<QueueTrainResult> QueueAsync(
 3. Deserializes `inputJson` to the train's `InputType`.
 4. Re-serializes the input using manifest serialization options (normalizes the JSON).
 5. Creates a `WorkQueue` entry with the train name, serialized input, input type name, and priority.
-6. Persists the entry via the data context.
-7. Returns the entry's ID and external ID.
+6. If the train overrides [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook), resolves the train and invokes the hook with the entry's `ExternalId` and the input. A throw aborts the enqueue. Trains that do not override it are never resolved here.
+7. Persists the entry via the data context.
+8. Returns the entry's ID and external ID.
 
 ## RunAsync
 
