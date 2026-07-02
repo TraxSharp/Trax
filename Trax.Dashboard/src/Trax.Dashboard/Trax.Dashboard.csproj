@@ -9,16 +9,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" Version="1.*" />
-    <PackageReference Include="Trax.Effect.Data" Version="1.*" />
-    <PackageReference Include="Trax.Mediator" Version="1.*" />
-    <PackageReference Include="Trax.Scheduler" Version="1.*" />
-    <PackageReference Include="Trax.Api.GraphQL.PersistedOperations" Version="1.*" />
+    <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Effect.Data" />
+    <PackageReference Include="Trax.Mediator" />
+    <PackageReference Include="Trax.Scheduler" />
+    <PackageReference Include="Trax.Api.GraphQL.PersistedOperations" />
   </ItemGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="Radzen.Blazor" Version="6.*" />
+    <PackageReference Include="Radzen.Blazor" />
   </ItemGroup>
 
   <!--

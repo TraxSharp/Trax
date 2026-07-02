@@ -22,7 +22,6 @@ x64/
 *_p.c
 *_i.h
 *.ilk
-*.meta
 *.obj
 *.pch
 *.pdb
@@ -149,3 +148,12 @@ node_modules/
 
 # MSBuild static graph restore cache
 *.csproj.lscache
+
+# Local CPM override (sets TraxLocalVersion for locally-packed Trax.* packages)
+trax-local.props
+
+# The "*.meta" rule above matches the Tests.Meta directory case-insensitively
+# (core.ignorecase=true), which excludes its contents (including the committed CPM
+# lock file). Un-ignore the directory so its lock file can be tracked.
+!tests/Trax.Dashboard.Tests.Meta/
+!tests/Trax.Dashboard.Tests.Meta/packages.lock.json

@@ -4,6 +4,9 @@ on:
   pull_request:
     branches: [main]
 
+# Default to no permissions; the job widens only what it needs.
+permissions: {}
+
 env:
   DOTNET_VERSION: '10.0.x'
 
@@ -11,18 +14,40 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Guard against local-dev lockfile versions
+        run: |
+          if grep -rln '"resolved": "1.99.99"' --include=packages.lock.json . ; then
+            echo "::error::A packages.lock.json contains the local-dev version 1.99.99. Regenerate lockfiles in CI mode (remove trax-local.props) before committing."
+            exit 1
+          fi
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2  # v5.3.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           dotnet-quality: preview
-      - run: dotnet tool restore
-      - run: dotnet csharpier check .
-      - run: dotnet build --configuration Release
-      - run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
+      - name: Restore tools
+        run: dotnet tool restore
+      - name: Check formatting
+        run: dotnet csharpier check .
+      - name: Restore (locked)
+        run: dotnet restore --locked-mode
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+      - name: Test
+        run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac  # v5.5.5
         with:
           directory: ./TestResults
           fail_ci_if_error: false

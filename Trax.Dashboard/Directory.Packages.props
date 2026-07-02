@@ -1,0 +1,54 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Some packages (Radzen.Blazor 6.*, Microsoft.Extensions.DependencyInjection 10.*)
+         intentionally float. CPM rejects floating PackageVersion items unless this is set. -->
+    <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
+  </PropertyGroup>
+
+  <!-- Local development override: sets TraxLocalVersion to 1.99.99 so locally-packed
+       Trax.* packages win over the CI-pinned versions below. Not committed. -->
+  <Import Project="trax-local.props" Condition="Exists('trax-local.props')" />
+
+  <!-- Trax.* cross-repo packages. CI pins the exact resolved version; a local build
+       can override via TraxLocalVersion (set by trax-local.props). -->
+  <ItemGroup>
+    <PackageVersion
+      Include="Trax.Api.GraphQL.PersistedOperations"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Mediator"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.20.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Scheduler"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.29.0'))"
+    />
+  </ItemGroup>
+
+  <!-- Third-party packages, pinned to exact versions. -->
+  <ItemGroup>
+    <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.2" />
+    <PackageVersion Include="bunit" Version="1.40.0" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="FluentAssertions" Version="8.8.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.*" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageVersion Include="NUnit" Version="4.4.0" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.11.2" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.1.0" />
+    <PackageVersion Include="PublicApiGenerator" Version="11.4.5" />
+    <PackageVersion Include="Radzen.Blazor" Version="6.*" />
+  </ItemGroup>
+</Project>
