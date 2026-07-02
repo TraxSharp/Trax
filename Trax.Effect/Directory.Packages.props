@@ -1,0 +1,62 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Let a central PackageVersion pin a transitively-referenced package
+         (used to force a patched SQLite native lib below). -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <!-- Local-dev override: pack-local.sh writes trax-local.props (gitignored) with TraxLocalVersion=1.99.99. -->
+  <Import
+    Project="$(MSBuildThisFileDirectory)trax-local.props"
+    Condition="Exists('$(MSBuildThisFileDirectory)trax-local.props')"
+  />
+  <ItemGroup>
+    <!-- Trax.* : exact CI pin, overridable by TraxLocalVersion -->
+    <PackageVersion
+      Include="Trax.Core"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.6.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Core.Testing"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.6.0'))"
+    />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- third-party : plain exact -->
+    <PackageVersion Include="BenchmarkDotNet" Version="0.14.0" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="dbup-core" Version="5.0.87" />
+    <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.2" />
+    <PackageVersion Include="dbup-postgresql" Version="5.0.40" />
+    <PackageVersion Include="dbup-sqlite" Version="5.0.40" />
+    <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
+    <PackageVersion Include="FluentAssertions" Version="8.8.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageVersion Include="Npgsql" Version="10.0.1" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="NUnit" Version="4.4.0" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.11.2" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.1.0" />
+    <PackageVersion Include="PublicApiGenerator" Version="11.4.5" />
+    <PackageVersion Include="RabbitMQ.Client" Version="7.2.1" />
+    <!-- Transitively pulled by EF Core Sqlite. bundle 3.0.3 brings the native
+         lib.e_sqlite3 3.50.3 (SQLite 3.50.3), fixing CVE-2025-6965. -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+  </ItemGroup>
+</Project>

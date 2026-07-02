@@ -15,10 +15,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
-    <PackageReference Include="dbup-core" Version="5.0.87" />
-    <PackageReference Include="dbup-sqlite" Version="5.0.40" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="dbup-core" />
+    <PackageReference Include="dbup-sqlite" />
   </ItemGroup>
 
   <ItemGroup>
