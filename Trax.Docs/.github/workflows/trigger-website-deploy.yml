@@ -4,9 +4,23 @@ on:
   push:
     branches: [main]
 
+# The deploy job calls no GitHub API; it needs no token permissions.
+permissions: {}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Gate production deploys behind a protected environment.
+    # Must be configured in repo Settings -> Environments.
+    environment: website-deploy
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
+        with:
+          egress-policy: audit
+
       - name: Trigger Vercel deploy
-        run: curl -s -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
+        env:
+          DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: curl -s -X POST "$DEPLOY_HOOK"
