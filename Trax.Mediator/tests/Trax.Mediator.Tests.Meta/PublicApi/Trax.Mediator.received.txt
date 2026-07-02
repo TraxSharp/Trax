@@ -131,51 +131,32 @@ namespace Trax.Mediator.Services.TrainDiscovery
         public TrainDiscoveryService(Microsoft.Extensions.DependencyInjection.IServiceCollection serviceCollection) { }
         public System.Collections.Generic.IReadOnlyList<Trax.Mediator.Services.TrainDiscovery.TrainRegistration> DiscoverTrains() { }
     }
-    [System.Runtime.CompilerServices.RequiredMember]
     public class TrainRegistration
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public TrainRegistration() { }
         public string? GraphQLDeprecationReason { get; init; }
         public string? GraphQLDescription { get; init; }
         public string? GraphQLName { get; init; }
         public string? GraphQLNamespace { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public Trax.Effect.Attributes.GraphQLOperation GraphQLOperations { get; init; }
+        public required Trax.Effect.Attributes.GraphQLOperation GraphQLOperations { get; init; }
         public bool HasAllowAnonymousAttribute { get; init; }
         public bool HasAuthorizeAttribute { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public System.Type ImplementationType { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string ImplementationTypeName { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public System.Type InputType { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string InputTypeName { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public bool IsBroadcastEnabled { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public bool IsMutation { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public bool IsQuery { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public bool IsRemote { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public Microsoft.Extensions.DependencyInjection.ServiceLifetime Lifetime { get; init; }
+        public required System.Type ImplementationType { get; init; }
+        public required string ImplementationTypeName { get; init; }
+        public required System.Type InputType { get; init; }
+        public required string InputTypeName { get; init; }
+        public required bool IsBroadcastEnabled { get; init; }
+        public required bool IsMutation { get; init; }
+        public required bool IsQuery { get; init; }
+        public required bool IsRemote { get; init; }
+        public required Microsoft.Extensions.DependencyInjection.ServiceLifetime Lifetime { get; init; }
         public int? MaxConcurrentRun { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public System.Type OutputType { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string OutputTypeName { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public System.Collections.Generic.IReadOnlyList<string> RequiredPolicies { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public System.Collections.Generic.IReadOnlyList<string> RequiredRoles { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public System.Type ServiceType { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string ServiceTypeName { get; init; }
+        public required System.Type OutputType { get; init; }
+        public required string OutputTypeName { get; init; }
+        public required System.Collections.Generic.IReadOnlyList<string> RequiredPolicies { get; init; }
+        public required System.Collections.Generic.IReadOnlyList<string> RequiredRoles { get; init; }
+        public required System.Type ServiceType { get; init; }
+        public required string ServiceTypeName { get; init; }
     }
 }
 namespace Trax.Mediator.Services.TrainExecution
