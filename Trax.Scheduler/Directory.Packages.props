@@ -1,0 +1,94 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Let a central PackageVersion pin a transitively-referenced package
+         (used to force a patched SQLite native lib below). -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!-- Local dev override: when present, trax-local.props sets TraxLocalVersion (e.g. 1.99.99)
+       so the local NuGet feed wins. CI leaves it absent and the exact pins below apply. -->
+  <Import
+    Project="$(MSBuildThisFileDirectory)trax-local.props"
+    Condition="Exists('$(MSBuildThisFileDirectory)trax-local.props')"
+  />
+
+  <ItemGroup Label="Trax">
+    <PackageVersion
+      Include="Trax.Effect"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data.InMemory"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data.Postgres"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data.Sqlite"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.JunctionProvider.Logging"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.JunctionProvider.Progress"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Provider.Json"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Provider.Parameter"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Mediator"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.20.0'))"
+    />
+  </ItemGroup>
+
+  <ItemGroup Label="AWS">
+    <PackageVersion Include="AWSSDK.Lambda" Version="4.0.17.6" />
+    <PackageVersion Include="AWSSDK.SQS" Version="4.0.3.6" />
+    <PackageVersion Include="Amazon.Lambda.Core" Version="2.8.1" />
+    <PackageVersion Include="Amazon.Lambda.SQSEvents" Version="2.2.1" />
+    <PackageVersion Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.5" />
+    <PackageVersion Include="Amazon.Lambda.TestUtilities" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Microsoft">
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Testing and tooling">
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.2" />
+    <PackageVersion Include="Cronos" Version="0.8.4" />
+    <PackageVersion Include="FluentAssertions" Version="8.8.0" />
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="Npgsql" Version="10.0.1" />
+    <PackageVersion Include="NUnit" Version="4.4.0" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.11.2" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.1.0" />
+    <PackageVersion Include="PublicApiGenerator" Version="11.4.5" />
+    <!-- Transitive (via EF Core Sqlite): pull the patched native SQLite lib (CVE-2025-6965). -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+  </ItemGroup>
+</Project>
