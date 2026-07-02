@@ -10,12 +10,9 @@
       },
       "Radzen.Blazor": {
         "type": "Direct",
-        "requested": "[6.*, )",
-        "resolved": "6.6.4",
-        "contentHash": "iceQonOpdZEJaujDMyB3AMLbRENj2CKiTQmqpbITO+Xz1WVV1nU6lW0unBrEQ/A97l14xtGQLLMtvOr/EIUWPg==",
-        "dependencies": {
-          "Microsoft.CodeAnalysis.CSharp": "4.8.0"
-        }
+        "requested": "[11.*, )",
+        "resolved": "11.1.0",
+        "contentHash": "brQCciUSVqNwzkYECVWaJZKHgXlC9CqtsmUiPVbMzRekBzswNW1teymOZm/IwnoFpIvB1xxR/HXTWFGDzHBPnw=="
       },
       "Trax.Api.GraphQL.PersistedOperations": {
         "type": "Direct",
@@ -448,19 +445,6 @@
         "resolved": "7.0.0",
         "contentHash": "3aeMZ1N0lJoSyzqiP03hqemtb1BijhsJADdobn/4nsMJ8V1H+CrpuduUe4hlRdx+ikBQju1VGjMD1GJ3Sk05Eg=="
       },
-      "Microsoft.CodeAnalysis.Analyzers": {
-        "type": "Transitive",
-        "resolved": "3.3.4",
-        "contentHash": "AxkxcPR+rheX0SmvpLVIGLhOUXAKG56a64kV9VQZ4y9gR9ZmPXnqZvHJnmwLSwzrEP6junUF11vuc+aqo5r68g=="
-      },
-      "Microsoft.CodeAnalysis.Common": {
-        "type": "Transitive",
-        "resolved": "4.8.0",
-        "contentHash": "/jR+e/9aT+BApoQJABlVCKnnggGQbvGh7BKq2/wI1LamxC+LbzhcLj4Vj7gXCofl1n4E521YfF9w0WcASGg/KA==",
-        "dependencies": {
-          "Microsoft.CodeAnalysis.Analyzers": "3.3.4"
-        }
-      },
       "Microsoft.EntityFrameworkCore": {
         "type": "Transitive",
         "resolved": "10.0.8",
@@ -615,15 +599,6 @@
         "contentHash": "gxtkN3a+9biu9V9Zd5NaTO6VZWXAnS2mhQ0R/VXmSPoTuiQNZsakKikrKpDtKxrL5nUYzbRsHtl40WNq+ZBKKg==",
         "dependencies": {
           "System.IO.Hashing": "8.0.0"
-        }
-      },
-      "Microsoft.CodeAnalysis.CSharp": {
-        "type": "CentralTransitive",
-        "requested": "[4.14.0, )",
-        "resolved": "4.8.0",
-        "contentHash": "+3+qfdb/aaGD8PZRCrsdobbzGs1m9u119SkkJt8e/mk3xLJz/udLtS2T6nY27OTXxBBw10HzAbC8Z9w08VyP/g==",
-        "dependencies": {
-          "Microsoft.CodeAnalysis.Common": "[4.8.0]"
         }
       }
     }
