@@ -5,7 +5,10 @@ updates:
     schedule: { interval: "weekly" }
     open-pull-requests-limit: 10
     groups:
-      nuget-dependencies: { patterns: ["*"] }
+      # Group only minor + patch; major bumps get their own reviewable PRs.
+      nuget-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule: { interval: "weekly" }
