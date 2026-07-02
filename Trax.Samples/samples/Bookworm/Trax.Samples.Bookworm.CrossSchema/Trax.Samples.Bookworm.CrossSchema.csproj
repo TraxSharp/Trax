@@ -12,6 +12,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Trax.Samples.Bookworm.Catalog\Trax.Samples.Bookworm.Catalog.csproj" />
     <ProjectReference Include="..\Trax.Samples.Bookworm.Lending\Trax.Samples.Bookworm.Lending.csproj" />
-    <PackageReference Include="Trax.Api.GraphQL" Version="1.*" />
+    <PackageReference Include="Trax.Api.GraphQL" />
   </ItemGroup>
 </Project>

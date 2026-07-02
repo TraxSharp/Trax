@@ -1,0 +1,153 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <!--
+    Local development override. When trax-local.props sets TraxLocalVersion (e.g. 1.99.99),
+    every Trax.* package below resolves to that version against the local .nupkg feed.
+    The file is gitignored, so CI/restore without it falls back to the pinned versions.
+  -->
+  <Import Project="trax-local.props" Condition="Exists('trax-local.props')" />
+
+  <ItemGroup Label="Trax">
+    <PackageVersion
+      Include="Trax.Api"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Api.Auth"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Api.Auth.ApiKey"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Api.Auth.Jwt"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Api.GraphQL"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Api.GraphQL.Audit"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Api.GraphQL.Client"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Api.GraphQL.Client.Trax"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Api.GraphQL.Client.Typed"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Api.GraphQL.PersistedOperations"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Api.GraphQL.Testing"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Dashboard"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.14.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Broadcaster.RabbitMQ"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Broadcaster.SignalR"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data.InMemory"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data.Postgres"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data.Sqlite"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data.Testing"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.JunctionProvider.Progress"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Provider.Json"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Provider.Parameter"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Mediator"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.20.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Mediator.Testing"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.20.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Runner.Lambda"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.29.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Scheduler"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.29.0'))"
+    />
+  </ItemGroup>
+
+  <ItemGroup Label="Third-party">
+    <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.2" />
+    <PackageVersion Include="Flowthru" Version="0.26.0" />
+    <PackageVersion Include="FluentAssertions" Version="8.10.0" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="15.1.17" />
+    <PackageVersion Include="MathNet.Numerics" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
+    <!-- Referenced directly by the SQLite-using projects to override the vulnerable
+         native lib EF Core Sqlite pulls transitively (CVE-2025-6965). -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
+    <PackageVersion Include="Moq" Version="4.20.72" />
+    <PackageVersion Include="NUnit" Version="4.6.1" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.14.0" />
+    <PackageVersion Include="NUnit.Engine" Version="3.22.0" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.2.0" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageVersion Include="Plotly.NET" Version="5.1.0" />
+    <PackageVersion Include="Plotly.NET.CSharp" Version="0.13.0" />
+    <PackageVersion Include="Plotly.NET.ImageExport" Version="6.1.0" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+  </ItemGroup>
+</Project>

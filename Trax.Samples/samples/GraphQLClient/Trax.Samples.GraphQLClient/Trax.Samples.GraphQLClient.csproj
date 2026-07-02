@@ -9,10 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="HotChocolate.AspNetCore" Version="15.*" />
-    <PackageReference Include="Trax.Api.GraphQL.Client" Version="1.*" />
-    <PackageReference Include="Trax.Api.GraphQL.Client.Trax" Version="1.*" />
-    <PackageReference Include="Trax.Api.GraphQL.Client.Typed" Version="1.*" />
+    <PackageReference Include="HotChocolate.AspNetCore" />
+    <PackageReference Include="Trax.Api.GraphQL.Client" />
+    <PackageReference Include="Trax.Api.GraphQL.Client.Trax" />
+    <PackageReference Include="Trax.Api.GraphQL.Client.Typed" />
   </ItemGroup>
 
   <ItemGroup>

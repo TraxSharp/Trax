@@ -11,16 +11,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" Version="1.*" />
-    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
-    <PackageReference Include="Trax.Mediator" Version="1.*" />
-    <PackageReference Include="Trax.Scheduler" Version="1.*" />
+    <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" />
+    <PackageReference Include="Trax.Mediator" />
+    <PackageReference Include="Trax.Scheduler" />
 
     <!--
             Flowthru — data pipeline framework by @Spelkington
             https://github.com/chaoticgoodcomputing/flowthru
         -->
-    <PackageReference Include="Flowthru" Version="0.1.24" />
+    <PackageReference Include="Flowthru" />
 
     <!--
             KedroSpaceflights — Catalog, Pipeline factories, Schemas

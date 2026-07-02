@@ -15,9 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="HotChocolate.AspNetCore" Version="15.*" />
-    <PackageReference Include="Trax.Effect" Version="1.*" />
-    <PackageReference Include="Trax.Effect.Data.Sqlite" Version="1.*" />
-    <PackageReference Include="Trax.Mediator" Version="1.*" />
+    <PackageReference Include="HotChocolate.AspNetCore" />
+    <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Effect.Data.Sqlite" />
+    <!-- Override the vulnerable native SQLite lib EF Core Sqlite pulls transitively (CVE-2025-6965). -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+    <PackageReference Include="Trax.Mediator" />
   </ItemGroup>
 </Project>

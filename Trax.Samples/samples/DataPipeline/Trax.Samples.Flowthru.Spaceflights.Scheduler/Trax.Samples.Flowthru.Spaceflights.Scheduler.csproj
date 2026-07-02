@@ -13,11 +13,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.*" />
-    <PackageReference Include="Trax.Effect.Data" Version="1.*" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.*" />
-    <PackageReference Include="Trax.Dashboard" Version="1.*" />
+    <PackageReference Include="Trax.Effect.Provider.Json" />
+    <PackageReference Include="Trax.Effect.Data.InMemory" />
+    <PackageReference Include="Trax.Effect.Data" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />
+    <PackageReference Include="Trax.Dashboard" />
   </ItemGroup>
 </Project>
