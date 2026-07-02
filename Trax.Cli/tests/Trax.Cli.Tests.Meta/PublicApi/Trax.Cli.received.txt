@@ -41,75 +41,49 @@ namespace Trax.Cli.Generator
 }
 namespace Trax.Cli.Models
 {
-    [System.Runtime.CompilerServices.RequiredMember]
     public class ApiEnum
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public ApiEnum() { }
         public string? Description { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string Name { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public System.Collections.Generic.List<string> Values { get; init; }
+        public required string Name { get; init; }
+        public required System.Collections.Generic.List<string> Values { get; init; }
     }
-    [System.Runtime.CompilerServices.RequiredMember]
     public class ApiField
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public ApiField() { }
         public string? Description { get; init; }
         public bool IsNullable { get; init; }
         public bool IsRequired { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string Name { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string TypeName { get; set; }
+        public required string Name { get; init; }
+        public required string TypeName { get; set; }
     }
-    [System.Runtime.CompilerServices.RequiredMember]
     public class ApiOperation
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public ApiOperation() { }
         public string? Description { get; init; }
         public string? Group { get; init; }
         public string? HttpMethod { get; init; }
         public string? HttpPath { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public Trax.Cli.Models.ApiType InputType { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public Trax.Cli.Models.OperationKind Kind { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string Name { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public Trax.Cli.Models.ApiType OutputType { get; init; }
+        public required Trax.Cli.Models.ApiType InputType { get; init; }
+        public required Trax.Cli.Models.OperationKind Kind { get; init; }
+        public required string Name { get; init; }
+        public required Trax.Cli.Models.ApiType OutputType { get; init; }
     }
-    [System.Runtime.CompilerServices.RequiredMember]
     public class ApiSchema
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public ApiSchema() { }
         public System.Collections.Generic.List<Trax.Cli.Models.ApiEnum> Enums { get; init; }
         public System.Collections.Generic.List<Trax.Cli.Models.ApiOperation> Operations { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string SchemaType { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string SourceFile { get; init; }
+        public required string SchemaType { get; init; }
+        public required string SourceFile { get; init; }
         public System.Collections.Generic.List<Trax.Cli.Models.ApiType> Types { get; init; }
     }
-    [System.Runtime.CompilerServices.RequiredMember]
     public class ApiType
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public ApiType() { }
         public System.Collections.Generic.List<Trax.Cli.Models.ApiField> Fields { get; init; }
         public bool IsBuiltIn { get; init; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string Name { get; init; }
+        public required string Name { get; init; }
     }
     public enum OperationKind
     {
