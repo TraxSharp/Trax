@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Mediator" Version="1.*" />
+    <PackageReference Include="Trax.Mediator" />
   </ItemGroup>
 
   <ItemGroup>

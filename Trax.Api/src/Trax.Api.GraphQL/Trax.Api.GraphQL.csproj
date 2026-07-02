@@ -22,10 +22,10 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="HotChocolate.AspNetCore" Version="15.*" />
-    <PackageReference Include="HotChocolate.AspNetCore.Authorization" Version="15.*" />
-    <PackageReference Include="HotChocolate.CostAnalysis" Version="15.*" />
-    <PackageReference Include="HotChocolate.Data" Version="15.*" />
-    <PackageReference Include="HotChocolate.Data.EntityFramework" Version="15.*" />
+    <PackageReference Include="HotChocolate.AspNetCore" />
+    <PackageReference Include="HotChocolate.AspNetCore.Authorization" />
+    <PackageReference Include="HotChocolate.CostAnalysis" />
+    <PackageReference Include="HotChocolate.Data" />
+    <PackageReference Include="HotChocolate.Data.EntityFramework" />
   </ItemGroup>
 </Project>

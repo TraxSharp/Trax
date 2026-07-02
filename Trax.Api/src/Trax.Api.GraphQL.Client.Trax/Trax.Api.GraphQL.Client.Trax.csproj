@@ -19,11 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="HotChocolate" Version="15.*" />
-    <PackageReference Include="HotChocolate.Execution" Version="15.*" />
-    <PackageReference Include="Trax.Effect" Version="1.*" />
-    <PackageReference Include="Trax.Mediator" Version="1.*" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.*" />
+    <PackageReference Include="HotChocolate" />
+    <PackageReference Include="HotChocolate.Execution" />
+    <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Mediator" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
   </ItemGroup>
 </Project>

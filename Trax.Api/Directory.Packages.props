@@ -1,0 +1,100 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Let a central PackageVersion pin a transitively-referenced package
+         (used to force a patched SQLite native lib below). -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!--
+    Local development override. When trax-local.props exists (created by the
+    workspace pack-local.sh), it sets TraxLocalVersion=1.99.99 so the locally
+    packed Trax.* packages win over the CI-pinned versions below. The file is
+    git-ignored and absent in CI, where the exact pins are used.
+  -->
+  <Import Project="trax-local.props" Condition="Exists('trax-local.props')" />
+
+  <!-- Trax cross-repo packages. CI pins below; overridable via TraxLocalVersion. -->
+  <ItemGroup>
+    <PackageVersion
+      Include="Trax.Core.Testing"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.6.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data.InMemory"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data.Postgres"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Data.Sqlite"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Provider.Json"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.Provider.Parameter"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Mediator"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.20.0'))"
+    />
+    <PackageVersion
+      Include="Trax.Scheduler"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.29.0'))"
+    />
+  </ItemGroup>
+
+  <!-- Third-party packages, pinned to exact resolved versions. -->
+  <ItemGroup>
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.2" />
+    <PackageVersion Include="FluentAssertions" Version="8.8.0" />
+    <PackageVersion Include="GraphQL" Version="8.8.4" />
+    <PackageVersion Include="GraphQL.Client" Version="6.1.0" />
+    <PackageVersion Include="GraphQL.Client.Serializer.SystemTextJson" Version="6.1.0" />
+    <PackageVersion Include="HotChocolate" Version="15.1.17" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="15.1.17" />
+    <PackageVersion Include="HotChocolate.AspNetCore.Authorization" Version="15.1.17" />
+    <PackageVersion Include="HotChocolate.CostAnalysis" Version="15.1.17" />
+    <PackageVersion Include="HotChocolate.Data" Version="15.1.17" />
+    <PackageVersion Include="HotChocolate.Data.EntityFramework" Version="15.1.17" />
+    <PackageVersion Include="HotChocolate.Execution" Version="15.1.17" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.5" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
+    <PackageVersion
+      Include="Microsoft.Extensions.DependencyInjection.Abstractions"
+      Version="10.0.9"
+    />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="NUnit" Version="4.4.0" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.11.2" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.1.0" />
+    <PackageVersion Include="PublicApiGenerator" Version="11.4.5" />
+    <PackageVersion Include="RabbitMQ.Client" Version="7.2.1" />
+    <!-- Transitive (via EF Core Sqlite): pull the patched native SQLite lib (CVE-2025-6965). -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+  </ItemGroup>
+</Project>
