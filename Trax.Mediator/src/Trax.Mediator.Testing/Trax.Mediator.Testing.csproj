@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Core.Testing" Version="1.*" />
-    <PackageReference Include="NUnit" Version="4.4.0" />
+    <PackageReference Include="Trax.Core.Testing" />
+    <PackageReference Include="NUnit" />
   </ItemGroup>
 </Project>

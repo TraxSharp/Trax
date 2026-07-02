@@ -16,7 +16,7 @@ public class CrossRepoPackageReferenceTests
     };
 
     [Test]
-    public void AllCrossRepo_TraxPackageReferences_Use_OnePointStar()
+    public void AllCrossRepo_TraxPackageReferences_AreCentrallyManaged()
     {
         var thisRepoOwnPrefix = DetectThisRepoPrefix();
         var offenders = new List<string>();
@@ -37,21 +37,26 @@ public class CrossRepoPackageReferenceTests
             foreach (var pkg in doc.Descendants("PackageReference"))
             {
                 var include = pkg.Attribute("Include")?.Value;
-                var version = pkg.Attribute("Version")?.Value;
+                var version = pkg.Attribute("Version")?.Value ?? pkg.Element("Version")?.Value;
                 if (string.IsNullOrEmpty(include))
                     continue;
                 if (!IsTraxPackage(include))
                     continue;
+
+                // Intra-repo references (a project pointing at a sibling package in the same repo)
+                // are rare but legal and are not centrally pinned here; skip them.
                 if (
                     thisRepoOwnPrefix is not null
                     && include.StartsWith(thisRepoOwnPrefix, StringComparison.Ordinal)
                 )
                     continue;
 
-                if (version != "1.*")
+                // Under Central Package Management the version lives in Directory.Packages.props,
+                // so a cross-repo Trax reference must carry no inline Version.
+                if (version is not null)
                 {
                     offenders.Add(
-                        $"{RepoRoot.Relative(csproj)} -> {include} Version=\"{version ?? "<missing>"}\""
+                        $"{RepoRoot.Relative(csproj)} -> {include} carries inline Version=\"{version}\""
                     );
                 }
             }
@@ -60,9 +65,9 @@ public class CrossRepoPackageReferenceTests
         offenders
             .Should()
             .BeEmpty(
-                "CLAUDE.md > Local Development Workflow requires all cross-repo Trax PackageReferences "
-                    + "to use Version=\"1.*\" so the local .nupkg/ feed (versioned 1.99.99) wins over nuget.org. "
-                    + "Offenders:\n  "
+                "cross-repo Trax package references must be managed by Central Package Management: no "
+                    + "inline Version on the PackageReference, with the exact pin in Directory.Packages.props "
+                    + "(overridden for local dev to the packed 1.99.99 via trax-local.props). Offenders:\n  "
                     + string.Join("\n  ", offenders)
             );
     }
