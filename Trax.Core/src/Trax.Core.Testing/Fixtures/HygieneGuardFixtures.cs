@@ -67,7 +67,7 @@ public abstract class RepoConventionGuardFixture
     }
 
     [Test]
-    public void Cross_repo_package_references_use_the_floating_version()
+    public void Cross_repo_package_references_are_centrally_managed()
     {
         var result = RepoConventionGuards.CrossRepoPackageVersions(Options);
         Assert.That(result.Offenders, Is.Empty, result.FailureMessage);

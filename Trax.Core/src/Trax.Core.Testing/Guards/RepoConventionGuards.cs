@@ -48,8 +48,11 @@ public static class RepoConventionGuards
     }
 
     /// <summary>
-    /// Asserts every cross-repo Trax package reference uses the expected floating version, so local
-    /// feed builds resolve consistently.
+    /// Asserts every cross-repo Trax package reference is managed by Central Package Management: it
+    /// carries no inline <c>Version</c>, and an exact <c>&lt;PackageVersion&gt;</c> pin exists in the
+    /// root <c>Directory.Packages.props</c>. Local development overrides those pins to the locally-packed
+    /// version via a gitignored <c>trax-local.props</c>; CI restores the exact pins under
+    /// <c>--locked-mode</c>.
     /// </summary>
     public static GuardResult CrossRepoPackageVersions(ArchitectureGuardOptions options)
     {
@@ -57,6 +60,26 @@ public static class RepoConventionGuards
         var root = options.RepoRootOverride ?? RepoRoot.Path;
         var offenders = new List<string>();
         var inspected = 0;
+
+        // Collect the centrally-pinned package ids from Directory.Packages.props (if present).
+        var centralPins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var cpmPath = Path.Combine(root, "Directory.Packages.props");
+        if (File.Exists(cpmPath))
+        {
+            try
+            {
+                foreach (var pv in XDocument.Load(cpmPath).Descendants("PackageVersion"))
+                {
+                    var id = pv.Attribute("Include")?.Value;
+                    if (id is not null)
+                        centralPins.Add(id);
+                }
+            }
+            catch (Exception ex)
+            {
+                offenders.Add($"Directory.Packages.props (could not parse: {ex.Message})");
+            }
+        }
 
         foreach (var csproj in SourceFiles.ProjectsUnder(root))
         {
@@ -88,14 +111,21 @@ public static class RepoConventionGuards
                 var version =
                     reference.Attribute("Version")?.Value ?? reference.Element("Version")?.Value;
 
-                if (version != options.ExpectedTraxPackageVersion)
-                    offenders.Add($"{rel} -> {include} Version=\"{version ?? "<missing>"}\"");
+                if (version is not null)
+                    offenders.Add(
+                        $"{rel} -> {include} carries inline Version=\"{version}\" (must be centrally managed)"
+                    );
+                else if (!centralPins.Contains(include))
+                    offenders.Add(
+                        $"{rel} -> {include} has no <PackageVersion> pin in Directory.Packages.props"
+                    );
             }
         }
 
         var message =
-            $"Cross-repo Trax package references (Include starts with '{options.TraxPackagePrefix}') must use "
-            + $"Version=\"{options.ExpectedTraxPackageVersion}\" so the local feed resolves correctly. "
+            $"Cross-repo Trax package references (Include starts with '{options.TraxPackagePrefix}') must be managed "
+            + "by Central Package Management: no inline Version on the PackageReference, and an exact "
+            + "<PackageVersion> pin in Directory.Packages.props (overridden for local dev via trax-local.props). "
             + "Offenders:\n  "
             + string.Join("\n  ", offenders);
 

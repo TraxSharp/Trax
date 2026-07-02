@@ -1,6 +1,10 @@
 <Project>
   <PropertyGroup>
     <Version>1.99.99</Version>
+    <!-- Audit direct + transitive dependencies and fail the build on any known
+         vulnerability (low through critical). -->
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 
   <!-- Propagate the Trax.Core analyzer to all projects in the solution -->
@@ -10,5 +14,11 @@
       ReferenceOutputAssembly="false"
       OutputItemType="Analyzer"
     />
+  </ItemGroup>
+
+  <!-- Deterministic/reproducible builds. CI source-path normalization
+       (ContinuousIntegrationBuild) is turned on by the package only when CI is detected. -->
+  <ItemGroup>
+    <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
   </ItemGroup>
 </Project>

@@ -41,8 +41,13 @@ public sealed class RepoConventionGuardFixtureSelfTest : RepoConventionGuardFixt
                 "<Project><PropertyGroup><Version>1.99.99</Version></PropertyGroup></Project>"
             )
             .Write(
+                "Directory.Packages.props",
+                "<Project><PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>"
+                    + "<ItemGroup><PackageVersion Include=\"Trax.Effect\" Version=\"1.41.0\" /></ItemGroup></Project>"
+            )
+            .Write(
                 "src/App/App.csproj",
-                "<Project><ItemGroup><PackageReference Include=\"Trax.Effect\" Version=\"1.*\" /></ItemGroup></Project>"
+                "<Project><ItemGroup><PackageReference Include=\"Trax.Effect\" /></ItemGroup></Project>"
             );
 
     [OneTimeTearDown]

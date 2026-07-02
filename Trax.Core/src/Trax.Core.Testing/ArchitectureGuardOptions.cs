@@ -37,9 +37,6 @@ public sealed record ArchitectureGuardOptions
     /// <summary>Package-name prefix treated as a cross-repo Trax dependency.</summary>
     public string TraxPackagePrefix { get; init; } = "Trax.";
 
-    /// <summary>The floating version every cross-repo Trax package reference must use.</summary>
-    public string ExpectedTraxPackageVersion { get; init; } = "1.*";
-
     /// <summary>Project files exempt from the cross-repo package-version guard.</summary>
     public IReadOnlySet<string> CrossRepoPackageKnownExceptions { get; init; } =
         new HashSet<string>(StringComparer.Ordinal);
