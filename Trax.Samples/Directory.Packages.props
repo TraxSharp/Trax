@@ -148,6 +148,6 @@
     <PackageVersion Include="Plotly.NET" Version="5.1.0" />
     <PackageVersion Include="Plotly.NET.CSharp" Version="0.13.0" />
     <PackageVersion Include="Plotly.NET.ImageExport" Version="6.1.0" />
-    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
   </ItemGroup>
 </Project>
