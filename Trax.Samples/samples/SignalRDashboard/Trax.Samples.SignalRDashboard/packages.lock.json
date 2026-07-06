@@ -680,7 +680,7 @@
       },
       "Trax.Api": {
         "type": "CentralTransitive",
-        "requested": "[1.38.0, )",
+        "requested": "[1.38.1, )",
         "resolved": "1.28.0",
         "contentHash": "yrs5O2alD+obvX6RjzXyb/plA2upbYErKwVHEHxibIR9h32fYBmXkFduucSVTh/clfZqTEjr/CHH/zlEhVQXqQ==",
         "dependencies": {
@@ -692,13 +692,13 @@
       },
       "Trax.Api.Auth": {
         "type": "CentralTransitive",
-        "requested": "[1.38.0, )",
+        "requested": "[1.38.1, )",
         "resolved": "1.28.0",
         "contentHash": "WfBeGuG9y0+iS0gZs7MRB9+JzSoKj1LrKMndc+4yw70sWVPgOVTvSiBIkkQvboNizbgcBmWndmLxhFtvyxr90w=="
       },
       "Trax.Api.Auth.Jwt": {
         "type": "CentralTransitive",
-        "requested": "[1.38.0, )",
+        "requested": "[1.38.1, )",
         "resolved": "1.28.0",
         "contentHash": "wQejbeWXmxWVPsvhxgrBz8ltFLNRTZqkW8H2ht1N14IXETv9INBo8LcjImvd0/uV1J1dNm/fx1MD1i6Br8tSFA==",
         "dependencies": {
@@ -708,7 +708,7 @@
       },
       "Trax.Api.GraphQL": {
         "type": "CentralTransitive",
-        "requested": "[1.38.0, )",
+        "requested": "[1.38.1, )",
         "resolved": "1.28.0",
         "contentHash": "AIUeP03s8A1fGBuT51F02BhOCsrid30uFuAmEIfDmFaVW3zSoQaIZnbHTmXel3cpfDjokKAK20yQNMCP8wiRnQ==",
         "dependencies": {
@@ -723,7 +723,7 @@
       },
       "Trax.Api.GraphQL.PersistedOperations": {
         "type": "CentralTransitive",
-        "requested": "[1.38.0, )",
+        "requested": "[1.38.1, )",
         "resolved": "1.28.0",
         "contentHash": "jD3rYn9MwHFQnv3qEQRfHz9+4omlvKQaD/N9GBWP1uNHCsy8ROS3iOZ5UP1fAa3tJm3qnt0tLJDUZn4imJgpgg==",
         "dependencies": {

@@ -24,9 +24,9 @@
       },
       "Trax.Api.GraphQL.Client": {
         "type": "Direct",
-        "requested": "[1.38.0, )",
-        "resolved": "1.38.0",
-        "contentHash": "YKJ4Nj9ooOhoE+rlmv5vPwzQ2W1DqqcSUbZmGvJMDAq2FzSY4cFndu+4qN4JlkOTnR2jAcPR+pCjNbabexDp0A==",
+        "requested": "[1.38.1, )",
+        "resolved": "1.38.1",
+        "contentHash": "dC0FAeUxe7ktAglya2mJgp97euGUE/RSmpxYa2yJUHykUGWa31H810p0OFpi1UVsJRYpDHA+lU+d8TsVIIurOA==",
         "dependencies": {
           "GraphQL": "8.8.4",
           "GraphQL.Client": "6.1.0",
@@ -35,24 +35,33 @@
       },
       "Trax.Api.GraphQL.Client.Trax": {
         "type": "Direct",
-        "requested": "[1.38.0, )",
-        "resolved": "1.38.0",
-        "contentHash": "nc1nxa6fhXusHwUGnIP3bx/LiLFWKYUny/WCtabf7idPqA4UfQ/6lxdkZnNyb10mFBm9nlTOfgJ/fPN5vyVtFg==",
+        "requested": "[1.38.1, )",
+        "resolved": "1.38.1",
+        "contentHash": "y1cgIW3J+Z9QOpF3GxvSWsbdQOWpBfZ6ux3zIctj4QrgCMOMudmzAIx04IhC8LS5tw1BFUtPtJ0sMFPvBuVLKw==",
         "dependencies": {
-          "HotChocolate": "15.1.16",
-          "HotChocolate.Execution": "15.1.16",
-          "Trax.Api.GraphQL.Client": "1.38.0",
-          "Trax.Effect": "1.40.0",
-          "Trax.Mediator": "1.19.0"
+          "GraphQL": "8.8.4",
+          "GraphQL.Client": "6.1.0",
+          "GraphQL.Client.Serializer.SystemTextJson": "6.1.0",
+          "HotChocolate": "15.1.17",
+          "HotChocolate.CostAnalysis": "15.1.17",
+          "HotChocolate.Execution": "15.1.17",
+          "Microsoft.EntityFrameworkCore": "10.0.9",
+          "Trax.Api.GraphQL.Client": "1.38.1",
+          "Trax.Effect": "1.41.0",
+          "Trax.Effect.Data": "1.41.0",
+          "Trax.Mediator": "1.20.0"
         }
       },
       "Trax.Api.GraphQL.Client.Typed": {
         "type": "Direct",
-        "requested": "[1.38.0, )",
-        "resolved": "1.38.0",
-        "contentHash": "4lU9krRoC1bEPDufQGCSekKwXngFqIJ4li4HtUMkOVchz7hpAOJPiCNG1lAzMNQZmUISeUw4xFPWBxnwhjj47w==",
+        "requested": "[1.38.1, )",
+        "resolved": "1.38.1",
+        "contentHash": "JhWTND1iH3+3EUZs6PUQKvwyt1iNlKN8GpQ0o9r7ruGMrCPcoRrkaarGhbsV2byrdm5WiwA2mFkT2yxKyYuEYw==",
         "dependencies": {
-          "Trax.Api.GraphQL.Client": "1.38.0"
+          "GraphQL": "8.8.4",
+          "GraphQL.Client": "6.1.0",
+          "GraphQL.Client.Serializer.SystemTextJson": "6.1.0",
+          "Trax.Api.GraphQL.Client": "1.38.1"
         }
       },
       "ChilliCream.Nitro.App": {
@@ -423,13 +432,13 @@
       },
       "Microsoft.EntityFrameworkCore.Abstractions": {
         "type": "Transitive",
-        "resolved": "10.0.3",
-        "contentHash": "c7Uoz381xnMHNBRB8eHRhGgzUtXbgddlbODhwZRrTSzZWDharp3RkJsFwhxyESbeXhCqmML7VdvjMQ7uu+HreA=="
+        "resolved": "10.0.9",
+        "contentHash": "GRMaiPkqYna/gCsyDffYDWmefGPC3hDrdMw+2rrGcQwhs6uZOsaMQXMJnoXQ35tx9SkBV2ieRRU9N/jLOO6BZw=="
       },
       "Microsoft.EntityFrameworkCore.Analyzers": {
         "type": "Transitive",
-        "resolved": "10.0.3",
-        "contentHash": "lVABgJTyTUNE7Bi0bSu4dWHiCHIXEGzTh/kLh0N07IgU/tIKwTeBPp8tgV4x2iKj4h7iPLo8oXzyHmLDGtAE1g=="
+        "resolved": "10.0.9",
+        "contentHash": "aiEFB+C5EsZGqxvMPazE07hbWsp4iPaufJpanGt5O+lrwv7mJLrqma5haVIgFAPCyhQkmk75XSCEubT1zUjxtA=="
       },
       "Microsoft.EntityFrameworkCore.Relational": {
         "type": "Transitive",
@@ -473,18 +482,18 @@
       "Microsoft.EntityFrameworkCore": {
         "type": "CentralTransitive",
         "requested": "[10.0.3, )",
-        "resolved": "10.0.3",
-        "contentHash": "CDEImwD4A7BseABJMCpLZnhfFjmPY/bHwhhS70elc6gLI/bYUEOhxWt7PmaNGYGhIEzOnStlCy5QcVb+8dod5Q==",
+        "resolved": "10.0.9",
+        "contentHash": "tu85SRzOT021V7EQlViCiAE7TqldVn469Y6lt5TEn/+XC4/MeNCHgMRSxqYuWqvF4zAQZUhCmtNEZuM3ss4LeA==",
         "dependencies": {
-          "Microsoft.EntityFrameworkCore.Abstractions": "10.0.3",
-          "Microsoft.EntityFrameworkCore.Analyzers": "10.0.3"
+          "Microsoft.EntityFrameworkCore.Abstractions": "10.0.9",
+          "Microsoft.EntityFrameworkCore.Analyzers": "10.0.9"
         }
       },
       "Trax.Effect": {
         "type": "CentralTransitive",
         "requested": "[1.41.0, )",
-        "resolved": "1.40.0",
-        "contentHash": "r2550yWCzziJgMh9Rvg5pqqlA1UaqBxivigFtBMRb2IOKVtrSwbkvDJpse59CP4hyQMzPbg9RGAx8D3z2moxLg==",
+        "resolved": "1.41.0",
+        "contentHash": "Tkeyd43vbDbKQ0tA7qoCCKZi21epAmnnDOIAqtQccqT0WxfujFifbtd56Sjgm4fs72KwUNDtbpjTWiGKA7+uNQ==",
         "dependencies": {
           "Trax.Core": "1.6.0"
         }
@@ -492,23 +501,23 @@
       "Trax.Effect.Data": {
         "type": "CentralTransitive",
         "requested": "[1.41.0, )",
-        "resolved": "1.40.0",
-        "contentHash": "MakiYYdYHeKcMiPt1qZdCPNvQHHQg/4UweOGtY4V5pvuW3BKJM8OwBG0QTvApTXoIDCpOuVGnjMpVenghG+wFA==",
+        "resolved": "1.41.0",
+        "contentHash": "3tr5igE+6JGXhLt1JlggSgJx+4y4AOmtnBBTIDbyvfLrdGj4Al4KNmJphzjf3KWCwMlMgoNaWTu7z2MageeE0g==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
           "Npgsql": "10.0.1",
-          "Trax.Effect": "1.40.0"
+          "Trax.Effect": "1.41.0"
         }
       },
       "Trax.Mediator": {
         "type": "CentralTransitive",
         "requested": "[1.20.0, )",
-        "resolved": "1.19.0",
-        "contentHash": "Se+O1/eTOUAG9Boxhx6J7ZnT83Lsne2cemFn9NjNPBxLe1onjVzDG4eFZuvN1eTgB9cjxhCEGC9pTBeeIJM6hA==",
+        "resolved": "1.20.0",
+        "contentHash": "++o5w7hEaf9SS+qyzvY2++kSECmUg1rvckCraFK+kVZ9eTYcgTJZ4jggtU/njDiZae64Fk34KE7LTS7THed/VA==",
         "dependencies": {
-          "Trax.Effect": "1.40.0",
-          "Trax.Effect.Data": "1.40.0"
+          "Trax.Effect": "1.41.0",
+          "Trax.Effect.Data": "1.41.0"
         }
       }
     }

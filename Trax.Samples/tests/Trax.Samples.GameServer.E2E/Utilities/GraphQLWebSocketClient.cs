@@ -23,7 +23,8 @@ public class GraphQLWebSocketClient : IAsyncDisposable
         WebSocketClient wsClient,
         string path = "/trax/graphql",
         TimeSpan? timeout = null,
-        string? apiKey = null
+        string? apiKey = null,
+        string? authToken = null
     )
     {
         var client = new GraphQLWebSocketClient();
@@ -38,10 +39,15 @@ public class GraphQLWebSocketClient : IAsyncDisposable
         client._webSocket = await wsClient.ConnectAsync(uri, CancellationToken.None);
 
         // Send connection_init. Subscription auth travels in the payload because
-        // browsers cannot attach custom headers to a WebSocket upgrade.
-        object initMessage = apiKey is null
-            ? new { type = "connection_init" }
-            : new { type = "connection_init", payload = new { apiKey } };
+        // browsers cannot attach custom headers to a WebSocket upgrade. `authToken`
+        // carries a JWT (routed to a scheme by the dispatcher); `apiKey` carries an
+        // API key.
+        object initMessage = (apiKey, authToken) switch
+        {
+            (not null, _) => new { type = "connection_init", payload = new { apiKey } },
+            (_, not null) => new { type = "connection_init", payload = new { authToken } },
+            _ => new { type = "connection_init" },
+        };
         await client.SendMessageAsync(initMessage);
 
         // Wait for connection_ack

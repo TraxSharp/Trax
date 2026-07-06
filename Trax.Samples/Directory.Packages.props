@@ -13,47 +13,47 @@
   <ItemGroup Label="Trax">
     <PackageVersion
       Include="Trax.Api"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.1'))"
     />
     <PackageVersion
       Include="Trax.Api.Auth"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.1'))"
     />
     <PackageVersion
       Include="Trax.Api.Auth.ApiKey"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.1'))"
     />
     <PackageVersion
       Include="Trax.Api.Auth.Jwt"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.1'))"
     />
     <PackageVersion
       Include="Trax.Api.GraphQL"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.1'))"
     />
     <PackageVersion
       Include="Trax.Api.GraphQL.Audit"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.1'))"
     />
     <PackageVersion
       Include="Trax.Api.GraphQL.Client"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.1'))"
     />
     <PackageVersion
       Include="Trax.Api.GraphQL.Client.Trax"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.1'))"
     />
     <PackageVersion
       Include="Trax.Api.GraphQL.Client.Typed"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.1'))"
     />
     <PackageVersion
       Include="Trax.Api.GraphQL.PersistedOperations"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.1'))"
     />
     <PackageVersion
       Include="Trax.Api.GraphQL.Testing"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.38.1'))"
     />
     <PackageVersion
       Include="Trax.Dashboard"

@@ -24,11 +24,14 @@
       },
       "Trax.Api.Auth": {
         "type": "Direct",
-        "requested": "[1.38.0, )",
-        "resolved": "1.38.0",
-        "contentHash": "umWJFgGfhaVX7kW0FAFbGVjxypgjBUAN/a2gw47vE8TFoC7NgW645Fm0nAVI04ZqEczpYIsSUXf2kWcDpY4WvA==",
+        "requested": "[1.38.1, )",
+        "resolved": "1.38.1",
+        "contentHash": "TokxNX4wjgxsBCmBejtdqeu6I9ba5sqvtffhK9EMDjdmqs87HCBC1yTBlf9hfdlTj1eSVWdzDm6VccGXl13MNw==",
         "dependencies": {
-          "Trax.Mediator": "1.19.0"
+          "Microsoft.EntityFrameworkCore": "10.0.9",
+          "Trax.Effect": "1.41.0",
+          "Trax.Effect.Data": "1.41.0",
+          "Trax.Mediator": "1.20.0"
         }
       },
       "Trax.Effect": {
@@ -414,13 +417,13 @@
       },
       "Microsoft.EntityFrameworkCore.Abstractions": {
         "type": "Transitive",
-        "resolved": "10.0.3",
-        "contentHash": "c7Uoz381xnMHNBRB8eHRhGgzUtXbgddlbODhwZRrTSzZWDharp3RkJsFwhxyESbeXhCqmML7VdvjMQ7uu+HreA=="
+        "resolved": "10.0.9",
+        "contentHash": "GRMaiPkqYna/gCsyDffYDWmefGPC3hDrdMw+2rrGcQwhs6uZOsaMQXMJnoXQ35tx9SkBV2ieRRU9N/jLOO6BZw=="
       },
       "Microsoft.EntityFrameworkCore.Analyzers": {
         "type": "Transitive",
-        "resolved": "10.0.3",
-        "contentHash": "lVABgJTyTUNE7Bi0bSu4dWHiCHIXEGzTh/kLh0N07IgU/tIKwTeBPp8tgV4x2iKj4h7iPLo8oXzyHmLDGtAE1g=="
+        "resolved": "10.0.9",
+        "contentHash": "aiEFB+C5EsZGqxvMPazE07hbWsp4iPaufJpanGt5O+lrwv7mJLrqma5haVIgFAPCyhQkmk75XSCEubT1zUjxtA=="
       },
       "Microsoft.EntityFrameworkCore.Relational": {
         "type": "Transitive",
@@ -467,11 +470,11 @@
       "Microsoft.EntityFrameworkCore": {
         "type": "CentralTransitive",
         "requested": "[10.0.3, )",
-        "resolved": "10.0.3",
-        "contentHash": "CDEImwD4A7BseABJMCpLZnhfFjmPY/bHwhhS70elc6gLI/bYUEOhxWt7PmaNGYGhIEzOnStlCy5QcVb+8dod5Q==",
+        "resolved": "10.0.9",
+        "contentHash": "tu85SRzOT021V7EQlViCiAE7TqldVn469Y6lt5TEn/+XC4/MeNCHgMRSxqYuWqvF4zAQZUhCmtNEZuM3ss4LeA==",
         "dependencies": {
-          "Microsoft.EntityFrameworkCore.Abstractions": "10.0.3",
-          "Microsoft.EntityFrameworkCore.Analyzers": "10.0.3"
+          "Microsoft.EntityFrameworkCore.Abstractions": "10.0.9",
+          "Microsoft.EntityFrameworkCore.Analyzers": "10.0.9"
         }
       },
       "Npgsql.EntityFrameworkCore.PostgreSQL": {

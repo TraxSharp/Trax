@@ -6,28 +6,27 @@
 // dispatch { trainName(mode: QUEUE) } mutations. This process does NOT run a scheduler — start the
 // Scheduler project alongside this one.
 //
-// Authentication (two schemes coexist, pick either per request):
+// Authentication (schemes coexist, pick any per request):
 //
 //   1. API key via X-Api-Key header — service-to-service / scripting
 //        Admin key:  admin-key-do-not-use-in-production  (roles: Admin, Player)
 //        Player key: player-key-do-not-use-in-production (role: Player)
 //
-//   2. JWT bearer via Authorization: Bearer <google-id-token> — the Next.js
-//      companion app (samples/LocalWorkers/trax-samples-gameserver-web)
-//      signs users in with Google via NextAuth, then forwards the id-token
-//      to this API. Trax validates against Google's JWKS. Enable by setting
-//      Google:ClientId (via `dotnet user-secrets set "Google:ClientId" <id>`)
-//      to your OAuth 2.0 client id from Google Cloud Console.
+//   2. JWT bearer via Authorization: Bearer <token>, dispatched by the token's
+//      `iss` claim across two demo issuers: "player" (the game client's own
+//      session tokens) and "partner" (a partner service). Both are symmetric
+//      HS256 so the sample runs with no external identity provider. AddTraxJwt
+//      Dispatcher routes each token to its scheme; the same dispatch applies to
+//      GraphQL subscriptions over WebSockets (see below). Grab a token from
+//      GET /dev/token/player or /dev/token/partner (Development only).
 //
-//      For a real app, the whole integration is one line:
-//        services.AddTraxJwtAuth("https://accounts.google.com", googleClientId);
-//      The default resolver handles standard OIDC claims. This sample uses a
-//      custom resolver only to hand every Google user the Player role so the
-//      trains work out of the box — see GoogleJwtResolver.cs for the rationale
-//      and the "when do I need a custom resolver?" guidance.
+//   3. Optional: Google id-tokens (RS256, validated against Google's JWKS),
+//      enabled when Google:ClientId is set (`dotnet user-secrets set
+//      "Google:ClientId" <id>`). When enabled it becomes a third dispatched
+//      issuer. See GoogleJwtResolver.cs and ../trax-samples-gameserver-web.
 //
-//   Both schemes feed the same TraxPrincipal, so [TraxAuthorize] works against
-//   either credential type.
+//   All schemes feed the same TraxPrincipal, so [TraxAuthorize] works against
+//   any credential type.
 //
 // Prerequisites:
 //   1. Start Postgres:  cd Trax.Samples && docker compose up -d
@@ -64,10 +63,16 @@
 //        -H "Content-Type: application/json" \
 //        -d '{"query":"mutation { dispatch { matches { processMatchResult(input: {region: \"na\", matchId: \"match-999\", winnerId: \"player-1\", loserId: \"player-2\", winnerScore: 100, loserScore: 30}, mode: QUEUE, priority: 10) { externalId workQueueId } } } }"}'
 //
-//   # Subscribe to real-time train lifecycle events (use Banana Cake Pop IDE):
+//   # Subscribe to real-time train lifecycle events (use Banana Cake Pop IDE).
+//   # Subscriptions authenticate via the connection_init payload; grab a token
+//   # from /dev/token/player (or /dev/token/partner) and set the connection's
+//   # authToken to it. The dispatcher validates it against the matched scheme.
 //   #   subscription { onTrainStarted { metadataId trainName trainState timestamp } }
 //   #   subscription { onTrainCompleted { metadataId trainName trainState timestamp } }
 //   #   subscription { onTrainFailed { metadataId trainName failureJunction failureReason } }
+//
+//   # Mint a demo subscription token (Development only)
+//   curl http://localhost:5200/dev/token/player
 //
 //   # Health check (no auth required)
 //   curl http://localhost:5200/trax/health
@@ -128,28 +133,49 @@ builder.Services.AddTraxApiKeyAuth(keys =>
         .Add(SampleKeys.PlayerKey, id: "player", nameof(GameRole.Player))
 );
 
-// 2. JWT bearer: accept Google-issued id-tokens. The Next.js frontend obtains
-//    them via NextAuth and sends them as Authorization: Bearer <id-token>.
-//    Signature validation happens against Google's published JWKS; only tokens
-//    minted for our specific OAuth client id are accepted (aud claim check).
-//
-//    The one-line path below is enough for most apps — the package's default
-//    resolver maps sub → Id, name/email → DisplayName, and role claims → Roles.
-//    We override with GoogleJwtResolver here ONLY because this sample needs to
-//    grant every signed-in user the Player role so the sample trains work.
-//    A real deployment would keep the default and look up roles in its user
-//    database via a scoped resolver — see GoogleJwtResolver.cs for the shape.
-//
-//    Default-resolver version (swap in for a real app):
-//        builder.Services.AddTraxJwtAuth("https://accounts.google.com", googleClientId);
+// 2. Two JWT issuers, dispatched by the token's `iss` claim. This mirrors a real
+//    multi-issuer host: a game client that mints its own session tokens
+//    ("player") plus a partner service integration ("partner"). Both are
+//    symmetric HS256 so the sample runs with no external identity provider. See
+//    DemoJwt.cs for the issuers, keys, and a token-minting helper; GET
+//    /dev/token/{player|partner} hands you a token to try.
+builder.Services.AddTraxJwtAuth(
+    DemoJwt.PlayerScheme,
+    jwt => jwt.UseSymmetricKey(DemoJwt.PlayerIssuer, DemoJwt.Audience, DemoJwt.PlayerKey)
+);
+builder.Services.AddTraxJwtAuth(
+    DemoJwt.PartnerScheme,
+    jwt => jwt.UseSymmetricKey(DemoJwt.PartnerIssuer, DemoJwt.Audience, DemoJwt.PartnerKey)
+);
+
+// 3. Optional third issuer: Google id-tokens (RS256, validated against Google's
+//    JWKS). Enabled only when Google:ClientId is configured
+//    (`dotnet user-secrets set "Google:ClientId" <id>`). GoogleJwtResolver grants
+//    every signed-in user the Player role so the sample trains work out of the
+//    box — see GoogleJwtResolver.cs for when a custom resolver is justified.
+const string GoogleScheme = "google";
+const string GoogleAuthority = "https://accounts.google.com";
 var googleClientId = builder.Configuration["Google:ClientId"];
-if (!string.IsNullOrWhiteSpace(googleClientId))
+var googleEnabled = !string.IsNullOrWhiteSpace(googleClientId);
+if (googleEnabled)
 {
     builder.Services.AddTraxJwtAuth<GoogleJwtResolver>(
-        "https://accounts.google.com",
-        googleClientId
+        GoogleScheme,
+        jwt => jwt.UseAuthority(GoogleAuthority, googleClientId!)
     );
 }
+
+// The dispatcher routes inbound tokens to the matching scheme by their `iss`
+// claim, over HTTP and over GraphQL subscription WebSockets alike. Each scheme
+// still runs full validation (signature, issuer, audience, lifetime, JWKS); the
+// `iss` peek only chooses which validator to run.
+builder.Services.AddTraxJwtDispatcher(d =>
+{
+    d.MapIssuer(DemoJwt.PlayerIssuer, DemoJwt.PlayerScheme);
+    d.MapIssuer(DemoJwt.PartnerIssuer, DemoJwt.PartnerScheme);
+    if (googleEnabled)
+        d.MapIssuer(GoogleAuthority, GoogleScheme);
+});
 
 // ── Authorization policies ──────────────────────────────────────────────
 builder.Services.AddAuthorization(options =>
@@ -404,6 +430,28 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
+
+// Development-only helper: mint a demo JWT for either issuer so you can try
+// subscription auth. Copy the token into a graphql-transport-ws connection_init
+// payload as { "authToken": "<token>" } and the dispatcher routes it by issuer.
+if (app.Environment.IsDevelopment())
+{
+    app.MapGet(
+            "/dev/token/{actor}",
+            (string actor) =>
+                actor.ToLowerInvariant() switch
+                {
+                    "player" => Results.Ok(
+                        new { scheme = DemoJwt.PlayerScheme, token = DemoJwt.MintPlayer() }
+                    ),
+                    "partner" => Results.Ok(
+                        new { scheme = DemoJwt.PartnerScheme, token = DemoJwt.MintPartner() }
+                    ),
+                    _ => Results.BadRequest(new { error = "actor must be 'player' or 'partner'" }),
+                }
+        )
+        .AllowAnonymous();
+}
 
 app.Run();
 

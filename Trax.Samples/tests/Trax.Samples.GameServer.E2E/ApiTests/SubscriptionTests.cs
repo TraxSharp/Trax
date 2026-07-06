@@ -1,9 +1,17 @@
 using System.Text.Json;
+using Trax.Samples.GameServer.Api;
 using Trax.Samples.GameServer.E2E.Fixtures;
 using Trax.Samples.GameServer.E2E.Utilities;
 
 namespace Trax.Samples.GameServer.E2E.ApiTests;
 
+/// <summary>
+/// Subscriptions authenticate over the WebSocket via JWT issuer dispatch: the
+/// connection_init token is routed to a scheme by its `iss` claim
+/// (AddTraxJwtDispatcher). One test connects with a "player"-issuer token and one
+/// with a "partner"-issuer token, so both mapped issuers are exercised over WS.
+/// The HTTP trigger query still uses an API key.
+/// </summary>
 [TestFixture]
 public class SubscriptionTests : ApiTestFixture
 {
@@ -25,7 +33,7 @@ public class SubscriptionTests : ApiTestFixture
         var wsClient = SharedApiSetup.Factory.Server.CreateWebSocketClient();
         await using var sub = await GraphQLWebSocketClient.ConnectAsync(
             wsClient,
-            apiKey: PlayerKey
+            authToken: DemoJwt.MintPlayer()
         );
 
         await sub.SubscribeAsync(
@@ -51,10 +59,12 @@ public class SubscriptionTests : ApiTestFixture
     [Test]
     public async Task OnTrainStarted_ReceivesEvent()
     {
+        // Connect with a "partner"-issuer token: the dispatcher routes it to the
+        // partner scheme, proving the second issuer authenticates over WS too.
         var wsClient = SharedApiSetup.Factory.Server.CreateWebSocketClient();
         await using var sub = await GraphQLWebSocketClient.ConnectAsync(
             wsClient,
-            apiKey: PlayerKey
+            authToken: DemoJwt.MintPartner()
         );
 
         await sub.SubscribeAsync(
@@ -82,7 +92,7 @@ public class SubscriptionTests : ApiTestFixture
         var wsClient = SharedApiSetup.Factory.Server.CreateWebSocketClient();
         await using var sub = await GraphQLWebSocketClient.ConnectAsync(
             wsClient,
-            apiKey: PlayerKey
+            authToken: DemoJwt.MintPlayer()
         );
 
         await sub.SubscribeAsync(
@@ -102,6 +112,19 @@ public class SubscriptionTests : ApiTestFixture
         // subscription also produces no event, so this assertion cannot be raced into a false pass.
         var received = await sub.TryReceiveNextAsync(TimeSpan.FromSeconds(3));
         received.Should().BeFalse("non-broadcast trains should not emit subscription events");
+    }
+
+    [Test]
+    public async Task UnroutableToken_ConnectionRejected()
+    {
+        // A token the dispatcher can't route to any scheme (unrecognized issuer)
+        // never receives a connection_ack, so the handshake fails.
+        var wsClient = SharedApiSetup.Factory.Server.CreateWebSocketClient();
+
+        var connect = async () =>
+            await GraphQLWebSocketClient.ConnectAsync(wsClient, authToken: "not-a-valid-jwt");
+
+        await connect.Should().ThrowAsync<Exception>();
     }
 
     /// <summary>
