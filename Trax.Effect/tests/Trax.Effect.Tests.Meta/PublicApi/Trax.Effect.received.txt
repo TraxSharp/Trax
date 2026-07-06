@@ -298,33 +298,23 @@ namespace Trax.Effect.Models.BackgroundJob
 }
 namespace Trax.Effect.Models.BackgroundJob.DTOs
 {
-    [System.Runtime.CompilerServices.RequiredMember]
     public class CreateBackgroundJob
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public CreateBackgroundJob() { }
         public string? Input { get; set; }
         public string? InputType { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public long MetadataId { get; set; }
+        public required long MetadataId { get; set; }
         public int Priority { get; set; }
     }
 }
 namespace Trax.Effect.Models.DeadLetter.DTOs
 {
-    [System.Runtime.CompilerServices.RequiredMember]
     public class CreateDeadLetter
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public CreateDeadLetter() { }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public Trax.Effect.Models.Manifest.Manifest Manifest { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string Reason { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public int RetryCount { get; set; }
+        public required Trax.Effect.Models.Manifest.Manifest Manifest { get; set; }
+        public required string Reason { get; set; }
+        public required int RetryCount { get; set; }
     }
 }
 namespace Trax.Effect.Models.DeadLetter
@@ -432,21 +422,14 @@ namespace Trax.Effect.Models.JunctionMetadata
 }
 namespace Trax.Effect.Models.Log.DTOs
 {
-    [System.Runtime.CompilerServices.RequiredMember]
     public class CreateLog
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public CreateLog() { }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string CategoryName { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public int EventId { get; set; }
+        public required string CategoryName { get; set; }
+        public required int EventId { get; set; }
         public System.Exception? Exception { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public Microsoft.Extensions.Logging.LogLevel Level { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string Message { get; set; }
+        public required Microsoft.Extensions.Logging.LogLevel Level { get; set; }
+        public required string Message { get; set; }
     }
 }
 namespace Trax.Effect.Models.Log
@@ -499,11 +482,8 @@ namespace Trax.Effect.Models.Log
 }
 namespace Trax.Effect.Models.Manifest.DTOs
 {
-    [System.Runtime.CompilerServices.RequiredMember]
     public class CreateManifest
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public CreateManifest() { }
         public string? CronExpression { get; set; }
         public long? DependsOnManifestId { get; set; }
@@ -513,8 +493,7 @@ namespace Trax.Effect.Models.Manifest.DTOs
         public int MaxRetries { get; set; }
         public Trax.Effect.Enums.MisfirePolicy MisfirePolicy { get; set; }
         public int? MisfireThresholdSeconds { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public System.Type Name { get; set; }
+        public required System.Type Name { get; set; }
         public int Priority { get; set; }
         public Trax.Effect.Models.Manifest.IManifestProperties? Properties { get; set; }
         public Trax.Effect.Enums.ScheduleType ScheduleType { get; set; }
@@ -647,19 +626,13 @@ namespace Trax.Effect.Models.ManifestGroup
 }
 namespace Trax.Effect.Models.Metadata.DTOs
 {
-    [System.Runtime.CompilerServices.RequiredMember]
     public class CreateMetadata
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public CreateMetadata() { }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string ExternalId { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public object? Input { get; set; }
+        public required string ExternalId { get; set; }
+        public required object? Input { get; set; }
         public long? ManifestId { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string Name { get; set; }
+        public required string Name { get; set; }
         public long? ParentId { get; set; }
     }
 }
@@ -841,11 +814,8 @@ namespace Trax.Effect.Models.SchedulerConfig
 }
 namespace Trax.Effect.Models.WorkQueue.DTOs
 {
-    [System.Runtime.CompilerServices.RequiredMember]
     public class CreateWorkQueue
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public CreateWorkQueue() { }
         public long? DeadLetterId { get; set; }
         public string? Input { get; set; }
@@ -853,8 +823,7 @@ namespace Trax.Effect.Models.WorkQueue.DTOs
         public long? ManifestId { get; set; }
         public int Priority { get; set; }
         public System.DateTime? ScheduledAt { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string TrainName { get; set; }
+        public required string TrainName { get; set; }
     }
 }
 namespace Trax.Effect.Models.WorkQueue
