@@ -257,6 +257,11 @@ namespace Trax.Api.GraphQL.Subscriptions
         public override System.Threading.Tasks.ValueTask<HotChocolate.AspNetCore.Subscriptions.Protocols.ConnectionStatus> OnConnectAsync(HotChocolate.AspNetCore.Subscriptions.ISocketSession session, HotChocolate.AspNetCore.Subscriptions.Protocols.IOperationMessagePayload connectionInitMessage, System.Threading.CancellationToken cancellationToken = default) { }
         public override System.Threading.Tasks.ValueTask OnRequestAsync(HotChocolate.AspNetCore.Subscriptions.ISocketSession session, string operationSessionId, HotChocolate.Execution.OperationRequestBuilder requestBuilder, System.Threading.CancellationToken cancellationToken = default) { }
     }
+    public sealed class TraxJwtDispatcherSocketInterceptor : HotChocolate.AspNetCore.DefaultSocketSessionInterceptor
+    {
+        public TraxJwtDispatcherSocketInterceptor(Trax.Api.Auth.Jwt.JwtDispatcherRuntime dispatcher, Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions> optionsMonitor, System.IServiceProvider services, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Subscriptions.TraxJwtDispatcherSocketInterceptor> logger) { }
+        public override System.Threading.Tasks.ValueTask<HotChocolate.AspNetCore.Subscriptions.Protocols.ConnectionStatus> OnConnectAsync(HotChocolate.AspNetCore.Subscriptions.ISocketSession session, HotChocolate.AspNetCore.Subscriptions.Protocols.IOperationMessagePayload connectionInitMessage, System.Threading.CancellationToken cancellationToken = default) { }
+    }
     public sealed class TraxJwtSocketInterceptor : HotChocolate.AspNetCore.DefaultSocketSessionInterceptor
     {
         public TraxJwtSocketInterceptor(Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions> optionsMonitor, Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput> resolver, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Subscriptions.TraxJwtSocketInterceptor> logger) { }

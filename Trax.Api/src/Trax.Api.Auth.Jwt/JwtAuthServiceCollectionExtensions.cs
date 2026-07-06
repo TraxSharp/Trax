@@ -215,6 +215,17 @@ public static class JwtAuthServiceCollectionExtensions
 
         IncludeInTraxAuthPolicy(services, dispatcherSchemeName);
 
+        // Expose the routing table to the GraphQL subscription socket path, which
+        // has no authentication middleware and cannot use the policy scheme above.
+        // FallbackSchemeName is null when unmapped issuers should be rejected (the
+        // reject scheme is HTTP-only and has no JWT options to validate against).
+        JwtResolverRegistry.GetOrAdd(services);
+        services.TryAddSingleton(sp => new JwtDispatcherRuntime(
+            mappings,
+            builder.FallbackSchemeName,
+            sp.GetRequiredService<JwtResolverRegistry>()
+        ));
+
         return authBuilder;
     }
 

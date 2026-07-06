@@ -178,17 +178,20 @@ public class SubscriptionE2ETests
         closed.Should().BeTrue();
     }
 
-    // ── Multi-scheme coexistence over WS (known limitation) ─────────────
+    // ── Multi-scheme coexistence over WS (stock defaults) ───────────────
     //
     // HotChocolate supports a single ISocketSessionInterceptor per schema.
-    // When both ApiKey and Jwt interceptors are registered, the last one
-    // registered wins. In AuthE2EHost that's JWT (it registers after
-    // ApiKey), so a WS connection that presents an API-key token while both
-    // schemes are wired gets rejected by the JWT interceptor because the
-    // token isn't a valid JWT. Presenting a JWT works.
+    // When both the stock ApiKey and Jwt interceptors are registered, the
+    // last one registered wins. In AuthE2EHost that's JWT (it registers
+    // after ApiKey), so a WS connection that presents an API-key token
+    // while both schemes are wired gets rejected by the JWT interceptor
+    // because the token isn't a valid JWT. Presenting a JWT works.
     //
-    // Hosts that need BOTH credential types over WS must pick one to use
-    // on subscriptions, or author their own composite interceptor.
+    // Hosts that need richer behavior supply their own interceptor via
+    // graphql.ConfigureSchema(b => b.AddSocketSessionInterceptor<T>())
+    // (see CustomSocketInterceptorE2ETests), or use AddTraxJwtDispatcher to
+    // route multiple JWT schemes by issuer (see
+    // TraxJwtDispatcherSocketE2ETests).
 
     [Test]
     public async Task BothSchemes_Jwt_Succeeds()

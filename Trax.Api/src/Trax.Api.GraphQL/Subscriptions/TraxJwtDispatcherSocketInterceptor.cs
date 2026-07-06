@@ -5,6 +5,7 @@ using HotChocolate.AspNetCore.Subscriptions;
 using HotChocolate.AspNetCore.Subscriptions.Protocols;
 using HotChocolate.Execution;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -15,30 +16,22 @@ namespace Trax.Api.GraphQL.Subscriptions;
 
 /// <summary>
 /// HotChocolate socket session interceptor that authenticates GraphQL
-/// subscriptions using JWT bearer credentials carried in the
-/// <c>connection_init</c> payload. Browsers cannot attach arbitrary headers
-/// to a WebSocket upgrade, so the token travels in the handshake payload
-/// instead.
+/// subscriptions across multiple JWT schemes, routing by the token's <c>iss</c>
+/// claim through the same <c>AddTraxJwtDispatcher</c> mapping the HTTP path uses.
+/// Wired automatically by <c>AddTraxGraphQL</c> when a dispatcher is registered,
+/// replacing the single-scheme <see cref="TraxJwtSocketInterceptor"/>.
 /// </summary>
 /// <remarks>
-/// Expected payload shape (either key is accepted — <c>authToken</c> is the
-/// graphql-transport-ws convention, <c>bearer</c> is accepted for clients
-/// that prefer naming it after the HTTP header):
-/// <code>{ "authToken": "eyJ..." }</code> or <code>{ "bearer": "eyJ..." }</code>.
-/// <para>
-/// Registered automatically by <c>AddTraxGraphQL</c> when
-/// <c>ITraxPrincipalResolver&lt;JwtTokenInput&gt;</c> is present. Hosts that
-/// prefer their own subscription-auth pipeline can remove the registration
-/// and wire a custom <see cref="ISocketSessionInterceptor"/>.
-/// </para>
-/// Token validation reuses the same <see cref="JwtBearerOptions"/> the HTTP
-/// handler uses (signature, issuer, audience, lifetime, clock skew), so the
-/// WS and HTTP paths cannot diverge.
+/// The issuer is read from the token without validating its signature and is used
+/// only to select a scheme. The selected scheme then validates signature, issuer,
+/// audience, and lifetime (fetching JWKS keys via its OIDC discovery document when
+/// needed), so an attacker cannot bypass validation by forging <c>iss</c>.
 /// </remarks>
-public sealed class TraxJwtSocketInterceptor(
+public sealed class TraxJwtDispatcherSocketInterceptor(
+    JwtDispatcherRuntime dispatcher,
     IOptionsMonitor<JwtBearerOptions> optionsMonitor,
-    ITraxPrincipalResolver<JwtTokenInput> resolver,
-    ILogger<TraxJwtSocketInterceptor> logger
+    IServiceProvider services,
+    ILogger<TraxJwtDispatcherSocketInterceptor> logger
 ) : DefaultSocketSessionInterceptor
 {
     public override async ValueTask<ConnectionStatus> OnConnectAsync(
@@ -52,7 +45,11 @@ public sealed class TraxJwtSocketInterceptor(
         if (string.IsNullOrWhiteSpace(token))
             return ConnectionStatus.Reject("Missing auth token in connection_init payload.");
 
-        var options = optionsMonitor.Get(JwtDefaults.SchemeName);
+        var scheme = dispatcher.ResolveSchemeForToken(token);
+        if (scheme is null)
+            return ConnectionStatus.Reject("Token issuer is not recognized.");
+
+        var options = optionsMonitor.Get(scheme);
 
         TokenValidationResult validation;
         try
@@ -65,7 +62,11 @@ public sealed class TraxJwtSocketInterceptor(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Trax subscription JWT validation threw an exception.");
+            logger.LogWarning(
+                ex,
+                "Trax dispatcher subscription JWT validation threw for scheme {Scheme}.",
+                scheme
+            );
             return ConnectionStatus.Reject("JWT validation failed.");
         }
 
@@ -75,6 +76,15 @@ public sealed class TraxJwtSocketInterceptor(
         var validatedPrincipal = new ClaimsPrincipal(validation.ClaimsIdentity);
         var input = new JwtTokenInput(validatedPrincipal, validation.SecurityToken);
 
+        // Named-scheme resolvers are registered scoped, and a socket connection has
+        // no ambient request scope, so resolve the resolver in a fresh scope.
+        await using var scope = services.CreateAsyncScope();
+        var resolver = dispatcher.ResolvePrincipalResolver(scheme, scope.ServiceProvider);
+        if (resolver is null)
+            return ConnectionStatus.Reject(
+                $"No principal resolver is registered for scheme '{scheme}'."
+            );
+
         TraxPrincipal? traxPrincipal;
         try
         {
@@ -82,26 +92,22 @@ public sealed class TraxJwtSocketInterceptor(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Trax subscription JWT resolver threw an exception.");
+            logger.LogWarning(
+                ex,
+                "Trax dispatcher subscription JWT resolver threw for scheme {Scheme}.",
+                scheme
+            );
             return ConnectionStatus.Reject("JWT resolver failed.");
         }
 
         if (traxPrincipal is null)
             return ConnectionStatus.Reject("JWT did not map to a known Trax principal.");
 
-        var claimsPrincipal = traxPrincipal.ToClaimsPrincipal(JwtDefaults.SchemeName);
-        AttachPrincipalToRequest(session, claimsPrincipal);
-
-        return await base.OnConnectAsync(session, connectionInitMessage, cancellationToken);
-    }
-
-    private static void AttachPrincipalToRequest(
-        ISocketSession session,
-        ClaimsPrincipal claimsPrincipal
-    )
-    {
+        var claimsPrincipal = traxPrincipal.ToClaimsPrincipal(scheme);
         if (session.Connection.HttpContext is { } httpContext)
             httpContext.User = claimsPrincipal;
+
+        return await base.OnConnectAsync(session, connectionInitMessage, cancellationToken);
     }
 
     private static ConnectionInitPayload? TryReadPayload(IOperationMessagePayload payload)

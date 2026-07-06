@@ -4,8 +4,10 @@ using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
 using HotChocolate.Validation;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Authorization;
@@ -85,6 +87,15 @@ public static class GraphQLServiceExtensions
         configure(builder);
         var config = builder.Build();
         services.AddSingleton(config);
+
+        // Ensure the WebSocket upgrade middleware sits at the front of the
+        // pipeline so subscriptions can always upgrade, no matter where the host
+        // places UseTraxGraphQL() relative to other endpoint middleware (the
+        // dashboard's Blazor endpoints, an explicit UseEndpoints, etc.). See
+        // WebSocketsStartupFilter for the failure mode this prevents.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Transient<IStartupFilter, WebSocketsStartupFilter>()
+        );
 
         // Detect train queries/mutations registered before us so we can decide whether
         // RootQuery / RootMutation will have any fields by the time HotChocolate builds
@@ -308,7 +319,9 @@ public static class GraphQLServiceExtensions
         Action<IEndpointConventionBuilder>? configure = null
     )
     {
-        app.UseWebSockets();
+        // The WebSocket upgrade middleware is wired at the front of the pipeline
+        // by WebSocketsStartupFilter (registered in AddTraxGraphQL), so it always
+        // runs before endpoint execution regardless of host middleware ordering.
         var endpoint = app.MapGraphQL(routePrefix, SchemaName);
         configure?.Invoke(endpoint);
         return app;
@@ -389,7 +402,13 @@ public static class GraphQLServiceExtensions
         )
             graphqlBuilder.AddSocketSessionInterceptor<TraxApiKeySocketInterceptor>();
 
-        if (
+        // A multi-scheme JWT dispatcher routes subscription auth by the token's
+        // issuer across every mapped scheme (JWKS included), so it supersedes the
+        // single-scheme stock JWT interceptor. Otherwise wire the stock one when a
+        // JWT resolver is present.
+        if (services.Any(sd => sd.ServiceType == typeof(Trax.Api.Auth.Jwt.JwtDispatcherRuntime)))
+            graphqlBuilder.AddSocketSessionInterceptor<TraxJwtDispatcherSocketInterceptor>();
+        else if (
             services.Any(sd =>
                 sd.ServiceType
                 == typeof(Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput>)

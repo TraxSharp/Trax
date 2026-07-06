@@ -13,6 +13,7 @@ using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Api.GraphQL.Startup;
 using Trax.Api.Services.HealthCheck;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -223,6 +224,24 @@ public class GraphQLServiceExtensionsTests
         response.IsSuccessStatusCode.Should().BeTrue();
         configuratorRan.Should().Be(1);
         await app.StopAsync();
+    }
+
+    [Test]
+    public void AddTraxGraphQL_RegistersSingleWebSocketsStartupFilter()
+    {
+        var services = NewMinimalServices();
+        services.AddTraxGraphQL(g => g.ExposeOperationQueries());
+
+        services
+            .Where(sd =>
+                sd.ServiceType == typeof(IStartupFilter)
+                && sd.ImplementationType == typeof(WebSocketsStartupFilter)
+            )
+            .Should()
+            .ContainSingle(
+                "AddTraxGraphQL wires the WebSocket upgrade middleware exactly once so "
+                    + "subscriptions upgrade regardless of host pipeline ordering"
+            );
     }
 
     private static IServiceCollection NewMinimalServices()
