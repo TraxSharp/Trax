@@ -254,6 +254,6 @@ ws.send(JSON.stringify({
 }));
 ```
 
-The interceptor validates against the same `JwtBearerOptions` as the HTTP handler (signature, issuer, audience, lifetime, clock skew), then runs the principal resolver and attaches the result to `HttpContext.User` for the socket lifetime. Rejected connections close before any subscription operation runs.
+The interceptor validates against the same `JwtBearerOptions` as the HTTP handler (signature, issuer, audience, lifetime, clock skew), including Authority/JWKS schemes: it fetches signing keys from the scheme's OIDC discovery document when the options carry no static key. It then runs the principal resolver and attaches the result to `HttpContext.User` for the socket lifetime. Rejected connections close before any subscription operation runs.
 
-In a multi-issuer setup, the socket interceptor only validates against the default-scheme options. Hosts that need subscriptions across more than one issuer must either route every browser connection through one scheme or write a custom `ISocketSessionInterceptor`.
+For subscriptions across more than one issuer, register [`AddTraxJwtDispatcher`](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher): Trax then wires `TraxJwtDispatcherSocketInterceptor`, which routes each connection to the right scheme by the token's `iss` claim. Hosts with needs beyond that can supply a custom `ISocketSessionInterceptor` via `ConfigureSchema`. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#authentication).

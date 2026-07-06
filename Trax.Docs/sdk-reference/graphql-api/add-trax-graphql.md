@@ -85,7 +85,7 @@ public static WebApplication UseTraxGraphQL(
 
 **Returns**: `WebApplication` for continued chaining.
 
-`UseTraxGraphQL` calls `app.UseWebSockets()` internally to enable the WebSocket transport required for [GraphQL subscriptions](/docs/sdk-reference/graphql-api/subscriptions).
+`AddTraxGraphQL` registers an `IStartupFilter` that prepends `app.UseWebSockets()` to the pipeline, so the WebSocket transport required for [GraphQL subscriptions](/docs/sdk-reference/graphql-api/subscriptions) is always in place before endpoint execution. You do not need to call `app.UseWebSockets()` yourself, and the ordering of `UseTraxGraphQL()` relative to other endpoint middleware (such as `UseTraxDashboard()`) does not affect the upgrade.
 
 ## What It Registers
 
@@ -106,7 +106,7 @@ If you call `AddTraxGraphQL` with no `[TraxQuery]` trains, no `[TraxQueryModel]`
 - **In-memory subscription transport**: HotChocolate's built-in pub/sub for delivering events to WebSocket clients
 - **Error filter**: `TraxErrorFilter`, which curates exception messages for train-related errors. Exposed types: `TrainException` passes through (`TRAX_TRAIN_ERROR`); `TrainAuthorizationException` always returns the generic `"Not authorized."` (`TRAX_AUTHORIZATION`); `TrainNotFoundException` returns `"The requested train was not found."` (`TRAX_TRAIN_NOT_FOUND`); `AmbiguousTrainNameException` surfaces candidate FullNames (`TRAX_AMBIGUOUS_TRAIN`); `TrainInputValidationException` returns `"The train input failed validation."` (`TRAX_INVALID_INPUT`). All other exception types (including `InvalidOperationException`) retain HotChocolate's default masked message.
 - **Hardening defaults**: max execution depth of 15, cost-analyzer budget `MaxFieldCost = 1000`, introspection allowed in Development only, and a 50-operation per-request cap. Override each via the builder methods above.
-- **Subscription auth interceptor**: when `AddTraxApiKeyAuth` is also wired, Trax registers `TraxApiKeySocketInterceptor` so WebSocket subscriptions authenticate via the same `ITraxPrincipalResolver<string>` using an `authToken` (or `apiKey`) key in the `connection_init` payload.
+- **Subscription auth interceptor**: Trax wires a socket interceptor so WebSocket subscriptions authenticate from the `connection_init` payload. `AddTraxApiKeyAuth` gets `TraxApiKeySocketInterceptor` (`authToken`/`apiKey`); `AddTraxJwtAuth` gets `TraxJwtSocketInterceptor` (`authToken`/`bearer`, including Authority/JWKS schemes); `AddTraxJwtDispatcher` gets `TraxJwtDispatcherSocketInterceptor`, which routes multiple JWT schemes by the token's issuer. Each is wired only when its matching auth is registered before `AddTraxGraphQL`. Supply your own via `ConfigureSchema(b => b.AddSocketSessionInterceptor<T>())` to override them. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#authentication).
 - **Lifecycle hook**: `GraphQLSubscriptionHook`, automatically registered to publish train state transitions to the subscription transport
 
 ## Prerequisites

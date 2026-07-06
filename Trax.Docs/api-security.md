@@ -134,11 +134,27 @@ ws.onopen = () => ws.send(JSON.stringify({
 }));
 ```
 
-`AddTraxJwtAuth` auto-registers `TraxJwtSocketInterceptor` when the Trax GraphQL schema is present. The interceptor validates the token against the same `JwtBearerOptions` (signature, issuer, audience, lifetime, clock skew) the HTTP handler uses - the WS and HTTP paths cannot diverge. It then runs `ITraxPrincipalResolver<JwtTokenInput>` and attaches the resulting principal.
+`AddTraxJwtAuth` auto-registers `TraxJwtSocketInterceptor` when the Trax GraphQL schema is present. The interceptor validates the token against the same `JwtBearerOptions` (signature, issuer, audience, lifetime, clock skew) the HTTP handler uses - the WS and HTTP paths cannot diverge. This includes Authority/JWKS schemes (Cognito, Google, any OIDC provider): the interceptor fetches signing keys from the scheme's discovery document when the options carry no static key. It then runs `ITraxPrincipalResolver<JwtTokenInput>` and attaches the resulting principal.
 
 ### OIDC cookie
 
 No extra code required. The browser attaches the session cookie (`trax.oidc`) to the WebSocket upgrade request; ASP.NET Core's cookie middleware reads and validates it on the upgrade, and `HttpContext.User` is populated for the socket lifetime. This is the one genuinely symmetric path across HTTP and WS.
+
+### Multiple JWT issuers
+
+`AddTraxJwtDispatcher` routes subscription tokens by their `iss` claim, the same way it routes HTTP requests. When a dispatcher is registered, Trax wires `TraxJwtDispatcherSocketInterceptor` in place of the single-scheme JWT interceptor, so each connection validates against the scheme its issuer maps to. Unmapped issuers are rejected.
+
+### Custom interceptor
+
+To authenticate against a scheme Trax does not model, supply your own `ISocketSessionInterceptor` through `ConfigureSchema`:
+
+```csharp
+services.AddTraxGraphQL(graphql => graphql
+    .AddDbContext<AppDbContext>()
+    .ConfigureSchema(b => b.AddSocketSessionInterceptor<MySocketInterceptor>()));
+```
+
+This overrides the stock interceptors and is independent of auth-registration order. Derive from `DefaultSocketSessionInterceptor` and read the credential from the `connection_init` payload in `OnConnectAsync`.
 
 ## Per-Train Authorization
 
@@ -274,4 +290,4 @@ Trax does none of these for you:
 
 ## SDK Reference
 
-> [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [AddTraxOidcAuth](/docs/sdk-reference/api-auth/add-trax-oidc-auth) | [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal) | [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal) | [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddAudit](/docs/sdk-reference/api-audit/add-audit) | [TraxAuditEntry](/docs/sdk-reference/api-audit/trax-audit-entry) | [ITraxAuditSink](/docs/sdk-reference/api-audit/i-trax-audit-sink) | [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options)
+> [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher) | [AddTraxOidcAuth](/docs/sdk-reference/api-auth/add-trax-oidc-auth) | [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal) | [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal) | [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddAudit](/docs/sdk-reference/api-audit/add-audit) | [TraxAuditEntry](/docs/sdk-reference/api-audit/trax-audit-entry) | [ITraxAuditSink](/docs/sdk-reference/api-audit/i-trax-audit-sink) | [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options)

@@ -78,10 +78,13 @@ The dispatcher never authenticates a token itself. It only chooses which validat
 | Bearer present, `iss` mapped, validation succeeds | `AuthenticateResult.Success` from the matched scheme |
 | Bearer present, `iss` mapped, validation fails | 401 from the matched scheme |
 
+## Subscriptions
+
+The dispatcher also covers GraphQL subscriptions over WebSockets. When a dispatcher is registered, `AddTraxGraphQL` wires `TraxJwtDispatcherSocketInterceptor` in place of the single-scheme JWT socket interceptor. It reads the token from the `connection_init` payload, routes by the token's `iss` claim through the same mapping, and validates against the matched scheme (signature, issuer, audience, lifetime, JWKS). Unmapped issuers are rejected unless `FallbackToScheme` is set. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#authentication).
+
 ## Caveats
 
 - The peek-then-validate dance means an attacker can route their token to any registered scheme by setting `iss`. That scheme's own issuer check is what stops them: never trust the unvalidated peek value beyond routing.
-- The dispatcher is HTTP-only. GraphQL subscriptions over WebSockets bypass it and run only the default scheme. See [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) for the subscription caveat in multi-issuer setups.
 
 ## SDK Reference
 
