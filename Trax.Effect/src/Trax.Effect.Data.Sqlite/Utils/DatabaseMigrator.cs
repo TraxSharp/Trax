@@ -10,7 +10,7 @@ public class DatabaseMigrator
 {
     public static UpgradeEngine CreateEngineWithEmbeddedScripts(string connectionString) =>
         DeployChanges
-            .To.SQLiteDatabase(connectionString)
+            .To.SqliteDatabase(connectionString)
             .WithScriptsEmbeddedInAssembly(typeof(AssemblyMarker).Assembly)
             .LogToTrace()
             .Build();
