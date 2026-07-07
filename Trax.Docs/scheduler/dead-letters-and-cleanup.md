@@ -213,7 +213,7 @@ Deletion uses EF Core's `ExecuteDeleteAsync` for efficient single-statement SQL.
 
 ### Enabling Cleanup
 
-Add `.AddMetadataCleanup()` to your scheduler configuration. By default this cleans up `ManifestManagerTrain` and `MetadataCleanupTrain` metadata older than 30 minutes, checking every minute.
+Add `.AddMetadataCleanup()` to your scheduler configuration. By default this cleans up the internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) metadata older than 30 minutes, checking every minute.
 
 See [MetadataCleanup](admin-trains/metadata-cleanup.md) for details on how the cleanup train operates internally.
 

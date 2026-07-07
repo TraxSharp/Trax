@@ -145,3 +145,16 @@ Run `026_scaling_indexes.sql` against your database. This migration adds partial
 | `ix_work_queue_manifest_id_status_queued` | `work_queue` | Dormant dependent activation check (partial: `queued` only) |
 
 These indexes are recommended for any deployment with more than a few thousand metadata rows. They have no effect on correctness, only on query performance.
+
+## Foreign-key and Manifest Indexes Migration (036)
+
+Run `036_fk_and_manifest_eval_indexes.sql` (Postgres) or `004_fk_and_manifest_eval_indexes.sql` (SQLite). All indexes use `CREATE INDEX IF NOT EXISTS` and are safe to re-run.
+
+| Index | Table | Covers |
+|-------|-------|--------|
+| `ix_metadata_parent_id` | `metadata` | Parent back-reference check when deleting metadata (partial: non-null only) |
+| `ix_work_queue_metadata_id` | `work_queue` | Metadata back-reference check when deleting metadata (partial: non-null only) |
+| `ix_dead_letter_retry_metadata_id` | `dead_letter` | Retry back-reference check when deleting metadata (partial: non-null only) |
+| `ix_metadata_manifest_failed` | `metadata` | Per-manifest `FailedCount` in the dispatch loop (partial: `failed` only) |
+
+PostgreSQL does not auto-index the referencing side of a foreign key, so without the first three, `DeleteExpiredMetadataJunction`'s cleanup DELETE had to scan those tables to satisfy the `ON DELETE RESTRICT` checks, becoming O(table) on a large database. The fourth bounds the per-manifest failed-count subquery in `LoadManifestsJunction` to failed rows instead of the manifest's entire terminal history.

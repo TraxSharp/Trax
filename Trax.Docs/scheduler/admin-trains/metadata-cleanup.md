@@ -8,7 +8,7 @@ nav_order: 4
 
 # MetadataCleanupTrain
 
-The MetadataCleanup train deletes old metadata rows for high-frequency internal trains. Without it, trains like ManifestManager (which runs every 5 seconds by default) would generate hundreds of thousands of metadata rows per day.
+The MetadataCleanup train deletes old metadata rows for the internal scheduler trains. Every train execution persists a metadata row, so high-frequency internal trains like JobDispatcher (every 2 seconds by default) and ManifestManager (every 5 seconds) would otherwise generate hundreds of thousands of rows per day. Once cleanup is enabled, the internal scheduler trains are pruned unconditionally, see [Configuration](#configuration).
 
 ## Chain
 
@@ -24,11 +24,11 @@ The `MetadataCleanupPollingService` is a separate `BackgroundService` from the m
 
 ## The Deletion Junction
 
-`DeleteExpiredMetadataJunction` deletes expired metadata in configurable batches (default: 1000 rows per batch) to limit row-level lock duration. Each batch loads metadata IDs first, then deletes associated FK rows and the metadata itself by ID. The junction loops until no more expired rows remain.
+`DeleteExpiredMetadataJunction` deletes expired metadata in configurable batches (default: 1000 rows per batch) to limit row-level lock duration. Each batch loads metadata IDs first, deletes the owned child rows (work queue entries, logs), clears the back-references that would otherwise block the delete (dead letter retry links, child metadata parent links), then deletes the metadata by ID. The junction loops until no more expired rows remain.
 
 A metadata row is deleted when all three conditions are true:
 
-1. Its `Name` matches a train in the `TrainTypeWhitelist`
+1. Its `Name` matches an internal scheduler train (always eligible) or a train in the `TrainTypeWhitelist`
 2. Its `StartTime` is older than `RetentionPeriod`
 3. Its `TrainState` is `Completed`, `Failed`, or `Cancelled`
 
@@ -46,15 +46,18 @@ Batching limits the duration of these implicit row-level locks. Without batching
 
 ### Deletion Order
 
-Each batch follows a five-step process:
+Each batch follows this process:
 
 1. **Load batch of metadata IDs**: select up to `DeleteBatchSize` IDs matching the criteria
 2. **WorkQueue entries**: delete entries whose `MetadataId` is in the batch
 3. **Log entries**: delete logs whose `MetadataId` is in the batch
-4. **Metadata rows**: delete metadata by ID
-5. **Repeat** until no more IDs match
+4. **Clear back-references**: null `dead_letter.retry_metadata_id` and child `metadata.parent_id` pointing at the batch, so the `ON DELETE RESTRICT` foreign keys don't block the delete (the dead letter and any still-running child are meaningful records and are kept)
+5. **Metadata rows**: delete metadata by ID
+6. **Repeat** until no more IDs match
 
-Using ID-based deletion guarantees all three DELETE statements in a batch target the exact same rows, avoiding race conditions between statements. Each `ExecuteDeleteAsync` is its own SQL statement, so a failure mid-batch leaves the Metadata rows intact, the next cleanup cycle retries and completes the deletion.
+Using ID-based deletion guarantees the statements in a batch target the exact same rows, avoiding race conditions between statements.
+
+A batch that still fails (for example an unexpected foreign-key reference or a deadlock) is bisected to isolate the offending row, which is logged and skipped so one bad row can never abort the whole sweep. Skipped rows are excluded from later batches and retried on the next cleanup cycle.
 
 ### Safety Boundary
 
@@ -72,7 +75,7 @@ Enable cleanup with `.AddMetadataCleanup()`:
 )
 ```
 
-With no arguments, this cleans up `ManifestManagerTrain` and `MetadataCleanupTrain` metadata older than 30 minutes, checking every minute.
+With no arguments, this cleans up metadata older than 30 minutes, checking every minute. The internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) are always cleaned up while cleanup is enabled, you can't forget one, and the retention window still keeps the last 30 minutes for diagnostics. Use the configure action to add your own noisy trains on top.
 
 ### Custom Configuration
 
@@ -86,7 +89,7 @@ With no arguments, this cleans up `ManifestManagerTrain` and `MetadataCleanupTra
 })
 ```
 
-`AddTrainType<T>()` uses `typeof(T).Name` to match the `Name` column in the metadata table. You can also pass a raw string for trains that aren't easily referenced by type.
+`AddTrainType<T>()` uses `typeof(T).FullName` to match the `Name` column in the metadata table (which stores the interface FullName). You can also pass a raw string for trains that aren't easily referenced by type.
 
 ### Options
 
@@ -95,7 +98,7 @@ With no arguments, this cleans up `ManifestManagerTrain` and `MetadataCleanupTra
 | `CleanupInterval` | 1 minute | How often the cleanup service runs |
 | `RetentionPeriod` | 30 minutes | Age threshold for deletion eligibility |
 | `DeleteBatchSize` | 1000 | Max rows deleted per batch. Set to `null` for single-statement deletes |
-| `TrainTypeWhitelist` | ManifestManager, MetadataCleanup | Train names whose metadata can be deleted |
+| `TrainTypeWhitelist` | (internal trains always included) | Additional consumer train names whose metadata can be deleted. The internal scheduler trains are pruned unconditionally on top of this list |
 
 ## SDK Reference
 
