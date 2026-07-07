@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.CancellationRegistry;
@@ -8,6 +9,7 @@ using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.Operations;
+using Trax.Scheduler.Services.SchedulerLiveness;
 using Trax.Scheduler.Services.SchedulerStartupService;
 using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.JobDispatcher;
@@ -37,6 +39,16 @@ public partial class SchedulerConfigurationBuilder
 
         // Register the configuration
         _parentBuilder.ServiceCollection.AddSingleton(_configuration);
+
+        // Liveness tracking: the JobDispatcher stamps this after each successful cycle so a
+        // wedged scheduler (up but dispatching nothing) can be detected via
+        // AddHealthChecks().AddTraxSchedulerLiveness(). TryAdd so a consumer-provided
+        // TimeProvider (e.g. a test clock) wins.
+        _parentBuilder.ServiceCollection.TryAddSingleton(TimeProvider.System);
+        _parentBuilder.ServiceCollection.AddSingleton<
+            ISchedulerLivenessMonitor,
+            SchedulerLivenessMonitor
+        >();
 
         // Register the cancellation registry (singleton — shared across all workers)
         _parentBuilder.ServiceCollection.AddSingleton<

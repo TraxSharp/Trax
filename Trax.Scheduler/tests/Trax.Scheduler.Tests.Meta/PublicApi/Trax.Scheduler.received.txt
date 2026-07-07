@@ -124,6 +124,7 @@ namespace Trax.Scheduler.Configuration
         public bool PruneOrphanedManifests { get; set; }
         public bool RecoverStuckJobsOnStartup { get; set; }
         public double RetryBackoffMultiplier { get; set; }
+        public System.TimeSpan? SchedulerLivenessThreshold { get; set; }
         public System.TimeSpan StaleInProgressTimeout { get; set; }
         public System.TimeSpan StalePendingTimeout { get; set; }
     }
@@ -208,6 +209,7 @@ namespace Trax.Scheduler.Configuration
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ScheduleOnce<TTrain, TInput, TOutput>(string externalId, TInput input, System.TimeSpan delay, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
             where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
             where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder SchedulerLivenessThreshold(System.TimeSpan threshold) { }
         public void SetRemoteRunRegistration(System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection> registration) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder StaleInProgressTimeout(System.TimeSpan timeout) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder StalePendingTimeout(System.TimeSpan timeout) { }
@@ -265,6 +267,10 @@ namespace Trax.Scheduler.Extensions
     {
         public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddScheduler(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder) { }
         public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddScheduler(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder, System.Func<Trax.Scheduler.Configuration.SchedulerConfigurationBuilder, Trax.Scheduler.Configuration.SchedulerConfigurationBuilder> configure) { }
+    }
+    public static class SchedulerLivenessHealthCheckExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IHealthChecksBuilder AddTraxSchedulerLiveness(this Microsoft.Extensions.DependencyInjection.IHealthChecksBuilder builder, string name = "scheduler-liveness", System.TimeSpan? threshold = default, Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus failureStatus = 0, System.Collections.Generic.IEnumerable<string>? tags = null) { }
     }
     public static class TrainRegistryExtensions
     {
@@ -622,6 +628,15 @@ namespace Trax.Scheduler.Services.RunExecutor
         public string? OutputJson { get; init; }
         public string? OutputType { get; init; }
         public string? StackTrace { get; init; }
+    }
+}
+namespace Trax.Scheduler.Services.SchedulerLiveness
+{
+    public interface ISchedulerLivenessMonitor
+    {
+        System.DateTimeOffset? LastDispatchCompletedAt { get; }
+        System.DateTimeOffset StartedAt { get; }
+        void RecordDispatchCycle();
     }
 }
 namespace Trax.Scheduler.Services.Scheduling

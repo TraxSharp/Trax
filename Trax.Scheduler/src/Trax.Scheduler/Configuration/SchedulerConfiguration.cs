@@ -49,6 +49,13 @@ public class SchedulerConfiguration
     public TimeSpan JobDispatcherPollingInterval { get; set; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
+    /// How long the JobDispatcher may go without completing a polling cycle before the
+    /// <c>AddTraxSchedulerLiveness()</c> health check reports unhealthy. When null, the
+    /// check uses max(<see cref="JobDispatcherPollingInterval"/> * 10, 30s).
+    /// </summary>
+    public TimeSpan? SchedulerLivenessThreshold { get; set; }
+
+    /// <summary>
     /// The maximum number of work queue entries dispatched concurrently within a single
     /// JobDispatcher polling cycle.
     /// </summary>

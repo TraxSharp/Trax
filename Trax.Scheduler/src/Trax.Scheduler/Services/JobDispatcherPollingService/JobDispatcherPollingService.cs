@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.SchedulerLiveness;
 using Trax.Scheduler.Trains.JobDispatcher;
 
 namespace Trax.Scheduler.Services.JobDispatcherPollingService;
@@ -14,6 +15,7 @@ namespace Trax.Scheduler.Services.JobDispatcherPollingService;
 internal class JobDispatcherPollingService(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration,
+    ISchedulerLivenessMonitor livenessMonitor,
     ILogger<JobDispatcherPollingService> logger
 ) : BackgroundService
 {
@@ -51,6 +53,11 @@ internal class JobDispatcherPollingService(
 
             logger.LogDebug("JobDispatcher polling cycle starting");
             await train.Run(Unit.Default, cancellationToken);
+
+            // Stamp liveness only on a successful cycle (a no-op poll still proves the loop
+            // and DB round-trip work). A failed run leaves the timestamp stale so the health
+            // check flips unhealthy.
+            livenessMonitor.RecordDispatchCycle();
             logger.LogDebug("JobDispatcher polling cycle completed");
         }
         catch (Exception ex)

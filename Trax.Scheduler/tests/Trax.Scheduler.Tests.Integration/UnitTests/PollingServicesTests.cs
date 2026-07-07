@@ -10,6 +10,7 @@ using Trax.Scheduler.Services.DeadLetterCleanupPollingService;
 using Trax.Scheduler.Services.JobDispatcherPollingService;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
+using Trax.Scheduler.Services.SchedulerLiveness;
 using Trax.Scheduler.Trains.DeadLetterCleanup;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.ManifestManager;
@@ -115,6 +116,7 @@ public class PollingServicesTests
         var service = new JobDispatcherPollingService(
             sp,
             FastConfig(),
+            new SchedulerLivenessMonitor(TimeProvider.System),
             NullLogger<JobDispatcherPollingService>.Instance
         );
 
@@ -134,6 +136,7 @@ public class PollingServicesTests
         var service = new JobDispatcherPollingService(
             sp,
             config,
+            new SchedulerLivenessMonitor(TimeProvider.System),
             NullLogger<JobDispatcherPollingService>.Instance
         );
 

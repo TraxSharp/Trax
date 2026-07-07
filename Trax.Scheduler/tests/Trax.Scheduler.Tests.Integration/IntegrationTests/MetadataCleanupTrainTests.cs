@@ -3,14 +3,20 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.DeadLetter;
+using Trax.Effect.Models.DeadLetter.DTOs;
 using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Log.DTOs;
+using Trax.Effect.Models.Manifest;
+using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
+using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.ManifestManager;
 using Trax.Scheduler.Trains.MetadataCleanup;
 
@@ -81,6 +87,187 @@ public class MetadataCleanupTrainTests : TestSetup
         _config
             .MetadataCleanup!.CleanupInterval.Should()
             .Be(TimeSpan.FromMinutes(1), "default cleanup interval should be 1 minute");
+    }
+
+    #endregion
+
+    #region Internal Train Pruning
+
+    [Test]
+    public async Task Run_PrunesEveryAdminTrainByDefault()
+    {
+        // Every internal scheduler train must be cleaned up without the consumer having to
+        // whitelist it. JobDispatcher (a metadata row every poll) is the one that caused the
+        // outage this guards against. If a new admin train is added to AdminTrains without the
+        // cleanup covering it, this fails.
+        var seeded = new List<long>();
+        foreach (var adminName in AdminTrains.FullNames)
+        {
+            var metadata = await CreateAndSaveMetadata(
+                name: adminName,
+                state: TrainState.Completed,
+                startTime: DateTime.UtcNow.AddHours(-2)
+            );
+            seeded.Add(metadata.Id);
+        }
+
+        await _train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        var remaining = await DataContext.Metadatas.Where(m => seeded.Contains(m.Id)).CountAsync();
+
+        remaining
+            .Should()
+            .Be(0, "every internal scheduler train's metadata should be pruned by default");
+    }
+
+    [Test]
+    public async Task Run_DeletesJobDispatcherMetadata_EvenThoughNotInWhitelist()
+    {
+        // The configurable whitelist never contains JobDispatcher, yet its metadata must be
+        // pruned: it persists a row on every dispatch poll and is the dominant source of growth.
+        _config
+            .MetadataCleanup!.TrainTypeWhitelist.Should()
+            .NotContain(
+                typeof(JobDispatcherTrain).FullName!,
+                "JobDispatcher is pruned unconditionally, not via the whitelist"
+            );
+
+        var metadata = await CreateAndSaveMetadata(
+            name: typeof(JobDispatcherTrain).FullName!,
+            state: TrainState.Completed,
+            startTime: DateTime.UtcNow.AddHours(-2)
+        );
+
+        await _train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        var remaining = await DataContext
+            .Metadatas.Where(m => m.Id == metadata.Id)
+            .FirstOrDefaultAsync();
+
+        remaining
+            .Should()
+            .BeNull("JobDispatcher metadata must be pruned even though it is not whitelisted");
+    }
+
+    #endregion
+
+    #region Foreign Key Reference Tests
+
+    [Test]
+    public async Task Run_MetadataReferencedByDeadLetterRetry_ClearsRefAndDeletesMetadata()
+    {
+        // Reproduces the incident: a dead letter's retry_metadata_id pointed at an expired
+        // metadata row, and the RESTRICT foreign key made the whole cleanup DELETE throw.
+        var manifest = await CreateAndSaveManifest();
+        var metadata = await CreateAndSaveMetadata(
+            name: typeof(ManifestManagerTrain).FullName!,
+            state: TrainState.Completed,
+            startTime: DateTime.UtcNow.AddHours(-2)
+        );
+        var deadLetter = await CreateAndSaveDeadLetter(manifest);
+
+        await DataContext
+            .DeadLetters.Where(d => d.Id == deadLetter.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, metadata.Id));
+        DataContext.Reset();
+
+        await _train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        var remainingMetadata = await DataContext
+            .Metadatas.Where(m => m.Id == metadata.Id)
+            .FirstOrDefaultAsync();
+        var survivingDeadLetter = await DataContext
+            .DeadLetters.Where(d => d.Id == deadLetter.Id)
+            .FirstOrDefaultAsync();
+
+        remainingMetadata
+            .Should()
+            .BeNull(
+                "the referenced metadata should be deleted after its back-reference is cleared"
+            );
+        survivingDeadLetter
+            .Should()
+            .NotBeNull("the dead letter is a meaningful record and must survive the cleanup");
+        survivingDeadLetter!
+            .RetryMetadataId.Should()
+            .BeNull(
+                "the dangling retry reference should be nulled, not left pointing at a deleted row"
+            );
+    }
+
+    [Test]
+    public async Task Run_ParentMetadataWithRunningChild_NullsChildParentIdAndDeletesParent()
+    {
+        var parent = await CreateAndSaveMetadata(
+            name: typeof(ManifestManagerTrain).FullName!,
+            state: TrainState.Completed,
+            startTime: DateTime.UtcNow.AddHours(-2)
+        );
+
+        // A still-running child (not eligible for deletion) references the parent via parent_id.
+        var child = await CreateAndSaveChildMetadata(
+            name: "Consumer.Trains.SomeChildTrain",
+            state: TrainState.InProgress,
+            parentId: parent.Id
+        );
+
+        await _train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        var remainingParent = await DataContext
+            .Metadatas.Where(m => m.Id == parent.Id)
+            .FirstOrDefaultAsync();
+        var survivingChild = await DataContext
+            .Metadatas.Where(m => m.Id == child.Id)
+            .FirstOrDefaultAsync();
+
+        remainingParent
+            .Should()
+            .BeNull(
+                "the expired parent should be deleted after the child's parent reference is cleared"
+            );
+        survivingChild.Should().NotBeNull("the still-running child must survive the cleanup");
+        survivingChild!.ParentId.Should().BeNull("the dangling parent reference should be nulled");
+    }
+
+    [Test]
+    public async Task Run_WithFkReferencedRowsAcrossBatches_DeletesAll()
+    {
+        // Batch size 1 forces the per-row delete path, so every row exercises the FK-clearing.
+        _config.MetadataCleanup!.DeleteBatchSize = 1;
+
+        var manifest = await CreateAndSaveManifest();
+        var ids = new List<long>();
+        for (var i = 0; i < 5; i++)
+        {
+            var metadata = await CreateAndSaveMetadata(
+                name: typeof(ManifestManagerTrain).FullName!,
+                state: TrainState.Completed,
+                startTime: DateTime.UtcNow.AddHours(-2)
+            );
+            ids.Add(metadata.Id);
+
+            var deadLetter = await CreateAndSaveDeadLetter(manifest);
+            await DataContext
+                .DeadLetters.Where(d => d.Id == deadLetter.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, metadata.Id));
+            DataContext.Reset();
+        }
+
+        await _train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        var remaining = await DataContext.Metadatas.Where(m => ids.Contains(m.Id)).CountAsync();
+
+        remaining
+            .Should()
+            .Be(
+                0,
+                "every expired row should be deleted even when each carries a dead-letter back-reference"
+            );
     }
 
     #endregion
@@ -732,6 +919,80 @@ public class MetadataCleanupTrainTests : TestSetup
         DataContext.Reset();
 
         return metadata;
+    }
+
+    private async Task<Metadata> CreateAndSaveChildMetadata(
+        string name,
+        TrainState state,
+        long parentId
+    )
+    {
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = name,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+                ParentId = parentId,
+            }
+        );
+
+        metadata.TrainState = state;
+        metadata.StartTime = DateTime.UtcNow;
+
+        await DataContext.Track(metadata);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        return metadata;
+    }
+
+    private async Task<Manifest> CreateAndSaveManifest()
+    {
+        var group = await TestSetup.CreateAndSaveManifestGroup(
+            DataContext,
+            name: $"group-{Guid.NewGuid():N}"
+        );
+
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(SchedulerTestTrain),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.Interval,
+                IntervalSeconds = 60,
+                MaxRetries = 3,
+                Properties = new SchedulerTestInput { Value = "cleanup-fk-test" },
+            }
+        );
+
+        manifest.ManifestGroupId = group.Id;
+
+        await DataContext.Track(manifest);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        return manifest;
+    }
+
+    private async Task<DeadLetter> CreateAndSaveDeadLetter(Manifest manifest)
+    {
+        var reloadedManifest = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+
+        var deadLetter = DeadLetter.Create(
+            new CreateDeadLetter
+            {
+                Manifest = reloadedManifest,
+                Reason = "Test dead letter",
+                RetryCount = 3,
+            }
+        );
+
+        await DataContext.Track(deadLetter);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        return deadLetter;
     }
 
     #endregion

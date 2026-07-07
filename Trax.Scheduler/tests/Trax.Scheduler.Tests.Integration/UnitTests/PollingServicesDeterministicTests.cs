@@ -7,6 +7,7 @@ using NSubstitute;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.DeadLetterCleanupPollingService;
 using Trax.Scheduler.Services.JobDispatcherPollingService;
+using Trax.Scheduler.Services.SchedulerLiveness;
 using Trax.Scheduler.Trains.DeadLetterCleanup;
 using Trax.Scheduler.Trains.JobDispatcher;
 
@@ -107,6 +108,7 @@ public class PollingServicesDeterministicTests
         var service = new JobDispatcherPollingService(
             Provide(train),
             LongIntervalConfig(),
+            new SchedulerLivenessMonitor(TimeProvider.System),
             NullLogger<JobDispatcherPollingService>.Instance
         );
 
@@ -123,6 +125,7 @@ public class PollingServicesDeterministicTests
         var service = new JobDispatcherPollingService(
             Provide(train),
             config,
+            new SchedulerLivenessMonitor(TimeProvider.System),
             NullLogger<JobDispatcherPollingService>.Instance
         );
 

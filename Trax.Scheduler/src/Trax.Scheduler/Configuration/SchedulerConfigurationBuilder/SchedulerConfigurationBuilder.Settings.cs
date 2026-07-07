@@ -47,6 +47,20 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
+    /// Sets how long the JobDispatcher may go without completing a cycle before the
+    /// <c>AddTraxSchedulerLiveness()</c> health check reports unhealthy.
+    /// </summary>
+    /// <param name="threshold">
+    /// The staleness threshold (default: max(JobDispatcherPollingInterval * 10, 30s)).
+    /// </param>
+    /// <returns>The builder for method chaining</returns>
+    public SchedulerConfigurationBuilder SchedulerLivenessThreshold(TimeSpan threshold)
+    {
+        _configuration.SchedulerLivenessThreshold = threshold;
+        return this;
+    }
+
+    /// <summary>
     /// Sets the maximum number of work queue entries dispatched concurrently per polling cycle.
     /// </summary>
     /// <param name="maxConcurrent">The concurrency limit (minimum: 1, default: 1)</param>

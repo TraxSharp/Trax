@@ -1,11 +1,18 @@
 using FluentAssertions;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.DeadLetter;
+using Trax.Effect.Models.DeadLetter.DTOs;
+using Trax.Effect.Models.Manifest;
+using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Scheduler.Tests.Sqlite.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Sqlite.Integration.Fixtures;
+using Trax.Scheduler.Trains.JobDispatcher;
+using Trax.Scheduler.Trains.MetadataCleanup;
 
 namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 
@@ -172,6 +179,107 @@ public class SqliteCleanupTests : TestSetup
 
         var remaining = await DataContext.Metadatas.CountAsync();
         remaining.Should().Be(0);
+    }
+
+    #endregion
+
+    #region MetadataCleanupTrain (dialect coverage)
+
+    [Test]
+    public async Task MetadataCleanupTrain_PrunesJobDispatcherMetadata()
+    {
+        var metadata = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName!);
+
+        var train = Scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
+        await train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        var remaining = await DataContext
+            .Metadatas.Where(m => m.Id == metadata.Id)
+            .FirstOrDefaultAsync();
+        remaining.Should().BeNull("JobDispatcher metadata is pruned unconditionally on Sqlite too");
+    }
+
+    [Test]
+    public async Task MetadataCleanupTrain_ClearsDeadLetterRetryRef_AndDeletes()
+    {
+        // Sqlite enforces the retry_metadata_id foreign key, so the SET NULL then DELETE path
+        // must translate correctly on this dialect.
+        var metadata = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName!);
+
+        var group = await TestSetup.CreateAndSaveManifestGroup(
+            DataContext,
+            name: $"group-{Guid.NewGuid():N}"
+        );
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(SchedulerTestTrain),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.Interval,
+                IntervalSeconds = 60,
+                MaxRetries = 3,
+                Properties = new SchedulerTestInput { Value = "fk" },
+            }
+        );
+        manifest.ManifestGroupId = group.Id;
+        await DataContext.Track(manifest);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        var reloaded = await DataContext.Manifests.FirstAsync(m => m.Id == manifest.Id);
+        var deadLetter = DeadLetter.Create(
+            new CreateDeadLetter
+            {
+                Manifest = reloaded,
+                Reason = "test",
+                RetryCount = 3,
+            }
+        );
+        await DataContext.Track(deadLetter);
+        await DataContext.SaveChanges(CancellationToken.None);
+        await DataContext
+            .DeadLetters.Where(d => d.Id == deadLetter.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, metadata.Id));
+        DataContext.Reset();
+
+        var train = Scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
+        await train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        var remainingMetadata = await DataContext
+            .Metadatas.Where(m => m.Id == metadata.Id)
+            .FirstOrDefaultAsync();
+        var survivingDeadLetter = await DataContext
+            .DeadLetters.Where(d => d.Id == deadLetter.Id)
+            .FirstOrDefaultAsync();
+
+        remainingMetadata.Should().BeNull("the referenced metadata should be deleted");
+        survivingDeadLetter.Should().NotBeNull("the dead letter must survive");
+        survivingDeadLetter!
+            .RetryMetadataId.Should()
+            .BeNull("the retry reference should be nulled");
+    }
+
+    private async Task<Metadata> CreateExpiredMetadata(string name)
+    {
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = name,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+        metadata.TrainState = TrainState.Completed;
+        metadata.StartTime = DateTime.UtcNow.AddHours(-2);
+        metadata.EndTime = DateTime.UtcNow.AddHours(-2).AddSeconds(1);
+
+        await DataContext.Track(metadata);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        return metadata;
     }
 
     #endregion
