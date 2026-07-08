@@ -211,6 +211,9 @@ query {
 |-----------|------|---------|-------------|
 | `skip` | `Int` | `0` | Number of records to skip (offset pagination) |
 | `take` | `Int` | `25` | Number of records to return |
+| `isEnabled` | `Boolean` | `null` | Filter by enabled/disabled |
+| `scheduleType` | `ScheduleType` | `null` | Filter by schedule type (`NONE`, `CRON`, `INTERVAL`, `ON_DEMAND`, `DEPENDENT`, `DORMANT_DEPENDENT`, `ONCE`) |
+| `nameContains` | `String` | `null` | Case-sensitive substring match on the train name |
 | `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. When provided, `skip` is ignored. See [Pagination](#pagination) |
 
 **Returns**: `PagedResult<ManifestSummary>`
@@ -303,7 +306,14 @@ query {
 |-----------|------|---------|-------------|
 | `skip` | `Int` | `0` | Number of records to skip (offset pagination) |
 | `take` | `Int` | `25` | Number of records to return |
-| `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. See [Pagination](#pagination) |
+| `trainState` | `TrainState` | `null` | Filter by state (`PENDING`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`) |
+| `trainName` | `String` | `null` | Exact-match filter on the train interface FullName |
+| `startedAfter` | `DateTime` | `null` | Only executions with `startTime >= startedAfter` |
+| `startedBefore` | `DateTime` | `null` | Only executions with `startTime <= startedBefore` |
+| `order` | `SortOrder` | `NEWEST` | `NEWEST` (id descending) or `OLDEST` (id ascending). Both stay keyset-safe |
+| `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId` (or `id > afterId` when `order: OLDEST`). See [Pagination](#pagination) |
+
+When any filter or `afterId` is supplied the count is exact (`isEstimatedCount: false`); the unfiltered first page uses the fast `pg_class.reltuples` estimator. `startedAfter`/`startedBefore` use the `ix_metadata_start_time_desc` index so they stay fast at scale. Arbitrary-column sorting is deliberately not offered: it is incompatible with keyset pagination over millions of rows (it forces OFFSET scans or a full sort). Filter to narrow the set instead.
 
 **Returns**: `PagedResult<ExecutionSummary>`
 
@@ -350,6 +360,82 @@ query {
 | `id` | `Long!` | Yes | The execution's metadata ID |
 
 **Returns**: `ExecutionSummary` (nullable, returns `null` if the ID does not exist)
+
+---
+
+### executionDetail
+
+Returns the full detail for a single execution, including the `input` / `output` payloads and
+`stackTrace` that `execution` / `executions` omit to keep list reads lean. Use this for a
+detail page; use `execution` for a light single-row lookup.
+
+```graphql
+query {
+  operations {
+    executionDetail(id: 100) {
+      id
+      externalId
+      name
+      trainState
+      startTime
+      endTime
+      failureJunction
+      failureReason
+      failureException
+      stackTrace
+      input
+      output
+      manifestId
+      cancellationRequested
+      currentlyRunningJunction
+      junctionStartedAt
+      hostName
+      hostEnvironment
+      hostInstanceId
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `Long!` | Yes | The execution's metadata ID |
+
+**Returns**: `ExecutionDetail` (nullable; `null` when the ID does not exist).
+
+`input` and `output` are the raw JSON payloads as stored (Postgres returns them in jsonb
+canonical form). There is no separate junction table: junction context is the
+`currentlyRunningJunction` (while `IN_PROGRESS`) and `failureJunction` (on failure) fields.
+`childCount` is the number of sub-executions (metadata rows whose `parentId` is this
+execution), for rendering a parent/child tree.
+
+---
+
+### executionChildren
+
+Paginated child executions of a parent (metadata rows whose `parentId` matches the given id),
+newest first. Keyset-paginated on id like the top-level `executions` list. Backed by the
+partial index `ix_metadata_parent_id`, so it stays O(page size) even on the huge metadata table.
+
+```graphql
+query {
+  operations {
+    executionChildren(parentId: 100, take: 25) {
+      items { id name trainState startTime endTime }
+      totalCount
+      nextCursor
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `parentId` | `Long!` | — | The parent execution's metadata id |
+| `take` | `Int` | `25` | Page size |
+| `afterId` | `Long` | `null` | Keyset cursor (`id < afterId`) |
+
+**Returns**: `PagedResult<ExecutionSummary>` (count is always exact).
 
 ---
 
@@ -411,6 +497,15 @@ When `afterId` is provided, `skip` is ignored.
 For unfiltered queries on large tables (>10,000 rows), `totalCount` uses PostgreSQL's `pg_class.reltuples` statistic instead of an exact `COUNT(*)`. This is O(1) rather than O(n), and the difference matters when the metadata table has millions of rows.
 
 When the estimate is used, `isEstimatedCount` is `true`. The estimate is updated by PostgreSQL's autovacuum/autoanalyze and is typically accurate within a few percent. For filtered queries or small tables, an exact count is always used and `isEstimatedCount` is `false`.
+
+### Performance at scale
+
+The operations queries are stress-tested against millions of rows (`Trax.Api.Tests.Stress`, run with `dotnet test --filter TestCategory=Stress`). At 3,000,000 metadata rows on laptop-class PostgreSQL:
+
+- **Keyset pagination stays flat.** A far-end page (an `afterId` near the end of the id sequence) returns in ~35ms no matter how deep it is, because it seeks through the primary key index rather than counting past skipped rows.
+- **Deep offset pagination does not.** A `skip` near the end of the table scans and discards every skipped row: ~430ms at a 3,000,000-row offset, more than 10x slower than the equivalent keyset page.
+
+Build list views on keyset cursors: read the first page with `take`, then pass each response's `nextCursor` as the next request's `afterId`. Reserve `skip` for shallow, bounded jumps. Filtered reads (`status`, `trainName`, `metadataId`, `minimumLevel`, `category`) and their exact counts also stay under ~100ms at the same scale, so filter controls stay responsive.
 
 ## config (nested under operations)
 
@@ -484,7 +579,7 @@ The `operations.metrics` namespace returns the data behind the dashboard's KPI c
 query {
   operations {
     metrics {
-      dashboard(range: LAST_24_HOURS, hideAdminTrains: true) {
+      dashboard(range: LAST24_HOURS, hideAdminTrains: true) {
         kpis { executionsToday successRate currentlyRunning unresolvedDeadLetters }
         executionsOverTime { timestamp completed failed cancelled }
         topFailures { trainName count }
@@ -501,7 +596,7 @@ query {
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `range` | `MetricsRange` | `LAST_24_HOURS` | Granularity of the executions-over-time chart. `LAST_60_MINUTES` returns 60 buckets (1 minute each); `LAST_24_HOURS` returns 24 buckets (1 hour each). The other series are always over the last 7 days |
+| `range` | `MetricsRange` | `LAST24_HOURS` | Granularity of the executions-over-time chart. `LAST60_MINUTES` returns 60 buckets (1 minute each); `LAST24_HOURS` returns 24 buckets (1 hour each). The other series are always over the last 7 days |
 | `hideAdminTrains` | `Boolean` | `false` | When `true`, framework admin trains (matching `AdminTrains.FullNames`) are excluded from every series |
 
 **Returns**: `DashboardMetrics`.
@@ -561,6 +656,8 @@ query {
 |-------|------|-------------|
 | `timestamp` | `DateTime!` | UTC start of the bucket |
 | `count` | `Int!` | Completed executions in the bucket |
+
+`dashboard` runs several aggregations over the last-24h and last-7-day windows on every call, and those windows hold hundreds of thousands to millions of rows at scale. The metadata table carries two covering indexes for them (`ix_metadata_metrics_state_time` and `ix_metadata_metrics_window`) so every aggregation is a heap-free index-only scan. At 3,000,000 metadata rows the whole block returns in ~400-525ms, against ~630-770ms without the covering indexes. It is the heaviest operations read, so poll it on an interval (a few seconds) rather than on every dashboard interaction.
 
 ### server
 
@@ -671,6 +768,7 @@ query {
 |-----------|------|---------|-------------|
 | `skip` | `Int` | `0` | Number of records to skip (offset pagination) |
 | `take` | `Int` | `25` | Number of records to return |
+| `nameContains` | `String` | `null` | Case-sensitive substring match on the group name |
 | `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. See [Pagination](#pagination) |
 
 **Returns**: `PagedResult<ManifestGroupSummary>`

@@ -375,6 +375,82 @@ mutation {
 
 ---
 
+### cancelExecution
+
+Requests cancellation of a single execution by metadata id. Sets the durable
+`cancel_requested` flag on the row (only when it is still `PENDING` or `IN_PROGRESS`); an
+in-process runner observes it and transitions the train to `CANCELLED`.
+
+```graphql
+mutation {
+  operations {
+    cancelExecution(id: 100) { success count message }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `Long!` | Yes | The execution's metadata id |
+
+**Returns**: `OperationResponse`. `count` is `1` when flagged, `0` when the execution is missing or already terminal.
+
+---
+
+### requeueExecution
+
+Re-queues an execution: reads its train name + input from the metadata row and enqueues a
+fresh work queue entry for the dispatcher (the dashboard's Re-queue action).
+
+```graphql
+mutation {
+  operations {
+    requeueExecution(id: 100) { success message }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `Long!` | Yes | The execution's metadata id |
+
+**Returns**: `OperationResponse`.
+
+---
+
+### updateManifest
+
+Patches mutable settings on a single manifest. Each field on `input` is independent; a `null`
+value leaves it unchanged. Set `clearTimeout: true` to remove the per-execution timeout.
+
+```graphql
+mutation {
+  operations {
+    updateManifest(id: 42, input: {
+      isEnabled: false
+      maxRetries: 5
+      priority: 10
+      scheduleType: CRON
+      cronExpression: "0 3 * * *"
+    }) { success message }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `isEnabled` | `Boolean` | Enable/disable the manifest |
+| `maxRetries` | `Int` | Retry budget |
+| `priority` | `Int` | Dispatch priority |
+| `timeoutSeconds` / `clearTimeout` | `Int` / `Boolean` | Per-execution timeout; `clearTimeout: true` removes it |
+| `scheduleType` | `ScheduleType` | Schedule type |
+| `cronExpression` | `String` | Cron expression |
+| `intervalSeconds` | `Int` | Interval |
+
+**Returns**: `OperationResponse` (`success: false` when the manifest id does not exist).
+
+---
+
 ### config (nested namespace)
 
 The `operations.config` namespace patches scheduler runtime settings. Writes go to both the in-memory `SchedulerConfiguration` singleton (immediate effect on running services) and the persisted `trax.scheduler_config` row (survives restarts via the `SchedulerConfigBootstrapHostedService`).
@@ -523,6 +599,28 @@ mutation {
 | `id` | `Long!` | Yes | The work queue entry's database ID |
 
 **Returns**: `OperationResponse`.
+
+#### cancelWorkQueueEntries
+
+Cancels many queued entries in one round-trip (a single set-based `UPDATE`). Only entries
+still `QUEUED` are affected; already-dispatched or already-cancelled ids in the list are
+silently skipped. Backs the dashboard's bulk-cancel selection.
+
+```graphql
+mutation {
+  operations {
+    workQueue {
+      cancelWorkQueueEntries(ids: [1234, 1235, 1236]) { success count message }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ids` | `[Long!]!` | Yes | Work queue entry ids to cancel |
+
+**Returns**: `OperationResponse`. `count` is the number actually cancelled.
 
 ---
 
