@@ -1,4 +1,7 @@
+using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.GraphQL.Mutations;
@@ -35,6 +38,33 @@ public class WorkQueueMutations
     {
         var result = await operationsService.CancelWorkQueueEntryAsync(id, ct);
         return ToResponse(result);
+    }
+
+    /// <summary>
+    /// Cancels many queued entries in one round-trip. Only entries still in <c>Queued</c>
+    /// are affected; already-dispatched/cancelled ids are silently skipped. Returns the
+    /// number actually cancelled.
+    /// </summary>
+    public async Task<OperationResponse> CancelWorkQueueEntries(
+        long[] ids,
+        [Service] IDataContextProviderFactory dataContextFactory,
+        CancellationToken ct
+    )
+    {
+        if (ids.Length == 0)
+            return new OperationResponse(true, Count: 0, Message: "No ids supplied.");
+
+        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+
+        var cancelled = await db
+            .WorkQueues.Where(q => ids.Contains(q.Id) && q.Status == WorkQueueStatus.Queued)
+            .ExecuteUpdateAsync(s => s.SetProperty(q => q.Status, WorkQueueStatus.Cancelled), ct);
+
+        return new OperationResponse(
+            true,
+            Count: cancelled,
+            Message: $"{cancelled} work queue entry(s) cancelled."
+        );
     }
 
     private static OperationResponse ToResponse(OperationResult result) =>

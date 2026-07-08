@@ -90,6 +90,42 @@ public class WorkQueueOperationsTests
         await db.SaveChanges(default);
     }
 
+    #region CancelWorkQueueEntries (batch)
+
+    [Test]
+    public async Task CancelWorkQueueEntries_CancelsOnlyQueuedInSet()
+    {
+        await SeedWorkQueues(3, WorkQueueStatus.Queued);
+        await SeedWorkQueues(1, WorkQueueStatus.Dispatched);
+
+        long[] ids;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+            ids = await db.WorkQueues.Select(q => q.Id).ToArrayAsync();
+
+        var resp = await new WorkQueueMutations().CancelWorkQueueEntries(ids, _factory, default);
+
+        resp.Success.Should().BeTrue();
+        resp.Count.Should().Be(3); // only the 3 queued; the dispatched one is skipped
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var cancelled = await db.WorkQueues.CountAsync(q =>
+                q.Status == WorkQueueStatus.Cancelled
+            );
+            cancelled.Should().Be(3);
+        }
+    }
+
+    [Test]
+    public async Task CancelWorkQueueEntries_EmptyIds_ReturnsZero()
+    {
+        var resp = await new WorkQueueMutations().CancelWorkQueueEntries([], _factory, default);
+
+        resp.Success.Should().BeTrue();
+        resp.Count.Should().Be(0);
+    }
+
+    #endregion
+
     #region GetWorkQueues
 
     [Test]

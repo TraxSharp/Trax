@@ -14,6 +14,50 @@ namespace Trax.Api.DTOs
         public long? RetryMetadataId { get; init; }
         public Trax.Effect.Enums.DeadLetterStatus Status { get; init; }
     }
+    public class ExecutionDetail : System.IEquatable<Trax.Api.DTOs.ExecutionDetail>
+    {
+        public ExecutionDetail(
+                    long Id,
+                    string ExternalId,
+                    string Name,
+                    Trax.Effect.Enums.TrainState TrainState,
+                    System.DateTime StartTime,
+                    System.DateTime? EndTime,
+                    string? FailureJunction,
+                    string? FailureReason,
+                    string? FailureException,
+                    string? StackTrace,
+                    string? Input,
+                    string? Output,
+                    long? ManifestId,
+                    bool CancellationRequested,
+                    string? CurrentlyRunningJunction,
+                    System.DateTime? JunctionStartedAt,
+                    string? HostName,
+                    string? HostEnvironment,
+                    string? HostInstanceId,
+                    int ChildCount = 0) { }
+        public bool CancellationRequested { get; init; }
+        public int ChildCount { get; init; }
+        public string? CurrentlyRunningJunction { get; init; }
+        public System.DateTime? EndTime { get; init; }
+        public string ExternalId { get; init; }
+        public string? FailureException { get; init; }
+        public string? FailureJunction { get; init; }
+        public string? FailureReason { get; init; }
+        public string? HostEnvironment { get; init; }
+        public string? HostInstanceId { get; init; }
+        public string? HostName { get; init; }
+        public long Id { get; init; }
+        public string? Input { get; init; }
+        public System.DateTime? JunctionStartedAt { get; init; }
+        public long? ManifestId { get; init; }
+        public string Name { get; init; }
+        public string? Output { get; init; }
+        public string? StackTrace { get; init; }
+        public System.DateTime StartTime { get; init; }
+        public Trax.Effect.Enums.TrainState TrainState { get; init; }
+    }
     public class ExecutionSummary : System.IEquatable<Trax.Api.DTOs.ExecutionSummary>
     {
         public ExecutionSummary(long Id, string ExternalId, string Name, Trax.Effect.Enums.TrainState TrainState, System.DateTime StartTime, System.DateTime? EndTime, string? FailureJunction, string? FailureReason, long? ManifestId, bool CancellationRequested, string? HostName = null, string? HostEnvironment = null, string? HostInstanceId = null) { }
@@ -136,6 +180,11 @@ namespace Trax.Api.DTOs
         public string ExternalId { get; init; }
         public long ManifestId { get; init; }
     }
+    public enum SortOrder
+    {
+        Newest = 0,
+        Oldest = 1,
+    }
     public class TrainInfo : System.IEquatable<Trax.Api.DTOs.TrainInfo>
     {
         public TrainInfo(string ServiceTypeName, string ImplementationTypeName, string InputTypeName, string OutputTypeName, string Lifetime, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.InputPropertySchema> InputSchema, System.Collections.Generic.IReadOnlyList<string> RequiredPolicies, System.Collections.Generic.IReadOnlyList<string> RequiredRoles, bool IsQuery, bool IsMutation, string? GraphQLName, bool IsBroadcastEnabled) { }
@@ -170,6 +219,18 @@ namespace Trax.Api.DTOs
     {
         public TriggerDelayedRequest(System.TimeSpan Delay) { }
         public System.TimeSpan Delay { get; init; }
+    }
+    public class UpdateManifestInput : System.IEquatable<Trax.Api.DTOs.UpdateManifestInput>
+    {
+        public UpdateManifestInput(bool? IsEnabled = default, int? MaxRetries = default, int? Priority = default, int? TimeoutSeconds = default, bool ClearTimeout = false, Trax.Effect.Enums.ScheduleType? ScheduleType = default, string? CronExpression = null, int? IntervalSeconds = default) { }
+        public bool ClearTimeout { get; init; }
+        public string? CronExpression { get; init; }
+        public int? IntervalSeconds { get; init; }
+        public bool? IsEnabled { get; init; }
+        public int? MaxRetries { get; init; }
+        public int? Priority { get; init; }
+        public Trax.Effect.Enums.ScheduleType? ScheduleType { get; init; }
+        public int? TimeoutSeconds { get; init; }
     }
     public class WorkQueueSummary : System.IEquatable<Trax.Api.DTOs.WorkQueueSummary>
     {

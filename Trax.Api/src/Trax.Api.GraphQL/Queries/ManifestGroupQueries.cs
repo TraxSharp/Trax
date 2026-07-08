@@ -26,21 +26,30 @@ public class ManifestGroupQueries
         CancellationToken ct,
         int skip = 0,
         int take = 25,
+        string? nameContains = null,
         long? afterId = null
     )
     {
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
-        var baseQuery = db.ManifestGroups.AsNoTracking().OrderByDescending(g => g.Id);
+        IQueryable<Effect.Models.ManifestGroup.ManifestGroup> baseQuery = db
+            .ManifestGroups.AsNoTracking()
+            .OrderByDescending(g => g.Id);
 
-        var (totalCount, isEstimate) = afterId.HasValue
-            ? (await baseQuery.CountAsync(ct), false)
-            : await CountEstimator.EstimateOrCountAsync(
-                db,
-                "manifest_group",
-                () => baseQuery.CountAsync(ct),
-                ct
-            );
+        if (!string.IsNullOrWhiteSpace(nameContains))
+            baseQuery = baseQuery.Where(g => g.Name.Contains(nameContains));
+
+        var hasFilter = !string.IsNullOrWhiteSpace(nameContains);
+
+        var (totalCount, isEstimate) =
+            (afterId.HasValue || hasFilter)
+                ? (await baseQuery.CountAsync(ct), false)
+                : await CountEstimator.EstimateOrCountAsync(
+                    db,
+                    "manifest_group",
+                    () => baseQuery.CountAsync(ct),
+                    ct
+                );
 
         var query = afterId.HasValue ? baseQuery.Where(g => g.Id < afterId.Value) : baseQuery;
 

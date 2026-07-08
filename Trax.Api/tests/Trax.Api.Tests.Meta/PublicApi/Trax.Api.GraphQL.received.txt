@@ -150,6 +150,7 @@ namespace Trax.Api.GraphQL.Mutations
     public class OperationsMutations
     {
         public OperationsMutations() { }
+        public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> CancelExecution(long id, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> CancelGroup(long groupId, [HotChocolate.Service] Trax.Scheduler.Services.TraxScheduler.ITraxScheduler scheduler, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> CancelManifest(string externalId, [HotChocolate.Service] Trax.Scheduler.Services.TraxScheduler.ITraxScheduler scheduler, System.Threading.CancellationToken ct) { }
         public Trax.Api.GraphQL.Mutations.ConfigMutations Config() { }
@@ -157,9 +158,11 @@ namespace Trax.Api.GraphQL.Mutations
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> DisableManifest(string externalId, [HotChocolate.Service] Trax.Scheduler.Services.TraxScheduler.ITraxScheduler scheduler, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> EnableManifest(string externalId, [HotChocolate.Service] Trax.Scheduler.Services.TraxScheduler.ITraxScheduler scheduler, System.Threading.CancellationToken ct) { }
         public Trax.Api.GraphQL.Mutations.ManifestGroupMutations ManifestGroups() { }
+        public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> RequeueExecution(long id, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, [HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> TriggerGroup(long groupId, [HotChocolate.Service] Trax.Scheduler.Services.TraxScheduler.ITraxScheduler scheduler, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> TriggerManifest(string externalId, [HotChocolate.Service] Trax.Scheduler.Services.TraxScheduler.ITraxScheduler scheduler, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> TriggerManifestDelayed(string externalId, System.TimeSpan delay, [HotChocolate.Service] Trax.Scheduler.Services.TraxScheduler.ITraxScheduler scheduler, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> UpdateManifest(long id, Trax.Api.DTOs.UpdateManifestInput input, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct) { }
         public Trax.Api.GraphQL.Mutations.WorkQueueMutations WorkQueue() { }
     }
     public class RootMutation
@@ -169,6 +172,7 @@ namespace Trax.Api.GraphQL.Mutations
     public class WorkQueueMutations
     {
         public WorkQueueMutations() { }
+        public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> CancelWorkQueueEntries(long[] ids, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> CancelWorkQueueEntry(long id, [HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> QueueTrain(Trax.Scheduler.Services.Operations.QueueTrainInput input, [HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct) { }
     }
@@ -200,7 +204,7 @@ namespace Trax.Api.GraphQL.Queries
         public ManifestGroupQueries() { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph?> GetGraph(long groupId, [HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.ManifestGroupSummary?> GetGroup(long id, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct) { }
-        public System.Threading.Tasks.Task<Trax.Api.DTOs.PagedResult<Trax.Api.DTOs.ManifestGroupSummary>> GetGroups([HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct, int skip = 0, int take = 25, long? afterId = default) { }
+        public System.Threading.Tasks.Task<Trax.Api.DTOs.PagedResult<Trax.Api.DTOs.ManifestGroupSummary>> GetGroups([HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct, int skip = 0, int take = 25, string? nameContains = null, long? afterId = default) { }
     }
     public class MetricsQueries
     {
@@ -214,10 +218,12 @@ namespace Trax.Api.GraphQL.Queries
         public Trax.Api.GraphQL.Queries.ConfigQueries Config() { }
         public Trax.Api.GraphQL.Queries.DeadLetterQueries DeadLetters() { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.ExecutionSummary?> GetExecution(long id, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct) { }
-        public System.Threading.Tasks.Task<Trax.Api.DTOs.PagedResult<Trax.Api.DTOs.ExecutionSummary>> GetExecutions([HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct, int skip = 0, int take = 25, long? afterId = default) { }
+        public System.Threading.Tasks.Task<Trax.Api.DTOs.PagedResult<Trax.Api.DTOs.ExecutionSummary>> GetExecutionChildren(long parentId, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct, int take = 25, long? afterId = default) { }
+        public System.Threading.Tasks.Task<Trax.Api.DTOs.ExecutionDetail?> GetExecutionDetail(long id, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Api.DTOs.PagedResult<Trax.Api.DTOs.ExecutionSummary>> GetExecutions([HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct, int skip = 0, int take = 25, Trax.Effect.Enums.TrainState? trainState = default, string? trainName = null, System.DateTime? startedAfter = default, System.DateTime? startedBefore = default, Trax.Api.DTOs.SortOrder order = 0, long? afterId = default) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.HealthStatus> GetHealth([HotChocolate.Service] Trax.Api.Services.HealthCheck.ITraxHealthService healthService, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.ManifestSummary?> GetManifest(long id, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct) { }
-        public System.Threading.Tasks.Task<Trax.Api.DTOs.PagedResult<Trax.Api.DTOs.ManifestSummary>> GetManifests([HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct, int skip = 0, int take = 25, long? afterId = default) { }
+        public System.Threading.Tasks.Task<Trax.Api.DTOs.PagedResult<Trax.Api.DTOs.ManifestSummary>> GetManifests([HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct, int skip = 0, int take = 25, bool? isEnabled = default, Trax.Effect.Enums.ScheduleType? scheduleType = default, string? nameContains = null, long? afterId = default) { }
         public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.TrainInfo> GetTrains([HotChocolate.Service] Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, bool hideAdminTrains = false) { }
         public Trax.Api.GraphQL.Queries.LogQueries Logs() { }
         public Trax.Api.GraphQL.Queries.ManifestGroupQueries ManifestGroups() { }
