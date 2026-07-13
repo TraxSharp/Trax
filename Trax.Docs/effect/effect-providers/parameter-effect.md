@@ -59,8 +59,34 @@ By default, both inputs and outputs are serialized. You can control this with th
 |----------|------|---------|-------------|
 | `SaveInputs` | `bool` | `true` | Whether to serialize train input parameters to `Metadata.Input` |
 | `SaveOutputs` | `bool` | `true` | Whether to serialize train output parameters to `Metadata.Output` |
+| `MaxParameterBytes` | `int?` | `null` | Hard byte ceiling per serialized parameter. `null` is unbounded. Over-limit payloads abort mid-serialization and store a `{"_truncated": true, ...}` placeholder. |
+| `ShouldSaveOutputs` | `Func<string, bool>?` | `null` | Predicate on the canonical train name; return `false` to skip that train's output. |
 
 The configuration is registered as a singleton and can be modified at runtime via the [Dashboard Effects page](/docs/dashboard#effects-page). Changes take effect on the next train execution scope.
+
+## Bounding what gets stored
+
+Parameter serialization is global: enabling it serializes every train. When a process runs a fan-out of trains whose outputs are large (multi-MB fetch results, cached blobs), that turns into large writes to `trax.metadata` on every run, and serializing several of them concurrently can exhaust host memory. Two knobs bound this without turning serialization off everywhere.
+
+**Skip output for known-large trains.** `ExcludeOutput` skips output serialization for named trains while keeping their (usually tiny) inputs:
+
+```csharp
+.SaveTrainParameters(configure: cfg =>
+{
+    cfg.ExcludeOutput<GetEntitiesQuery>();   // by type
+    cfg.ExcludeOutput("GetLeadsQuery");      // or by name fragment
+})
+```
+
+Matching is a substring check against the canonical train name (`Metadata.Name`), so pass the type that appears in that name: the train interface for named routes, or the request/query type for trains dispatched by input type.
+
+**Cap every parameter.** `MaxParameterBytes` is the automatic safety net for the trains you did not predict:
+
+```csharp
+.SaveTrainParameters(configure: cfg => cfg.MaxParameterBytes = 1_048_576)
+```
+
+A parameter that serializes past the ceiling is aborted before it is fully materialized (the serializer streams through a byte-counting writer and stops the moment the count is exceeded), and a small placeholder is stored instead. This bounds serialization work for collection and object graphs; it does not shrink the train's return value, which is already resident in memory. For a train that genuinely returns tens of MB, prefer `ExcludeOutput` and reduce what the train returns.
 
 ## How It Works
 
@@ -68,7 +94,9 @@ The parameter effect only cares about `Metadata` objects and ignores other track
 
 1. It iterates through every tracked `Metadata` instance.
 2. If `SaveInputs` is enabled, it calls `metadata.GetInputObject()`, serializes it to JSON, and assigns it to `metadata.Input`.
-3. If `SaveOutputs` is enabled, it calls `metadata.GetOutputObject()`, serializes it to JSON, and assigns it to `metadata.Output`.
+3. If `SaveOutputs` is enabled and the train is not excluded (via `ExcludeOutput`/`ShouldSaveOutputs`), it calls `metadata.GetOutputObject()`, serializes it to JSON, and assigns it to `metadata.Output`.
+
+When `MaxParameterBytes` is set, both serializations run through a streaming writer that aborts once the ceiling is crossed and substitutes the placeholder, so a runaway payload never gets fully built.
 
 These fields are then persisted by whatever data provider you have registered (Postgres or InMemory). When you later inspect train executions (through the [Dashboard](/docs/dashboard), direct database queries, or the metadata API), you can see exactly what went in and what came out.
 
