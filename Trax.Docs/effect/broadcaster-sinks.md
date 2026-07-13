@@ -33,6 +33,10 @@ A sink that wants to react to **every** event regardless of where the train ran 
 
 A purely headless sink (writes to a database, files, an external API) only needs `ITrainEventHandler` when it lives on a host that receives events over a transport.
 
+### Data-change signals
+
+The broadcaster also carries coalesced data-change signals, not just train lifecycle events. A write path calls `ITraxChangeSignal.Notify(domain)`; in a single-process deployment the signal reaches local GraphQL subscribers directly, and when `UseBroadcaster()` is configured a `BroadcastChangeSink` forwards it to other processes over the same transport (the receiving side re-publishes it to its own subscribers). This is what drives the dashboard's `onDataChanged` push without polling. See [Subscriptions: Data Change Signals](/docs/sdk-reference/graphql-api/subscriptions#data-change-signals).
+
 ## Pairing a transport with a sink
 
 This is the canonical multi-process layout: workers and the UI host share a RabbitMQ exchange; the UI host adds SignalR so browsers see events live.

@@ -34,6 +34,7 @@ The generic type parameter `TBuilder` is inferred by the compiler, so callers ju
 | Component | Description |
 |-----------|-------------|
 | `BroadcastLifecycleHook` | Lifecycle hook that publishes events to `ITrainEventBroadcaster` |
+| `BroadcastChangeSink` | Forwards coalesced data-change signals (`onDataChanged`) to other processes over the same transport |
 | `TrainEventReceiverService` | `BackgroundService` that consumes events from `ITrainEventReceiver` and dispatches to `ITrainEventHandler` instances |
 
 The transport-specific `ITrainEventBroadcaster` and `ITrainEventReceiver` are registered by the callback (e.g., `UseRabbitMq()`).

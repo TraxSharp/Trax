@@ -101,6 +101,11 @@ public static WebApplication UseTraxGraphQL(
 
 > The Trax operational surface is **off by default**. The scheduler-control mutations (`triggerManifest`, `cancelGroup`, dead-letter requeue, etc.) call `ITraxScheduler` directly, and an unauthenticated caller could disrupt scheduled work. The read queries (`health`, `manifests`, `executions`, `trains`) reveal deployment topology. Both surfaces have to be opted in explicitly via `ExposeOperationQueries()` and `ExposeOperationMutations()`. They are usually paired with `RequireAuthorization()` so only authenticated callers reach them.
 
+Exposing the operations surface changes two behaviours automatically:
+
+- **Startup guard.** The operations resolvers call `IOperationsService` (and, for the mutations, `ITraxScheduler`). If you expose them without registering those services, the schema still builds and every operation fails at request time with a masked error. To catch this at boot instead, `AddTraxGraphQL()` registers a hosted-service guard that throws `InvalidOperationException` at startup when the surface is exposed but the backing services are missing. A collocated host gets them from `AddScheduler(...)`; an API-only host that talks to a remote scheduler needs `AddTraxJobRunner()` plus `services.AddScoped<IOperationsService, OperationsService>()`.
+- **Stream every train.** Exposing operations marks the host as an administrative/observability surface, so the [lifecycle subscriptions](/docs/sdk-reference/graphql-api/subscriptions) emit events for **all** trains, not just those decorated with [`[TraxBroadcast]`](/docs/sdk-reference/graphql-api/trax-broadcast-attribute). Without the operations surface, only `[TraxBroadcast]` trains emit (the user-facing default).
+
 If you call `AddTraxGraphQL` with no `[TraxQuery]` trains, no `[TraxQueryModel]` entities, and `ExposeOperationQueries()` not set, the call throws `InvalidOperationException` because the resulting `RootQuery` would have no fields and HotChocolate would refuse to build the schema.
 - **Subscription type**: `LifecycleSubscriptions`, providing real-time [lifecycle events](/docs/sdk-reference/graphql-api/subscriptions) via WebSocket (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`)
 - **In-memory subscription transport**: HotChocolate's built-in pub/sub for delivering events to WebSocket clients

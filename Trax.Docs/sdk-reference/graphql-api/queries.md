@@ -174,6 +174,127 @@ query {
 
 ---
 
+### adminTrainNames
+
+Returns the canonical FullNames of the framework's internal scheduler trains (job dispatcher, manifest manager, job runner, cleanup). This is the same list `hideAdminTrains` filters against on the `trains` and `executions` queries and the `metrics.dashboard` query.
+
+```graphql
+query {
+  operations {
+    adminTrainNames
+  }
+}
+```
+
+The subscription feed streams every train on an admin host, so the dashboard reads this list once and filters the live `onTrainStateChanged` events client-side by the same rule the server applies to the grid, keeping the feed and grid consistent when "Hide admin trains" is on.
+
+**Returns**: `[String!]!`
+
+---
+
+### hosts
+
+Rolls up the processes that have executed trains, grouped by `HostInstanceId` from the metadata table. Backs the dashboard's cluster view across a split API + scheduler + worker deployment. Rows without a stamped host instance are ignored.
+
+```graphql
+query {
+  operations {
+    hosts {
+      instanceId
+      name
+      environment
+      lastSeen
+      totalExecutions
+      currentlyRunning
+    }
+  }
+}
+```
+
+This is a full aggregation over the metadata table (like `metrics.dashboard`), so treat it as an occasional-refresh read, not a hot poll. `lastSeen` is the most recent execution start on the host, the freshness signal the dashboard renders; there is no separate heartbeat.
+
+**Returns**: `[HostInfo!]!`
+
+#### HostInfo fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `instanceId` | `String!` | Stable per-process id (lives for the process's lifetime) |
+| `name` | `String` | Machine / container host name, if stamped |
+| `environment` | `String` | Hosting environment (e.g. `Production`), if stamped |
+| `lastSeen` | `DateTime!` | Most recent execution start on this host |
+| `totalExecutions` | `Long!` | Total executions attributed to this host |
+| `currentlyRunning` | `Int!` | Executions on this host still `InProgress` |
+
+---
+
+### trainStats
+
+Execution roll-up for a single train, keyed by its interface FullName (the value stored in `metadata.Name`). Backs the summary cards on the dashboard's per-train detail page. The state grouping and `ix_metadata_*` indexes keep it cheap against a large metadata table.
+
+```graphql
+query {
+  operations {
+    trainStats(trainName: "Trax.Samples.GameServer.Trains.IRecalculateLeaderboardTrain") {
+      total
+      completed
+      failed
+      inProgress
+      averageMilliseconds
+      lastRun
+      lastSuccessfulRun
+    }
+  }
+}
+```
+
+**Returns**: `TrainExecutionStats!`
+
+#### TrainExecutionStats fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `trainName` | `String!` | The interface FullName the stats are scoped to |
+| `total` | `Long!` | Total executions of this train |
+| `completed` / `failed` / `inProgress` / `pending` / `cancelled` | `Long!` | Counts by state |
+| `lastRun` | `DateTime` | Start time of the most recent execution. Null when there are none |
+| `lastSuccessfulRun` | `DateTime` | End time of the most recent `Completed` execution. Null when there are none |
+| `averageMilliseconds` | `Float` | Mean duration of completed executions. Null when there are none |
+
+---
+
+### effects
+
+Lists the observational effects registered in the API process, with their enabled and toggleable state. Backs the dashboard's effects list.
+
+Read-only by design. The effect registry is an in-memory, per-process singleton with no persistence or cross-process broadcast, so this reflects the API host only, not the scheduler/worker processes where effects actually run, and there is no toggle mutation. Changing effect state at runtime across a distributed deployment would need a shared store plus a change-broadcast, which is not built.
+
+```graphql
+query {
+  operations {
+    effects {
+      name
+      fullName
+      enabled
+      toggleable
+    }
+  }
+}
+```
+
+**Returns**: `[EffectInfo!]!`, ordered by `fullName`.
+
+#### EffectInfo fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `String!` | Effect factory type name (short) |
+| `fullName` | `String!` | Effect factory type FullName |
+| `enabled` | `Boolean!` | Whether the effect is currently enabled in this process |
+| `toggleable` | `Boolean!` | Whether the effect can be toggled (infrastructure effects are always on) |
+
+---
+
 ### manifests
 
 Returns a paginated list of scheduler manifests, ordered by ID descending (newest first). Supports both offset-based and keyset cursor pagination.
@@ -215,6 +336,7 @@ query {
 | `scheduleType` | `ScheduleType` | `null` | Filter by schedule type (`NONE`, `CRON`, `INTERVAL`, `ON_DEMAND`, `DEPENDENT`, `DORMANT_DEPENDENT`, `ONCE`) |
 | `nameContains` | `String` | `null` | Case-sensitive substring match on the train name |
 | `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. When provided, `skip` is ignored. See [Pagination](#pagination) |
+| `manifestGroupId` | `Long` | `null` | Only manifests belonging to this group. The dashboard uses it to list a group's manifests |
 
 **Returns**: `PagedResult<ManifestSummary>`
 
@@ -266,6 +388,90 @@ query {
 
 ---
 
+### manifestStats
+
+Execution roll-up for a single manifest: run counts by state plus the most recent run and most recent successful run. Backs the summary cards on the dashboard's manifest detail page. Served index-only by `ix_metadata_manifest_state`, so it stays fast on a manifest with a long history.
+
+```graphql
+query {
+  operations {
+    manifestStats(manifestId: 42) {
+      manifestId
+      total
+      completed
+      failed
+      inProgress
+      pending
+      cancelled
+      lastRun
+      lastSuccessfulRun
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `manifestId` | `Long!` | Yes | The manifest's database ID |
+
+**Returns**: `ManifestExecutionStats!` (never null; a manifest with no runs returns all-zero counts and null timestamps).
+
+#### ManifestExecutionStats fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `manifestId` | `Long!` | The manifest these stats are for (echoes the argument) |
+| `total` | `Long!` | Total executions across all states |
+| `completed` | `Long!` | Executions in `Completed` |
+| `failed` | `Long!` | Executions in `Failed` |
+| `inProgress` | `Long!` | Executions in `InProgress` |
+| `pending` | `Long!` | Executions in `Pending` |
+| `cancelled` | `Long!` | Executions in `Cancelled` |
+| `lastRun` | `DateTime` | Start time of the most recent execution. Null when there are none |
+| `lastSuccessfulRun` | `DateTime` | End time of the most recent `Completed` execution. Null when there are none |
+
+---
+
+### manifestExclusions
+
+The schedule exclusion windows configured on a manifest: the days, dates, ranges, or daily time windows during which it is intentionally skipped (not treated as a misfire). Backs the exclusions panel on the manifest detail page. The model is flat and discriminated: `type` selects which of the other fields apply.
+
+```graphql
+query {
+  operations {
+    manifestExclusions(manifestId: 42) {
+      type
+      daysOfWeek
+      dates
+      startDate
+      endDate
+      startTime
+      endTime
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `manifestId` | `Long!` | Yes | The manifest's database ID |
+
+**Returns**: `[ManifestExclusion!]!` (empty when the manifest has no exclusions or does not exist).
+
+#### ManifestExclusion fields
+
+| Field | Type | Applies when `type` is | Description |
+|-------|------|------------------------|-------------|
+| `type` | `ExclusionType!` | always | `DAYS_OF_WEEK`, `DATES`, `DATE_RANGE`, or `TIME_WINDOW` |
+| `daysOfWeek` | `[DayOfWeek!]` | `DAYS_OF_WEEK` | Weekdays to skip (`SUNDAY`..`SATURDAY`) |
+| `dates` | `[Date!]` | `DATES` | Specific calendar dates to skip |
+| `startDate` | `Date` | `DATE_RANGE` | First day of an inclusive skipped range |
+| `endDate` | `Date` | `DATE_RANGE` | Last day of an inclusive skipped range |
+| `startTime` | `LocalTime` | `TIME_WINDOW` | Daily window start (supports midnight crossover) |
+| `endTime` | `LocalTime` | `TIME_WINDOW` | Daily window end |
+
+---
+
 ### manifestGroups
 
 Manifest group queries live under the `operations.manifestGroups` namespace, not at the top level. The namespace holds the paged list (`groups`), single-group lookup (`group`), and cross-group dependency graph (`graph`). See [manifestGroups (nested under operations)](#manifestgroups-nested-under-operations).
@@ -312,8 +518,11 @@ query {
 | `startedBefore` | `DateTime` | `null` | Only executions with `startTime <= startedBefore` |
 | `order` | `SortOrder` | `NEWEST` | `NEWEST` (id descending) or `OLDEST` (id ascending). Both stay keyset-safe |
 | `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId` (or `id > afterId` when `order: OLDEST`). See [Pagination](#pagination) |
+| `manifestId` | `Long` | `null` | Only executions of this manifest. The dashboard uses it for a manifest's execution history |
+| `manifestGroupId` | `Long` | `null` | Only executions of any manifest in this group (resolved through `manifest.manifest_group_id`). The dashboard uses it for a group's recent executions |
+| `hideAdminTrains` | `Boolean` | `false` | When `true`, excludes the framework's internal scheduler trains (matches `AdminTrains.FullNames` against `metadata.Name`, which stores the interface FullName). The dashboard sets this from its "Hide admin trains" toggle |
 
-When any filter or `afterId` is supplied the count is exact (`isEstimatedCount: false`); the unfiltered first page uses the fast `pg_class.reltuples` estimator. `startedAfter`/`startedBefore` use the `ix_metadata_start_time_desc` index so they stay fast at scale. Arbitrary-column sorting is deliberately not offered: it is incompatible with keyset pagination over millions of rows (it forces OFFSET scans or a full sort). Filter to narrow the set instead.
+When any filter or `afterId` is supplied the count is exact (`isEstimatedCount: false`); the unfiltered first page uses the fast `pg_class.reltuples` estimator. `startedAfter`/`startedBefore` use the `ix_metadata_start_time_desc` index so they stay fast at scale. `manifestId` and `manifestGroupId` are served by the covering index `ix_metadata_manifest_state`, so a manifest's or group's history stays index-only even against millions of rows. Arbitrary-column sorting is deliberately not offered: it is incompatible with keyset pagination over millions of rows (it forces OFFSET scans or a full sort). Filter to narrow the set instead.
 
 **Returns**: `PagedResult<ExecutionSummary>`
 
@@ -661,7 +870,7 @@ query {
 
 ### server
 
-Process-level snapshot. CPU% is intentionally not returned since it requires per-instance sampling state; consumers that need it can take two snapshots and compute it themselves.
+Process-level snapshot. CPU% is not on `ServerMetrics` because it can only be measured as a delta between two samples; use the sibling `serverCpuPercent` field for that.
 
 ```graphql
 query {
@@ -681,6 +890,24 @@ query {
 | `uptimeSeconds` | `Float!` | Seconds since process start |
 | `workingSetBytes` | `Long!` | `Process.WorkingSet64` |
 | `gcHeapBytes` | `Long!` | `GC.GetTotalMemory(false)` |
+
+### serverCpuPercent
+
+This API process's CPU utilisation since the previous poll, as a percentage of total capacity (normalised by core count, so 100 means every core fully busy). CPU% is a delta measurement, so the sampler holds the previous sample: the **first** poll after startup returns `null` while the baseline primes, and each subsequent poll reports usage since the last. Poll it on the same interval as the rest of the dashboard's server panel.
+
+It is a sibling of `server` rather than a field on `ServerMetrics` because the sampling state is per-process and stateful, which is exactly why it is not part of the shared `IOperationsService` snapshot the scheduler and dashboard also read.
+
+```graphql
+query {
+  operations {
+    metrics {
+      serverCpuPercent
+    }
+  }
+}
+```
+
+**Returns**: `Float` (nullable; `null` on the first poll or if no measurable time has elapsed since the last).
 
 ---
 
@@ -811,6 +1038,46 @@ query {
 
 **Returns**: `ManifestGroupSummary` (nullable; `null` when the group does not exist).
 
+### stats
+
+Execution roll-up for a set of manifest groups in a single round-trip: manifest count, executions by state, and last run per group. Backs the per-group stat columns on the dashboard's manifest groups list, which calls it with just the ids of the visible page. Every requested id gets a row (zeros when the group has no manifests or executions), returned in the order requested so the caller can zip it to its rows. The metadata side is served by `ix_metadata_manifest_state` and the manifest side by `ix_manifest_manifest_group_id`.
+
+```graphql
+query {
+  operations {
+    manifestGroups {
+      stats(groupIds: [1, 2, 7]) {
+        groupId
+        manifestCount
+        totalExecutions
+        completed
+        failed
+        inProgress
+        lastRun
+      }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `groupIds` | `[Long!]!` | Yes | The group ids to roll up. Duplicates are collapsed; an empty list returns an empty result |
+
+**Returns**: `[ManifestGroupStats!]!`
+
+#### ManifestGroupStats fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `groupId` | `Long!` | The group these stats are for |
+| `manifestCount` | `Long!` | Manifests belonging to the group |
+| `totalExecutions` | `Long!` | Executions across all of the group's manifests |
+| `completed` | `Long!` | Executions in `Completed` |
+| `failed` | `Long!` | Executions in `Failed` |
+| `inProgress` | `Long!` | Executions in `InProgress` |
+| `lastRun` | `DateTime` | Start time of the group's most recent execution. Null when there are none |
+
 ### graph
 
 Returns the 1-hop cross-group dependency neighborhood for a manifest group: every group containing a manifest the focal group's manifests depend on (upstream), every group containing a manifest depending on the focal group's manifests (downstream), and the focal group itself. Edges are directed parent → dependent.
@@ -833,6 +1100,25 @@ query {
 | `groupId` | `Long!` | Yes | Database ID of the focal manifest group |
 
 **Returns**: `ManifestGroupDependencyGraph` (nullable). Returns `null` only when the group does not exist. Empty groups still return a single-node graph (focal group, no edges) so the UI can render the focal node.
+
+### dependencyGraph
+
+The whole cross-group dependency graph in one shot: every manifest group as a node and every cross-group dependency (a manifest in one group depending on a manifest in another) as a directed parent → dependent edge. Nothing is highlighted. Backs the global DAG the dashboard renders on the manifest-groups page; `graph(groupId)` is the same shape narrowed to one group's neighborhood.
+
+```graphql
+query {
+  operations {
+    manifestGroups {
+      dependencyGraph {
+        nodes { id name isHighlighted }
+        edges { fromId toId }
+      }
+    }
+  }
+}
+```
+
+**Returns**: `ManifestGroupDependencyGraph!` (never null; empty when there are no groups). Same-group dependencies are excluded, so a deployment whose groups never depend on each other returns nodes with no edges.
 
 #### ManifestGroupDependencyGraph fields
 

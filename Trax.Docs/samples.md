@@ -181,11 +181,13 @@ Trax.Samples.GameServer.Scheduler/  ← executable (scheduler + dashboard)
 Trax.Samples.GameServer.Api/        ← executable (API only)
 ```
 
-Two processes share the same trains library. The scheduler process handles background execution and hosts the dashboard. The GraphQL process serves the API - it can run lightweight trains synchronously and queue heavy work for the scheduler.
+Two processes share the same trains library and Postgres database. The scheduler process handles background execution and hosts the dashboard. The GraphQL process serves the API - it can run lightweight trains synchronously and queue heavy work for the scheduler.
 
-The split is simple:
-- **Scheduler:** `AddScheduler()` + `AddTraxDashboard()`
-- **API:** `AddTraxGraphQL()` - no scheduler, no executor
+Because the two processes are separate, both call `UseBroadcaster(b => b.UseRabbitMq(...))`. The scheduler publishes train lifecycle events and coalesced data-change signals; the API subscribes and relays them to its GraphQL subscriptions. So `onTrainStateChanged` reflects trains the scheduler ran, and `onDataChanged` fires when the scheduler queues, dispatches, or dead-letters work, letting a dashboard update live without polling.
+
+The split:
+- **Scheduler:** `AddScheduler()` + `AddTraxDashboard()` + `UseBroadcaster()`
+- **API:** `AddTraxGraphQL()` + `UseBroadcaster()` - no scheduler, no executor
 
 Good for: web applications with both an API and background jobs, where the API needs to stay responsive and offload heavy work.
 

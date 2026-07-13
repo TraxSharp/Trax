@@ -12,6 +12,8 @@ The `[TraxBroadcast]` attribute opts a train into real-time GraphQL [subscriptio
 
 Trains without this attribute run normally but are silently skipped by both the local `GraphQLSubscriptionHook` and the remote `GraphQLTrainEventHandler` (used with [`UseBroadcaster()`](/docs/sdk-reference/configuration/use-broadcaster)).
 
+The attribute governs the **user-facing** subscription surface. If the host exposes the operations (admin) surface via [`ExposeOperationQueries()`/`ExposeOperationMutations()`](/docs/sdk-reference/graphql-api/add-trax-graphql), it is treated as an observability host and streams **every** train regardless of this attribute. `[TraxBroadcast]` only matters on hosts that do not expose operations, where it picks the subset of trains that end users are allowed to watch.
+
 ## Definition
 
 ```csharp

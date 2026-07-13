@@ -8,15 +8,20 @@ nav_order: 5
 
 # Subscriptions
 
-Trax provides real-time GraphQL subscriptions for train lifecycle events. Clients connect via WebSocket and receive events as trains transition through states (started, completed, failed, cancelled).
+Trax provides real-time GraphQL subscriptions over WebSocket. There are two kinds: per-train lifecycle events (started, completed, failed, cancelled) and a coalesced `onDataChanged` signal that tells an admin UI which data domain changed so it can refetch without polling.
 
 Subscriptions are powered by HotChocolate's built-in subscription infrastructure with an in-memory pub/sub transport. They are automatically enabled when you call `AddTraxGraphQL()`.
 
-**Only trains decorated with [`[TraxBroadcast]`](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) emit subscription events.** Trains without the attribute are silently skipped.
+**Which trains emit lifecycle events depends on what the host exposes:**
 
-## Subscription Fields
+- **User-facing host** (subscriptions but no operations surface): only trains decorated with [`[TraxBroadcast]`](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) emit. This is the opt-in for streaming a curated subset of trains to your app's own clients; others are silently skipped.
+- **Admin host** (calls `ExposeOperationQueries()` / `ExposeOperationMutations()`): **every** train emits, regardless of `[TraxBroadcast]`. An operations dashboard should observe all server activity, so exposing the operations surface flips the lifecycle subscriptions to stream everything. You do not decorate trains for the admin dashboard to see them.
 
-All subscriptions return a `TrainLifecycleEvent` payload.
+Data-change signals (`onDataChanged`) are unrelated to `[TraxBroadcast]` and fire for the scheduler/admin domains regardless.
+
+## Lifecycle Subscription Fields
+
+The lifecycle subscriptions return a `TrainLifecycleEvent` payload.
 
 | Field | Description |
 |-------|-------------|
@@ -24,6 +29,7 @@ All subscriptions return a `TrainLifecycleEvent` payload.
 | `onTrainCompleted` | Fires when a train completes successfully |
 | `onTrainFailed` | Fires when a train fails with an exception |
 | `onTrainCancelled` | Fires when a train is cancelled via `CancellationToken` |
+| `onTrainStateChanged` | Fires on every lifecycle transition (one field drives a whole live feed) |
 
 ## TrainLifecycleEvent Payload
 
@@ -96,6 +102,62 @@ subscription { onTrainFailed { metadataId trainName failureJunction failureReaso
 subscription { onTrainCancelled { metadataId trainName trainState } }
 ```
 
+## Data Change Signals
+
+`onDataChanged` is a single subscription that fires when a scheduler/admin data domain changes. It carries only which domain changed, never the changed rows, so a client uses it as a nudge to refetch its own bounded, paged view. This is how the dashboard's list pages update live without a poll timer.
+
+```graphql
+type DataChangedEvent {
+  domain: ChangeDomain!
+  timestamp: DateTime!
+}
+
+enum ChangeDomain {
+  WORK_QUEUE
+  DEAD_LETTER
+  MANIFEST
+  MANIFEST_GROUP
+  SCHEDULER_CONFIG
+}
+```
+
+| Domain | Fires when |
+|--------|------------|
+| `WORK_QUEUE` | Entries are queued, dispatched, or cancelled |
+| `DEAD_LETTER` | A dead letter is created (retries exhausted), requeued, or acknowledged |
+| `MANIFEST` | A manifest is edited, enabled, or disabled (not on routine schedule recompute) |
+| `MANIFEST_GROUP` | A manifest group's configuration changes |
+| `SCHEDULER_CONFIG` | The scheduler configuration changes |
+
+```graphql
+subscription {
+  onDataChanged {
+    domain
+    timestamp
+  }
+}
+```
+
+Signals are **coalesced**: a burst of writes to one domain (for example a dispatch cycle touching thousands of work-queue rows) collapses into a single `onDataChanged` event per short window, so a subscriber refetches at most once per window instead of once per row. Filter by `domain` on the client to refetch just the affected view.
+
+### Emitting signals
+
+Write paths emit signals through `ITraxChangeSignal`, a singleton registered by `AddTrax()`:
+
+```csharp
+public class MyService(ITraxChangeSignal changeSignal)
+{
+    public async Task DoWorkAsync(IDataContext db, CancellationToken ct)
+    {
+        // ... mutate and persist ...
+        await db.SaveChanges(ct);
+        changeSignal.Notify(ChangeDomain.WorkQueue); // fire-and-forget after the commit
+    }
+}
+```
+
+`Notify` never throws and never blocks the caller; under sustained pressure signals are dropped rather than queued unbounded (a coalesced refetch is coming regardless). A background coalescer flushes the distinct set of changed domains to the `onDataChanged` topic. Trax's own scheduler and GraphQL write paths already call `Notify`, so the dashboard gets live updates out of the box; call it yourself only from custom write paths that should nudge a dashboard view.
+
 ## WebSocket Connection
 
 Subscriptions use the GraphQL over WebSocket protocol. Connect to the same endpoint as queries and mutations:
@@ -109,6 +171,13 @@ In Banana Cake Pop (the built-in GraphQL IDE), subscriptions work out of the box
 For programmatic clients, use any GraphQL client that supports the `graphql-ws` protocol (e.g., Apollo Client, urql, Strawberry Shake).
 
 `AddTraxGraphQL()` wires the WebSocket upgrade middleware at the front of the pipeline (via an `IStartupFilter`), so the handshake upgrades no matter where you place `UseTraxGraphQL()` relative to other endpoint middleware such as `UseTraxDashboard()`. You do not need to call `app.UseWebSockets()` yourself.
+
+### Reconnection
+
+The server does not persist per-subscriber state, and there is no replay: events emitted while a client's socket is down are not redelivered. A resilient client should therefore do two things, both of which the Trax dashboard does:
+
+- **Reconnect indefinitely on transient failures.** `graphql-ws` gives up after 5 attempts by default; set `retryAttempts: Infinity` so the socket survives server restarts and network drops. Active subscriptions are re-established automatically on each reconnect, and because the credential rides in `connection_init`, each reconnect re-authenticates. Do *not* retry on auth-rejection close codes (4400/4401/4403/4429): a retry can't fix a bad credential, so re-auth by terminating and reopening the socket instead.
+- **Refetch on recovery.** Because missed events are gone, refetch the visible data once when the socket transitions back to connected. Pairing this with the coalesced `onDataChanged` signal keeps grids correct: the signal drives incremental refetches while connected, and the reconnect refetch fills the gap for anything that changed while it wasn't.
 
 ## Authentication
 
@@ -163,13 +232,14 @@ This registration overrides the stock interceptors and is independent of when au
 
 Subscriptions are powered by the [lifecycle hooks](/docs/sdk-reference/configuration/add-lifecycle-hook) system. The `GraphQLSubscriptionHook` is automatically registered by `AddTraxGraphQL()` and publishes lifecycle events to HotChocolate's in-memory subscription transport.
 
-At startup, the hook builds a set of canonical train names (using `ServiceType.FullName`, the interface name) from registrations that have `[TraxBroadcast]`. On each lifecycle event, it checks the train's metadata name against this set and only publishes if the train is opted in.
+At startup, the hook builds a set of canonical train names (using `ServiceType.FullName`, the interface name) from registrations that have `[TraxBroadcast]`. On each lifecycle event it publishes when the train is opted in — **or, if the operations surface is exposed, for every train** (`TrainLifecycleStreamOptions.StreamAllTrains`, set automatically by `AddTraxGraphQL()` when `ExposeOperationQueries()`/`ExposeOperationMutations()` is called).
 
 ```
 ServiceTrain.Run()
   → LifecycleHookRunner.OnCompleted()
     → GraphQLSubscriptionHook.OnCompleted()
-      → Check: does metadata.Name match a [TraxBroadcast] train's ServiceType.FullName?
+      → Publish if: operations surface exposed (all trains), OR
+                    metadata.Name matches a [TraxBroadcast] train's ServiceType.FullName
         → Yes → ITopicEventSender.SendAsync("OnTrainCompleted", event)
           → WebSocket clients receive the event
         → No → skip (no event published)
@@ -184,7 +254,9 @@ By default, subscriptions only fire for trains that execute in the same process 
 effects.UseBroadcaster(b => b.UseRabbitMq("amqp://guest:guest@localhost:5672"))
 ```
 
-When a broadcaster is configured, `AddTraxGraphQL()` automatically registers a `GraphQLTrainEventHandler` that receives remote lifecycle events from the message bus and forwards them to HotChocolate's subscription transport. Like the local `GraphQLSubscriptionHook`, the remote handler filters by `[TraxBroadcast]` using canonical train names (`ServiceType.FullName`). Only trains with the attribute produce subscription events, regardless of which process executes them. Events from the local process are de-duplicated automatically.
+When a broadcaster is configured, `AddTraxGraphQL()` automatically registers a `GraphQLTrainEventHandler` that receives remote lifecycle events from the message bus and forwards them to HotChocolate's subscription transport. It applies the same rule as the local `GraphQLSubscriptionHook`: forward every train when the operations surface is exposed, otherwise only `[TraxBroadcast]` trains (matched by canonical `ServiceType.FullName`), regardless of which process executes them. Events from the local process are de-duplicated automatically.
+
+Data-change signals ride the same bridge. In a single-process deployment (the API collocated with the scheduler), `onDataChanged` works with no broadcaster: signals flow in-process to the subscription topic. When the scheduler runs in a separate process, `UseBroadcaster()` forwards its `Notify` calls over the message bus (a `BroadcastChangeSink`), and the API's `GraphQLDataChangeHandler` re-publishes them to local subscribers. The originating process ignores its own broadcast via the same executor de-duplication used for lifecycle events.
 
 See [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) for full details.
 
