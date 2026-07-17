@@ -4,9 +4,9 @@
   "private": true,
   "description": "Effect system for Trax workflows",
   "devDependencies": {
-    "semantic-release": "^25.0.5",
+    "semantic-release": "^25.0.7",
     "@semantic-release/exec": "^7.1.0",
     "@semantic-release/github": "^12.0.9",
-    "conventional-commits-parser": "^7.0.1"
+    "conventional-commits-parser": "^7.1.0"
   }
 }
