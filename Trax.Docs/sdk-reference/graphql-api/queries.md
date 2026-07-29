@@ -640,7 +640,7 @@ query {
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `parentId` | `Long!` | — | The parent execution's metadata id |
+| `parentId` | `Long!` | none | The parent execution's metadata id |
 | `take` | `Int` | `25` | Page size |
 | `afterId` | `Long` | `null` | Keyset cursor (`id < afterId`) |
 

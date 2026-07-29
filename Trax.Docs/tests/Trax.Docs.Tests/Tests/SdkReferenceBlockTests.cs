@@ -51,6 +51,8 @@ public class SdkReferenceBlockTests
         "reference/comparison.md",
         "reference/migration.md",
         "reference/semantic-release.md",
+        // Only code block is a `gh attestation verify` CLI command, no SDK calls.
+        "supply-chain-security.md",
         // Tech debt: tracked for follow-up. These ARE concept pages with SDK code but the
         // SDK reference block was missed when authored. Fix by adding the block.
         "core/ide-extensions.md",
