@@ -89,6 +89,70 @@ public class RabbitMqBroadcasterIntegrationTests
     }
 
     [Test]
+    public async Task DataChangeMessage_RoundTrips_DomainAndEventTypeAcrossTheBroker()
+    {
+        // The cross-process change-signal path serialises a DataChanged message and rides the same
+        // exchange as lifecycle events. Prove the domain + event type survive the real broker.
+        var opts = Options("datachange");
+        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+            opts,
+            NullLogger<RabbitMqTrainEventBroadcaster>.Instance
+        );
+        await using var receiver = new RabbitMqTrainEventReceiver(
+            opts,
+            NullLogger<RabbitMqTrainEventReceiver>.Instance
+        );
+
+        var received = new TaskCompletionSource<TrainLifecycleEventMessage>();
+
+        // Reachability guard: skip at runtime when no broker is reachable rather than hard-fail
+        // (CLAUDE.md). A connection failure throws here, before any assertion.
+        try
+        {
+            await receiver.StartAsync(
+                (msg, _) =>
+                {
+                    received.TrySetResult(msg);
+                    return Task.CompletedTask;
+                },
+                CancellationToken.None
+            );
+        }
+        catch (Exception ex)
+        {
+            Assert.Ignore($"RabbitMQ not reachable at {AmqpUri}: {ex.Message}");
+            return;
+        }
+
+        var message = new TrainLifecycleEventMessage(
+            MetadataId: 0,
+            ExternalId: string.Empty,
+            TrainName: string.Empty,
+            TrainState: string.Empty,
+            Timestamp: DateTime.UtcNow,
+            FailureJunction: null,
+            FailureReason: null,
+            EventType: TrainLifecycleEventMessage.DataChangedEventType,
+            Executor: "SchedulerProc",
+            Output: null,
+            ChangeDomain: "WorkQueue"
+        );
+        await broadcaster.PublishAsync(message, CancellationToken.None);
+
+        var awaited = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        awaited
+            .Should()
+            .Be(received.Task, "the data-change message should be delivered over RabbitMQ");
+
+        var got = received.Task.Result;
+        got.EventType.Should().Be(TrainLifecycleEventMessage.DataChangedEventType);
+        got.ChangeDomain.Should().Be("WorkQueue");
+        got.Executor.Should().Be("SchedulerProc");
+
+        await receiver.StopAsync(CancellationToken.None);
+    }
+
+    [Test]
     public async Task Receiver_HandlerThrows_NacksAndKeepsConsuming()
     {
         var opts = Options("handler-throws");

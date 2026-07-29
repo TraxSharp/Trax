@@ -869,6 +869,47 @@ namespace Trax.Effect.Models.WorkQueue
         public static Trax.Effect.Models.WorkQueue.WorkQueue Create(Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue dto) { }
     }
 }
+namespace Trax.Effect.Services.ChangeSignal
+{
+    public enum ChangeDomain
+    {
+        WorkQueue = 0,
+        DeadLetter = 1,
+        Manifest = 2,
+        ManifestGroup = 3,
+        SchedulerConfig = 4,
+    }
+    public sealed class ChangeSignalCoalescer : Microsoft.Extensions.Hosting.BackgroundService
+    {
+        public ChangeSignalCoalescer(Trax.Effect.Services.ChangeSignal.TraxChangeSignal signal, System.IServiceProvider serviceProvider, Trax.Effect.Services.ChangeSignal.ChangeSignalOptions options, System.TimeProvider timeProvider, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.ChangeSignal.ChangeSignalCoalescer>? logger = null) { }
+        protected override System.Threading.Tasks.Task ExecuteAsync(System.Threading.CancellationToken stoppingToken) { }
+    }
+    public sealed class ChangeSignalOptions
+    {
+        public ChangeSignalOptions() { }
+        public int ChannelCapacity { get; set; }
+        public System.TimeSpan CoalesceWindow { get; set; }
+    }
+    public interface IChangeSignalSink
+    {
+        System.Threading.Tasks.Task FlushAsync(System.Collections.Generic.IReadOnlyCollection<Trax.Effect.Services.ChangeSignal.ChangeDomain> domains, System.Threading.CancellationToken ct);
+    }
+    public interface ITraxChangeSignal
+    {
+        void Notify(Trax.Effect.Services.ChangeSignal.ChangeDomain domain);
+    }
+    public sealed class TraxChangeSignal : System.IDisposable, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal
+    {
+        public const string DroppedCounterName = "trax.change_signal.dropped";
+        public const string MeterName = "Trax.ChangeSignal";
+        public TraxChangeSignal(Trax.Effect.Services.ChangeSignal.ChangeSignalOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.ChangeSignal.TraxChangeSignal>? logger = null) { }
+        public System.Threading.Channels.ChannelReader<Trax.Effect.Services.ChangeSignal.ChangeDomain> Reader { get; }
+        public long TotalDropped { get; }
+        public void Complete() { }
+        public void Dispose() { }
+        public void Notify(Trax.Effect.Services.ChangeSignal.ChangeDomain domain) { }
+    }
+}
 namespace Trax.Effect.Services.EffectJunction
 {
     public abstract class EffectJunction<TIn, TOut> : Trax.Core.Junction.Junction<TIn, TOut>, Trax.Core.Junction.IJunction<TIn, TOut>, Trax.Effect.Services.EffectJunction.IEffectJunction<TIn, TOut>
@@ -1063,6 +1104,11 @@ namespace Trax.Effect.Services.ServiceTrain
 }
 namespace Trax.Effect.Services.TrainEventBroadcaster
 {
+    public sealed class BroadcastChangeSink : Trax.Effect.Services.ChangeSignal.IChangeSignalSink
+    {
+        public BroadcastChangeSink(Trax.Effect.Services.TrainEventBroadcaster.ITrainEventBroadcaster broadcaster, System.TimeProvider timeProvider, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.TrainEventBroadcaster.BroadcastChangeSink>? logger = null) { }
+        public System.Threading.Tasks.Task FlushAsync(System.Collections.Generic.IReadOnlyCollection<Trax.Effect.Services.ChangeSignal.ChangeDomain> domains, System.Threading.CancellationToken ct) { }
+    }
     public class BroadcastLifecycleHook : Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook
     {
         public BroadcastLifecycleHook(Trax.Effect.Services.TrainEventBroadcaster.ITrainEventBroadcaster broadcaster, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.TrainEventBroadcaster.BroadcastLifecycleHook>? logger = null) { }
@@ -1093,7 +1139,10 @@ namespace Trax.Effect.Services.TrainEventBroadcaster
     }
     public class TrainLifecycleEventMessage : System.IEquatable<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage>
     {
-        public TrainLifecycleEventMessage(long MetadataId, string ExternalId, string TrainName, string TrainState, System.DateTime Timestamp, string? FailureJunction, string? FailureReason, string EventType, string? Executor, string? Output, string? HostName = null, string? HostEnvironment = null) { }
+        public const string DataChangedEventType = "DataChanged";
+        public TrainLifecycleEventMessage(long MetadataId, string ExternalId, string TrainName, string TrainState, System.DateTime Timestamp, string? FailureJunction, string? FailureReason, string EventType, string? Executor, string? Output, string? HostName = null, string? HostEnvironment = null, string? ChangeDomain = null) { }
+        [System.Text.Json.Serialization.JsonPropertyName("changeDomain")]
+        public string? ChangeDomain { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("eventType")]
         public string EventType { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("executor")]

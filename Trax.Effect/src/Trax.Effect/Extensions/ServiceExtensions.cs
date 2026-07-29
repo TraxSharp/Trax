@@ -1,9 +1,12 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.EffectRunner;
@@ -71,6 +74,16 @@ public static class ServiceExtensions
 
         // Marker so AddTraxDashboard() / AddTraxGraphQL() can verify AddTrax() was called
         services.AddSingleton<TraxMarker>();
+
+        // Coalesced domain change-signals (the push behind the dashboard's onDataChanged
+        // subscription). Registered process-wide so any write path can Notify without a null
+        // check; sinks self-register from the GraphQL and broadcaster layers, and the coalescer
+        // simply flushes to nothing when a process has no sinks.
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<ChangeSignalOptions>();
+        services.AddSingleton<TraxChangeSignal>();
+        services.AddSingleton<ITraxChangeSignal>(sp => sp.GetRequiredService<TraxChangeSignal>());
+        services.AddHostedService<ChangeSignalCoalescer>();
 
         return services
             .AddSingleton<IEffectRegistry>(registry)

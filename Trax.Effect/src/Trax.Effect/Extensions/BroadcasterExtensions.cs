@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.BroadcasterBuilder;
 using Trax.Effect.Configuration.TraxEffectBuilder;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
 namespace Trax.Effect.Extensions;
@@ -16,6 +17,7 @@ public static class BroadcasterExtensions
     /// This registers:
     /// <list type="bullet">
     ///   <item><see cref="BroadcastLifecycleHook"/> — publishes lifecycle events to the broadcaster</item>
+    ///   <item><see cref="BroadcastChangeSink"/> — forwards coalesced data-change signals to the broadcaster</item>
     ///   <item><see cref="TrainEventReceiverService"/> — hosted service that consumes events and dispatches to handlers</item>
     /// </list>
     /// The transport-specific <see cref="ITrainEventBroadcaster"/> and <see cref="ITrainEventReceiver"/>
@@ -33,6 +35,10 @@ public static class BroadcasterExtensions
         builder.AddLifecycleHook<BroadcastLifecycleHook>(toggleable: false);
 
         builder.ServiceCollection.AddHostedService<TrainEventReceiverService>();
+
+        // Fan coalesced data-change signals out cross-process over the same transport, so a
+        // split scheduler process can push work-queue/dead-letter changes to the API's clients.
+        builder.ServiceCollection.AddSingleton<IChangeSignalSink, BroadcastChangeSink>();
 
         return builder;
     }

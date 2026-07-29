@@ -110,6 +110,59 @@ public class TrainLifecycleEventMessageTests
     }
 
     [Test]
+    public void DataChangedMessage_RoundTripsChangeDomain()
+    {
+        // Data-change signals ride the same transport as lifecycle events, tagged with the
+        // DataChanged event type and the domain. The domain must survive the JSON boundary.
+        var message = new TrainLifecycleEventMessage(
+            MetadataId: 0,
+            ExternalId: string.Empty,
+            TrainName: string.Empty,
+            TrainState: string.Empty,
+            Timestamp: new DateTime(2026, 3, 6, 12, 0, 0, DateTimeKind.Utc),
+            FailureJunction: null,
+            FailureReason: null,
+            EventType: TrainLifecycleEventMessage.DataChangedEventType,
+            Executor: "Hub",
+            Output: null,
+            ChangeDomain: "WorkQueue"
+        );
+
+        var json = JsonSerializer.Serialize(message);
+        json.Should().Contain("\"changeDomain\":\"WorkQueue\"");
+
+        var deserialized = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json);
+        deserialized!.EventType.Should().Be(TrainLifecycleEventMessage.DataChangedEventType);
+        deserialized.ChangeDomain.Should().Be("WorkQueue");
+    }
+
+    [Test]
+    public void LifecycleMessage_HasNullChangeDomainByDefault()
+    {
+        // Existing lifecycle events don't set ChangeDomain; the new optional field must default to
+        // null so older/other publishers stay wire-compatible.
+        var message = new TrainLifecycleEventMessage(
+            MetadataId: 1,
+            ExternalId: "ext",
+            TrainName: "Train",
+            TrainState: "Completed",
+            Timestamp: DateTime.UtcNow,
+            FailureJunction: null,
+            FailureReason: null,
+            EventType: "Completed",
+            Executor: "Worker",
+            Output: null
+        );
+
+        message.ChangeDomain.Should().BeNull();
+
+        var roundTripped = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(
+            JsonSerializer.Serialize(message)
+        );
+        roundTripped!.ChangeDomain.Should().BeNull();
+    }
+
+    [Test]
     public void RecordEquality_WorksCorrectly()
     {
         var timestamp = DateTime.UtcNow;
