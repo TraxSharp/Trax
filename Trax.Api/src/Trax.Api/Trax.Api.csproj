@@ -18,4 +18,10 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Exposes the ProcessCpuSampler test seam (internal ctor + ComputePercent) for deterministic
+         unit tests without widening the public API. -->
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+  </ItemGroup>
 </Project>

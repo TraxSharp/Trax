@@ -6,6 +6,7 @@ using NUnit.Framework;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Api.Tests.Fakes;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -17,6 +18,9 @@ using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.ChangeSignal;
+using Trax.Effect.Services.EffectRegistry;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.Tests;
@@ -114,6 +118,43 @@ public class OperationsQueriesTests
                     Input = null,
                 }
             );
+            await db.Track(meta);
+        }
+        await db.SaveChanges(default);
+    }
+
+    private async Task<long> SeedManifestInGroup(long groupId)
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+        m.ManifestGroupId = groupId;
+        await db.Track(m);
+        await db.SaveChanges(default);
+        return m.Id;
+    }
+
+    private async Task SeedExecutionsForManifest(
+        long manifestId,
+        int count,
+        TrainState state = TrainState.Completed
+    )
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        for (var i = 0; i < count; i++)
+        {
+            var meta = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.Run",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            meta.ManifestId = manifestId;
+            meta.TrainState = state;
+            // Terminal runs carry an end time so last-successful-run aggregation has data.
+            if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
+                meta.EndTime = DateTime.UtcNow;
             await db.Track(meta);
         }
         await db.SaveChanges(default);
@@ -395,6 +436,165 @@ public class OperationsQueriesTests
     }
 
     [Test]
+    public async Task GetExecutions_HideAdminTrains_ExcludesAdminTrainRuns()
+    {
+        var adminName = AdminTrains.FullNames.First();
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            foreach (var name in new[] { adminName, adminName, "Trax.X.RegularTrain" })
+            {
+                var meta = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = name,
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    }
+                );
+                await db.Track(meta);
+            }
+            await db.SaveChanges(default);
+        }
+
+        var all = await new OperationsQueries().GetExecutions(_factory, default);
+        var visible = await new OperationsQueries().GetExecutions(
+            _factory,
+            default,
+            hideAdminTrains: true
+        );
+
+        all.Items.Should().HaveCount(3);
+        visible.Items.Should().ContainSingle();
+        visible.Items[0].Name.Should().Be("Trax.X.RegularTrain");
+        visible.Items.Should().OnlyContain(e => !AdminTrains.FullNames.Contains(e.Name));
+        visible.IsEstimatedCount.Should().BeFalse("hideAdminTrains forces an exact count");
+    }
+
+    [Test]
+    public void GetAdminTrainNames_ReturnsCanonicalFullNames()
+    {
+        var names = new OperationsQueries().GetAdminTrainNames();
+
+        names.Should().BeEquivalentTo(AdminTrains.FullNames);
+        names.Should().Contain(n => n.EndsWith("IJobDispatcherTrain"));
+    }
+
+    [Test]
+    public async Task GetHosts_RollsUpByInstance_WithRunningAndTotalCounts()
+    {
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            // inst-1: two runs, one still in progress. inst-2: a single completed run.
+            async Task Seed(string instance, string name, string env, TrainState state)
+            {
+                var m = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = "Trax.X.HostTrain",
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    }
+                );
+                m.HostInstanceId = instance;
+                m.HostName = name;
+                m.HostEnvironment = env;
+                m.TrainState = state;
+                await db.Track(m);
+            }
+
+            await Seed("inst-1", "host-1", "Production", TrainState.Completed);
+            await Seed("inst-1", "host-1", "Production", TrainState.InProgress);
+            await Seed("inst-2", "host-2", "Development", TrainState.Completed);
+            await db.SaveChanges(default);
+        }
+
+        var hosts = await new OperationsQueries().GetHosts(_factory, default);
+
+        hosts.Should().HaveCount(2);
+        var one = hosts.Single(h => h.InstanceId == "inst-1");
+        one.Name.Should().Be("host-1");
+        one.Environment.Should().Be("Production");
+        one.TotalExecutions.Should().Be(2);
+        one.CurrentlyRunning.Should().Be(1);
+        var two = hosts.Single(h => h.InstanceId == "inst-2");
+        two.TotalExecutions.Should().Be(1);
+        two.CurrentlyRunning.Should().Be(0);
+    }
+
+    [Test]
+    public async Task GetHosts_IgnoresRowsWithoutAHostInstance()
+    {
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                var m = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = $"Trax.X.NoHost{i}",
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    }
+                );
+                // Metadata.Create stamps the running process's host by default; clear it so this
+                // row represents pre-host-tracking data that the rollup must skip.
+                m.HostInstanceId = null;
+                m.HostName = null;
+                m.HostEnvironment = null;
+                await db.Track(m);
+            }
+            await db.SaveChanges(default);
+        }
+
+        var hosts = await new OperationsQueries().GetHosts(_factory, default);
+
+        hosts.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task GetTrainStats_ScopesToTrainAndAveragesCompletedDurations()
+    {
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            async Task Seed(string name, TrainState state, DateTime? end)
+            {
+                var m = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = name,
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    }
+                );
+                m.StartTime = start;
+                m.TrainState = state;
+                m.EndTime = end;
+                await db.Track(m);
+            }
+
+            // Two completed runs (2s and 4s) → avg 3000ms. One failed. Plus another train, ignored.
+            await Seed("Trax.X.StatTrain", TrainState.Completed, start.AddSeconds(2));
+            await Seed("Trax.X.StatTrain", TrainState.Completed, start.AddSeconds(4));
+            await Seed("Trax.X.StatTrain", TrainState.Failed, null);
+            await Seed("Trax.X.OtherTrain", TrainState.Completed, start.AddSeconds(9));
+            await db.SaveChanges(default);
+        }
+
+        var stats = await new OperationsQueries().GetTrainStats(
+            "Trax.X.StatTrain",
+            _factory,
+            default
+        );
+
+        stats.TrainName.Should().Be("Trax.X.StatTrain");
+        stats.Total.Should().Be(3);
+        stats.Completed.Should().Be(2);
+        stats.Failed.Should().Be(1);
+        stats.AverageMilliseconds.Should().BeApproximately(3000, 0.001);
+    }
+
+    [Test]
     public async Task GetExecutions_OrderOldest_ReturnsAscendingIds()
     {
         await SeedExecutions(3);
@@ -406,6 +606,289 @@ public class OperationsQueriesTests
         );
 
         result.Items.Select(e => e.Id).Should().BeInAscendingOrder();
+    }
+
+    [Test]
+    public async Task GetExecutions_FilterByManifestId_ReturnsOnlyThatManifestsRuns()
+    {
+        var groupId = await SeedManifestGroup("mgroup");
+        var m1 = await SeedManifestInGroup(groupId);
+        var m2 = await SeedManifestInGroup(groupId);
+        await SeedExecutionsForManifest(m1, 3);
+        await SeedExecutionsForManifest(m2, 2);
+
+        var result = await new OperationsQueries().GetExecutions(_factory, default, manifestId: m1);
+
+        result.Items.Should().HaveCount(3);
+        result.Items.Should().OnlyContain(e => e.ManifestId == m1);
+        result.TotalCount.Should().Be(3);
+        result.IsEstimatedCount.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task GetExecutions_FilterByManifestId_NoMatches_ReturnsEmpty()
+    {
+        var groupId = await SeedManifestGroup("g");
+        var m1 = await SeedManifestInGroup(groupId);
+        await SeedExecutionsForManifest(m1, 2);
+
+        var result = await new OperationsQueries().GetExecutions(
+            _factory,
+            default,
+            manifestId: 999999
+        );
+
+        result.Items.Should().BeEmpty();
+        result.TotalCount.Should().Be(0);
+    }
+
+    [Test]
+    public async Task GetExecutions_FilterByManifestGroupId_ReturnsRunsForEveryManifestInGroup()
+    {
+        var groupA = await SeedManifestGroup("A");
+        var groupB = await SeedManifestGroup("B");
+        var a1 = await SeedManifestInGroup(groupA);
+        var a2 = await SeedManifestInGroup(groupA);
+        var b1 = await SeedManifestInGroup(groupB);
+        await SeedExecutionsForManifest(a1, 2);
+        await SeedExecutionsForManifest(a2, 3);
+        await SeedExecutionsForManifest(b1, 4);
+
+        var result = await new OperationsQueries().GetExecutions(
+            _factory,
+            default,
+            manifestGroupId: groupA
+        );
+
+        result.Items.Should().HaveCount(5); // a1(2) + a2(3), never b1
+        result.Items.Should().OnlyContain(e => e.ManifestId == a1 || e.ManifestId == a2);
+        result.TotalCount.Should().Be(5);
+        result.IsEstimatedCount.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task GetExecutions_ManifestIdAndState_Combine()
+    {
+        var groupId = await SeedManifestGroup("g");
+        var m1 = await SeedManifestInGroup(groupId);
+        await SeedExecutionsForManifest(m1, 2, TrainState.Completed);
+        await SeedExecutionsForManifest(m1, 1, TrainState.Failed);
+
+        var result = await new OperationsQueries().GetExecutions(
+            _factory,
+            default,
+            manifestId: m1,
+            trainState: TrainState.Failed
+        );
+
+        result.Items.Should().ContainSingle();
+        result.Items[0].TrainState.Should().Be(TrainState.Failed);
+        result.Items[0].ManifestId.Should().Be(m1);
+    }
+
+    [Test]
+    public async Task GetManifests_FilterByManifestGroupId_ReturnsOnlyGroupMembers()
+    {
+        var groupA = await SeedManifestGroup("A");
+        var groupB = await SeedManifestGroup("B");
+        await SeedManifestInGroup(groupA);
+        await SeedManifestInGroup(groupA);
+        await SeedManifestInGroup(groupB);
+
+        var result = await new OperationsQueries().GetManifests(
+            _factory,
+            default,
+            manifestGroupId: groupA
+        );
+
+        result.Items.Should().HaveCount(2);
+        result.Items.Should().OnlyContain(m => m.ManifestGroupId == groupA);
+        result.IsEstimatedCount.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task GetManifestStats_CountsByStateAndLastRun()
+    {
+        var groupId = await SeedManifestGroup("g");
+        var m1 = await SeedManifestInGroup(groupId);
+        await SeedExecutionsForManifest(m1, 3, TrainState.Completed);
+        await SeedExecutionsForManifest(m1, 2, TrainState.Failed);
+        await SeedExecutionsForManifest(m1, 1, TrainState.InProgress);
+
+        var stats = await new OperationsQueries().GetManifestStats(m1, _factory, default);
+
+        stats.ManifestId.Should().Be(m1);
+        stats.Total.Should().Be(6);
+        stats.Completed.Should().Be(3);
+        stats.Failed.Should().Be(2);
+        stats.InProgress.Should().Be(1);
+        stats.Cancelled.Should().Be(0);
+        stats.Pending.Should().Be(0);
+        stats.LastRun.Should().NotBeNull();
+        stats.LastSuccessfulRun.Should().NotBeNull(); // completed rows carry an end time
+    }
+
+    [Test]
+    public async Task GetManifestStats_NoRuns_ReturnsZeros()
+    {
+        var groupId = await SeedManifestGroup("g");
+        var m1 = await SeedManifestInGroup(groupId);
+
+        var stats = await new OperationsQueries().GetManifestStats(m1, _factory, default);
+
+        stats.Total.Should().Be(0);
+        stats.Completed.Should().Be(0);
+        stats.LastRun.Should().BeNull();
+        stats.LastSuccessfulRun.Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetGroupStats_PerGroup_CountsManifestsAndExecutions_InRequestedOrder()
+    {
+        var groupA = await SeedManifestGroup("A");
+        var groupB = await SeedManifestGroup("B");
+        var a1 = await SeedManifestInGroup(groupA);
+        var a2 = await SeedManifestInGroup(groupA);
+        var b1 = await SeedManifestInGroup(groupB);
+        await SeedExecutionsForManifest(a1, 2, TrainState.Completed);
+        await SeedExecutionsForManifest(a2, 1, TrainState.Failed);
+        await SeedExecutionsForManifest(b1, 3, TrainState.Completed);
+
+        var stats = await new ManifestGroupQueries().GetStats(
+            new[] { groupA, groupB },
+            _factory,
+            default
+        );
+
+        stats.Select(s => s.GroupId).Should().Equal(groupA, groupB); // requested order preserved
+        var sa = stats.Single(s => s.GroupId == groupA);
+        sa.ManifestCount.Should().Be(2);
+        sa.TotalExecutions.Should().Be(3);
+        sa.Completed.Should().Be(2);
+        sa.Failed.Should().Be(1);
+        sa.LastRun.Should().NotBeNull();
+        var sb = stats.Single(s => s.GroupId == groupB);
+        sb.ManifestCount.Should().Be(1);
+        sb.TotalExecutions.Should().Be(3);
+        sb.Completed.Should().Be(3);
+    }
+
+    [Test]
+    public async Task GetGroupStats_EmptyGroupIds_ReturnsEmpty()
+    {
+        var stats = await new ManifestGroupQueries().GetStats(
+            Array.Empty<long>(),
+            _factory,
+            default
+        );
+
+        stats.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task GetGroupStats_GroupWithNoManifestsOrExecutions_ReturnsZeroRow()
+    {
+        var groupId = await SeedManifestGroup("empty");
+
+        var stats = await new ManifestGroupQueries().GetStats(new[] { groupId }, _factory, default);
+
+        stats.Should().ContainSingle();
+        stats[0].GroupId.Should().Be(groupId);
+        stats[0].ManifestCount.Should().Be(0);
+        stats[0].TotalExecutions.Should().Be(0);
+        stats[0].LastRun.Should().BeNull();
+    }
+
+    [Test]
+    public void GetEffects_MapsRegistryEntries_WithEnabledAndToggleableState()
+    {
+        var registry = Substitute.For<IEffectRegistry>();
+        registry
+            .GetAll()
+            .Returns(
+                new Dictionary<Type, bool>
+                {
+                    { typeof(FakeInput), true },
+                    { typeof(FakeOutput), false },
+                }
+            );
+        registry.IsToggleable(typeof(FakeInput)).Returns(true);
+        registry.IsToggleable(typeof(FakeOutput)).Returns(false);
+
+        var result = new OperationsQueries().GetEffects(registry);
+
+        result.Should().HaveCount(2);
+        var enabled = result.Single(e => e.Name == nameof(FakeInput));
+        enabled.Enabled.Should().BeTrue();
+        enabled.Toggleable.Should().BeTrue();
+        enabled.FullName.Should().Be(typeof(FakeInput).FullName);
+        var disabled = result.Single(e => e.Name == nameof(FakeOutput));
+        disabled.Enabled.Should().BeFalse();
+        disabled.Toggleable.Should().BeFalse();
+    }
+
+    [Test]
+    public void GetEffects_EmptyRegistry_ReturnsEmpty()
+    {
+        var registry = Substitute.For<IEffectRegistry>();
+        registry.GetAll().Returns(new Dictionary<Type, bool>());
+
+        new OperationsQueries().GetEffects(registry).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task GetManifestExclusions_ReturnsTypedWindows()
+    {
+        var groupId = await SeedManifestGroup("g");
+        long manifestId;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+            m.ManifestGroupId = groupId;
+            m.SetExclusions(
+                new List<Exclusion>
+                {
+                    Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday),
+                    Exclude.DateRange(new DateOnly(2026, 12, 24), new DateOnly(2026, 12, 26)),
+                    Exclude.TimeWindow(new TimeOnly(2, 0), new TimeOnly(4, 0)),
+                }
+            );
+            await db.Track(m);
+            await db.SaveChanges(default);
+            manifestId = m.Id;
+        }
+
+        var result = await new OperationsQueries().GetManifestExclusions(
+            manifestId,
+            _factory,
+            default
+        );
+
+        result.Should().HaveCount(3);
+        result
+            .Single(e => e.Type == ExclusionType.DaysOfWeek)
+            .DaysOfWeek.Should()
+            .BeEquivalentTo(new[] { DayOfWeek.Saturday, DayOfWeek.Sunday });
+        var range = result.Single(e => e.Type == ExclusionType.DateRange);
+        range.StartDate.Should().Be(new DateOnly(2026, 12, 24));
+        range.EndDate.Should().Be(new DateOnly(2026, 12, 26));
+        var window = result.Single(e => e.Type == ExclusionType.TimeWindow);
+        window.StartTime.Should().Be(new TimeOnly(2, 0));
+        window.EndTime.Should().Be(new TimeOnly(4, 0));
+    }
+
+    [Test]
+    public async Task GetManifestExclusions_NoneOrMissing_ReturnsEmpty()
+    {
+        var groupId = await SeedManifestGroup("g");
+        var m1 = await SeedManifestInGroup(groupId);
+
+        (await new OperationsQueries().GetManifestExclusions(m1, _factory, default))
+            .Should()
+            .BeEmpty();
+        (await new OperationsQueries().GetManifestExclusions(999999, _factory, default))
+            .Should()
+            .BeEmpty();
     }
 
     [Test]
@@ -482,6 +965,7 @@ public class OperationsQueriesTests
         await using (var db = await _factory.CreateDbContextAsync(default))
             id = await db.Manifests.Select(m => m.Id).FirstAsync();
 
+        var signal = new RecordingChangeSignal();
         var resp = await new OperationsMutations().UpdateManifest(
             id,
             new UpdateManifestInput(
@@ -492,10 +976,12 @@ public class OperationsQueriesTests
                 CronExpression: "0 0 * * *"
             ),
             _factory,
+            signal,
             default
         );
 
         resp.Success.Should().BeTrue();
+        signal.Domains.Should().ContainSingle().Which.Should().Be(ChangeDomain.Manifest);
         await using (var db = await _factory.CreateDbContextAsync(default))
         {
             var m = await db.Manifests.FirstAsync(x => x.Id == id);
@@ -510,14 +996,17 @@ public class OperationsQueriesTests
     [Test]
     public async Task UpdateManifest_MissingId_ReturnsFalse()
     {
+        var signal = new RecordingChangeSignal();
         var resp = await new OperationsMutations().UpdateManifest(
             999999,
             new UpdateManifestInput(IsEnabled: true),
             _factory,
+            signal,
             default
         );
 
         resp.Success.Should().BeFalse();
+        signal.Domains.Should().BeEmpty("a missing manifest makes no change to signal");
     }
 
     [Test]
@@ -530,6 +1019,7 @@ public class OperationsQueriesTests
 
         // First patch exercises the TimeoutSeconds (else-if) and IntervalSeconds branches.
         var mutations = new OperationsMutations();
+        var signal = new RecordingChangeSignal();
         var set = await mutations.UpdateManifest(
             id,
             new UpdateManifestInput(
@@ -538,6 +1028,7 @@ public class OperationsQueriesTests
                 TimeoutSeconds: 120
             ),
             _factory,
+            signal,
             default
         );
         set.Success.Should().BeTrue();
@@ -554,6 +1045,7 @@ public class OperationsQueriesTests
             id,
             new UpdateManifestInput(ClearTimeout: true, TimeoutSeconds: 999),
             _factory,
+            signal,
             default
         );
         cleared.Success.Should().BeTrue();

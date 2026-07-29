@@ -54,6 +54,15 @@ public abstract class StressTestSetup
     /// <summary>Budget for the health snapshot (polled continuously by the dashboard).</summary>
     protected static readonly TimeSpan HealthBudget = TimeSpan.FromMilliseconds(300);
 
+    /// <summary>
+    /// Budget for the cluster (hosts) rollup: a full, time-unfiltered aggregation of the metadata
+    /// table by host instance. That is inherently O(rows) and can't be made grid-fast at millions
+    /// of rows, but it is a refresh-on-demand admin view (the operator opens the Cluster page), not
+    /// a hot poll or a paginated scroll, so a ~1s SLA is appropriate. The ix_metadata_host_rollup
+    /// covering index (migration 039) keeps it near that floor with a heap-free index-only scan.
+    /// </summary>
+    protected static readonly TimeSpan ClusterBudget = TimeSpan.FromMilliseconds(1200);
+
     /// <summary>Budget for in-memory / config reads that never touch a large table.</summary>
     protected static readonly TimeSpan TrivialBudget = TimeSpan.FromMilliseconds(150);
 
@@ -71,8 +80,7 @@ public abstract class StressTestSetup
     public async Task OneTimeSetUp()
     {
         var connectionString = ConnectionString;
-        var database = new NpgsqlConnectionStringBuilder(connectionString).Database!;
-        BulkSeeder.EnsureDatabaseExists(database);
+        BulkSeeder.EnsureDatabaseExists(connectionString);
 
         _serviceProvider = new ServiceCollection()
             .AddLogging(x => x.SetMinimumLevel(LogLevel.Warning))

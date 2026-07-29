@@ -57,6 +57,7 @@ public static class GraphQLFixture
         sc.AddTraxGraphQL(g =>
             g.ExposeOperationQueries()
                 .ExposeOperationMutations()
+                .AllowAnonymousOperations()
                 .AddTypeExtension<HelloQuery>()
                 .UsePersistedOperations(po => po.UseDatabase(PostgresFixture.ConnectionString))
         );

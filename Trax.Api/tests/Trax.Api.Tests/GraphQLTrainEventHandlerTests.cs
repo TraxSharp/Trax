@@ -44,6 +44,30 @@ public class GraphQLTrainEventHandlerTests
         sender.Events.Should().BeEmpty();
     }
 
+    [Test]
+    public async Task HandleAsync_StreamAllTrains_ForwardsNonBroadcastTrain()
+    {
+        // With StreamAllTrains (set when the operations/admin surface is exposed), the handler
+        // forwards remote events for every train, not just [TraxBroadcast] ones.
+        var sender = new RecordingTopicEventSender();
+        var discovery = new StubDiscoveryService([
+            CreateRegistration("Namespace.NotBroadcast", broadcastEnabled: false),
+        ]);
+        var handler = new GraphQLTrainEventHandler(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions { StreamAllTrains = true }
+        );
+
+        await handler.HandleAsync(
+            CreateMessage("Completed", "Completed", "Namespace.NotBroadcast"),
+            CancellationToken.None
+        );
+
+        sender.Events.Should().ContainSingle();
+        sender.Events[0].Topic.Should().Be(nameof(LifecycleSubscriptions.OnTrainCompleted));
+    }
+
     #endregion
 
     #region Event Type Routing
@@ -145,7 +169,11 @@ public class GraphQLTrainEventHandlerTests
             broadcastEnabled: true
         );
         var discovery = new StubDiscoveryService([registration]);
-        var handler = new GraphQLTrainEventHandler(sender, discovery);
+        var handler = new GraphQLTrainEventHandler(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         var message = CreateMessage("Completed", "Completed", "Namespace.IMyTrain");
         await handler.HandleAsync(message, CancellationToken.None);
@@ -165,7 +193,11 @@ public class GraphQLTrainEventHandlerTests
             broadcastEnabled: true
         );
         var discovery = new StubDiscoveryService([registration]);
-        var handler = new GraphQLTrainEventHandler(sender, discovery);
+        var handler = new GraphQLTrainEventHandler(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         var message = CreateMessage("Completed", "Completed", "Namespace.MyTrain");
         await handler.HandleAsync(message, CancellationToken.None);
@@ -183,7 +215,11 @@ public class GraphQLTrainEventHandlerTests
             broadcastEnabled: true
         );
         var discovery = new StubDiscoveryService([registration]);
-        var handler = new GraphQLTrainEventHandler(sender, discovery);
+        var handler = new GraphQLTrainEventHandler(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         var message = CreateMessage("Completed", "Completed", "Namespace.SomeOtherTrain");
         await handler.HandleAsync(message, CancellationToken.None);
@@ -283,7 +319,11 @@ public class GraphQLTrainEventHandlerTests
     {
         var sender = new RecordingTopicEventSender();
         var discovery = new StubDiscoveryService([]);
-        var handler = new GraphQLTrainEventHandler(sender, discovery);
+        var handler = new GraphQLTrainEventHandler(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         await handler.HandleAsync(
             CreateMessage("Started", "InProgress", "Any.Train"),
@@ -320,7 +360,11 @@ public class GraphQLTrainEventHandlerTests
             CreateRegistration("Third.Train", broadcastEnabled: false),
         };
         var discovery = new StubDiscoveryService(registrations);
-        var handler = new GraphQLTrainEventHandler(sender, discovery);
+        var handler = new GraphQLTrainEventHandler(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         await handler.HandleAsync(
             CreateMessage("Completed", "Completed", "First.Train"),
@@ -349,7 +393,7 @@ public class GraphQLTrainEventHandlerTests
     {
         var registrations = new[] { CreateRegistration(enabledTrainName, broadcastEnabled: true) };
         var discovery = new StubDiscoveryService(registrations);
-        return new GraphQLTrainEventHandler(sender, discovery);
+        return new GraphQLTrainEventHandler(sender, discovery, new TrainLifecycleStreamOptions());
     }
 
     private static TrainLifecycleEventMessage CreateMessage(

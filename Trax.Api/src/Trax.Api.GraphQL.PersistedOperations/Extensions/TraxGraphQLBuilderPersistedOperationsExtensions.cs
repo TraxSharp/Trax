@@ -41,6 +41,12 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
     /// operation tables (<c>trax.persisted_operation</c>,
     /// <c>trax.persisted_operation_history</c>) live in the same <c>trax</c>
     /// schema as the rest of the Trax tables.
+    /// <para>
+    /// This exposes the operations namespace, including the persisted-operation management
+    /// mutations. Those are admin operations, so the host must gate the endpoint with
+    /// <c>RequireAuthorization()</c>, or explicitly opt into anonymous access with
+    /// <c>AllowAnonymousOperations()</c>; otherwise <c>AddTraxGraphQL()</c> fails at startup.
+    /// </para>
     /// </remarks>
     public static TraxGraphQLBuilder UsePersistedOperations(
         this TraxGraphQLBuilder builder,

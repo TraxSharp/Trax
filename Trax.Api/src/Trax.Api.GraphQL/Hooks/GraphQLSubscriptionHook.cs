@@ -10,19 +10,23 @@ namespace Trax.Api.GraphQL.Hooks;
 /// <summary>
 /// Lifecycle hook that publishes train state transitions to Hot Chocolate's
 /// in-memory subscription transport, enabling real-time GraphQL subscriptions.
-/// Only trains decorated with <c>[TraxBroadcast]</c> have their events published.
+/// By default only trains decorated with <c>[TraxBroadcast]</c> are published; when the operations
+/// (admin) surface is exposed, every train is published (see <see cref="TrainLifecycleStreamOptions"/>).
 /// </summary>
 public class GraphQLSubscriptionHook : ITrainLifecycleHook
 {
     private readonly ITopicEventSender _eventSender;
+    private readonly bool _streamAllTrains;
     private readonly HashSet<string> _enabledTrains;
 
     public GraphQLSubscriptionHook(
         ITopicEventSender eventSender,
-        ITrainDiscoveryService discoveryService
+        ITrainDiscoveryService discoveryService,
+        TrainLifecycleStreamOptions options
     )
     {
         _eventSender = eventSender;
+        _streamAllTrains = options.StreamAllTrains;
         _enabledTrains = discoveryService
             .DiscoverTrains()
             .Where(r => r.IsBroadcastEnabled)
@@ -30,9 +34,13 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
             .ToHashSet();
     }
 
+    // Admin observability streams every train; otherwise only [TraxBroadcast] trains.
+    private bool ShouldPublish(string trainName) =>
+        _streamAllTrains || _enabledTrains.Contains(trainName);
+
     public async Task OnStarted(Metadata metadata, CancellationToken ct)
     {
-        if (!_enabledTrains.Contains(metadata.Name))
+        if (!ShouldPublish(metadata.Name))
             return;
 
         await _eventSender.SendAsync(
@@ -44,7 +52,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
 
     public async Task OnCompleted(Metadata metadata, CancellationToken ct)
     {
-        if (!_enabledTrains.Contains(metadata.Name))
+        if (!ShouldPublish(metadata.Name))
             return;
 
         await _eventSender.SendAsync(
@@ -56,7 +64,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
 
     public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {
-        if (!_enabledTrains.Contains(metadata.Name))
+        if (!ShouldPublish(metadata.Name))
             return;
 
         await _eventSender.SendAsync(
@@ -68,7 +76,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
 
     public async Task OnCancelled(Metadata metadata, CancellationToken ct)
     {
-        if (!_enabledTrains.Contains(metadata.Name))
+        if (!ShouldPublish(metadata.Name))
             return;
 
         await _eventSender.SendAsync(
@@ -80,7 +88,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
 
     public async Task OnStateChanged(Metadata metadata, CancellationToken ct)
     {
-        if (!_enabledTrains.Contains(metadata.Name))
+        if (!ShouldPublish(metadata.Name))
             return;
 
         await _eventSender.SendAsync(

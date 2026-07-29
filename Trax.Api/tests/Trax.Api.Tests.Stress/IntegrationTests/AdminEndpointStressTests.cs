@@ -8,6 +8,7 @@ using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.Operations;
 
@@ -158,6 +159,30 @@ public class AdminEndpointStressTests : StressTestSetup
                     hideAdminTrains: true
                 );
                 metrics.Should().NotBeNull();
+            }
+        );
+    }
+
+    [Test]
+    public async Task Hosts_AtScale_WithinBudget()
+    {
+        // The cluster rollup is a full aggregation of the metadata table by host instance (no time
+        // filter, so it scans every row). Inherently O(rows) and refresh-on-demand, so it gets the
+        // dedicated cluster budget, not the hot-path metrics budget. Migration 039's covering index
+        // keeps it near the floor for a full aggregation.
+        await MeasureAsync(
+            "operations.hosts",
+            ClusterBudget,
+            async (sp, ct) =>
+            {
+                var hosts = await new OperationsQueries().GetHosts(Factory(sp), ct);
+                hosts.Should().NotBeEmpty();
+                // Every seeded row carries a host, so the per-host totals account for at least the
+                // whole seed (a reused stress DB may hold a few extra rows from other processes).
+                hosts
+                    .Sum(h => h.TotalExecutions)
+                    .Should()
+                    .BeGreaterThanOrEqualTo(Profile.Metadata);
             }
         );
     }
@@ -480,6 +505,162 @@ public class AdminEndpointStressTests : StressTestSetup
         );
     }
 
+    [Test]
+    public async Task ManifestGroups_GlobalDependencyGraph_WithinBudget()
+    {
+        // The whole-graph read: every group as a node plus a self-join over the manifest table for
+        // cross-group edges. The manifest table is small relative to metadata, so it stays cheap.
+        await MeasureAsync(
+            "operations.manifestGroups.dependencyGraph",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var graph = await new ManifestGroupQueries().GetDependencyGraph(Operations(sp), ct);
+                graph.Nodes.Should().NotBeEmpty();
+            }
+        );
+    }
+
+    #endregion
+
+    #region Manifest- and group-scoped reads (dashboard detail pages)
+
+    [Test]
+    public async Task Executions_FilterByManifestId_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.executions (manifestId)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var page = await new OperationsQueries().GetExecutions(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    manifestId: 1
+                );
+                page.Items.Should().NotBeEmpty();
+                page.Items.Should().OnlyContain(e => e.ManifestId == 1);
+                page.TotalCount.Should().BeGreaterThan(0);
+            }
+        );
+    }
+
+    [Test]
+    public async Task Executions_FilterByManifestGroupId_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.executions (manifestGroupId)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var page = await new OperationsQueries().GetExecutions(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    manifestGroupId: 1
+                );
+                page.Items.Should().NotBeEmpty();
+                page.TotalCount.Should().BeGreaterThan(0);
+            }
+        );
+    }
+
+    [Test]
+    public async Task Manifests_FilterByManifestGroupId_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.manifests (manifestGroupId)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var page = await new OperationsQueries().GetManifests(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    manifestGroupId: 1
+                );
+                page.Items.Should().NotBeEmpty();
+                page.Items.Should().OnlyContain(m => m.ManifestGroupId == 1);
+            }
+        );
+    }
+
+    [Test]
+    public async Task ManifestStats_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.manifestStats",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var stats = await new OperationsQueries().GetManifestStats(1, Factory(sp), ct);
+                stats.ManifestId.Should().Be(1);
+                stats.Total.Should().BeGreaterThan(0);
+            }
+        );
+    }
+
+    [Test]
+    public async Task TrainStats_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.trainStats",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                // One of the seeded train names (name = TrainName || (g % TrainNames)). The
+                // ix_metadata_name_train_state index serves the filter + state grouping.
+                var stats = await new OperationsQueries().GetTrainStats(
+                    "Trax.Stress.Trains.IStressTrain0",
+                    Factory(sp),
+                    ct
+                );
+                stats.Total.Should().BeGreaterThan(0);
+                stats.Completed.Should().BeGreaterThan(0);
+            }
+        );
+    }
+
+    [Test]
+    public async Task GroupStats_VisiblePage_WithinBudget()
+    {
+        // The dashboard groups list requests stats for its visible page (25 groups). This is the
+        // heaviest of the new reads: it joins metadata to each group's manifests and aggregates by
+        // state, so it gets the metrics budget rather than the list budget.
+        var groupIds = Enumerable.Range(1, 25).Select(i => (long)i).ToArray();
+        await MeasureAsync(
+            "operations.manifestGroups.stats (25 groups)",
+            MetricsBudget,
+            async (sp, ct) =>
+            {
+                var stats = await new ManifestGroupQueries().GetStats(groupIds, Factory(sp), ct);
+                stats.Should().HaveCount(25);
+                stats.Should().Contain(s => s.TotalExecutions > 0);
+            }
+        );
+    }
+
+    [Test]
+    public async Task ManifestExclusions_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.manifestExclusions",
+            TrivialBudget,
+            async (sp, ct) =>
+            {
+                // Seeded manifests carry no exclusions; the point is the single-manifest read +
+                // JSON parse stays trivial regardless of metadata volume.
+                var windows = await new OperationsQueries().GetManifestExclusions(
+                    1,
+                    Factory(sp),
+                    ct
+                );
+                windows.Should().NotBeNull();
+            }
+        );
+    }
+
     #endregion
 
     #region New query paths (time-range, sort, children) + bulk/single mutations
@@ -584,6 +765,7 @@ public class AdminEndpointStressTests : StressTestSetup
                 await new WorkQueueMutations().CancelWorkQueueEntries(
                     [1, 2, 3, 4, 5],
                     Factory(sp),
+                    sp.GetRequiredService<ITraxChangeSignal>(),
                     ct
                 );
             }

@@ -68,6 +68,8 @@ public partial class TraxGraphQLBuilder
                     + "remove the ConfigureFiltering(...) call."
             );
 
+        ValidateOperationsAuthorization();
+
         return new GraphQLConfiguration(
             modelRegistrations,
             AdditionalTypeModules,
@@ -83,6 +85,36 @@ public partial class TraxGraphQLBuilder
             OperationMutationsExposed,
             FilterModules
         );
+    }
+
+    /// <summary>
+    /// Fails at build when the operations mutations are exposed without an endpoint gate. Those
+    /// mutations drive the scheduler directly (trigger/enable/disable/cancel, dead-letter
+    /// requeue/acknowledge, config changes), so anonymous access to them must be a deliberate choice
+    /// (<c>RequireAuthorization()</c> to gate, or <c>AllowAnonymousOperations()</c> to opt in), never
+    /// a forgotten one. Extends the "anonymous access is always deliberate" stance of
+    /// <see cref="ExposureAuthorizationRule"/> to the built-in admin namespace, which is otherwise
+    /// exempt from the per-surface rule.
+    /// </summary>
+    private void ValidateOperationsAuthorization()
+    {
+        if (AuthorizationRequired && AnonymousOperationsAllowed)
+            throw new InvalidOperationException(
+                "AllowAnonymousOperations() was called together with RequireAuthorization(). They "
+                    + "contradict: the endpoint gate already rejects anonymous callers, so the "
+                    + "anonymous opt-in can never take effect. Remove AllowAnonymousOperations()."
+            );
+
+        if (OperationMutationsExposed && !AuthorizationRequired && !AnonymousOperationsAllowed)
+            throw new InvalidOperationException(
+                "ExposeOperationMutations() exposes scheduler-control mutations "
+                    + "(trigger/enable/disable/cancel, dead-letter requeue/acknowledge, config "
+                    + "changes), but the GraphQL endpoint is not gated, so an unauthenticated caller "
+                    + "could disrupt scheduled work. Gate it with RequireAuthorization(...) (optionally "
+                    + "a dedicated admin policy), or, if the surface is protected another way (a "
+                    + "private network, a sidecar, ASP.NET endpoint authorization) or is intentionally "
+                    + "public, call AllowAnonymousOperations() to acknowledge that."
+            );
     }
 
     /// <summary>

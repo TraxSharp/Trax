@@ -4,6 +4,7 @@ using Trax.Api.DTOs;
 using Trax.Api.Services.HealthCheck;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
+using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
 
@@ -55,6 +56,13 @@ public class OperationsQueries
         return await healthService.GetHealthAsync(ct);
     }
 
+    /// <summary>
+    /// Canonical FullNames of the internal/administrative scheduler trains (JobDispatcher,
+    /// ManifestManager, JobRunner, cleanup, etc.). Clients filter these out of live subscription
+    /// feeds; the <c>executions</c> query filters them server-side via <c>hideAdminTrains</c>.
+    /// </summary>
+    public IReadOnlyList<string> GetAdminTrainNames() => AdminTrains.FullNames;
+
     public IReadOnlyList<TrainInfo> GetTrains(
         [Service] ITrainDiscoveryService discoveryService,
         bool hideAdminTrains = false
@@ -88,6 +96,57 @@ public class OperationsQueries
             .ToList();
     }
 
+    /// <summary>
+    /// The observational effects registered in THIS process, with their enabled + toggleable state.
+    /// Read-only: the registry is an in-memory per-process singleton, so this reflects the API host
+    /// only, not the scheduler/worker processes where effects run. Backs the dashboard effects list.
+    /// </summary>
+    public IReadOnlyList<EffectInfo> GetEffects([Service] IEffectRegistry registry)
+    {
+        return registry
+            .GetAll()
+            .Select(kvp => new EffectInfo(
+                kvp.Key.Name,
+                kvp.Key.FullName ?? kvp.Key.Name,
+                kvp.Value,
+                registry.IsToggleable(kvp.Key)
+            ))
+            .OrderBy(e => e.FullName, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The schedule exclusion windows configured on a manifest (the days/dates/ranges/time windows
+    /// during which it is intentionally skipped). Empty when the manifest has none or does not
+    /// exist. Backs the exclusions panel on the dashboard's manifest detail page.
+    /// </summary>
+    public async Task<IReadOnlyList<ManifestExclusion>> GetManifestExclusions(
+        long manifestId,
+        [Service] IDataContextProviderFactory dataContextFactory,
+        CancellationToken ct
+    )
+    {
+        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        var manifest = await db
+            .Manifests.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == manifestId, ct);
+        if (manifest is null)
+            return Array.Empty<ManifestExclusion>();
+
+        return manifest
+            .GetExclusions()
+            .Select(e => new ManifestExclusion(
+                e.Type,
+                e.DaysOfWeek,
+                e.Dates,
+                e.StartDate,
+                e.EndDate,
+                e.StartTime,
+                e.EndTime
+            ))
+            .ToList();
+    }
+
     public async Task<PagedResult<ManifestSummary>> GetManifests(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
@@ -96,7 +155,8 @@ public class OperationsQueries
         bool? isEnabled = null,
         ScheduleType? scheduleType = null,
         string? nameContains = null,
-        long? afterId = null
+        long? afterId = null,
+        long? manifestGroupId = null
     )
     {
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
@@ -111,9 +171,14 @@ public class OperationsQueries
             baseQuery = baseQuery.Where(m => m.ScheduleType == scheduleType.Value);
         if (!string.IsNullOrWhiteSpace(nameContains))
             baseQuery = baseQuery.Where(m => m.Name.Contains(nameContains));
+        if (manifestGroupId.HasValue)
+            baseQuery = baseQuery.Where(m => m.ManifestGroupId == manifestGroupId.Value);
 
         var hasFilter =
-            isEnabled.HasValue || scheduleType.HasValue || !string.IsNullOrWhiteSpace(nameContains);
+            isEnabled.HasValue
+            || scheduleType.HasValue
+            || !string.IsNullOrWhiteSpace(nameContains)
+            || manifestGroupId.HasValue;
 
         // Count: estimate only for the unfiltered first page, exact when filtered or cursored.
         var (totalCount, isEstimate) =
@@ -192,6 +257,137 @@ public class OperationsQueries
             .FirstOrDefaultAsync(ct);
     }
 
+    /// <summary>
+    /// Execution roll-up for a single manifest: run counts by state plus the most recent run and
+    /// most recent successful run. Backs the summary cards on the dashboard's manifest detail page.
+    /// Served index-only by ix_metadata_manifest_state.
+    /// </summary>
+    public async Task<ManifestExecutionStats> GetManifestStats(
+        long manifestId,
+        [Service] IDataContextProviderFactory dataContextFactory,
+        CancellationToken ct
+    )
+    {
+        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        var scoped = db.Metadatas.AsNoTracking().Where(m => m.ManifestId == manifestId);
+
+        var byState = await scoped
+            .GroupBy(m => m.TrainState)
+            .Select(g => new { State = g.Key, Count = (long)g.Count() })
+            .ToListAsync(ct);
+
+        long CountOf(TrainState state) => byState.FirstOrDefault(x => x.State == state)?.Count ?? 0;
+
+        var lastRun = await scoped.MaxAsync(m => (DateTime?)m.StartTime, ct);
+        var lastSuccessfulRun = await scoped
+            .Where(m => m.TrainState == TrainState.Completed && m.EndTime != null)
+            .MaxAsync(m => (DateTime?)m.EndTime, ct);
+
+        return new ManifestExecutionStats(
+            manifestId,
+            Total: byState.Sum(x => x.Count),
+            Completed: CountOf(TrainState.Completed),
+            Failed: CountOf(TrainState.Failed),
+            InProgress: CountOf(TrainState.InProgress),
+            Pending: CountOf(TrainState.Pending),
+            Cancelled: CountOf(TrainState.Cancelled),
+            LastRun: lastRun,
+            LastSuccessfulRun: lastSuccessfulRun
+        );
+    }
+
+    /// <summary>
+    /// Execution roll-up for one train, keyed by its interface FullName (the value stored in
+    /// <c>metadata.Name</c>). Backs the per-train detail page. The state grouping and
+    /// <c>ix_metadata_*</c> indexes keep this cheap even against a large metadata table.
+    /// </summary>
+    public async Task<TrainExecutionStats> GetTrainStats(
+        string trainName,
+        [Service] IDataContextProviderFactory dataContextFactory,
+        CancellationToken ct
+    )
+    {
+        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        var scoped = db.Metadatas.AsNoTracking().Where(m => m.Name == trainName);
+
+        var byState = await scoped
+            .GroupBy(m => m.TrainState)
+            .Select(g => new { State = g.Key, Count = (long)g.Count() })
+            .ToListAsync(ct);
+
+        long CountOf(TrainState state) => byState.FirstOrDefault(x => x.State == state)?.Count ?? 0;
+
+        var lastRun = await scoped.MaxAsync(m => (DateTime?)m.StartTime, ct);
+        var completed = scoped.Where(m =>
+            m.TrainState == TrainState.Completed && m.EndTime != null
+        );
+        var lastSuccessfulRun = await completed.MaxAsync(m => (DateTime?)m.EndTime, ct);
+        var avgMs = await completed
+            .Select(m => (double?)(m.EndTime!.Value - m.StartTime).TotalMilliseconds)
+            .AverageAsync(ct);
+
+        return new TrainExecutionStats(
+            trainName,
+            Total: byState.Sum(x => x.Count),
+            Completed: CountOf(TrainState.Completed),
+            Failed: CountOf(TrainState.Failed),
+            InProgress: CountOf(TrainState.InProgress),
+            Pending: CountOf(TrainState.Pending),
+            Cancelled: CountOf(TrainState.Cancelled),
+            LastRun: lastRun,
+            LastSuccessfulRun: lastSuccessfulRun,
+            AverageMilliseconds: avgMs
+        );
+    }
+
+    /// <summary>
+    /// The processes that have executed trains, rolled up from <c>metadata</c> by
+    /// <c>HostInstanceId</c>: last-seen, total executions, and how many are still running. Backs the
+    /// dashboard's cluster view. This is a full aggregation over the metadata table (like the
+    /// dashboard metrics), so it is meant for occasional refresh, not a hot poll.
+    /// </summary>
+    public async Task<IReadOnlyList<HostInfo>> GetHosts(
+        [Service] IDataContextProviderFactory dataContextFactory,
+        CancellationToken ct
+    )
+    {
+        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+
+        // Aggregate into an anonymous shape first: a filtered COUNT and a DTO constructor inside a
+        // GroupBy projection don't translate, but SUM(CASE ...) does. Order and map to HostInfo
+        // client-side (the host list is tiny).
+        var rows = await db
+            .Metadatas.AsNoTracking()
+            .Where(m => m.HostInstanceId != null)
+            .GroupBy(m => new
+            {
+                m.HostInstanceId,
+                m.HostName,
+                m.HostEnvironment,
+            })
+            .Select(g => new
+            {
+                g.Key.HostInstanceId,
+                g.Key.HostName,
+                g.Key.HostEnvironment,
+                LastSeen = g.Max(m => m.StartTime),
+                Total = g.LongCount(),
+                Running = g.Sum(m => m.TrainState == TrainState.InProgress ? 1 : 0),
+            })
+            .ToListAsync(ct);
+
+        return rows.OrderByDescending(r => r.LastSeen)
+            .Select(r => new HostInfo(
+                r.HostInstanceId!,
+                r.HostName,
+                r.HostEnvironment,
+                r.LastSeen,
+                r.Total,
+                r.Running
+            ))
+            .ToList();
+    }
+
     public async Task<PagedResult<ExecutionSummary>> GetExecutions(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
@@ -202,7 +398,10 @@ public class OperationsQueries
         DateTime? startedAfter = null,
         DateTime? startedBefore = null,
         SortOrder order = SortOrder.Newest,
-        long? afterId = null
+        long? afterId = null,
+        long? manifestId = null,
+        long? manifestGroupId = null,
+        bool hideAdminTrains = false
     )
     {
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
@@ -213,16 +412,36 @@ public class OperationsQueries
             filtered = filtered.Where(m => m.TrainState == trainState.Value);
         if (!string.IsNullOrWhiteSpace(trainName))
             filtered = filtered.Where(m => m.Name == trainName);
+        // metadata.Name stores the interface FullName (per CLAUDE.md), which is what
+        // AdminTrains.FullNames holds. EF translates the list Contains to a SQL IN.
+        if (hideAdminTrains)
+            filtered = filtered.Where(m => !AdminTrains.FullNames.Contains(m.Name));
         if (startedAfter.HasValue)
             filtered = filtered.Where(m => m.StartTime >= startedAfter.Value);
         if (startedBefore.HasValue)
             filtered = filtered.Where(m => m.StartTime <= startedBefore.Value);
+        if (manifestId.HasValue)
+            filtered = filtered.Where(m => m.ManifestId == manifestId.Value);
+        if (manifestGroupId.HasValue)
+        {
+            // Executions for a group = executions of any manifest in that group. The subquery
+            // stays index-friendly: manifest.manifest_group_id is indexed, and the resulting
+            // manifest ids seek ix_metadata_manifest_state on the metadata side.
+            var groupManifestIds = db
+                .Manifests.AsNoTracking()
+                .Where(mf => mf.ManifestGroupId == manifestGroupId.Value)
+                .Select(mf => (long?)mf.Id);
+            filtered = filtered.Where(m => groupManifestIds.Contains(m.ManifestId));
+        }
 
         var hasFilter =
             trainState.HasValue
             || !string.IsNullOrWhiteSpace(trainName)
             || startedAfter.HasValue
-            || startedBefore.HasValue;
+            || startedBefore.HasValue
+            || manifestId.HasValue
+            || manifestGroupId.HasValue
+            || hideAdminTrains;
 
         // Filters (or a cursor) force an exact count; the estimator only applies to the
         // unfiltered first page.

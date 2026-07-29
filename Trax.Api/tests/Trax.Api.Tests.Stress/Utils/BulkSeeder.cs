@@ -52,16 +52,27 @@ public static class BulkSeeder
     // Guarantees dense coverage of every dashboard window (last hour, last 24h, last 7d).
     private const int MinuteSpread = 20160;
 
-    public static void EnsureDatabaseExists(string database)
+    // Number of distinct host instances stamped across the metadata, so the cluster rollup groups
+    // millions of rows into a handful of hosts.
+    private const int HostInstances = 4;
+
+    public static void EnsureDatabaseExists(string connectionString)
     {
+        var database = new NpgsqlConnectionStringBuilder(connectionString).Database!;
         if (!Regex.IsMatch(database, "^[a-z_][a-z0-9_]*$"))
             throw new ArgumentException(
                 $"Database name '{database}' must be a snake_case ASCII identifier.",
                 nameof(database)
             );
 
-        const string maintenance =
-            "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123;Timeout=30";
+        // Maintenance connection on the same server + credentials as the target, switched to the
+        // always-present "postgres" database, so CREATE DATABASE works regardless of which host
+        // TRAX_STRESS_CONNECTION points at (not just localhost:5432).
+        var maintenance = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Database = "postgres",
+            Timeout = 30,
+        }.ConnectionString;
         using var connection = new NpgsqlConnection(maintenance);
         connection.Open();
         using var command = connection.CreateCommand();
@@ -139,7 +150,7 @@ public static class BulkSeeder
         await SeedTable(
             conn,
             profile.Metadata,
-            "INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, manifest_id, parent_id) "
+            "INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, manifest_id, parent_id, host_instance_id, host_name, host_environment) "
                 + "SELECT lpad(g::text, 32, '0'), "
                 + $"       '{TrainName}' || (g % {profile.TrainNames}), "
                 + "       (ARRAY['completed','completed','completed','completed','failed','failed','in_progress','pending','cancelled']::trax.train_state[])[1 + (g % 9)], "
@@ -150,7 +161,12 @@ public static class BulkSeeder
                 + $"       1 + (g % {profile.Manifests}), "
                 // ~1% of rows are children of metadata id 1, so the parent/child query has a
                 // large but partial-indexed set to page (ix_metadata_parent_id).
-                + "       CASE WHEN g > 1 AND (g % 100) = 0 THEN 1 ELSE NULL END "
+                + "       CASE WHEN g > 1 AND (g % 100) = 0 THEN 1 ELSE NULL END, "
+                // A few host instances so the cluster (hosts) rollup aggregates the whole table
+                // into a handful of groups — the real shape of that endpoint at scale.
+                + $"       'stress-instance-' || (g % {HostInstances}), "
+                + $"       'stress-host-' || (g % {HostInstances}), "
+                + "       'Production' "
                 + "FROM generate_series(@lo, @hi) g",
             ct
         );

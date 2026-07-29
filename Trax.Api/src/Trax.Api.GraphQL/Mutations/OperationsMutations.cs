@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -176,6 +177,7 @@ public class OperationsMutations
         long id,
         UpdateManifestInput input,
         [Service] IDataContextProviderFactory dataContextFactory,
+        [Service] ITraxChangeSignal changeSignal,
         CancellationToken ct
     )
     {
@@ -203,6 +205,7 @@ public class OperationsMutations
             manifest.IntervalSeconds = input.IntervalSeconds.Value;
 
         await db.SaveChanges(ct);
+        changeSignal.Notify(ChangeDomain.Manifest);
         return new OperationResponse(true, Count: 1, Message: "Manifest updated");
     }
 }

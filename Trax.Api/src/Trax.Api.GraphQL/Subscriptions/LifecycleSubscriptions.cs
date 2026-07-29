@@ -4,8 +4,9 @@ using Trax.Api.DTOs;
 namespace Trax.Api.GraphQL.Subscriptions;
 
 /// <summary>
-/// GraphQL subscription type for real-time train lifecycle events.
-/// Clients connect via WebSocket at the GraphQL endpoint.
+/// GraphQL subscription root for real-time push. Carries per-train lifecycle events plus a
+/// coalesced <c>onDataChanged</c> signal that admin UIs use to refetch a domain's view without
+/// polling. Clients connect via WebSocket at the GraphQL endpoint.
 /// </summary>
 public class LifecycleSubscriptions
 {
@@ -23,4 +24,12 @@ public class LifecycleSubscriptions
 
     [Subscribe]
     public TrainLifecycleEvent OnTrainStateChanged([EventMessage] TrainLifecycleEvent e) => e;
+
+    /// <summary>
+    /// Fires when a scheduler/admin data domain changes (work queue, dead letters, manifests,
+    /// manifest groups, scheduler config). One event per coalesced burst; the payload names the
+    /// domain so a client can refetch just that view.
+    /// </summary>
+    [Subscribe]
+    public DataChangedEvent OnDataChanged([EventMessage] DataChangedEvent e) => e;
 }

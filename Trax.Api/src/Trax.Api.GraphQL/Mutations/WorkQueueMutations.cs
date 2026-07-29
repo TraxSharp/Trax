@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.GraphQL.Mutations;
@@ -48,6 +49,7 @@ public class WorkQueueMutations
     public async Task<OperationResponse> CancelWorkQueueEntries(
         long[] ids,
         [Service] IDataContextProviderFactory dataContextFactory,
+        [Service] ITraxChangeSignal changeSignal,
         CancellationToken ct
     )
     {
@@ -59,6 +61,9 @@ public class WorkQueueMutations
         var cancelled = await db
             .WorkQueues.Where(q => ids.Contains(q.Id) && q.Status == WorkQueueStatus.Queued)
             .ExecuteUpdateAsync(s => s.SetProperty(q => q.Status, WorkQueueStatus.Cancelled), ct);
+
+        if (cancelled > 0)
+            changeSignal.Notify(ChangeDomain.WorkQueue);
 
         return new OperationResponse(
             true,

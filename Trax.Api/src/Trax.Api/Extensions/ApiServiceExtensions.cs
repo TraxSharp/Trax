@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Trax.Api.Services.Authorization;
 using Trax.Api.Services.HealthCheck;
+using Trax.Api.Services.Metrics;
 using Trax.Api.Services.Principal;
 using Trax.Mediator.Services.Principal;
 using Trax.Mediator.Services.TrainAuthorization;
@@ -20,6 +21,9 @@ public static class ApiServiceExtensions
         services.AddHttpContextAccessor();
         services.AddScoped<ITraxHealthService, TraxHealthService>();
         services.AddScoped<ITrainAuthorizationService, TrainAuthorizationService>();
+
+        // Singleton so the CPU sampler's previous-sample delta survives across requests.
+        services.TryAddSingleton<ProcessCpuSampler>();
 
         // Replace the mediator's null-default principal provider with one backed
         // by IHttpContextAccessor so per-principal concurrency caps work for

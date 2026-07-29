@@ -19,16 +19,19 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
 {
     private readonly ITopicEventSender _eventSender;
     private readonly ILogger<GraphQLTrainEventHandler>? _logger;
+    private readonly bool _streamAllTrains;
     private readonly HashSet<string> _enabledTrains;
 
     public GraphQLTrainEventHandler(
         ITopicEventSender eventSender,
         ITrainDiscoveryService discoveryService,
+        TrainLifecycleStreamOptions options,
         ILogger<GraphQLTrainEventHandler>? logger = null
     )
     {
         _eventSender = eventSender;
         _logger = logger;
+        _streamAllTrains = options.StreamAllTrains;
         _enabledTrains = discoveryService
             .DiscoverTrains()
             .Where(r => r.IsBroadcastEnabled)
@@ -36,9 +39,17 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
             .ToHashSet();
     }
 
+    // Admin observability forwards every train; otherwise only [TraxBroadcast] trains.
+    private bool ShouldForward(string trainName) =>
+        _streamAllTrains || _enabledTrains.Contains(trainName);
+
     public async Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct)
     {
-        if (!_enabledTrains.Contains(message.TrainName))
+        // Data-change signals ride the same transport but are handled by GraphQLDataChangeHandler.
+        if (message.EventType == TrainLifecycleEventMessage.DataChangedEventType)
+            return;
+
+        if (!ShouldForward(message.TrainName))
             return;
 
         var topicName = message.EventType switch

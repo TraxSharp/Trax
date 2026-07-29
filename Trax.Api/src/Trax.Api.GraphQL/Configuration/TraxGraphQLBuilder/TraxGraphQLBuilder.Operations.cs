@@ -37,4 +37,21 @@ public partial class TraxGraphQLBuilder
         OperationMutationsExposed = true;
         return this;
     }
+
+    internal bool AnonymousOperationsAllowed { get; private set; }
+
+    /// <summary>
+    /// Acknowledges that the operations (admin) namespace is reachable without the builder's
+    /// <c>RequireAuthorization()</c> gate. Exposing <see cref="ExposeOperationMutations"/> without
+    /// a gate otherwise fails at startup: those mutations drive the scheduler directly, so
+    /// anonymous access to them must be a deliberate choice, never a forgotten one. Call this only
+    /// when the surface is protected another way (a private network, a sidecar, ASP.NET endpoint
+    /// authorization) or is intentionally public. It has no effect on the schema; it only records
+    /// that anonymous operations are intended so the startup guard stays quiet.
+    /// </summary>
+    public TraxGraphQLBuilder AllowAnonymousOperations()
+    {
+        AnonymousOperationsAllowed = true;
+        return this;
+    }
 }

@@ -17,12 +17,14 @@ using Trax.Api.GraphQL.Errors;
 using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Api.GraphQL.Sinks;
 using Trax.Api.GraphQL.Startup;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.GraphQL.Types;
 using Trax.Api.GraphQL.Validation;
 using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -120,6 +122,29 @@ public static class GraphQLServiceExtensions
             .AddSingleton<ITrainLifecycleHookFactory>(sp =>
                 sp.GetRequiredService<LifecycleHookFactory<GraphQLSubscriptionHook>>()
             );
+
+        // Deliver coalesced change signals to the local onDataChanged subscription. The change-
+        // signal pipeline itself is registered by AddTrax(); this is the in-process delivery sink.
+        services.AddSingleton<IChangeSignalSink, TopicEventSenderChangeSink>();
+
+        // Exposing the operations (admin) surface means this host is an admin dashboard, which
+        // should observe every train's lifecycle — not the per-train [TraxBroadcast] opt-in that
+        // curates user-facing subscriptions. So the lifecycle hooks stream all trains here.
+        var operationsExposed = config.OperationQueriesExposed || config.OperationMutationsExposed;
+        services.AddSingleton(
+            new TrainLifecycleStreamOptions { StreamAllTrains = operationsExposed }
+        );
+
+        // Fail fast at startup if the operations surface is exposed without its backing services,
+        // instead of masking a runtime "Unexpected Execution Error" per request.
+        if (operationsExposed)
+        {
+            var mutationsExposed = config.OperationMutationsExposed;
+            services.AddHostedService(sp => new TraxOperationsServiceValidator(
+                sp.GetRequiredService<IServiceProviderIsService>(),
+                mutationsExposed
+            ));
+        }
 
         var hasQueryRoot =
             config.OperationQueriesExposed
@@ -283,11 +308,12 @@ public static class GraphQLServiceExtensions
         }
 
         // If a broadcaster receiver is registered (via UseBroadcaster()),
-        // wire up the GraphQL handler so remote lifecycle events are forwarded
-        // to HotChocolate subscriptions.
+        // wire up the GraphQL handlers so remote lifecycle events and data-change
+        // signals are forwarded to HotChocolate subscriptions.
         if (services.Any(sd => sd.ServiceType == typeof(ITrainEventReceiver)))
         {
             services.AddTransient<ITrainEventHandler, GraphQLTrainEventHandler>();
+            services.AddTransient<ITrainEventHandler, GraphQLDataChangeHandler>();
         }
 
         return services;

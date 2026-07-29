@@ -1,5 +1,11 @@
 namespace Trax.Api.DTOs
 {
+    public class DataChangedEvent : System.IEquatable<Trax.Api.DTOs.DataChangedEvent>
+    {
+        public DataChangedEvent(Trax.Effect.Services.ChangeSignal.ChangeDomain Domain, System.DateTime Timestamp) { }
+        public Trax.Effect.Services.ChangeSignal.ChangeDomain Domain { get; init; }
+        public System.DateTime Timestamp { get; init; }
+    }
     public class DeadLetterSummary : System.IEquatable<Trax.Api.DTOs.DeadLetterSummary>
     {
         public DeadLetterSummary(long Id, long ManifestId, string ManifestName, Trax.Effect.Enums.DeadLetterStatus Status, System.DateTime DeadLetteredAt, string Reason, int RetryCountAtDeadLetter, System.DateTime? ResolvedAt, string? ResolutionNote, long? RetryMetadataId) { }
@@ -13,6 +19,14 @@ namespace Trax.Api.DTOs
         public int RetryCountAtDeadLetter { get; init; }
         public long? RetryMetadataId { get; init; }
         public Trax.Effect.Enums.DeadLetterStatus Status { get; init; }
+    }
+    public class EffectInfo : System.IEquatable<Trax.Api.DTOs.EffectInfo>
+    {
+        public EffectInfo(string Name, string FullName, bool Enabled, bool Toggleable) { }
+        public bool Enabled { get; init; }
+        public string FullName { get; init; }
+        public string Name { get; init; }
+        public bool Toggleable { get; init; }
     }
     public class ExecutionDetail : System.IEquatable<Trax.Api.DTOs.ExecutionDetail>
     {
@@ -85,6 +99,16 @@ namespace Trax.Api.DTOs
         public int QueueDepth { get; init; }
         public string Status { get; init; }
     }
+    public class HostInfo : System.IEquatable<Trax.Api.DTOs.HostInfo>
+    {
+        public HostInfo(string InstanceId, string? Name, string? Environment, System.DateTime LastSeen, long TotalExecutions, int CurrentlyRunning) { }
+        public int CurrentlyRunning { get; init; }
+        public string? Environment { get; init; }
+        public string InstanceId { get; init; }
+        public System.DateTime LastSeen { get; init; }
+        public string? Name { get; init; }
+        public long TotalExecutions { get; init; }
+    }
     public class InputPropertySchema : System.IEquatable<Trax.Api.DTOs.InputPropertySchema>
     {
         public InputPropertySchema(string Name, string TypeName, bool IsNullable) { }
@@ -103,6 +127,41 @@ namespace Trax.Api.DTOs
         public string Message { get; init; }
         public long MetadataId { get; init; }
         public string? StackTrace { get; init; }
+    }
+    public class ManifestExclusion : System.IEquatable<Trax.Api.DTOs.ManifestExclusion>
+    {
+        public ManifestExclusion(Trax.Effect.Models.Manifest.ExclusionType Type, System.Collections.Generic.IReadOnlyList<System.DayOfWeek>? DaysOfWeek, System.Collections.Generic.IReadOnlyList<System.DateOnly>? Dates, System.DateOnly? StartDate, System.DateOnly? EndDate, System.TimeOnly? StartTime, System.TimeOnly? EndTime) { }
+        public System.Collections.Generic.IReadOnlyList<System.DateOnly>? Dates { get; init; }
+        public System.Collections.Generic.IReadOnlyList<System.DayOfWeek>? DaysOfWeek { get; init; }
+        public System.DateOnly? EndDate { get; init; }
+        public System.TimeOnly? EndTime { get; init; }
+        public System.DateOnly? StartDate { get; init; }
+        public System.TimeOnly? StartTime { get; init; }
+        public Trax.Effect.Models.Manifest.ExclusionType Type { get; init; }
+    }
+    public class ManifestExecutionStats : System.IEquatable<Trax.Api.DTOs.ManifestExecutionStats>
+    {
+        public ManifestExecutionStats(long ManifestId, long Total, long Completed, long Failed, long InProgress, long Pending, long Cancelled, System.DateTime? LastRun, System.DateTime? LastSuccessfulRun) { }
+        public long Cancelled { get; init; }
+        public long Completed { get; init; }
+        public long Failed { get; init; }
+        public long InProgress { get; init; }
+        public System.DateTime? LastRun { get; init; }
+        public System.DateTime? LastSuccessfulRun { get; init; }
+        public long ManifestId { get; init; }
+        public long Pending { get; init; }
+        public long Total { get; init; }
+    }
+    public class ManifestGroupStats : System.IEquatable<Trax.Api.DTOs.ManifestGroupStats>
+    {
+        public ManifestGroupStats(long GroupId, long ManifestCount, long TotalExecutions, long Completed, long Failed, long InProgress, System.DateTime? LastRun) { }
+        public long Completed { get; init; }
+        public long Failed { get; init; }
+        public long GroupId { get; init; }
+        public long InProgress { get; init; }
+        public System.DateTime? LastRun { get; init; }
+        public long ManifestCount { get; init; }
+        public long TotalExecutions { get; init; }
     }
     public class ManifestGroupSummary : System.IEquatable<Trax.Api.DTOs.ManifestGroupSummary>
     {
@@ -184,6 +243,20 @@ namespace Trax.Api.DTOs
     {
         Newest = 0,
         Oldest = 1,
+    }
+    public class TrainExecutionStats : System.IEquatable<Trax.Api.DTOs.TrainExecutionStats>
+    {
+        public TrainExecutionStats(string TrainName, long Total, long Completed, long Failed, long InProgress, long Pending, long Cancelled, System.DateTime? LastRun, System.DateTime? LastSuccessfulRun, double? AverageMilliseconds) { }
+        public double? AverageMilliseconds { get; init; }
+        public long Cancelled { get; init; }
+        public long Completed { get; init; }
+        public long Failed { get; init; }
+        public long InProgress { get; init; }
+        public System.DateTime? LastRun { get; init; }
+        public System.DateTime? LastSuccessfulRun { get; init; }
+        public long Pending { get; init; }
+        public long Total { get; init; }
+        public string TrainName { get; init; }
     }
     public class TrainInfo : System.IEquatable<Trax.Api.DTOs.TrainInfo>
     {
@@ -294,5 +367,13 @@ namespace Trax.Api.Services.HealthCheck
     {
         public TraxHealthService(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.HealthStatus> GetHealthAsync(System.Threading.CancellationToken ct = default) { }
+    }
+}
+namespace Trax.Api.Services.Metrics
+{
+    public sealed class ProcessCpuSampler
+    {
+        public ProcessCpuSampler() { }
+        public double? SamplePercent() { }
     }
 }

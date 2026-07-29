@@ -5,12 +5,14 @@ using NSubstitute;
 using NUnit.Framework;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Api.Tests.Fakes;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.Tests;
@@ -102,10 +104,17 @@ public class WorkQueueOperationsTests
         await using (var db = await _factory.CreateDbContextAsync(default))
             ids = await db.WorkQueues.Select(q => q.Id).ToArrayAsync();
 
-        var resp = await new WorkQueueMutations().CancelWorkQueueEntries(ids, _factory, default);
+        var signal = new RecordingChangeSignal();
+        var resp = await new WorkQueueMutations().CancelWorkQueueEntries(
+            ids,
+            _factory,
+            signal,
+            default
+        );
 
         resp.Success.Should().BeTrue();
         resp.Count.Should().Be(3); // only the 3 queued; the dispatched one is skipped
+        signal.Domains.Should().ContainSingle().Which.Should().Be(ChangeDomain.WorkQueue);
         await using (var db = await _factory.CreateDbContextAsync(default))
         {
             var cancelled = await db.WorkQueues.CountAsync(q =>
@@ -118,10 +127,17 @@ public class WorkQueueOperationsTests
     [Test]
     public async Task CancelWorkQueueEntries_EmptyIds_ReturnsZero()
     {
-        var resp = await new WorkQueueMutations().CancelWorkQueueEntries([], _factory, default);
+        var signal = new RecordingChangeSignal();
+        var resp = await new WorkQueueMutations().CancelWorkQueueEntries(
+            [],
+            _factory,
+            signal,
+            default
+        );
 
         resp.Success.Should().BeTrue();
         resp.Count.Should().Be(0);
+        signal.Domains.Should().BeEmpty("nothing was cancelled, so no work-queue change fired");
     }
 
     #endregion

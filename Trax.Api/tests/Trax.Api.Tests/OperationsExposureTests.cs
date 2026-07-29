@@ -270,7 +270,7 @@ public class OperationsExposureTests
 
         var executor = await BuildExecutor(
             _queryOnlyDiscovery,
-            graphql => graphql.ExposeOperationMutations(),
+            graphql => graphql.ExposeOperationMutations().AllowAnonymousOperations(),
             registerScheduler: true
         );
 
@@ -291,7 +291,7 @@ public class OperationsExposureTests
 
         var executor = await BuildExecutor(
             _queryOnlyDiscovery,
-            graphql => graphql.ExposeOperationMutations(),
+            graphql => graphql.ExposeOperationMutations().AllowAnonymousOperations(),
             registerScheduler: true
         );
 
@@ -308,7 +308,7 @@ public class OperationsExposureTests
     {
         var executor = await BuildExecutor(
             _queryOnlyDiscovery,
-            graphql => graphql.ExposeOperationMutations(),
+            graphql => graphql.ExposeOperationMutations().AllowAnonymousOperations(),
             registerScheduler: true
         );
 
@@ -346,6 +346,104 @@ public class OperationsExposureTests
         var opResult = result as IOperationResult;
         opResult!.Errors.Should().BeNullOrEmpty();
         opResult.ToJson().Should().Contain("RootMutation");
+    }
+
+    #endregion
+
+    #region Operations authorization guard
+
+    [Test]
+    public void AllowAnonymousOperations_DefaultIsFalse()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+
+        builder.AnonymousOperationsAllowed.Should().BeFalse();
+    }
+
+    [Test]
+    public void AllowAnonymousOperations_FlipsFlag()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+
+        builder.AllowAnonymousOperations();
+
+        builder.AnonymousOperationsAllowed.Should().BeTrue();
+    }
+
+    [Test]
+    public void ExposeOperationMutations_WithoutAuthorization_ThrowsAtBuild()
+    {
+        var services = BuildBaseServices(_emptyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g => g.ExposeOperationQueries().ExposeOperationMutations()
+            );
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*RequireAuthorization*")
+            .WithMessage("*AllowAnonymousOperations*");
+    }
+
+    [Test]
+    public void ExposeOperationMutations_WithRequireAuthorization_DoesNotThrow()
+    {
+        var services = BuildBaseServices(_emptyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g => g.ExposeOperationQueries().ExposeOperationMutations().RequireAuthorization()
+            );
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void ExposeOperationMutations_WithAllowAnonymousOperations_DoesNotThrow()
+    {
+        var services = BuildBaseServices(_emptyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g =>
+                    g.ExposeOperationQueries().ExposeOperationMutations().AllowAnonymousOperations()
+            );
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void ExposeOperationQueriesOnly_WithoutAuthorization_DoesNotThrow()
+    {
+        // The guard is about scheduler-control mutations. Read-only operation queries stay reachable
+        // without a gate (health checks and dashboards commonly want that).
+        var services = BuildBaseServices(_emptyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g => g.ExposeOperationQueries()
+            );
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void RequireAuthorization_WithAllowAnonymousOperations_ThrowsContradiction()
+    {
+        var services = BuildBaseServices(_emptyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g => g.ExposeOperationQueries().RequireAuthorization().AllowAnonymousOperations()
+            );
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*contradict*");
     }
 
     #endregion

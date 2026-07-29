@@ -18,6 +18,7 @@ using Trax.Api.Services.HealthCheck;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Api.Tests;
@@ -120,6 +121,7 @@ public class GraphQLServiceExtensionsTests
                         s.AddRouting();
                         s.AddTraxGraphQL(g => g.ExposeOperationQueries());
                         s.AddSingleton(Substitute.For<ITraxScheduler>());
+                        s.AddSingleton(Substitute.For<IOperationsService>());
                         s.AddSingleton(Substitute.For<ITraxHealthService>());
                     })
                     .Configure(app =>
@@ -161,6 +163,7 @@ public class GraphQLServiceExtensionsTests
                         s.AddRouting();
                         s.AddTraxGraphQL(g => g.ExposeOperationQueries());
                         s.AddSingleton(Substitute.For<ITraxScheduler>());
+                        s.AddSingleton(Substitute.For<IOperationsService>());
                         s.AddSingleton(Substitute.For<ITraxHealthService>());
                     })
                     .Configure(app =>
@@ -205,6 +208,7 @@ public class GraphQLServiceExtensionsTests
         builder.Services.AddSingleton(Substitute.For<IEffectRegistry>());
         builder.Services.AddTraxGraphQL(g => g.ExposeOperationQueries());
         builder.Services.AddSingleton(Substitute.For<ITraxScheduler>());
+        builder.Services.AddSingleton(Substitute.For<IOperationsService>());
         builder.Services.AddSingleton(Substitute.For<ITraxHealthService>());
 
         await using var app = builder.Build();

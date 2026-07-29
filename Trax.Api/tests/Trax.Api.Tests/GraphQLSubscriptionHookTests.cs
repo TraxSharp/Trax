@@ -323,7 +323,11 @@ public class GraphQLSubscriptionHookTests
             subscriptionEnabled: true
         );
         var discovery = new StubDiscoveryService([registration]);
-        var hook = new GraphQLSubscriptionHook(sender, discovery);
+        var hook = new GraphQLSubscriptionHook(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         var metadata = CreateMetadata("Namespace.IMyTrain");
         await hook.OnCompleted(metadata, CancellationToken.None);
@@ -344,7 +348,11 @@ public class GraphQLSubscriptionHookTests
             subscriptionEnabled: true
         );
         var discovery = new StubDiscoveryService([registration]);
-        var hook = new GraphQLSubscriptionHook(sender, discovery);
+        var hook = new GraphQLSubscriptionHook(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         var metadata = CreateMetadata("Namespace.MyTrain");
         await hook.OnCompleted(metadata, CancellationToken.None);
@@ -362,7 +370,11 @@ public class GraphQLSubscriptionHookTests
             subscriptionEnabled: true
         );
         var discovery = new StubDiscoveryService([registration]);
-        var hook = new GraphQLSubscriptionHook(sender, discovery);
+        var hook = new GraphQLSubscriptionHook(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         var metadata = CreateMetadata("Namespace.SomeOtherTrain");
         await hook.OnCompleted(metadata, CancellationToken.None);
@@ -380,7 +392,11 @@ public class GraphQLSubscriptionHookTests
             subscriptionEnabled: true
         );
         var discovery = new StubDiscoveryService([registration]);
-        var hook = new GraphQLSubscriptionHook(sender, discovery);
+        var hook = new GraphQLSubscriptionHook(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         var metadata = CreateMetadata("Namespace.IMyTrain");
         await hook.OnStarted(metadata, CancellationToken.None);
@@ -399,7 +415,11 @@ public class GraphQLSubscriptionHookTests
             subscriptionEnabled: true
         );
         var discovery = new StubDiscoveryService([registration]);
-        var hook = new GraphQLSubscriptionHook(sender, discovery);
+        var hook = new GraphQLSubscriptionHook(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         var metadata = CreateMetadata("Namespace.IMyTrain");
         await hook.OnFailed(metadata, new Exception("fail"), CancellationToken.None);
@@ -418,7 +438,11 @@ public class GraphQLSubscriptionHookTests
             subscriptionEnabled: true
         );
         var discovery = new StubDiscoveryService([registration]);
-        var hook = new GraphQLSubscriptionHook(sender, discovery);
+        var hook = new GraphQLSubscriptionHook(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         var metadata = CreateMetadata("Namespace.IMyTrain");
         await hook.OnCancelled(metadata, CancellationToken.None);
@@ -437,7 +461,11 @@ public class GraphQLSubscriptionHookTests
             subscriptionEnabled: true
         );
         var discovery = new StubDiscoveryService([registration]);
-        var hook = new GraphQLSubscriptionHook(sender, discovery);
+        var hook = new GraphQLSubscriptionHook(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         var metadata = CreateMetadata("Namespace.IMyTrain");
         await hook.OnStateChanged(metadata, CancellationToken.None);
@@ -455,7 +483,11 @@ public class GraphQLSubscriptionHookTests
     {
         var sender = new RecordingTopicEventSender();
         var discovery = new StubDiscoveryService([]);
-        var hook = new GraphQLSubscriptionHook(sender, discovery);
+        var hook = new GraphQLSubscriptionHook(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
         var metadata = CreateMetadata("Any.Train");
 
         await hook.OnStarted(metadata, CancellationToken.None);
@@ -481,13 +513,38 @@ public class GraphQLSubscriptionHookTests
             CreateRegistration("Third.Train", subscriptionEnabled: false),
         };
         var discovery = new StubDiscoveryService(registrations);
-        var hook = new GraphQLSubscriptionHook(sender, discovery);
+        var hook = new GraphQLSubscriptionHook(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions()
+        );
 
         await hook.OnCompleted(CreateMetadata("First.Train"), CancellationToken.None);
         await hook.OnCompleted(CreateMetadata("Second.Train"), CancellationToken.None);
         await hook.OnCompleted(CreateMetadata("Third.Train"), CancellationToken.None);
 
         sender.Events.Should().HaveCount(2);
+    }
+
+    [Test]
+    public async Task StreamAllTrains_PublishesEvenNonBroadcastTrains()
+    {
+        // When the operations (admin) surface is exposed, StreamAllTrains is set and the hook
+        // publishes every train regardless of [TraxBroadcast].
+        var sender = new RecordingTopicEventSender();
+        var discovery = new StubDiscoveryService([
+            CreateRegistration("Not.Broadcast.Train", subscriptionEnabled: false),
+        ]);
+        var hook = new GraphQLSubscriptionHook(
+            sender,
+            discovery,
+            new TrainLifecycleStreamOptions { StreamAllTrains = true }
+        );
+
+        await hook.OnCompleted(CreateMetadata("Not.Broadcast.Train"), CancellationToken.None);
+
+        sender.Events.Should().ContainSingle();
+        sender.Events[0].Topic.Should().Be(nameof(LifecycleSubscriptions.OnTrainCompleted));
     }
 
     #endregion
@@ -503,6 +560,7 @@ public class GraphQLSubscriptionHookTests
 
         services.AddSingleton<ITopicEventSender>(sender);
         services.AddSingleton<ITrainDiscoveryService>(discovery);
+        services.AddSingleton(new TrainLifecycleStreamOptions());
         services.AddTransient<GraphQLSubscriptionHook>();
         using var provider = services.BuildServiceProvider();
 
@@ -527,7 +585,7 @@ public class GraphQLSubscriptionHookTests
             CreateRegistration(enabledTrainName, subscriptionEnabled: true),
         };
         var discovery = new StubDiscoveryService(registrations);
-        return new GraphQLSubscriptionHook(sender, discovery);
+        return new GraphQLSubscriptionHook(sender, discovery, new TrainLifecycleStreamOptions());
     }
 
     private static Metadata CreateMetadata(string name)

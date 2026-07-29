@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.GraphQL.Queries;
@@ -111,6 +112,81 @@ public class ManifestGroupQueries
     }
 
     /// <summary>
+    /// Execution roll-up for a set of manifest groups: manifest count, executions by state, and
+    /// last run per group. Batched so the dashboard's groups list fetches stats for just the
+    /// visible page in one round-trip. Every requested id gets a row (zeros when it has no
+    /// manifests or executions), in the order requested, so the caller can zip it to its rows.
+    /// The metadata side is served by ix_metadata_manifest_state, the manifest side by
+    /// ix_manifest_manifest_group_id.
+    /// </summary>
+    public async Task<IReadOnlyList<ManifestGroupStats>> GetStats(
+        long[] groupIds,
+        [Service] IDataContextProviderFactory dataContextFactory,
+        CancellationToken ct
+    )
+    {
+        var ids = groupIds.Distinct().ToArray();
+        if (ids.Length == 0)
+            return Array.Empty<ManifestGroupStats>();
+
+        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+
+        var manifestCounts = await db
+            .Manifests.AsNoTracking()
+            .Where(m => ids.Contains(m.ManifestGroupId))
+            .GroupBy(m => m.ManifestGroupId)
+            .Select(g => new { GroupId = g.Key, Count = (long)g.Count() })
+            .ToListAsync(ct);
+
+        // Join metadata to the group's manifests, then aggregate per (group, state). The join
+        // stays cheap: the manifest side is filtered to the requested groups first, and each
+        // manifest_id seek hits ix_metadata_manifest_state.
+        var execAgg = await db
+            .Metadatas.AsNoTracking()
+            .Where(m => m.ManifestId != null)
+            .Join(
+                db.Manifests.AsNoTracking().Where(mf => ids.Contains(mf.ManifestGroupId)),
+                m => m.ManifestId,
+                mf => (long?)mf.Id,
+                (m, mf) =>
+                    new
+                    {
+                        mf.ManifestGroupId,
+                        m.TrainState,
+                        m.StartTime,
+                    }
+            )
+            .GroupBy(x => new { x.ManifestGroupId, x.TrainState })
+            .Select(g => new
+            {
+                g.Key.ManifestGroupId,
+                g.Key.TrainState,
+                Count = (long)g.Count(),
+                LastRun = g.Max(x => (DateTime?)x.StartTime),
+            })
+            .ToListAsync(ct);
+
+        return ids.Select(id =>
+            {
+                var manifestCount = manifestCounts.FirstOrDefault(x => x.GroupId == id)?.Count ?? 0;
+                var rows = execAgg.Where(x => x.ManifestGroupId == id).ToList();
+                long StateCount(TrainState state) =>
+                    rows.Where(x => x.TrainState == state).Sum(x => x.Count);
+                var lastRun = rows.Count == 0 ? (DateTime?)null : rows.Max(x => x.LastRun);
+                return new ManifestGroupStats(
+                    id,
+                    ManifestCount: manifestCount,
+                    TotalExecutions: rows.Sum(x => x.Count),
+                    Completed: StateCount(TrainState.Completed),
+                    Failed: StateCount(TrainState.Failed),
+                    InProgress: StateCount(TrainState.InProgress),
+                    LastRun: lastRun
+                );
+            })
+            .ToList();
+    }
+
+    /// <summary>
     /// Returns the dependency graph for the given group, or <c>null</c> if the group
     /// does not exist. Empty groups still return a single-node graph (the focal group)
     /// so the UI can render it.
@@ -122,5 +198,18 @@ public class ManifestGroupQueries
     )
     {
         return await operationsService.GetManifestGroupDependencyGraphAsync(groupId, ct);
+    }
+
+    /// <summary>
+    /// The whole cross-group dependency graph: every group as a node and every cross-group
+    /// dependency as a directed parent → dependent edge. Nothing is highlighted. Backs the
+    /// dashboard's global dependency graph on the manifest-groups page.
+    /// </summary>
+    public async Task<ManifestGroupDependencyGraph> GetDependencyGraph(
+        [Service] IOperationsService operationsService,
+        CancellationToken ct
+    )
+    {
+        return await operationsService.GetGlobalManifestGroupGraphAsync(ct);
     }
 }

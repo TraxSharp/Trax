@@ -1,3 +1,4 @@
+using Trax.Api.Services.Metrics;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.GraphQL.Queries;
@@ -22,5 +23,15 @@ public class MetricsQueries
     public ServerMetrics GetServer([Service] IOperationsService operationsService)
     {
         return operationsService.GetServerMetrics();
+    }
+
+    /// <summary>
+    /// This API process's CPU utilisation since the previous poll (0-100, normalised by core
+    /// count). Separate from <see cref="GetServer"/> because it is stateful per process: it needs
+    /// a delta between two samples, so the first poll returns <c>null</c> while the baseline primes.
+    /// </summary>
+    public double? GetServerCpuPercent([Service] ProcessCpuSampler sampler)
+    {
+        return sampler.SamplePercent();
     }
 }
