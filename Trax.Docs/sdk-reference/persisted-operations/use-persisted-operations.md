@@ -64,6 +64,8 @@ See [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persis
 
 Also extends the GraphQL schema with the [management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations), and calls `ExposeOperationQueries()` / `ExposeOperationMutations()` on the builder so `RootQuery` and `RootMutation` are emitted even when the host has not registered any train-backed queries or mutations.
 
+Because this exposes the operation mutations (including the persisted-operation management mutations, which are admin operations), the host must gate the endpoint with [`RequireAuthorization()`](/docs/sdk-reference/graphql-api/add-trax-graphql), or explicitly opt into anonymous access with `AllowAnonymousOperations()`. Otherwise `AddTraxGraphQL()` fails at startup.
+
 ## Validation
 
 Configuration errors throw `InvalidOperationException` at startup. Each message names the misconfigured method and suggests a fix:
