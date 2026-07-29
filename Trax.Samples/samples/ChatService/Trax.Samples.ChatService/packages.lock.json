@@ -34,24 +34,28 @@
       },
       "Trax.Effect": {
         "type": "Direct",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "Tkeyd43vbDbKQ0tA7qoCCKZi21epAmnnDOIAqtQccqT0WxfujFifbtd56Sjgm4fs72KwUNDtbpjTWiGKA7+uNQ==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "UsqXX7rJP7wbA+gtRJWfPZ3Hq4EQs35H99uFwSV3iLGvMmbIiyiHX0kW7mCsWC3XocTnIj3OKtnAAgyqsIQ0sw==",
         "dependencies": {
           "Trax.Core": "1.6.0"
         }
       },
       "Trax.Effect.Data.Sqlite": {
         "type": "Direct",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "Gypcd/W7mkJWSSwXFc/eEgLl5g3gwaIpsYi1wB36eOf0aV4u6AF4o+i/9Jo3aYRT14+exZ6ZeU2sHI5h2nJedA==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "w+rl0fvxip2Cn37mb6BufmU5PkR0tc6oRQeSUQZz/qwv/G+mx4qQXFDL1M3I07S2QTP+kyX3KlCJWeyZ2AoAZw==",
         "dependencies": {
+          "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
           "Microsoft.EntityFrameworkCore.Sqlite": "10.0.3",
-          "Trax.Effect.Data": "1.41.0",
-          "dbup-core": "5.0.87",
-          "dbup-sqlite": "5.0.40"
+          "Npgsql": "10.0.3",
+          "SQLitePCLRaw.bundle_e_sqlite3": "3.0.3",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect.Data": "1.43.0",
+          "dbup-core": "6.1.1",
+          "dbup-sqlite": "6.0.4"
         }
       },
       "Trax.Mediator": {
@@ -74,17 +78,16 @@
       },
       "dbup-core": {
         "type": "Transitive",
-        "resolved": "5.0.87",
-        "contentHash": "KhcbHJfaxNA4yRwFGGewD4znkOweyPLIbSQnUU2tMjLDkEWiBNFKlojhk46J7qsyKssk/RSzC0s/Rohjp4Y9xA=="
+        "resolved": "6.1.1",
+        "contentHash": "kgpuyJVEFJHoIj/slnc994Go88aoeZqNDfGHDBr4sh7CsEWwJhOTCt/FJqO4ziUImL5L0NEY0kxxOiNgPKI2Fw=="
       },
       "dbup-sqlite": {
         "type": "Transitive",
-        "resolved": "5.0.40",
-        "contentHash": "0/QsCVPpQHMbHAr6/A8OxsbGwCNes3KsKbo53yeWn7tGen2/XMV7+h8kpQC2wZWvbhbsZqTrrW/35UDjlB9MPQ==",
+        "resolved": "6.0.4",
+        "contentHash": "eEUr/hCvQHzvPjCSqV6Ic5cZTFiKXLse2k9e5ji8KDgIBD12BCvDdq2E6+C8GbYCZ8GEqlF7uRxVcyvYfrebQg==",
         "dependencies": {
-          "Microsoft.Data.Sqlite": "1.0.1",
-          "NETStandard.Library": "1.6.1",
-          "dbup-core": "5.0.37"
+          "Microsoft.Data.Sqlite.Core": "9.0.10",
+          "dbup-core": "6.0.15"
         }
       },
       "GreenDonut": {
@@ -387,14 +390,6 @@
         "resolved": "7.0.0",
         "contentHash": "3aeMZ1N0lJoSyzqiP03hqemtb1BijhsJADdobn/4nsMJ8V1H+CrpuduUe4hlRdx+ikBQju1VGjMD1GJ3Sk05Eg=="
       },
-      "Microsoft.Data.Sqlite": {
-        "type": "Transitive",
-        "resolved": "1.0.1",
-        "contentHash": "1L1ndXFfk0IniEbpkZaG2Jyzokt9zZbWqD1MHellRFtIpaJy+vs+Wbfh313ai7TAoXP1oCxK3h3KzqCSMaIlEQ==",
-        "dependencies": {
-          "SQLite": "3.13.0"
-        }
-      },
       "Microsoft.Data.Sqlite.Core": {
         "type": "Transitive",
         "resolved": "10.0.3",
@@ -437,33 +432,15 @@
         "resolved": "10.0.3",
         "contentHash": "31kRjr1fgdJO1UZ/AsjL2noqwht+juHMQ8c/oh8CEsDhlM2+0zwVZVsZjxSfOFiPtn5+6kRGuvSbLAufAPT0kA=="
       },
-      "Microsoft.NETCore.Platforms": {
-        "type": "Transitive",
-        "resolved": "1.1.0",
-        "contentHash": "kz0PEW2lhqygehI/d6XsPCQzD7ff7gUJaVGPVETX611eadGsA3A877GdSlU0LRVMCTH/+P3o2iDTak+S08V2+A=="
-      },
-      "NETStandard.Library": {
-        "type": "Transitive",
-        "resolved": "1.6.1",
-        "contentHash": "WcSp3+vP+yHNgS8EV5J7pZ9IRpeDuARBPN28by8zqff1wJQXm26PVU8L3/fYLBJVU7BtDyqNVWq2KlCVvSSR4A==",
-        "dependencies": {
-          "Microsoft.NETCore.Platforms": "1.1.0"
-        }
-      },
       "Npgsql": {
         "type": "Transitive",
-        "resolved": "10.0.1",
-        "contentHash": "XyUcxEfqlFomhNTG/ZdGlec+uSOQArKz0Mzz8jYKP/Jj9GM2YabU5CVZtp0yiC4f9hRp+tRZTnHMatJeJ3rwgw=="
+        "resolved": "10.0.3",
+        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w=="
       },
       "SourceGear.sqlite3": {
         "type": "Transitive",
         "resolved": "3.50.4.5",
         "contentHash": "UtnipXhJYZKQOQIfpws/msLK7IRhMplE1CZCaZLIQXRnGD474QVpO/J9nMlQQY8NZueGz1aidjoxDRnrC1NT3Q=="
-      },
-      "SQLite": {
-        "type": "Transitive",
-        "resolved": "3.13.0",
-        "contentHash": "MJfRiz2p6aMVOxrxGMdVzhpzI0oxTgZSwC8eVuOpV8L7yYaFUu8q/OFYwv9P0/aZ/pdEu24O6gma6wZJMTun9A=="
       },
       "SQLitePCLRaw.config.e_sqlite3": {
         "type": "Transitive",
@@ -513,7 +490,7 @@
           "Microsoft.EntityFrameworkCore": "[10.0.3, )",
           "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.3, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.3, )",
-          "Trax.Effect.Data": "[1.41.0, )"
+          "Trax.Effect.Data": "[1.43.0, )"
         }
       },
       "Microsoft.EntityFrameworkCore": {
@@ -540,14 +517,15 @@
       },
       "Trax.Effect.Data": {
         "type": "CentralTransitive",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "3tr5igE+6JGXhLt1JlggSgJx+4y4AOmtnBBTIDbyvfLrdGj4Al4KNmJphzjf3KWCwMlMgoNaWTu7z2MageeE0g==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "oFmABbDcY+r7pwJGDWGuAv9vVdn3WWPM8pYH1nS9+0Kn+4Wbaedug9RDsHcPzpJcQ57eiw/UM2U7chrS23DUeg==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
-          "Npgsql": "10.0.1",
-          "Trax.Effect": "1.41.0"
+          "Npgsql": "10.0.3",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0"
         }
       }
     }

@@ -24,9 +24,9 @@
       },
       "Trax.Api.GraphQL.Client": {
         "type": "Direct",
-        "requested": "[1.38.1, )",
-        "resolved": "1.38.1",
-        "contentHash": "dC0FAeUxe7ktAglya2mJgp97euGUE/RSmpxYa2yJUHykUGWa31H810p0OFpi1UVsJRYpDHA+lU+d8TsVIIurOA==",
+        "requested": "[1.40.0, )",
+        "resolved": "1.40.0",
+        "contentHash": "zkd6FeeQcz34Lz/Kcv0MNjufHkqL4hHaWolywsC1RndfK8r8VBeR7w9BsiTdYHOulExkhFxlf8ISyZl4OSZHaw==",
         "dependencies": {
           "GraphQL": "8.8.4",
           "GraphQL.Client": "6.1.0",
@@ -35,9 +35,9 @@
       },
       "Trax.Api.GraphQL.Client.Trax": {
         "type": "Direct",
-        "requested": "[1.38.1, )",
-        "resolved": "1.38.1",
-        "contentHash": "y1cgIW3J+Z9QOpF3GxvSWsbdQOWpBfZ6ux3zIctj4QrgCMOMudmzAIx04IhC8LS5tw1BFUtPtJ0sMFPvBuVLKw==",
+        "requested": "[1.40.0, )",
+        "resolved": "1.40.0",
+        "contentHash": "Qm8XCx/zhtPigt1w68u/g4FNpWU6PSQLRn8TgLeXNsQcwzNAjf+1dYm+tYus4MLlfnxcEF0vyk064CYlA3iGGA==",
         "dependencies": {
           "GraphQL": "8.8.4",
           "GraphQL.Client": "6.1.0",
@@ -46,22 +46,22 @@
           "HotChocolate.CostAnalysis": "15.1.17",
           "HotChocolate.Execution": "15.1.17",
           "Microsoft.EntityFrameworkCore": "10.0.9",
-          "Trax.Api.GraphQL.Client": "1.38.1",
-          "Trax.Effect": "1.41.0",
-          "Trax.Effect.Data": "1.41.0",
+          "Trax.Api.GraphQL.Client": "1.40.0",
+          "Trax.Effect": "1.43.0",
+          "Trax.Effect.Data": "1.43.0",
           "Trax.Mediator": "1.20.0"
         }
       },
       "Trax.Api.GraphQL.Client.Typed": {
         "type": "Direct",
-        "requested": "[1.38.1, )",
-        "resolved": "1.38.1",
-        "contentHash": "JhWTND1iH3+3EUZs6PUQKvwyt1iNlKN8GpQ0o9r7ruGMrCPcoRrkaarGhbsV2byrdm5WiwA2mFkT2yxKyYuEYw==",
+        "requested": "[1.40.0, )",
+        "resolved": "1.40.0",
+        "contentHash": "a/u+a/liPboyKtQiHo528XpbWTPQUTIqU81YOlRjMMfyyKGXzeXbIJeGZ8esqTQKlIid2sGZMi1/KsoQ+c3y1Q==",
         "dependencies": {
           "GraphQL": "8.8.4",
           "GraphQL.Client": "6.1.0",
           "GraphQL.Client.Serializer.SystemTextJson": "6.1.0",
-          "Trax.Api.GraphQL.Client": "1.38.1"
+          "Trax.Api.GraphQL.Client": "1.40.0"
         }
       },
       "ChilliCream.Nitro.App": {
@@ -450,8 +450,8 @@
       },
       "Npgsql": {
         "type": "Transitive",
-        "resolved": "10.0.1",
-        "contentHash": "XyUcxEfqlFomhNTG/ZdGlec+uSOQArKz0Mzz8jYKP/Jj9GM2YabU5CVZtp0yiC4f9hRp+tRZTnHMatJeJ3rwgw=="
+        "resolved": "10.0.3",
+        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w=="
       },
       "System.IO.Hashing": {
         "type": "Transitive",
@@ -491,23 +491,24 @@
       },
       "Trax.Effect": {
         "type": "CentralTransitive",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "Tkeyd43vbDbKQ0tA7qoCCKZi21epAmnnDOIAqtQccqT0WxfujFifbtd56Sjgm4fs72KwUNDtbpjTWiGKA7+uNQ==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "UsqXX7rJP7wbA+gtRJWfPZ3Hq4EQs35H99uFwSV3iLGvMmbIiyiHX0kW7mCsWC3XocTnIj3OKtnAAgyqsIQ0sw==",
         "dependencies": {
           "Trax.Core": "1.6.0"
         }
       },
       "Trax.Effect.Data": {
         "type": "CentralTransitive",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "3tr5igE+6JGXhLt1JlggSgJx+4y4AOmtnBBTIDbyvfLrdGj4Al4KNmJphzjf3KWCwMlMgoNaWTu7z2MageeE0g==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "oFmABbDcY+r7pwJGDWGuAv9vVdn3WWPM8pYH1nS9+0Kn+4Wbaedug9RDsHcPzpJcQ57eiw/UM2U7chrS23DUeg==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
-          "Npgsql": "10.0.1",
-          "Trax.Effect": "1.41.0"
+          "Npgsql": "10.0.3",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0"
         }
       },
       "Trax.Mediator": {

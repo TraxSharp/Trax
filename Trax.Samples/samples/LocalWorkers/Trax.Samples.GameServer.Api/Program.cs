@@ -63,13 +63,20 @@
 //        -H "Content-Type: application/json" \
 //        -d '{"query":"mutation { dispatch { matches { processMatchResult(input: {region: \"na\", matchId: \"match-999\", winnerId: \"player-1\", loserId: \"player-2\", winnerScore: 100, loserScore: 30}, mode: QUEUE, priority: 10) { externalId workQueueId } } } }"}'
 //
-//   # Subscribe to real-time train lifecycle events (use Banana Cake Pop IDE).
+//   # Subscribe to real-time events (use Banana Cake Pop IDE). This process runs no trains
+//   # itself, so these stream what the scheduler process does, relayed over RabbitMQ (see
+//   # UseBroadcaster below). onDataChanged is a coalesced signal naming which admin domain
+//   # changed (work queue, dead letters, manifests) so a UI can refetch without polling.
 //   # Subscriptions authenticate via the connection_init payload; grab a token
 //   # from /dev/token/player (or /dev/token/partner) and set the connection's
 //   # authToken to it. The dispatcher validates it against the matched scheme.
 //   #   subscription { onTrainStarted { metadataId trainName trainState timestamp } }
 //   #   subscription { onTrainCompleted { metadataId trainName trainState timestamp } }
 //   #   subscription { onTrainFailed { metadataId trainName failureJunction failureReason } }
+//   #   subscription { onDataChanged { domain timestamp } }
+//
+//   # Point the React dashboard (../../Trax.Api.Dashboard) at this API to watch trains queue,
+//   # dispatch, and run live:  TRAX_API_TARGET=http://localhost:5200 npm run dev
 //
 //   # Mint a demo subscription token (Development only)
 //   curl http://localhost:5200/dev/token/player
@@ -86,6 +93,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Effect.Broadcaster.RabbitMQ.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
@@ -98,6 +106,8 @@ using Trax.Samples.GameServer.Auth;
 using Trax.Samples.GameServer.Data;
 using Trax.Samples.GameServer.Data.Models;
 using Trax.Samples.GameServer.Hooks;
+using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Services.Operations;
 using SampleKeys = Trax.Samples.GameServer.Auth.ApiKeyDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -105,6 +115,14 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString =
     builder.Configuration.GetConnectionString("TraxDatabase")
     ?? throw new InvalidOperationException("Connection string 'TraxDatabase' not found.");
+
+// The scheduler runs in a separate process, so it broadcasts train lifecycle events and
+// coalesced data-change signals over RabbitMQ. This API subscribes to that stream (below) and
+// re-publishes it to GraphQL subscribers, so onTrainStateChanged and onDataChanged reflect work
+// the scheduler queued/dispatched/ran, not just work this process handled inline.
+var rabbitMqConnectionString =
+    builder.Configuration.GetConnectionString("RabbitMQ")
+    ?? throw new InvalidOperationException("Connection string 'RabbitMQ' not found.");
 
 builder.Services.AddLogging(logging => logging.AddConsole());
 
@@ -194,9 +212,22 @@ builder.Services.AddTrax(trax =>
                 .AddJson()
                 .SaveTrainParameters()
                 .AddLifecycleHook<AuditLogHook>()
+                // Bridge the scheduler's cross-process events into this API. AddTraxGraphQL()
+                // detects the receiver and forwards remote lifecycle + data-change events to the
+                // onTrainStateChanged / onDataChanged subscriptions.
+                .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString))
         )
         .AddMediator(typeof(ManifestNames).Assembly)
 );
+
+// ── Register the operations admin surface's backing services ─────────────
+// This process exposes ExposeOperationQueries()/ExposeOperationMutations() below so the ops
+// dashboard can read manifests/executions/dead letters and trigger/cancel/queue work. Those
+// resolvers depend on ITraxScheduler and IOperationsService. AddTraxJobRunner() registers the
+// scheduler services (ITraxScheduler, SchedulerConfiguration, cancellation registry) with NO
+// background pollers — the separate Scheduler process owns the polling loop.
+builder.Services.AddTraxJobRunner();
+builder.Services.AddScoped<IOperationsService, OperationsService>();
 
 // ── Register application DbContext for game data ────────────────────────
 builder.Services.AddDbContextFactory<GameDbContext>(options => options.UseNpgsql(connectionString));
@@ -220,6 +251,11 @@ builder.Services.AddTraxGraphQL(graphql =>
         // cancel jobs. Both surfaces are off by default; opt in here.
         .ExposeOperationQueries()
         .ExposeOperationMutations()
+        // Per-train [TraxAuthorize] gates individual operations (see the endpoint-mapping
+        // note below); the ops namespace itself is intentionally reachable, and the sample
+        // keeps per-train auth rather than an endpoint-wide gate so anonymous player trains
+        // (leaderboard, player lookup) and the Banana Cake Pop IDE still work.
+        .AllowAnonymousOperations()
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 

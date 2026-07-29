@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Trax.Effect.Broadcaster.RabbitMQ" />
     <PackageReference Include="Trax.Effect.Provider.Json" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" />
     <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />

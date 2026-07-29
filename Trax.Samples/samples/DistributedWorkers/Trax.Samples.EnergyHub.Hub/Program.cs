@@ -193,6 +193,8 @@ builder.Services.AddTraxGraphQL(graphql =>
         // trigger jobs. Both surfaces are off by default; opt in here.
         .ExposeOperationQueries()
         .ExposeOperationMutations()
+        // Demo hub with no endpoint auth; acknowledge the ops surface is intentionally open.
+        .AllowAnonymousOperations()
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 

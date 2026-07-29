@@ -76,6 +76,9 @@ builder.Services.AddTraxGraphQL(graphql =>
                 // through the manifest uploader.
                 .AllowOperationsMatching(id => id.StartsWith("dev_"))
         )
+        // UsePersistedOperations exposes the management mutations; this demo has no endpoint
+        // auth, so acknowledge the ops surface is intentionally reachable.
+        .AllowAnonymousOperations()
 );
 
 // Dashboard: mounts the operations control room (including the Persisted

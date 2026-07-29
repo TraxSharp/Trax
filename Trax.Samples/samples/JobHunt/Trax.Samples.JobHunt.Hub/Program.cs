@@ -120,6 +120,8 @@ builder.Services.AddTraxGraphQL(graphql =>
         .AddTypeExtension<JobHuntSubscriptions>()
         .ExposeOperationQueries()
         .ExposeOperationMutations()
+        // Demo hub; acknowledge the ops surface is reachable without an endpoint gate.
+        .AllowAnonymousOperations()
 );
 
 builder.Services.AddHealthChecks().AddTraxHealthCheck();

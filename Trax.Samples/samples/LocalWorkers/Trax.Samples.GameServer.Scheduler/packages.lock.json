@@ -28,32 +28,49 @@
           "Trax.Scheduler": "1.29.0"
         }
       },
+      "Trax.Effect.Broadcaster.RabbitMQ": {
+        "type": "Direct",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "lNd3kWKJfxLWCcnN03PYzym41WEUFfU6MGjLToJegqSJx77nTuba3DnULZvGmzcqlOLa2BFscWx7moSghKcYuQ==",
+        "dependencies": {
+          "RabbitMQ.Client": "7.2.1",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0"
+        }
+      },
       "Trax.Effect.JunctionProvider.Progress": {
         "type": "Direct",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "eUSAPzcCiHbkK71G4m+GLooAD95Qp5yt7nw33owxrOhSk8x4Xz8e7JOo773HWCKnbP3HZj3gnkw87dxXmn989A==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "cPpPcElRN7pdnzOu4dHBlxqE87ZqaT+tNSkBg4aCaY1dtEUXcqaHa0HwfINgzeYi35r/YrLHmpT+6l4ICU3H8A==",
         "dependencies": {
-          "Trax.Effect": "1.41.0",
-          "Trax.Effect.Data": "1.41.0"
+          "Microsoft.EntityFrameworkCore": "10.0.3",
+          "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
+          "Npgsql": "10.0.3",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0",
+          "Trax.Effect.Data": "1.43.0"
         }
       },
       "Trax.Effect.Provider.Json": {
         "type": "Direct",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "x4IV63yln7b1eKYyjt6L8KeRDw550Sgb2vIFiAS+V1PabOAd2or9lhO0TEVU6sip9l0KyUCaA19j5/RUvziAGw==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "DGTT71841RzxloK24I8oKm1mQ1t+QF6JN6bxFiwAHDN9eB64ZFy+PtfglHVGFjAfCv0F8EF4MWAcSzXGLIrNcQ==",
         "dependencies": {
-          "Trax.Effect": "1.41.0"
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0"
         }
       },
       "Trax.Effect.Provider.Parameter": {
         "type": "Direct",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "61G46HzkRfB1YZwNH7m4qtBSlxKDt1PdHC2JZbB5z0GS9gZYcvecdaQq6syzmOaIXxT3Xpu99AMvocxva6c39Q==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "cQKRm8OBUp+aYmtPC7mQame6xNjS7ecl52EqZKx6CoW/gMmPHZAcDyGprSF9kWLDe7Muic2K0sKm3s21GZ3k/g==",
         "dependencies": {
-          "Trax.Effect": "1.41.0"
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0"
         }
       },
       "ChilliCream.Nitro.App": {
@@ -66,21 +83,21 @@
       },
       "Cronos": {
         "type": "Transitive",
-        "resolved": "0.8.4",
-        "contentHash": "sTyvTH8hh5YWivinRGzL5QrfKKt59I/Hh+4m8j6vmtJdSOWA4I3B+AS9iJk3RdQqZ+i4E+0PlhYuY9iaxDLTcQ=="
+        "resolved": "0.13.0",
+        "contentHash": "Nkve+Yi0+ol3ntSBRHeW0ka9cJQ8vndSUvvkXqF9LVqwpoqWueyxu/HS275r98RDOmF7/mzRnZW5XXUBXob+TA=="
       },
       "dbup-core": {
         "type": "Transitive",
-        "resolved": "5.0.87",
-        "contentHash": "KhcbHJfaxNA4yRwFGGewD4znkOweyPLIbSQnUU2tMjLDkEWiBNFKlojhk46J7qsyKssk/RSzC0s/Rohjp4Y9xA=="
+        "resolved": "6.1.1",
+        "contentHash": "kgpuyJVEFJHoIj/slnc994Go88aoeZqNDfGHDBr4sh7CsEWwJhOTCt/FJqO4ziUImL5L0NEY0kxxOiNgPKI2Fw=="
       },
       "dbup-postgresql": {
         "type": "Transitive",
-        "resolved": "5.0.40",
-        "contentHash": "w7uUc6ZIOIfp0BYV3PashcLP+GZTCG5oOkDJSk3pO/7B3zCbaeKTATtdnBzWbgL8ci6SYrCWgth3KvMtNMkvmg==",
+        "resolved": "7.0.1",
+        "contentHash": "mRnmENWWPuuMZ538gOd1mZnzucx6FQk0anmw3EABjGfcbp24FDb9QdGepYrDiaM8K9s5/gd49+5cmBOlniH/lg==",
         "dependencies": {
-          "Npgsql": "3.2.7",
-          "dbup-core": "5.0.37"
+          "Npgsql": "10.0.1",
+          "dbup-core": "6.1.1"
         }
       },
       "EFCore.NamingConventions": {
@@ -514,8 +531,8 @@
       },
       "Npgsql": {
         "type": "Transitive",
-        "resolved": "10.0.1",
-        "contentHash": "XyUcxEfqlFomhNTG/ZdGlec+uSOQArKz0Mzz8jYKP/Jj9GM2YabU5CVZtp0yiC4f9hRp+tRZTnHMatJeJ3rwgw=="
+        "resolved": "10.0.3",
+        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w=="
       },
       "RabbitMQ.Client": {
         "type": "Transitive",
@@ -563,11 +580,11 @@
       "trax.samples.gameserver": {
         "type": "Project",
         "dependencies": {
-          "Trax.Effect": "[1.41.0, )",
-          "Trax.Effect.Data": "[1.41.0, )",
-          "Trax.Effect.Data.Postgres": "[1.41.0, )",
+          "Trax.Effect": "[1.43.0, )",
+          "Trax.Effect.Data": "[1.43.0, )",
+          "Trax.Effect.Data.Postgres": "[1.43.0, )",
           "Trax.Mediator": "[1.20.0, )",
-          "Trax.Scheduler": "[1.29.0, )"
+          "Trax.Scheduler": "[1.31.0, )"
         }
       },
       "HotChocolate.AspNetCore": {
@@ -616,7 +633,7 @@
       },
       "Trax.Api": {
         "type": "CentralTransitive",
-        "requested": "[1.38.1, )",
+        "requested": "[1.40.0, )",
         "resolved": "1.28.0",
         "contentHash": "yrs5O2alD+obvX6RjzXyb/plA2upbYErKwVHEHxibIR9h32fYBmXkFduucSVTh/clfZqTEjr/CHH/zlEhVQXqQ==",
         "dependencies": {
@@ -628,13 +645,13 @@
       },
       "Trax.Api.Auth": {
         "type": "CentralTransitive",
-        "requested": "[1.38.1, )",
+        "requested": "[1.40.0, )",
         "resolved": "1.28.0",
         "contentHash": "WfBeGuG9y0+iS0gZs7MRB9+JzSoKj1LrKMndc+4yw70sWVPgOVTvSiBIkkQvboNizbgcBmWndmLxhFtvyxr90w=="
       },
       "Trax.Api.Auth.Jwt": {
         "type": "CentralTransitive",
-        "requested": "[1.38.1, )",
+        "requested": "[1.40.0, )",
         "resolved": "1.28.0",
         "contentHash": "wQejbeWXmxWVPsvhxgrBz8ltFLNRTZqkW8H2ht1N14IXETv9INBo8LcjImvd0/uV1J1dNm/fx1MD1i6Br8tSFA==",
         "dependencies": {
@@ -644,7 +661,7 @@
       },
       "Trax.Api.GraphQL": {
         "type": "CentralTransitive",
-        "requested": "[1.38.1, )",
+        "requested": "[1.40.0, )",
         "resolved": "1.28.0",
         "contentHash": "AIUeP03s8A1fGBuT51F02BhOCsrid30uFuAmEIfDmFaVW3zSoQaIZnbHTmXel3cpfDjokKAK20yQNMCP8wiRnQ==",
         "dependencies": {
@@ -659,7 +676,7 @@
       },
       "Trax.Api.GraphQL.PersistedOperations": {
         "type": "CentralTransitive",
-        "requested": "[1.38.1, )",
+        "requested": "[1.40.0, )",
         "resolved": "1.28.0",
         "contentHash": "jD3rYn9MwHFQnv3qEQRfHz9+4omlvKQaD/N9GBWP1uNHCsy8ROS3iOZ5UP1fAa3tJm3qnt0tLJDUZn4imJgpgg==",
         "dependencies": {
@@ -670,37 +687,41 @@
       },
       "Trax.Effect": {
         "type": "CentralTransitive",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "Tkeyd43vbDbKQ0tA7qoCCKZi21epAmnnDOIAqtQccqT0WxfujFifbtd56Sjgm4fs72KwUNDtbpjTWiGKA7+uNQ==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "UsqXX7rJP7wbA+gtRJWfPZ3Hq4EQs35H99uFwSV3iLGvMmbIiyiHX0kW7mCsWC3XocTnIj3OKtnAAgyqsIQ0sw==",
         "dependencies": {
           "Trax.Core": "1.6.0"
         }
       },
       "Trax.Effect.Data": {
         "type": "CentralTransitive",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "3tr5igE+6JGXhLt1JlggSgJx+4y4AOmtnBBTIDbyvfLrdGj4Al4KNmJphzjf3KWCwMlMgoNaWTu7z2MageeE0g==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "oFmABbDcY+r7pwJGDWGuAv9vVdn3WWPM8pYH1nS9+0Kn+4Wbaedug9RDsHcPzpJcQ57eiw/UM2U7chrS23DUeg==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
-          "Npgsql": "10.0.1",
-          "Trax.Effect": "1.41.0"
+          "Npgsql": "10.0.3",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0"
         }
       },
       "Trax.Effect.Data.Postgres": {
         "type": "CentralTransitive",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "8M1mwLdHggetsXzpzWN812n807b5bvBZsthsJTfcomd4bqSlIpHt8W4c6WzIudhHygRNbpocE+k47Dxrsty+HQ==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "pfQbPCqISZS9ywK8wZXfhPsCri1kSY6noJmKudwjEZbaHorHp9yS9F+Z+adZ0x7mJ5Q/A+0Ld42nyv843SBbFw==",
         "dependencies": {
           "EFCore.NamingConventions": "10.0.1",
+          "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
+          "Npgsql": "10.0.3",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "10.0.0",
-          "Trax.Effect.Data": "1.41.0",
-          "dbup-core": "5.0.87",
-          "dbup-postgresql": "5.0.40"
+          "Trax.Core": "1.6.0",
+          "Trax.Effect.Data": "1.43.0",
+          "dbup-core": "6.1.1",
+          "dbup-postgresql": "7.0.1"
         }
       },
       "Trax.Mediator": {
@@ -715,14 +736,15 @@
       },
       "Trax.Scheduler": {
         "type": "CentralTransitive",
-        "requested": "[1.29.0, )",
-        "resolved": "1.29.0",
-        "contentHash": "G+917A7sZl4NJuTyv6m17eJiqEUiZrjJk/AqkJ7n1ZOcoHw2FY92xpHCvZL2syUsbZmoCfRIt3yBMZUpbTEaYw==",
+        "requested": "[1.31.0, )",
+        "resolved": "1.31.0",
+        "contentHash": "7vCFKZJjsM6P/C0KmGNA71FictNdnSJnenMBLRgXsBueeeE3LE0cerLv+E5RZgdJLYtzwdHKz+qfohhiIZVTAA==",
         "dependencies": {
-          "Cronos": "0.8.4",
-          "Trax.Effect": "1.34.0",
-          "Trax.Effect.Data": "1.34.0",
-          "Trax.Mediator": "1.17.0"
+          "Cronos": "0.13.0",
+          "Npgsql": "10.0.3",
+          "Trax.Effect": "1.43.0",
+          "Trax.Effect.Data": "1.43.0",
+          "Trax.Mediator": "1.20.0"
         }
       }
     }

@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Trax.Dashboard.Extensions;
+using Trax.Effect.Broadcaster.RabbitMQ.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Enums;
@@ -47,6 +48,13 @@ var connectionString =
     builder.Configuration.GetConnectionString("TraxDatabase")
     ?? throw new InvalidOperationException("Connection string 'TraxDatabase' not found.");
 
+// This process queues, dispatches, and runs the trains. It broadcasts lifecycle events and
+// coalesced data-change signals (work queue, dead letters, manifests) over RabbitMQ so the
+// separate API process can push them to its GraphQL subscribers in real time.
+var rabbitMqConnectionString =
+    builder.Configuration.GetConnectionString("RabbitMQ")
+    ?? throw new InvalidOperationException("Connection string 'RabbitMQ' not found.");
+
 builder.Services.AddLogging(logging => logging.AddConsole());
 
 builder.Services.AddTrax(trax =>
@@ -58,6 +66,8 @@ builder.Services.AddTrax(trax =>
                 .SaveTrainParameters()
                 .AddJunctionProgress()
                 .AddLifecycleHook<AuditLogHook>()
+                // Publish this process's lifecycle + data-change events to the API process.
+                .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString))
         )
         // The scheduler is trusted infrastructure: it dispatches work that was
         // already authorized at API submission time. [TraxAuthorize]-gated
