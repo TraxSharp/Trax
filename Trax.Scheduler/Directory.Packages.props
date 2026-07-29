@@ -16,39 +16,39 @@
   <ItemGroup Label="Trax">
     <PackageVersion
       Include="Trax.Effect"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
     />
     <PackageVersion
       Include="Trax.Effect.Data"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
     />
     <PackageVersion
       Include="Trax.Effect.Data.InMemory"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
     />
     <PackageVersion
       Include="Trax.Effect.Data.Postgres"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
     />
     <PackageVersion
       Include="Trax.Effect.Data.Sqlite"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
     />
     <PackageVersion
       Include="Trax.Effect.JunctionProvider.Logging"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
     />
     <PackageVersion
       Include="Trax.Effect.JunctionProvider.Progress"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
     />
     <PackageVersion
       Include="Trax.Effect.Provider.Json"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
     />
     <PackageVersion
       Include="Trax.Effect.Provider.Parameter"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.41.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
     />
     <PackageVersion
       Include="Trax.Mediator"

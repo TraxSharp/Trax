@@ -59,6 +59,14 @@ public interface IOperationsService
     );
 
     /// <summary>
+    /// Returns the whole cross-group dependency graph: every manifest group as a node and every
+    /// cross-group dependency (a manifest in one group depending on a manifest in another) as a
+    /// directed parent → dependent edge. Nothing is highlighted. Backs the global dependency
+    /// graph on the dashboard's manifest-groups page.
+    /// </summary>
+    Task<ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(CancellationToken ct);
+
+    /// <summary>
     /// Returns a snapshot of dashboard-relevant metrics: today's KPI counts, an
     /// executions-over-time chart at the chosen granularity, top failing trains over
     /// the last 7 days, top average durations over the last 7 days, and per-train

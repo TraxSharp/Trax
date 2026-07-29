@@ -350,4 +350,40 @@ public class OperationsServiceManifestGroupTests : TestSetup
     }
 
     #endregion
+
+    #region GetGlobalManifestGroupGraphAsync
+
+    [Test]
+    public async Task GetGlobalGraph_ReturnsEveryGroupAndCrossGroupEdges_NothingHighlighted()
+    {
+        var a = await CreateAndSaveManifestGroup(DataContext, "a");
+        var b = await CreateAndSaveManifestGroup(DataContext, "b");
+        var c = await CreateAndSaveManifestGroup(DataContext, "c");
+        var aM = await SeedManifest(a.Id);
+        var bM = await SeedManifest(b.Id, dependsOn: aM.Id); // a → b
+        await SeedManifest(c.Id, dependsOn: bM.Id); // b → c
+
+        var graph = await _operations.GetGlobalManifestGroupGraphAsync(CancellationToken.None);
+
+        graph.Nodes.Select(n => n.Id).Should().BeEquivalentTo(new[] { a.Id, b.Id, c.Id });
+        graph.Nodes.Should().OnlyContain(n => !n.IsHighlighted);
+        graph.Edges.Should().HaveCount(2);
+        graph.Edges.Should().ContainSingle(e => e.FromId == a.Id && e.ToId == b.Id);
+        graph.Edges.Should().ContainSingle(e => e.FromId == b.Id && e.ToId == c.Id);
+    }
+
+    [Test]
+    public async Task GetGlobalGraph_OmitsIntraGroupDependencies()
+    {
+        var g = await CreateAndSaveManifestGroup(DataContext, "solo");
+        var first = await SeedManifest(g.Id);
+        await SeedManifest(g.Id, dependsOn: first.Id); // same-group dependency
+
+        var graph = await _operations.GetGlobalManifestGroupGraphAsync(CancellationToken.None);
+
+        graph.Nodes.Should().ContainSingle(n => n.Id == g.Id);
+        graph.Edges.Should().BeEmpty("a dependency within one group is not a cross-group edge");
+    }
+
+    #endregion
 }

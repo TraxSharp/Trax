@@ -8,6 +8,7 @@ using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
@@ -36,7 +37,8 @@ internal class DispatchJobsJunction(
     ILogger<DispatchJobsJunction> logger,
     JobSubmitterRoutingConfiguration routingConfiguration,
     SchedulerConfiguration schedulerConfiguration,
-    ISqlDialect sqlDialect
+    ISqlDialect sqlDialect,
+    ITraxChangeSignal? changeSignal = null
 ) : EffectJunction<List<WorkQueue>, Unit>
 {
     public override async Task<Unit> Run(List<WorkQueue> entries)
@@ -105,11 +107,14 @@ internal class DispatchJobsJunction(
         var duration = DateTime.UtcNow - dispatchStartTime;
 
         if (jobsDispatched > 0)
+        {
             logger.LogInformation(
                 "DispatchJobsJunction completed: {JobsDispatched} jobs dispatched in {Duration}ms",
                 jobsDispatched,
                 duration.TotalMilliseconds
             );
+            changeSignal?.Notify(ChangeDomain.WorkQueue);
+        }
         else
             logger.LogDebug("DispatchJobsJunction completed: no jobs dispatched");
 

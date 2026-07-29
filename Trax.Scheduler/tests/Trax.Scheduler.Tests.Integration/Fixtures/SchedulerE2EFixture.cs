@@ -42,6 +42,9 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
     public ITraxScheduler Scheduler { get; }
     public SchedulerConfiguration Configuration { get; }
 
+    /// <summary>The scoped service provider, so tests can resolve additional services (e.g. IOperationsService).</summary>
+    public IServiceProvider Services => _scope.ServiceProvider;
+
     private SchedulerE2EFixture(
         ServiceProvider provider,
         IServiceScope scope,
@@ -63,7 +66,8 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
     /// down the provider.
     /// </summary>
     public static async Task<SchedulerE2EFixture> CreateAsync(
-        Action<SchedulerConfigurationBuilder> configureScheduler
+        Action<SchedulerConfigurationBuilder> configureScheduler,
+        Action<IServiceCollection>? configureServices = null
     )
     {
         var configuration = new ConfigurationBuilder()
@@ -82,7 +86,7 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
             connectionString +=
                 ";Pooling=true;Maximum Pool Size=1;Minimum Pool Size=0;Connection Idle Lifetime=1;Connection Pruning Interval=1";
 
-        var provider = new ServiceCollection()
+        var services = new ServiceCollection()
             .AddLogging(b => b.AddProvider(NullLoggerProvider.Instance))
             .AddTrax(trax =>
                 trax.AddEffects(effects =>
@@ -100,8 +104,10 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
             {
                 var factory = sp.GetRequiredService<IDataContextProviderFactory>();
                 return (IDataContext)factory.Create();
-            })
-            .BuildServiceProvider();
+            });
+
+        configureServices?.Invoke(services);
+        var provider = services.BuildServiceProvider();
 
         var scope = provider.CreateScope();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
@@ -166,10 +172,11 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
     /// InMemory database so no cleanup is needed.
     /// </summary>
     public static SchedulerE2EFixture CreateInMemory(
-        Action<SchedulerConfigurationBuilder> configureScheduler
+        Action<SchedulerConfigurationBuilder> configureScheduler,
+        Action<IServiceCollection>? configureServices = null
     )
     {
-        var provider = new ServiceCollection()
+        var services = new ServiceCollection()
             .AddLogging(b => b.AddProvider(NullLoggerProvider.Instance))
             .AddTrax(trax =>
                 trax.AddEffects(effects => effects.UseInMemory().AddJson().SaveTrainParameters())
@@ -184,8 +191,10 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
             {
                 var factory = sp.GetRequiredService<IDataContextProviderFactory>();
                 return (IDataContext)factory.Create();
-            })
-            .BuildServiceProvider();
+            });
+
+        configureServices?.Invoke(services);
+        var provider = services.BuildServiceProvider();
 
         var scope = provider.CreateScope();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();

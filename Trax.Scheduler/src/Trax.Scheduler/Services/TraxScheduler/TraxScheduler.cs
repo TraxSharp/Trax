@@ -7,6 +7,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Configuration;
@@ -23,7 +24,9 @@ public class TraxScheduler(
     IDataContextProviderFactory dataContextFactory,
     ITrainRegistry trainRegistry,
     ICancellationRegistry cancellationRegistry,
-    ILogger<TraxScheduler> logger
+    ILogger<TraxScheduler> logger,
+    // Optional so direct construction in tests stays simple; always resolved via DI in a host.
+    ITraxChangeSignal? changeSignal = null
 ) : ITraxScheduler
 {
     /// <inheritdoc />
@@ -306,6 +309,7 @@ public class TraxScheduler(
         var manifest = await GetManifestByExternalIdAsync(context, externalId, ct);
         manifest.IsEnabled = false;
         await context.SaveChanges(ct);
+        changeSignal?.Notify(ChangeDomain.Manifest);
 
         logger.LogInformation("Disabled manifest {ExternalId}", externalId);
     }
@@ -318,6 +322,7 @@ public class TraxScheduler(
         var manifest = await GetManifestByExternalIdAsync(context, externalId, ct);
         manifest.IsEnabled = true;
         await context.SaveChanges(ct);
+        changeSignal?.Notify(ChangeDomain.Manifest);
 
         logger.LogInformation("Enabled manifest {ExternalId}", externalId);
     }
@@ -341,6 +346,7 @@ public class TraxScheduler(
         );
         context.WorkQueues.Add(entry);
         await context.SaveChanges(ct);
+        changeSignal?.Notify(ChangeDomain.WorkQueue);
 
         logger.LogInformation(
             "Queued manifest {ExternalId} for execution (WorkQueueId: {WorkQueueId})",
@@ -373,6 +379,7 @@ public class TraxScheduler(
         );
         context.WorkQueues.Add(entry);
         await context.SaveChanges(ct);
+        changeSignal?.Notify(ChangeDomain.WorkQueue);
 
         logger.LogInformation(
             "Queued delayed manifest {ExternalId} for execution at {ScheduledAt} (WorkQueueId: {WorkQueueId})",
@@ -471,6 +478,7 @@ public class TraxScheduler(
         }
 
         await context.SaveChanges(ct);
+        changeSignal?.Notify(ChangeDomain.WorkQueue);
 
         logger.LogInformation(
             "Queued {Count} manifests in group {GroupId} for execution",
@@ -891,6 +899,10 @@ public class TraxScheduler(
         deadLetter.ResolutionNote = $"Re-queued (WorkQueue {entry.Id})";
         await context.SaveChanges(ct);
 
+        // A requeue both resolves a dead letter and creates a work-queue entry.
+        changeSignal?.Notify(ChangeDomain.DeadLetter);
+        changeSignal?.Notify(ChangeDomain.WorkQueue);
+
         logger.LogInformation(
             "Requeued dead letter {DeadLetterId} as WorkQueue {WorkQueueId}",
             deadLetterId,
@@ -923,6 +935,7 @@ public class TraxScheduler(
 
         deadLetter.Acknowledge(note);
         await context.SaveChanges(ct);
+        changeSignal?.Notify(ChangeDomain.DeadLetter);
 
         logger.LogInformation("Acknowledged dead letter {DeadLetterId}", deadLetterId);
 
@@ -966,6 +979,8 @@ public class TraxScheduler(
             dl.Acknowledge(note);
 
         await context.SaveChanges(ct);
+        if (deadLetters.Count > 0)
+            changeSignal?.Notify(ChangeDomain.DeadLetter);
 
         logger.LogInformation("Acknowledged {Count} dead letters", deadLetters.Count);
 
@@ -1006,6 +1021,8 @@ public class TraxScheduler(
             dl.Acknowledge(note);
 
         await context.SaveChanges(ct);
+        if (deadLetters.Count > 0)
+            changeSignal?.Notify(ChangeDomain.DeadLetter);
 
         logger.LogInformation("Acknowledged all {Count} dead letters", deadLetters.Count);
 
@@ -1029,6 +1046,11 @@ public class TraxScheduler(
         }
 
         await context.SaveChanges(ct);
+        if (deadLetters.Count > 0)
+        {
+            changeSignal?.Notify(ChangeDomain.DeadLetter);
+            changeSignal?.Notify(ChangeDomain.WorkQueue);
+        }
 
         logger.LogInformation("Requeued {Count} dead letters", deadLetters.Count);
 

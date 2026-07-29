@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Trains.ManifestManager;
@@ -20,7 +21,8 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 internal class CreateWorkQueueEntriesJunction(
     IDataContext dataContext,
     SchedulerConfiguration schedulerConfiguration,
-    ILogger<CreateWorkQueueEntriesJunction> logger
+    ILogger<CreateWorkQueueEntriesJunction> logger,
+    ITraxChangeSignal? changeSignal = null
 ) : EffectJunction<List<ManifestDispatchView>, Unit>
 {
     public override async Task<Unit> Run(List<ManifestDispatchView> views)
@@ -115,11 +117,14 @@ internal class CreateWorkQueueEntriesJunction(
         var duration = DateTime.UtcNow - pollStartTime;
 
         if (entriesCreated > 0)
+        {
             logger.LogInformation(
                 "CreateWorkQueueEntriesJunction completed: {EntriesCreated} entries created in {Duration}ms",
                 entriesCreated,
                 duration.TotalMilliseconds
             );
+            changeSignal?.Notify(ChangeDomain.WorkQueue);
+        }
         else
             logger.LogDebug("CreateWorkQueueEntriesJunction completed: no entries created");
 

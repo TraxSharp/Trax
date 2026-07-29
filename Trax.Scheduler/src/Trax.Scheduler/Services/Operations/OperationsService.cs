@@ -7,6 +7,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.SchedulerConfig;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
@@ -20,19 +21,23 @@ public class OperationsService : IOperationsService
     private readonly IDataContextProviderFactory _dataContextFactory;
     private readonly SchedulerConfiguration _schedulerConfiguration;
     private readonly LocalWorkerOptions? _localWorkerOptions;
+    private readonly ITraxChangeSignal? _changeSignal;
 
     public OperationsService(
         ITrainDiscoveryService discoveryService,
         IDataContextProviderFactory dataContextFactory,
         SchedulerConfiguration schedulerConfiguration,
         // LocalWorkerOptions is only registered when UseLocalWorkers() is called; treat as optional.
-        LocalWorkerOptions? localWorkerOptions = null
+        LocalWorkerOptions? localWorkerOptions = null,
+        // Optional so direct construction in tests stays simple; always resolved via DI in a host.
+        ITraxChangeSignal? changeSignal = null
     )
     {
         _discoveryService = discoveryService;
         _dataContextFactory = dataContextFactory;
         _schedulerConfiguration = schedulerConfiguration;
         _localWorkerOptions = localWorkerOptions;
+        _changeSignal = changeSignal;
     }
 
     /// <inheritdoc />
@@ -98,6 +103,7 @@ public class OperationsService : IOperationsService
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
         await db.Track(entry);
         await db.SaveChanges(ct);
+        _changeSignal?.Notify(ChangeDomain.WorkQueue);
 
         return new OperationResult(
             true,
@@ -126,6 +132,7 @@ public class OperationsService : IOperationsService
 
         entry.Status = WorkQueueStatus.Cancelled;
         await db.SaveChanges(ct);
+        _changeSignal?.Notify(ChangeDomain.WorkQueue);
 
         return new OperationResult(
             true,
@@ -187,6 +194,7 @@ public class OperationsService : IOperationsService
 
         group.UpdatedAt = DateTime.UtcNow;
         await db.SaveChanges(ct);
+        _changeSignal?.Notify(ChangeDomain.ManifestGroup);
 
         return new OperationResult(
             true,
@@ -286,6 +294,47 @@ public class OperationsService : IOperationsService
                 e.ParentGroupId != e.DependentGroupId
                 && allRelevantGroupIds.Contains(e.ParentGroupId)
             )
+            .Distinct()
+            .ToListAsync(ct);
+
+        var edges = crossGroupEdges
+            .Select(e => new DependencyGraphEdge(e.ParentGroupId, e.DependentGroupId))
+            .ToList();
+
+        return new ManifestGroupDependencyGraph(nodes, edges);
+    }
+
+    /// <inheritdoc />
+    public async Task<ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(
+        CancellationToken ct
+    )
+    {
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+
+        // Every group is a node; nothing is focal on the global view.
+        var nodes = await db
+            .ManifestGroups.AsNoTracking()
+            .OrderBy(g => g.Name)
+            .Select(g => new DependencyGraphNode(g.Id, g.Name, false))
+            .ToListAsync(ct);
+
+        // Cross-group edges: a manifest in one group depends on a manifest in another. Same shape as
+        // the per-group query, but unbounded (all groups) and with no focal filter.
+        var crossGroupEdges = await db
+            .Manifests.AsNoTracking()
+            .Where(m => m.DependsOnManifestId != null)
+            .Join(
+                db.Manifests.AsNoTracking(),
+                dependent => dependent.DependsOnManifestId,
+                parent => (long?)parent.Id,
+                (dependent, parent) =>
+                    new
+                    {
+                        ParentGroupId = parent.ManifestGroupId,
+                        DependentGroupId = dependent.ManifestGroupId,
+                    }
+            )
+            .Where(e => e.ParentGroupId != e.DependentGroupId)
             .Distinct()
             .ToListAsync(ct);
 
@@ -755,7 +804,10 @@ public class OperationsService : IOperationsService
 
         // No-op patches skip the DB write entirely so `updated_at` only moves on real changes.
         if (changed > 0)
+        {
             await PersistAsync(ct);
+            _changeSignal?.Notify(ChangeDomain.SchedulerConfig);
+        }
 
         return new OperationResult(
             true,

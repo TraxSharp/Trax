@@ -416,6 +416,7 @@ namespace Trax.Scheduler.Services.Operations
     {
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> CancelWorkQueueEntryAsync(long id, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DashboardMetrics> GetDashboardMetricsAsync(Trax.Scheduler.Services.Operations.MetricsRange range, bool hideAdminTrains, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph?> GetManifestGroupDependencyGraphAsync(long groupId, System.Threading.CancellationToken ct);
         Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig();
         Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics();
@@ -444,9 +445,10 @@ namespace Trax.Scheduler.Services.Operations
     }
     public class OperationsService : Trax.Scheduler.Services.Operations.IOperationsService
     {
-        public OperationsService(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Scheduler.Configuration.SchedulerConfiguration schedulerConfiguration, Trax.Scheduler.Configuration.LocalWorkerOptions? localWorkerOptions = null) { }
+        public OperationsService(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Scheduler.Configuration.SchedulerConfiguration schedulerConfiguration, Trax.Scheduler.Configuration.LocalWorkerOptions? localWorkerOptions = null, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal = null) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> CancelWorkQueueEntryAsync(long id, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DashboardMetrics> GetDashboardMetricsAsync(Trax.Scheduler.Services.Operations.MetricsRange range, bool hideAdminTrains, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph?> GetManifestGroupDependencyGraphAsync(long groupId, System.Threading.CancellationToken ct) { }
         public Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig() { }
         public Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics() { }
@@ -727,7 +729,7 @@ namespace Trax.Scheduler.Services.TraxScheduler
     }
     public class TraxScheduler : Trax.Scheduler.Services.TraxScheduler.ITraxScheduler
     {
-        public TraxScheduler(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Mediator.Services.TrainRegistry.ITrainRegistry trainRegistry, Trax.Scheduler.Services.CancellationRegistry.ICancellationRegistry cancellationRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.TraxScheduler.TraxScheduler> logger) { }
+        public TraxScheduler(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Mediator.Services.TrainRegistry.ITrainRegistry trainRegistry, Trax.Scheduler.Services.CancellationRegistry.ICancellationRegistry cancellationRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.TraxScheduler.TraxScheduler> logger, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal = null) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> AcknowledgeAllDeadLettersAsync(string note, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult> AcknowledgeDeadLetterAsync(long deadLetterId, string note, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> AcknowledgeDeadLettersAsync(long[] deadLetterIds, string note, System.Threading.CancellationToken ct = default) { }

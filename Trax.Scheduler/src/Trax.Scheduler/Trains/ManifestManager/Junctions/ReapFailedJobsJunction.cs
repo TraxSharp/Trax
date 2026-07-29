@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Trains.ManifestManager;
 
@@ -22,7 +23,8 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// </remarks>
 internal class ReapFailedJobsJunction(
     IDataContext dataContext,
-    ILogger<ReapFailedJobsJunction> logger
+    ILogger<ReapFailedJobsJunction> logger,
+    ITraxChangeSignal? changeSignal = null
 ) : EffectJunction<List<ManifestDispatchView>, List<DeadLetter>>
 {
     public override async Task<List<DeadLetter>> Run(List<ManifestDispatchView> views)
@@ -74,6 +76,9 @@ internal class ReapFailedJobsJunction(
 
         // Persist all changes immediately to ensure dead letters survive train failure
         await dataContext.SaveChanges(CancellationToken);
+
+        if (deadLettersCreated.Count > 0)
+            changeSignal?.Notify(ChangeDomain.DeadLetter);
 
         logger.LogInformation(
             "ReapFailedJobsJunction completed: {DeadLettersCreated} dead letters created",

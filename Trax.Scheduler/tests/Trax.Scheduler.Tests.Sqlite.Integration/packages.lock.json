@@ -77,53 +77,77 @@
       },
       "Trax.Effect.Data.Sqlite": {
         "type": "Direct",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "Gypcd/W7mkJWSSwXFc/eEgLl5g3gwaIpsYi1wB36eOf0aV4u6AF4o+i/9Jo3aYRT14+exZ6ZeU2sHI5h2nJedA==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "w+rl0fvxip2Cn37mb6BufmU5PkR0tc6oRQeSUQZz/qwv/G+mx4qQXFDL1M3I07S2QTP+kyX3KlCJWeyZ2AoAZw==",
         "dependencies": {
+          "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
           "Microsoft.EntityFrameworkCore.Sqlite": "10.0.3",
-          "Trax.Effect.Data": "1.41.0",
-          "dbup-core": "5.0.87",
-          "dbup-sqlite": "5.0.40"
+          "Microsoft.Extensions.DependencyInjection": "10.0.9",
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.9",
+          "Microsoft.Extensions.Logging": "10.0.9",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.9",
+          "Npgsql": "10.0.3",
+          "SQLitePCLRaw.bundle_e_sqlite3": "3.0.3",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect.Data": "1.43.0",
+          "dbup-core": "6.1.1",
+          "dbup-sqlite": "6.0.4"
         }
       },
       "Trax.Effect.JunctionProvider.Logging": {
         "type": "Direct",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "6wuAkHmHCpUCopZlWzRfcWAoVkfNt0UuyQchzK9LWcdNdSiHoUYsYI6D3cokm3linAkfOYe51oMX/Z6E8/rT1w==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "gcWdGP5Phf70DhxxhTE3f/WfUjmXxBHenEMw1WXHDFOIWaX3cOiNlsir3Npw56NjtC3AZolrvC6EAiWUtrpv1A==",
         "dependencies": {
-          "Trax.Effect": "1.41.0"
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.9",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.9",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0"
         }
       },
       "Trax.Effect.JunctionProvider.Progress": {
         "type": "Direct",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "eUSAPzcCiHbkK71G4m+GLooAD95Qp5yt7nw33owxrOhSk8x4Xz8e7JOo773HWCKnbP3HZj3gnkw87dxXmn989A==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "cPpPcElRN7pdnzOu4dHBlxqE87ZqaT+tNSkBg4aCaY1dtEUXcqaHa0HwfINgzeYi35r/YrLHmpT+6l4ICU3H8A==",
         "dependencies": {
-          "Trax.Effect": "1.41.0",
-          "Trax.Effect.Data": "1.41.0"
+          "Microsoft.EntityFrameworkCore": "10.0.3",
+          "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
+          "Microsoft.Extensions.DependencyInjection": "10.0.9",
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.9",
+          "Microsoft.Extensions.Logging": "10.0.9",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.9",
+          "Npgsql": "10.0.3",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0",
+          "Trax.Effect.Data": "1.43.0"
         }
       },
       "Trax.Effect.Provider.Json": {
         "type": "Direct",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "x4IV63yln7b1eKYyjt6L8KeRDw550Sgb2vIFiAS+V1PabOAd2or9lhO0TEVU6sip9l0KyUCaA19j5/RUvziAGw==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "DGTT71841RzxloK24I8oKm1mQ1t+QF6JN6bxFiwAHDN9eB64ZFy+PtfglHVGFjAfCv0F8EF4MWAcSzXGLIrNcQ==",
         "dependencies": {
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.3",
-          "Trax.Effect": "1.41.0"
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.9",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.9",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0"
         }
       },
       "Trax.Effect.Provider.Parameter": {
         "type": "Direct",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "61G46HzkRfB1YZwNH7m4qtBSlxKDt1PdHC2JZbB5z0GS9gZYcvecdaQq6syzmOaIXxT3Xpu99AMvocxva6c39Q==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "cQKRm8OBUp+aYmtPC7mQame6xNjS7ecl52EqZKx6CoW/gMmPHZAcDyGprSF9kWLDe7Muic2K0sKm3s21GZ3k/g==",
         "dependencies": {
-          "Trax.Effect": "1.41.0"
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.9",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.9",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0"
         }
       },
       "Trax.Mediator": {
@@ -138,17 +162,19 @@
       },
       "dbup-core": {
         "type": "Transitive",
-        "resolved": "5.0.87",
-        "contentHash": "KhcbHJfaxNA4yRwFGGewD4znkOweyPLIbSQnUU2tMjLDkEWiBNFKlojhk46J7qsyKssk/RSzC0s/Rohjp4Y9xA=="
+        "resolved": "6.1.1",
+        "contentHash": "kgpuyJVEFJHoIj/slnc994Go88aoeZqNDfGHDBr4sh7CsEWwJhOTCt/FJqO4ziUImL5L0NEY0kxxOiNgPKI2Fw==",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "8.0.0"
+        }
       },
       "dbup-sqlite": {
         "type": "Transitive",
-        "resolved": "5.0.40",
-        "contentHash": "0/QsCVPpQHMbHAr6/A8OxsbGwCNes3KsKbo53yeWn7tGen2/XMV7+h8kpQC2wZWvbhbsZqTrrW/35UDjlB9MPQ==",
+        "resolved": "6.0.4",
+        "contentHash": "eEUr/hCvQHzvPjCSqV6Ic5cZTFiKXLse2k9e5ji8KDgIBD12BCvDdq2E6+C8GbYCZ8GEqlF7uRxVcyvYfrebQg==",
         "dependencies": {
-          "Microsoft.Data.Sqlite": "1.0.1",
-          "NETStandard.Library": "1.6.1",
-          "dbup-core": "5.0.37"
+          "Microsoft.Data.Sqlite.Core": "9.0.10",
+          "dbup-core": "6.0.15"
         }
       },
       "LanguageExt.Core": {
@@ -173,14 +199,6 @@
         "type": "Transitive",
         "resolved": "18.8.1",
         "contentHash": "Eclse/ZZjr4lmWzZFNN9h/OluhKL+SK/QbUyKUewgX139aGeyMEO/DkMPwuFs2MixvanTnz6891rF8UHDg+W4Q=="
-      },
-      "Microsoft.Data.Sqlite": {
-        "type": "Transitive",
-        "resolved": "1.0.1",
-        "contentHash": "1L1ndXFfk0IniEbpkZaG2Jyzokt9zZbWqD1MHellRFtIpaJy+vs+Wbfh313ai7TAoXP1oCxK3h3KzqCSMaIlEQ==",
-        "dependencies": {
-          "SQLite": "3.13.0"
-        }
       },
       "Microsoft.Data.Sqlite.Core": {
         "type": "Transitive",
@@ -374,11 +392,6 @@
         "resolved": "10.0.10",
         "contentHash": "5wu/GrYVd8mG2DVUw3vFJzF+O336TyTGg/Kmcgw9bfwYhCoFiV5lR5QeEmKecJyrW4W54nMfD3p3589E8a7czQ=="
       },
-      "Microsoft.NETCore.Platforms": {
-        "type": "Transitive",
-        "resolved": "1.1.0",
-        "contentHash": "kz0PEW2lhqygehI/d6XsPCQzD7ff7gUJaVGPVETX611eadGsA3A877GdSlU0LRVMCTH/+P3o2iDTak+S08V2+A=="
-      },
       "Microsoft.Testing.Extensions.Telemetry": {
         "type": "Transitive",
         "resolved": "2.1.0",
@@ -433,23 +446,10 @@
           "Microsoft.TestPlatform.ObjectModel": "18.8.1"
         }
       },
-      "NETStandard.Library": {
-        "type": "Transitive",
-        "resolved": "1.6.1",
-        "contentHash": "WcSp3+vP+yHNgS8EV5J7pZ9IRpeDuARBPN28by8zqff1wJQXm26PVU8L3/fYLBJVU7BtDyqNVWq2KlCVvSSR4A==",
-        "dependencies": {
-          "Microsoft.NETCore.Platforms": "1.1.0"
-        }
-      },
       "SourceGear.sqlite3": {
         "type": "Transitive",
         "resolved": "3.50.4.5",
         "contentHash": "UtnipXhJYZKQOQIfpws/msLK7IRhMplE1CZCaZLIQXRnGD474QVpO/J9nMlQQY8NZueGz1aidjoxDRnrC1NT3Q=="
-      },
-      "SQLite": {
-        "type": "Transitive",
-        "resolved": "3.13.0",
-        "contentHash": "MJfRiz2p6aMVOxrxGMdVzhpzI0oxTgZSwC8eVuOpV8L7yYaFUu8q/OFYwv9P0/aZ/pdEu24O6gma6wZJMTun9A=="
       },
       "SQLitePCLRaw.config.e_sqlite3": {
         "type": "Transitive",
@@ -486,8 +486,8 @@
         "type": "Project",
         "dependencies": {
           "Cronos": "[0.13.0, )",
-          "Trax.Effect": "[1.41.0, )",
-          "Trax.Effect.Data": "[1.41.0, )",
+          "Trax.Effect": "[1.43.0, )",
+          "Trax.Effect.Data": "[1.43.0, )",
           "Trax.Mediator": "[1.20.0, )"
         }
       },
@@ -495,7 +495,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.10, )",
-          "Trax.Effect": "[1.41.0, )"
+          "Trax.Effect": "[1.43.0, )"
         }
       },
       "Cronos": {
@@ -547,25 +547,30 @@
       },
       "Trax.Effect": {
         "type": "CentralTransitive",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "Tkeyd43vbDbKQ0tA7qoCCKZi21epAmnnDOIAqtQccqT0WxfujFifbtd56Sjgm4fs72KwUNDtbpjTWiGKA7+uNQ==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "UsqXX7rJP7wbA+gtRJWfPZ3Hq4EQs35H99uFwSV3iLGvMmbIiyiHX0kW7mCsWC3XocTnIj3OKtnAAgyqsIQ0sw==",
         "dependencies": {
-          "Microsoft.Extensions.Hosting.Abstractions": "10.0.3",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.3",
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.9",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.9",
           "Trax.Core": "1.6.0"
         }
       },
       "Trax.Effect.Data": {
         "type": "CentralTransitive",
-        "requested": "[1.41.0, )",
-        "resolved": "1.41.0",
-        "contentHash": "3tr5igE+6JGXhLt1JlggSgJx+4y4AOmtnBBTIDbyvfLrdGj4Al4KNmJphzjf3KWCwMlMgoNaWTu7z2MageeE0g==",
+        "requested": "[1.43.0, )",
+        "resolved": "1.43.0",
+        "contentHash": "oFmABbDcY+r7pwJGDWGuAv9vVdn3WWPM8pYH1nS9+0Kn+4Wbaedug9RDsHcPzpJcQ57eiw/UM2U7chrS23DUeg==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
-          "Npgsql": "10.0.1",
-          "Trax.Effect": "1.41.0"
+          "Microsoft.Extensions.DependencyInjection": "10.0.9",
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.9",
+          "Microsoft.Extensions.Logging": "10.0.9",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.9",
+          "Npgsql": "10.0.3",
+          "Trax.Core": "1.6.0",
+          "Trax.Effect": "1.43.0"
         }
       }
     }
