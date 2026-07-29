@@ -60,8 +60,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-          dotnet-quality: preview
+          global-json-file: global.json
       - name: Restore (locked)
         run: dotnet restore --locked-mode
       - name: Build
@@ -116,8 +115,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-          dotnet-quality: preview
+          global-json-file: global.json
       - name: Install release tooling (locked, no install scripts)
         run: npm ci --ignore-scripts
       - name: Run semantic-release
@@ -185,8 +183,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-          dotnet-quality: preview
+          global-json-file: global.json
       # NuGet trusted publishing: exchange the GitHub OIDC token for a short-lived
       # (~1h, single-use) key. No stored NUGET_API_KEY. Requires a trusted-publishing
       # policy on nuget.org scoped to this repo + workflow file + the `release` environment.
