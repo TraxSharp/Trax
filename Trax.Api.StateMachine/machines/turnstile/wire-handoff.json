@@ -1,0 +1,17 @@
+{
+  "description": "Snapshots on the wire, as the canonical bytes both engines must agree on. serialize(build) must equal snapshot exactly (RFC 8785 canonical ordering).",
+  "samples": [
+    {
+      "machine": "turnstile",
+      "name": "locked-initial",
+      "build": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} },
+      "snapshot": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}"
+    },
+    {
+      "machine": "turnstile",
+      "name": "unlocked-quarter",
+      "build": { "machine": "turnstile", "version": 1, "state": "Unlocked", "context": { "paidWith": "quarter" } },
+      "snapshot": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}"
+    }
+  ]
+}

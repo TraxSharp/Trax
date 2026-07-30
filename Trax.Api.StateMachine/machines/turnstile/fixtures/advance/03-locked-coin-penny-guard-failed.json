@@ -1,0 +1,6 @@
+{
+  "name": "Locked + Coin(penny) is declined by the guard",
+  "given": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} },
+  "when": { "trigger": "Coin", "input": { "coin": "penny" } },
+  "expect": { "outcome": "rejected", "reason": "guard-failed" }
+}

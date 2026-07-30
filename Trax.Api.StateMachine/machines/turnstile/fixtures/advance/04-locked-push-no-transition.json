@@ -1,0 +1,6 @@
+{
+  "name": "Locked + Push has no wired edge",
+  "given": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} },
+  "when": { "trigger": "Push" },
+  "expect": { "outcome": "rejected", "reason": "no-transition" }
+}

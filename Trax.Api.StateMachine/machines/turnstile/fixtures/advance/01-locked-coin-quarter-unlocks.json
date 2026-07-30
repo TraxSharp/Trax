@@ -1,0 +1,9 @@
+{
+  "name": "Locked + Coin(quarter) transitions to Unlocked and records paidWith",
+  "given": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} },
+  "when": { "trigger": "Coin", "input": { "coin": "quarter" } },
+  "expect": {
+    "outcome": "transitioned",
+    "snapshot": { "machine": "turnstile", "version": 1, "state": "Unlocked", "context": { "paidWith": "quarter" } }
+  }
+}

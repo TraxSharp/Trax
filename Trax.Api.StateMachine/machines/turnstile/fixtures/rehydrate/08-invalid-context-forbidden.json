@@ -1,0 +1,5 @@
+{
+  "name": "Locked carrying paidWith is invalid-context (data it should not have)",
+  "json": { "machine": "turnstile", "version": 1, "state": "Locked", "context": { "paidWith": "quarter" } },
+  "expect": { "result": "error", "code": "invalid-context" }
+}

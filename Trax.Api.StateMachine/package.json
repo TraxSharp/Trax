@@ -1,0 +1,56 @@
+{
+  "name": "@trax/state-machine",
+  "version": "0.0.0",
+  "description": "Portable, resumable snapshot state-machine engine — the TypeScript twin of Trax.Effect.StateMachine. Represents a multi-step flow's state as language-neutral JSON so a client and a C# backend agree on it, with illegal (state, context) pairs unrepresentable and every operation total.",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js",
+      "require": "./dist/react.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "codegen": "node tools/state-machine-codegen/generate.mjs",
+    "codegen:check": "node tools/state-machine-codegen/generate.mjs --check"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "valibot": "^0.42.1"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^24.12.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jsdom": "^25.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tsup": "^8.3.5",
+    "typescript": "~5.9.2",
+    "vitest": "^2.1.9"
+  }
+}
