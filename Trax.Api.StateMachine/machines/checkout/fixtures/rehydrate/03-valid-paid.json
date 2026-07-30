@@ -1,0 +1,5 @@
+{
+  "name": "A well-formed Paid snapshot rehydrates",
+  "json": { "machine": "checkout", "version": 1, "state": "Paid", "context": { "currency": "USD", "items": ["latte"], "receipt": "txn-1", "total": 5 } },
+  "expect": { "result": "ok", "snapshot": { "machine": "checkout", "version": 1, "state": "Paid", "context": { "currency": "USD", "items": ["latte"], "receipt": "txn-1", "total": 5 } } }
+}

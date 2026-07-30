@@ -1,0 +1,5 @@
+{
+  "name": "A well-formed Review snapshot rehydrates",
+  "json": { "machine": "checkout", "version": 1, "state": "Review", "context": { "currency": "USD", "items": ["latte"], "receipt": null, "total": 5 } },
+  "expect": { "result": "ok", "snapshot": { "machine": "checkout", "version": 1, "state": "Review", "context": { "currency": "USD", "items": ["latte"], "receipt": null, "total": 5 } } }
+}

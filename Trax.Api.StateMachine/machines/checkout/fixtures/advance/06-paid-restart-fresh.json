@@ -1,0 +1,9 @@
+{
+  "name": "Paid + Restart resets to a fresh Cart",
+  "given": { "machine": "checkout", "version": 1, "state": "Paid", "context": { "currency": "USD", "items": ["latte"], "receipt": "txn-1", "total": 5 } },
+  "when": { "trigger": "Restart" },
+  "expect": {
+    "outcome": "transitioned",
+    "snapshot": { "machine": "checkout", "version": 1, "state": "Cart", "context": { "currency": "USD", "items": [], "receipt": null, "total": 0 } }
+  }
+}

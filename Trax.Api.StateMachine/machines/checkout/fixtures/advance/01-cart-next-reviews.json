@@ -1,0 +1,9 @@
+{
+  "name": "Cart + Next (with items) transitions to Review, carrying the context",
+  "given": { "machine": "checkout", "version": 1, "state": "Cart", "context": { "currency": "USD", "items": ["latte"], "receipt": null, "total": 5 } },
+  "when": { "trigger": "Next" },
+  "expect": {
+    "outcome": "transitioned",
+    "snapshot": { "machine": "checkout", "version": 1, "state": "Review", "context": { "currency": "USD", "items": ["latte"], "receipt": null, "total": 5 } }
+  }
+}

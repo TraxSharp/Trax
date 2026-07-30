@@ -1,0 +1,27 @@
+{
+  "description": "Multi-key context canonicalization: the build snapshot lists context keys in NON-alphabetical order; serialize must emit them sorted (RFC 8785, ordinal). This is the case a single-key machine like turnstile cannot exercise (canonicalization is vacuous below two keys).",
+  "samples": [
+    {
+      "machine": "checkout",
+      "name": "review-multikey-unsorted",
+      "build": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Review",
+        "context": { "total": 42, "items": ["latte", "muffin"], "currency": "USD", "receipt": null }
+      },
+      "snapshot": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Review\",\"context\":{\"currency\":\"USD\",\"items\":[\"latte\",\"muffin\"],\"receipt\":null,\"total\":42}}"
+    },
+    {
+      "machine": "checkout",
+      "name": "paid-multikey",
+      "build": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": { "receipt": "txn-1", "total": 42, "currency": "USD", "items": ["latte", "muffin"] }
+      },
+      "snapshot": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Paid\",\"context\":{\"currency\":\"USD\",\"items\":[\"latte\",\"muffin\"],\"receipt\":\"txn-1\",\"total\":42}}"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Review + Pay without a receipt is declined by the guard",
+  "given": { "machine": "checkout", "version": 1, "state": "Review", "context": { "currency": "USD", "items": ["latte"], "receipt": null, "total": 5 } },
+  "when": { "trigger": "Pay" },
+  "expect": { "outcome": "rejected", "reason": "guard-failed" }
+}

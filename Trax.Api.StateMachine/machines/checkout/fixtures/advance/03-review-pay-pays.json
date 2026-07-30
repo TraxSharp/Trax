@@ -1,0 +1,9 @@
+{
+  "name": "Review + Pay (with a receipt) transitions to Paid and records the receipt",
+  "given": { "machine": "checkout", "version": 1, "state": "Review", "context": { "currency": "USD", "items": ["latte", "muffin"], "receipt": null, "total": 9 } },
+  "when": { "trigger": "Pay", "input": { "receipt": "txn-9" } },
+  "expect": {
+    "outcome": "transitioned",
+    "snapshot": { "machine": "checkout", "version": 1, "state": "Paid", "context": { "currency": "USD", "items": ["latte", "muffin"], "receipt": "txn-9", "total": 9 } }
+  }
+}

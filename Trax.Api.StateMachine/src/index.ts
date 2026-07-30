@@ -23,3 +23,5 @@ export { createDevLogger, type DevLoggerOptions } from './devtools';
 // Machines.
 export { turnstile, turnstileCore, turnstileDefinition } from './machines/turnstile/turnstile';
 export type { TurnstileState, TurnstileTrigger, TurnstileSpec } from './machines/turnstile/turnstile';
+export { checkout, checkoutCore, checkoutDefinition } from './machines/checkout/checkout';
+export type { CheckoutState, CheckoutTrigger, CheckoutSpec } from './machines/checkout/checkout';

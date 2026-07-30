@@ -1,0 +1,27 @@
+{
+  "_comment": "A neutral, multi-step effectful demo: Cart -> Review -> Paid, with a guard branch and a multi-key context (the case turnstile can't exercise). Structure only; guards/reducers/validators are hand-written per language and bound by name.",
+  "id": "checkout",
+  "version": 1,
+  "initialState": "Cart",
+  "states": ["Cart", "Review", "Paid"],
+  "triggers": ["Next", "Back", "Pay", "Restart"],
+  "transitions": [
+    {
+      "from": "Cart",
+      "trigger": "Next",
+      "to": "Review",
+      "guard": "hasItems",
+      "guardMessage": "Add an item before reviewing."
+    },
+    { "from": "Review", "trigger": "Back", "to": "Cart" },
+    {
+      "from": "Review",
+      "trigger": "Pay",
+      "to": "Paid",
+      "guard": "payable",
+      "guardMessage": "A payable order needs items, a positive total, and a receipt.",
+      "reduce": "applyReceipt"
+    },
+    { "from": "Paid", "trigger": "Restart", "to": "Cart", "reduce": "freshCart" }
+  ]
+}

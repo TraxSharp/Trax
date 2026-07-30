@@ -1,0 +1,5 @@
+{
+  "name": "A well-formed Cart snapshot rehydrates",
+  "json": { "machine": "checkout", "version": 1, "state": "Cart", "context": { "currency": "USD", "items": [], "receipt": null, "total": 0 } },
+  "expect": { "result": "ok", "snapshot": { "machine": "checkout", "version": 1, "state": "Cart", "context": { "currency": "USD", "items": [], "receipt": null, "total": 0 } } }
+}

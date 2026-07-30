@@ -23,6 +23,12 @@ const MACHINES = [
     structure: 'machines/turnstile/structure.json',
     tsOut: 'src/machines/turnstile/turnstile.g.ts',
   },
+  {
+    name: 'checkout',
+    spec: 'machines/checkout/machine.json',
+    structure: 'machines/checkout/structure.json',
+    tsOut: 'src/machines/checkout/checkout.g.ts',
+  },
 ];
 
 let drift = false;
