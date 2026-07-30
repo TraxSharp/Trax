@@ -1,10 +1,10 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReSharperPlugin.Trax.Core", "src\dotnet\ReSharperPlugin.Trax.Core\ReSharperPlugin.Trax.Core.csproj", "{05608FE6-4FD1-4E9D-9BE2-B13A0E370BA2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReSharperPlugin.Trax", "src\dotnet\ReSharperPlugin.Trax\ReSharperPlugin.Trax.csproj", "{05608FE6-4FD1-4E9D-9BE2-B13A0E370BA2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReSharperPlugin.Trax.Core.Rider", "src\dotnet\ReSharperPlugin.Trax.Core\ReSharperPlugin.Trax.Core.Rider.csproj", "{084172D1-A9C6-46D0-96AD-05C5B09A5E5D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReSharperPlugin.Trax.Rider", "src\dotnet\ReSharperPlugin.Trax\ReSharperPlugin.Trax.Rider.csproj", "{084172D1-A9C6-46D0-96AD-05C5B09A5E5D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReSharperPlugin.Trax.Core.Tests", "src\dotnet\ReSharperPlugin.Trax.Core.Tests\ReSharperPlugin.Trax.Core.Tests.csproj", "{01C3DEF5-50B2-47CB-9467-19BC6DDF9D3D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReSharperPlugin.Trax.Tests", "src\dotnet\ReSharperPlugin.Trax.Tests\ReSharperPlugin.Trax.Tests.csproj", "{01C3DEF5-50B2-47CB-9467-19BC6DDF9D3D}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "misc", "misc", "{4A9ABB95-3762-448B-B5BF-099E46DB22DE}"
 ProjectSection(SolutionItems) = preProject
