@@ -61,47 +61,55 @@
     />
     <PackageVersion
       Include="Trax.Effect"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
     />
     <PackageVersion
       Include="Trax.Effect.Broadcaster.RabbitMQ"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
     />
     <PackageVersion
       Include="Trax.Effect.Broadcaster.SignalR"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
     />
     <PackageVersion
       Include="Trax.Effect.Data"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
     />
     <PackageVersion
       Include="Trax.Effect.Data.InMemory"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
     />
     <PackageVersion
       Include="Trax.Effect.Data.Postgres"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
     />
     <PackageVersion
       Include="Trax.Effect.Data.Sqlite"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
     />
     <PackageVersion
       Include="Trax.Effect.Data.Testing"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
     />
     <PackageVersion
       Include="Trax.Effect.JunctionProvider.Progress"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
     />
     <PackageVersion
       Include="Trax.Effect.Provider.Json"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
     />
     <PackageVersion
       Include="Trax.Effect.Provider.Parameter"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.43.0'))"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.StateMachine"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
+    />
+    <PackageVersion
+      Include="Trax.Effect.StateMachine.Persistence"
+      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.44.1'))"
     />
     <PackageVersion
       Include="Trax.Mediator"
@@ -127,7 +135,7 @@
     <PackageVersion Include="FluentAssertions" Version="8.10.0" />
     <PackageVersion Include="HotChocolate.AspNetCore" Version="15.1.17" />
     <PackageVersion Include="MathNet.Numerics" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.3" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
@@ -137,7 +145,7 @@
     <!-- Referenced directly by the SQLite-using projects to override the vulnerable
          native lib EF Core Sqlite pulls transitively (CVE-2025-6965). -->
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="NUnit" Version="4.6.1" />

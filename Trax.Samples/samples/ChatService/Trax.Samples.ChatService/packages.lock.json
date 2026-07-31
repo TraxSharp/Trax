@@ -34,18 +34,18 @@
       },
       "Trax.Effect": {
         "type": "Direct",
-        "requested": "[1.43.0, )",
-        "resolved": "1.43.0",
-        "contentHash": "UsqXX7rJP7wbA+gtRJWfPZ3Hq4EQs35H99uFwSV3iLGvMmbIiyiHX0kW7mCsWC3XocTnIj3OKtnAAgyqsIQ0sw==",
+        "requested": "[1.44.1, )",
+        "resolved": "1.44.1",
+        "contentHash": "8CBPyzYo9CdG7khtCdzwMizS+nTUTZbTr7b+nIDTPN6wP5yCvFde/+CyU3kpVibrona8nLDmEviaJ8HEaY1hNQ==",
         "dependencies": {
           "Trax.Core": "1.6.0"
         }
       },
       "Trax.Effect.Data.Sqlite": {
         "type": "Direct",
-        "requested": "[1.43.0, )",
-        "resolved": "1.43.0",
-        "contentHash": "w+rl0fvxip2Cn37mb6BufmU5PkR0tc6oRQeSUQZz/qwv/G+mx4qQXFDL1M3I07S2QTP+kyX3KlCJWeyZ2AoAZw==",
+        "requested": "[1.44.1, )",
+        "resolved": "1.44.1",
+        "contentHash": "Zkd5+y0hFRfOk1Nc+5i27qHrapfD5N6v+spolyhpNTN/+oGODbrZOrUlfl4HKUyLc4423NUfMJ87dIxTWkNcSw==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
@@ -53,7 +53,7 @@
           "Npgsql": "10.0.3",
           "SQLitePCLRaw.bundle_e_sqlite3": "3.0.3",
           "Trax.Core": "1.6.0",
-          "Trax.Effect.Data": "1.43.0",
+          "Trax.Effect.Data": "1.44.1",
           "dbup-core": "6.1.1",
           "dbup-sqlite": "6.0.4"
         }
@@ -490,7 +490,7 @@
           "Microsoft.EntityFrameworkCore": "[10.0.3, )",
           "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.3, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.3, )",
-          "Trax.Effect.Data": "[1.43.0, )"
+          "Trax.Effect.Data": "[1.44.1, )"
         }
       },
       "Microsoft.EntityFrameworkCore": {
@@ -517,15 +517,15 @@
       },
       "Trax.Effect.Data": {
         "type": "CentralTransitive",
-        "requested": "[1.43.0, )",
-        "resolved": "1.43.0",
-        "contentHash": "oFmABbDcY+r7pwJGDWGuAv9vVdn3WWPM8pYH1nS9+0Kn+4Wbaedug9RDsHcPzpJcQ57eiw/UM2U7chrS23DUeg==",
+        "requested": "[1.44.1, )",
+        "resolved": "1.44.1",
+        "contentHash": "HAEsFzGwhVla348IhBY9rrEEtnTlq4f8D7beE77ALpe82k1JyxQqUGpO9JZoGZcpJMtzvtZ/l+QBeiHsMDFYIw==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
           "Npgsql": "10.0.3",
           "Trax.Core": "1.6.0",
-          "Trax.Effect": "1.43.0"
+          "Trax.Effect": "1.44.1"
         }
       }
     }

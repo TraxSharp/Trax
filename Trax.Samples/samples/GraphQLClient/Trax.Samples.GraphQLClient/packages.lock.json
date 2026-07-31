@@ -491,7 +491,7 @@
       },
       "Trax.Effect": {
         "type": "CentralTransitive",
-        "requested": "[1.43.0, )",
+        "requested": "[1.44.1, )",
         "resolved": "1.43.0",
         "contentHash": "UsqXX7rJP7wbA+gtRJWfPZ3Hq4EQs35H99uFwSV3iLGvMmbIiyiHX0kW7mCsWC3XocTnIj3OKtnAAgyqsIQ0sw==",
         "dependencies": {
@@ -500,7 +500,7 @@
       },
       "Trax.Effect.Data": {
         "type": "CentralTransitive",
-        "requested": "[1.43.0, )",
+        "requested": "[1.44.1, )",
         "resolved": "1.43.0",
         "contentHash": "oFmABbDcY+r7pwJGDWGuAv9vVdn3WWPM8pYH1nS9+0Kn+4Wbaedug9RDsHcPzpJcQ57eiw/UM2U7chrS23DUeg==",
         "dependencies": {

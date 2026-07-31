@@ -30,47 +30,47 @@
       },
       "Trax.Effect.Broadcaster.RabbitMQ": {
         "type": "Direct",
-        "requested": "[1.43.0, )",
-        "resolved": "1.43.0",
-        "contentHash": "lNd3kWKJfxLWCcnN03PYzym41WEUFfU6MGjLToJegqSJx77nTuba3DnULZvGmzcqlOLa2BFscWx7moSghKcYuQ==",
+        "requested": "[1.44.1, )",
+        "resolved": "1.44.1",
+        "contentHash": "XrV7ox2029G1/aNW/UEeRXeGaSHWpSu/+9U7VdX0EyaZ+Qn0p/3Ege9+MhlbdItuYYd3dS8kpxjnsdgZSdg7Sg==",
         "dependencies": {
           "RabbitMQ.Client": "7.2.1",
           "Trax.Core": "1.6.0",
-          "Trax.Effect": "1.43.0"
+          "Trax.Effect": "1.44.1"
         }
       },
       "Trax.Effect.JunctionProvider.Progress": {
         "type": "Direct",
-        "requested": "[1.43.0, )",
-        "resolved": "1.43.0",
-        "contentHash": "cPpPcElRN7pdnzOu4dHBlxqE87ZqaT+tNSkBg4aCaY1dtEUXcqaHa0HwfINgzeYi35r/YrLHmpT+6l4ICU3H8A==",
+        "requested": "[1.44.1, )",
+        "resolved": "1.44.1",
+        "contentHash": "BPV5pFuXv/Oa6iDce8j+afd6oE6E3AdfsLaIJwlPn8zz9qAXT+K4pchoPbUhbxdUHsHB8dw8IukeOnCmz/udqg==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
           "Npgsql": "10.0.3",
           "Trax.Core": "1.6.0",
-          "Trax.Effect": "1.43.0",
-          "Trax.Effect.Data": "1.43.0"
+          "Trax.Effect": "1.44.1",
+          "Trax.Effect.Data": "1.44.1"
         }
       },
       "Trax.Effect.Provider.Json": {
         "type": "Direct",
-        "requested": "[1.43.0, )",
-        "resolved": "1.43.0",
-        "contentHash": "DGTT71841RzxloK24I8oKm1mQ1t+QF6JN6bxFiwAHDN9eB64ZFy+PtfglHVGFjAfCv0F8EF4MWAcSzXGLIrNcQ==",
+        "requested": "[1.44.1, )",
+        "resolved": "1.44.1",
+        "contentHash": "mOBuSHh3YeW3w+7fl93h80WjxHv5s430vxv1oB6Y25pEH+GB3fP7/OiqHcsSlN3LiHIbZsTE+f3MeJst+YxfJg==",
         "dependencies": {
           "Trax.Core": "1.6.0",
-          "Trax.Effect": "1.43.0"
+          "Trax.Effect": "1.44.1"
         }
       },
       "Trax.Effect.Provider.Parameter": {
         "type": "Direct",
-        "requested": "[1.43.0, )",
-        "resolved": "1.43.0",
-        "contentHash": "cQKRm8OBUp+aYmtPC7mQame6xNjS7ecl52EqZKx6CoW/gMmPHZAcDyGprSF9kWLDe7Muic2K0sKm3s21GZ3k/g==",
+        "requested": "[1.44.1, )",
+        "resolved": "1.44.1",
+        "contentHash": "HR0DSUsycsU2s1i+1IOFEVouA5ilI4YYsi6COE4+d/6jQIlAuZWGfYAGx2iFIkbHUsO91gUWj+Na5pOfp/6uEw==",
         "dependencies": {
           "Trax.Core": "1.6.0",
-          "Trax.Effect": "1.43.0"
+          "Trax.Effect": "1.44.1"
         }
       },
       "ChilliCream.Nitro.App": {
@@ -580,9 +580,9 @@
       "trax.samples.gameserver": {
         "type": "Project",
         "dependencies": {
-          "Trax.Effect": "[1.43.0, )",
-          "Trax.Effect.Data": "[1.43.0, )",
-          "Trax.Effect.Data.Postgres": "[1.43.0, )",
+          "Trax.Effect": "[1.44.1, )",
+          "Trax.Effect.Data": "[1.44.1, )",
+          "Trax.Effect.Data.Postgres": "[1.44.1, )",
           "Trax.Mediator": "[1.20.0, )",
           "Trax.Scheduler": "[1.31.0, )"
         }
@@ -687,31 +687,31 @@
       },
       "Trax.Effect": {
         "type": "CentralTransitive",
-        "requested": "[1.43.0, )",
-        "resolved": "1.43.0",
-        "contentHash": "UsqXX7rJP7wbA+gtRJWfPZ3Hq4EQs35H99uFwSV3iLGvMmbIiyiHX0kW7mCsWC3XocTnIj3OKtnAAgyqsIQ0sw==",
+        "requested": "[1.44.1, )",
+        "resolved": "1.44.1",
+        "contentHash": "8CBPyzYo9CdG7khtCdzwMizS+nTUTZbTr7b+nIDTPN6wP5yCvFde/+CyU3kpVibrona8nLDmEviaJ8HEaY1hNQ==",
         "dependencies": {
           "Trax.Core": "1.6.0"
         }
       },
       "Trax.Effect.Data": {
         "type": "CentralTransitive",
-        "requested": "[1.43.0, )",
-        "resolved": "1.43.0",
-        "contentHash": "oFmABbDcY+r7pwJGDWGuAv9vVdn3WWPM8pYH1nS9+0Kn+4Wbaedug9RDsHcPzpJcQ57eiw/UM2U7chrS23DUeg==",
+        "requested": "[1.44.1, )",
+        "resolved": "1.44.1",
+        "contentHash": "HAEsFzGwhVla348IhBY9rrEEtnTlq4f8D7beE77ALpe82k1JyxQqUGpO9JZoGZcpJMtzvtZ/l+QBeiHsMDFYIw==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
           "Npgsql": "10.0.3",
           "Trax.Core": "1.6.0",
-          "Trax.Effect": "1.43.0"
+          "Trax.Effect": "1.44.1"
         }
       },
       "Trax.Effect.Data.Postgres": {
         "type": "CentralTransitive",
-        "requested": "[1.43.0, )",
-        "resolved": "1.43.0",
-        "contentHash": "pfQbPCqISZS9ywK8wZXfhPsCri1kSY6noJmKudwjEZbaHorHp9yS9F+Z+adZ0x7mJ5Q/A+0Ld42nyv843SBbFw==",
+        "requested": "[1.44.1, )",
+        "resolved": "1.44.1",
+        "contentHash": "Zs8jJyN315qx1zivjBLnNabkSEvL344L3nVVCJ0TFkaQ0BOTNXCk6v1PPUDPiyv/JFjSZ4HGW9pEK8q0etvmNg==",
         "dependencies": {
           "EFCore.NamingConventions": "10.0.1",
           "Microsoft.EntityFrameworkCore": "10.0.3",
@@ -719,7 +719,7 @@
           "Npgsql": "10.0.3",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "10.0.0",
           "Trax.Core": "1.6.0",
-          "Trax.Effect.Data": "1.43.0",
+          "Trax.Effect.Data": "1.44.1",
           "dbup-core": "6.1.1",
           "dbup-postgresql": "7.0.1"
         }
