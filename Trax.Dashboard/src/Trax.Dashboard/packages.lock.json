@@ -11,8 +11,8 @@
       "Radzen.Blazor": {
         "type": "Direct",
         "requested": "[11.*, )",
-        "resolved": "11.1.0",
-        "contentHash": "brQCciUSVqNwzkYECVWaJZKHgXlC9CqtsmUiPVbMzRekBzswNW1teymOZm/IwnoFpIvB1xxR/HXTWFGDzHBPnw=="
+        "resolved": "11.2.0",
+        "contentHash": "hBnrzApLsABPPT1CsaWfDxOKDxo0UzD+wu7i8gcmp0+/BO9AQdGIxBudq9heVOcwDjSpRtvhsFDkifTyl3Urzw=="
       },
       "Trax.Api.GraphQL.PersistedOperations": {
         "type": "Direct",

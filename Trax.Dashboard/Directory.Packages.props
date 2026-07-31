@@ -37,6 +37,9 @@
 
   <!-- Third-party packages, pinned to exact versions. -->
   <ItemGroup>
+    <!-- bunit pulls AngleSharp transitively; pin it to 1.5.0 to clear GHSA-pgww-w46g-26qg (mXSS,
+         all versions before 1.5.0). bunit 1.40.0 accepts the whole 1.x range. -->
+    <PackageVersion Include="AngleSharp" Version="1.5.0" />
     <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.2" />
     <PackageVersion Include="bunit" Version="1.40.0" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />

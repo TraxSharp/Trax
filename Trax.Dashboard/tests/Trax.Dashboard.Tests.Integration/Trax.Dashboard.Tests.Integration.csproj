@@ -17,6 +17,8 @@
     <PackageReference Include="NUnit.Analyzers" />
     <PackageReference Include="NUnit3TestAdapter" />
     <PackageReference Include="bunit" />
+    <!-- Force bunit's transitive AngleSharp up to the patched 1.5.0 (GHSA-pgww-w46g-26qg). -->
+    <PackageReference Include="AngleSharp" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
   </ItemGroup>
 
