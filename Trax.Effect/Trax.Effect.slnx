@@ -9,6 +9,10 @@
     <Project Path="src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
     <Project Path="src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
   </Folder>
+  <Folder Name="/src/statemachine/">
+    <Project Path="src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
+    <Project Path="src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+  </Folder>
   <Folder Name="/src/broadcaster/">
     <Project Path="src/Trax.Effect.Broadcaster.RabbitMQ/Trax.Effect.Broadcaster.RabbitMQ.csproj" />
     <Project Path="src/Trax.Effect.Broadcaster.SignalR/Trax.Effect.Broadcaster.SignalR.csproj" />
@@ -30,5 +34,8 @@
     <Project Path="tests/Trax.Effect.Tests.Benchmarks/Trax.Effect.Tests.Benchmarks.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Meta/Trax.Effect.Tests.Meta.csproj" />
     <Project Path="tests/Trax.Effect.Data.Testing.Tests/Trax.Effect.Data.Testing.Tests.csproj" />
+    <Project Path="tests/Trax.Effect.StateMachine.Tests/Trax.Effect.StateMachine.Tests.csproj" />
+    <Project Path="tests/Trax.Effect.StateMachine.Persistence.Integration/Trax.Effect.StateMachine.Persistence.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.StateMachine.Tests.Stress/Trax.Effect.StateMachine.Tests.Stress.csproj" />
   </Folder>
 </Solution>

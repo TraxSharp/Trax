@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageDescription>Portable, resumable snapshot state-machine engine. Pure, dependency-free: represents a multi-step flow's state as language-neutral JSON so a C# backend and a TypeScript client agree on it, with illegal (state, context) pairs unrepresentable and every operation total.</PackageDescription>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <AssemblyName>Trax.Effect.StateMachine</AssemblyName>
+  </PropertyGroup>
+</Project>
