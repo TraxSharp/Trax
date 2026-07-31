@@ -59,9 +59,11 @@ the build if a committed generated file goes stale.
 ## Persistence and exactly-once effects
 
 The persistence layer is generic over a machine's (state, trigger) pair and stores the context in a real
-`jsonb` column. A draft is scoped to its owner by a composite key, and every authoritative write carries an
-app-managed optimistic-concurrency token, so concurrent writers get a typed conflict rather than a lost
-update or a thrown exception. Two write paths have different trust levels. Autosave is the soft path: the
+`jsonb` column. Its two tables (`snapshot_draft` and `effect_claim`) ship as migrations in the core data
+providers, so registering `UsePostgres` or `UseSqlite` creates them automatically. There is no manual DDL and
+no `EnsureCreated` step. A draft is scoped to its owner by a composite key, and every authoritative write
+carries an app-managed optimistic-concurrency token, so concurrent writers get a typed conflict rather than a
+lost update or a thrown exception. Two write paths have different trust levels. Autosave is the soft path: the
 client sends a whole snapshot, the server validates it and stores it. Advance is the authoritative path: the
 client sends only a trigger, and the server re-drives the transition from the stored snapshot, never
 trusting a client-computed state.

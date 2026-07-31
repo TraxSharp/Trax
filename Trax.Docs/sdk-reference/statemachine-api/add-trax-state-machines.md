@@ -42,7 +42,7 @@ Two things a machine can't know, plus the mediator scan that lets Trax route the
 | `AddMediator(..., StateMachineMutations.Assembly)` | The four mutation trains ship in the persistence package, not your assembly. Trax routes a train by its input type through an assembly-scanned registry, so that assembly must be in the mediator scan. |
 | `ISnapshotPrincipal` | Maps the current caller to the user key that scopes drafts. Bind it over your auth (for example Trax's `TraxCaller`). |
 | Each effect implementation | Every effect a machine references with `RunsOnce<TEffect>` is resolved from the container when its transition is sent. |
-| `SnapshotDbContext` | The EF context for the `snapshot_draft` and `effect_claim` tables. |
+| `SnapshotDbContext` | The EF context the stores query. Register it against the same database; the tables themselves are created by the migration set (see below), so this call does not create them. |
 
 ## Example
 
@@ -57,3 +57,13 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 builder.Services.AddScoped<ICharge, StripeCharge>();
 builder.Services.AddDbContext<SnapshotDbContext>(o => o.UseNpgsql(cs));
 ```
+
+## The tables
+
+`snapshot_draft` and `effect_claim` (both in the `trax` schema) ship as migrations in the core data
+providers and apply automatically when you register one. `UsePostgres(...)` runs
+`040_state_machine_snapshots.sql`; `UseSqlite(...)` runs `006_state_machine_snapshots.sql`. A host that
+calls `AddTraxStateMachines` gets the tables for free; one that does not just carries two empty tables. You
+do not create or migrate them yourself, and there is no `EnsureCreated` step. On SQLite, `SnapshotDbContext`
+strips the `trax` schema and maps the `jsonb` context column to `TEXT` so the stores match the unqualified
+SQLite tables.
