@@ -15,6 +15,8 @@ can be stored in Postgres and rebuilt from any point, so a user can start on one
 another. Illegal (state, data) combinations are made unrepresentable, and neither the API nor the client can
 produce an unhandled exception.
 
+To author a machine and wire it into a host, start with [Authoring a machine](/docs/statemachine/authoring).
+
 ## The two-document model
 
 Keep these two things separate. Conflating them is the classic mistake.

@@ -38,6 +38,12 @@ Scheduler configuration (`AddScheduler` + `SchedulerConfigurationBuilder`) and t
 
 Includes: `AddScheduler`, `Schedule`, `ScheduleMany`, dependent scheduling, manifest management, scheduling helpers (`Every`, `Cron`, `ManifestOptions`).
 
+### [State Machine API](/docs/sdk-reference/statemachine-api) (Effect)
+
+Authoring portable snapshot state machines and hosting them: one-line discovery and wiring, plus the fluent builder for declaring states, transitions, guards, reducers, committed states, and exactly-once effects.
+
+Includes: `AddTraxStateMachines`, `Machine<TState, TTrigger>`, `IMachineBuilder`, `StateMachineMutations`.
+
 ### [Dashboard API](/docs/sdk-reference/dashboard-api) (Dashboard)
 
 Setup and configuration for the Trax Blazor dashboard.
