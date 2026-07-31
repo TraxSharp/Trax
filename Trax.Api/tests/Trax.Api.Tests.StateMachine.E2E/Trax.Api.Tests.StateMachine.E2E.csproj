@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    GraphQL-over-HTTP E2E for the state-machine mutations. Lives in Trax.Api because it exercises
+    Trax.Api.GraphQL exposing/executing the four generic `stateMachine` mutations over the wire. Every
+    reference points the right way in the chain: Trax.Api.* are ProjectReferences (same repo);
+    Trax.Effect.* / Trax.Mediator are upstream packages (from the locally-packed feed via trax-local.props).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Trax.Api.StateMachine.E2E</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Same-repo: project references. -->
+    <ProjectReference Include="../../src/Trax.Api/Trax.Api.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.Auth/Trax.Api.Auth.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Upstream: package references (feed-packed 1.99.99 for local dev). -->
+    <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" />
+    <PackageReference Include="Trax.Effect.Provider.Json" />
+    <PackageReference Include="Trax.Effect.StateMachine" />
+    <PackageReference Include="Trax.Effect.StateMachine.Persistence" />
+    <PackageReference Include="Trax.Mediator" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+</Project>
