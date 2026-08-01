@@ -113,6 +113,26 @@ An unauthenticated caller gets the opaque authorization error at HTTP 200, not a
 A complete, runnable version of this (two machines, a GraphQL host, exactly-once over the wire) lives in the
 `StateMachine` sample under `Trax.Samples`.
 
+## Keep the two runtimes in parity
+
+If your machine has a TypeScript twin, add a `differential` block to its `machine.json` so the exhaustive
+[differential corpus](/docs/statemachine#two-runtimes-one-behavior) can enumerate it. Two fields, both small:
+
+- `samples`: a few representative inputs per trigger (a no-input case is always added). A guard that accepts
+  `quarter`/`dollar` wants `[{"coin":"quarter"},{"coin":"penny"},{}]` — one that passes, one that fails, one malformed.
+- `seeds`: a representative valid context for any state a trigger cannot reach (context that arrives via
+  autosave rather than a transition). The initial state and everything reachable from it need no seed.
+
+```json
+"differential": {
+  "samples": { "Pay": [{ "receipt": "rcpt_1" }, {}] },
+  "seeds": { "Review": { "items": ["book"], "total": 5, "receipt": null } }
+}
+```
+
+Regenerate the corpus with `UPDATE_DIFFERENTIAL=1 npm test`; commit the resulting `differential.json`. Both
+engines then replay it and fail loudly if their hand-written guards or reducers ever drift apart.
+
 ## SDK Reference
 
 > [AddTraxStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
