@@ -49,10 +49,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 var connectionString =
     builder.Configuration.GetConnectionString("TraxDatabase")
-    ?? "Host=localhost;Port=5432;Database=trax_statemachine;Username=trax;Password=trax123";
-
-// Create the sample database + snapshot tables before AddTrax (see SnapshotSchema).
-await SnapshotSchema.EnsureAsync(connectionString);
+    ?? "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123";
 
 builder.Services.AddLogging(logging => logging.AddConsole());
 
@@ -75,7 +72,9 @@ builder.Services.AddTraxStateMachines(typeof(TurnstileMachine).Assembly);
 builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 builder.Services.AddScoped<ICharge, LoggingCharge>();
 
-// The snapshot store's DbContext (snapshot_draft + effect_claim tables).
+// The snapshot store's DbContext. The snapshot_draft + effect_claim tables are created by the
+// Trax migration set: UsePostgres above runs DbUp, which applies 040_state_machine_snapshots.sql.
+// Nothing here creates tables — `docker compose up -d` (a `trax` database) is all that's needed.
 builder.Services.AddDbContext<SnapshotDbContext>(options => options.UseNpgsql(connectionString));
 
 builder.Services.AddTraxGraphQL(graphql => graphql);
