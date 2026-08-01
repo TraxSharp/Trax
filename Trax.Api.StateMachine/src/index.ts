@@ -20,6 +20,11 @@ export { MachineController, type ControllerOptions, type ControllerView, type Ma
 export { problemFromAdvance, problemFromRehydration, type Problem } from './problem';
 export { createDevLogger, type DevLoggerOptions } from './devtools';
 
+// Cross-runtime differential conformance: enumerate a machine's behavior into a golden corpus that the C#
+// engine replays (Trax.Effect.StateMachine.Testing). TypeScript is the oracle.
+export { enumerate, serializeCorpus } from './differential';
+export type { DifferentialSpec, DifferentialCorpus, DifferentialCase } from './differential';
+
 // Machines.
 export { turnstile, turnstileCore, turnstileDefinition } from './machines/turnstile/turnstile';
 export type { TurnstileState, TurnstileTrigger, TurnstileSpec } from './machines/turnstile/turnstile';
