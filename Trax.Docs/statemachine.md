@@ -62,7 +62,7 @@ it drives the engine over every reachable snapshot (discovered by walking the ma
 the initial snapshot, plus a few declared `seeds` for states whose context arrives out of band), times every
 trigger, times a few representative `samples` per trigger, and records each outcome as canonical wire (on a
 transition) or a rejection code. The corpus is committed as `machines/<machine>/differential.json`; both
-engines replay it and must reproduce every outcome byte-for-byte. Turnstile is 18 cases, checkout 30 — most
+engines replay it and must reproduce every outcome byte-for-byte. Turnstile is 18 cases, checkout 30, most
 of them rejections, which is exactly what a hand-written fixture set never covers exhaustively.
 
 The corpus is machine-managed; you never hand-write it. The `samples` and `seeds` live in `machine.json`.

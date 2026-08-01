@@ -129,7 +129,7 @@ If your machine has a TypeScript twin, add a `differential` block to its `machin
 [differential corpus](/docs/statemachine#two-runtimes-one-behavior) can enumerate it. Two fields, both small:
 
 - `samples`: a few representative inputs per trigger (a no-input case is always added). A guard that accepts
-  `quarter`/`dollar` wants `[{"coin":"quarter"},{"coin":"penny"},{}]` — one that passes, one that fails, one malformed.
+  `quarter`/`dollar` wants `[{"coin":"quarter"},{"coin":"penny"},{}]`: one that passes, one that fails, one malformed.
 - `seeds`: a representative valid context for any state a trigger cannot reach (context that arrives via
   autosave rather than a transition). The initial state and everything reachable from it need no seed.
 
