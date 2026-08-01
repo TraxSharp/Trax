@@ -28,5 +28,9 @@
     <!-- The demo mutation trains reference the real Trax ServiceTrain / Junction / attribute API. Living
          in the test project keeps them out of any production-scanned assembly (G23). -->
     <ProjectReference Include="../../src/Trax.Effect/Trax.Effect.csproj" />
+    <!-- Both data providers: the migration-guard tests run the SHIPPED migrations (Postgres 040 / SQLite
+         006) and round-trip through the stores, proving the DDL matches the EF model (no EnsureCreated). -->
+    <ProjectReference Include="../../src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
   </ItemGroup>
 </Project>

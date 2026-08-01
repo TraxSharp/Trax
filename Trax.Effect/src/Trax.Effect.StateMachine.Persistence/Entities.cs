@@ -105,8 +105,10 @@ public class EffectClaim
 /// <summary>
 /// A ready-made DbContext for the snapshot-draft and effect-claim tables in the <c>trax</c> schema. A
 /// host may use this directly, or add the two entities to its own context via the entities'
-/// <c>OnModelCreating</c> helpers. Tests build the tables via <c>EnsureCreated</c> against a throwaway
-/// database; a production host applies the equivalent migration.
+/// <c>OnModelCreating</c> helpers. The tables ship as migrations that apply automatically when the data
+/// provider is registered: Postgres via <c>040_state_machine_snapshots.sql</c>, SQLite via
+/// <c>006_state_machine_snapshots.sql</c>. Tests build them either from those migrations or via
+/// <c>EnsureCreated</c> against a throwaway database.
 /// </summary>
 public sealed class SnapshotDbContext(DbContextOptions<SnapshotDbContext> options)
     : DbContext(options)
@@ -119,5 +121,22 @@ public sealed class SnapshotDbContext(DbContextOptions<SnapshotDbContext> option
         modelBuilder.HasDefaultSchema("trax");
         SnapshotRecord.OnModelCreating(modelBuilder);
         EffectClaim.OnModelCreating(modelBuilder);
+
+        // SQLite has no schemas and no jsonb type. Strip the "trax" schema and map jsonb -> TEXT so the
+        // tables the stores query match the SQLite migration (006_state_machine_snapshots.sql: plain,
+        // unqualified table names, TEXT columns). Mirrors Trax.Effect.Data.Sqlite's SqliteContext.
+        // Detected by provider name to avoid a hard reference to the SQLite provider from this package.
+        if (Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                entityType.SetSchema(null);
+                foreach (var property in entityType.GetProperties())
+                {
+                    if (property.GetColumnType() == "jsonb")
+                        property.SetColumnType("TEXT");
+                }
+            }
+        }
     }
 }
