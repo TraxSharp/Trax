@@ -23,5 +23,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.StateMachine.Testing/Trax.Effect.StateMachine.Testing.csproj" />
   </ItemGroup>
 </Project>

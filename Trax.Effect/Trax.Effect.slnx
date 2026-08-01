@@ -12,6 +12,7 @@
   <Folder Name="/src/statemachine/">
     <Project Path="src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
     <Project Path="src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <Project Path="src/Trax.Effect.StateMachine.Testing/Trax.Effect.StateMachine.Testing.csproj" />
   </Folder>
   <Folder Name="/src/broadcaster/">
     <Project Path="src/Trax.Effect.Broadcaster.RabbitMQ/Trax.Effect.Broadcaster.RabbitMQ.csproj" />

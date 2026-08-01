@@ -66,19 +66,21 @@ public sealed class SnapshotMachine<TState, TTrigger>
                 $"No transition from '{snapshot.State}' on '{trigger}'."
             );
 
-        var chosen = matches.FirstOrDefault(t => GuardPasses(t, context, input));
-        if (chosen is null)
-        {
-            var message =
-                matches.Select(m => m.GuardMessage).FirstOrDefault(m => m is not null)
-                ?? $"A transition from '{snapshot.State}' on '{trigger}' exists but its guard rejected the input.";
-            return new AdvanceResult.Rejected(RejectionReasons.GuardFailed, message);
-        }
-
         try
         {
-            // The chosen edge is the single source of BOTH the destination and the reducer — no separate
-            // engine recomputes the target (which could disagree). Matches the TS reducer's `chosen.to`.
+            // A guard is hand-written per runtime and may throw on unexpected input, so evaluate it inside
+            // the totality backstop: a throwing guard degrades to internal-error rather than escaping
+            // Advance (PD4). The chosen edge is the single source of BOTH the destination and the reducer —
+            // no separate engine recomputes the target (which could disagree). Matches the TS engine.
+            var chosen = matches.FirstOrDefault(t => GuardPasses(t, context, input));
+            if (chosen is null)
+            {
+                var message =
+                    matches.Select(m => m.GuardMessage).FirstOrDefault(m => m is not null)
+                    ?? $"A transition from '{snapshot.State}' on '{trigger}' exists but its guard rejected the input.";
+                return new AdvanceResult.Rejected(RejectionReasons.GuardFailed, message);
+            }
+
             var toState = chosen.To;
 
             var newContext =

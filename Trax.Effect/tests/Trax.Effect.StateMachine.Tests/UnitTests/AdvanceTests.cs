@@ -147,4 +147,71 @@ public class AdvanceTests
             .Which.Reason.Should()
             .Be(RejectionReasons.InternalError);
     }
+
+    [Test]
+    public void Advance_guard_failure_without_a_guard_message_falls_back_to_the_generic_reason()
+    {
+        // A guarded edge with no GuardMessage: the guard-failed path must still return a generic reason
+        // (exercises the `?? fallback` when no matching edge supplies a message).
+        var machine = new SnapshotMachine<FaultyState, FaultyTrigger>(
+            new MachineDefinition<FaultyState, FaultyTrigger>
+            {
+                Id = "blocked",
+                Version = 1,
+                InitialState = FaultyState.A,
+                CreateInitialContext = () => new JsonObject(),
+                Transitions = new[]
+                {
+                    new TransitionDefinition<FaultyState, FaultyTrigger>
+                    {
+                        From = FaultyState.A,
+                        Trigger = FaultyTrigger.Boom,
+                        To = FaultyState.B,
+                        Guard = (_, _) => false,
+                    },
+                },
+            }
+        );
+
+        var result = machine.Advance(
+            new Snapshot
+            {
+                Machine = "blocked",
+                Version = 1,
+                State = "A",
+                Context = new JsonObject(),
+            },
+            "Boom"
+        );
+
+        result
+            .Should()
+            .BeOfType<AdvanceResult.Rejected>()
+            .Which.Reason.Should()
+            .Be(RejectionReasons.GuardFailed);
+    }
+
+    [Test]
+    public void Advance_where_a_guard_throws_is_internal_error_not_an_exception()
+    {
+        // Guards are hand-written per runtime; a throwing guard must degrade to internal-error rather
+        // than escape Advance, exactly like a throwing reducer (PD4 totality applies to guards too).
+        var a = new Snapshot
+        {
+            Machine = "faulty",
+            Version = 1,
+            State = "A",
+            Context = new JsonObject(),
+        };
+
+        AdvanceResult result = null!;
+        var act = () => result = FaultyMachine.Machine.Advance(a, "Trap");
+
+        act.Should().NotThrow();
+        result
+            .Should()
+            .BeOfType<AdvanceResult.Rejected>()
+            .Which.Reason.Should()
+            .Be(RejectionReasons.InternalError);
+    }
 }

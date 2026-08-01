@@ -13,13 +13,15 @@ public enum FaultyTrigger
 {
     Boom,
     Bad,
+    Trap,
 }
 
 /// <summary>
-/// A machine whose reducers misbehave, to prove the two engine failure modes that must stay total:
-/// a reducer that THROWS degrades to <c>internal-error</c> (the totality backstop), and a reducer that
-/// produces a context the target state rejects degrades to <c>invalid-context</c> (a reducer bug, not
-/// user error) — neither ever surfaces an exception.
+/// A machine whose handlers misbehave, to prove the engine failure modes that must stay total: a reducer
+/// that THROWS degrades to <c>internal-error</c> (the totality backstop), a reducer that produces a
+/// context the target state rejects degrades to <c>invalid-context</c> (a reducer bug, not user error),
+/// and a GUARD that throws also degrades to <c>internal-error</c> (guards are evaluated inside the
+/// backstop too — PD4). None ever surfaces an exception.
 /// </summary>
 public static class FaultyMachine
 {
@@ -46,6 +48,14 @@ public static class FaultyMachine
                     To = FaultyState.B,
                     // Produces an empty context, but B requires "ok" — so the target validator rejects it.
                     Reduce = (_, _) => new JsonObject(),
+                },
+                new TransitionDefinition<FaultyState, FaultyTrigger>
+                {
+                    From = FaultyState.A,
+                    Trigger = FaultyTrigger.Trap,
+                    To = FaultyState.B,
+                    // A guard that throws must be caught by the totality backstop, not escape Advance.
+                    Guard = (_, _) => throw new InvalidOperationException("guard blew up"),
                 },
             },
             ContextValidators = new Dictionary<FaultyState, Func<JsonObject, string?>>

@@ -19,6 +19,10 @@ public static class FixturePaths
     public static string? RehydrateDir(string machine) =>
         MachinesRoot is null ? null : Path.Combine(MachinesRoot, machine, "fixtures", "rehydrate");
 
+    /// <summary>The shared, TypeScript-generated differential corpus for a machine (or null if isolated).</summary>
+    public static string? DifferentialFile(string machine) =>
+        MachinesRoot is null ? null : Path.Combine(MachinesRoot, machine, "differential.json");
+
     private static string? Find()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
