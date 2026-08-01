@@ -90,6 +90,13 @@ recorded result. A lease with a fence token keeps it live: if a runner wins the 
 lease expires and the next caller reclaims the key, and a revived stuck runner is fenced out of completing
 the new claimant's work. A scheduled sweeper releases abandoned claims as a backstop.
 
+A draft has no natural end. A user can abandon a half-filled form, and a completed one lingers as a committed
+snapshot. An optional TTL bounds that: set `DraftTtl` on `AddTraxStateMachines`, and the next load of a draft
+idle past the window discards it. The row is deleted and the load reports no draft, so the user starts fresh.
+Deleting rather than ignoring also clears a committed draft, so a returning user is never wedged behind a
+finished one. The check is lazy, on load, so there is no scheduled job, and it never touches an active
+session: an advance or autosave mid-flow is left alone. The default is off, which never expires a draft.
+
 ## The frontend surface
 
 A React engineer works through one hook. It owns the snapshot, persists after every successful step, and

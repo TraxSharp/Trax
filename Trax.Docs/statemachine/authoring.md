@@ -76,6 +76,16 @@ builder.Services.AddScoped<ICharge, StripeCharge>();
 builder.Services.AddDbContext<SnapshotDbContext>(o => o.UseNpgsql(connectionString));
 ```
 
+To expire abandoned drafts, use the `configure` overload with a `DraftTtl`. A load of a draft idle past the
+window discards it and the user starts fresh, so a forgotten form (or a finished one) never lingers. The
+default is off.
+
+```csharp
+builder.Services.AddTraxStateMachines(
+    o => o.DraftTtl = TimeSpan.FromDays(30),
+    typeof(CheckoutMachine).Assembly);
+```
+
 `ISnapshotPrincipal` maps the current caller to the user key that scopes drafts. Binding it over Trax's own
 `TraxCaller` is a one-liner:
 

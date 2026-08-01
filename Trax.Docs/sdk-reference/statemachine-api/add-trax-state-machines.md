@@ -21,6 +21,12 @@ public static IServiceCollection AddTraxStateMachines(
     this IServiceCollection services,
     params Assembly[] assemblies
 )
+
+public static IServiceCollection AddTraxStateMachines(
+    this IServiceCollection services,
+    Action<StateMachineOptions> configure,
+    params Assembly[] assemblies
+)
 ```
 
 ## Parameters
@@ -28,6 +34,21 @@ public static IServiceCollection AddTraxStateMachines(
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `assemblies` | `Assembly[]` | Yes | The assemblies to scan for `Machine<TState, TTrigger>` subclasses. Throws `InvalidOperationException` if none are found. |
+| `configure` | `Action<StateMachineOptions>` | No | Sets host-level options (see below). The `assemblies`-only overload is this one with an empty configure. |
+
+## Options
+
+`StateMachineOptions` carries host-level settings read when the registry builds a machine's draft service.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `DraftTtl` | `TimeSpan?` | `null` | How long a draft survives without activity before the next load discards it and the user starts fresh (a sliding window on the row's last update). The stale row is deleted, so an abandoned or completed draft can't linger or block a new one. `null` never expires a draft. Recommended: 7 to 30 days for a form-style flow. |
+
+```csharp
+builder.Services.AddTraxStateMachines(
+    o => o.DraftTtl = TimeSpan.FromDays(30),
+    typeof(CheckoutMachine).Assembly);
+```
 
 ## Returns
 
