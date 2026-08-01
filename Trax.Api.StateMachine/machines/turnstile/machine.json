@@ -22,11 +22,26 @@
     }
   ],
   "context": {
-    "Locked": { "additionalProperties": false, "required": [], "properties": {} },
+    "Locked": {
+      "additionalProperties": false,
+      "required": [],
+      "properties": {}
+    },
     "Unlocked": {
       "additionalProperties": false,
       "required": ["paidWith"],
       "properties": { "paidWith": { "type": "string", "minLength": 1 } }
+    }
+  },
+  "differential": {
+    "_comment": "Feeds the exhaustive cross-runtime differential corpus. `samples` are representative inputs per trigger (a no-input case is always added). No `seeds` are needed: Coin sets paidWith, so Unlocked is reachable from the initial Locked snapshot by driving the machine's own transitions.",
+    "samples": {
+      "Coin": [
+        { "coin": "quarter" },
+        { "coin": "dollar" },
+        { "coin": "penny" },
+        {}
+      ]
     }
   }
 }

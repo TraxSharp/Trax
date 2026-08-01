@@ -1,0 +1,6 @@
+# Machine-generated artifacts. These are owned by tools/state-machine-codegen/generate.mjs and the
+# differential test (serializeCorpus); a formatter must not touch them or it will fight the generator's
+# byte-exact --check and the differential snapshot comparison.
+machines/**/differential.json
+machines/**/structure.json
+src/machines/**/*.g.ts

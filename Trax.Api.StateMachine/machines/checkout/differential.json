@@ -1,0 +1,675 @@
+{
+  "machine": "checkout",
+  "version": 1,
+  "generated": "GENERATED differential corpus. Do not hand-edit; regenerate with UPDATE_DIFFERENTIAL=1. TypeScript is the oracle; every runtime replays and must reproduce each outcome.",
+  "cases": [
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Next"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Review\",\"context\":{\"currency\":\"USD\",\"items\":[\"book\"],\"receipt\":null,\"total\":5}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay",
+        "input": {
+          "receipt": "rcpt_1"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Restart"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [],
+          "receipt": null,
+          "total": 0
+        }
+      },
+      "when": {
+        "trigger": "Next"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [],
+          "receipt": null,
+          "total": 0
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [],
+          "receipt": null,
+          "total": 0
+        }
+      },
+      "when": {
+        "trigger": "Pay"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [],
+          "receipt": null,
+          "total": 0
+        }
+      },
+      "when": {
+        "trigger": "Pay",
+        "input": {
+          "receipt": "rcpt_1"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [],
+          "receipt": null,
+          "total": 0
+        }
+      },
+      "when": {
+        "trigger": "Pay",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [],
+          "receipt": null,
+          "total": 0
+        }
+      },
+      "when": {
+        "trigger": "Restart"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_1",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Next"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_1",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_1",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_1",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay",
+        "input": {
+          "receipt": "rcpt_1"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_1",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_1",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Restart"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"currency\":\"USD\",\"items\":[],\"receipt\":null,\"total\":0}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_seed",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Next"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_seed",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_seed",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_seed",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay",
+        "input": {
+          "receipt": "rcpt_1"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_seed",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Paid",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": "rcpt_seed",
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Restart"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"currency\":\"USD\",\"items\":[],\"receipt\":null,\"total\":0}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Review",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Next"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Review",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"currency\":\"USD\",\"items\":[\"book\"],\"receipt\":null,\"total\":5}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Review",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Review",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay",
+        "input": {
+          "receipt": "rcpt_1"
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Paid\",\"context\":{\"currency\":\"USD\",\"items\":[\"book\"],\"receipt\":\"rcpt_1\",\"total\":5}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Review",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Pay",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Review",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Restart"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    }
+  ]
+}
