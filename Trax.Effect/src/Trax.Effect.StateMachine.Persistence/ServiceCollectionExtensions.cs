@@ -22,8 +22,23 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddTraxStateMachines(
         this IServiceCollection services,
         params Assembly[] assemblies
+    ) => services.AddTraxStateMachines(_ => { }, assemblies);
+
+    /// <summary>
+    /// As <see cref="AddTraxStateMachines(IServiceCollection, Assembly[])"/>, with host-level options (see
+    /// <see cref="StateMachineOptions"/>) such as the draft TTL. Example:
+    /// <c>services.AddTraxStateMachines(o =&gt; o.DraftTtl = TimeSpan.FromDays(30), typeof(Program).Assembly)</c>.
+    /// </summary>
+    public static IServiceCollection AddTraxStateMachines(
+        this IServiceCollection services,
+        Action<StateMachineOptions> configure,
+        params Assembly[] assemblies
     )
     {
+        var options = new StateMachineOptions();
+        configure(options);
+        services.AddSingleton(options);
+
         var machineTypes = assemblies
             .SelectMany(assembly => assembly.GetTypes())
             .Where(type =>

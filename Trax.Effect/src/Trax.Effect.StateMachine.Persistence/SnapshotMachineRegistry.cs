@@ -19,6 +19,7 @@ public sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
     private readonly IEffectClaimStore _claims;
     private readonly IdempotentEffect _idempotent;
     private readonly IServiceProvider _services;
+    private readonly TimeSpan? _draftTtl;
     private readonly Dictionary<string, ISnapshotDraftService> _serviceCache = new(
         StringComparer.Ordinal
     );
@@ -28,7 +29,8 @@ public sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
         ISnapshotStore store,
         IEffectClaimStore claims,
         IdempotentEffect idempotent,
-        IServiceProvider services
+        IServiceProvider services,
+        StateMachineOptions? options = null
     )
     {
         _machines = machines.ToDictionary(m => m.Name, StringComparer.Ordinal);
@@ -36,6 +38,7 @@ public sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
         _claims = claims;
         _idempotent = idempotent;
         _services = services;
+        _draftTtl = options?.DraftTtl;
     }
 
     public ISnapshotDraftService? Service(string machine)
@@ -45,7 +48,7 @@ public sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
         if (!_machines.TryGetValue(machine, out var found))
             return null;
 
-        var service = found.CreateService(_store, _claims);
+        var service = found.CreateService(_store, _claims, _draftTtl);
         _serviceCache[machine] = service;
         return service;
     }

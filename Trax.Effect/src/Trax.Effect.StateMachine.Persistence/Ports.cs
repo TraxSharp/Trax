@@ -3,10 +3,16 @@ using Trax.Effect.StateMachine;
 namespace Trax.Effect.StateMachine.Persistence;
 
 /// <summary>
-/// A stored draft as read back: its canonical JSON, the concurrency token to write against, and the
-/// idempotency key of the last applied advance (if any).
+/// A stored draft as read back: its canonical JSON, the concurrency token to write against, the
+/// idempotency key of the last applied advance (if any), and when the row was last written (the sliding
+/// window the draft-TTL expiry checks against).
 /// </summary>
-public sealed record StoredSnapshot(string Json, Guid Token, string? LastRequestId);
+public sealed record StoredSnapshot(
+    string Json,
+    Guid Token,
+    string? LastRequestId,
+    DateTimeOffset UpdatedAt
+);
 
 /// <summary>
 /// Raw, user-scoped persistence of a snapshot. Engine-agnostic: it moves the four snapshot fields
@@ -23,6 +29,12 @@ public interface ISnapshotStore
         Guid id,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Deletes the caller's draft (the expiry / start-over path). Idempotent: deleting a row that is
+    /// already gone is a no-op, never a throw.
+    /// </summary>
+    Task Delete(string userKey, Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Insert-or-update (the autosave path). Returns <c>false</c> on a concurrent-write conflict

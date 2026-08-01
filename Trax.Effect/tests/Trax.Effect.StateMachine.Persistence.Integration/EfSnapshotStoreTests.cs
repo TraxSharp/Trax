@@ -73,6 +73,37 @@ public class EfSnapshotStoreTests
     }
 
     [Test]
+    public async Task Delete_removes_the_row()
+    {
+        var id = Guid.NewGuid();
+        await TestDb.NewStore().Upsert("u", id, Unlocked());
+        (await TestDb.NewStore().Get("u", id)).Should().NotBeNull();
+
+        await TestDb.NewStore().Delete("u", id);
+
+        (await TestDb.NewStore().Get("u", id)).Should().BeNull();
+    }
+
+    [Test]
+    public async Task Delete_is_idempotent_on_a_missing_row()
+    {
+        var act = async () => await TestDb.NewStore().Delete("u", Guid.NewGuid());
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task Get_surfaces_the_rows_updated_at()
+    {
+        var id = Guid.NewGuid();
+        await TestDb.NewStore().Upsert("u", id, Unlocked());
+
+        (await TestDb.NewStore().Get("u", id))!
+            .UpdatedAt.Should()
+            .BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
+    }
+
+    [Test]
     public async Task Update_applies_only_when_the_concurrency_token_still_matches()
     {
         var id = Guid.NewGuid();

@@ -138,4 +138,21 @@ public static class TestOrder
     }
 
     public static string DraftJson => Machine.Serialize(Machine.Definition.CreateInitialSnapshot());
+
+    /// <summary>A committed Placed snapshot (non-empty items + a receipt).</summary>
+    public static string PlacedJson(string receipt, params int[] items)
+    {
+        var arr = new JsonArray();
+        foreach (var i in items)
+            arr.Add(i);
+        return Machine.Serialize(
+            new Snapshot
+            {
+                Machine = Id,
+                Version = 1,
+                State = "Placed",
+                Context = new JsonObject { ["items"] = arr, ["receipt"] = receipt },
+            }
+        );
+    }
 }

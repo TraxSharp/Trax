@@ -41,6 +41,45 @@ public class AddTraxStateMachinesTests
     }
 
     [Test]
+    public async Task AddTraxStateMachines_honors_a_configured_draft_ttl()
+    {
+        var services = new ServiceCollection();
+        services.AddDbContext<SnapshotDbContext>(o => o.UseNpgsql(PostgresSetup.ConnectionString));
+        services.AddScoped<ISnapshotPrincipal>(_ => new FakePrincipal("u"));
+        services.AddScoped<IOrderCharge, CountingEffect>();
+        services.AddTraxStateMachines(
+            o => o.DraftTtl = TimeSpan.FromMinutes(1),
+            typeof(OrderMachine).Assembly
+        );
+        using var provider = services.BuildServiceProvider();
+
+        provider
+            .GetRequiredService<StateMachineOptions>()
+            .DraftTtl.Should()
+            .Be(TimeSpan.FromMinutes(1));
+
+        // The registry-built service actually applies the TTL: a draft aged past it expires on the next load.
+        var id = Guid.NewGuid();
+        using (var scope = provider.CreateScope())
+        {
+            var svc = scope
+                .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
+                .Service("turnstile")!;
+            (await svc.Autosave("u", id, TestTurnstile.UnlockedJson))
+                .Should()
+                .BeOfType<AutosaveResult.Saved>();
+        }
+        await TestDb.BackdateDraft("u", id, DateTimeOffset.UtcNow.AddHours(-1));
+        using (var scope = provider.CreateScope())
+        {
+            var svc = scope
+                .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
+                .Service("turnstile")!;
+            (await svc.Load("u", id)).Should().BeOfType<LoadResult.NotFound>();
+        }
+    }
+
+    [Test]
     public void AddTraxStateMachines_with_no_machines_throws_a_helpful_error()
     {
         var services = new ServiceCollection();

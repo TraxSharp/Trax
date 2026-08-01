@@ -11,8 +11,12 @@ public interface IMachine
     /// <summary>Whether the machine binds an irreversible exactly-once effect.</summary>
     bool HasEffect { get; }
 
-    /// <summary>Build the draft service for a request's store (threading committed states + the effect-claim reset).</summary>
-    ISnapshotDraftService CreateService(ISnapshotStore store, IEffectClaimStore? claims);
+    /// <summary>Build the draft service for a request's store (threading committed states, the effect-claim reset, and the optional draft TTL).</summary>
+    ISnapshotDraftService CreateService(
+        ISnapshotStore store,
+        IEffectClaimStore? claims,
+        TimeSpan? draftTtl = null
+    );
 
     /// <summary>Build the exactly-once effect runner (resolving the effect from the container), or null if none.</summary>
     ISnapshotEffectRunner? CreateEffectRunner(
@@ -60,13 +64,18 @@ public abstract class Machine<TState, TTrigger> : IMachine
 
     public bool HasEffect => Built.Effects.Count > 0;
 
-    public ISnapshotDraftService CreateService(ISnapshotStore store, IEffectClaimStore? claims) =>
+    public ISnapshotDraftService CreateService(
+        ISnapshotStore store,
+        IEffectClaimStore? claims,
+        TimeSpan? draftTtl = null
+    ) =>
         new SnapshotDraftService<TState, TTrigger>(
             Built.Engine,
             store,
             Built.CommittedStates,
             claims,
-            EffectKeysOnReset
+            EffectKeysOnReset,
+            draftTtl
         );
 
     private IEnumerable<string> EffectKeysOnReset(string userKey, Guid id) =>

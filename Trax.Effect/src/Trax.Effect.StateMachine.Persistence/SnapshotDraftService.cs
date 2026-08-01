@@ -85,7 +85,8 @@ public sealed class SnapshotDraftService<TState, TTrigger>(
     ISnapshotStore store,
     IReadOnlyCollection<TState>? committedStates = null,
     IEffectClaimStore? effectClaims = null,
-    Func<string, Guid, IEnumerable<string>>? effectKeysOnReset = null
+    Func<string, Guid, IEnumerable<string>>? effectKeysOnReset = null,
+    TimeSpan? draftTtl = null
 ) : ISnapshotDraftService
     where TState : struct, Enum
     where TTrigger : struct, Enum
@@ -147,6 +148,16 @@ public sealed class SnapshotDraftService<TState, TTrigger>(
         var stored = await store.Get(userKey, id, cancellationToken);
         if (stored is null)
             return new LoadResult.NotFound();
+
+        // Lazy on-read expiry: a draft idle past the TTL is treated as abandoned. Delete the row (so an
+        // expired COMMITTED draft is cleared uniformly, not just ignored) and report NotFound, which every
+        // caller already handles as "no draft, start fresh". A null TTL never expires. This is a resume-time
+        // decision only; Advance/Autosave never yank an active session's draft.
+        if (draftTtl is { } ttl && stored.UpdatedAt < DateTimeOffset.UtcNow - ttl)
+        {
+            await store.Delete(userKey, id, cancellationToken);
+            return new LoadResult.NotFound();
+        }
 
         return machine.Rehydrate(stored.Json) switch
         {

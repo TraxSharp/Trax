@@ -37,9 +37,15 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
         return new StoredSnapshot(
             snapshot.ToJsonString(),
             record.ConcurrencyToken,
-            record.LastRequestId
+            record.LastRequestId,
+            record.UpdatedAt
         );
     }
+
+    public Task Delete(string userKey, Guid id, CancellationToken cancellationToken = default) =>
+        db
+            .SnapshotDrafts.Where(x => x.Id == id && x.UserKey == userKey)
+            .ExecuteDeleteAsync(cancellationToken);
 
     public async Task<bool> Upsert(
         string userKey,
