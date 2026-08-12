@@ -81,7 +81,7 @@ public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
 }
 
 /// <summary>The order machine's irreversible effect port (bound inline via <c>RunsOnce&lt;IOrderCharge&gt;</c>).</summary>
-public interface IOrderCharge : IEffect { }
+public interface IOrderCharge : ISnapshotEffect { }
 
 /// <summary>
 /// Counts deliveries and returns a distinct receipt each time, so the E2E can prove exactly-once from the

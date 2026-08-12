@@ -90,9 +90,9 @@
       },
       "Trax.Effect.Data.InMemory": {
         "type": "Direct",
-        "requested": "[1.44.1, )",
-        "resolved": "1.44.1",
-        "contentHash": "sRdc/U/YIwtwGhD9kNs9iPAuqG/XhTUjntJocb+4uLC0wF5Su/qqbxj49Vw42JvwVPPLrUvO7tNC/ZP+JFyJOA==",
+        "requested": "[1.47.0, )",
+        "resolved": "1.47.0",
+        "contentHash": "5BsY8Crh5JniYehsT76T7Sd6DQ4dRmfcgfQlf31pXG9lWTiRfu6EO6oe41RZpu7tK7oN2QVYzZsRT1d5+sYHsw==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.InMemory": "10.0.3",
@@ -103,14 +103,14 @@
           "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
           "Npgsql": "10.0.3",
           "Trax.Core": "1.6.0",
-          "Trax.Effect.Data": "1.44.1"
+          "Trax.Effect.Data": "1.47.0"
         }
       },
       "Trax.Effect.Data.Postgres": {
         "type": "Direct",
-        "requested": "[1.44.1, )",
-        "resolved": "1.44.1",
-        "contentHash": "Zs8jJyN315qx1zivjBLnNabkSEvL344L3nVVCJ0TFkaQ0BOTNXCk6v1PPUDPiyv/JFjSZ4HGW9pEK8q0etvmNg==",
+        "requested": "[1.47.0, )",
+        "resolved": "1.47.0",
+        "contentHash": "uAS+Q+as7yo2xftAOBUJW7e0OuWm+UqNqBRxzUEILxcllLvRnI/HjQsyhF2Fnth8/JaoQ04AMZsTmwWIwaCPJA==",
         "dependencies": {
           "EFCore.NamingConventions": "10.0.1",
           "Microsoft.EntityFrameworkCore": "10.0.3",
@@ -122,16 +122,16 @@
           "Npgsql": "10.0.3",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "10.0.0",
           "Trax.Core": "1.6.0",
-          "Trax.Effect.Data": "1.44.1",
+          "Trax.Effect.Data": "1.47.0",
           "dbup-core": "6.1.1",
           "dbup-postgresql": "7.0.1"
         }
       },
       "Trax.Effect.Data.Sqlite": {
         "type": "Direct",
-        "requested": "[1.44.1, )",
-        "resolved": "1.44.1",
-        "contentHash": "Zkd5+y0hFRfOk1Nc+5i27qHrapfD5N6v+spolyhpNTN/+oGODbrZOrUlfl4HKUyLc4423NUfMJ87dIxTWkNcSw==",
+        "requested": "[1.47.0, )",
+        "resolved": "1.47.0",
+        "contentHash": "QEW4dZIQHz8UKXwv52JEoZPBysRmTv0HnweAiYDZeTGReUV/eW6fz7RE7eCuKXzg0oaIWep+Z9ZB6p4Y5hLCFw==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
@@ -143,33 +143,33 @@
           "Npgsql": "10.0.3",
           "SQLitePCLRaw.bundle_e_sqlite3": "3.0.3",
           "Trax.Core": "1.6.0",
-          "Trax.Effect.Data": "1.44.1",
+          "Trax.Effect.Data": "1.47.0",
           "dbup-core": "6.1.1",
           "dbup-sqlite": "6.0.4"
         }
       },
       "Trax.Effect.Provider.Json": {
         "type": "Direct",
-        "requested": "[1.44.1, )",
-        "resolved": "1.44.1",
-        "contentHash": "mOBuSHh3YeW3w+7fl93h80WjxHv5s430vxv1oB6Y25pEH+GB3fP7/OiqHcsSlN3LiHIbZsTE+f3MeJst+YxfJg==",
+        "requested": "[1.47.0, )",
+        "resolved": "1.47.0",
+        "contentHash": "ehW9cgGkKV7hCtdo4fEqVTRc1T2epw83d6ys+q8Xd9K2ihhZ35rRJRHRHDIxZWkLRe5ivlurvM4X1GiXiDkf0g==",
         "dependencies": {
           "Microsoft.Extensions.Hosting.Abstractions": "10.0.10",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
           "Trax.Core": "1.6.0",
-          "Trax.Effect": "1.44.1"
+          "Trax.Effect": "1.47.0"
         }
       },
       "Trax.Effect.Provider.Parameter": {
         "type": "Direct",
-        "requested": "[1.44.1, )",
-        "resolved": "1.44.1",
-        "contentHash": "HR0DSUsycsU2s1i+1IOFEVouA5ilI4YYsi6COE4+d/6jQIlAuZWGfYAGx2iFIkbHUsO91gUWj+Na5pOfp/6uEw==",
+        "requested": "[1.47.0, )",
+        "resolved": "1.47.0",
+        "contentHash": "2uVJcb9IZoOIisb5hSpFpsrD6V407xM82LZ2tNH6uIbxsl79QEUhN4e+GhrXJHl9O6EuH5SgMioEMM5D79hS2w==",
         "dependencies": {
           "Microsoft.Extensions.Hosting.Abstractions": "10.0.10",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
           "Trax.Core": "1.6.0",
-          "Trax.Effect": "1.44.1"
+          "Trax.Effect": "1.47.0"
         }
       },
       "Castle.Core": {
@@ -880,8 +880,8 @@
       "trax.api": {
         "type": "Project",
         "dependencies": {
-          "Trax.Effect": "[1.44.1, )",
-          "Trax.Effect.Data": "[1.44.1, )",
+          "Trax.Effect": "[1.47.0, )",
+          "Trax.Effect.Data": "[1.47.0, )",
           "Trax.Mediator": "[1.20.0, )",
           "Trax.Scheduler": "[1.31.0, )"
         }
@@ -969,7 +969,7 @@
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.10, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.10, )",
           "Trax.Api.GraphQL.Client": "[1.99.99, )",
-          "Trax.Effect": "[1.44.1, )",
+          "Trax.Effect": "[1.47.0, )",
           "Trax.Mediator": "[1.20.0, )"
         }
       },
@@ -1204,9 +1204,9 @@
       },
       "Trax.Effect": {
         "type": "CentralTransitive",
-        "requested": "[1.44.1, )",
-        "resolved": "1.44.1",
-        "contentHash": "8CBPyzYo9CdG7khtCdzwMizS+nTUTZbTr7b+nIDTPN6wP5yCvFde/+CyU3kpVibrona8nLDmEviaJ8HEaY1hNQ==",
+        "requested": "[1.47.0, )",
+        "resolved": "1.47.0",
+        "contentHash": "0M+Ydpjse1pLNzsnp5S/PuRKVDXDn+w58x8d/BqocghzjByq/RM1bGQGyneqa++tWPZZoQUjn5fGteZv1L0wOQ==",
         "dependencies": {
           "Microsoft.Extensions.Hosting.Abstractions": "10.0.10",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
@@ -1215,9 +1215,9 @@
       },
       "Trax.Effect.Data": {
         "type": "CentralTransitive",
-        "requested": "[1.44.1, )",
-        "resolved": "1.44.1",
-        "contentHash": "HAEsFzGwhVla348IhBY9rrEEtnTlq4f8D7beE77ALpe82k1JyxQqUGpO9JZoGZcpJMtzvtZ/l+QBeiHsMDFYIw==",
+        "requested": "[1.47.0, )",
+        "resolved": "1.47.0",
+        "contentHash": "wX8lUqPrh3VfQgHHKqDS1pksRwHuSra/5FqTswnonyu1ZYxo9rpk0qHUER1IcXK3A2M8o8ErAGsi5+vY0Q5eFA==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.3",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.3",
@@ -1227,7 +1227,7 @@
           "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
           "Npgsql": "10.0.3",
           "Trax.Core": "1.6.0",
-          "Trax.Effect": "1.44.1"
+          "Trax.Effect": "1.47.0"
         }
       },
       "Trax.Mediator": {
