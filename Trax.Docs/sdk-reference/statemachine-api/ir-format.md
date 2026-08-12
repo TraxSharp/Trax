@@ -31,6 +31,7 @@ Export requires a declarative machine: `Export` throws if the machine was author
 | `inputs` | object | trigger name to its input schema (only triggers that declared `WithInput<T>`) |
 | `invariants` | object | state name to a per-state policy rule (the `.Requires(...)` on top of the schema); omitted when the machine has none |
 | `transitions` | object[] | the edges, sorted by `(from, trigger, to)` |
+| `differential` | object | the test-only fuzzing inputs authored with `.Differential(...)`: `samples` (per trigger), `seeds` (per state), and `contexts` (probes). Omitted when the machine declares none, and stripped from the generated runtime machine (it drives only the cross-language differential test). |
 
 A schema (under `context` or `inputs`) is `{ "fields": [ { "name", "type", "nullable", "constraints" } ] }`,
 where `type` is one of `string`/`number`/`boolean`/`array`/`object` and `constraints` is an array of rules.

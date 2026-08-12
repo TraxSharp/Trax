@@ -57,23 +57,21 @@ Guards and reducers are named code, never serialized. The snapshot carries struc
 
 ## Wire it into a host
 
-Three calls. `AddMediator` scans your assembly plus `StateMachineMutations.Assembly` (the four generic
-mutations ship there, not in your assembly, so Trax can route them by input type). `AddTraxStateMachines`
-discovers every machine and wires the store, the effect-claim ledger, the exactly-once runner, and the
-registry. The host binds only the two things a machine can't know: how to map its auth to a user key, and
+One builder step. `AddStateMachines` discovers every machine and wires the store, the effect-claim ledger,
+the exactly-once runner, and the registry. It also auto-registers the `SnapshotDbContext` against the provider
+you configured in `AddEffects`, and contributes the four generic mutation trains to the mediator scan (they
+ship in the persistence package, not your assembly, so Trax can route them by input type). Call it before
+`AddMediator`. The host binds only the two things a machine can't know: how to map its auth to a user key, and
 each effect implementation.
 
 ```csharp
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
-        .AddMediator(typeof(CheckoutMachine).Assembly, StateMachineMutations.Assembly));
-
-builder.Services.AddTraxStateMachines(typeof(CheckoutMachine).Assembly);
+        .AddStateMachines(typeof(CheckoutMachine).Assembly)
+        .AddMediator(typeof(CheckoutMachine).Assembly));
 
 builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 builder.Services.AddScoped<ICharge, StripeCharge>();
-
-builder.Services.AddDbContext<SnapshotDbContext>(o => o.UseNpgsql(connectionString));
 ```
 
 To expire abandoned drafts, use the `configure` overload with a `DraftTtl`. A load of a draft idle past the
@@ -81,7 +79,7 @@ window discards it and the user starts fresh, so a forgotten form (or a finished
 default is off.
 
 ```csharp
-builder.Services.AddTraxStateMachines(
+trax.AddStateMachines(
     o => o.DraftTtl = TimeSpan.FromDays(30),
     typeof(CheckoutMachine).Assembly);
 ```
@@ -145,4 +143,4 @@ engines then replay it and fail loudly if their hand-written guards or reducers 
 
 ## SDK Reference
 
-> [AddTraxStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
+> [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)

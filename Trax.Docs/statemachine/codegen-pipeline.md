@@ -35,8 +35,11 @@ declared. There is no hand-written binding layer.
 Two goldens, both committed, both replayed by each runtime independently:
 
 - The **differential corpus** (`differential.json`) enumerates the machine's behaviour over a dense space of
-  states, triggers, and inputs. TypeScript is the oracle that produces it; the C# engine replays it and must
-  match byte for byte. This is what catches a guard or reducer that behaves differently across runtimes. See
+  states, triggers, and inputs. The fuzzing inputs (samples, seeds, probe contexts) are authored in C# with
+  `.Differential(...)` and exported into the IR's `differential` block, so the corpus is driven off the one
+  C# source, not a separate hand-written file. TypeScript is the oracle that enumerates from the IR and
+  produces the corpus; the C# engine replays it and must match byte for byte. This is what catches a guard or
+  reducer that behaves differently across runtimes. See
   [two runtimes, one behaviour](/docs/statemachine#two-runtimes-one-behavior).
 - The **migration golden** (`migration.json`) pins schema evolution: a set of stored older-version snapshots
   and the exact canonical wire each must become. A migration that drops or reorders a surviving field fails.

@@ -9,7 +9,7 @@ nav_order: 8
 # Persistence ports
 
 Two ports sit under the draft operations. A host always supplies `ISnapshotPrincipal`;
-[`AddTraxStateMachines`](/docs/sdk-reference/statemachine-api/add-trax-state-machines) provides a default
+[`AddStateMachines`](/docs/sdk-reference/statemachine-api/add-trax-state-machines) provides a default
 Postgres-backed `ISnapshotStore`, so you implement the store only for a custom backend.
 
 ## ISnapshotPrincipal

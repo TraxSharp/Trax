@@ -42,7 +42,7 @@ Includes: `AddScheduler`, `Schedule`, `ScheduleMany`, dependent scheduling, mani
 
 Authoring portable snapshot state machines and hosting them: one-line discovery and wiring, plus the fluent builder for declaring states, transitions, guards, reducers, committed states, and exactly-once effects.
 
-Includes: `AddTraxStateMachines`, `Machine<TState, TTrigger>`, `IMachineBuilder`, `StateMachineMutations`.
+Includes: `AddStateMachines`, `Machine<TState, TTrigger>`, `IMachineBuilder`, `StateMachineMutations`.
 
 ### [Dashboard API](/docs/sdk-reference/dashboard-api) (Dashboard)
 

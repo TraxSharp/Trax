@@ -18,7 +18,7 @@ walkthroughs, see [Authoring a machine](/docs/statemachine/authoring) and
 
 | Page | Covers |
 | --- | --- |
-| [AddTraxStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | Discovering machines and wiring the subsystem in one call |
+| [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | Discovering machines and wiring the subsystem in one call |
 | [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | The `Machine<TState, TTrigger>` base class and the fluent builder |
 | [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) | The string-free `Rules` surface for declarative guards and reducers |
 | [Declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model) | The `Rule` / `Reduction` / `ContextSchema` types the IR carries |

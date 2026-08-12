@@ -29,6 +29,7 @@ public abstract class Machine<TState, TTrigger>
 | `Version(int version)` | The definition version stamped onto every snapshot. |
 | `StartsAt(TState state, Func<JsonObject> context)` | The initial state and a factory for its context. A factory, not a value, so instances never alias. |
 | `MigrateFrom(int fromVersion, Func<string, JsonObject, MigrationResult> migrate)` | Forward-migrate a stored snapshot from `fromVersion` to this definition's version. The migrator gets the stored state name and context and returns a `MigrationResult`. |
+| `Differential(Action<IDifferentialBuilder> configure)` | Authors the cross-language differential fuzzing inputs (test-only): per-trigger input samples, per-state seed contexts, and dense probe contexts. Exported into the IR's `differential` block so the differential harness enumerates off the one C# source, with no hand-written machine.json. Only valid on a declaratively-authored machine. See [IDifferentialBuilder](#idifferentialbuilder). |
 | `In(TState state)` | Opens a state to declare its context rule and outgoing transitions. Returns an `IStateBuilder`. |
 
 ## IStateBuilder
@@ -54,6 +55,23 @@ public abstract class Machine<TState, TTrigger>
 | `Reduce(Reduction reduce)` | The declarative, exportable reducer: `Set(...).FromInput(...)`, `Clear()`, `Reset()`, `Keep()`. See the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
 | `RunsOnce<TEffect>(string? keyPrefix = null)` | Binds an `ISnapshotEffect` that runs exactly once when this transition is sent, keyed on `{keyPrefix}:{user}:{id}`. Omit `keyPrefix` and it defaults to `{machineId}:{trigger}`. |
 | `To(TState state)` | The destination state. Also closes the transition, so you can chain another `On(...)`. |
+
+## IDifferentialBuilder
+
+Authors a machine's differential fuzzing inputs, consumed only by the cross-language differential test: the
+harness enumerates the reachable space plus these inputs, records each outcome into a committed corpus, and
+every runtime replays it. Declared in C# so the machine is the single source; the IR carries them and the
+generated runtime machine strips them. The harness always fires a no-input case per trigger, so an explicit
+empty sample is a distinct case. Typed overloads serialize the record with camelCase names (nulls kept);
+raw `JsonObject` overloads give exact control.
+
+| Method | Description |
+|--------|-------------|
+| `Sample<TInput>(TTrigger trigger, TInput input)` | A representative input for a trigger, from a typed record. |
+| `Sample(TTrigger trigger, JsonObject input)` | The same, as a raw JSON object. |
+| `EmptySample(TTrigger trigger)` | An empty (`{}`) input for a trigger, distinct from the always-added no-input case. |
+| `Seed<TContext>(TState state, TContext context)` / `Seed(TState state, JsonObject context)` | A seed context used as a BFS start point, reaching states the initial snapshot can't. |
+| `Probe<TContext>(TContext context)` / `Probe(JsonObject context)` | A dense probe context crossed with every state, exercising guards and validators on unreachable-but-sendable snapshots. |
 
 ## Delegate vs declarative
 
