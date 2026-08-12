@@ -61,38 +61,48 @@ public class CoreTrainMemoryTests
     [Test]
     public async Task Train_MemoryDictionary_ShouldGrowWithJunctionCount()
     {
-        // Test how Memory dictionary grows with increasing number of junctions
-        var smallTrainResult = await MemoryProfiler.MonitorMemoryUsageAsync(
-            async () =>
-            {
-                var train = new SmallChainTrain();
-                var input = new SimpleInput("small_test");
-                await train.Run(input);
-            },
-            "SmallTrain_MemoryUsage"
+        // Allocation grows with junction count: LargeChainTrain chains five junctions to SmallChainTrain's
+        // one, so it stores more entries in the Memory dictionary and allocates more per run.
+        //
+        // Measuring that deterministically needs two things the old net-heap-delta approach got wrong. Warm up
+        // both trains first, so the measured runs reflect steady-state allocation rather than one-time JIT /
+        // type-init / DI-resolution cost (that cost inflated whichever train ran first, which made the
+        // comparison order-dependent and flaky). And measure real bytes allocated via GetTotalAllocatedBytes,
+        // which is monotonic and so unaffected by GC timing, amortised over many iterations to drown per-run
+        // noise.
+        await new SmallChainTrain().Run(new SimpleInput("warmup"));
+        await new LargeChainTrain().Run(new SimpleInput("warmup"));
+
+        const int iterations = 200;
+        var smallAllocated = await AllocatedOverAsync(
+            () => new SmallChainTrain().Run(new SimpleInput("small_test")),
+            iterations
+        );
+        var largeAllocated = await AllocatedOverAsync(
+            () => new LargeChainTrain().Run(new SimpleInput("large_test")),
+            iterations
         );
 
-        var largeTrainResult = await MemoryProfiler.MonitorMemoryUsageAsync(
-            async () =>
-            {
-                var train = new LargeChainTrain(); // Many more steps
-                var input = new SimpleInput("large_test");
-                await train.Run(input);
-            },
-            "LargeTrain_MemoryUsage"
-        );
+        Console.WriteLine($"SmallChainTrain: {smallAllocated:N0} bytes over {iterations} runs");
+        Console.WriteLine($"LargeChainTrain: {largeAllocated:N0} bytes over {iterations} runs");
 
-        Console.WriteLine(smallTrainResult.GetSummary());
-        Console.WriteLine(largeTrainResult.GetSummary());
-
-        // Large train may allocate similar or more memory due to more objects in Memory dictionary
-        // Note: Very efficient trains might have similar allocation patterns
-        largeTrainResult
-            .MemoryAllocated.Should()
-            .BeGreaterThanOrEqualTo(
-                smallTrainResult.MemoryAllocated / 3,
-                "Trains should have reasonable memory allocation patterns"
+        largeAllocated
+            .Should()
+            .BeGreaterThan(
+                smallAllocated,
+                "a train with more junctions allocates more (its Memory dictionary holds more entries)"
             );
+    }
+
+    // Real bytes allocated while running `body` `iterations` times. GC.GetTotalAllocatedBytes is cumulative
+    // and monotonic, so the delta is the allocation total independent of when the GC ran, unlike a heap-size
+    // snapshot, which shrinks whenever a collection happens mid-measure.
+    private static async Task<long> AllocatedOverAsync(Func<Task> body, int iterations)
+    {
+        var start = GC.GetTotalAllocatedBytes(precise: true);
+        for (var i = 0; i < iterations; i++)
+            await body();
+        return GC.GetTotalAllocatedBytes(precise: true) - start;
     }
 
     [Test]
