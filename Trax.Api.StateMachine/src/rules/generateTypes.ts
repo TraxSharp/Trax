@@ -87,7 +87,7 @@ export function generateMachineFactory(ir: IrDocument): string {
     `>;`,
     "",
     `/** The ${ir.id} machine, built from the IR and typed by ${machine}Spec. No hand-written twin. */`,
-    `export const ${ir.id} = new TypedMachine<${machine}Spec>(core);`,
+    `export const ${camel(ir.id)} = new TypedMachine<${machine}Spec>(core);`,
     "",
   ].join("\n");
 }
@@ -133,5 +133,17 @@ function tsType(type: JsonFieldType): string {
 const union = (values: readonly string[]): string =>
   values.map((v) => `"${v}"`).join(" | ");
 
+// A machine id is kebab/snake (write-to-congress); its type prefix is PascalCase (WriteToCongress) and its
+// exported const is camelCase (writeToCongress). Splitting on - and _ is what makes a multi-word id emit valid
+// identifiers; a single-word id (turnstile) is unchanged.
 const pascal = (id: string): string =>
-  id.length === 0 ? id : id.charAt(0).toUpperCase() + id.slice(1);
+  id
+    .split(/[-_]+/)
+    .filter((s) => s.length > 0)
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join("");
+
+const camel = (id: string): string => {
+  const p = pascal(id);
+  return p.length === 0 ? p : p.charAt(0).toLowerCase() + p.slice(1);
+};
