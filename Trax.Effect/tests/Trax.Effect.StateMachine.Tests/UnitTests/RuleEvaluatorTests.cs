@@ -214,6 +214,93 @@ public class RuleEvaluatorTests
 
     #endregion
 
+    #region Length (string length)
+
+    [Test]
+    public void Length_compares_string_length_and_is_false_for_non_strings()
+    {
+        var ctx = new JsonObject { ["body"] = "123456", ["n"] = 6 };
+
+        Eval(new Rule.Length(RuleSource.Context, "body", CompareOp.GreaterOrEqual, 6), ctx)
+            .Should()
+            .BeTrue();
+        Eval(new Rule.Length(RuleSource.Context, "body", CompareOp.GreaterThan, 6), ctx)
+            .Should()
+            .BeFalse();
+        Eval(new Rule.Length(RuleSource.Context, "body", CompareOp.LessThan, 6), ctx)
+            .Should()
+            .BeFalse();
+        Eval(new Rule.Length(RuleSource.Context, "n", CompareOp.GreaterOrEqual, 0), ctx)
+            .Should()
+            .BeFalse("a number has no string length");
+        Eval(new Rule.Length(RuleSource.Context, "missing", CompareOp.GreaterOrEqual, 0), ctx)
+            .Should()
+            .BeFalse();
+    }
+
+    #endregion
+
+    #region BoolEquals
+
+    [Test]
+    public void BoolEquals_matches_a_boolean_value_only()
+    {
+        var ctx = new JsonObject
+        {
+            ["guided"] = true,
+            ["off"] = false,
+            ["s"] = "true",
+        };
+
+        Eval(new Rule.BoolEquals(RuleSource.Context, "guided", true), ctx).Should().BeTrue();
+        Eval(new Rule.BoolEquals(RuleSource.Context, "guided", false), ctx).Should().BeFalse();
+        Eval(new Rule.BoolEquals(RuleSource.Context, "off", false), ctx).Should().BeTrue();
+        Eval(new Rule.BoolEquals(RuleSource.Context, "s", true), ctx)
+            .Should()
+            .BeFalse("the string \"true\" is not the boolean true");
+        Eval(new Rule.BoolEquals(RuleSource.Context, "missing", false), ctx)
+            .Should()
+            .BeFalse("a missing field is absent, not false");
+    }
+
+    #endregion
+
+    #region ArrayOf
+
+    [Test]
+    public void ArrayOf_requires_every_element_to_match_the_type()
+    {
+        var ctx = new JsonObject
+        {
+            ["nums"] = new JsonArray(1, 2, 3),
+            ["strs"] = new JsonArray("a", "b"),
+            ["mixed"] = new JsonArray(1, "b"),
+            ["empty"] = new JsonArray(),
+            ["scalar"] = 5,
+        };
+
+        Eval(new Rule.ArrayOf(RuleSource.Context, "nums", JsonFieldType.Number), ctx)
+            .Should()
+            .BeTrue();
+        Eval(new Rule.ArrayOf(RuleSource.Context, "strs", JsonFieldType.String), ctx)
+            .Should()
+            .BeTrue();
+        Eval(new Rule.ArrayOf(RuleSource.Context, "empty", JsonFieldType.Number), ctx)
+            .Should()
+            .BeTrue("an empty array vacuously satisfies the element type");
+        Eval(new Rule.ArrayOf(RuleSource.Context, "mixed", JsonFieldType.Number), ctx)
+            .Should()
+            .BeFalse("a string element breaks a number array");
+        Eval(new Rule.ArrayOf(RuleSource.Context, "nums", JsonFieldType.String), ctx)
+            .Should()
+            .BeFalse();
+        Eval(new Rule.ArrayOf(RuleSource.Context, "scalar", JsonFieldType.Number), ctx)
+            .Should()
+            .BeFalse("a scalar is not an array");
+    }
+
+    #endregion
+
     #region All / Any
 
     [Test]

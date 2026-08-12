@@ -16,6 +16,7 @@ public class RulesTests
         public string[] Items { get; init; } = [];
         public int Total { get; init; }
         public string Name { get; init; } = "";
+        public bool Flag { get; init; }
     }
 
     private sealed record In
@@ -77,6 +78,31 @@ public class RulesTests
             .CountAtLeast(2)
             .Should()
             .Be(new Rule.Count(RuleSource.Context, "items", CompareOp.GreaterOrEqual, 2));
+    }
+
+    [Test]
+    public void The_length_bool_and_array_matchers_build_their_rules()
+    {
+        Field((Ctx c) => c.Name)
+            .LengthGreaterThan(5)
+            .Should()
+            .Be(new Rule.Length(RuleSource.Context, "name", CompareOp.GreaterThan, 5));
+        Field((Ctx c) => c.Name)
+            .LengthAtLeast(6)
+            .Should()
+            .Be(new Rule.Length(RuleSource.Context, "name", CompareOp.GreaterOrEqual, 6));
+        Field((Ctx c) => c.Flag)
+            .IsTrue()
+            .Should()
+            .Be(new Rule.BoolEquals(RuleSource.Context, "flag", true));
+        Field((Ctx c) => c.Flag)
+            .IsFalse()
+            .Should()
+            .Be(new Rule.BoolEquals(RuleSource.Context, "flag", false));
+        Field((Ctx c) => c.Items)
+            .ArrayOf(JsonFieldType.String)
+            .Should()
+            .Be(new Rule.ArrayOf(RuleSource.Context, "items", JsonFieldType.String));
     }
 
     [Test]

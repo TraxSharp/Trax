@@ -76,6 +76,14 @@ public interface IStateBuilder<TState, TTrigger>
     /// <summary>Declare that this state carries no context (an empty schema).</summary>
     IStateBuilder<TState, TTrigger> Context();
 
+    /// <summary>
+    /// Add a per-state context requirement, composed (ANDed) with the schema from
+    /// <see cref="Context{TContext}"/> and with any other requirements. The declarative, exportable peer of a
+    /// policy check in <see cref="Holds"/>: use it for what a state demands beyond its shape (a complete draft,
+    /// an absent receipt). Chain several; each is one small rule.
+    /// </summary>
+    IStateBuilder<TState, TTrigger> Requires(Rule constraint);
+
     /// <summary>Mark this state committed: a soft autosave may not move a draft out of it (the guarded path).</summary>
     IStateBuilder<TState, TTrigger> Committed();
 
@@ -138,6 +146,7 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
     private readonly Dictionary<int, Func<string, JsonObject, MigrationResult>> _migrations = [];
     private readonly Dictionary<TState, ContextSchema> _contextSchemas = [];
     private readonly Dictionary<TTrigger, ContextSchema> _triggerInputs = [];
+    private readonly Dictionary<TState, List<Rule>> _stateInvariants = [];
     private readonly List<DeclarativeTransition<TState, TTrigger>> _declarativeTransitions = [];
     private bool _usedDeclarative;
 
@@ -198,7 +207,11 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
             ? new DeclarativeModel<TState, TTrigger>(
                 _contextSchemas,
                 _triggerInputs,
-                _declarativeTransitions
+                _declarativeTransitions,
+                _stateInvariants.ToDictionary(
+                    kv => kv.Key,
+                    kv => kv.Value.Count == 1 ? kv.Value[0] : (Rule)new Rule.All(kv.Value)
+                )
             )
             : null;
 
@@ -223,8 +236,40 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
         {
             owner._usedDeclarative = true;
             owner._contextSchemas[state] = schema;
-            owner._validators[state] = ctx => SchemaValidator.Validate(schema, ctx);
+            RebuildValidator();
             return this;
+        }
+
+        public IStateBuilder<TState, TTrigger> Requires(Rule constraint)
+        {
+            owner._usedDeclarative = true;
+            if (!owner._stateInvariants.TryGetValue(state, out var list))
+                owner._stateInvariants[state] = list = [];
+            list.Add(constraint);
+            RebuildValidator();
+            return this;
+        }
+
+        // The state's validator is its schema (if declared) AND each requirement, composed. Rebuilt whenever
+        // Context or Requires changes, so the order of those calls does not matter.
+        private void RebuildValidator()
+        {
+            var schema = owner._contextSchemas.GetValueOrDefault(state);
+            var invariants = owner._stateInvariants.GetValueOrDefault(state);
+            owner._validators[state] = ctx =>
+            {
+                if (schema is not null)
+                {
+                    var error = SchemaValidator.Validate(schema, ctx);
+                    if (error is not null)
+                        return error;
+                }
+                if (invariants is not null)
+                    foreach (var rule in invariants)
+                        if (!RuleEvaluator.Evaluate(rule, ctx, input: null))
+                            return "A state requirement was not satisfied.";
+                return null;
+            };
         }
 
         public IStateBuilder<TState, TTrigger> Committed()

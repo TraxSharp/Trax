@@ -29,6 +29,13 @@ public static class RuleEvaluator
                 && Compare(d, r.Op, r.Value),
             Rule.Count r => Read(r.Source, r.Field, context, input) is JsonArray a
                 && Compare(a.Count, r.Op, r.Value),
+            Rule.Length r => Read(r.Source, r.Field, context, input) is { } n
+                && n.GetValueKind() == JsonValueKind.String
+                && Compare(n.GetValue<string>().Length, r.Op, r.Value),
+            Rule.BoolEquals r => Read(r.Source, r.Field, context, input) is { } b
+                && b.GetValueKind() == (r.Value ? JsonValueKind.True : JsonValueKind.False),
+            Rule.ArrayOf r => Read(r.Source, r.Field, context, input) is JsonArray arr
+                && arr.All(e => MatchesType(e, r.ElementType)),
             Rule.All r => r.Rules.All(x => Evaluate(x, context, input, customGuards)),
             Rule.Any r => r.Rules.Any(x => Evaluate(x, context, input, customGuards)),
             Rule.Custom r => customGuards is not null

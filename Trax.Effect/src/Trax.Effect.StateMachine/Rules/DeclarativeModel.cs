@@ -23,7 +23,8 @@ public sealed record DeclarativeTransition<TState, TTrigger>(
 public sealed record DeclarativeModel<TState, TTrigger>(
     IReadOnlyDictionary<TState, ContextSchema> ContextSchemas,
     IReadOnlyDictionary<TTrigger, ContextSchema> TriggerInputs,
-    IReadOnlyList<DeclarativeTransition<TState, TTrigger>> Transitions
+    IReadOnlyList<DeclarativeTransition<TState, TTrigger>> Transitions,
+    IReadOnlyDictionary<TState, Rule> StateInvariants
 )
     where TState : struct, Enum
     where TTrigger : struct, Enum;

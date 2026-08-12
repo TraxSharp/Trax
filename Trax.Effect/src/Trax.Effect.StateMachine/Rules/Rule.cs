@@ -62,6 +62,15 @@ public abstract record Rule
     /// <summary>An array field whose length is compared against a constant.</summary>
     public sealed record Count(RuleSource Source, string Field, CompareOp Op, int Value) : Rule;
 
+    /// <summary>A string field whose length is compared against a constant.</summary>
+    public sealed record Length(RuleSource Source, string Field, CompareOp Op, int Value) : Rule;
+
+    /// <summary>A boolean field equal to a constant.</summary>
+    public sealed record BoolEquals(RuleSource Source, string Field, bool Value) : Rule;
+
+    /// <summary>An array field whose every element is of the given JSON type.</summary>
+    public sealed record ArrayOf(RuleSource Source, string Field, JsonFieldType ElementType) : Rule;
+
     /// <summary>All sub-rules hold (logical AND). An empty list is vacuously true.</summary>
     public sealed record All(IReadOnlyList<Rule> Rules) : Rule;
 

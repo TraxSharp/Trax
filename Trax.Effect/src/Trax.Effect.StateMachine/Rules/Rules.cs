@@ -73,6 +73,23 @@ public sealed class FieldMatcher(RuleSource source, string field)
     /// <summary>An array field with at least <paramref name="value"/> elements.</summary>
     public Rule CountAtLeast(int value) =>
         new Rule.Count(source, field, CompareOp.GreaterOrEqual, value);
+
+    /// <summary>A string field whose length is greater than a constant.</summary>
+    public Rule LengthGreaterThan(int value) =>
+        new Rule.Length(source, field, CompareOp.GreaterThan, value);
+
+    /// <summary>A string field whose length is at least a constant.</summary>
+    public Rule LengthAtLeast(int value) =>
+        new Rule.Length(source, field, CompareOp.GreaterOrEqual, value);
+
+    /// <summary>A boolean field equal to <c>true</c>.</summary>
+    public Rule IsTrue() => new Rule.BoolEquals(source, field, true);
+
+    /// <summary>A boolean field equal to <c>false</c>.</summary>
+    public Rule IsFalse() => new Rule.BoolEquals(source, field, false);
+
+    /// <summary>An array field whose every element is of the given JSON type.</summary>
+    public Rule ArrayOf(JsonFieldType type) => new Rule.ArrayOf(source, field, type);
 }
 
 /// <summary>Completes a <see cref="Rules.Set{TContext,TField}"/>: where the field's new value comes from.</summary>

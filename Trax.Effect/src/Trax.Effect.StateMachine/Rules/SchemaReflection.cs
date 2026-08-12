@@ -35,15 +35,50 @@ public static class SchemaReflection
         return new ContextSchema(fields);
     }
 
-    // Maps validation attributes to declarative constraint rules over the field. Kept small on purpose:
-    // [MinLength(>=1)] on a string/array is the non-empty constraint the real machines use. More can be
-    // added as real machines need them.
+    // Maps a property's type and validation attributes to declarative constraint rules over the field:
+    // [MinLength(>=1)] -> non-empty, a typed collection -> every element is that JSON type, [AllowedValues]
+    // -> one of a fixed set (the enum domain). More can be added as real machines need them.
     private static IReadOnlyList<Rule> Constraints(PropertyInfo property, string jsonName)
     {
         var rules = new List<Rule>();
         if (property.GetCustomAttribute<MinLengthAttribute>() is { Length: >= 1 })
             rules.Add(new Rule.NonEmpty(RuleSource.Context, jsonName));
+        if (ArrayElementType(property.PropertyType) is { } element)
+            rules.Add(new Rule.ArrayOf(RuleSource.Context, jsonName, element));
+        if (property.GetCustomAttribute<AllowedValuesAttribute>() is { Values.Length: > 0 } allowed)
+            rules.Add(
+                new Rule.OneOf(
+                    RuleSource.Context,
+                    jsonName,
+                    allowed.Values.Select(v => v?.ToString() ?? string.Empty).ToArray()
+                )
+            );
         return rules;
+    }
+
+    // The JSON type of a typed collection's elements (int[] -> Number, string[] -> String), or null when the
+    // property is not a scalar-element collection (a string, a scalar, or an array of objects).
+    private static JsonFieldType? ArrayElementType(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (type == typeof(string) || !typeof(IEnumerable).IsAssignableFrom(type))
+            return null;
+
+        var element =
+            type.IsArray ? type.GetElementType()
+            : type.IsGenericType ? type.GetGenericArguments().FirstOrDefault()
+            : null;
+        if (element is null)
+            return null;
+        element = Nullable.GetUnderlyingType(element) ?? element;
+
+        if (element == typeof(string))
+            return JsonFieldType.String;
+        if (element == typeof(bool))
+            return JsonFieldType.Boolean;
+        if (IsNumeric(element))
+            return JsonFieldType.Number;
+        return null; // arrays of objects: the field is Array, but elements aren't further type-checked
     }
 
     private static JsonFieldType JsonTypeOf(Type type)
