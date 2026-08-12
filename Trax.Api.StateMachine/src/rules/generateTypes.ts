@@ -69,6 +69,9 @@ export function generateContextTypes(ir: IrDocument): string {
  */
 export function generateMachineFactory(ir: IrDocument): string {
   const machine = pascal(ir.id);
+  // The differential block is test-only fuzzing data (samples/seeds/contexts); the runtime machine never
+  // reads it. Strip it so the generated module stays lean and doesn't ship test inputs to the browser.
+  const { differential: _differential, ...runtimeIr } = ir;
   return [
     `// AUTO-GENERATED from ${ir.id}.ir.json by generateMachineFactory. Do not edit by hand.`,
     "",
@@ -77,7 +80,7 @@ export function generateMachineFactory(ir: IrDocument): string {
     `import { TypedMachine } from "../../typed";`,
     `import type { ${machine}Spec, ${machine}State, ${machine}Trigger } from "./${ir.id}.contexts.g";`,
     "",
-    `const ir = ${JSON.stringify(ir, null, 2)} as IrDocument;`,
+    `const ir = ${JSON.stringify(runtimeIr, null, 2)} as IrDocument;`,
     "",
     "// The runtime machine's states/triggers are exactly those in the IR; the cast narrows the string",
     `// generics to the generated unions so TypedMachine<${machine}Spec> lines up.`,

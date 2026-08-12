@@ -40,6 +40,15 @@ export interface IrDocument {
   inputs: Record<string, ContextSchema>;
   invariants?: Record<string, Rule>;
   transitions: IrTransition[];
+  // Differential fuzzing inputs (test-only), authored in C# via .Differential(...) and exported here so the
+  // cross-language differential harness enumerates off this IR instead of a hand-written machine.json. Absent
+  // on machines with no cross-language differential. Structurally the same block DifferentialSpec carries, so
+  // an IrDocument is a valid DifferentialSpec for enumerate(). Stripped from the generated runtime machine.
+  differential?: {
+    samples?: Record<string, unknown[]>;
+    seeds?: Record<string, Record<string, unknown>>;
+    contexts?: Record<string, unknown>[];
+  };
 }
 
 export function machineFromIr(

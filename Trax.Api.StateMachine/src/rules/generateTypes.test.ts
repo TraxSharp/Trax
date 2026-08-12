@@ -79,6 +79,13 @@ describe("generateContextTypes", () => {
     );
   });
 
+  it("strips the differential block from the generated runtime machine (test-only data)", () => {
+    // The IR carries a differential block (test fuzzing inputs), but the runtime machine embeds structure
+    // only — it must not ship samples/seeds/contexts to the browser.
+    expect(ir.differential).toBeDefined();
+    expect(generateMachineFactory(ir)).not.toContain('"differential"');
+  });
+
   it("the generated typed machine drives the turnstile with typed context and input", () => {
     const initial = turnstile.initial();
     expect(initial.state).toBe("Locked");

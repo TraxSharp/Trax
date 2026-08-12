@@ -5,23 +5,30 @@ import {
   serializeCorpus,
   type DifferentialSpec,
 } from "./differential";
-import { differentialFile, machineSpecFile } from "./fixtures";
+import { differentialFile, irFile, machineSpecFile } from "./fixtures";
 import type { SnapshotMachine } from "./machine";
 import { checkoutCore } from "./machines/checkout/checkout";
 import { turnstileCore } from "./machines/turnstile/turnstile";
 
-// TypeScript is the oracle. It re-enumerates the corpus from machine.json + the engine on every run and
-// compares to the committed golden (jest-snapshot style): a diff means either the engine changed behavior
-// or machine.json's samples/seeds changed. Regenerate deliberately with UPDATE_DIFFERENTIAL=1 — the git
-// diff of the golden is the review of what changed. C# replays the same committed file to prove parity.
+// TypeScript is the oracle. It re-enumerates the corpus from the machine's IR (the single source authored in
+// C#, whose differential block carries the samples/seeds/contexts) plus the engine on every run, and compares
+// to the committed golden (jest-snapshot style): a diff means either the engine changed behavior or the IR's
+// differential block changed. Regenerate deliberately with UPDATE_DIFFERENTIAL=1 — the git diff of the golden
+// is the review of what changed. C# replays the same committed file to prove parity.
 const UPDATE = process.env.UPDATE_DIFFERENTIAL === "1";
 
 function assertCorpus<S extends string, T extends string>(
   name: string,
   machine: SnapshotMachine<S, T>,
 ): void {
+  // Enumerate off the IR when the machine has one (the IR is structurally a DifferentialSpec — enumerate
+  // reads only id/version/states/triggers + the differential block). Machines not yet on the IR path
+  // (checkout) fall back to the legacy hand-written machine.json.
+  const specFile = fs.existsSync(irFile(name))
+    ? irFile(name)
+    : machineSpecFile(name);
   const spec = JSON.parse(
-    fs.readFileSync(machineSpecFile(name), "utf8"),
+    fs.readFileSync(specFile, "utf8"),
   ) as DifferentialSpec;
   const generated = serializeCorpus(enumerate(machine, spec));
   const file = differentialFile(name);

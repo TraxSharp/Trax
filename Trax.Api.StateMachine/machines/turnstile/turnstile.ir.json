@@ -48,5 +48,10 @@
       "to": "Locked",
       "reduce": { "reduce": "clear" }
     }
-  ]
+  ],
+  "differential": {
+    "samples": {
+      "Coin": [{ "coin": "quarter" }, { "coin": "dollar" }, { "coin": "penny" }, {}]
+    }
+  }
 }
