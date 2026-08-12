@@ -10,8 +10,9 @@ section: SDK Reference
 # State Machine API
 
 Reference for authoring and hosting portable snapshot state machines. For the concepts (the two-document
-model, the guarantees, exactly-once effects), see [State Machines](/docs/statemachine). For a task-oriented
-walkthrough, see [Authoring a machine](/docs/statemachine/authoring).
+model, the guarantees, exactly-once effects), see [State Machines](/docs/statemachine). For task-oriented
+walkthroughs, see [Authoring a machine](/docs/statemachine/authoring) and
+[Declarative authoring](/docs/statemachine/declarative-authoring).
 
 ## Pages
 
@@ -19,3 +20,4 @@ walkthrough, see [Authoring a machine](/docs/statemachine/authoring).
 | --- | --- |
 | [AddTraxStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | Discovering machines and wiring the subsystem in one call |
 | [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | The `Machine<TState, TTrigger>` base class and the fluent builder |
+| [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) | The string-free `Rules` surface for declarative guards and reducers |
