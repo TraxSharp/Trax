@@ -32,6 +32,7 @@ export interface IrDocument {
   id: string;
   version: number;
   initialState: string;
+  initialContext?: Record<string, unknown>;
   states: string[];
   triggers: string[];
   committedStates: string[];
@@ -46,8 +47,12 @@ export function machineFromIr(
   customGuards: CustomGuards = {},
   customReducers: CustomReducers = {},
 ): MachineDefinition<string, string> {
+  // The machine's actual initial context (what StartsAt built) if the IR carries it, else derived from the
+  // initial state's schema. The IR value is authoritative: it reproduces a constrained default (an enum) that
+  // the schema alone would default to "" and reject.
   const initialSchema = ir.context[ir.initialState] ?? { fields: [] };
-  const createInitialContext = () => defaultsFor(initialSchema);
+  const createInitialContext = (): Record<string, unknown> =>
+    ir.initialContext ? { ...ir.initialContext } : defaultsFor(initialSchema);
 
   const transitions: TransitionDefinition<string, string>[] =
     ir.transitions.map((t) => ({
