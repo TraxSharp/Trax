@@ -37,6 +37,7 @@ export interface IrDocument {
   committedStates: string[];
   context: Record<string, ContextSchema>;
   inputs: Record<string, ContextSchema>;
+  invariants?: Record<string, Rule>;
   transitions: IrTransition[];
 }
 
@@ -71,8 +72,25 @@ export function machineFromIr(
     }));
 
   const contextValidators: Partial<Record<string, ContextValidator>> = {};
-  for (const [state, schema] of Object.entries(ir.context))
-    contextValidators[state] = (ctx) => validateSchema(schema, ctx);
+  const validatedStates = new Set([
+    ...Object.keys(ir.context),
+    ...Object.keys(ir.invariants ?? {}),
+  ]);
+  for (const state of validatedStates) {
+    const schema = ir.context[state];
+    const invariant = ir.invariants?.[state];
+    contextValidators[state] = (ctx) => {
+      if (schema) {
+        const error = validateSchema(schema, ctx);
+        if (error) return error;
+      }
+      // The per-state .Requires policy, evaluated after the shape. Matches the C# validator (no custom
+      // handlers at the validator layer), so a custom rule here is a reject.
+      if (invariant && !evaluateRule(invariant, ctx, null))
+        return "A state requirement was not satisfied.";
+      return null;
+    };
+  }
 
   return {
     id: ir.id,

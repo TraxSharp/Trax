@@ -52,3 +52,36 @@ describe("turnstile machine built from the IR", () => {
     }
   });
 });
+
+describe("machine built from an IR with per-state invariants", () => {
+  const ir: IrDocument = {
+    id: "inv",
+    version: 1,
+    initialState: "Draft",
+    states: ["Draft", "Done"],
+    triggers: ["Finish"],
+    committedStates: [],
+    context: {
+      Draft: {
+        fields: [{ name: "body", type: "string", nullable: false, constraints: [] }],
+      },
+      Done: {
+        fields: [{ name: "body", type: "string", nullable: false, constraints: [] }],
+      },
+    },
+    inputs: {},
+    invariants: {
+      Done: { rule: "length", source: "context", field: "body", op: "gte", value: 6 },
+    },
+    transitions: [{ from: "Draft", trigger: "Finish", to: "Done" }],
+  };
+  const machine = new SnapshotMachine(machineFromIr(ir));
+  const wire = (context: unknown) =>
+    JSON.stringify({ machine: "inv", version: 1, state: "Done", context });
+
+  it("enforces the schema AND the invariant on rehydrate", () => {
+    expect(machine.rehydrate(wire({ body: "123456" })).result).toBe("ok");
+    expect(machine.rehydrate(wire({ body: "short" })).result).not.toBe("ok");
+    expect(machine.rehydrate(wire({ body: 5 })).result).not.toBe("ok");
+  });
+});

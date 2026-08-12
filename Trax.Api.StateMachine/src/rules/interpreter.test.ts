@@ -58,6 +58,59 @@ describe("evaluateRule: present / absent", () => {
   });
 });
 
+describe("evaluateRule: length (string length)", () => {
+  it("compares string length and is false for non-strings", () => {
+    const ctx = { body: "123456", n: 6 };
+    const len = (op: "gt" | "gte" | "lt", value: number) =>
+      ev({ rule: "length", source: "context", field: "body", op, value }, ctx);
+    expect(len("gte", 6)).toBe(true);
+    expect(len("gt", 6)).toBe(false);
+    expect(len("lt", 6)).toBe(false);
+    expect(
+      ev({ rule: "length", source: "context", field: "n", op: "gte", value: 0 }, ctx),
+    ).toBe(false);
+    expect(
+      ev(
+        { rule: "length", source: "context", field: "missing", op: "gte", value: 0 },
+        ctx,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("evaluateRule: boolEquals", () => {
+  it("matches a boolean value only", () => {
+    const ctx = { guided: true, off: false, s: "true" };
+    const be = (field: string, value: boolean) =>
+      ev({ rule: "boolEquals", source: "context", field, value }, ctx);
+    expect(be("guided", true)).toBe(true);
+    expect(be("guided", false)).toBe(false);
+    expect(be("off", false)).toBe(true);
+    expect(be("s", true)).toBe(false);
+    expect(be("missing", false)).toBe(false);
+  });
+});
+
+describe("evaluateRule: arrayOf", () => {
+  it("requires every element to match the type", () => {
+    const ctx = {
+      nums: [1, 2, 3],
+      strs: ["a", "b"],
+      mixed: [1, "b"],
+      empty: [],
+      scalar: 5,
+    };
+    const of = (field: string, type: "number" | "string") =>
+      ev({ rule: "arrayOf", source: "context", field, type }, ctx);
+    expect(of("nums", "number")).toBe(true);
+    expect(of("strs", "string")).toBe(true);
+    expect(of("empty", "number")).toBe(true);
+    expect(of("mixed", "number")).toBe(false);
+    expect(of("nums", "string")).toBe(false);
+    expect(of("scalar", "number")).toBe(false);
+  });
+});
+
 describe("evaluateRule: ofType / nonEmpty / oneOf", () => {
   it("ofType matches the JSON kind and rejects others", () => {
     const ctx = { s: "x", n: 5, b: true, arr: [1], obj: {} };

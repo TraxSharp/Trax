@@ -28,6 +28,15 @@ export type Rule =
       op: CompareOp;
       value: number;
     }
+  | {
+      rule: "length";
+      source: RuleSource;
+      field: string;
+      op: CompareOp;
+      value: number;
+    }
+  | { rule: "boolEquals"; source: RuleSource; field: string; value: boolean }
+  | { rule: "arrayOf"; source: RuleSource; field: string; type: JsonFieldType }
   | { rule: "all"; rules: Rule[] }
   | { rule: "any"; rules: Rule[] }
   | { rule: "custom"; name: string };
@@ -89,6 +98,18 @@ export function evaluateRule(
     case "count": {
       const v = read(rule.source, rule.field, context, input);
       return Array.isArray(v) && compare(v.length, rule.op, rule.value);
+    }
+    case "length": {
+      const v = read(rule.source, rule.field, context, input);
+      return typeof v === "string" && compare(v.length, rule.op, rule.value);
+    }
+    case "boolEquals": {
+      const v = read(rule.source, rule.field, context, input);
+      return typeof v === "boolean" && v === rule.value;
+    }
+    case "arrayOf": {
+      const v = read(rule.source, rule.field, context, input);
+      return Array.isArray(v) && v.every((e) => matchesType(e, rule.type));
     }
     case "all":
       return rule.rules.every((r) =>
