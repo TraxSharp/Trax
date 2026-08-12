@@ -69,14 +69,5 @@ the data form with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/r
 
 ## Result codes
 
-Only the codes are contract; detail text is free to differ across runtimes.
-
-| Code | Meaning |
-|------|---------|
-| `no-transition` | No edge matches the `(state, trigger)` pair. |
-| `guard-failed` | An edge matched but its guard rejected the trigger. |
-| `invalid-context` | The resulting (or stored) context failed the target state's rule. |
-| `malformed` | The snapshot JSON could not be parsed. |
-| `unknown-state` | The snapshot names a state the definition doesn't have. |
-| `version-mismatch` | The snapshot version is newer than the definition, or a migration is missing. |
-| `unknown-machine` | No registered machine has that name. |
+Every advance and rehydrate returns a typed result, never an exception. See
+[Result codes](/docs/sdk-reference/statemachine-api/result-codes) for the full set and when each is returned.
