@@ -4,3 +4,4 @@
 machines/**/differential.json
 machines/**/structure.json
 src/machines/**/*.g.ts
+machines/**/*.ir.json

@@ -37,6 +37,10 @@ export const machineSpecFile = (machine: string): string =>
   path.join(machinesRoot(), machine, "machine.json");
 export const differentialFile = (machine: string): string =>
   path.join(machinesRoot(), machine, "differential.json");
+export const migrationFile = (machine: string): string =>
+  path.join(machinesRoot(), machine, "migration.json");
+export const irFile = (machine: string): string =>
+  path.join(machinesRoot(), machine, `${machine}.ir.json`);
 
 export interface LoadedFixture {
   file: string;
