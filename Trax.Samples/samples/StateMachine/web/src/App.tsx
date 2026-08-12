@@ -1,5 +1,9 @@
 import { useMemo, useState } from "react";
-import { createTransport, type Snapshot, type TraxTransport } from "./traxTransport";
+import {
+  createTransport,
+  type Snapshot,
+  type TraxTransport,
+} from "./traxTransport";
 import { useMachine } from "./useMachine";
 
 const ENDPOINT = "http://localhost:5220/trax/graphql";
@@ -21,24 +25,30 @@ const initialTurnstile = (): Snapshot => ({
   state: "Locked",
   context: {},
 });
+// Demo unit price in cents, matched to the server's CheckoutMachine. v2 carries a denormalised `total`.
+const UNIT_PRICE_CENTS = 999;
 const initialCheckout = (): Snapshot => ({
   machine: "checkout",
-  version: 1,
+  version: 2,
   state: "Cart",
-  context: { items: [], receipt: null },
+  context: { items: [], receipt: null, total: 0 },
 });
 
 export function App() {
   const [apiKey, setApiKey] = useState(USERS[0].key);
-  const transport = useMemo(() => createTransport(ENDPOINT, () => apiKey), [apiKey]);
+  const transport = useMemo(
+    () => createTransport(ENDPOINT, () => apiKey),
+    [apiKey],
+  );
 
   return (
     <div className="page">
       <header>
         <h1>Trax State Machine</h1>
         <p className="sub">
-          One machine-agnostic transport, driving two machines over the four generic{" "}
-          <code>stateMachine</code> mutations. Drafts are scoped per user.
+          One machine-agnostic transport, driving two machines over the four
+          generic <code>stateMachine</code> mutations. Drafts are scoped per
+          user.
         </p>
         <div className="who">
           <span>Signed in as</span>
@@ -73,15 +83,26 @@ function Turnstile({ transport }: { transport: TraxTransport }) {
         <h2>turnstile</h2>
         <StateBadge state={m.state} tone={unlocked ? "good" : "muted"} />
       </div>
-      <p className="hint">Authoritative advance: the server re-drives the stored draft from a trigger.</p>
+      <p className="hint">
+        Authoritative advance: the server re-drives the stored draft from a
+        trigger.
+      </p>
 
-      <div className="turnstile-visual">{unlocked ? "🔓 open" : "🔒 locked"}</div>
+      <div className="turnstile-visual">
+        {unlocked ? "🔓 open" : "🔒 locked"}
+      </div>
 
       <div className="actions">
-        <button disabled={m.busy} onClick={() => m.advance("Coin", { coin: "quarter" })}>
+        <button
+          disabled={m.busy}
+          onClick={() => m.advance("Coin", { coin: "quarter" })}
+        >
           Insert quarter
         </button>
-        <button disabled={m.busy} onClick={() => m.advance("Coin", { coin: "dollar" })}>
+        <button
+          disabled={m.busy}
+          onClick={() => m.advance("Coin", { coin: "dollar" })}
+        >
           Insert dollar
         </button>
         <button disabled={m.busy} onClick={() => m.advance("Push")}>
@@ -99,14 +120,20 @@ function Checkout({ transport }: { transport: TraxTransport }) {
   const [item, setItem] = useState("");
   const items = (m.context.items as string[] | undefined) ?? [];
   const receipt = m.context.receipt as string | null;
+  const total = (m.context.total as number | undefined) ?? 0;
 
   function addItem() {
     if (!item.trim()) return;
+    const nextItems = [...items, item.trim()];
     void m.save({
       machine: "checkout",
-      version: 1,
+      version: 2,
       state: "Cart",
-      context: { items: [...items, item.trim()], receipt: null },
+      context: {
+        items: nextItems,
+        receipt: null,
+        total: nextItems.length * UNIT_PRICE_CENTS,
+      },
     });
     setItem("");
   }
@@ -115,7 +142,10 @@ function Checkout({ transport }: { transport: TraxTransport }) {
     <section className="card">
       <div className="card-head">
         <h2>checkout</h2>
-        <StateBadge state={m.state} tone={m.state === "Paid" ? "good" : "muted"} />
+        <StateBadge
+          state={m.state}
+          tone={m.state === "Paid" ? "good" : "muted"}
+        />
       </div>
 
       <Stepper current={m.state} steps={["Cart", "Review", "Paid"]} />
@@ -127,6 +157,7 @@ function Checkout({ transport }: { transport: TraxTransport }) {
           items.map((it, i) => <li key={i}>{it}</li>)
         )}
       </ul>
+      <div className="total">total ${(total / 100).toFixed(2)}</div>
 
       {m.state === "Cart" && (
         <div className="actions">
@@ -139,7 +170,10 @@ function Checkout({ transport }: { transport: TraxTransport }) {
           <button disabled={m.busy} onClick={addItem}>
             Add
           </button>
-          <button disabled={m.busy || items.length === 0} onClick={() => m.advance("Next")}>
+          <button
+            disabled={m.busy || items.length === 0}
+            onClick={() => m.advance("Next")}
+          >
             Review →
           </button>
         </div>
@@ -150,7 +184,11 @@ function Checkout({ transport }: { transport: TraxTransport }) {
           <button disabled={m.busy} onClick={() => m.advance("Back")}>
             ← Back
           </button>
-          <button className="primary" disabled={m.busy} onClick={() => m.send(`pay-${Date.now()}`)}>
+          <button
+            className="primary"
+            disabled={m.busy}
+            onClick={() => m.send(`pay-${Date.now()}`)}
+          >
             Pay (charge)
           </button>
         </div>
@@ -162,7 +200,10 @@ function Checkout({ transport }: { transport: TraxTransport }) {
             charged, receipt <code>{receipt}</code>
           </div>
           <div className="actions">
-            <button disabled={m.busy} onClick={() => m.send(`pay-${Date.now()}`)}>
+            <button
+              disabled={m.busy}
+              onClick={() => m.send(`pay-${Date.now()}`)}
+            >
               Charge again
             </button>
             <button disabled={m.busy} onClick={() => m.advance("Reset")}>
@@ -170,8 +211,8 @@ function Checkout({ transport }: { transport: TraxTransport }) {
             </button>
           </div>
           <p className="hint">
-            &ldquo;Charge again&rdquo; returns the same receipt and does not re-charge. That is the
-            exactly-once effect.
+            &ldquo;Charge again&rdquo; returns the same receipt and does not
+            re-charge. That is the exactly-once effect.
           </p>
         </div>
       )}
@@ -181,12 +222,21 @@ function Checkout({ transport }: { transport: TraxTransport }) {
   );
 }
 
-function Stepper({ current, steps }: { current: string | null; steps: string[] }) {
+function Stepper({
+  current,
+  steps,
+}: {
+  current: string | null;
+  steps: string[];
+}) {
   const idx = current ? steps.indexOf(current) : -1;
   return (
     <div className="stepper">
       {steps.map((s, i) => (
-        <span key={s} className={i === idx ? "step active" : i < idx ? "step done" : "step"}>
+        <span
+          key={s}
+          className={i === idx ? "step active" : i < idx ? "step done" : "step"}
+        >
           {s}
         </span>
       ))}
@@ -194,7 +244,13 @@ function Stepper({ current, steps }: { current: string | null; steps: string[] }
   );
 }
 
-function StateBadge({ state, tone }: { state: string | null; tone: "good" | "muted" }) {
+function StateBadge({
+  state,
+  tone,
+}: {
+  state: string | null;
+  tone: "good" | "muted";
+}) {
   return <span className={`badge ${tone}`}>{state ?? "…"}</span>;
 }
 
@@ -206,7 +262,11 @@ function Panel({ machine }: { machine: ReturnType<typeof useMachine> }) {
           <strong>{machine.problem.code}</strong> {machine.problem.message}
         </div>
       )}
-      <pre>{machine.snapshot ? JSON.stringify(machine.snapshot, null, 2) : "loading…"}</pre>
+      <pre>
+        {machine.snapshot
+          ? JSON.stringify(machine.snapshot, null, 2)
+          : "loading…"}
+      </pre>
     </div>
   );
 }

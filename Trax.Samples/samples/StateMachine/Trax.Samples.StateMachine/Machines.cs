@@ -78,7 +78,7 @@ public enum CheckoutTrigger
 }
 
 /// <summary>The irreversible effect on <c>Pay</c>: charge the order. Bound inline via <c>RunsOnce&lt;ICharge&gt;</c>.</summary>
-public interface ICharge : IEffect { }
+public interface ICharge : ISnapshotEffect { }
 
 /// <summary>A demo charge that logs and returns a receipt. A real host swaps in a payment gateway.</summary>
 public sealed class LoggingCharge(ILogger<LoggingCharge> logger) : ICharge
@@ -97,14 +97,26 @@ public sealed class LoggingCharge(ILogger<LoggingCharge> logger) : ICharge
 
 /// <summary>
 /// A neutral checkout wizard: <c>Cart → Review → Paid</c>. <c>Paid</c> is committed (a soft autosave can't
-/// resurrect it) and <c>Pay</c> runs <see cref="ICharge"/> exactly once, both declared inline. Context is
-/// <c>{ items: string[], receipt: string | null }</c>.
+/// resurrect it) and <c>Pay</c> runs <see cref="ICharge"/> exactly once, both declared inline.
+///
+/// <para><b>Version 2</b> adds a denormalised <c>total</c> (cents) to the context, so it is
+/// <c>{ items: string[], receipt: string | null, total: number }</c>. Every state requires <c>total</c> to be
+/// a number, which makes the forward migration load-bearing: a stored v1 draft (no <c>total</c>) would fail
+/// v2 validation, so <see cref="Configure"/> registers a <c>MigrateFrom(1)</c> that backfills it from the
+/// item count on rehydrate. That is the schema-evolution path a real persisted flow needs.</para>
 /// </summary>
 public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
 {
+    // Demo unit price in cents; the real total would come from a catalog. Kept integer so the canonical wire
+    // stays exact and readable.
+    private const int UnitPriceCents = 999;
+
     private static int ItemsCount(JsonObject ctx) => ctx["items"] is JsonArray a ? a.Count : 0;
 
     private static bool ItemsIsArray(JsonObject ctx) => ctx["items"] is JsonArray;
+
+    private static bool TotalIsNumber(JsonObject ctx) =>
+        ctx["total"]?.GetValueKind() == JsonValueKind.Number;
 
     private static bool ReceiptEmpty(JsonObject ctx) =>
         ctx["receipt"] is null || ctx["receipt"]!.GetValueKind() == JsonValueKind.Null;
@@ -118,24 +130,44 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
             ? o["receipt"]!.GetValue<string>()
             : null;
 
-    private static JsonObject Fresh() => new() { ["items"] = new JsonArray(), ["receipt"] = null };
+    private static JsonObject Fresh() =>
+        new()
+        {
+            ["items"] = new JsonArray(),
+            ["receipt"] = null,
+            ["total"] = 0,
+        };
 
     protected override void Configure(IMachineBuilder<CheckoutState, CheckoutTrigger> m)
     {
-        m.Id("checkout").Version(1).StartsAt(CheckoutState.Cart, Fresh);
+        m.Id("checkout")
+            .Version(2)
+            .StartsAt(CheckoutState.Cart, Fresh)
+            // v1 -> v2: backfill total from the item count so a pre-total draft stays valid under v2.
+            .MigrateFrom(
+                1,
+                (state, ctx) =>
+                {
+                    var next = (JsonObject)ctx.DeepClone();
+                    next["total"] = ItemsCount(ctx) * UnitPriceCents;
+                    return new MigrationResult(state, next);
+                }
+            );
 
         m.In(CheckoutState.Cart)
             .Holds(ctx =>
-                ItemsIsArray(ctx) && ReceiptEmpty(ctx) ? null : "Cart: items[] and no receipt."
+                ItemsIsArray(ctx) && ReceiptEmpty(ctx) && TotalIsNumber(ctx)
+                    ? null
+                    : "Cart: items[], no receipt, numeric total."
             )
             .On(CheckoutTrigger.Next)
             .To(CheckoutState.Review);
 
         m.In(CheckoutState.Review)
             .Holds(ctx =>
-                ItemsCount(ctx) > 0 && ReceiptEmpty(ctx)
+                ItemsCount(ctx) > 0 && ReceiptEmpty(ctx) && TotalIsNumber(ctx)
                     ? null
-                    : "Review: non-empty items and no receipt."
+                    : "Review: non-empty items, no receipt, numeric total."
             )
             .On(CheckoutTrigger.Back)
             .To(CheckoutState.Cart)
@@ -156,9 +188,9 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
         m.In(CheckoutState.Paid)
             .Committed()
             .Holds(ctx =>
-                ItemsCount(ctx) > 0 && ReceiptPresent(ctx)
+                ItemsCount(ctx) > 0 && ReceiptPresent(ctx) && TotalIsNumber(ctx)
                     ? null
-                    : "Paid: non-empty items and a receipt."
+                    : "Paid: non-empty items, a receipt, numeric total."
             )
             .On(CheckoutTrigger.Reset)
             .Reduce((_, _) => Fresh())
