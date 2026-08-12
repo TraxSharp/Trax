@@ -23,6 +23,11 @@ public static class FixturePaths
     public static string? DifferentialFile(string machine) =>
         MachinesRoot is null ? null : Path.Combine(MachinesRoot, machine, "differential.json");
 
+    /// <summary>The shared migration golden for a machine: stored older-version snapshots and the exact
+    /// canonical wire each must become after forward migration (or null if isolated).</summary>
+    public static string? MigrationFile(string machine) =>
+        MachinesRoot is null ? null : Path.Combine(MachinesRoot, machine, "migration.json");
+
     private static string? Find()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

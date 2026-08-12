@@ -218,35 +218,17 @@ public sealed class SnapshotMachine<TState, TTrigger>
     /// <summary>Serializes a snapshot to the canonical JSON shape (round-trips through <see cref="Rehydrate"/>).</summary>
     public string Serialize(Snapshot snapshot)
     {
-        var obj = new JsonObject
-        {
-            ["machine"] = snapshot.Machine,
-            ["version"] = snapshot.Version,
-            ["state"] = snapshot.State,
-            // The envelope order (machine, version, state, context) is fixed by construction on both
-            // sides; the CONTEXT's key order is data-dependent, so it is canonicalized (RFC 8785 key
-            // sorting) to make the serialized bytes identical regardless of how the object was built —
-            // the prerequisite for any hash/signature/byte-equality over a stored snapshot.
-            ["context"] = Canonicalize(snapshot.Context),
-        };
-        return obj.ToJsonString();
-    }
-
-    // RFC 8785 §3.2.3: sort object members by UTF-16 code unit (ordinal), recursively. Arrays keep order.
-    private static JsonNode? Canonicalize(JsonNode? node) =>
-        node switch
-        {
-            JsonObject obj => SortObject(obj),
-            JsonArray arr => new JsonArray(arr.Select(Canonicalize).ToArray()),
-            _ => node?.DeepClone(),
-        };
-
-    private static JsonObject SortObject(JsonObject obj)
-    {
-        var sorted = new JsonObject();
-        foreach (var kv in obj.OrderBy(kv => kv.Key, StringComparer.Ordinal))
-            sorted[kv.Key] = Canonicalize(kv.Value);
-        return sorted;
+        // The envelope order (machine, version, state, context) is fixed by construction on both sides; the
+        // CONTEXT is canonicalized per RFC 8785 (JCS) — keys sorted, ECMAScript number formatting, and
+        // JSON.stringify string escaping — so the bytes are identical to the TypeScript twin's regardless of
+        // how the object was built. That byte-equality is the prerequisite for any hash/signature over a
+        // stored snapshot and for the differential's byte-exact compare.
+        return CanonicalJson.SerializeSnapshot(
+            snapshot.Machine,
+            snapshot.Version,
+            snapshot.State,
+            snapshot.Context
+        );
     }
 
     /// <summary>

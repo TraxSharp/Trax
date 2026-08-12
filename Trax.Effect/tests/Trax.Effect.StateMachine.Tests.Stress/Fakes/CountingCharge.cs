@@ -8,7 +8,7 @@ namespace Trax.Effect.StateMachine.Tests.Stress.Fakes;
 /// so a test proves exactly-once at scale from the total count: N instances charged once each means exactly
 /// N calls, no matter how many concurrent sends raced for each one.
 /// </summary>
-public sealed class CountingCharge : IEffect
+public sealed class CountingCharge : ISnapshotEffect
 {
     private int _calls;
 

@@ -31,7 +31,7 @@ public sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRunn
     where TTrigger : struct, Enum
 {
     private readonly SnapshotDraftService<TState, TTrigger> _drafts;
-    private readonly IEffect _effect;
+    private readonly ISnapshotEffect _effect;
     private readonly IdempotentEffect _idempotent;
     private readonly Func<string, Guid, string> _effectKey;
     private readonly string _fromState;
@@ -47,7 +47,7 @@ public sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRunn
     /// <param name="receiptKey">The context key the receipt is written under by the reducer.</param>
     public SnapshotEffectRunner(
         SnapshotDraftService<TState, TTrigger> drafts,
-        IEffect effect,
+        ISnapshotEffect effect,
         IdempotentEffect idempotent,
         TState fromState,
         TTrigger trigger,

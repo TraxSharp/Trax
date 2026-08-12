@@ -8,7 +8,7 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 /// <summary>The exactly-once effect orchestration over the order machine (place = the irreversible action).</summary>
 public class OrderSendTests
 {
-    private static SnapshotEffectRunner<OrderState, OrderTrigger> NewRunner(IEffect effect)
+    private static SnapshotEffectRunner<OrderState, OrderTrigger> NewRunner(ISnapshotEffect effect)
     {
         var ctx = TestDb.NewContext();
         var claims = new EfEffectClaimStore(ctx);

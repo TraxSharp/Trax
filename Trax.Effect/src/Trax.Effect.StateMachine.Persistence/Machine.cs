@@ -91,7 +91,7 @@ public abstract class Machine<TState, TTrigger> : IMachine
             return null;
 
         var binding = Built.Effects[0];
-        var effect = (IEffect)services.GetRequiredService(binding.EffectType);
+        var effect = (ISnapshotEffect)services.GetRequiredService(binding.EffectType);
         return new SnapshotEffectRunner<TState, TTrigger>(
             (SnapshotDraftService<TState, TTrigger>)service,
             effect,

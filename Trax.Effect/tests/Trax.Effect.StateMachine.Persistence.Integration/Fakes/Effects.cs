@@ -6,7 +6,7 @@ public sealed class FakePrincipal(string? userKey) : ISnapshotPrincipal
 }
 
 /// <summary>The order machine's irreversible effect port (bound inline via RunsOnce&lt;IOrderCharge&gt;).</summary>
-public interface IOrderCharge : IEffect { }
+public interface IOrderCharge : ISnapshotEffect { }
 
 /// <summary>An effect that counts deliveries and returns a distinct receipt each time — so a test can prove
 /// exactly-once from the call count and the receipt in the snapshot.</summary>
@@ -27,7 +27,7 @@ public sealed class CountingEffect(bool fail = false) : IOrderCharge
 
 /// <summary>An effect that blocks until released — lets a test hold a claim mid-flight deterministically
 /// (no sleeps) to prove a second caller gets an in-progress result.</summary>
-public sealed class GatedEffect : IEffect
+public sealed class GatedEffect : ISnapshotEffect
 {
     private readonly TaskCompletionSource _gate = new(
         TaskCreationOptions.RunContinuationsAsynchronously

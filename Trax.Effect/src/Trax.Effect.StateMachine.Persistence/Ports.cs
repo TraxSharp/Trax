@@ -78,7 +78,7 @@ public interface ISnapshotPrincipal
 /// card, provision a resource). It returns a receipt (a downstream id) recorded in the snapshot. Run
 /// through <see cref="IdempotentEffect"/> so it fires exactly once per intent.
 /// </summary>
-public interface IEffect
+public interface ISnapshotEffect
 {
     Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default);
 }

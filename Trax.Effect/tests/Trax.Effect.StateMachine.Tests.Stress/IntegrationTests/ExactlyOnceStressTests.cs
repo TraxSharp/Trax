@@ -32,7 +32,11 @@ public class ExactlyOnceStressTests : StressFixture
         return loaded is LoadResult.Loaded l ? l.Snapshot.State : "not-loaded";
     }
 
-    private static async Task<AdvanceOutcome> Send(Guid id, string requestId, IEffect effect)
+    private static async Task<AdvanceOutcome> Send(
+        Guid id,
+        string requestId,
+        ISnapshotEffect effect
+    )
     {
         await using var ctx = StressDb.NewContext();
         var claims = new EfEffectClaimStore(ctx);

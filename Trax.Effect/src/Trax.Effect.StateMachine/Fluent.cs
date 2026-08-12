@@ -25,7 +25,8 @@ public sealed record EffectBinding<TState, TTrigger>(
 public sealed record BuiltMachine<TState, TTrigger>(
     MachineDefinition<TState, TTrigger> Definition,
     IReadOnlyCollection<TState> CommittedStates,
-    IReadOnlyList<EffectBinding<TState, TTrigger>> Effects
+    IReadOnlyList<EffectBinding<TState, TTrigger>> Effects,
+    DeclarativeModel<TState, TTrigger>? Declarative = null
 )
     where TState : struct, Enum
     where TTrigger : struct, Enum
@@ -65,6 +66,16 @@ public interface IStateBuilder<TState, TTrigger>
     /// <summary>The context validator for this state (returns null when valid, else a message). Makes illegal states unrepresentable.</summary>
     IStateBuilder<TState, TTrigger> Holds(Func<JsonObject, string?> validator);
 
+    /// <summary>
+    /// Declare this state's context shape from a record: the fields, JSON types, nullability, and
+    /// attribute-derived constraints (e.g. <c>[MinLength(1)]</c>) become the validator AND the exportable
+    /// schema. The declarative, string-free replacement for <see cref="Holds"/>.
+    /// </summary>
+    IStateBuilder<TState, TTrigger> Context<TContext>();
+
+    /// <summary>Declare that this state carries no context (an empty schema).</summary>
+    IStateBuilder<TState, TTrigger> Context();
+
     /// <summary>Mark this state committed: a soft autosave may not move a draft out of it (the guarded path).</summary>
     IStateBuilder<TState, TTrigger> Committed();
 
@@ -80,11 +91,20 @@ public interface ITransitionBuilder<TState, TTrigger>
     /// <summary>Only take this edge when the predicate holds. Guards for one (state, trigger) must be mutually exclusive.</summary>
     ITransitionBuilder<TState, TTrigger> When(Func<JsonObject, JsonNode?, bool> guard);
 
+    /// <summary>Only take this edge when the declarative <see cref="Rule"/> holds (the exportable, string-free guard).</summary>
+    ITransitionBuilder<TState, TTrigger> When(Rule guard);
+
+    /// <summary>Declare this trigger's input shape from a record, so the IR carries a typed input schema for it.</summary>
+    ITransitionBuilder<TState, TTrigger> WithInput<TInput>();
+
     /// <summary>A human-readable reason surfaced when the guard declines (non-contract detail text).</summary>
     ITransitionBuilder<TState, TTrigger> Because(string guardMessage);
 
     /// <summary>Produce the destination state's context. Omit to carry the current context forward unchanged.</summary>
     ITransitionBuilder<TState, TTrigger> Reduce(Func<JsonObject, JsonNode?, JsonObject> reduce);
+
+    /// <summary>Produce the destination context with a declarative <see cref="Reduction"/> (the exportable reducer).</summary>
+    ITransitionBuilder<TState, TTrigger> Reduce(Reduction reduce);
 
     /// <summary>
     /// Bind the one irreversible effect to this transition. It runs exactly-once (claim before the effect,
@@ -116,6 +136,10 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
     private readonly HashSet<TState> _committed = [];
     private readonly List<EffectBinding<TState, TTrigger>> _effects = [];
     private readonly Dictionary<int, Func<string, JsonObject, MigrationResult>> _migrations = [];
+    private readonly Dictionary<TState, ContextSchema> _contextSchemas = [];
+    private readonly Dictionary<TTrigger, ContextSchema> _triggerInputs = [];
+    private readonly List<DeclarativeTransition<TState, TTrigger>> _declarativeTransitions = [];
+    private bool _usedDeclarative;
 
     public IMachineBuilder<TState, TTrigger> Id(string id)
     {
@@ -170,7 +194,15 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
             Migrations = _migrations,
         };
 
-        return new BuiltMachine<TState, TTrigger>(definition, _committed, _effects);
+        var declarative = _usedDeclarative
+            ? new DeclarativeModel<TState, TTrigger>(
+                _contextSchemas,
+                _triggerInputs,
+                _declarativeTransitions
+            )
+            : null;
+
+        return new BuiltMachine<TState, TTrigger>(definition, _committed, _effects, declarative);
     }
 
     private sealed class StateBuilder(MachineBuilder<TState, TTrigger> owner, TState state)
@@ -179,6 +211,19 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
         public IStateBuilder<TState, TTrigger> Holds(Func<JsonObject, string?> validator)
         {
             owner._validators[state] = validator;
+            return this;
+        }
+
+        public IStateBuilder<TState, TTrigger> Context<TContext>() =>
+            SetSchema(SchemaReflection.For<TContext>());
+
+        public IStateBuilder<TState, TTrigger> Context() => SetSchema(ContextSchema.Empty);
+
+        private IStateBuilder<TState, TTrigger> SetSchema(ContextSchema schema)
+        {
+            owner._usedDeclarative = true;
+            owner._contextSchemas[state] = schema;
+            owner._validators[state] = ctx => SchemaValidator.Validate(schema, ctx);
             return this;
         }
 
@@ -204,10 +249,28 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
         private Func<JsonObject, JsonNode?, JsonObject>? _reduce;
         private Type? _effectType;
         private string? _effectKeyPrefix;
+        private Rule? _guardRule;
+        private Reduction? _reduction;
 
         public ITransitionBuilder<TState, TTrigger> When(Func<JsonObject, JsonNode?, bool> guard)
         {
             _guard = guard;
+            return this;
+        }
+
+        public ITransitionBuilder<TState, TTrigger> When(Rule guard)
+        {
+            owner._usedDeclarative = true;
+            _guardRule = guard;
+            // Compile the rule down to the delegate the engine already runs; the engine is untouched.
+            _guard = (ctx, input) => RuleEvaluator.Evaluate(guard, ctx, input);
+            return this;
+        }
+
+        public ITransitionBuilder<TState, TTrigger> WithInput<TInput>()
+        {
+            owner._usedDeclarative = true;
+            owner._triggerInputs[trigger] = SchemaReflection.For<TInput>();
             return this;
         }
 
@@ -222,6 +285,20 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
         )
         {
             _reduce = reduce;
+            return this;
+        }
+
+        public ITransitionBuilder<TState, TTrigger> Reduce(Reduction reduce)
+        {
+            owner._usedDeclarative = true;
+            _reduction = reduce;
+            _reduce = (ctx, input) =>
+                ReductionEvaluator.Apply(
+                    reduce,
+                    ctx,
+                    input,
+                    owner._initialContext?.Invoke() ?? new JsonObject()
+                );
             return this;
         }
 
@@ -255,6 +332,15 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
                         _effectKeyPrefix ?? $"{owner._id}:{trigger}"
                     )
                 );
+            owner._declarativeTransitions.Add(
+                new DeclarativeTransition<TState, TTrigger>(
+                    from,
+                    trigger,
+                    target,
+                    _guardRule,
+                    _reduction
+                )
+            );
             return state;
         }
     }
