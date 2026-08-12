@@ -25,6 +25,9 @@ A guard or a field constraint, as data. `abstract record Rule` with these cases:
 | `OneOf` | `Source`, `Field`, `Values` | a string equal to one of `Values` |
 | `Compare` | `Source`, `Field`, `Op`, `Value` (`double`) | a number in the `Op` relation to `Value` |
 | `Count` | `Source`, `Field`, `Op`, `Value` (`int`) | an array whose length is in the `Op` relation to `Value` |
+| `Length` | `Source`, `Field`, `Op`, `Value` (`int`) | a string whose length is in the `Op` relation to `Value` |
+| `BoolEquals` | `Source`, `Field`, `Value` (`bool`) | a boolean field equals `Value` |
+| `ArrayOf` | `Source`, `Field`, `ElementType` | an array whose every element is of `ElementType` |
 | `All` | `Rules` | every sub-rule holds (empty is true) |
 | `Any` | `Rules` | at least one sub-rule holds (empty is false) |
 | `Custom` | `Name` | a named handler resolves it (the escape hatch) |

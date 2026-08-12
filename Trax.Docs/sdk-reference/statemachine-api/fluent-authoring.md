@@ -38,6 +38,7 @@ public abstract class Machine<TState, TTrigger>
 | `Holds(Func<JsonObject, string?> validator)` | The state's context rule: return `null` when valid, or a reason string. Enforced on rehydrate and on advance. |
 | `Context<TContext>()` | The declarative, string-free replacement for `Holds`: the state's context shape comes from a record. Field names, JSON types, nullability, and attribute constraints (`[MinLength(1)]`) become both the validator and the exportable schema. |
 | `Context()` | Declares that the state carries no context (an empty schema). |
+| `Requires(Rule constraint)` | A per-state policy layered on the schema (composed, ANDed, chainable): what the state demands beyond its shape, e.g. a complete draft or an absent receipt. Exports as the state's `invariants` entry. Build the rule with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
 | `Committed()` | Marks the state as one a soft autosave must not overwrite (except a reset to the initial state). |
 | `On(TTrigger trigger)` | Starts a transition out of this state. Returns an `ITransitionBuilder`. |
 

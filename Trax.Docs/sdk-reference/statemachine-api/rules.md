@@ -49,6 +49,10 @@ Terminal methods on `FieldMatcher`, each returning a `Rule`:
 | `EqualTo(double value)` | a number equal to `value` |
 | `CountGreaterThan(int value)` | an array with more than `value` elements |
 | `CountAtLeast(int value)` | an array with at least `value` elements |
+| `LengthGreaterThan(int value)` | a string whose length is more than `value` |
+| `LengthAtLeast(int value)` | a string whose length is at least `value` |
+| `IsTrue()` / `IsFalse()` | a boolean field equal to `true` / `false` |
+| `ArrayOf(JsonFieldType type)` | an array whose every element is of `type` |
 
 Every predicate is total: a missing or wrong-typed field is `false`, never an exception. That is what lets
 guards run against an in-progress draft without throwing.

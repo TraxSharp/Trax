@@ -29,6 +29,7 @@ Export requires a declarative machine: `Export` throws if the machine was author
 | `committedStates` | string[] | states a soft autosave must not overwrite |
 | `context` | object | state name to its context schema |
 | `inputs` | object | trigger name to its input schema (only triggers that declared `WithInput<T>`) |
+| `invariants` | object | state name to a per-state policy rule (the `.Requires(...)` on top of the schema); omitted when the machine has none |
 | `transitions` | object[] | the edges, sorted by `(from, trigger, to)` |
 
 A schema (under `context` or `inputs`) is `{ "fields": [ { "name", "type", "nullable", "constraints" } ] }`,
@@ -47,7 +48,8 @@ Each transition carries its structure plus its guard and reducer as data:
 | `effect` | object | the edge binds `RunsOnce<T>`; `{ "type": <TEffect full name>, "keyPrefix": <string> }` |
 
 A rule is a tagged object keyed by `rule` (`present`, `absent`, `ofType`, `nonEmpty`, `oneOf`, `compare`,
-`count`, `all`, `any`, `custom`); a reduction is keyed by `reduce` (`keep`, `clear`, `reset`, `set`, `custom`).
+`count`, `length`, `boolEquals`, `arrayOf`, `all`, `any`, `custom`); a reduction is keyed by `reduce` (`keep`,
+`clear`, `reset`, `set`, `custom`).
 See the [data model](/docs/sdk-reference/statemachine-api/declarative-data-model) for each shape.
 
 ## Example
