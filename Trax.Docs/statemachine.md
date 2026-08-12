@@ -70,6 +70,22 @@ Regenerate deliberately with `UPDATE_DIFFERENTIAL=1 npm test`, and the git diff 
 of what changed. Each side replays the committed file independently, so the C# suite needs no Node and the
 TypeScript suite needs no .NET.
 
+The **canonical wire** is what makes a byte-for-byte comparison meaningful. The envelope (`machine`,
+`version`, `state`, `context`) is emitted in fixed order; the context is canonicalized per RFC 8785 (JCS):
+object keys sorted by UTF-16 code unit (recursively, with array order preserved), numbers formatted by the
+ECMAScript `Number` algorithm (so `1e21` is `1e+21`, not .NET's `1E+21`), and strings escaped exactly as
+`JSON.stringify` (non-ASCII stays literal, control characters use the short escapes or lowercase `\u00xx`).
+Both engines emit identical bytes regardless of how the snapshot was constructed, which is the prerequisite
+for the differential's byte-exact compare and for any hash or signature over a stored snapshot.
+
+Forward migration of stored snapshots is guarded the same way. When a machine bumps its `version`, a
+per-source-version migration function upgrades an older stored snapshot on rehydrate (a missing step in the
+chain is a typed `version-mismatch`, never a silent misread). Correctness against real stored shapes is pinned
+by a **migration golden**, `machines/<machine>/migration.json`: a committed set of stored older-version
+snapshots and the exact canonical wire each must become. Both engines replay it, so a migration that drops,
+renames, or reorders a surviving field fails, and the two runtimes cannot migrate the same draft differently.
+Where the differential guards machine logic, the migration golden guards schema evolution.
+
 ## Persistence and exactly-once effects
 
 The persistence layer is generic over a machine's (state, trigger) pair and stores the context in a real

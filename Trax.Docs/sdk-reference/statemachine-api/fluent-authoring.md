@@ -46,7 +46,7 @@ public abstract class Machine<TState, TTrigger>
 | `When(Func<JsonObject, JsonNode?, bool> guard)` | Admits the transition only when the guard passes. The first matching edge wins. |
 | `Because(string message)` | The detail surfaced when the guard rejects the trigger. |
 | `Reduce(Func<JsonObject, JsonNode?, JsonObject> reducer)` | Computes the next context. Return a fresh JSON object; never mutate the input. |
-| `RunsOnce<TEffect>(string keyPrefix)` | Binds an `IEffect` that runs exactly once when this transition is sent, keyed on `{keyPrefix}:{user}:{id}`. |
+| `RunsOnce<TEffect>(string keyPrefix)` | Binds an `ISnapshotEffect` that runs exactly once when this transition is sent, keyed on `{keyPrefix}:{user}:{id}`. |
 | `To(TState state)` | The destination state. Also closes the transition, so you can chain another `On(...)`. |
 
 ## Result codes
