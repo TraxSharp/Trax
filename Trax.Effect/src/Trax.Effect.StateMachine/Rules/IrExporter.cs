@@ -37,6 +37,10 @@ public static class IrExporter
             ["id"] = def.Id,
             ["version"] = def.Version,
             ["initialState"] = def.InitialState.ToString(),
+            // The machine's actual initial context (from StartsAt), so a generated runtime reproduces it
+            // exactly. Deriving it from the schema is not enough: a field with a constrained default (an enum
+            // like legislature="federal") would default to "" and fail its own OneOf constraint.
+            ["initialContext"] = def.CreateInitialContext(),
             ["states"] = ToSortedArray(Enum.GetNames<TState>()),
             ["triggers"] = ToSortedArray(Enum.GetNames<TTrigger>()),
             ["committedStates"] = ToSortedArray(
