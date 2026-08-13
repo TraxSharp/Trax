@@ -58,6 +58,23 @@ The payoff is proportional to how much of the machine fits the [Rules vocabulary
 an edge left on a delegate guard is invisible in the IR, so it cannot be generated and must be hand-written in
 each runtime. A machine that stays declarative generates its whole twin.
 
+## Running it
+
+One command runs the whole flow: [`trax machine generate`](/docs/reference/cli#trax-machine-generate). It
+exports the IR from the compiled machine in-process, then drives the engine's own generators to emit the twin
+and the corpus, each to its own output root:
+
+```bash
+trax machine generate --assembly ./bin/MyApp.dll \
+  --ir-out ./machines/checkout --twin-out ./web/src/app/checkout --corpus-out ./machines/checkout \
+  --engine-src ./vendor/state-machine/src
+```
+
+Scaffold a new machine with [`trax machine new`](/docs/reference/cli#trax-machine-new-name), and gate CI with
+[`trax machine check`](/docs/reference/cli#trax-machine-check), which regenerates to a temp location and fails
+on any drift. Because generate and check are the same code path, a passing `check` guarantees the committed
+artifacts match the source.
+
 ## SDK Reference
 
-> [IrExporter.Export](/docs/sdk-reference/statemachine-api/ir-format) | [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules)
+> [ExportIr](/docs/sdk-reference/statemachine-api/fluent-authoring#exporting-the-ir) | [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) | [trax machine](/docs/reference/cli#state-machines-trax-machine)

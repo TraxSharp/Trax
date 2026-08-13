@@ -86,6 +86,23 @@ machine exports a complete IR: any edge left on a delegate guard or reducer is i
 the data form with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules), and see
 [Declarative authoring](/docs/statemachine/declarative-authoring) for a machine built end to end.
 
+## Exporting the IR
+
+`Machine<TState, TTrigger>` (and the `IMachine` a host discovers) exposes `ExportIr()`, the in-process entry
+point that turns a built machine into its canonical [IR](/docs/sdk-reference/statemachine-api/ir-format):
+
+```csharp
+public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger> { /* ... */ }
+
+string ir = new CheckoutMachine().ExportIr();   // canonical single-line JSON
+```
+
+The result is the same canonical JSON the [`trax machine` CLI](/docs/reference/cli#state-machines-trax-machine)
+writes to `<machine>.ir.json`; the CLI calls `ExportIr()` directly. It requires a declaratively-authored
+machine (`Context`/`When(Rule)`/`Reduce(Reduction)`); a machine with a delegate guard or reducer throws, since
+those closures carry no exportable data. In practice you rarely call `ExportIr()` by hand: `trax machine
+generate` exports the IR and regenerates every downstream artifact in one command.
+
 ## Result codes
 
 Every advance and rehydrate returns a typed result, never an exception. See
