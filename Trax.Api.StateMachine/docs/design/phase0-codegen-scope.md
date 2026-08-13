@@ -281,16 +281,50 @@ requirements, not incidental:
   the IR (Decision E; `MigrateFrom` already exists at the engine level); the command exists so the surface is
   complete.
 
-**Oracle-agnostic by design.** Pre-D the corpus is produced by the TypeScript `enumerate()` (so `generate`
-either shells the TS corpus step or leaves it to the existing Jest golden until D lands); post-D the C#
-enumerator produces it and `generate` owns all three artifacts. Either way the twin emit, the IR export, and
-the drift check are the same, so E does not wait on D.
+**Execution model: how the C# tool drives the TypeScript generators.** This is the one thing the CLI must
+decide before anything else, because after the interpret-at-runtime pivot there is no C# generator: the IR
+export is C# (`IrExporter.Export`), but the twin generators (`generateContextTypes` / `generateMachineFactory`)
+and the pre-D corpus enumerator (`enumerate`) are TypeScript, in the engine's `src/rules/`. So `generate` is a
+C# **orchestrator** that crosses the runtime boundary explicitly:
+
+- **IR — in-process C#.** The CLI references `Trax.Effect.StateMachine`, builds the machine, calls
+  `IrExporter.Export`, and writes `<machine>.ir.json` to `--ir-out`. No Node involved.
+- **Twin (and pre-D corpus) — shell out to Node.** The CLI spawns `node` against a thin entrypoint shipped in
+  the engine repo (`tools/generate-twin.mjs`, sibling to the existing `generate.mjs`) that imports the TS
+  generators from `--engine-src`, and writes the `.g.ts` files to `--twin-out` for the given `--ir` and
+  `--import-style`; a `tools/generate-corpus.mjs` does the same with `enumerate` / `serializeCorpus` for
+  `--corpus-out`. This *is* the "run the generators directly, not through a test runner" requirement: it
+  replaces nwyc's `npx jest … .codegen.test` invocation with a direct `node tools/generate-twin.mjs …`, and it
+  removes the `.replace()` import hack because the entrypoint passes `--import-style` into
+  `generateMachineFactory`'s new options arg. **New deliverables:** the two `tools/*.mjs` entrypoints, plus the
+  options arg on `generateMachineFactory`.
+- **Consequence.** The `dotnet tool` needs `node` on `PATH` for the twin/corpus steps (the IR-only path and a
+  `check` of the IR do not). Acceptable: the artifacts are produced by Node today, and Trax.Cli already ships a
+  `package.json`, so Node-in-the-repo has precedent.
+- **Alternative (fallback, not the default).** Keep twin generation entirely in the consumer's Node toolchain
+  (a `package.json` script running the same `tools/generate-twin.mjs`) and let the C# CLI own only the IR
+  export and `check`. This drops the Node dependency from the dotnet tool but splits the workflow across two
+  entry points. Prefer the single-orchestrator model; fall back only if bundling Node with the tool proves
+  painful for a consumer.
+
+**Scope of the first pass.** Build and test the CLI in this workspace against `turnstile` and `checkout` (the
+personal-repo machines); their committed IR/twin/corpus are the byte-parity oracle. write-to-congress lives in
+the nwyc work repo, so validate against it separately (point the CLI at nwyc's vendored engine `src` and its
+committed artifacts via `--engine-src`) rather than depending on nwyc from here. And note that Increment E
+deliberately bundles two real sub-projects, not incidental to the CLI: the `checkout` declarative migration
+(test item 6) and the `machine.json` / `generate.mjs` retirement (cleanup below).
+
+**Oracle-agnostic by design.** Pre-D the corpus comes from the TypeScript `enumerate()` (the
+`generate-corpus.mjs` step above); post-D the C# enumerator produces it in-process and `generate` owns all
+three artifacts natively. Either way the IR export and the drift check are unchanged, so E does not wait on D.
 
 **Test strategy (test-first, per the repo rules).** The regen script's three golden tests already *are* the
 oracle for what the CLI must reproduce, so the CLI is correct iff its output is byte-identical to theirs:
-1. **Byte-parity with the script.** `trax machine generate` on write-to-congress produces the exact committed
-   `*.ir.json`, `*.contexts.g.ts`, `*.machine.g.ts` (and post-D `differential.json`) that the golden tests
-   produce. Assert byte-equality against the checked-in artifacts.
+1. **Byte-parity with the existing pipeline.** `trax machine generate` on `turnstile` (then `checkout`)
+   produces the exact committed `*.ir.json`, `*.contexts.g.ts`, `*.machine.g.ts` (and post-D
+   `differential.json`) the current pipeline produces. Assert byte-equality against the checked-in artifacts.
+   Then validate cross-repo: run it against nwyc's write-to-congress (`--engine-src` its vendored engine) and
+   assert byte-parity with what `regen-state-machine.sh` produces there.
 2. **Idempotence.** A second `generate` with no source change yields no diff; `check` exits zero.
 3. **Drift detection.** Mutate the C# source (add a state), run `check`, assert non-zero exit and a message
    naming the drifted artifact. Revert.

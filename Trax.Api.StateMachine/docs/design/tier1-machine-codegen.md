@@ -541,10 +541,16 @@ oracle flip (§12).
   + a couple of transitions), the differential wiring, and the mutation registration. The common case becomes
   a ~30-second scaffold, and consistency is by construction.
 - `trax machine generate` — export the IR from the C# source and regenerate every target language, running the
-  exporter and generators **directly** (not through a test runner), atomically (§6). Must take an output root
-  per artifact (the IR/corpus and the twin live in different trees, §4), must run against an arbitrary engine
-  `src` (the consumer vendors it, §4), and must take an **import style** option so the twin's imports collapse
-  to the `@trax/state-machine` specifier without the hard-coded string `.replace()` the codegen test does now.
+  exporter and generators **directly** (not through a test runner), atomically (§6). It is a C# orchestrator
+  that crosses the runtime boundary explicitly: the **IR export is in-process C#** (`IrExporter.Export`), while
+  the **twin generation and the pre-flip corpus shell out to Node** (thin `tools/*.mjs` entrypoints that call
+  the TypeScript `generateContextTypes` / `generateMachineFactory` / `enumerate` against the engine `src`),
+  because after interpret-at-runtime the only generators are TypeScript. Consequence: the tool needs `node` on
+  `PATH` for the twin/corpus steps. Must take an output root per artifact (the IR/corpus and the twin live in
+  different trees, §4), must run against an arbitrary engine `src` (the consumer vendors it, §4), and must take
+  an **import style** option so the twin's imports collapse to the `@trax/state-machine` specifier without the
+  hard-coded string `.replace()` the codegen test does now. phase0 §5 has the full execution model and the
+  fallback (twin generation left in the consumer's Node toolchain, CLI owns only IR + `check`).
 - `trax machine check` — `--check` drift across the IR, the generated outputs, and the golden corpus (CI).
 - `trax machine migrate` — diff the context schema and scaffold a forward migration (when migrations are wired
   into the IR, §8; `MigrateFrom` already exists at the engine level).
@@ -663,7 +669,11 @@ decided and, for its core, built. What is genuinely still open:
   into the consuming repo. This also closes the §7 CI-skip problem on the consumer side.
 - **`machine.json`'s fate.** Retired for migrated machines: the IR is the sole spec, exported from C#.
   `machine.json` survives only for the unmigrated `checkout`, pending Phase 2 cleanup.
-- **Generator home.** Converge on `Trax.Cli` (§9), not the node `generate.mjs`.
+- **Generator home and execution boundary.** The home is `Trax.Cli` (§9), not the node `generate.mjs`. The
+  C#/Node boundary is resolved too: the CLI exports the IR in-process (C#) and shells thin `node` entrypoints
+  for the TypeScript twin/corpus generators (phase0 §5). The one residual unknown is whether bundling a Node
+  dependency into the dotnet tool is painful enough to prefer the split-toolchain fallback; decided when the
+  CLI is built.
 
 ## 14. Risks and tradeoffs
 
