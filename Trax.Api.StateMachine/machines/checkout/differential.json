@@ -18,11 +18,11 @@
         }
       },
       "when": {
-        "trigger": "Next"
+        "trigger": "Back"
       },
       "expect": {
-        "outcome": "transitioned",
-        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Review\",\"context\":{\"currency\":\"USD\",\"items\":[\"book\"],\"receipt\":null,\"total\":5}}"
+        "outcome": "rejected",
+        "reason": "no-transition"
       }
     },
     {
@@ -40,11 +40,11 @@
         }
       },
       "when": {
-        "trigger": "Back"
+        "trigger": "Next"
       },
       "expect": {
-        "outcome": "rejected",
-        "reason": "no-transition"
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Review\",\"context\":{\"currency\":\"USD\",\"items\":[\"book\"],\"receipt\":null,\"total\":5}}"
       }
     },
     {
@@ -133,6 +133,26 @@
       },
       "when": {
         "trigger": "Restart"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "currency": "USD",
+          "items": [],
+          "receipt": null,
+          "total": 0
+        }
+      },
+      "when": {
+        "trigger": "Back"
       },
       "expect": {
         "outcome": "rejected",
@@ -172,26 +192,6 @@
         }
       },
       "when": {
-        "trigger": "Back"
-      },
-      "expect": {
-        "outcome": "rejected",
-        "reason": "no-transition"
-      }
-    },
-    {
-      "given": {
-        "machine": "checkout",
-        "version": 1,
-        "state": "Cart",
-        "context": {
-          "currency": "USD",
-          "items": [],
-          "receipt": null,
-          "total": 0
-        }
-      },
-      "when": {
         "trigger": "Pay"
       },
       "expect": {
@@ -278,7 +278,7 @@
         }
       },
       "when": {
-        "trigger": "Next"
+        "trigger": "Back"
       },
       "expect": {
         "outcome": "rejected",
@@ -300,7 +300,7 @@
         }
       },
       "when": {
-        "trigger": "Back"
+        "trigger": "Next"
       },
       "expect": {
         "outcome": "rejected",
@@ -414,7 +414,7 @@
         }
       },
       "when": {
-        "trigger": "Next"
+        "trigger": "Back"
       },
       "expect": {
         "outcome": "rejected",
@@ -436,7 +436,7 @@
         }
       },
       "when": {
-        "trigger": "Back"
+        "trigger": "Next"
       },
       "expect": {
         "outcome": "rejected",
@@ -533,28 +533,6 @@
       "expect": {
         "outcome": "transitioned",
         "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"currency\":\"USD\",\"items\":[],\"receipt\":null,\"total\":0}}"
-      }
-    },
-    {
-      "given": {
-        "machine": "checkout",
-        "version": 1,
-        "state": "Review",
-        "context": {
-          "currency": "USD",
-          "items": [
-            "book"
-          ],
-          "receipt": null,
-          "total": 5
-        }
-      },
-      "when": {
-        "trigger": "Next"
-      },
-      "expect": {
-        "outcome": "rejected",
-        "reason": "no-transition"
       }
     },
     {
@@ -577,6 +555,28 @@
       "expect": {
         "outcome": "transitioned",
         "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"currency\":\"USD\",\"items\":[\"book\"],\"receipt\":null,\"total\":5}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Review",
+        "context": {
+          "currency": "USD",
+          "items": [
+            "book"
+          ],
+          "receipt": null,
+          "total": 5
+        }
+      },
+      "when": {
+        "trigger": "Next"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
       }
     },
     {

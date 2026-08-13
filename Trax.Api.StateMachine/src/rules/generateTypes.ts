@@ -63,21 +63,50 @@ export function generateContextTypes(ir: IrDocument): string {
 }
 
 /**
+ * How the generated factory imports the engine symbols (SnapshotMachine, machineFromIr, TypedMachine,
+ * IrDocument):
+ *
+ * - `"relative"` (default): three imports relative to the engine's own `src`
+ *   (`../../machine`, `../../rules/irMachine`, `../../typed`). Right for a machine living inside this repo.
+ * - `"specifier"`: one collapsed import from a module specifier (`@trax/state-machine` by default). Right for
+ *   a consumer that vendors the engine behind a path alias, e.g. nwyc's `apps/web`. This replaces the
+ *   hard-coded string-`.replace()` rewrite consumers used to do by hand.
+ */
+export interface MachineFactoryOptions {
+  importStyle?: "relative" | "specifier";
+  /** The module specifier used when `importStyle` is `"specifier"`. Defaults to `@trax/state-machine`. */
+  specifier?: string;
+}
+
+/**
  * Emits a runnable, typed machine factory: it embeds the IR (so the module is self-contained and
  * browser-safe, no fs), builds the machine via machineFromIr, and wraps it in TypedMachine<Spec> for typed
  * context-by-state and input-by-trigger. This is the generated replacement for a hand-written twin.
  */
-export function generateMachineFactory(ir: IrDocument): string {
+export function generateMachineFactory(
+  ir: IrDocument,
+  options: MachineFactoryOptions = {},
+): string {
   const machine = pascal(ir.id);
+  const importStyle = options.importStyle ?? "relative";
+  const specifier = options.specifier ?? "@trax/state-machine";
   // The differential block is test-only fuzzing data (samples/seeds/contexts); the runtime machine never
   // reads it. Strip it so the generated module stays lean and doesn't ship test inputs to the browser.
   const { differential: _differential, ...runtimeIr } = ir;
+  const engineImports =
+    importStyle === "specifier"
+      ? [
+          `import { SnapshotMachine, TypedMachine, machineFromIr, type IrDocument } from "${specifier}";`,
+        ]
+      : [
+          `import { SnapshotMachine } from "../../machine";`,
+          `import { machineFromIr, type IrDocument } from "../../rules/irMachine";`,
+          `import { TypedMachine } from "../../typed";`,
+        ];
   return [
     `// AUTO-GENERATED from ${ir.id}.ir.json by generateMachineFactory. Do not edit by hand.`,
     "",
-    `import { SnapshotMachine } from "../../machine";`,
-    `import { machineFromIr, type IrDocument } from "../../rules/irMachine";`,
-    `import { TypedMachine } from "../../typed";`,
+    ...engineImports,
     `import type { ${machine}Spec, ${machine}State, ${machine}Trigger } from "./${ir.id}.contexts.g";`,
     "",
     `const ir = ${JSON.stringify(runtimeIr, null, 2)} as IrDocument;`,

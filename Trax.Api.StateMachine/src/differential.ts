@@ -11,7 +11,7 @@ import type { Snapshot } from "./types";
  * Coverage:
  *   1. BFS from the initial snapshot over the machine's own transitions — reaches every state whose
  *      context a trigger can populate.
- *   2. Declared `seeds` (machine.json `differential.seeds`) — representative valid contexts for states a
+ *   2. Declared `seeds` (the IR's `differential.seeds`) — representative valid contexts for states a
  *      trigger cannot reach (e.g. checkout's Review/Paid, whose items/total arrive via autosave).
  * At every reachable snapshot we fire every trigger x sample-input; the bulk of the corpus is rejections.
  */
@@ -92,7 +92,12 @@ export function enumerate<S extends string, T extends string>(
   // invalid-context and guard-failed divergences a complex machine can hide are caught).
   for (const context of contexts) {
     for (const state of spec.states) {
-      const snap = { machine: spec.id, version: spec.version, state, context } as Snapshot;
+      const snap = {
+        machine: spec.id,
+        version: spec.version,
+        state,
+        context,
+      } as Snapshot;
       reachable.set(machine.serialize(snap), snap);
     }
   }

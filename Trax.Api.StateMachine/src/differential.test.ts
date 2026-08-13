@@ -5,7 +5,7 @@ import {
   serializeCorpus,
   type DifferentialSpec,
 } from "./differential";
-import { differentialFile, irFile, machineSpecFile } from "./fixtures";
+import { differentialFile, irFile } from "./fixtures";
 import type { SnapshotMachine } from "./machine";
 import { checkoutCore } from "./machines/checkout/checkout";
 import { turnstileCore } from "./machines/turnstile/turnstile";
@@ -21,14 +21,10 @@ function assertCorpus<S extends string, T extends string>(
   name: string,
   machine: SnapshotMachine<S, T>,
 ): void {
-  // Enumerate off the IR when the machine has one (the IR is structurally a DifferentialSpec — enumerate
-  // reads only id/version/states/triggers + the differential block). Machines not yet on the IR path
-  // (checkout) fall back to the legacy hand-written machine.json.
-  const specFile = fs.existsSync(irFile(name))
-    ? irFile(name)
-    : machineSpecFile(name);
+  // Enumerate off the IR (structurally a DifferentialSpec — enumerate reads only id/version/states/triggers
+  // + the differential block). Every machine is now on the IR path; the old hand-authored machine.json is gone.
   const spec = JSON.parse(
-    fs.readFileSync(specFile, "utf8"),
+    fs.readFileSync(irFile(name), "utf8"),
   ) as DifferentialSpec;
   const generated = serializeCorpus(enumerate(machine, spec));
   const file = differentialFile(name);

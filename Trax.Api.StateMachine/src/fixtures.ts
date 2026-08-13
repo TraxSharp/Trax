@@ -33,8 +33,6 @@ export const wireHandoffFile = (machine: string): string =>
   path.join(machinesRoot(), machine, "wire-handoff.json");
 export const structureFile = (machine: string): string =>
   path.join(machinesRoot(), machine, "structure.json");
-export const machineSpecFile = (machine: string): string =>
-  path.join(machinesRoot(), machine, "machine.json");
 export const differentialFile = (machine: string): string =>
   path.join(machinesRoot(), machine, "differential.json");
 export const migrationFile = (machine: string): string =>

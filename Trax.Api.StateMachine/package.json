@@ -26,9 +26,7 @@
     "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "codegen": "node tools/state-machine-codegen/generate.mjs",
-    "codegen:check": "node tools/state-machine-codegen/generate.mjs --check"
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "react": ">=18"

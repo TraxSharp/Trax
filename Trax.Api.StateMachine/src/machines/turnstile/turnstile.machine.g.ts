@@ -6,17 +6,6 @@ import { TypedMachine } from "../../typed";
 import type { TurnstileSpec, TurnstileState, TurnstileTrigger } from "./turnstile.contexts.g";
 
 const ir = {
-  "id": "turnstile",
-  "version": 1,
-  "initialState": "Locked",
-  "states": [
-    "Locked",
-    "Unlocked"
-  ],
-  "triggers": [
-    "Coin",
-    "Push"
-  ],
   "committedStates": [],
   "context": {
     "Locked": {
@@ -25,41 +14,46 @@ const ir = {
     "Unlocked": {
       "fields": [
         {
-          "name": "paidWith",
-          "type": "string",
-          "nullable": false,
           "constraints": [
             {
+              "field": "paidWith",
               "rule": "nonEmpty",
-              "source": "context",
-              "field": "paidWith"
+              "source": "context"
             }
-          ]
+          ],
+          "name": "paidWith",
+          "nullable": false,
+          "type": "string"
         }
       ]
     }
   },
+  "id": "turnstile",
+  "initialContext": {},
+  "initialState": "Locked",
   "inputs": {
     "Coin": {
       "fields": [
         {
+          "constraints": [],
           "name": "coin",
-          "type": "string",
           "nullable": false,
-          "constraints": []
+          "type": "string"
         }
       ]
     }
   },
+  "states": [
+    "Locked",
+    "Unlocked"
+  ],
   "transitions": [
     {
       "from": "Locked",
-      "trigger": "Coin",
-      "to": "Unlocked",
       "guard": {
+        "field": "coin",
         "rule": "oneOf",
         "source": "input",
-        "field": "coin",
         "values": [
           "quarter",
           "dollar"
@@ -76,17 +70,24 @@ const ir = {
             }
           }
         ]
-      }
+      },
+      "to": "Unlocked",
+      "trigger": "Coin"
     },
     {
       "from": "Unlocked",
-      "trigger": "Push",
-      "to": "Locked",
       "reduce": {
         "reduce": "clear"
-      }
+      },
+      "to": "Locked",
+      "trigger": "Push"
     }
-  ]
+  ],
+  "triggers": [
+    "Coin",
+    "Push"
+  ],
+  "version": 1
 } as IrDocument;
 
 // The runtime machine's states/triggers are exactly those in the IR; the cast narrows the string
