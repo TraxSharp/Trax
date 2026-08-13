@@ -93,8 +93,10 @@ namespace Trax.Effect.Configuration.TraxBuilder
     public class TraxBuilder
     {
         public TraxBuilder(Microsoft.Extensions.DependencyInjection.IServiceCollection services, Trax.Effect.Services.EffectRegistry.IEffectRegistry registry) { }
+        public System.Collections.Generic.List<System.Reflection.Assembly> ContributedMediatorAssemblies { get; }
         public bool HasDataProvider { get; set; }
         public bool HasDatabaseProvider { get; set; }
+        public bool MediatorConfigured { get; set; }
         public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
         public Trax.Effect.Configuration.TraxBuilder.TraxBuilder AddHostLabel(string key, string value) { }
         public Trax.Effect.Configuration.TraxBuilder.TraxBuilder AddHostLabels(System.Collections.Generic.Dictionary<string, string> labels) { }

@@ -89,9 +89,34 @@ public class IrExporterTests
         // schema, and per-transition guard/reducer as data, canonical (keys sorted). A change to the
         // authoring or the exporter must move this deliberately.
         const string golden =
-            """{"committedStates":[],"context":{"Locked":{"fields":[]},"Unlocked":{"fields":[{"constraints":[{"field":"paidWith","rule":"nonEmpty","source":"context"}],"name":"paidWith","nullable":false,"type":"string"}]}},"id":"turnstile","initialContext":{},"initialState":"Locked","inputs":{"Coin":{"fields":[{"constraints":[],"name":"coin","nullable":false,"type":"string"}]}},"states":["Locked","Unlocked"],"transitions":[{"from":"Locked","guard":{"field":"coin","rule":"oneOf","source":"input","values":["quarter","dollar"]},"guardMessage":"Only a quarter or a dollar is accepted.","reduce":{"reduce":"set","steps":[{"field":"paidWith","value":{"input":"coin"}}]},"to":"Unlocked","trigger":"Coin"},{"from":"Unlocked","reduce":{"reduce":"clear"},"to":"Locked","trigger":"Push"}],"triggers":["Coin","Push"],"version":1}""";
+            """{"committedStates":[],"context":{"Locked":{"fields":[]},"Unlocked":{"fields":[{"constraints":[{"field":"paidWith","rule":"nonEmpty","source":"context"}],"name":"paidWith","nullable":false,"type":"string"}]}},"differential":{"samples":{"Coin":[{"coin":"quarter"},{"coin":"dollar"},{"coin":"penny"},{}]}},"id":"turnstile","initialContext":{},"initialState":"Locked","inputs":{"Coin":{"fields":[{"constraints":[],"name":"coin","nullable":false,"type":"string"}]}},"states":["Locked","Unlocked"],"transitions":[{"from":"Locked","guard":{"field":"coin","rule":"oneOf","source":"input","values":["quarter","dollar"]},"guardMessage":"Only a quarter or a dollar is accepted.","reduce":{"reduce":"set","steps":[{"field":"paidWith","value":{"input":"coin"}}]},"to":"Unlocked","trigger":"Coin"},{"from":"Unlocked","reduce":{"reduce":"clear"},"to":"Locked","trigger":"Push"}],"triggers":["Coin","Push"],"version":1}""";
 
         IrExporter.Export(DeclarativeTurnstile.Built).Should().Be(golden);
+    }
+
+    [Test]
+    public void Export_carries_the_differential_block()
+    {
+        // The .Differential(...) samples authored on the turnstile become the IR's differential block, so the
+        // cross-language harness enumerates off this IR instead of a hand-written machine.json. The empty {}
+        // sample is preserved (distinct from the harness's always-added no-input case).
+        var samples = (JsonObject)Ir()["differential"]!["samples"]!;
+        var coin = samples["Coin"]!.AsArray();
+
+        coin.Should().HaveCount(4);
+        ((JsonObject)coin[0]!)["coin"]!.GetValue<string>().Should().Be("quarter");
+        ((JsonObject)coin[1]!)["coin"]!.GetValue<string>().Should().Be("dollar");
+        ((JsonObject)coin[2]!)["coin"]!.GetValue<string>().Should().Be("penny");
+        coin[3]!.AsObject().Count.Should().Be(0);
+    }
+
+    [Test]
+    public void Export_omits_differential_when_none()
+    {
+        // A declarative machine that declares no .Differential(...) has no differential key, so adding the
+        // feature leaves every existing machine's IR byte-identical.
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(RichExportMachine.Built))!;
+        ir.ContainsKey("differential").Should().BeFalse();
     }
 
     [Test]

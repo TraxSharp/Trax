@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Services.EffectRegistry;
@@ -57,4 +58,21 @@ public partial class TraxBuilder(IServiceCollection services, IEffectRegistry re
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool HasDataProvider { get; set; }
+
+    /// <summary>
+    /// Assemblies a subsystem contributes for the mediator to scan so its routes become dispatchable, without
+    /// the host naming them. For example <c>AddStateMachines(...)</c> adds its generic state-machine mutations'
+    /// assembly here; <c>AddMediator(...)</c> merges these into its scan at build time. Populated before
+    /// <c>AddMediator</c> runs (the fluent chain enforces the order).
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public List<Assembly> ContributedMediatorAssemblies { get; } = [];
+
+    /// <summary>
+    /// Set once <c>AddMediator</c> has built the train registry. A subsystem that contributes mediator
+    /// assemblies checks this to fail fast if it is called after <c>AddMediator</c>, since its routes would
+    /// arrive too late to be dispatchable.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool MediatorConfigured { get; set; }
 }

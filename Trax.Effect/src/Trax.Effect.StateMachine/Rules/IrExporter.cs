@@ -61,7 +61,53 @@ public static class IrExporter
             ir["invariants"] = invariants;
         }
 
+        // The differential fuzzing inputs (test-only), if authored via .Differential(...). Carries the
+        // samples/seeds/contexts the cross-language harness enumerates, so it reads this one IR instead of a
+        // hand-written machine.json. Omitted when empty, so a machine without .Differential has identical IR.
+        if (declarative.Differential is { IsEmpty: false } differential)
+            ir["differential"] = WriteDifferential(differential);
+
         return CanonicalJson.Serialize(ir);
+    }
+
+    private static JsonObject WriteDifferential<TState, TTrigger>(
+        DifferentialModel<TState, TTrigger> diff
+    )
+        where TState : struct, Enum
+        where TTrigger : struct, Enum
+    {
+        var obj = new JsonObject();
+
+        if (diff.Samples.Count > 0)
+        {
+            var samples = new JsonObject();
+            foreach (var (trigger, inputs) in diff.Samples)
+            {
+                var arr = new JsonArray();
+                foreach (var input in inputs)
+                    arr.Add(input.DeepClone());
+                samples[trigger.ToString()!] = arr;
+            }
+            obj["samples"] = samples;
+        }
+
+        if (diff.Seeds.Count > 0)
+        {
+            var seeds = new JsonObject();
+            foreach (var (state, context) in diff.Seeds)
+                seeds[state.ToString()!] = context.DeepClone();
+            obj["seeds"] = seeds;
+        }
+
+        if (diff.Contexts.Count > 0)
+        {
+            var contexts = new JsonArray();
+            foreach (var context in diff.Contexts)
+                contexts.Add(context.DeepClone());
+            obj["contexts"] = contexts;
+        }
+
+        return obj;
     }
 
     private static JsonArray BuildTransitions<TState, TTrigger>(

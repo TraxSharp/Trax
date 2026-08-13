@@ -32,5 +32,8 @@
          006) and round-trip through the stores, proving the DDL matches the EF model (no EnsureCreated). -->
     <ProjectReference Include="../../src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
+    <!-- InMemory + SQLite exercise the ITraxFeatureDbConfigurator seam with no external server, covering the
+         auto-registered SnapshotDbContext on each provider (FeatureDbConfiguratorTests). -->
+    <ProjectReference Include="../../src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
   </ItemGroup>
 </Project>

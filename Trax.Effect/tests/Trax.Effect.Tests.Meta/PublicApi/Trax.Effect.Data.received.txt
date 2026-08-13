@@ -238,6 +238,18 @@ namespace Trax.Effect.Data.Services.DomainContext
         System.Threading.Tasks.Task<int> SaveChangesAsync(System.Threading.CancellationToken cancellationToken = default);
     }
 }
+namespace Trax.Effect.Data.Services.FeatureDbConfigurator
+{
+    public sealed class DelegateFeatureDbConfigurator : Trax.Effect.Data.Services.FeatureDbConfigurator.ITraxFeatureDbConfigurator
+    {
+        public DelegateFeatureDbConfigurator(System.Action<Microsoft.EntityFrameworkCore.DbContextOptionsBuilder> configure) { }
+        public void Configure(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder options) { }
+    }
+    public interface ITraxFeatureDbConfigurator
+    {
+        void Configure(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder options);
+    }
+}
 namespace Trax.Effect.Data.Services.IDataContextFactory
 {
     public interface IDataContextProviderFactory : Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory

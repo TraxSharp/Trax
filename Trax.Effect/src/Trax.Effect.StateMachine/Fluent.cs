@@ -1,4 +1,6 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace Trax.Effect.StateMachine;
 
@@ -54,8 +56,51 @@ public interface IMachineBuilder<TState, TTrigger>
         Func<string, JsonObject, MigrationResult> migrate
     );
 
+    /// <summary>
+    /// Author the differential fuzzing inputs (test-only) the cross-language differential harness enumerates:
+    /// representative per-trigger input samples, per-state seed contexts, and dense probe contexts. Declared
+    /// here so the C# machine is the single source; the IR exporter carries them and the harness enumerates
+    /// off the IR, with no hand-written machine.json. Only valid on a declaratively-authored machine (it rides
+    /// the IR). Omit for machines with no cross-language differential.
+    /// </summary>
+    IMachineBuilder<TState, TTrigger> Differential(
+        Action<IDifferentialBuilder<TState, TTrigger>> configure
+    );
+
     /// <summary>Begin configuring transitions and rules for a state.</summary>
     IStateBuilder<TState, TTrigger> In(TState state);
+}
+
+/// <summary>
+/// Authors a machine's differential fuzzing inputs. Each call adds one representative input. The harness
+/// always fires a no-input case per trigger, so an explicit <see cref="EmptySample"/> (<c>{}</c>) is a
+/// distinct case. Typed overloads serialize the record with camelCase names (nulls kept), matching the field
+/// names the guards and reducers read; raw <see cref="JsonObject"/> overloads give exact control.
+/// </summary>
+public interface IDifferentialBuilder<TState, TTrigger>
+    where TState : struct, Enum
+    where TTrigger : struct, Enum
+{
+    /// <summary>A representative input for <paramref name="trigger"/>, from a typed record.</summary>
+    IDifferentialBuilder<TState, TTrigger> Sample<TInput>(TTrigger trigger, TInput input);
+
+    /// <summary>A representative input for <paramref name="trigger"/>, as a raw JSON object.</summary>
+    IDifferentialBuilder<TState, TTrigger> Sample(TTrigger trigger, JsonObject input);
+
+    /// <summary>An empty (<c>{}</c>) input for <paramref name="trigger"/> — distinct from the no-input case.</summary>
+    IDifferentialBuilder<TState, TTrigger> EmptySample(TTrigger trigger);
+
+    /// <summary>A seed context for <paramref name="state"/> (a BFS start point that reaches states the initial snapshot can't), from a typed record.</summary>
+    IDifferentialBuilder<TState, TTrigger> Seed<TContext>(TState state, TContext context);
+
+    /// <summary>A seed context for <paramref name="state"/>, as a raw JSON object.</summary>
+    IDifferentialBuilder<TState, TTrigger> Seed(TState state, JsonObject context);
+
+    /// <summary>A dense probe context crossed with EVERY state (exercises guards/validators on unreachable-but-sendable snapshots), from a typed record.</summary>
+    IDifferentialBuilder<TState, TTrigger> Probe<TContext>(TContext context);
+
+    /// <summary>A dense probe context, as a raw JSON object.</summary>
+    IDifferentialBuilder<TState, TTrigger> Probe(JsonObject context);
 }
 
 /// <summary>Per-state configuration: its context validator, whether it is committed, and its transitions.</summary>
@@ -148,6 +193,9 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
     private readonly Dictionary<TTrigger, ContextSchema> _triggerInputs = [];
     private readonly Dictionary<TState, List<Rule>> _stateInvariants = [];
     private readonly List<DeclarativeTransition<TState, TTrigger>> _declarativeTransitions = [];
+    private readonly Dictionary<TTrigger, List<JsonNode>> _diffSamples = [];
+    private readonly Dictionary<TState, JsonNode> _diffSeeds = [];
+    private readonly List<JsonNode> _diffContexts = [];
     private bool _usedDeclarative;
 
     public IMachineBuilder<TState, TTrigger> Id(string id)
@@ -178,6 +226,14 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
         return this;
     }
 
+    public IMachineBuilder<TState, TTrigger> Differential(
+        Action<IDifferentialBuilder<TState, TTrigger>> configure
+    )
+    {
+        configure(new DifferentialBuilder(this));
+        return this;
+    }
+
     public IStateBuilder<TState, TTrigger> In(TState state) => new StateBuilder(this, state);
 
     /// <summary>Compile the configuration into an engine-ready definition + host metadata.</summary>
@@ -203,6 +259,24 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
             Migrations = _migrations,
         };
 
+        var differential =
+            _diffSamples.Count > 0 || _diffSeeds.Count > 0 || _diffContexts.Count > 0
+                ? new DifferentialModel<TState, TTrigger>(
+                    _diffSamples.ToDictionary(
+                        kv => kv.Key,
+                        kv => (IReadOnlyList<JsonNode>)kv.Value
+                    ),
+                    _diffSeeds,
+                    _diffContexts
+                )
+                : null;
+
+        if (differential is not null && !_usedDeclarative)
+            throw new InvalidOperationException(
+                ".Differential(...) is only valid on a declaratively-authored machine (use .Context/.When/.Reduce). "
+                    + "The differential inputs are carried through the IR, which a raw-delegate machine cannot export."
+            );
+
         var declarative = _usedDeclarative
             ? new DeclarativeModel<TState, TTrigger>(
                 _contextSchemas,
@@ -213,6 +287,9 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
                     kv => kv.Value.Count == 1 ? kv.Value[0] : (Rule)new Rule.All(kv.Value)
                 )
             )
+            {
+                Differential = differential,
+            }
             : null;
 
         return new BuiltMachine<TState, TTrigger>(definition, _committed, _effects, declarative);
@@ -388,5 +465,60 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
             );
             return state;
         }
+    }
+
+    private sealed class DifferentialBuilder(MachineBuilder<TState, TTrigger> owner)
+        : IDifferentialBuilder<TState, TTrigger>
+    {
+        // camelCase to match the field names the guards/reducers read (SchemaReflection uses the same policy);
+        // nulls kept so a nullable field's null appears in a probe context exactly as the wire carries it. An
+        // empty input uses EmptySample, so all-null typed inputs are never how {} is authored.
+        private static readonly JsonSerializerOptions Json = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+        };
+
+        public IDifferentialBuilder<TState, TTrigger> Sample<TInput>(
+            TTrigger trigger,
+            TInput input
+        ) => Sample(trigger, ToObject(input));
+
+        public IDifferentialBuilder<TState, TTrigger> Sample(TTrigger trigger, JsonObject input)
+        {
+            if (!owner._diffSamples.TryGetValue(trigger, out var list))
+                owner._diffSamples[trigger] = list = [];
+            list.Add(input);
+            return this;
+        }
+
+        public IDifferentialBuilder<TState, TTrigger> EmptySample(TTrigger trigger) =>
+            Sample(trigger, new JsonObject());
+
+        public IDifferentialBuilder<TState, TTrigger> Seed<TContext>(
+            TState state,
+            TContext context
+        ) => Seed(state, ToObject(context));
+
+        public IDifferentialBuilder<TState, TTrigger> Seed(TState state, JsonObject context)
+        {
+            owner._diffSeeds[state] = context;
+            return this;
+        }
+
+        public IDifferentialBuilder<TState, TTrigger> Probe<TContext>(TContext context) =>
+            Probe(ToObject(context));
+
+        public IDifferentialBuilder<TState, TTrigger> Probe(JsonObject context)
+        {
+            owner._diffContexts.Add(context);
+            return this;
+        }
+
+        private static JsonObject ToObject<T>(T value) =>
+            JsonSerializer.SerializeToNode(value, Json) as JsonObject
+            ?? throw new InvalidOperationException(
+                $"A differential input must serialize to a JSON object, but {typeof(T).Name} did not."
+            );
     }
 }

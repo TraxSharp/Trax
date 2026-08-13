@@ -12,6 +12,7 @@ using Trax.Effect.Data.Postgres.Services.SqlDialect;
 using Trax.Effect.Data.Postgres.Utils;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
+using Trax.Effect.Data.Services.FeatureDbConfigurator;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -158,6 +159,12 @@ public static class ServiceExtensions
 
         // Register the SQL dialect for provider-specific raw SQL
         configurationBuilder.ServiceCollection.AddSingleton<ISqlDialect, PostgresSqlDialect>();
+
+        // Configure any feature's own DbContext (e.g. the state-machine SnapshotDbContext) against this same
+        // Postgres data source, so a subsystem like AddStateMachines(...) needs no host AddDbContext call.
+        configurationBuilder.ServiceCollection.AddSingleton<ITraxFeatureDbConfigurator>(
+            new DelegateFeatureDbConfigurator(options => options.UseNpgsql(dataSource))
+        );
 
         configurationBuilder.HasDatabaseProvider = true;
         configurationBuilder.HasDataProvider = true;

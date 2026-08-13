@@ -2,7 +2,7 @@
 -- exactly-once effect ledger live in the StateMachine.Persistence package; these are the two tables its
 -- SnapshotDbContext maps. They live in the `trax` schema like every other Trax table, and — as with
 -- 035_persisted_operations — a higher-level feature's tables ship in this migration set so the standard
--- DatabaseMigrator creates them automatically at startup (a host that uses AddTraxStateMachines needs no
+-- DatabaseMigrator creates them automatically at startup (a host that uses AddStateMachines needs no
 -- extra table wiring; a host that doesn't just carries two empty tables).
 --
 -- Columns mirror SnapshotRecord / EffectClaim (Trax.Effect.StateMachine.Persistence/Entities.cs) EXACTLY —

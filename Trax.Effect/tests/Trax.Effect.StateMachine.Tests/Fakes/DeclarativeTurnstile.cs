@@ -47,6 +47,16 @@ public static class DeclarativeTurnstile
             .Reduce(Clear())
             .To(TurnstileState.Locked);
 
+        // Differential fuzzing inputs for the cross-language corpus: representative Coin inputs (the harness
+        // always adds a no-input case, and the empty {} case is distinct from it). No seeds are needed: Coin
+        // sets paidWith, so Unlocked is reachable by driving the machine from the initial Locked snapshot.
+        m.Differential(d =>
+            d.Sample(TurnstileTrigger.Coin, new CoinInput { Coin = "quarter" })
+                .Sample(TurnstileTrigger.Coin, new CoinInput { Coin = "dollar" })
+                .Sample(TurnstileTrigger.Coin, new CoinInput { Coin = "penny" })
+                .EmptySample(TurnstileTrigger.Coin)
+        );
+
         return m.Build();
     }
 }

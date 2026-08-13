@@ -1,8 +1,10 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.FeatureDbConfigurator;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using InMemoryContext = Trax.Effect.Data.InMemory.Services.InMemoryContext.InMemoryContext;
@@ -72,6 +74,14 @@ public static class ServiceExtensions
         configurationBuilder.ServiceCollection.AddScoped<IDataContext>(_ => new InMemoryContext(
             InMemoryContextProviderFactory.BuildOptions(root)
         ));
+
+        // Configure any feature's own DbContext (e.g. the state-machine SnapshotDbContext) against this same
+        // in-memory store (shared root), so a subsystem like AddStateMachines(...) needs no host AddDbContext.
+        configurationBuilder.ServiceCollection.AddSingleton<ITraxFeatureDbConfigurator>(
+            new DelegateFeatureDbConfigurator(options =>
+                options.UseInMemoryDatabase("trax-feature", root)
+            )
+        );
 
         configurationBuilder.HasDataProvider = true;
 

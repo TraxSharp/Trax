@@ -5,7 +5,7 @@ using Trax.Effect.Services.ServiceTrain;
 namespace Trax.Effect.StateMachine.Persistence.Mutations;
 
 // FOUR trains for ALL machines, under the `stateMachine` GraphQL namespace. No per-machine plumbing:
-// the machine is a runtime argument the registry resolves. AddTraxStateMachines registers these once.
+// the machine is a runtime argument the registry resolves. AddStateMachines registers these once.
 
 [TraxAuthorize]
 [TraxMutation(

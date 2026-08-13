@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.FeatureDbConfigurator;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Data.Sqlite.Services.SqlDialect;
@@ -71,6 +72,12 @@ public static class ServiceExtensions
 
         // Register the SQL dialect
         configurationBuilder.ServiceCollection.AddSingleton<ISqlDialect, SqliteSqlDialect>();
+
+        // Configure any feature's own DbContext (e.g. the state-machine SnapshotDbContext) against this same
+        // SQLite database, so a subsystem like AddStateMachines(...) needs no host AddDbContext call.
+        configurationBuilder.ServiceCollection.AddSingleton<ITraxFeatureDbConfigurator>(
+            new DelegateFeatureDbConfigurator(options => options.UseSqlite(connectionString))
+        );
 
         configurationBuilder.HasDatabaseProvider = true;
         configurationBuilder.HasDataProvider = true;

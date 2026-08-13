@@ -2,7 +2,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 
 /// <summary>
 /// Host-level options for the state-machine subsystem, configured through the
-/// <see cref="ServiceCollectionExtensions.AddTraxStateMachines(Microsoft.Extensions.DependencyInjection.IServiceCollection, System.Action{StateMachineOptions}, System.Reflection.Assembly[])"/>
+/// <see cref="StateMachinesBuilderExtensions.AddStateMachines(Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects, System.Action{StateMachineOptions}, System.Reflection.Assembly[])"/>
 /// overload and read by the machine registry when it builds a per-machine draft service.
 /// </summary>
 public sealed class StateMachineOptions

@@ -1,7 +1,7 @@
 -- SQLite parity for Postgres 040_state_machine_snapshots.sql. The state-machine draft store and
 -- exactly-once effect ledger (Trax.Effect.StateMachine.Persistence) ship their tables in the core
 -- provider migration set so DatabaseMigrator creates them automatically at startup — a host that calls
--- AddTraxStateMachines needs no extra table wiring, a host that doesn't just carries two empty tables.
+-- AddStateMachines needs no extra table wiring, a host that doesn't just carries two empty tables.
 --
 -- SQLite has no schemas and no jsonb/uuid/timestamptz types, so the tables are unqualified and every
 -- column is TEXT/INTEGER (SnapshotDbContext strips the "trax" schema and maps jsonb -> TEXT when it runs

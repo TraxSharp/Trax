@@ -11,8 +11,10 @@
 
   <ItemGroup>
     <ProjectReference Include="../Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
-    <!-- The generic mutation surface (ServiceTrain / Junction / [TraxMutation]) and AddTraxStateMachines. -->
+    <!-- The generic mutation surface (ServiceTrain / Junction / [TraxMutation]) and AddStateMachines. -->
     <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
+    <!-- The provider-agnostic ITraxFeatureDbConfigurator seam that auto-registers the SnapshotDbContext. -->
+    <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
   </ItemGroup>
 
   <ItemGroup>
