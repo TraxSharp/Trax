@@ -11,6 +11,15 @@ public interface IMachine
     /// <summary>Whether the machine binds an irreversible exactly-once effect.</summary>
     bool HasEffect { get; }
 
+    /// <summary>
+    /// Export this machine's neutral IR (the formalized machine.json) as canonical single-line JSON: the
+    /// single-source artifact every frontend generator consumes. Requires a declaratively-authored machine
+    /// (<c>.Context</c>/<c>.When</c>/<c>.Reduce</c>); a raw-delegate machine throws, because its guards and
+    /// reducers are opaque closures with no exportable data. This is the in-process entry point the
+    /// <c>trax machine</c> CLI calls.
+    /// </summary>
+    string ExportIr();
+
     /// <summary>Build the draft service for a request's store (threading committed states, the effect-claim reset, and the optional draft TTL).</summary>
     ISnapshotDraftService CreateService(
         ISnapshotStore store,
@@ -63,6 +72,8 @@ public abstract class Machine<TState, TTrigger> : IMachine
     public string Name => Built.Definition.Id;
 
     public bool HasEffect => Built.Effects.Count > 0;
+
+    public string ExportIr() => IrExporter.Export(Built);
 
     public ISnapshotDraftService CreateService(
         ISnapshotStore store,
