@@ -1,0 +1,81 @@
+using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Nodes;
+{{- if WithEffect }}
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+{{- end }}
+using Trax.Effect.StateMachine;
+using Trax.Effect.StateMachine.Persistence;
+using static Trax.Effect.StateMachine.Rules;
+
+namespace {{ Namespace }};
+
+// States and triggers for the {{ Id }} machine. Rename these to your real flow; each becomes part of the IR
+// (and the generated TypeScript unions), so a change here propagates to every runtime via `trax machine generate`.
+public enum {{ Pascal }}State
+{
+    Start,
+    Done,
+}
+
+public enum {{ Pascal }}Trigger
+{
+    Submit,
+}
+
+// The context carried in the Done state. Field names + types become the IR context schema; DataAnnotations
+// (e.g. [MinLength]) become declarative validators the interpreter runs on every runtime.
+public sealed record {{ Pascal }}Context
+{
+    [MinLength(1)]
+    public string Value { get; init; } = "";
+}
+
+// The input the Submit trigger takes. Referenced by member expression below, never a magic string.
+public sealed record {{ Pascal }}SubmitInput
+{
+    public string Value { get; init; } = "";
+}
+{{- if WithEffect }}
+
+// The irreversible, exactly-once effect this machine runs on Submit. Implement Run to perform the action and
+// return its receipt; the engine records it so a crash-and-redrive reuses the receipt instead of running twice.
+public interface I{{ Pascal }}Effect : ISnapshotEffect;
+
+public sealed class {{ Pascal }}Effect : I{{ Pascal }}Effect
+{
+    public Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException("Perform the {{ Id }} action and return its receipt.");
+}
+{{- end }}
+
+/// <summary>
+/// The {{ Id }} machine. Author the whole definition here; <c>trax machine generate</c> produces the IR, the
+/// TypeScript twin, and the differential corpus from it.
+/// </summary>
+public sealed class {{ Pascal }}Machine : Machine<{{ Pascal }}State, {{ Pascal }}Trigger>
+{
+    protected override void Configure(IMachineBuilder<{{ Pascal }}State, {{ Pascal }}Trigger> m)
+    {
+        // Start carries an empty context; the factory seeds the initial snapshot.
+        m.Id("{{ Id }}").Version(1).StartsAt({{ Pascal }}State.Start, () => new JsonObject());
+
+        m.In({{ Pascal }}State.Start)
+            .Context()
+            .On({{ Pascal }}Trigger.Submit)
+            .WithInput<{{ Pascal }}SubmitInput>()
+            .When(Input(({{ Pascal }}SubmitInput i) => i.Value).NonEmpty())
+            .Because("A value is required.")
+{{- if WithEffect }}
+            .RunsOnce<I{{ Pascal }}Effect>("{{ Id }}:submit")
+{{- end }}
+            .Reduce(Set(({{ Pascal }}Context c) => c.Value).FromInput(({{ Pascal }}SubmitInput i) => i.Value))
+            .To({{ Pascal }}State.Done);
+
+        m.In({{ Pascal }}State.Done){{ if WithEffect }}.Committed(){{ end }}.Context<{{ Pascal }}Context>();
+
+        // Differential probe inputs: representative Submit payloads the cross-language corpus enumerates over.
+        m.Differential(d => d.Sample({{ Pascal }}Trigger.Submit, new {{ Pascal }}SubmitInput { Value = "example" }));
+    }
+}

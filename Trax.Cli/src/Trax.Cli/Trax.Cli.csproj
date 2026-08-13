@@ -13,6 +13,7 @@
     <PackageReference Include="GraphQL-Parser" />
     <PackageReference Include="Microsoft.OpenApi.Readers" />
     <PackageReference Include="Scriban" />
+    <PackageReference Include="Trax.Effect.StateMachine.Persistence" />
   </ItemGroup>
 
   <ItemGroup>
