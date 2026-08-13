@@ -53,13 +53,18 @@ language-neutral conformance fixtures that both engines drive and must agree on.
 (`no-transition`, `guard-failed`, `invalid-context`, `malformed`, `unknown-machine`, `version-mismatch`,
 `unknown-state`) are contract. Human-readable detail text is free to differ.
 
-Guards and reducers are named code on each side, never serialized expressions. The snapshot carries
-structure and data, never logic, so there is nothing to evaluate twice. A machine's structure (its states,
-triggers, and edges) is generated for both languages from a single `machine.json`, and a drift check fails
-the build if a committed generated file goes stale.
+The machine is authored in C#, which is the source of truth, and exported to a neutral IR
+(`<machine>.ir.json`). Common guards and reducers are authored declaratively and travel in the IR as data;
+a small interpreter on each side runs them, so they are single-sourced rather than hand-written per language.
+A genuinely-custom guard or reducer is bound by name in the IR and hand-written per runtime (the escape
+hatch). The snapshot itself still carries only structure and data, never logic. A machine's structure and its
+declarative logic are generated for the frontend from that IR, and a drift check fails the build if a
+committed generated file goes stale. (The one unmigrated sample, `checkout`, still uses a hand-authored
+`machine.json`; the IR replaces it everywhere else.)
 
-Structure agreement is not enough on its own: the guards and reducers are hand-written twice, so their
-behavior can still drift. That is caught by an exhaustive **differential corpus**. TypeScript is the oracle:
+Structure agreement is not enough on its own: any custom (hand-written) guard or reducer exists once per
+language, and the interpreters that run the declarative rules must agree too, so behavior can still drift.
+That is caught by an exhaustive **differential corpus**. TypeScript is the oracle:
 it drives the engine over every reachable snapshot (discovered by walking the machine's own transitions from
 the initial snapshot, plus a few declared `seeds` for states whose context arrives out of band), times every
 trigger, times a few representative `samples` per trigger, and records each outcome as canonical wire (on a
@@ -67,9 +72,9 @@ transition) or a rejection code. The corpus is committed as `machines/<machine>/
 engines replay it and must reproduce every outcome byte-for-byte. Turnstile is 18 cases, checkout 30, most
 of them rejections, which is exactly what a hand-written fixture set never covers exhaustively.
 
-The corpus is machine-managed; you never hand-write it. The `samples` and `seeds` live in `machine.json`.
-Regenerate deliberately with `UPDATE_DIFFERENTIAL=1 npm test`, and the git diff of the golden is the review
-of what changed. Each side replays the committed file independently, so the C# suite needs no Node and the
+The corpus is machine-managed; you never hand-write it. The `samples` and `seeds` are authored in C# with
+`.Differential(...)` and exported into the IR's `differential` block (the legacy `checkout` still keeps them
+in its `machine.json`). Regenerate deliberately, and the git diff of the golden is the review of what changed. Each side replays the committed file independently, so the C# suite needs no Node and the
 TypeScript suite needs no .NET.
 
 The **canonical wire** is what makes a byte-for-byte comparison meaningful. The envelope (`machine`,
@@ -131,4 +136,4 @@ terminal step.
 | C# engine (pure, total, dependency-free) | Trax.Effect.StateMachine |
 | C# persistence, exactly-once effects, mutation trains | Trax.Effect.StateMachine.Persistence |
 | TypeScript engine, typed facade, React hook | the @trax/state-machine package |
-| Shared conformance fixtures and the structure generator | the shared machines directory and the codegen tool |
+| Shared machines (the exported IR, differential and migration goldens) and the frontend generators | the shared machines directory and the codegen tools |
