@@ -15,7 +15,6 @@ using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.StateMachine.Persistence;
-using Trax.Effect.StateMachine.Persistence.Mutations;
 using Trax.Mediator.Extensions;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -23,7 +22,7 @@ namespace Trax.Api.StateMachine.E2E;
 /// <summary>
 /// Builds a live in-process Trax GraphQL server (ASP.NET Core via <see cref="TestServer"/>) over a real
 /// throwaway Postgres, with the full stack wired the way a real host would: <c>AddTrax</c> +
-/// <c>AddTraxStateMachines</c> + <c>AddTraxGraphQL</c> + API-key auth, and <see cref="ISnapshotPrincipal"/>
+/// <c>AddStateMachines</c> + <c>AddTraxGraphQL</c> + API-key auth, and <see cref="ISnapshotPrincipal"/>
 /// bound over Trax's own <see cref="Trax.Api.Auth.TraxCaller"/>. The four generic <c>stateMachine</c>
 /// mutations are driven over HTTP against this host.
 /// </summary>
@@ -89,30 +88,23 @@ public static class E2EHost
                         );
                         services.AddAuthorization();
 
-                        // Trax core + mediator. The mediator scan needs the assembly that holds the four
-                        // generic mutation trains (they ship in the persistence package, not this one), so
-                        // Trax can route them by input type. StateMachineMutations.Assembly names it.
+                        // Trax core + state machines + mediator in one chain. AddStateMachines discovers the
+                        // machines, wires the store / claim ledger / exactly-once runner / registry,
+                        // auto-registers the SnapshotDbContext against the Postgres provider, and contributes
+                        // the four generic mutation trains to the mediator scan (they ship in the persistence
+                        // package, not this one) so Trax routes them by input type. The host names neither the
+                        // SnapshotDbContext nor the mutations' assembly. AddStateMachines precedes AddMediator.
                         services.AddTrax(trax =>
                             trax.AddEffects(effects =>
                                     effects.UsePostgres(connectionString).AddJson()
                                 )
-                                .AddMediator(
-                                    typeof(E2EHost).Assembly,
-                                    StateMachineMutations.Assembly
-                                )
+                                .AddStateMachines(typeof(E2EHost).Assembly)
+                                .AddMediator(typeof(E2EHost).Assembly)
                         );
-
-                        // One line: discover the machines and wire the store, the claim ledger, the
-                        // exactly-once runner, and the machine registry.
-                        services.AddTraxStateMachines(typeof(E2EHost).Assembly);
 
                         // The two things a machine can't know: map auth to a user key, and the effect impl.
                         services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
                         services.AddSingleton(charge);
-
-                        services.AddDbContext<SnapshotDbContext>(o =>
-                            o.UseNpgsql(connectionString)
-                        );
 
                         services.AddTraxApi();
                         // The four stateMachine trains are all mutations; the Ping query train (this
