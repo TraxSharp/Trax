@@ -105,6 +105,14 @@ public static class ServiceExtensions
     {
         var mediatorBuilder = new TraxMediatorBuilder(builder);
         configure(mediatorBuilder);
+
+        // Merge assemblies contributed by earlier subsystems (e.g. AddStateMachines adds its generic
+        // mutations' assembly) so the host never names them. The fluent chain runs those subsystems on
+        // TraxBuilderWithEffects, before AddMediator, so the list is fully populated here.
+        if (builder.Root.ContributedMediatorAssemblies.Count > 0)
+            mediatorBuilder.ScanAssemblies([.. builder.Root.ContributedMediatorAssemblies]);
+        builder.Root.MediatorConfigured = true;
+
         var configuration = mediatorBuilder.Build();
 
         builder.ServiceCollection.AddSingleton(configuration);
