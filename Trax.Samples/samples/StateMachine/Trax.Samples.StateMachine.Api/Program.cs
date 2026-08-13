@@ -2,7 +2,7 @@
 // Trax State Machine sample — a GraphQL host over two fluent machines.
 //
 // Two machines, authored fluently in Trax.Samples.StateMachine, are discovered with one line
-// (AddTraxStateMachines) and driven through the four generic `stateMachine` mutations:
+// (AddStateMachines) and driven through the four generic `stateMachine` mutations:
 //   turnstile  Locked ⇄ Unlocked                (no effect)
 //   checkout   Cart → Review → Paid             (Paid committed, one exactly-once charge on Pay)
 //
@@ -32,7 +32,6 @@
 //   }) { output { snapshot problem { code } } } } } }
 // ─────────────────────────────────────────────────────────────────────────────
 
-using Microsoft.EntityFrameworkCore;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
@@ -40,7 +39,6 @@ using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.StateMachine.Persistence;
-using Trax.Effect.StateMachine.Persistence.Mutations;
 using Trax.Mediator.Extensions;
 using Trax.Samples.StateMachine;
 using Trax.Samples.StateMachine.Api;
@@ -59,23 +57,20 @@ builder.Services.AddTraxApiKeyAuth(keys =>
 );
 builder.Services.AddAuthorization();
 
-// Trax + the state machine. The mediator scan includes StateMachineMutations.Assembly so the four generic
-// mutations route by input type; AddTraxStateMachines discovers the machines in the sample library and
-// wires the store, the effect-claim ledger, the exactly-once runner, and the registry.
+// Trax + the state machine, in one builder chain. AddStateMachines discovers the machines in the sample
+// library, wires the store / effect-claim ledger / exactly-once runner / registry, AUTO-registers the
+// SnapshotDbContext against the Postgres provider above, and contributes the four generic `stateMachine`
+// mutations to the mediator scan. The host names neither SnapshotDbContext nor the mutations' assembly.
+// (Call AddStateMachines before AddMediator: the mediator builds its route registry when it runs.)
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
-        .AddMediator(typeof(TurnstileMachine).Assembly, StateMachineMutations.Assembly)
+        .AddStateMachines(typeof(TurnstileMachine).Assembly)
+        .AddMediator(typeof(TurnstileMachine).Assembly)
 );
-builder.Services.AddTraxStateMachines(typeof(TurnstileMachine).Assembly);
 
 // The two host-supplied bindings a machine can't know: map auth to a user key, and the charge impl.
 builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 builder.Services.AddScoped<ICharge, LoggingCharge>();
-
-// The snapshot store's DbContext. The snapshot_draft + effect_claim tables are created by the
-// Trax migration set: UsePostgres above runs DbUp, which applies 040_state_machine_snapshots.sql.
-// Nothing here creates tables — `docker compose up -d` (a `trax` database) is all that's needed.
-builder.Services.AddDbContext<SnapshotDbContext>(options => options.UseNpgsql(connectionString));
 
 builder.Services.AddTraxGraphQL(graphql => graphql);
 builder.Services.AddHealthChecks().AddTraxHealthCheck();

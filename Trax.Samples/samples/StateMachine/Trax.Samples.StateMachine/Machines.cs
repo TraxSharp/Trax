@@ -7,7 +7,7 @@ using Trax.Effect.StateMachine.Persistence;
 namespace Trax.Samples.StateMachine;
 
 // Two worked-example machines, authored with the fluent API. A host discovers them with one line
-// (AddTraxStateMachines) and drives them through the four generic `stateMachine` GraphQL mutations. The
+// (AddStateMachines) and drives them through the four generic `stateMachine` GraphQL mutations. The
 // turnstile is the pure-structure proof (no effect); the checkout is the effectful proof (a committed state
 // and one irreversible charge, fired exactly once).
 
