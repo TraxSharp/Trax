@@ -28,9 +28,12 @@ export async function generateTwin({
 
   const irRaw = readFileSync(irPath, "utf8");
   const ir = JSON.parse(irRaw);
-  // SHA-256 of the exact committed IR bytes — matches C#'s IMachine.SchemaHash (which hashes ExportIr(),
-  // pinned equal to this file by the drift tests). The twin carries it for the runtime skew handshake.
-  const irHash = createHash("sha256").update(irRaw, "utf8").digest("hex");
+  // SHA-256 of the IR content, trailing newline stripped so it matches C#'s IMachine.SchemaHash, which hashes
+  // ExportIr() (no trailing newline; the committed file adds one, which the C# drift test trims). The twin
+  // carries this for the runtime skew handshake.
+  const irHash = createHash("sha256")
+    .update(irRaw.replace(/\n+$/, ""), "utf8")
+    .digest("hex");
   const { generateContextTypes, generateMachineFactory } = await bundleModule(
     join(engineSrc, "rules", "generateTypes.ts"),
   );

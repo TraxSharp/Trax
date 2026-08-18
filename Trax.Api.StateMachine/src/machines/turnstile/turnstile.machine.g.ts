@@ -90,7 +90,7 @@ const ir = {
 } as IrDocument;
 
 /** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */
-export const irHash = "3616328b5f265cb5e7c0c4605df513407e5b88c6a32d1ef9b86c29779201d5e2";
+export const irHash = "81fa335d7d4f9d584628df62bf27b160c5c978ac40ba63f17261269fe53b6ccb";
 
 /** The turnstile machine, built from the IR and typed by TurnstileSpec. No hand-written twin. */
 export const turnstile = typedMachineFromIr<TurnstileSpec>(ir, irHash);

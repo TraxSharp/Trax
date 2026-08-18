@@ -25,10 +25,11 @@ describe("generateContextTypes", () => {
   const ir = JSON.parse(
     fs.readFileSync(irFile("turnstile"), "utf8"),
   ) as IrDocument;
-  // The twin embeds SHA-256 of the raw IR bytes (matching the codegen entrypoint and C#'s SchemaHash), so the
-  // drift check must regenerate with that same hash.
+  // The twin embeds SHA-256 of the IR content with the trailing newline stripped (matching the codegen
+  // entrypoint and C#'s SchemaHash, which hashes ExportIr() — no trailing newline), so the drift check must
+  // regenerate with that same hash.
   const irHash = createHash("sha256")
-    .update(fs.readFileSync(irFile("turnstile"), "utf8"), "utf8")
+    .update(fs.readFileSync(irFile("turnstile"), "utf8").replace(/\n+$/, ""), "utf8")
     .digest("hex");
 
   it("regenerates the committed turnstile context types (drift check)", () => {

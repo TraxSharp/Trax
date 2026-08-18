@@ -261,7 +261,7 @@ const ir = {
 } as IrDocument;
 
 /** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */
-export const irHash = "ae83887c2f399c0abf35a5eeb40a14fe0bc2f1c305e9d8726f3f3fb9a8bede6e";
+export const irHash = "7ed747818303694e14df969d1422a25f90e39dff6e9aa20532b84d409066a7c4";
 
 /** The checkout machine, built from the IR and typed by CheckoutSpec. No hand-written twin. */
 export const checkout = typedMachineFromIr<CheckoutSpec>(ir, irHash);
