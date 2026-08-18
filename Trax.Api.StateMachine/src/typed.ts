@@ -38,7 +38,15 @@ export type TypedRehydrationResult<Spec extends MachineSpec> =
 
 /** A thin, types-only wrapper over the raw engine. Adds no behavior — just compile-time safety. */
 export class TypedMachine<Spec extends MachineSpec> {
-  constructor(readonly core: SnapshotMachine<StateOf<Spec>, TriggerOf<Spec>>) {}
+  /**
+   * @param schemaHash SHA-256 of the machine's IR (the same value C#'s `IMachine.SchemaHash` computes),
+   * embedded in the generated twin so the client can send it for the server-side version-skew handshake.
+   * `''` when the twin was built without one.
+   */
+  constructor(
+    readonly core: SnapshotMachine<StateOf<Spec>, TriggerOf<Spec>>,
+    readonly schemaHash: string = '',
+  ) {}
 
   get id(): string {
     return this.core.definition.id;
@@ -84,12 +92,15 @@ export class TypedMachine<Spec extends MachineSpec> {
  * themselves. Safe by construction: the codegen emits the Spec and the IR from the same C# source, and the
  * drift tests pin the two together.
  */
-export function typedMachineFromIr<Spec extends MachineSpec>(ir: IrDocument): TypedMachine<Spec> {
+export function typedMachineFromIr<Spec extends MachineSpec>(
+  ir: IrDocument,
+  schemaHash = '',
+): TypedMachine<Spec> {
   const core = new SnapshotMachine(machineFromIr(ir)) as unknown as SnapshotMachine<
     StateOf<Spec>,
     TriggerOf<Spec>
   >;
-  return new TypedMachine<Spec>(core);
+  return new TypedMachine<Spec>(core, schemaHash);
 }
 
 // re-export the raw result types so consumers can build a Problem outside a controller if needed.

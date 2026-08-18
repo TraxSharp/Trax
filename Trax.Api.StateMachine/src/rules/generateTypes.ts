@@ -76,6 +76,12 @@ export interface MachineFactoryOptions {
   importStyle?: "relative" | "specifier";
   /** The module specifier used when `importStyle` is `"specifier"`. Defaults to `@trax/state-machine`. */
   specifier?: string;
+  /**
+   * SHA-256 of the machine's canonical IR (the committed `ir.json`). Emitted as an `irHash` export and passed
+   * to the factory so the twin carries the version-skew handshake token; matches C#'s `IMachine.SchemaHash`.
+   * Callers that read the IR from disk should hash those exact bytes.
+   */
+  irHash?: string;
 }
 
 /**
@@ -90,6 +96,7 @@ export function generateMachineFactory(
   const machine = pascal(ir.id);
   const importStyle = options.importStyle ?? "relative";
   const specifier = options.specifier ?? "@trax/state-machine";
+  const irHash = options.irHash ?? "";
   // The differential block is test-only fuzzing data (samples/seeds/contexts); the runtime machine never
   // reads it. Strip it so the generated module stays lean and doesn't ship test inputs to the browser.
   const { differential: _differential, ...runtimeIr } = ir;
@@ -108,8 +115,11 @@ export function generateMachineFactory(
     "",
     `const ir = ${JSON.stringify(runtimeIr, null, 2)} as IrDocument;`,
     "",
+    `/** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */`,
+    `export const irHash = ${JSON.stringify(irHash)};`,
+    "",
     `/** The ${ir.id} machine, built from the IR and typed by ${machine}Spec. No hand-written twin. */`,
-    `export const ${camel(ir.id)} = typedMachineFromIr<${machine}Spec>(ir);`,
+    `export const ${camel(ir.id)} = typedMachineFromIr<${machine}Spec>(ir, irHash);`,
     "",
   ].join("\n");
 }

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -24,6 +25,11 @@ describe("generateContextTypes", () => {
   const ir = JSON.parse(
     fs.readFileSync(irFile("turnstile"), "utf8"),
   ) as IrDocument;
+  // The twin embeds SHA-256 of the raw IR bytes (matching the codegen entrypoint and C#'s SchemaHash), so the
+  // drift check must regenerate with that same hash.
+  const irHash = createHash("sha256")
+    .update(fs.readFileSync(irFile("turnstile"), "utf8"), "utf8")
+    .digest("hex");
 
   it("regenerates the committed turnstile context types (drift check)", () => {
     expect(generateContextTypes(ir)).toBe(
@@ -74,9 +80,18 @@ describe("generateContextTypes", () => {
     const committedFactory = fileURLToPath(
       new URL("../machines/turnstile/turnstile.machine.g.ts", import.meta.url),
     );
-    expect(generateMachineFactory(ir)).toBe(
+    expect(generateMachineFactory(ir, { irHash })).toBe(
       fs.readFileSync(committedFactory, "utf8"),
     );
+  });
+
+  it("embeds the IR hash and exposes it as the machine's schemaHash (the handshake token)", () => {
+    expect(irHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(generateMachineFactory(ir, { irHash })).toContain(
+      `export const irHash = "${irHash}";`,
+    );
+    // The built twin surfaces it as schemaHash, so a client can send it to the server for the skew handshake.
+    expect(turnstile.schemaHash).toBe(irHash);
   });
 
   it("strips the differential block from the generated runtime machine (test-only data)", () => {

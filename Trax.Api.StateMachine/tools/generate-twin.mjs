@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -25,13 +26,17 @@ export async function generateTwin({
       `--import-style must be 'relative' or 'specifier', got '${importStyle}'.`,
     );
 
-  const ir = JSON.parse(readFileSync(irPath, "utf8"));
+  const irRaw = readFileSync(irPath, "utf8");
+  const ir = JSON.parse(irRaw);
+  // SHA-256 of the exact committed IR bytes — matches C#'s IMachine.SchemaHash (which hashes ExportIr(),
+  // pinned equal to this file by the drift tests). The twin carries it for the runtime skew handshake.
+  const irHash = createHash("sha256").update(irRaw, "utf8").digest("hex");
   const { generateContextTypes, generateMachineFactory } = await bundleModule(
     join(engineSrc, "rules", "generateTypes.ts"),
   );
 
   const contexts = generateContextTypes(ir);
-  const factory = generateMachineFactory(ir, { importStyle, specifier });
+  const factory = generateMachineFactory(ir, { importStyle, specifier, irHash });
 
   mkdirSync(outDir, { recursive: true });
   const contextsPath = join(outDir, `${ir.id}.contexts.g.ts`);
