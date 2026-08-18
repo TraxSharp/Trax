@@ -112,12 +112,11 @@ describe("generateMachineFactory import styles", () => {
   ) as IrDocument;
 
   const RELATIVE_IMPORTS = [
-    `import { SnapshotMachine } from "../../machine";`,
-    `import { machineFromIr, type IrDocument } from "../../rules/irMachine";`,
-    `import { TypedMachine } from "../../typed";`,
+    `import { typedMachineFromIr } from "../../typed";`,
+    `import type { IrDocument } from "../../rules/irMachine";`,
   ].join("\n");
 
-  const SPECIFIER_IMPORT = `import { SnapshotMachine, TypedMachine, machineFromIr, type IrDocument } from "@trax/state-machine";`;
+  const SPECIFIER_IMPORT = `import { typedMachineFromIr, type IrDocument } from "@trax/state-machine";`;
 
   it("defaults to relative imports (unchanged from the no-options call)", () => {
     // The default MUST equal the argless call so the committed in-repo twin and its drift check never move.
@@ -139,7 +138,7 @@ describe("generateMachineFactory import styles", () => {
   });
 
   it("specifier style differs from relative ONLY in the engine import lines", () => {
-    // Everything after the imports (the embedded IR, the cast, the export) must be identical, so the two
+    // Everything after the imports (the embedded IR and the export) must be identical, so the two
     // styles are the same module with a different import head, nothing else.
     const relative = generateMachineFactory(ir, { importStyle: "relative" });
     const specifier = generateMachineFactory(ir, { importStyle: "specifier" });
@@ -154,7 +153,7 @@ describe("generateMachineFactory import styles", () => {
       specifier: "@acme/machines",
     });
     expect(out).toContain(
-      `import { SnapshotMachine, TypedMachine, machineFromIr, type IrDocument } from "@acme/machines";`,
+      `import { typedMachineFromIr, type IrDocument } from "@acme/machines";`,
     );
   });
 

@@ -1,9 +1,8 @@
 // AUTO-GENERATED from checkout.ir.json by generateMachineFactory. Do not edit by hand.
 
-import { SnapshotMachine } from "../../machine";
-import { machineFromIr, type IrDocument } from "../../rules/irMachine";
-import { TypedMachine } from "../../typed";
-import type { CheckoutSpec, CheckoutState, CheckoutTrigger } from "./checkout.contexts.g";
+import { typedMachineFromIr } from "../../typed";
+import type { IrDocument } from "../../rules/irMachine";
+import type { CheckoutSpec } from "./checkout.contexts.g";
 
 const ir = {
   "committedStates": [
@@ -261,12 +260,5 @@ const ir = {
   "version": 1
 } as IrDocument;
 
-// The runtime machine's states/triggers are exactly those in the IR; the cast narrows the string
-// generics to the generated unions so TypedMachine<CheckoutSpec> lines up.
-const core = new SnapshotMachine(machineFromIr(ir)) as unknown as SnapshotMachine<
-  CheckoutState,
-  CheckoutTrigger
->;
-
 /** The checkout machine, built from the IR and typed by CheckoutSpec. No hand-written twin. */
-export const checkout = new TypedMachine<CheckoutSpec>(core);
+export const checkout = typedMachineFromIr<CheckoutSpec>(ir);

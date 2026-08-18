@@ -228,9 +228,9 @@ export class SnapshotMachine<S extends string, T extends string> {
     ].sort(ordinal);
     const transitions = this.def.transitions
       .map((t) => ({
-        from: t.from as string,
-        trigger: t.trigger as string,
-        to: t.to as string,
+        from: t.from,
+        trigger: t.trigger,
+        to: t.to,
       }))
       .sort(
         (a, b) =>

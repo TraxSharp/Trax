@@ -95,31 +95,21 @@ export function generateMachineFactory(
   const { differential: _differential, ...runtimeIr } = ir;
   const engineImports =
     importStyle === "specifier"
-      ? [
-          `import { SnapshotMachine, TypedMachine, machineFromIr, type IrDocument } from "${specifier}";`,
-        ]
+      ? [`import { typedMachineFromIr, type IrDocument } from "${specifier}";`]
       : [
-          `import { SnapshotMachine } from "../../machine";`,
-          `import { machineFromIr, type IrDocument } from "../../rules/irMachine";`,
-          `import { TypedMachine } from "../../typed";`,
+          `import { typedMachineFromIr } from "../../typed";`,
+          `import type { IrDocument } from "../../rules/irMachine";`,
         ];
   return [
     `// AUTO-GENERATED from ${ir.id}.ir.json by generateMachineFactory. Do not edit by hand.`,
     "",
     ...engineImports,
-    `import type { ${machine}Spec, ${machine}State, ${machine}Trigger } from "./${ir.id}.contexts.g";`,
+    `import type { ${machine}Spec } from "./${ir.id}.contexts.g";`,
     "",
     `const ir = ${JSON.stringify(runtimeIr, null, 2)} as IrDocument;`,
     "",
-    "// The runtime machine's states/triggers are exactly those in the IR; the cast narrows the string",
-    `// generics to the generated unions so TypedMachine<${machine}Spec> lines up.`,
-    `const core = new SnapshotMachine(machineFromIr(ir)) as unknown as SnapshotMachine<`,
-    `  ${machine}State,`,
-    `  ${machine}Trigger`,
-    `>;`,
-    "",
     `/** The ${ir.id} machine, built from the IR and typed by ${machine}Spec. No hand-written twin. */`,
-    `export const ${camel(ir.id)} = new TypedMachine<${machine}Spec>(core);`,
+    `export const ${camel(ir.id)} = typedMachineFromIr<${machine}Spec>(ir);`,
     "",
   ].join("\n");
 }

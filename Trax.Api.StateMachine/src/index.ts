@@ -17,7 +17,7 @@ export {
 export { SnapshotMachine } from "./machine";
 
 // Typed frontend surface (framework-free). The React hook is at the `./react` subpath.
-export { TypedMachine } from "./typed";
+export { TypedMachine, typedMachineFromIr } from "./typed";
 export type {
   MachineSpec,
   StateOf,

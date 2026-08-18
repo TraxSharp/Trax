@@ -1,4 +1,5 @@
-import type { SnapshotMachine } from './machine';
+import { SnapshotMachine } from './machine';
+import { machineFromIr, type IrDocument } from './rules/irMachine';
 import type { AdvanceResult, RehydrationResult } from './results';
 
 /**
@@ -74,6 +75,21 @@ export class TypedMachine<Spec extends MachineSpec> {
   available(snapshot: TypedSnapshot<Spec>): TriggerOf<Spec>[] {
     return this.core.availableTriggers(snapshot) as TriggerOf<Spec>[];
   }
+}
+
+/**
+ * Build a {@link TypedMachine}<Spec> straight from an IR document. `machineFromIr` is data-driven, so it can
+ * only produce a `SnapshotMachine<string, string>`; the single unavoidable narrowing to the Spec's literal
+ * state/trigger unions is confined here so generated twins (and hand callers) never emit the `as unknown as`
+ * themselves. Safe by construction: the codegen emits the Spec and the IR from the same C# source, and the
+ * drift tests pin the two together.
+ */
+export function typedMachineFromIr<Spec extends MachineSpec>(ir: IrDocument): TypedMachine<Spec> {
+  const core = new SnapshotMachine(machineFromIr(ir)) as unknown as SnapshotMachine<
+    StateOf<Spec>,
+    TriggerOf<Spec>
+  >;
+  return new TypedMachine<Spec>(core);
 }
 
 // re-export the raw result types so consumers can build a Problem outside a controller if needed.

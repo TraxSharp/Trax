@@ -83,7 +83,7 @@ describe("generate-twin entrypoint", () => {
     });
     const machine = read(machinePath);
     expect(machine).toContain(
-      `import { SnapshotMachine, TypedMachine, machineFromIr, type IrDocument } from "@trax/state-machine";`,
+      `import { typedMachineFromIr, type IrDocument } from "@trax/state-machine";`,
     );
     expect(machine).not.toContain(`from "../../machine"`);
     // Context types are independent of import style, so they stay byte-identical to the committed file.
