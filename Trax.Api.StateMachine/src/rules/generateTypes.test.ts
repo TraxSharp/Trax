@@ -38,6 +38,97 @@ describe("generateContextTypes", () => {
     );
   });
 
+  // Turnstile alone is not enough cover: its schema carries no arrayOf/oneOf, so a generator change
+  // that alters constrained fields regenerates it byte-identically and the drift check stays green.
+  // Checkout has a constrained field, so every committed twin in the repo is now pinned.
+  it("regenerates the committed checkout context types (drift check)", () => {
+    const checkoutIr = JSON.parse(
+      fs.readFileSync(irFile("checkout"), "utf8"),
+    ) as IrDocument;
+    expect(generateContextTypes(checkoutIr)).toBe(
+      fs.readFileSync(
+        fileURLToPath(
+          new URL("../machines/checkout/checkout.contexts.g.ts", import.meta.url),
+        ),
+        "utf8",
+      ),
+    );
+  });
+
+  // A field's own constraints ARE type information: reading them is what keeps a consumer from
+  // hand-maintaining a precise copy of a context the IR already describes exactly.
+  describe("constraint-derived field types", () => {
+    const schemaFor = (field: Record<string, unknown>): IrDocument =>
+      ({
+        id: "sample",
+        version: 1,
+        initialState: "Only",
+        states: ["Only"],
+        triggers: ["Go"],
+        committedStates: [],
+        context: { Only: { fields: [field] } },
+        inputs: {},
+        transitions: [],
+      }) as unknown as IrDocument;
+
+    it("gives an arrayOf array its element type instead of unknown[]", () => {
+      const out = generateContextTypes(
+        schemaFor({
+          name: "ids",
+          type: "array",
+          nullable: false,
+          constraints: [
+            { rule: "arrayOf", source: "context", field: "ids", type: "number" },
+          ],
+        }),
+      );
+      expect(out).toContain("ids: number[];");
+    });
+
+    it("gives a oneOf string its literal union instead of string", () => {
+      const out = generateContextTypes(
+        schemaFor({
+          name: "size",
+          type: "string",
+          nullable: false,
+          constraints: [
+            { rule: "oneOf", source: "context", field: "size", values: ["s", "m"] },
+          ],
+        }),
+      );
+      expect(out).toContain('size: "s" | "m";');
+    });
+
+    it("leaves a field alone when the constraint targets another field or the trigger input", () => {
+      const out = generateContextTypes(
+        schemaFor({
+          name: "ids",
+          type: "array",
+          nullable: false,
+          constraints: [
+            { rule: "arrayOf", source: "input", field: "ids", type: "number" },
+            { rule: "arrayOf", source: "context", field: "other", type: "number" },
+          ],
+        }),
+      );
+      expect(out).toContain("ids: unknown[];");
+    });
+
+    it("keeps a narrowed nullable field optional and nullable", () => {
+      const out = generateContextTypes(
+        schemaFor({
+          name: "size",
+          type: "string",
+          nullable: true,
+          constraints: [
+            { rule: "oneOf", source: "context", field: "size", values: ["s"] },
+          ],
+        }),
+      );
+      expect(out).toContain('size?: "s" | null;');
+    });
+  });
+
   it("emits unions and a context interface derived from the schema", () => {
     const out = generateContextTypes(ir);
     expect(out).toContain(

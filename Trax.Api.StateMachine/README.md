@@ -34,6 +34,10 @@ each runtime, pinned by a shared conformance-vector suite.
 
 ## Data is generated, logic is interpreted
 
+The generated context types read the IR's **constraints**, not just its field types: a field constrained
+`arrayOf number` is emitted as `number[]`, and one constrained `oneOf ["a","b"]` as `"a" | "b"`. The IR
+already describes the context exactly, so a consumer never has to hand-maintain a more precise copy of it.
+
 **C# is the source of truth.** A machine is authored declaratively in C# (`Trax.Effect.StateMachine`), and
 `IrExporter.Export` emits a neutral, versioned **IR** (`<machine>.ir.json`) carrying identity, structure, the
 per-state context/input schemas, the declarative guards/reducers and invariants, committed states, effect
@@ -57,6 +61,30 @@ Consumers drive regeneration through `trax machine generate` (the Trax.Cli `mach
 progress) or, on the C# side, the exporter directly. The legacy `tools/state-machine-codegen/generate.mjs`
 reads a hand-authored `machine.json` and still serves the one machine not yet migrated (`checkout`); it is
 retired for everything on the IR pipeline.
+
+## Driving a UI that owns its own data
+
+`useMachine` / `MachineController` assume the machine owns the snapshot. A wizard built on a form
+library doesn't — the form is the source of truth, and the machine is an oracle: *given these values at
+this step, may I fire this, and where does it land?* `createFormView` derives that whole bridge from
+the only two things an app can supply:
+
+```ts
+const wizard = createFormView(writeToCongress, {
+  steps:     { welcome: 'Welcome', topic: 'Topic', compose: 'Compose', confirmation: 'Sent' },
+  toContext: (values, options = {}) => ({ subject: values.compose.subject, /* … */ }),
+});
+
+wizard.advance('topic', values, 'Next');   // → { ok: true, step: 'recipients' }
+wizard.can('topic', values, 'Next');       // → false while the guard declines
+wizard.serialize('topic', values);         // → canonical JSON for an autosave
+wizard.resume(storedJson);                 // → { step, snapshot } | null
+```
+
+The step map is given in **one** direction; `stepFor` is derived, so the two can't drift (a many-to-one
+map is rejected at construction, where the inverse would be ambiguous). Snapshots are stamped with the
+machine's own id and version. `resume` returns null for a COMMITTED run, and which states those are
+comes from the machine's IR (`.Committed()` in C#) — never a state name repeated in the app.
 
 ## Talking to the server — `@trax/state-machine/client`
 

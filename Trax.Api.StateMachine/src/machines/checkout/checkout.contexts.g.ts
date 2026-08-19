@@ -5,21 +5,21 @@ export type CheckoutTrigger = "Back" | "Next" | "Pay" | "Restart";
 
 export type CheckoutCartContext = {
   currency: string;
-  items: unknown[];
+  items: string[];
   receipt?: string | null;
   total: number;
 };
 
 export type CheckoutPaidContext = {
   currency: string;
-  items: unknown[];
+  items: string[];
   receipt: string;
   total: number;
 };
 
 export type CheckoutReviewContext = {
   currency: string;
-  items: unknown[];
+  items: string[];
   receipt?: string | null;
   total: number;
 };

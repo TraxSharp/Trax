@@ -6,7 +6,7 @@
 // Object shapes are emitted as `type` aliases, not `interface`, so they carry the implicit index signature
 // that `MachineSpec` (Record<string, ...>) requires.
 
-import type { ContextSchema, FieldSchema, JsonFieldType } from "./interpreter";
+import type { ContextSchema, FieldSchema, JsonFieldType, RuleSource } from "./interpreter";
 import type { IrDocument } from "./irMachine";
 
 export function generateContextTypes(ir: IrDocument): string {
@@ -144,10 +144,35 @@ function member(field: FieldSchema): string {
     : JSON.stringify(field.name);
   const optional = field.nullable ? "?" : "";
   const nullable = field.nullable ? " | null" : "";
-  return `${key}${optional}: ${tsType(field.type)}${nullable}`;
+  return `${key}${optional}: ${tsType(field)}${nullable}`;
 }
 
-function tsType(type: JsonFieldType): string {
+/**
+ * The TypeScript type for one context field. `field.type` alone is lossy: the IR also carries the
+ * field's constraints, and two of them ARE type information — `arrayOf` gives an array its element
+ * type, `oneOf` gives a string its literal union. Reading them here is what stops a consumer from
+ * hand-maintaining a "precise" copy of a context the IR already described exactly.
+ *
+ * Only a field's own, top-level, context-sourced constraint narrows it. A rule nested inside
+ * `all`/`any` may be conditional, and one aimed at another field or at trigger input says nothing
+ * about this field, so neither is safe to read as a type.
+ */
+function tsType(field: FieldSchema): string {
+  for (const rule of field.constraints) {
+    if (rule.rule === "arrayOf" && field.type === "array" && ownContextRule(rule, field))
+      return `${baseType(rule.type)}[]`;
+    if (rule.rule === "oneOf" && field.type === "string" && ownContextRule(rule, field))
+      return union(rule.values);
+  }
+  return baseType(field.type);
+}
+
+const ownContextRule = (
+  rule: { source: RuleSource; field: string },
+  field: FieldSchema,
+): boolean => rule.source === "context" && rule.field === field.name;
+
+function baseType(type: JsonFieldType): string {
   switch (type) {
     case "string":
       return "string";

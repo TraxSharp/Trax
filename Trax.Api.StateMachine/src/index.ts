@@ -12,7 +12,8 @@
  *   1. The wire        what crosses the network or lands in a row, and the codes that describe it
  *   2. The engine      the reducer that moves a snapshot from one state to the next
  *   3. The typed view  the same engine with a machine's own states/triggers/contexts as types
- *   4. Driving a UI    a framework-free store, and problems shaped for display
+ *   4. Driving a UI    a store for when the machine owns the data, a form view for when the UI
+ *                     does, and problems shaped for display
  *   5. Building one    the IR, the rule interpreter, and the generators that emit a twin
  *   6. Conformance     enumerating a machine into the golden corpus the other runtime replays
  *   7. Sample machines the two machines this repo ships as proofs
@@ -68,6 +69,12 @@ export {
 } from './controller';
 export { problemFromAdvance, problemFromRehydration, type Problem } from './problem';
 export { createDevLogger, type DevLoggerOptions } from './devtools';
+
+// The other shape: the UI already owns the data (a form), and the machine is asked rather than told.
+// A FormView derives the whole bridge — step↔state both ways, snapshot building, advance/can/serialize,
+// resume — from a step map and one projection.
+export { createFormView } from './formView';
+export type { FormView, FormViewOptions, ResumedStep, StepAdvance } from './formView';
 
 // ── 5. Building a machine from its IR ─────────────────────────────────────────────────────────────
 // `machineFromIr` runs the IR's declarative guards/reducers through the rule interpreter — no
