@@ -21,6 +21,8 @@ branching.
 | `unknown-state` | rehydrate | the snapshot names a state the definition does not have |
 | `version-mismatch` | rehydrate | the snapshot version is newer than the definition, or a [migration](/docs/sdk-reference/statemachine-api/migrations) is missing |
 | `unknown-machine` | rehydrate | no registered machine has that name |
+| `schema-mismatch` | save, advance, load, send | the client's machine [schema hash](/docs/sdk-reference/statemachine-api/runtime-integrity) differs from the server's; the client is out of date and should reload |
+| `client-divergence` | advance | the client's computed result differs from the server's authoritative result ([divergence detection](/docs/sdk-reference/statemachine-api/runtime-integrity)); reload |
 
 Over GraphQL these surface on the mutation's `problem` field, so a client reads the code and reacts (re-enable
 a control on `guard-failed`, start fresh on `version-mismatch`) without ever seeing a stack trace.
