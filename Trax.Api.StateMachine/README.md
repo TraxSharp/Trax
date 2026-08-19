@@ -10,6 +10,7 @@ This repo owns three things:
 | Piece | Location |
 | --- | --- |
 | The `@trax/state-machine` package (engine, rule interpreter, typed facade, React hook) | [`src/`](src) |
+| The `@trax/state-machine/client` subpath (the four generic snapshot mutations, machine-agnostic) | [`src/client/`](src/client) |
 | The shared, language-neutral fixtures both engines drive (the cross-language oracle) | [`machines/`](machines) |
 | The IR-driven generators (`generateContextTypes` / `generateMachineFactory`) and the legacy node generator | [`src/rules/generateTypes.ts`](src/rules/generateTypes.ts), [`tools/state-machine-codegen/`](tools/state-machine-codegen) |
 
@@ -56,6 +57,42 @@ Consumers drive regeneration through `trax machine generate` (the Trax.Cli `mach
 progress) or, on the C# side, the exporter directly. The legacy `tools/state-machine-codegen/generate.mjs`
 reads a hand-authored `machine.json` and still serves the one machine not yet migrated (`checkout`); it is
 retired for everything on the IR pipeline.
+
+## Talking to the server — `@trax/state-machine/client`
+
+The engine above is pure: a reducer and a rule interpreter, no I/O. Persisting a draft is a separate
+subpath, so importing the engine never pulls a transport into a bundle that only wanted the reducer.
+
+`Trax.Effect.StateMachine.Persistence` exposes **one** set of operations for **every** machine —
+`saveSnapshot`, `advanceSnapshot`, `loadSnapshot`, `sendSnapshot` under `dispatch { stateMachine { … } }`,
+each carrying a `machine` discriminator the server resolves in its registry. So there is one client, not
+one per machine:
+
+```ts
+import { createSnapshotClient, createHttpExecutor, createDraftSession } from '@trax/state-machine/client';
+
+const client  = createSnapshotClient(createHttpExecutor('/graphql'));
+const session = createDraftSession({ client, machine: writeToCongress, id: DRAFT_ID });
+
+await session.save(machine.serialize(snapshot));   // soft autosave
+await session.advance('Next');                     // authoritative transition
+await session.send(requestId);                     // the exactly-once effect
+```
+
+- **`createSnapshotClient(executor)`** — the four operations, machine-agnostic: `(machine, id)` on every
+  call. The `executor` is the seam to the host's GraphQL stack. An app with generated typed documents
+  writes a small one against those; an app without can use `createHttpExecutor`, which builds the four
+  documents itself.
+- **`createDraftSession({ client, machine, id })`** — one machine's one draft, with `machine` and
+  `schemaHash` read off the `TypedMachine` so they cannot disagree with the machine actually running.
+  Every method is **total**: a refusal arrives as a typed `problem` and an unreachable server as
+  `transport-error`, so no call site needs a try/catch. Fallback copy is overridable via `messages`.
+
+The `schemaHash` threaded through every call is the version-skew handshake: a client whose machine has
+drifted from the deployed one is refused with `schema-mismatch` and reloads, rather than writing under an
+outdated contract. `advance` also accepts `clientResult` — the snapshot the local twin computed for that
+same advance — so the server can refuse a `client-divergence` instead of storing a result the two engines
+disagree on.
 
 ## Status
 

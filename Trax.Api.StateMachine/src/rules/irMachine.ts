@@ -113,6 +113,7 @@ export function machineFromIr(
     createInitialContext,
     states: ir.states,
     transitions,
+    committedStates: ir.committedStates,
     contextValidators,
   };
 }

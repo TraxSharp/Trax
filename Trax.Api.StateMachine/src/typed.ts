@@ -56,8 +56,37 @@ export class TypedMachine<Spec extends MachineSpec> {
     return [...this.core.definition.states];
   }
 
+  /** The definition's schema version — the `version` every snapshot this machine writes must carry. */
+  get version(): number {
+    return this.core.definition.version;
+  }
+
   initial(): TypedSnapshot<Spec> {
     return this.core.createInitialSnapshot() as TypedSnapshot<Spec>;
+  }
+
+  /**
+   * A snapshot pinned at an arbitrary state — for a client whose UI owns the draft values (a form, say)
+   * and rebuilds the snapshot to ask the machine a question, rather than letting the machine own them.
+   * Takes `machine` and `version` from the definition, so a `.MigrateFrom` version bump can't leave a
+   * caller writing snapshots stamped with a stale version.
+   */
+  snapshotAt<S extends StateOf<Spec>>(state: S, context: Spec['states'][S]): TypedSnapshot<Spec> {
+    return {
+      machine: this.id,
+      version: this.version,
+      state,
+      context,
+    } as TypedSnapshot<Spec>;
+  }
+
+  /**
+   * Whether `state` is COMMITTED — an irreversible effect has run there, so the draft must not be
+   * overwritten by a soft save. The set comes from the machine's own IR (`.Committed()` in C#), so a
+   * caller never has to hardcode the terminal state's name.
+   */
+  isCommitted(state: StateOf<Spec>): boolean {
+    return this.core.definition.committedStates?.includes(state) ?? false;
   }
 
   advance<T extends TriggerOf<Spec>>(

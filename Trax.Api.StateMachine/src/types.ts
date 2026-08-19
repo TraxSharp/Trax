@@ -45,6 +45,12 @@ export interface MachineDefinition<S extends string, T extends string> {
   createInitialContext: () => Record<string, unknown>;
   states: readonly S[];
   transitions: ReadonlyArray<TransitionDefinition<S, T>>;
+  /**
+   * States that are COMMITTED: once a draft reaches one, an irreversible effect has run and a soft
+   * autosave must not overwrite it. Authored in C# via `.Committed()`, carried through the IR, and
+   * enforced server-side by the persistence layer — mirrored here so a client can ask before it writes.
+   */
+  committedStates?: readonly S[];
   /** Per-state validators: return null when the context is legal for that state, else a message. */
   contextValidators?: Partial<Record<S, ContextValidator>>;
   /** Forward migrations keyed by the version they migrate FROM. */
