@@ -1,6 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Nodes;
-
 namespace Trax.Effect.StateMachine.Testing;
 
 /// <summary>
@@ -32,52 +29,5 @@ public static class DifferentialCorpus
         string goldenJson
     )
         where TState : struct, Enum
-        where TTrigger : struct, Enum
-    {
-        var doc = (JsonObject)JsonNode.Parse(goldenJson)!;
-        var diffs = new List<string>();
-
-        foreach (var node in (JsonArray)doc["cases"]!)
-        {
-            var c = (JsonObject)node!;
-            var given = (JsonObject)c["given"]!;
-            var when = (JsonObject)c["when"]!;
-            var expect = (JsonObject)c["expect"]!;
-
-            var snap = new Snapshot
-            {
-                Machine = given["machine"]!.GetValue<string>(),
-                Version = given["version"]!.GetValue<int>(),
-                State = given["state"]!.GetValue<string>(),
-                Context = (JsonObject)given["context"]!.DeepClone(),
-            };
-            var trigger = when["trigger"]!.GetValue<string>();
-            var input = when["input"]?.DeepClone();
-
-            var (outcome, wire, reason) = machine.Advance(snap, trigger, input) switch
-            {
-                AdvanceResult.Transitioned t => (
-                    "transitioned",
-                    machine.Serialize(t.Snapshot),
-                    (string?)null
-                ),
-                AdvanceResult.Rejected r => ("rejected", (string?)null, r.Reason),
-                _ => ("internal-error", null, null),
-            };
-
-            var wantOutcome = expect["outcome"]!.GetValue<string>();
-            var wantWire = expect["wire"]?.GetValue<string>();
-            var wantReason = expect["reason"]?.GetValue<string>();
-
-            if (outcome != wantOutcome || wire != wantWire || reason != wantReason)
-            {
-                var payload = input is null ? "" : " " + input.ToJsonString();
-                diffs.Add(
-                    $"[{snap.State} + {trigger}{payload}] oracle {wantOutcome} "
-                        + $"{wantWire ?? wantReason}, C# {outcome} {wire ?? reason}"
-                );
-            }
-        }
-        return diffs;
-    }
+        where TTrigger : struct, Enum => CorpusReplay.Replay(machine, goldenJson);
 }

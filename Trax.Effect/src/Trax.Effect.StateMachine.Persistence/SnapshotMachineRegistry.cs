@@ -10,6 +10,9 @@ public interface ISnapshotMachineRegistry
     ISnapshotDraftService? Service(string machine);
 
     ISnapshotEffectRunner? EffectRunner(string machine);
+
+    /// <summary>The registered machine's schema hash (<see cref="IMachine.SchemaHash"/>), or null if unknown.</summary>
+    string? SchemaHash(string machine);
 }
 
 public sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
@@ -60,4 +63,7 @@ public sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
 
         return found.CreateEffectRunner(Service(machine)!, _idempotent, _services);
     }
+
+    public string? SchemaHash(string machine) =>
+        _machines.TryGetValue(machine, out var found) ? found.SchemaHash : null;
 }

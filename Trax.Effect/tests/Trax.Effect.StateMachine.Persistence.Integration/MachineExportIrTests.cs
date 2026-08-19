@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Trax.Effect.StateMachine.Persistence.Integration.Fakes;
@@ -48,6 +50,37 @@ public class MachineExportIrTests
         // Canonical single-line JSON: the CLI writes this verbatim (+ a trailing newline) as the .ir.json.
         first.Should().NotContain("\n");
         first.Should().StartWith("{").And.EndWith("}");
+    }
+
+    [Test]
+    public void SchemaHash_is_sha256_of_the_ir_with_the_committed_files_trailing_newline_stripped()
+    {
+        // The runtime skew handshake only works if the C# SchemaHash and the frontend twin's irHash hash the
+        // SAME bytes. C# hashes ExportIr() (no trailing newline); the CLI writes ExportIr() + "\n" as the
+        // committed .ir.json, and the frontend codegen hashes THAT file. So the codegen MUST strip the trailing
+        // newline, or the two hashes differ by one byte and every real client is falsely refused. This pins the
+        // contract cross-language: SchemaHash equals the trimmed-file hash and is NOT the raw-file hash.
+        var machine = new DeclarativeTurnstileMachine();
+        var ir = machine.ExportIr();
+        var committedFile = ir + "\n"; // exactly what the CLI writes as <machine>.ir.json
+
+        static string Sha(string s) =>
+            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
+
+        machine.SchemaHash.Should().MatchRegex("^[0-9a-f]{64}$");
+        machine.SchemaHash.Should().Be(Sha(ir), "SchemaHash is SHA-256 of the exported IR");
+        machine
+            .SchemaHash.Should()
+            .Be(
+                Sha(committedFile.TrimEnd('\n')),
+                "the frontend codegen must hash the committed file with its trailing newline stripped"
+            );
+        machine
+            .SchemaHash.Should()
+            .NotBe(
+                Sha(committedFile),
+                "hashing the raw committed file (with its trailing newline) is the skew-handshake bug this guards"
+            );
     }
 
     [Test]

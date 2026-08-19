@@ -29,13 +29,18 @@ public sealed class DeclarativeTurnstileMachine : Machine<TurnstileState, Turnst
         ConfigureTurnstile(m);
 
     /// <summary>The declarative definition, shared so a test can build the same machine standalone.</summary>
-    internal static void ConfigureTurnstile(IMachineBuilder<TurnstileState, TurnstileTrigger> m)
+    internal static void ConfigureTurnstile(IMachineBuilder<TurnstileState, TurnstileTrigger> m) =>
+        ConfigureTurnstile(m, "declarative-turnstile");
+
+    /// <summary>The same declarative turnstile under a caller-chosen id, so a test can register several without id clashes.</summary>
+    internal static void ConfigureTurnstile(
+        IMachineBuilder<TurnstileState, TurnstileTrigger> m,
+        string id
+    )
     {
         // A distinct id from the raw-delegate TurnstileMachine in this assembly, so both coexist under the
         // AddStateMachines registry scan (which keys machines by id).
-        m.Id("declarative-turnstile")
-            .Version(1)
-            .StartsAt(TurnstileState.Locked, () => new JsonObject());
+        m.Id(id).Version(1).StartsAt(TurnstileState.Locked, () => new JsonObject());
 
         m.In(TurnstileState.Locked)
             .Context()
