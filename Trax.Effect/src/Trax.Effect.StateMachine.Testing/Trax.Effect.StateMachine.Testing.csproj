@@ -13,5 +13,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
+    <ProjectReference Include="../Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
   </ItemGroup>
 </Project>

@@ -25,6 +25,9 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <!-- MachineConformance is the Testing package's helper over IMachine, so its tests live with the
+         Machine<,> fakes here rather than duplicating them in the engine test project. -->
+    <ProjectReference Include="../../src/Trax.Effect.StateMachine.Testing/Trax.Effect.StateMachine.Testing.csproj" />
     <!-- The demo mutation trains reference the real Trax ServiceTrain / Junction / attribute API. Living
          in the test project keeps them out of any production-scanned assembly (G23). -->
     <ProjectReference Include="../../src/Trax.Effect/Trax.Effect.csproj" />
