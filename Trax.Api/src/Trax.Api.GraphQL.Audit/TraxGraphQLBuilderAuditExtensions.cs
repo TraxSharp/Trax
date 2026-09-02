@@ -62,12 +62,12 @@ public static class TraxGraphQLBuilderAuditExtensions
             // HotChocolate 16 activates diagnostic listeners out of the schema container,
             // which no longer forwards to the application container. Bridge the services
             // the listener is constructed from.
-            schema.BridgeApplicationService<IHttpContextAccessor>(services);
-            schema.BridgeApplicationService<TraxAuditChannel>(services);
-            schema.BridgeApplicationService<IOptions<TraxAuditOptions>>(services);
-            schema.BridgeApplicationService<ITraxAuditRedactor>(services);
-            schema.BridgeApplicationService<TimeProvider>(services);
-            schema.BridgeApplicationService<ILogger<TraxGraphQLAuditListener>>(services);
+            schema.BridgeApplicationService<IHttpContextAccessor>();
+            schema.BridgeApplicationService<TraxAuditChannel>();
+            schema.BridgeApplicationService<IOptions<TraxAuditOptions>>();
+            schema.BridgeApplicationService<ITraxAuditRedactor>();
+            schema.BridgeApplicationService<TimeProvider>();
+            schema.BridgeApplicationService<ILogger<TraxGraphQLAuditListener>>();
             schema.AddDiagnosticEventListener<TraxGraphQLAuditListener>();
         });
 

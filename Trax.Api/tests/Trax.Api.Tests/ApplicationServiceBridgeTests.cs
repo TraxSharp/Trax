@@ -20,65 +20,6 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class ApplicationServiceBridgeTests
 {
-    #region IsRegistered
-
-    [Test]
-    public void IsRegistered_ClosedRegistration_IsFound()
-    {
-        var services = new ServiceCollection();
-        services.AddSingleton<IProbe, Probe>();
-
-        ApplicationServiceBridge.IsRegistered<IProbe>(services).Should().BeTrue();
-    }
-
-    [Test]
-    public void IsRegistered_MissingRegistration_IsNotFound()
-    {
-        ApplicationServiceBridge.IsRegistered<IProbe>(new ServiceCollection()).Should().BeFalse();
-    }
-
-    [Test]
-    public void IsRegistered_OpenGenericRegistration_SatisfiesClosedRequest()
-    {
-        // AddLogging registers ILogger<> open. A closed ILogger<Probe> is resolvable from
-        // it, so the bridge must consider it present.
-        var services = new ServiceCollection();
-        services.AddLogging();
-
-        ApplicationServiceBridge.IsRegistered<ILogger<Probe>>(services).Should().BeTrue();
-    }
-
-    [Test]
-    public void IsRegistered_OptionsOpenGeneric_SatisfiesClosedRequest()
-    {
-        var services = new ServiceCollection();
-        services.AddOptions();
-
-        ApplicationServiceBridge.IsRegistered<IOptions<ProbeOptions>>(services).Should().BeTrue();
-    }
-
-    [Test]
-    public void IsRegistered_UnrelatedGeneric_IsNotFound()
-    {
-        var services = new ServiceCollection();
-        services.AddSingleton<IEqualityComparer<string>>(StringComparer.Ordinal);
-
-        ApplicationServiceBridge.IsRegistered<IComparer<string>>(services).Should().BeFalse();
-    }
-
-    [Test]
-    public void IsRegistered_ImplementationTypeOnly_IsNotAServiceType()
-    {
-        // A descriptor registered as its concrete type does not satisfy the interface.
-        var services = new ServiceCollection();
-        services.AddSingleton<Probe>();
-
-        ApplicationServiceBridge.IsRegistered<IProbe>(services).Should().BeFalse();
-        ApplicationServiceBridge.IsRegistered<Probe>(services).Should().BeTrue();
-    }
-
-    #endregion
-
     #region BridgeApplicationService
 
     [Test]
@@ -90,7 +31,7 @@ public class ApplicationServiceBridgeTests
         var builder = services
             .AddGraphQLServer()
             .AddQueryType(d => d.Name("Query").Field("ping").Type<StringType>().Resolve("pong"));
-        builder.BridgeApplicationService<IProbe>(services);
+        builder.BridgeApplicationService<IProbe>();
 
         var executor = await BuildAsync(services);
 
@@ -103,18 +44,42 @@ public class ApplicationServiceBridgeTests
     [Test]
     public async Task Bridge_MissingService_DoesNotBreakSchemaBuild()
     {
-        // The whole point of the conditional: an unconditional AddApplicationService here
-        // would throw "No service for type ... has been registered" at schema build.
+        // Resolving eagerly while the schema container is built would turn a service the
+        // host never registered into a startup crash. The bridge defers, so composition
+        // succeeds and only an actual request for it fails.
         var services = new ServiceCollection();
 
         var builder = services
             .AddGraphQLServer()
             .AddQueryType(d => d.Name("Query").Field("ping").Type<StringType>().Resolve("pong"));
-        builder.BridgeApplicationService<IProbe>(services);
+        builder.BridgeApplicationService<IProbe>();
 
         var executor = await BuildAsync(services);
 
-        executor.Schema.Services.GetService<IProbe>().Should().BeNull();
+        var act = () => executor.Schema.Services.GetRequiredService<IProbe>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("*IProbe*");
+    }
+
+    [Test]
+    public async Task Bridge_ServiceRegisteredAfterTheBuilder_IsStillResolvable()
+    {
+        // The regression this guards: AddTraxGraphQL() runs before AddAuthentication() in
+        // plenty of hosts. HotChocolate 15 forwarded lookups at request time so order never
+        // mattered; deciding what to bridge from the collection's contents reintroduced an
+        // ordering dependency and left interceptors unable to activate.
+        var services = new ServiceCollection();
+
+        var builder = services
+            .AddGraphQLServer()
+            .AddQueryType(d => d.Name("Query").Field("ping").Type<StringType>().Resolve("pong"));
+        builder.BridgeApplicationService<IProbe>();
+
+        // Registered only after the GraphQL builder has been configured.
+        services.AddSingleton<IProbe>(new Probe { Marker = "late" });
+
+        var executor = await BuildAsync(services);
+
+        executor.Schema.Services.GetRequiredService<IProbe>().Marker.Should().Be("late");
     }
 
     [Test]
@@ -123,26 +88,13 @@ public class ApplicationServiceBridgeTests
         var services = new ServiceCollection();
         var builder = services.AddGraphQLServer();
 
-        builder.BridgeApplicationService<IProbe>(services).Should().BeSameAs(builder);
+        builder.BridgeApplicationService<IProbe>().Should().BeSameAs(builder);
     }
 
     [Test]
     public void Bridge_NullBuilder_Throws()
     {
-        var act = () =>
-            ((IRequestExecutorBuilder)null!).BridgeApplicationService<IProbe>(
-                new ServiceCollection()
-            );
-
-        act.Should().Throw<ArgumentNullException>();
-    }
-
-    [Test]
-    public void Bridge_NullServices_Throws()
-    {
-        var builder = new ServiceCollection().AddGraphQLServer();
-
-        var act = () => builder.BridgeApplicationService<IProbe>(null!);
+        var act = () => ((IRequestExecutorBuilder)null!).BridgeApplicationService<IProbe>();
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -177,7 +129,7 @@ public class ApplicationServiceBridgeTests
         var builder = services
             .AddGraphQLServer()
             .AddQueryType(d => d.Name("Query").Field("ping").Type<StringType>().Resolve("pong"));
-        builder.BridgeApplicationService<TraxApplicationServices>(services);
+        builder.BridgeApplicationService<TraxApplicationServices>();
 
         var executor = await BuildAsync(services);
 
