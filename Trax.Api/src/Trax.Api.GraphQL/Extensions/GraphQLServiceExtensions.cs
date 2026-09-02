@@ -20,6 +20,7 @@ using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Errors;
+using Trax.Api.GraphQL.Filtering.ListElements;
 using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Projection;
@@ -274,13 +275,32 @@ public static class GraphQLServiceExtensions
 
             if (config.ModelRegistrations.Any(r => r.Attribute.Filtering))
             {
-                if (config.FilterModules.Count > 0)
+                // Scalar collection properties need their element filter input restricted:
+                // `some/all/none: { neq: ... }` lowers to Any(x => x != value) over a
+                // primitive collection, which no EF Core provider can translate, so it
+                // passes validation and throws at execution. See ListElementFilterBinding.
+                var listElementBindings = ListElementFilterBinding.Discover(
+                    config
+                        .ModelRegistrations.Where(r => r.Attribute.Filtering)
+                        .Select(r => r.EntityType)
+                );
+
+                if (listElementBindings.Count > 0)
+                {
+                    // Whether a scalar collection is GIN-indexed decides which operator
+                    // Npgsql emits for a membership filter, and nothing in the schema or
+                    // the response reveals the answer. Say so at startup.
+                    services.AddHostedService<QueryModelScalarCollectionIndexValidator>();
+                }
+
+                if (config.FilterModules.Count > 0 || listElementBindings.Count > 0)
                     graphqlBuilder.AddFiltering(convention =>
                     {
                         // Supplying a configure action replaces HotChocolate's default
                         // convention wiring, so re-establish the stock operations and
                         // queryable provider before layering the opt-in modules on top.
                         convention.AddDefaults();
+                        ListElementFilterBinding.Apply(convention, listElementBindings);
                         foreach (var module in config.FilterModules)
                             module.Apply(convention);
                     });
