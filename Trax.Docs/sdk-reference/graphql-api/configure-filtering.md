@@ -94,14 +94,14 @@ since `neq` translates correctly on ordinary scalar properties, so the element p
 gets its own input type instead:
 
 ```graphql
-input ListBadgeOperationFilterInput {
-  all: BadgeListElementFilterInput
-  none: BadgeListElementFilterInput
-  some: BadgeListElementFilterInput
+input ListBadgeElementFilterInput {
+  all: BadgeElementFilterInput
+  none: BadgeElementFilterInput
+  some: BadgeElementFilterInput
   any: Boolean
 }
 
-input BadgeListElementFilterInput {
+input BadgeElementFilterInput {
   eq: Badge
   in: [Badge!]
   nin: [Badge!]
@@ -110,6 +110,13 @@ input BadgeListElementFilterInput {
 
 `all: { neq: X }` is the only filter this removes. `none: { eq: X }` means the same thing
 and is still available. Scalar properties keep the full operation set including `neq`.
+
+The restricted types are named `{Scalar}ElementFilterInput` rather than reusing
+HotChocolate's `{Scalar}OperationFilterInput`. A collection whose element cannot be
+restricted keeps the stock types, so a restricted type sharing a stock name would collide
+with it at schema build. Collections of a nullable scalar (`int?[]`) are that case: the
+`struct` constraint on HotChocolate's comparable filter input excludes `Nullable<T>`, so
+they keep the stock element input, `neq` included.
 
 The restriction applies to the auto-generated filter input, to
 [`ExposeAs`](/docs/sdk-reference/graphql-api/query-models#exposeas)-projected inputs, and

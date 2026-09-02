@@ -391,19 +391,23 @@ The schema exposes the enum by name and the collection as a list filter:
 ```graphql
 enum Badge { FOUNDER, VETERAN, CHAMPION }
 
-input ListBadgeOperationFilterInput {
-  all: BadgeListElementFilterInput
-  none: BadgeListElementFilterInput
-  some: BadgeListElementFilterInput
+input ListBadgeElementFilterInput {
+  all: BadgeElementFilterInput
+  none: BadgeElementFilterInput
+  some: BadgeElementFilterInput
   any: Boolean
 }
 
-input BadgeListElementFilterInput {
+input BadgeElementFilterInput {
   eq: Badge
   in: [Badge!]
   nin: [Badge!]
 }
 ```
+
+A collection of a nullable scalar (`int?[]`) is the exception: HotChocolate's comparable
+filter input is constrained to non-nullable value types, so those keep the stock input,
+`neq` included.
 
 Set membership is expressed with the standard list operators, and each one reaches
 PostgreSQL as an array operator a GIN index can serve:
