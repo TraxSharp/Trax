@@ -19,14 +19,23 @@ A `GreenDonut.BatchDataLoader<int, TEntity>` keyed by integer `Id`. It injects t
 public sealed class LoanToBookEdge
 {
     public async Task<Book?> GetBook(
-        [Parent] Loan loan,
+        [Parent(requires: nameof(Loan.BookId))] Loan loan,
         CrossSchemaLoader<CatalogDbContext, Book> books,
         CancellationToken ct
     ) => await books.LoadAsync(loan.BookId, ct);
 }
 ```
 
-The target entity must have an integer `Id` primary key. Because HotChocolate projection only loads selected columns, a query selecting the edge must also select its foreign key (here `bookId`).
+The target entity must have an integer `Id` primary key.
+
+`requires:` is what puts the foreign key in the projection. Projection narrows the `SELECT` to
+the columns the caller named, and a cross-schema edge reads a column the caller did not ask
+for, so without the declaration `loan.BookId` arrives as `0` and the edge resolves to null. Trax
+adds the *key* of a query model to the projection on its own; a foreign key has to be declared.
+See [query models](/docs/sdk-reference/graphql-api/query-models#projection-and-hand-written-resolvers).
+
+The `ExtensionResolversDeclareParentRequirements` guard fails the build when an edge resolver
+omits it.
 
 ## CrossSchemaEdge and registration
 
@@ -50,3 +59,7 @@ Cross-schema edge resolvers live in their own project (the one place allowed to 
 | `CrossSchemaLoader<TContext, TEntity>` | Batched loader resolving `TEntity` (integer `Id` PK) from `TContext`. |
 | `CrossSchemaEdge` | Manifest entry: `Source`, `Fk`, `Target`, `TargetContext`, `FieldName`. |
 | `AddCrossSchemaLoader<TContext, TEntity>()` | Registers the loader for one target pair. |
+
+## SDK Reference
+
+> [Query models](/docs/sdk-reference/graphql-api/query-models) | [Architecture guards](/docs/reference/architecture-guards)

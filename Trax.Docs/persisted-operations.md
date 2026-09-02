@@ -103,10 +103,12 @@ The RabbitMQ broadcaster publishes a `PersistedOperationChangedMessage` on every
 
 Upsert, deactivate, and restore each clear HotChocolate's request-pipeline caches in addition to Trax's optional `IPersistedOperationCache`:
 
-- `IDocumentCache` (root-scoped, keyed by persisted-operation id) holds the parsed `DocumentNode`.
-- `IPreparedOperationCache` (schema-scoped, keyed by `{schema}-{executorVersion}-{documentId}+{operationName}`) holds the compiled operation.
+- `IDocumentCache` (keyed by persisted-operation id) holds the parsed `DocumentNode`.
+- `IPreparedOperationCache` (keyed by `{schema}-{executorVersion}-{documentId}+{operationName}`) holds the compiled operation.
 
-Without this, a re-uploaded document text would be visible from `IPersistedOperationStore.GetAsync` but the request executor would keep serving the previously compiled operation until the process restarted. Cross-node invalidation via `UseRabbitMqInvalidation(...)` triggers the same HotChocolate cache clear on every receiver. Neither HC cache exposes per-id removal, so each invalidation clears the cache entirely; persisted-operation edits are operator-driven and rare, so the cache-warm cost on the next handful of requests is acceptable.
+Without this, a re-uploaded document text would be visible from `IPersistedOperationStore.GetAsync` but the request executor would keep serving the previously compiled operation until the process restarted. Cross-node invalidation via `UseRabbitMqInvalidation(...)` triggers the same HotChocolate cache clear on every receiver.
+
+HotChocolate treats a persisted-operation id as immutable, so neither of its caches exposes per-id removal (and from version 16, no way to clear them at all). Enabling persisted operations therefore substitutes two cache implementations that can be emptied, with the same contracts and bounds as HotChocolate's own. Each invalidation empties them; persisted-operation edits are operator-driven and rare, so the cache-warm cost on the next handful of requests is acceptable. A host that does not use persisted operations keeps HotChocolate's caches untouched.
 
 ## Phased rollout
 

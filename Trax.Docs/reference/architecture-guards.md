@@ -65,9 +65,10 @@ The guards check first-class Trax types, so adopting them goes hand in hand with
 - **`DomainDataContext<TSelf>`** (`Trax.Effect.Data`) is the base for a domain data context. It applies the default schema on PostgreSQL, a UTC datetime converter, and seals `OnModelCreating` (you override `Schema` and `ConfigureModel`). It is separate from Trax's own metadata `DataContext<T>`. Register it with `AddDomainDataContext<TInterface, TContext>` and create its schema with `EnsureSchemaCreatedAsync<TContext>`.
 - **`IEntityReference`** marks a scalar-only projection of an entity owned by another schema, for cross-schema reads.
 - **`CrossSchemaLoader<TContext, TEntity>`** and **`CrossSchemaEdge`** (`Trax.Api.GraphQL`) back cross-schema GraphQL edges: a batched loader collapses every cross-context lookup in a request into one `WHERE id IN (...)`, and the edge manifest is the single source of truth the guards check.
+- **`[Parent(requires: ...)]`** on a resolver declares which columns of its parent it reads. Trax adds a query model's key to the projection automatically, so `Extension_resolvers_declare_what_they_read_off_their_parent` only fires on the properties it cannot infer: foreign keys, and anything else a resolver touches. Without the declaration the property arrives as `0` or `null` and the field silently returns nothing.
 
 The Bookworm sample is the reference consumer of every package and pattern above.
 
 ## SDK Reference
 
-> [DomainDataContext](/docs/effect/effect-providers/domain-data-contexts) | [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders)
+> [DomainDataContext](/docs/effect/effect-providers/domain-data-contexts) | [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders) | [Query models](/docs/sdk-reference/graphql-api/query-models)

@@ -119,6 +119,60 @@ public class StatusCode { ... }
 
 When `Paging = false`, the field returns a plain list (`[Entity!]!`) instead of a Connection type.
 
+## Projection and hand-written resolvers
+
+Projection narrows the `SELECT` to the columns the caller's selection set names. A query for
+`{ players { nodes { displayName } } }` reads one column, not the whole row.
+
+That has a consequence for any field you add to a query model with `[ExtendObjectType]`. Such a
+resolver reads its `[Parent]` in C#, where projection cannot see what it touches, so a property
+nobody selected arrives as `0` or `null` and the resolver silently returns an empty or zero
+answer.
+
+Trax closes the common case: for every field on a query model that is not backed by an entity
+property, it adds the entity's key to the projection. A resolver that batches on the parent's
+key needs no annotation.
+
+```csharp
+[ExtendObjectType(typeof(Player))]
+public sealed class PlayerAchievements
+{
+    // player.Id arrives whether or not the caller selected `id`.
+    public Task<IReadOnlyList<Achievement>> GetAchievements(
+        [Parent] Player player,
+        AchievementLoader loader,
+        CancellationToken ct
+    ) => loader.LoadAsync(player.Id, ct);
+}
+```
+
+A resolver that reads something other than the key declares it, and HotChocolate merges that
+with the key Trax already requires:
+
+```csharp
+[ExtendObjectType(typeof(Player))]
+public sealed class PlayerTeam
+{
+    public Task<Team?> GetTeam(
+        [Parent(requires: nameof(Player.TeamId))] Player player,
+        TeamLoader loader,
+        CancellationToken ct
+    ) => loader.LoadAsync(player.TeamId, ct);
+}
+```
+
+The requirement is per field and only applies when the field is selected, so a query that does
+not ask for `team` still projects exactly the columns it named.
+
+The key is read from the entity class: a `[Key]` property (all of them, for a composite key),
+otherwise `Id`, otherwise `{TypeName}Id`. A key configured only through the fluent API's
+`HasKey` is not visible there, so resolvers on such an entity declare what they read with
+`[Parent(requires: ...)]`.
+
+`ExtensionResolversDeclareParentRequirements` in `Trax.Api.GraphQL.Testing` fails the build when
+a resolver reads an undeclared property. See
+[architecture guards](/docs/reference/architecture-guards).
+
 ## Field Binding
 
 By default, HotChocolate exposes all public properties on an entity as GraphQL fields. When your entity has `[NotMapped]` aliases, DataLoader methods, or infrastructure methods that should not appear in the schema, use explicit binding:
@@ -319,4 +373,4 @@ Both appear under the `discover` namespace in the GraphQL schema.
 
 ## SDK Reference
 
-> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ConfigureFiltering](/docs/sdk-reference/graphql-api/configure-filtering)
+> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ConfigureFiltering](/docs/sdk-reference/graphql-api/configure-filtering) | [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders) | [Architecture guards](/docs/reference/architecture-guards)
