@@ -228,6 +228,20 @@ services.AddTraxGraphQL(graphql => graphql
 
 This registration overrides the stock interceptors and is independent of when auth was registered in the service collection. The interceptor's own dependencies resolve per connection, so it only needs them in DI by app start. Derive from `DefaultSocketSessionInterceptor`, read the credential from the `connection_init` payload in `OnConnectAsync`, and return `ConnectionStatus.Reject(...)` to refuse the connection or attach the principal to `session.Connection.HttpContext.User` and call `base.OnConnectAsync(...)` to accept.
 
+### Register authentication before AddTraxGraphQL
+
+The interceptor that reads the credential is chosen from what is registered when
+`AddTraxGraphQL()` runs, so the auth call has to come first:
+
+```csharp
+builder.Services.AddTraxJwtAuth(...);   // must precede AddTraxGraphQL
+builder.Services.AddTraxGraphQL(...);
+```
+
+The other order fails at startup with a message naming the call to move. Before that check
+existed it started fine and accepted every connection anonymously, because HotChocolate falls
+back to an interceptor that accepts everything and HTTP gating is unaffected.
+
 ## Architecture
 
 Subscriptions are powered by the [lifecycle hooks](/docs/sdk-reference/configuration/add-lifecycle-hook) system. The `GraphQLSubscriptionHook` is automatically registered by `AddTraxGraphQL()` and publishes lifecycle events to HotChocolate's in-memory subscription transport.

@@ -170,6 +170,26 @@ builder.Services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
 
 The two are independent. Use the builder method when you want developers to load the IDE without credentials and only enforce auth on actual GraphQL operations; use the endpoint method when even the IDE shell should be gated.
 
+## Registration order
+
+`AddTraxGraphQL()` needs `AddTrax()` to have run first, and it chooses which subscription
+interceptor to wire from the authentication schemes registered by the time it runs. Register
+authentication before it:
+
+```csharp
+builder.Services.AddTrax(trax => trax.AddEffects(...).AddMediator(...));
+builder.Services.AddTraxJwtAuth(...);        // or AddTraxApiKeyAuth / AddTraxJwtDispatcher
+builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<AppDbContext>());
+```
+
+Get it wrong and the host refuses to start, naming the call to move. It does not start with
+subscriptions unauthenticated, which is what earlier versions did: no interceptor was wired, so
+HotChocolate accepted every `connection_init` while HTTP requests kept being gated normally.
+
+Everything else is order-independent. `@authorize` is attached to the schema, so query and
+mutation gating works whichever way round the host is composed, and services the GraphQL
+components depend on are resolved on first use rather than when `AddTraxGraphQL()` runs.
+
 ## Package
 
 ```
