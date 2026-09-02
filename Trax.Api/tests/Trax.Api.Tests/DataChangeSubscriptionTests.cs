@@ -52,15 +52,15 @@ public class DataChangeSubscriptionTests
 
         _provider = services.BuildServiceProvider();
         return await _provider
-            .GetRequiredService<IRequestExecutorResolver>()
-            .GetRequestExecutorAsync("trax");
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
     }
 
     [Test]
     public async Task Schema_ExposesOnDataChanged_WithConstantCaseChangeDomainEnum()
     {
         var executor = await BuildExecutorAsync();
-        var sdl = executor.Schema.Print();
+        var sdl = executor.Schema.ToString();
 
         sdl.Should().Contain("onDataChanged: DataChangedEvent!");
         sdl.Should().Contain("type DataChangedEvent");
@@ -92,7 +92,7 @@ public class DataChangeSubscriptionTests
         );
         var stream = result.ExpectResponseStream();
 
-        var received = new TaskCompletionSource<IOperationResult>(
+        var received = new TaskCompletionSource<OperationResult>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
         var reader = Task.Run(async () =>
@@ -126,7 +126,7 @@ public class DataChangeSubscriptionTests
         var payload = await received.Task;
         payload.Errors.Should().BeNullOrEmpty();
 
-        var data = (IReadOnlyDictionary<string, object?>)payload.Data!["onDataChanged"]!;
+        var data = (IReadOnlyDictionary<string, object?>)payload.DataMap()["onDataChanged"]!;
         data["domain"]!.ToString().Should().Be("WORK_QUEUE");
 
         await stream.DisposeAsync();

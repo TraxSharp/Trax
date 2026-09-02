@@ -1,3 +1,4 @@
+using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Execution.Caching;
 using HotChocolate.Language;
@@ -7,19 +8,20 @@ using Microsoft.Extensions.Logging;
 namespace Trax.Api.GraphQL.PersistedOperations.Storage;
 
 /// <summary>
-/// Invalidates HotChocolate's request-pipeline caches when a persisted
-/// operation document changes. Without this, HC's <see cref="IDocumentCache"/>
-/// (parsed <c>DocumentNode</c> keyed by persisted-op id) and
-/// <see cref="IPreparedOperationCache"/> (compiled operation keyed by
-/// <c>{schema}-{executorVersion}-{documentId}+{operationName}</c>) will keep
-/// serving the previously cached version even after
-/// <c>IOperationDocumentStorage.TryReadAsync</c> returns the new text.
+/// Empties HotChocolate's request-pipeline caches when a persisted operation document
+/// changes. Without this, the parsed-document cache (keyed by persisted-op id) and the
+/// prepared-operation cache (keyed by
+/// <c>{schema}-{executorVersion}-{documentId}+{operationName}</c>) keep serving the
+/// previous document even after <c>IOperationDocumentStorage.TryReadAsync</c> returns the
+/// new text.
 /// </summary>
 /// <remarks>
-/// Neither cache exposes per-id removal in HC 15.x, so this clears each
-/// cache in its entirety. Persisted-operation upserts are operator-driven
-/// and rare, so the cache-warm cost on the next handful of requests is
-/// acceptable.
+/// Both caches live in the executor's service provider, and HotChocolate 16 exposes no way
+/// to drop an entry from its own implementations: <c>Clear()</c> is gone from both, and
+/// evicting the executor does not rebuild one whose schema has not changed. The
+/// persisted-operations package therefore substitutes
+/// <see cref="ClearableDocumentCache"/> and <see cref="ClearablePreparedOperationCache"/>,
+/// and this type empties them.
 /// </remarks>
 internal sealed class HotChocolateOperationCacheInvalidator
 {
@@ -39,47 +41,46 @@ internal sealed class HotChocolateOperationCacheInvalidator
     }
 
     /// <summary>
-    /// Schema name captured at <c>ConfigureSchema</c> time so we know which
-    /// executor to ask for. <c>null</c> resolves to HC's default schema.
+    /// Schema name captured at <c>ConfigureSchema</c> time so we know which executor's
+    /// caches to reach. <c>null</c> resolves to HotChocolate's default schema.
     /// </summary>
     public void SetSchemaName(string? schemaName) => _schemaName = schemaName;
 
     /// <summary>
-    /// Clears both the parsed-document cache and the prepared-operation
-    /// cache. Safe to call from any thread. Never throws; logs and returns.
+    /// Empties both caches. Safe to call from any thread. Never throws except on
+    /// cancellation; otherwise logs and returns.
     /// </summary>
     public async Task InvalidateAsync(CancellationToken ct)
     {
-        try
-        {
-            var documentCache = _rootServices.GetService<IDocumentCache>();
-            documentCache?.Clear();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to clear HotChocolate IDocumentCache during persisted-operation invalidation."
-            );
-        }
+        ct.ThrowIfCancellationRequested();
 
         try
         {
-            var resolver = _rootServices.GetService<IRequestExecutorResolver>();
-            if (resolver is null)
+            var provider = _rootServices.GetService<IRequestExecutorProvider>();
+            if (provider is null)
                 return;
 
-            var executor = await resolver
-                .GetRequestExecutorAsync(_schemaName, ct)
+            var executor = await provider
+                .GetExecutorAsync(_schemaName ?? ISchemaDefinition.DefaultName, ct)
                 .ConfigureAwait(false);
-            var prepared = executor.Schema.Services.GetService<IPreparedOperationCache>();
-            prepared?.Clear();
+
+            var schemaServices = executor.Schema.Services;
+
+            (schemaServices.GetService<IDocumentCache>() as ClearableDocumentCache)?.Clear();
+            (
+                schemaServices.GetService<IPreparedOperationCache>()
+                as ClearablePreparedOperationCache
+            )?.Clear();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(
                 ex,
-                "Failed to clear HotChocolate IPreparedOperationCache during persisted-operation invalidation."
+                "Failed to clear the HotChocolate operation caches during persisted-operation invalidation."
             );
         }
     }

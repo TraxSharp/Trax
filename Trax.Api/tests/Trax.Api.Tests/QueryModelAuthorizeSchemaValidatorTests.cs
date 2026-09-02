@@ -379,8 +379,8 @@ public class QueryModelAuthorizeSchemaValidatorTests
         }
 
         var sp = services.BuildServiceProvider();
-        var resolver = sp.GetRequiredService<IRequestExecutorResolver>();
-        _ = await resolver.GetRequestExecutorAsync("trax");
+        var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
+        _ = await resolver.GetExecutorAsync("trax");
 
         return (config, sp);
     }
@@ -461,8 +461,8 @@ public class QueryModelAuthorizeSchemaValidatorTests
         }
 
         var sp = services.BuildServiceProvider();
-        var resolver = sp.GetRequiredService<IRequestExecutorResolver>();
-        _ = await resolver.GetRequestExecutorAsync("trax");
+        var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
+        _ = await resolver.GetExecutorAsync("trax");
 
         return (config, sp);
     }
@@ -507,8 +507,8 @@ public class QueryModelAuthorizeSchemaValidatorTests
         );
 
         var sp = services.BuildServiceProvider();
-        var resolver = sp.GetRequiredService<IRequestExecutorResolver>();
-        _ = await resolver.GetRequestExecutorAsync("trax");
+        var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
+        _ = await resolver.GetExecutorAsync("trax");
 
         return (config, sp);
     }

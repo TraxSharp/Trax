@@ -1,4 +1,5 @@
 using HotChocolate;
+using HotChocolate.Execution;
 using Trax.Api.Exceptions;
 using Trax.Core.Exceptions;
 using Trax.Mediator.Exceptions;

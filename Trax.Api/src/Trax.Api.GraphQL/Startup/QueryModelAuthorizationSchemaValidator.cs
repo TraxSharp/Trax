@@ -55,8 +55,8 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
         // misconfiguration at host start instead of on the first request, and
         // (b) lets us walk the resolved types.
         using var scope = serviceProvider.CreateScope();
-        var resolver = scope.ServiceProvider.GetRequiredService<IRequestExecutorResolver>();
-        var executor = await resolver.GetRequestExecutorAsync(TraxSchemaName, cancellationToken);
+        var resolver = scope.ServiceProvider.GetRequiredService<IRequestExecutorProvider>();
+        var executor = await resolver.GetExecutorAsync(TraxSchemaName, cancellationToken);
         var schema = executor.Schema;
 
         var queryType = schema.QueryType;
@@ -80,7 +80,10 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
     /// gate that enforces transitive navigation — without it, any field elsewhere in
     /// the schema whose return type is this entity would be readable.
     /// </summary>
-    private static void VerifyTypeLevelDirective(ISchema schema, QueryModelRegistration reg)
+    private static void VerifyTypeLevelDirective(
+        ISchemaDefinition schema,
+        QueryModelRegistration reg
+    )
     {
         var objectType = schema
             .Types.OfType<ObjectType>()
@@ -113,7 +116,10 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
     /// gate is what blocks Connection-shaped scalars (<c>totalCount</c>, <c>pageInfo</c>)
     /// from leaking through when the request never resolves an entity node.
     /// </summary>
-    private static void VerifyEntryFieldDirective(IObjectType rootQuery, QueryModelRegistration reg)
+    private static void VerifyEntryFieldDirective(
+        IObjectTypeDefinition rootQuery,
+        QueryModelRegistration reg
+    )
     {
         // Path: RootQuery.discover -> (DiscoverQueries[.namespace]).<fieldName>
         var discoverField = rootQuery.Fields.FirstOrDefault(f => f.Name == "discover");
@@ -125,7 +131,7 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
                     + "ConfigureSchema callback has removed the discover namespace."
             );
 
-        var discoverType = (IObjectType)discoverField.Type.NamedType();
+        var discoverType = (IObjectTypeDefinition)discoverField.Type.NamedType();
         var container = discoverType;
 
         if (reg.Attribute.Namespace is not null)
@@ -138,7 +144,7 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
                         + $"'{nsFieldName}' is missing under `discover` for "
                         + $"'{reg.EntityType.FullName}'."
                 );
-            container = (IObjectType)nsField.Type.NamedType();
+            container = (IObjectTypeDefinition)nsField.Type.NamedType();
         }
 
         var fieldName =
@@ -170,7 +176,10 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
     /// the type the developer explicitly opened — almost always from a hostile
     /// or buggy <c>ConfigureSchema</c> callback.
     /// </summary>
-    private static void VerifyTypeLevelDirectiveAbsent(ISchema schema, QueryModelRegistration reg)
+    private static void VerifyTypeLevelDirectiveAbsent(
+        ISchemaDefinition schema,
+        QueryModelRegistration reg
+    )
     {
         var objectType = schema
             .Types.OfType<ObjectType>()
@@ -205,7 +214,7 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
     /// introspection but every request gets <c>"Not authorized."</c>).
     /// </summary>
     private static void VerifyEntryFieldDirectiveAbsent(
-        IObjectType rootQuery,
+        IObjectTypeDefinition rootQuery,
         QueryModelRegistration reg
     )
     {
@@ -213,7 +222,7 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
         if (discoverField is null)
             return; // Nothing to verify when the discover surface is absent.
 
-        var discoverType = (IObjectType)discoverField.Type.NamedType();
+        var discoverType = (IObjectTypeDefinition)discoverField.Type.NamedType();
         var container = discoverType;
 
         if (reg.Attribute.Namespace is not null)
@@ -222,7 +231,7 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
             var nsField = discoverType.Fields.FirstOrDefault(f => f.Name == nsFieldName);
             if (nsField is null)
                 return;
-            container = (IObjectType)nsField.Type.NamedType();
+            container = (IObjectTypeDefinition)nsField.Type.NamedType();
         }
 
         var fieldName =
@@ -243,8 +252,8 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
             );
     }
 
-    private static bool HasAuthorizeDirective(IDirectiveCollection directives) =>
-        directives.Any(d => d.Type.Name == "authorize");
+    private static bool HasAuthorizeDirective(IEnumerable<IDirective> directives) =>
+        directives.Any(d => d.Definition.Name == "authorize");
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

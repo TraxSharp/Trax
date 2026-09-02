@@ -120,7 +120,7 @@ public class GraphQLOperationsTests
         );
 
         // Assert
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
         var json = operationResult.ToJson();
@@ -148,7 +148,7 @@ public class GraphQLOperationsTests
         );
 
         // Assert
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
     }
@@ -178,7 +178,7 @@ public class GraphQLOperationsTests
         );
 
         // Assert
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
         var json = operationResult.ToJson();
@@ -208,7 +208,7 @@ public class GraphQLOperationsTests
         );
 
         // Assert
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
         await _scheduler.Received(1).DisableAsync("test-job", Arg.Any<CancellationToken>());
@@ -235,7 +235,7 @@ public class GraphQLOperationsTests
         );
 
         // Assert
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
         await _scheduler.Received(1).EnableAsync("test-job", Arg.Any<CancellationToken>());
@@ -265,7 +265,7 @@ public class GraphQLOperationsTests
         );
 
         // Assert
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
         var json = operationResult.ToJson();
@@ -296,7 +296,7 @@ public class GraphQLOperationsTests
         );
 
         // Assert
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
     }
@@ -335,8 +335,8 @@ public class GraphQLOperationsTests
         _serviceProvider = services.BuildServiceProvider();
 
         return await _serviceProvider
-            .GetRequiredService<IRequestExecutorResolver>()
-            .GetRequestExecutorAsync("trax");
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
     }
 
     #endregion

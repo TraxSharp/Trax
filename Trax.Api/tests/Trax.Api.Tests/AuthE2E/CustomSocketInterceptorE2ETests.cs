@@ -49,7 +49,9 @@ public class CustomSocketInterceptorE2ETests
             MagicPayload? payload = null;
             try
             {
-                payload = init.As<MagicPayload>();
+                payload = init.Payload?.Deserialize<MagicPayload>(
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                );
             }
             catch (JsonException) { }
 

@@ -13,7 +13,7 @@ internal sealed class TraxCaseInsensitiveFilterProviderExtension : QueryableFilt
     public TraxCaseInsensitiveFilterProviderExtension()
         : base(descriptor =>
             descriptor
-                .AddFieldHandler<QueryableStringIContainsHandler>()
-                .AddFieldHandler<QueryableStringIEqualsHandler>()
+                .AddFieldHandler(c => new QueryableStringIContainsHandler(c.InputParser))
+                .AddFieldHandler(c => new QueryableStringIEqualsHandler(c.InputParser))
         ) { }
 }

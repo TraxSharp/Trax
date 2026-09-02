@@ -69,8 +69,8 @@ public static class GraphQLFixture
         CancellationToken ct = default
     )
     {
-        var resolver = sp.GetRequiredService<IRequestExecutorResolver>();
-        return await resolver.GetRequestExecutorAsync("trax", ct);
+        var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
+        return await resolver.GetExecutorAsync("trax", ct);
     }
 
     [ExtendObjectType("RootQuery")]

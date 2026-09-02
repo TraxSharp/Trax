@@ -6,8 +6,10 @@ using HotChocolate.Execution;
 using HotChocolate.Types;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Trax.Api.Auth;
 using Trax.Api.GraphQL.Audit;
 
@@ -126,7 +128,7 @@ public class TraxGraphQLAuditListenerTests
         await using var host = await TestHost.BuildAsync();
 
         var result = await host.Executor.ExecuteAsync("{ notARealField }");
-        (result as IOperationResult)!.Errors.Should().NotBeNullOrEmpty();
+        (result as OperationResult)!.Errors.Should().NotBeNullOrEmpty();
 
         var entries = host.DrainEntries();
         entries.Should().HaveCount(1);
@@ -140,7 +142,7 @@ public class TraxGraphQLAuditListenerTests
         await using var host = await TestHost.BuildAsync();
 
         var result = await host.Executor.ExecuteAsync("{ throws }");
-        (result as IOperationResult)!.Errors.Should().NotBeNullOrEmpty();
+        (result as OperationResult)!.Errors.Should().NotBeNullOrEmpty();
 
         var entries = host.DrainEntries();
         entries.Should().HaveCount(1);
@@ -232,6 +234,116 @@ public class TraxGraphQLAuditListenerTests
 
     #endregion
 
+    #region Subscription filtering
+
+    [Test]
+    public async Task SkipSubscriptions_Enabled_SubscriptionIsNotAudited()
+    {
+        // The operation type is only known once the document is compiled, which happens
+        // after the audit scope opens — so this exercises the filter on the way out.
+        await using var host = await TestHost.BuildAsync(opts => opts.SkipSubscriptions = true);
+
+        var result = await host.Executor.ExecuteAsync("subscription { onPing }");
+        if (result is IResponseStream stream)
+            await stream.DisposeAsync();
+
+        host.DrainEntries().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task SkipSubscriptions_Disabled_SubscriptionIsAudited()
+    {
+        await using var host = await TestHost.BuildAsync(opts => opts.SkipSubscriptions = false);
+
+        var result = await host.Executor.ExecuteAsync("subscription { onPing }");
+        if (result is IResponseStream stream)
+            await stream.DisposeAsync();
+
+        host.DrainEntries().Should().ContainSingle().Which.Document.Should().Contain("onPing");
+    }
+
+    [Test]
+    public async Task SkipSubscriptions_Enabled_QueriesAreStillAudited()
+    {
+        await using var host = await TestHost.BuildAsync(opts => opts.SkipSubscriptions = true);
+
+        await host.Executor.ExecuteAsync("{ ping }");
+
+        host.DrainEntries().Should().ContainSingle();
+    }
+
+    #endregion
+
+    #region Request-level faults
+
+    [Test]
+    public async Task RequestPipelineException_IsAuditedWithTheExceptionMessage()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var request = OperationRequestBuilder
+            .New()
+            .SetDocument("query Boom { ping }")
+            .SetOperationName("Boom")
+            .Build();
+
+        var result = await host.Executor.ExecuteAsync(request);
+
+        result.ExpectOperationResult().Errors.Should().NotBeNullOrEmpty();
+
+        // HotChocolate masks the exception in the response, so the audit trail is the only
+        // place the real cause survives.
+        var entry = host.DrainEntries().Should().ContainSingle().Subject;
+        entry.Success.Should().BeFalse();
+        entry.ErrorText.Should().Be("request pipeline exploded");
+    }
+
+    [Test]
+    public async Task PrincipalCaptureThrows_RequestStillSucceeds_AndIsNotAudited()
+    {
+        // The listener must never take a request down with it: a broken
+        // IHttpContextAccessor drops the audit entry, it does not fail the query.
+        await using var host = await TestHost.BuildAsync(configureServices: services =>
+            services.Replace(
+                ServiceDescriptor.Singleton<IHttpContextAccessor>(new ThrowingHttpContextAccessor())
+            )
+        );
+
+        var result = await host.Executor.ExecuteAsync("{ ping }");
+
+        result.ExpectOperationResult().Errors.Should().BeNullOrEmpty();
+        host.DrainEntries().Should().BeEmpty();
+    }
+
+    private sealed class ThrowingHttpContextAccessor : IHttpContextAccessor
+    {
+        public HttpContext? HttpContext
+        {
+            get => throw new InvalidOperationException("no ambient context");
+            set => throw new NotSupportedException();
+        }
+    }
+
+    #endregion
+
+    #region Validation failures
+
+    [Test]
+    public async Task ValidationError_IsAuditedAsUnsuccessful()
+    {
+        // The request never reaches a resolver, so the entry has to come from the result's
+        // errors rather than from a captured exception.
+        await using var host = await TestHost.BuildAsync();
+
+        await host.Executor.ExecuteAsync("{ fieldThatDoesNotExist }");
+
+        var entry = host.DrainEntries().Should().ContainSingle().Subject;
+        entry.Success.Should().BeFalse();
+        entry.ErrorText.Should().NotBeNullOrEmpty();
+    }
+
+    #endregion
+
     #region Document truncation
 
     [Test]
@@ -315,7 +427,7 @@ public class TraxGraphQLAuditListenerTests
 
     private static void AssertNoErrors(IExecutionResult result)
     {
-        var op = result as IOperationResult;
+        var op = result as OperationResult;
         op.Should().NotBeNull();
         op!.Errors.Should().BeNullOrEmpty();
     }
@@ -389,14 +501,36 @@ public class TraxGraphQLAuditListenerTests
             services
                 .AddGraphQLServer()
                 .AddQueryType<TestQuery>()
+                .AddSubscriptionType<TestSubscription>()
+                .AddInMemorySubscriptions()
+                // A request-level fault (as opposed to a resolver fault) reaches the
+                // listener through RequestError, not through the result's errors.
+                .UseRequest(
+                    next =>
+                        context =>
+                            context.Request.OperationName == "Boom"
+                                ? throw new InvalidOperationException("request pipeline exploded")
+                                : next(context),
+                    key: "TraxAuditTestFault",
+                    after: "DocumentValidationMiddleware"
+                )
                 .AddType<EnumType<Mood>>()
                 .AddType<InputObjectType<FooInput>>()
+                // Mirrors AddTraxAudit: HotChocolate 16 activates diagnostic listeners
+                // from the schema container, so the listener's application services have
+                // to be bridged across.
+                .AddApplicationService<IHttpContextAccessor>()
+                .AddApplicationService<TraxAuditChannel>()
+                .AddApplicationService<IOptions<TraxAuditOptions>>()
+                .AddApplicationService<ITraxAuditRedactor>()
+                .AddApplicationService<TimeProvider>()
+                .AddApplicationService<ILogger<TraxGraphQLAuditListener>>()
                 .AddDiagnosticEventListener<TraxGraphQLAuditListener>();
 
             var provider = services.BuildServiceProvider();
             var executor = await provider
-                .GetRequiredService<IRequestExecutorResolver>()
-                .GetRequestExecutorAsync();
+                .GetRequiredService<IRequestExecutorProvider>()
+                .GetExecutorAsync();
 
             return new TestHost
             {
@@ -405,6 +539,13 @@ public class TraxGraphQLAuditListenerTests
                 Provider = provider,
             };
         }
+    }
+
+    public class TestSubscription
+    {
+        [Subscribe]
+        [Topic("ping")]
+        public string OnPing([EventMessage] string message) => message;
     }
 
     public enum Mood

@@ -1,5 +1,9 @@
+using HotChocolate;
 using HotChocolate.Execution;
+using HotChocolate.Execution.Caching;
 using HotChocolate.Execution.Configuration;
+using HotChocolate.Language;
+using HotChocolate.PersistedOperations;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -118,8 +122,7 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         builder.AddTypeExtensions(typeof(GraphQL.PersistedOperationMutations).Assembly);
 
         // HotChocolate cache invalidator. The schema name is captured below
-        // inside ConfigureSchema so the invalidator can resolve the right
-        // executor when clearing IPreparedOperationCache.
+        // inside ConfigureSchema so the invalidator can evict the right executor.
         services.AddSingleton<HotChocolateOperationCacheInvalidator>();
 
         // Storage: implements both IPersistedOperationStore and the HC hot-path.
@@ -136,21 +139,38 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         // Register it on the schema services so the request executor finds it.
         builder.ConfigureSchema(schema =>
         {
-            // Storage resolves through HC's schema-services container, which
-            // does not forward to root. Use IApplicationServiceProvider to
-            // reach back into the root container where DbPersistedOperationStorage
-            // is registered.
+            // HC's schema-services container does not forward to root. HotChocolate 16
+            // replaced IApplicationServiceProvider with an explicit bridge:
+            // AddApplicationService makes a root-container registration resolvable from
+            // the schema-scoped provider the persisted-operation middleware uses.
+            schema.AddApplicationService<DbPersistedOperationStorage>();
+            schema.AddApplicationService<HotChocolateOperationCacheInvalidator>();
+
+            // Substitute caches that can be emptied. HotChocolate's own document and
+            // prepared-operation caches assume a persisted-operation id maps to one
+            // document forever and expose no way to drop an entry, which is exactly what
+            // re-uploading a document under an existing id needs.
+            var cacheDefaults = new SchemaOptions();
+            schema.ConfigureSchemaServices(sc =>
+            {
+                sc.AddSingleton<IDocumentCache>(
+                    new ClearableDocumentCache(cacheDefaults.OperationDocumentCacheSize)
+                );
+                sc.AddSingleton<IPreparedOperationCache>(
+                    new ClearablePreparedOperationCache(cacheDefaults.PreparedOperationCacheSize)
+                );
+            });
+
             schema.ConfigureSchemaServices(sc =>
                 sc.AddSingleton<IOperationDocumentStorage>(sp =>
                 {
-                    var root = sp.GetRequiredService<HotChocolate.IApplicationServiceProvider>();
                     // Capture the schema name on the invalidator the first
                     // time the schema services are built. ConfigureSchemaServices
                     // runs lazily during executor build, by which time the root
                     // provider has the singleton ready.
-                    root.GetRequiredService<HotChocolateOperationCacheInvalidator>()
+                    sp.GetRequiredService<HotChocolateOperationCacheInvalidator>()
                         .SetSchemaName(schema.Name);
-                    return root.GetRequiredService<DbPersistedOperationStorage>();
+                    return sp.GetRequiredService<DbPersistedOperationStorage>();
                 })
             );
             schema.UsePersistedOperationPipeline();

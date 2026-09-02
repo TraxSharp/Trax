@@ -27,5 +27,6 @@
     <PackageReference Include="HotChocolate.CostAnalysis" />
     <PackageReference Include="HotChocolate.Data" />
     <PackageReference Include="HotChocolate.Data.EntityFramework" />
+    <PackageReference Include="HotChocolate.Execution.Projections" />
   </ItemGroup>
 </Project>

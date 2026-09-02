@@ -164,7 +164,7 @@ public class OperationsExposureTests
 
         var result = await executor.ExecuteAsync("{ operations { health { status } } }");
 
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().NotBeNullOrEmpty();
         operationResult.Errors!.Any(e => e.Message.Contains("operations")).Should().BeTrue();
@@ -179,7 +179,7 @@ public class OperationsExposureTests
             "mutation { operations { triggerManifest(externalId: \"x\") { success } } }"
         );
 
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().NotBeNullOrEmpty();
     }
@@ -215,7 +215,7 @@ public class OperationsExposureTests
 
         var result = await executor.ExecuteAsync("{ operations { health { status } } }");
 
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
         operationResult.ToJson().Should().Contain("Healthy");
@@ -235,7 +235,7 @@ public class OperationsExposureTests
         var schemaResult = await executor.ExecuteAsync(
             "{ __type(name: \"OperationsQueries\") { fields { name } } }"
         );
-        var opResult = schemaResult as IOperationResult;
+        var opResult = schemaResult as OperationResult;
         opResult!.Errors.Should().BeNullOrEmpty();
         opResult.ToJson().Should().Contain("deadLetters");
     }
@@ -252,7 +252,7 @@ public class OperationsExposureTests
         var result = await executor.ExecuteAsync(
             "{ __type(name: \"RootQuery\") { fields { name } } }"
         );
-        var opResult = result as IOperationResult;
+        var opResult = result as OperationResult;
         opResult!.Errors.Should().BeNullOrEmpty();
         var json = opResult.ToJson();
         json.Should().Contain("operations");
@@ -278,7 +278,7 @@ public class OperationsExposureTests
             "mutation { operations { triggerManifest(externalId: \"abc\") { success } } }"
         );
 
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
         await _scheduler!.Received(1).TriggerAsync("abc", Arg.Any<CancellationToken>());
@@ -298,7 +298,7 @@ public class OperationsExposureTests
         var schemaResult = await executor.ExecuteAsync(
             "{ __type(name: \"OperationsMutations\") { fields { name } } }"
         );
-        var opResult = schemaResult as IOperationResult;
+        var opResult = schemaResult as OperationResult;
         opResult!.Errors.Should().BeNullOrEmpty();
         opResult.ToJson().Should().Contain("deadLetters");
     }
@@ -313,7 +313,7 @@ public class OperationsExposureTests
         );
 
         var result = await executor.ExecuteAsync("{ __schema { mutationType { name } } }");
-        var opResult = result as IOperationResult;
+        var opResult = result as OperationResult;
         opResult!.Errors.Should().BeNullOrEmpty();
         opResult.ToJson().Should().Contain("RootMutation");
     }
@@ -328,7 +328,7 @@ public class OperationsExposureTests
         );
 
         var result = await executor.ExecuteAsync("{ __schema { mutationType { name } } }");
-        var opResult = result as IOperationResult;
+        var opResult = result as OperationResult;
         opResult!.Errors.Should().BeNullOrEmpty();
         // mutationType is null when the schema has no mutation root.
         opResult.ToJson().Replace(" ", "").Should().Contain("\"mutationType\":null");
@@ -343,7 +343,7 @@ public class OperationsExposureTests
         var executor = await BuildExecutor(_queryAndMutationDiscovery);
 
         var result = await executor.ExecuteAsync("{ __schema { mutationType { name } } }");
-        var opResult = result as IOperationResult;
+        var opResult = result as OperationResult;
         opResult!.Errors.Should().BeNullOrEmpty();
         opResult.ToJson().Should().Contain("RootMutation");
     }
@@ -490,8 +490,8 @@ public class OperationsExposureTests
         _serviceProvider = services.BuildServiceProvider();
 
         return await _serviceProvider
-            .GetRequiredService<IRequestExecutorResolver>()
-            .GetRequestExecutorAsync("trax");
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
     }
 
     #endregion

@@ -23,7 +23,7 @@ internal sealed class OperationCountValidatorRule(int maxOperations) : IDocument
 
     public ushort Priority => 0;
 
-    public void Validate(IDocumentValidatorContext context, DocumentNode document)
+    public void Validate(DocumentValidatorContext context, DocumentNode document)
     {
         var total = 0;
         foreach (var definition in document.Definitions)

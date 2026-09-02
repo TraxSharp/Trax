@@ -276,7 +276,7 @@ public class ExposeAsTests
     {
         var schema = await BuildSchemaAsync<BookDbContext>();
 
-        var bookType = schema.GetType<ObjectType>("BookRef");
+        var bookType = schema.Types.GetType<ObjectType>("BookRef");
 
         var fieldNames = bookType
             .Fields.Where(f => !f.IsIntrospectionField)
@@ -291,7 +291,7 @@ public class ExposeAsTests
     {
         var schema = await BuildSchemaAsync<BookDbContext>();
 
-        var bookType = schema.GetType<ObjectType>("BookRef");
+        var bookType = schema.Types.GetType<ObjectType>("BookRef");
 
         bookType
             .Fields.Should()
@@ -304,7 +304,7 @@ public class ExposeAsTests
     {
         var schema = await BuildSchemaAsync<UnrestrictedBookDbContext>();
 
-        var bookType = schema.GetType<ObjectType>("UnrestrictedBookRef");
+        var bookType = schema.Types.GetType<ObjectType>("UnrestrictedBookRef");
 
         var fieldNames = bookType
             .Fields.Where(f => !f.IsIntrospectionField)
@@ -322,7 +322,7 @@ public class ExposeAsTests
     {
         var schema = await BuildSchemaAsync<AuditedBookDbContext>();
 
-        var bookType = schema.GetType<ObjectType>("AuditedBookRef");
+        var bookType = schema.Types.GetType<ObjectType>("AuditedBookRef");
 
         var fieldNames = bookType
             .Fields.Where(f => !f.IsIntrospectionField)
@@ -346,7 +346,7 @@ public class ExposeAsTests
     {
         var schema = await BuildSchemaAsync<BookDbContext>();
 
-        var filterType = schema.GetType<InputObjectType>("BookRefFilterInput");
+        var filterType = schema.Types.GetType<InputObjectType>("BookRefFilterInput");
 
         var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet();
 
@@ -364,7 +364,7 @@ public class ExposeAsTests
             builder.AddFilterType<BookRef, BookRefIdOnlyFilter>()
         );
 
-        var filterType = schema.GetType<InputObjectType>("BookRefIdOnlyFilter");
+        var filterType = schema.Types.GetType<InputObjectType>("BookRefIdOnlyFilter");
 
         var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet();
         var dataFields = fieldNames.Where(n => n != "and" && n != "or").ToHashSet();
@@ -379,7 +379,7 @@ public class ExposeAsTests
     {
         var schema = await BuildSchemaAsync<UnrestrictedBookDbContext>();
 
-        var filterType = schema.GetType<InputObjectType>("UnrestrictedBookRefFilterInput");
+        var filterType = schema.Types.GetType<InputObjectType>("UnrestrictedBookRefFilterInput");
 
         var fieldNames = filterType.Fields.Select(f => f.Name).ToHashSet();
 
@@ -396,7 +396,7 @@ public class ExposeAsTests
     {
         var schema = await BuildSchemaAsync<BookDbContext>();
 
-        var sortType = schema.GetType<InputObjectType>("BookRefSortInput");
+        var sortType = schema.Types.GetType<InputObjectType>("BookRefSortInput");
 
         var fieldNames = sortType.Fields.Select(f => f.Name).ToHashSet();
 
@@ -411,7 +411,7 @@ public class ExposeAsTests
             builder.AddSortType<BookRef, BookRefTitleOnlySort>()
         );
 
-        var sortType = schema.GetType<InputObjectType>("BookRefTitleOnlySort");
+        var sortType = schema.Types.GetType<InputObjectType>("BookRefTitleOnlySort");
         var fieldNames = sortType.Fields.Select(f => f.Name).ToHashSet();
 
         fieldNames.Should().BeEquivalentTo("title");
@@ -507,7 +507,7 @@ public class ExposeAsTests
 
     #region Helpers — schema construction
 
-    private static async Task<ISchema> BuildSchemaAsync<TContext>(
+    private static async Task<ISchemaDefinition> BuildSchemaAsync<TContext>(
         Action<TraxGraphQLBuilder>? customize = null
     )
         where TContext : DbContext
@@ -574,9 +574,7 @@ public class ExposeAsTests
             await ctx.SaveChangesAsync();
         }
 
-        return await provider
-            .GetRequiredService<IRequestExecutorResolver>()
-            .GetRequestExecutorAsync();
+        return await provider.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync();
     }
 
     #endregion
@@ -845,19 +843,6 @@ public class BookRefTitleOnlySort : SortInputType<BookRef>
         descriptor.Name("BookRefTitleOnlySort");
         descriptor.BindFieldsExplicitly();
         descriptor.Field(x => x.Title);
-    }
-}
-
-#endregion
-
-#region Helpers
-
-internal static class ExposeAsExecutionResultExtensions
-{
-    public static IOperationResult ExpectOperationResult(this IExecutionResult result)
-    {
-        result.Should().BeAssignableTo<IOperationResult>();
-        return (IOperationResult)result;
     }
 }
 

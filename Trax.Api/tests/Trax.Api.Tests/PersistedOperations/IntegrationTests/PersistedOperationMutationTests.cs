@@ -541,8 +541,8 @@ public class PersistedOperationMutationTests
             .SetVariableValues(variables.ToDictionary(p => p.Key, p => p.Value))
             .Build();
         var result = await _executor.ExecuteAsync(request);
-        var op = result as IOperationResult;
-        op.Should().NotBeNull("expected IOperationResult");
+        var op = result as OperationResult;
+        op.Should().NotBeNull("expected OperationResult");
         op!.Errors.Should().BeNullOrEmpty();
         return JsonDocument.Parse(op.ToJson());
     }

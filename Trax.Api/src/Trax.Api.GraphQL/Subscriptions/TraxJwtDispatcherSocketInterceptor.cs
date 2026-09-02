@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
+using Trax.Api.GraphQL.Extensions;
 
 namespace Trax.Api.GraphQL.Subscriptions;
 
@@ -30,7 +31,7 @@ namespace Trax.Api.GraphQL.Subscriptions;
 public sealed class TraxJwtDispatcherSocketInterceptor(
     JwtDispatcherRuntime dispatcher,
     IOptionsMonitor<JwtBearerOptions> optionsMonitor,
-    IServiceProvider services,
+    TraxApplicationServices applicationServices,
     ILogger<TraxJwtDispatcherSocketInterceptor> logger
 ) : DefaultSocketSessionInterceptor
 {
@@ -78,7 +79,7 @@ public sealed class TraxJwtDispatcherSocketInterceptor(
 
         // Named-scheme resolvers are registered scoped, and a socket connection has
         // no ambient request scope, so resolve the resolver in a fresh scope.
-        await using var scope = services.CreateAsyncScope();
+        await using var scope = applicationServices.Services.CreateAsyncScope();
         var resolver = dispatcher.ResolvePrincipalResolver(scheme, scope.ServiceProvider);
         if (resolver is null)
             return ConnectionStatus.Reject(
@@ -110,17 +111,8 @@ public sealed class TraxJwtDispatcherSocketInterceptor(
         return await base.OnConnectAsync(session, connectionInitMessage, cancellationToken);
     }
 
-    private static ConnectionInitPayload? TryReadPayload(IOperationMessagePayload payload)
-    {
-        try
-        {
-            return payload.As<ConnectionInitPayload>();
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
+    private static ConnectionInitPayload? TryReadPayload(IOperationMessagePayload payload) =>
+        ConnectionInitPayloadReader.TryRead<ConnectionInitPayload>(payload);
 
     internal sealed record ConnectionInitPayload(string? AuthToken, string? Bearer);
 }

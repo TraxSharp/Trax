@@ -1,3 +1,4 @@
+using System.Text.Json;
 using HotChocolate.AspNetCore.Subscriptions;
 using HotChocolate.AspNetCore.Subscriptions.Protocols;
 using Microsoft.AspNetCore.Http;
@@ -13,25 +14,36 @@ namespace Trax.Api.Tests.Auth;
 internal static class SocketInterceptorTestHelpers
 {
     /// <summary>
-    /// Builds a fake <see cref="IOperationMessagePayload"/> that returns the
-    /// given value from <c>As&lt;T&gt;()</c> when T matches the supplied
-    /// type. Any other T returns null. Simulates a well-formed JSON payload
-    /// that deserializes only to the expected shape.
+    /// Builds a payload carrying the JSON a real client would send for
+    /// <paramref name="value"/>: camelCase keys, serialized and re-parsed so the
+    /// interceptor exercises its own deserialization rather than a stubbed result.
     /// </summary>
     public static IOperationMessagePayload Payload<T>(T value)
-        where T : class
+        where T : class => RawPayload(JsonSerializer.Serialize(value, WebOptions));
+
+    /// <summary>
+    /// Builds a payload from a literal JSON document, for casing and malformed-input
+    /// cases that a serialized object cannot express.
+    /// </summary>
+    public static IOperationMessagePayload RawPayload(string json)
     {
+        using var document = JsonDocument.Parse(json);
         var payload = Substitute.For<IOperationMessagePayload>();
-        payload.As<T>().Returns(value);
+        payload.Payload.Returns(document.RootElement.Clone());
         return payload;
     }
 
     /// <summary>
-    /// Builds a fake payload where <c>As&lt;T&gt;()</c> returns null — simulates
-    /// a missing or malformed payload.
+    /// Builds a payload with no JSON at all — the frame carried no <c>payload</c> member.
     /// </summary>
-    public static IOperationMessagePayload EmptyPayload() =>
-        Substitute.For<IOperationMessagePayload>();
+    public static IOperationMessagePayload EmptyPayload()
+    {
+        var payload = Substitute.For<IOperationMessagePayload>();
+        payload.Payload.Returns((JsonElement?)null);
+        return payload;
+    }
+
+    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>
     /// Builds a fake <see cref="ISocketSession"/> wrapping a

@@ -20,7 +20,6 @@
 
   <ItemGroup>
     <PackageReference Include="HotChocolate" />
-    <PackageReference Include="HotChocolate.Execution" />
     <PackageReference Include="Trax.Effect" />
     <PackageReference Include="Trax.Mediator" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />

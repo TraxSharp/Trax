@@ -27,14 +27,21 @@ public sealed class TraxGraphQLAuditListener(
     ILogger<TraxGraphQLAuditListener> logger
 ) : ExecutionDiagnosticEventListener
 {
+    /// <summary>
+    /// Key under which <see cref="RequestError(RequestContext, Exception)"/> parks the
+    /// request-level exception for the scope to pick up on completion. The listener is a
+    /// singleton, so per-request state has to live on the request context.
+    /// </summary>
+    private const string ExceptionKey = "Trax.Audit.RequestException";
+
     private readonly TraxAuditOptions _options = options.Value;
 
     /// <inheritdoc />
-    public override IDisposable ExecuteRequest(IRequestContext context)
+    public override IDisposable ExecuteRequest(RequestContext context)
     {
         try
         {
-            if (ShouldSkip(context))
+            if (ShouldSkipOnStart(context))
                 return EmptyScope;
 
             var startTicks = timeProvider.GetTimestamp();
@@ -50,20 +57,45 @@ public sealed class TraxGraphQLAuditListener(
         }
     }
 
-    private bool ShouldSkip(IRequestContext context)
+    /// <inheritdoc />
+    /// <remarks>
+    /// HotChocolate 16 no longer hangs the request-level exception off the context, so the
+    /// listener records it here and reads it back when the scope completes.
+    /// </remarks>
+    public override void RequestError(RequestContext context, Exception exception)
     {
-        if (_options.SkipIntrospection)
+        try
         {
-            var opName = context.Request?.OperationName;
-            if (string.Equals(opName, "IntrospectionQuery", StringComparison.Ordinal))
-                return true;
+            context.ContextData[ExceptionKey] = exception;
         }
-
-        if (_options.SkipSubscriptions && context.Operation?.Type == OperationType.Subscription)
-            return true;
-
-        return false;
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Trax audit listener failed to record a request exception.");
+        }
     }
+
+    /// <summary>
+    /// Checks the only predicate that is knowable before the document is parsed: the
+    /// caller-supplied operation name. The subscription check needs the compiled
+    /// operation and therefore runs in <see cref="ShouldSkipOnComplete"/>.
+    /// </summary>
+    private bool ShouldSkipOnStart(RequestContext context)
+    {
+        if (!_options.SkipIntrospection)
+            return false;
+
+        var operationName = context.Request.OperationName;
+        return string.Equals(operationName, "IntrospectionQuery", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The operation is only compiled partway through the pipeline, so its type cannot be
+    /// read when the scope opens. Subscriptions are therefore filtered on the way out.
+    /// </summary>
+    private bool ShouldSkipOnComplete(RequestContext context) =>
+        _options.SkipSubscriptions
+        && context.TryGetOperation(out var operation)
+        && operation.Kind == OperationType.Subscription;
 
     private (string Id, string? Type) CapturePrincipal()
     {
@@ -76,7 +108,7 @@ public sealed class TraxGraphQLAuditListener(
     }
 
     private void CompleteScope(
-        IRequestContext context,
+        RequestContext context,
         long startTicks,
         DateTimeOffset startTime,
         (string Id, string? Type) principal
@@ -84,8 +116,13 @@ public sealed class TraxGraphQLAuditListener(
     {
         try
         {
+            if (ShouldSkipOnComplete(context))
+                return;
+
             var elapsed = timeProvider.GetElapsedTime(startTicks);
-            var document = TruncateDocument(context.Document?.ToString() ?? string.Empty);
+            var document = TruncateDocument(
+                context.OperationDocumentInfo.Document?.ToString() ?? string.Empty
+            );
             var variables = BuildVariables(context);
             var redactedVariables = SafeRedact(variables);
             var (success, errorText) = InterpretResult(context);
@@ -93,7 +130,7 @@ public sealed class TraxGraphQLAuditListener(
             var entry = new TraxAuditEntry(
                 PrincipalId: principal.Id,
                 PrincipalType: principal.Type,
-                OperationName: context.Request?.OperationName,
+                OperationName: context.Request.OperationName,
                 Document: document,
                 Variables: redactedVariables,
                 DurationMs: (long)elapsed.TotalMilliseconds,
@@ -119,18 +156,12 @@ public sealed class TraxGraphQLAuditListener(
         return string.Concat(document.AsSpan(0, _options.MaxDocumentLength), "...[truncated]");
     }
 
-    private static IReadOnlyDictionary<string, object?>? BuildVariables(IRequestContext context)
+    private static IReadOnlyDictionary<string, object?>? BuildVariables(RequestContext context)
     {
-        var variables = context.Variables;
-        if (variables is null)
-            return null;
-
-        // context.Variables is IReadOnlyList<IVariableValueCollection> in HC 15.x
-        // (one collection per operation, to support batched requests). The inner
-        // IVariableValueCollection itself is IEnumerable<VariableValue>, so no
-        // cast is needed past the outer list.
+        // VariableValues holds one collection per operation so batched requests keep their
+        // values separate. The inner collection enumerates VariableValue directly.
         var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var collection in variables)
+        foreach (var collection in context.VariableValues)
         {
             if (collection is null)
                 continue;
@@ -155,14 +186,17 @@ public sealed class TraxGraphQLAuditListener(
         }
     }
 
-    private static (bool Success, string? ErrorText) InterpretResult(IRequestContext context)
+    private static (bool Success, string? ErrorText) InterpretResult(RequestContext context)
     {
-        if (context.Exception is not null)
-            return (false, context.Exception.Message);
+        if (
+            context.ContextData.TryGetValue(ExceptionKey, out var parked)
+            && parked is Exception exception
+        )
+            return (false, exception.Message);
 
-        if (context.Result is IOperationResult opResult && opResult.Errors is { Count: > 0 } errors)
+        if (context.Result is OperationResult { Errors.Count: > 0 } operationResult)
         {
-            var joined = string.Join("; ", errors.Select(e => e.Message));
+            var joined = string.Join("; ", operationResult.Errors.Select(e => e.Message));
             return (false, joined);
         }
 
@@ -171,7 +205,7 @@ public sealed class TraxGraphQLAuditListener(
 
     private sealed class RequestScope(
         TraxGraphQLAuditListener listener,
-        IRequestContext context,
+        RequestContext context,
         long startTicks,
         DateTimeOffset startTime,
         (string Id, string? Type) principal

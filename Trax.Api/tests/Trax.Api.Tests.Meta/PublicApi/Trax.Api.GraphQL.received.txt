@@ -92,6 +92,11 @@ namespace Trax.Api.GraphQL.Extensions
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxGraphQL(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Func<Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder, Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder> configure) { }
         public static Microsoft.AspNetCore.Builder.WebApplication UseTraxGraphQL(this Microsoft.AspNetCore.Builder.WebApplication app, string routePrefix = "/trax/graphql", System.Action<Microsoft.AspNetCore.Builder.IEndpointConventionBuilder>? configure = null) { }
     }
+    public sealed class TraxApplicationServices
+    {
+        public TraxApplicationServices(System.IServiceProvider services) { }
+        public System.IServiceProvider Services { get; }
+    }
 }
 namespace Trax.Api.GraphQL.Filtering
 {
@@ -295,7 +300,7 @@ namespace Trax.Api.GraphQL.Subscriptions
     }
     public sealed class TraxJwtDispatcherSocketInterceptor : HotChocolate.AspNetCore.DefaultSocketSessionInterceptor
     {
-        public TraxJwtDispatcherSocketInterceptor(Trax.Api.Auth.Jwt.JwtDispatcherRuntime dispatcher, Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions> optionsMonitor, System.IServiceProvider services, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Subscriptions.TraxJwtDispatcherSocketInterceptor> logger) { }
+        public TraxJwtDispatcherSocketInterceptor(Trax.Api.Auth.Jwt.JwtDispatcherRuntime dispatcher, Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions> optionsMonitor, Trax.Api.GraphQL.Extensions.TraxApplicationServices applicationServices, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Subscriptions.TraxJwtDispatcherSocketInterceptor> logger) { }
         public override System.Threading.Tasks.ValueTask<HotChocolate.AspNetCore.Subscriptions.Protocols.ConnectionStatus> OnConnectAsync(HotChocolate.AspNetCore.Subscriptions.ISocketSession session, HotChocolate.AspNetCore.Subscriptions.Protocols.IOperationMessagePayload connectionInitMessage, System.Threading.CancellationToken cancellationToken = default) { }
     }
     public sealed class TraxJwtSocketInterceptor : HotChocolate.AspNetCore.DefaultSocketSessionInterceptor

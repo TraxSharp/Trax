@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
+using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
@@ -42,7 +43,7 @@ public class TraxJwtDispatcherSocketInterceptorTests
         new(
             sp.GetRequiredService<JwtDispatcherRuntime>(),
             sp.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>(),
-            sp,
+            new TraxApplicationServices(sp),
             NullLogger<TraxJwtDispatcherSocketInterceptor>.Instance
         );
 

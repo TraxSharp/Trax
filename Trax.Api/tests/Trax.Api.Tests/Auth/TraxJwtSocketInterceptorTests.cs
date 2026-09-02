@@ -350,7 +350,7 @@ public class TraxJwtSocketInterceptorTests
             .Received(1)
             .ResolveAsync(
                 Arg.Is<JwtTokenInput>(i =>
-                    i.Principal.FindFirst("sub")!.Value == "alice" && i.SecurityToken != null
+                    i!.Principal!.FindFirst("sub")!.Value == "alice" && i.SecurityToken != null
                 ),
                 Arg.Any<CancellationToken>()
             );

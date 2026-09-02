@@ -1,6 +1,9 @@
 using FluentAssertions;
 using HotChocolate;
+using HotChocolate.Execution;
+using HotChocolate.Features;
 using HotChocolate.Language;
+using HotChocolate.Types;
 using HotChocolate.Validation;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -113,16 +116,65 @@ public class GraphQLHardeningTests
 
     #region OperationCountValidatorRule
 
+    /// <summary>
+    /// A real <see cref="DocumentValidatorContext"/> over a minimal schema. The context is
+    /// pooled and inert until initialised — an uninitialised one allows zero errors and
+    /// throws on the first report — so every rule test goes through here.
+    /// </summary>
+    private static DocumentValidatorContext NewValidatorContext(DocumentNode document)
+    {
+        var context = new DocumentValidatorContext();
+        context.Initialize(
+            ValidationSchema,
+            new OperationDocumentId("trax-hardening-test"),
+            document,
+            maxAllowedErrors: 32,
+            maxLocationsPerError: 8,
+            maxAllowedFragmentVisits: 1024,
+            features: new FeatureCollection()
+        );
+        return context;
+    }
+
+    private static ISchemaDefinition ValidationSchema =>
+        field_ValidationSchema ??= BuildValidationSchema();
+
+    private static ISchemaDefinition? field_ValidationSchema;
+
+    private static ISchemaDefinition BuildValidationSchema() =>
+        new ServiceCollection()
+            .AddGraphQL()
+            .AddQueryType(d =>
+            {
+                d.Name("Query");
+                d.Field("foo").Type<StringType>().Resolve("foo");
+                d.Field("a").Type<StringType>().Resolve("a");
+                d.Field("b").Type<StringType>().Resolve("b");
+                d.Field("c").Type<StringType>().Resolve("c");
+                d.Field("d").Type<StringType>().Resolve("d");
+                d.Field("e").Type<StringType>().Resolve("e");
+                d.Field("f").Type<StringType>().Resolve("f");
+                d.Field("g").Type<StringType>().Resolve("g");
+                d.Field("h").Type<StringType>().Resolve("h");
+            })
+            .Services.BuildServiceProvider()
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync()
+            .AsTask()
+            .GetAwaiter()
+            .GetResult()
+            .Schema;
+
     [Test]
     public void OperationCountValidator_UnderCap_DoesNotReport()
     {
         var rule = new OperationCountValidatorRule(10);
         var doc = Utf8GraphQLParser.Parse("{ a b c }");
-        var ctx = Substitute.For<IDocumentValidatorContext>();
+        var ctx = NewValidatorContext(doc);
 
         rule.Validate(ctx, doc);
 
-        ctx.DidNotReceive().ReportError(Arg.Any<IError>());
+        ctx.Errors.Should().BeEmpty();
     }
 
     [Test]
@@ -130,11 +182,11 @@ public class GraphQLHardeningTests
     {
         var rule = new OperationCountValidatorRule(3);
         var doc = Utf8GraphQLParser.Parse("{ a b c }");
-        var ctx = Substitute.For<IDocumentValidatorContext>();
+        var ctx = NewValidatorContext(doc);
 
         rule.Validate(ctx, doc);
 
-        ctx.DidNotReceive().ReportError(Arg.Any<IError>());
+        ctx.Errors.Should().BeEmpty();
     }
 
     [Test]
@@ -143,16 +195,13 @@ public class GraphQLHardeningTests
         // Three aliased selections against a single root exceed a cap of 2.
         var rule = new OperationCountValidatorRule(2);
         var doc = Utf8GraphQLParser.Parse("{ a: foo b: foo c: foo }");
-        var ctx = Substitute.For<IDocumentValidatorContext>();
+        var ctx = NewValidatorContext(doc);
 
         rule.Validate(ctx, doc);
 
-        ctx.Received(1)
-            .ReportError(
-                Arg.Is<IError>(e =>
-                    e.Code == "TRAX_TOO_MANY_OPERATIONS" && e.Message.Contains("maximum")
-                )
-            );
+        ctx.Errors.Should().ContainSingle();
+        ctx.Errors[0].Code.Should().Be("TRAX_TOO_MANY_OPERATIONS");
+        ctx.Errors[0].Message.Should().Contain("maximum");
     }
 
     [Test]
@@ -161,11 +210,11 @@ public class GraphQLHardeningTests
         // Two operations with 3 selections each = 6 total, cap of 4 rejects.
         var rule = new OperationCountValidatorRule(4);
         var doc = Utf8GraphQLParser.Parse("query A { a b c } query B { d e f }");
-        var ctx = Substitute.For<IDocumentValidatorContext>();
+        var ctx = NewValidatorContext(doc);
 
         rule.Validate(ctx, doc);
 
-        ctx.Received().ReportError(Arg.Any<IError>());
+        ctx.Errors.Should().NotBeEmpty();
     }
 
     [Test]
@@ -177,11 +226,11 @@ public class GraphQLHardeningTests
         var doc = Utf8GraphQLParser.Parse(
             "fragment F on Foo { x } fragment G on Foo { y } { a b }"
         );
-        var ctx = Substitute.For<IDocumentValidatorContext>();
+        var ctx = NewValidatorContext(doc);
 
         rule.Validate(ctx, doc);
 
-        ctx.DidNotReceive().ReportError(Arg.Any<IError>());
+        ctx.Errors.Should().BeEmpty();
     }
 
     [Test]
@@ -191,11 +240,11 @@ public class GraphQLHardeningTests
         // short-circuit and not report duplicate errors.
         var rule = new OperationCountValidatorRule(1);
         var doc = Utf8GraphQLParser.Parse("query A { a b c } query B { d e f g h }");
-        var ctx = Substitute.For<IDocumentValidatorContext>();
+        var ctx = NewValidatorContext(doc);
 
         rule.Validate(ctx, doc);
 
-        ctx.Received(1).ReportError(Arg.Any<IError>());
+        ctx.Errors.Should().ContainSingle();
     }
 
     #endregion

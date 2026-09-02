@@ -40,8 +40,8 @@ public sealed class AssemblySchemaProvider : ISchemaProvider
         _configure(builder);
 
         await using var provider = services.BuildServiceProvider();
-        var resolver = provider.GetRequiredService<IRequestExecutorResolver>();
-        var executor = await resolver.GetRequestExecutorAsync().ConfigureAwait(false);
+        var resolver = provider.GetRequiredService<IRequestExecutorProvider>();
+        var executor = await resolver.GetExecutorAsync().ConfigureAwait(false);
         var hcSchema = executor.Schema;
 
         var sdl = hcSchema.ToString();

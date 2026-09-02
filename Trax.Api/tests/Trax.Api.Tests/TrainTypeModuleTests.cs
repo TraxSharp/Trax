@@ -712,7 +712,7 @@ public class TrainTypeModuleTests
         schema.Types.Should().NotContain(t => t.Name == "AddressValidationMutationResponse");
     }
 
-    private static async Task<ISchema> BuildSchemaWithDiscoveryAsync(
+    private static async Task<ISchemaDefinition> BuildSchemaWithDiscoveryAsync(
         IReadOnlyList<TrainRegistration> registrations
     )
     {
@@ -744,8 +744,8 @@ public class TrainTypeModuleTests
         }
 
         var sp = services.BuildServiceProvider();
-        var resolver = sp.GetRequiredService<IRequestExecutorResolver>();
-        var executor = await resolver.GetRequestExecutorAsync("trax");
+        var resolver = sp.GetRequiredService<IRequestExecutorProvider>();
+        var executor = await resolver.GetExecutorAsync("trax");
         return executor.Schema;
     }
 

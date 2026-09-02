@@ -155,7 +155,7 @@ public class CaseInsensitiveFilterTests
     {
         var schema = await BuildSchemaAsync<PeopleDbContext>(caseInsensitive: true);
 
-        var stringFilter = schema.GetType<InputObjectType>("StringOperationFilterInput");
+        var stringFilter = schema.Types.GetType<InputObjectType>("StringOperationFilterInput");
         var fieldNames = stringFilter.Fields.Select(f => f.Name).ToHashSet();
 
         fieldNames.Should().Contain("icontains");
@@ -170,7 +170,7 @@ public class CaseInsensitiveFilterTests
     {
         var schema = await BuildSchemaAsync<PeopleDbContext>(caseInsensitive: false);
 
-        var stringFilter = schema.GetType<InputObjectType>("StringOperationFilterInput");
+        var stringFilter = schema.Types.GetType<InputObjectType>("StringOperationFilterInput");
         var fieldNames = stringFilter.Fields.Select(f => f.Name).ToHashSet();
 
         // Default behavior is untouched: stock ops present, custom ops absent.
@@ -231,7 +231,7 @@ public class CaseInsensitiveFilterTests
         var op = result.ExpectOperationResult();
         op.Errors.Should().NotBeNullOrEmpty();
         // The field errors out instead of matching every row.
-        var discover = (IReadOnlyDictionary<string, object?>)op.Data!["discover"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
         discover["people"].Should().BeNull();
     }
 
@@ -246,7 +246,7 @@ public class CaseInsensitiveFilterTests
 
         var op = result.ExpectOperationResult();
         op.Errors.Should().NotBeNullOrEmpty();
-        var discover = (IReadOnlyDictionary<string, object?>)op.Data!["discover"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
         discover["people"].Should().BeNull();
     }
 
@@ -290,11 +290,13 @@ public class CaseInsensitiveFilterTests
         }
 
         var executor = await provider
-            .GetRequiredService<IRequestExecutorResolver>()
-            .GetRequestExecutorAsync("trax");
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
 
         // The operators reached the schema through the real wiring.
-        var stringFilter = executor.Schema.GetType<InputObjectType>("StringOperationFilterInput");
+        var stringFilter = executor.Schema.Types.GetType<InputObjectType>(
+            "StringOperationFilterInput"
+        );
         stringFilter.Fields.Select(f => f.Name).Should().Contain(["icontains", "ieq"]);
 
         // And they actually filter against DI-resolved data.
@@ -386,7 +388,7 @@ public class CaseInsensitiveFilterTests
         var op = result.ExpectOperationResult();
         op.Errors.Should().BeNullOrEmpty();
 
-        var discover = (IReadOnlyDictionary<string, object?>)op.Data!["discover"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
         var people = (IReadOnlyDictionary<string, object?>)discover["people"]!;
         var nodes = (IReadOnlyList<object?>)people["nodes"]!;
 
@@ -396,9 +398,9 @@ public class CaseInsensitiveFilterTests
             .ToList();
     }
 
-    private static int TotalCount(IOperationResult op, string field)
+    private static int TotalCount(OperationResult op, string field)
     {
-        var discover = (IReadOnlyDictionary<string, object?>)op.Data!["discover"]!;
+        var discover = (IReadOnlyDictionary<string, object?>)op.DataMap()["discover"]!;
         var connection = (IReadOnlyDictionary<string, object?>)discover[field]!;
         return Convert.ToInt32(connection["totalCount"]);
     }
@@ -417,7 +419,7 @@ public class CaseInsensitiveFilterTests
         return builder.Build();
     }
 
-    private static async Task<ISchema> BuildSchemaAsync<TContext>(bool caseInsensitive)
+    private static async Task<ISchemaDefinition> BuildSchemaAsync<TContext>(bool caseInsensitive)
         where TContext : DbContext
     {
         var executor = await BuildExecutorAsync<TContext>(caseInsensitive: caseInsensitive);
@@ -474,9 +476,7 @@ public class CaseInsensitiveFilterTests
         if (seedData)
             await SeedAsync<TContext>(provider);
 
-        return await provider
-            .GetRequiredService<IRequestExecutorResolver>()
-            .GetRequestExecutorAsync();
+        return await provider.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync();
     }
 
     private static async Task SeedAsync<TContext>(IServiceProvider provider)

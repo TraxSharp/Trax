@@ -1,5 +1,6 @@
 using FluentAssertions;
 using HotChocolate.Execution;
+using HotChocolate.Language;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;

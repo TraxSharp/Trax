@@ -62,8 +62,8 @@ public class GraphQLServiceExtensionsTests
         );
 
         await using var sp = services.BuildServiceProvider();
-        var executor = await sp.GetRequiredService<IRequestExecutorResolver>()
-            .GetRequestExecutorAsync("trax");
+        var executor = await sp.GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
 
         // The marker type module adds an extra query field.
         executor.Schema.QueryType.Fields.Select(f => f.Name).Should().Contain("markerField");
@@ -79,8 +79,8 @@ public class GraphQLServiceExtensionsTests
         );
 
         await using var sp = services.BuildServiceProvider();
-        var executor = await sp.GetRequiredService<IRequestExecutorResolver>()
-            .GetRequestExecutorAsync("trax");
+        var executor = await sp.GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
 
         executor.Should().NotBeNull();
     }
@@ -102,8 +102,8 @@ public class GraphQLServiceExtensionsTests
 
         // Build to make sure the schema constructs with the request interceptor wired.
         await using var sp = services.BuildServiceProvider();
-        var executor = await sp.GetRequiredService<IRequestExecutorResolver>()
-            .GetRequestExecutorAsync("trax");
+        var executor = await sp.GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
         executor.Should().NotBeNull();
     }
 

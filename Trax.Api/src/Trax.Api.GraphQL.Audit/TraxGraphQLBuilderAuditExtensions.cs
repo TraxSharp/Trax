@@ -1,9 +1,12 @@
 using HotChocolate.Execution.Configuration;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
+using Trax.Api.GraphQL.Extensions;
 
 namespace Trax.Api.GraphQL.Audit;
 
@@ -55,8 +58,18 @@ public static class TraxGraphQLBuilderAuditExtensions
         EnsureDisclaimerLog(services);
 
         builder.ConfigureSchema(schema =>
-            schema.AddDiagnosticEventListener<TraxGraphQLAuditListener>()
-        );
+        {
+            // HotChocolate 16 activates diagnostic listeners out of the schema container,
+            // which no longer forwards to the application container. Bridge the services
+            // the listener is constructed from.
+            schema.BridgeApplicationService<IHttpContextAccessor>(services);
+            schema.BridgeApplicationService<TraxAuditChannel>(services);
+            schema.BridgeApplicationService<IOptions<TraxAuditOptions>>(services);
+            schema.BridgeApplicationService<ITraxAuditRedactor>(services);
+            schema.BridgeApplicationService<TimeProvider>(services);
+            schema.BridgeApplicationService<ILogger<TraxGraphQLAuditListener>>(services);
+            schema.AddDiagnosticEventListener<TraxGraphQLAuditListener>();
+        });
 
         return builder;
     }

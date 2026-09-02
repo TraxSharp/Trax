@@ -13,6 +13,7 @@ using HotChocolate.Types.Pagination;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Configuration;
+using Trax.Api.GraphQL.Projection;
 using Trax.Api.GraphQL.Queries;
 using Trax.Effect.Attributes;
 
@@ -186,7 +187,7 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
         }
 
         if (attr.Projection)
-            field.UseProjection<TEntity>();
+            field.Use(QueryModelProjection.CreateMiddleware<TEntity>());
 
         if (attr.Filtering)
         {

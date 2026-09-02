@@ -50,11 +50,11 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
         var schema = await BuildSchemaAsync<AnonDefaultDbContext>();
 
         var discoverField = schema.QueryType.Fields.Single(f => f.Name == "discover");
-        var discoverType = (IObjectType)discoverField.Type.NamedType();
+        var discoverType = (IObjectTypeDefinition)discoverField.Type.NamedType();
         var entry = discoverType.Fields.Single(f => f.Name == "anonDefaultRows");
 
         entry
-            .Directives.Any(d => d.Type.Name == "authorize")
+            .Directives.Any(d => d.Definition.Name == "authorize")
             .Should()
             .BeFalse("an anonymous entry field must not carry the @authorize directive");
     }
@@ -65,11 +65,11 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
         var schema = await BuildSchemaAsync<AnonDefaultDbContext>();
 
         var anonType = schema
-            .Types.OfType<IObjectType>()
+            .Types.OfType<IObjectTypeDefinition>()
             .First(t => t.RuntimeType == typeof(AnonDefaultRow));
 
         anonType
-            .Directives.Any(d => d.Type.Name == "authorize")
+            .Directives.Any(d => d.Definition.Name == "authorize")
             .Should()
             .BeFalse("the ObjectType of an anonymous entity must not carry @authorize");
     }
@@ -107,7 +107,7 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
         var schema = await BuildSchemaAsync<AnonExplicitDbContext>();
 
         var anonType = schema
-            .Types.OfType<IObjectType>()
+            .Types.OfType<IObjectTypeDefinition>()
             .First(t => t.RuntimeType == typeof(AnonExplicitRow));
 
         var fieldNames = anonType
@@ -117,7 +117,7 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
             .ToArray();
         fieldNames.Should().BeEquivalentTo(new[] { "id", "publicField" });
 
-        anonType.Directives.Any(d => d.Type.Name == "authorize").Should().BeFalse();
+        anonType.Directives.Any(d => d.Definition.Name == "authorize").Should().BeFalse();
     }
 
     // ── ExposeAs branch ──────────────────────────────────────────────────
@@ -159,7 +159,7 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
         var schema = await BuildSchemaAsync<AnonExposedDbContext>();
 
         var anonType = schema
-            .Types.OfType<IObjectType>()
+            .Types.OfType<IObjectTypeDefinition>()
             .First(t => t.RuntimeType == typeof(AnonExposedRow));
 
         var fieldNames = anonType
@@ -169,12 +169,12 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
             .ToArray();
         fieldNames.Should().BeEquivalentTo(new[] { "headline", "id" });
 
-        anonType.Directives.Any(d => d.Type.Name == "authorize").Should().BeFalse();
+        anonType.Directives.Any(d => d.Definition.Name == "authorize").Should().BeFalse();
     }
 
     // ── Schema-build helper ─────────────────────────────────────────────
 
-    private static async Task<ISchema> BuildSchemaAsync<TContext>()
+    private static async Task<ISchemaDefinition> BuildSchemaAsync<TContext>()
         where TContext : DbContext
     {
         var services = new ServiceCollection();
@@ -198,8 +198,8 @@ public class QueryModelTypeModuleAllowAnonymousCompositionTests
             .AddProjections();
 
         var provider = services.BuildServiceProvider();
-        var resolver = provider.GetRequiredService<IRequestExecutorResolver>();
-        var executor = await resolver.GetRequestExecutorAsync();
+        var resolver = provider.GetRequiredService<IRequestExecutorProvider>();
+        var executor = await resolver.GetExecutorAsync();
         return executor.Schema;
     }
 

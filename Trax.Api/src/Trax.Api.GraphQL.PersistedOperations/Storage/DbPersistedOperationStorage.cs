@@ -1,5 +1,6 @@
 using HotChocolate.Execution;
 using HotChocolate.Language;
+using HotChocolate.PersistedOperations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;

@@ -48,4 +48,11 @@ public abstract class CrossSchemaGuardFixture
         var result = CrossSchemaGuards.EdgeResolversUseLoader(Options);
         Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
     }
+
+    [Test]
+    public void Extension_resolvers_declare_what_they_read_off_their_parent()
+    {
+        var result = CrossSchemaGuards.ExtensionResolversDeclareParentRequirements(Options);
+        Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
+    }
 }

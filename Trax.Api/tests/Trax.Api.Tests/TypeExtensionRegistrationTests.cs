@@ -276,14 +276,14 @@ public class TypeExtensionRegistrationTests
 
         await using var provider = services.BuildServiceProvider();
         var executor = await provider
-            .GetRequiredService<IRequestExecutorResolver>()
-            .GetRequestExecutorAsync("trax");
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
 
         // Act — query the field added by PingTypeExtension
         var result = await executor.ExecuteAsync("{ operations { ping } }");
 
         // Assert
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
 
@@ -339,14 +339,14 @@ public class TypeExtensionRegistrationTests
 
         await using var provider = services.BuildServiceProvider();
         var executor = await provider
-            .GetRequiredService<IRequestExecutorResolver>()
-            .GetRequestExecutorAsync("trax");
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
 
         // Act — PingTypeExtension should have been discovered via assembly scan
         var result = await executor.ExecuteAsync("{ operations { ping } }");
 
         // Assert
-        var operationResult = result as IOperationResult;
+        var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
     }

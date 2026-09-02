@@ -97,17 +97,8 @@ public sealed class TraxApiKeySocketInterceptor(
             httpContext.User = claimsPrincipal;
     }
 
-    private static ConnectionInitPayload? TryReadPayload(IOperationMessagePayload payload)
-    {
-        try
-        {
-            return payload.As<ConnectionInitPayload>();
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
+    private static ConnectionInitPayload? TryReadPayload(IOperationMessagePayload payload) =>
+        ConnectionInitPayloadReader.TryRead<ConnectionInitPayload>(payload);
 
     internal sealed record ConnectionInitPayload(string? AuthToken, string? ApiKey);
 }

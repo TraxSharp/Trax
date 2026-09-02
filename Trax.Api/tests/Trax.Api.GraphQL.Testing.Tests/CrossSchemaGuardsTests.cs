@@ -187,4 +187,147 @@ public class CrossSchemaGuardsTests
     }
 
     #endregion
+
+    #region ExtensionResolversDeclareParentRequirements
+
+    private const string EdgeReadingFk = """
+        [ExtendObjectType(typeof(Article))]
+        public sealed class ArticleToBillEdge
+        {
+            public async Task<BillReference?> GetBill(
+                [Parent] Article article,
+                CrossSchemaLoader<LegidexContext, Bill> bills,
+                CancellationToken ct) => await bills.LoadAsync(article.BillId, ct);
+        }
+        """;
+
+    private const string EdgeDeclaringFk = """
+        [ExtendObjectType(typeof(Article))]
+        public sealed class ArticleToBillEdge
+        {
+            public async Task<BillReference?> GetBill(
+                [Parent(requires: nameof(Article.BillId))] Article article,
+                CrossSchemaLoader<LegidexContext, Bill> bills,
+                CancellationToken ct) => await bills.LoadAsync(article.BillId, ct);
+        }
+        """;
+
+    [Test]
+    public void ExtensionResolvers_ReadingUndeclaredProperty_IsOffender()
+    {
+        using var repo = new TempRepo().Write("libs/Edges/ArticleToBillEdge.cs", EdgeReadingFk);
+
+        var result = CrossSchemaGuards.ExtensionResolversDeclareParentRequirements(
+            new ArchitectureGuardOptions
+            {
+                RepoRootOverride = repo.Root,
+                SourceScanRoots = ["libs"],
+            }
+        );
+
+        result.Passed.Should().BeFalse();
+        result.Offenders.Should().ContainSingle().Which.Should().Contain("article.BillId");
+    }
+
+    [Test]
+    public void ExtensionResolvers_DeclaringTheProperty_Passes()
+    {
+        using var repo = new TempRepo().Write("libs/Edges/ArticleToBillEdge.cs", EdgeDeclaringFk);
+
+        var result = CrossSchemaGuards.ExtensionResolversDeclareParentRequirements(
+            new ArchitectureGuardOptions
+            {
+                RepoRootOverride = repo.Root,
+                SourceScanRoots = ["libs"],
+            }
+        );
+
+        result.Passed.Should().BeTrue(result.FailureMessage);
+        result.Inspected.Should().Be(1);
+    }
+
+    [Test]
+    public void ExtensionResolvers_ReadingOnlyTheKey_Passes()
+    {
+        // Trax adds the entity key to the projection for hand-written resolvers, so a
+        // resolver batching on Id needs no annotation.
+        using var repo = new TempRepo().Write(
+            "libs/Content/IssueContentExtension.cs",
+            """
+            [ExtendObjectType(typeof(Issue))]
+            public sealed class IssueContentExtension
+            {
+                public Task<IReadOnlyList<Item>> GetContent(
+                    [Parent] Issue issue,
+                    IssueContentLoader loader,
+                    CancellationToken ct) => loader.LoadAsync(issue.Id, ct);
+            }
+            """
+        );
+
+        var result = CrossSchemaGuards.ExtensionResolversDeclareParentRequirements(
+            new ArchitectureGuardOptions
+            {
+                RepoRootOverride = repo.Root,
+                SourceScanRoots = ["libs"],
+            }
+        );
+
+        result.Passed.Should().BeTrue(result.FailureMessage);
+    }
+
+    [Test]
+    public void ExtensionResolvers_MethodCallOnParent_IsNotAPropertyRead()
+    {
+        using var repo = new TempRepo().Write(
+            "libs/Edges/CallEdge.cs",
+            """
+            [ExtendObjectType(typeof(Article))]
+            public sealed class CallEdge
+            {
+                public string GetLabel([Parent] Article article) => article.ToString();
+            }
+            """
+        );
+
+        var result = CrossSchemaGuards.ExtensionResolversDeclareParentRequirements(
+            new ArchitectureGuardOptions
+            {
+                RepoRootOverride = repo.Root,
+                SourceScanRoots = ["libs"],
+            }
+        );
+
+        result.Passed.Should().BeTrue(result.FailureMessage);
+    }
+
+    [Test]
+    public void ExtensionResolvers_FileWithoutExtendObjectType_IsNotInspected()
+    {
+        using var repo = new TempRepo().Write(
+            "libs/Plain.cs",
+            "public sealed class Plain { public int Read(Thing t) => t.SomeColumn; }"
+        );
+
+        var result = CrossSchemaGuards.ExtensionResolversDeclareParentRequirements(
+            new ArchitectureGuardOptions
+            {
+                RepoRootOverride = repo.Root,
+                SourceScanRoots = ["libs"],
+            }
+        );
+
+        result.Passed.Should().BeTrue();
+        result.Inspected.Should().Be(0);
+    }
+
+    [Test]
+    public void ExtensionResolvers_NullOptions_Throws()
+    {
+        var act = () => CrossSchemaGuards.ExtensionResolversDeclareParentRequirements(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    #endregion
 }

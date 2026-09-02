@@ -8,7 +8,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Storage;
 /// </summary>
 /// <remarks>
 /// The HTTP request path does NOT use this interface; HotChocolate calls
-/// <see cref="HotChocolate.Execution.IOperationDocumentStorage.TryReadAsync"/>
+/// <see cref="HotChocolate.PersistedOperations.IOperationDocumentStorage.TryReadAsync"/>
 /// (implemented internally by the package) instead. Use this interface for
 /// administrative changes only.
 /// </remarks>

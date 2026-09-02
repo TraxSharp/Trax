@@ -1086,7 +1086,7 @@ public class OperationsQueriesTests
         await ops.Received(1)
             .QueueTrainAsync(
                 Arg.Is<QueueTrainInput>(i =>
-                    i.TrainName == "Trax.X.RequeueTrain" && i.InputJson == "{\"v\": 1}"
+                    i!.TrainName == "Trax.X.RequeueTrain" && i.InputJson == "{\"v\": 1}"
                 ),
                 Arg.Any<CancellationToken>()
             );

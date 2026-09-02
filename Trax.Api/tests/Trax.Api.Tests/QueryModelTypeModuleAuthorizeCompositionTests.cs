@@ -54,7 +54,7 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
         var schema = await BuildSchemaAsync<LegacyDbContext>();
 
         var discoverField = schema.QueryType.Fields.Single(f => f.Name == "discover");
-        var discoverType = (IObjectType)discoverField.Type.NamedType();
+        var discoverType = (IObjectTypeDefinition)discoverField.Type.NamedType();
         var entry = discoverType.Fields.Single(f => f.Name == "legacyThings");
 
         entry.IsDeprecated.Should().BeTrue();
@@ -92,7 +92,7 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
         var schema = await BuildSchemaAsync<AuditDbContext>();
 
         var auditType = schema
-            .Types.OfType<IObjectType>()
+            .Types.OfType<IObjectTypeDefinition>()
             .First(t => t.RuntimeType == typeof(AuditRow));
 
         // Only [Column]-decorated properties appear. If the BindFields.Explicit
@@ -111,7 +111,7 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
         // one — a regression that called .Authorize() only in the implicit
         // factory would silently un-gate every entity that uses explicit
         // binding.
-        auditType.Directives.Any(d => d.Type.Name == "authorize").Should().BeTrue();
+        auditType.Directives.Any(d => d.Definition.Name == "authorize").Should().BeTrue();
     }
 
     // ── Schema-build helper ─────────────────────────────────────────────
@@ -122,7 +122,7 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
     /// dependency graph (TraxMarker, train discovery, etc.) so the test
     /// focuses on the type module's emission behavior.
     /// </summary>
-    private static async Task<ISchema> BuildSchemaAsync<TContext>()
+    private static async Task<ISchemaDefinition> BuildSchemaAsync<TContext>()
         where TContext : DbContext
     {
         var services = new ServiceCollection();
@@ -146,8 +146,8 @@ public class QueryModelTypeModuleAuthorizeCompositionTests
             .AddProjections();
 
         var provider = services.BuildServiceProvider();
-        var resolver = provider.GetRequiredService<IRequestExecutorResolver>();
-        var executor = await resolver.GetRequestExecutorAsync();
+        var resolver = provider.GetRequiredService<IRequestExecutorProvider>();
+        var executor = await resolver.GetExecutorAsync();
         return executor.Schema;
     }
 
