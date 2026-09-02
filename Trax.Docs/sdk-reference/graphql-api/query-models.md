@@ -344,6 +344,143 @@ builder.Services.AddTraxGraphQL(graphql => graphql
 
 This adds `icontains` (case-insensitive substring) and `ieq` (case-insensitive equality) to every string filter input, including `ExposeAs`-projected and custom filter types. The existing case-sensitive operators are unchanged; a client opts in per query by choosing the operator. See [ConfigureFiltering](/docs/sdk-reference/graphql-api/configure-filtering) for the translation, indexing, and extension details.
 
+## Scalar Collections (PostgreSQL Arrays)
+
+A property typed as a collection of scalars (`Badge[]`, `string[]`, `List<int>`) maps to a
+PostgreSQL array column and is filtered with array containment. This fits a small bounded
+set of values that carries no data of its own, such as roles or feature flags on a row.
+If the membership itself needs fields (`GrantedAt`, `GrantedBy`), use a junction table
+instead and expose that as its own query model.
+
+```csharp
+public enum Badge { Founder, Veteran, Champion }
+
+[TraxQueryModel(Namespace = "players")]
+[Table("player_records", Schema = "game")]
+public class PlayerRecord
+{
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
+
+    [Column("badges")]
+    public Badge[] Badges { get; set; } = [];
+}
+```
+
+The DbContext maps the enum and declares the index. Both matter, for different reasons
+(see [The GIN index declaration changes the SQL](#the-gin-index-declaration-changes-the-sql)):
+
+```csharp
+protected override void OnConfiguring(DbContextOptionsBuilder options) =>
+    options.UseNpgsql(connectionString, npgsql => npgsql.MapEnum<Badge>("badge", "game"));
+
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    modelBuilder.HasPostgresEnum<Badge>(schema: "game");
+    modelBuilder.Entity<PlayerRecord>().HasIndex(x => x.Badges).HasMethod("gin");
+}
+```
+
+The column and its index are created by a migration, like any other table.
+
+### Generated filter surface
+
+The schema exposes the enum by name and the collection as a list filter:
+
+```graphql
+enum Badge { FOUNDER, VETERAN, CHAMPION }
+
+input ListBadgeOperationFilterInput {
+  all: BadgeListElementFilterInput
+  none: BadgeListElementFilterInput
+  some: BadgeListElementFilterInput
+  any: Boolean
+}
+
+input BadgeListElementFilterInput {
+  eq: Badge
+  in: [Badge!]
+  nin: [Badge!]
+}
+```
+
+Set membership is expressed with the standard list operators, and each one reaches
+PostgreSQL as an array operator a GIN index can serve:
+
+| Query | SQL | Uses GIN |
+|-------|-----|----------|
+| `badges: { some: { eq: CHAMPION } }` | `badges @> ARRAY[$v]` | Yes |
+| `badges: { some: { in: [A, B] } }` | `badges && ARRAY[$v]` | Yes |
+| `and: [{ badges: { some: { eq: A } } }, { badges: { some: { eq: B } } }]` | `badges @> ARRAY[$a] AND badges @> ARRAY[$b]` | Yes |
+| `badges: { all: { in: [A, B] } }` | `badges <@ ARRAY[$v]` | Yes |
+| `badges: { none: { eq: A } }` | `NOT (badges @> ARRAY[$v])` | No, negated |
+| `badges: { any: false }` | `cardinality(badges) = 0` | No |
+
+Those first three cover "contains", "contains any" and "contains all" respectively. There
+is no separate `contains` operator, because `some: { eq: }` already compiles to exactly
+the containment operator a hand-written one would emit.
+
+```graphql
+query PlayersHoldingBothBadges {
+  discover {
+    players {
+      playerRecords(
+        where: {
+          and: [
+            { badges: { some: { eq: CHAMPION } } }
+            { badges: { some: { eq: VETERAN } } }
+          ]
+        }
+      ) {
+        totalCount
+        nodes { id badges }
+      }
+    }
+  }
+}
+```
+
+### The GIN index declaration changes the SQL
+
+`HasIndex(...).HasMethod("gin")` does more than describe the database. Npgsql reads it
+when it compiles a single-value membership filter and picks a different operator:
+
+| EF model | `some: { eq: X }` compiles to | Plan |
+|----------|-------------------------------|------|
+| `HasIndex(x => x.Badges).HasMethod("gin")` | `badges @> ARRAY[$v]` | Index scan |
+| No index declared | `$v = ANY(badges)` | Sequential scan, no index can serve it |
+
+Both return identical rows, and the GraphQL schema, the query and the response are the
+same either way. Only the plan differs, so the omission stays invisible until the table
+grows. Trax logs a warning at startup for any filterable scalar collection with no GIN
+index declared in the EF model, naming the property and the fix. The multi-value
+operators (`some: { in: }`, `all: { in: }`) compile to `&&` and `<@` either way and are
+unaffected, so a collection filtered only those ways does not need the declaration.
+
+The collection type is not what decides this. `Badge[]` and `List<Badge>` both map to the
+same array column and behave identically; only the index declaration matters.
+
+### `neq` is not available inside a collection
+
+The element filter offers `eq`, `in` and `nin` but not `neq`. Inside a collection, `neq`
+lowers to `Any(x => x != value)` over a primitive collection, which no EF Core provider
+can translate, so it would pass GraphQL validation and then fail at execution. Trax
+removes it from the element input so the query is rejected up front instead.
+
+Scalar properties are unaffected and keep `neq`:
+
+```graphql
+# Rejected: `neq` does not exist on the element input.
+where: { badges: { some: { neq: CHAMPION } } }
+
+# Fine: `tier` is a scalar enum property, not a collection.
+where: { tier: { neq: CHAMPION } }
+```
+
+The one filter this costs is `all: { neq: X }`, which did translate. `none: { eq: X }` is
+exactly equivalent and still available.
+
 ## AddDbContext
 
 Register one or more DbContext types whose `DbSet<T>` properties contain attributed entities:

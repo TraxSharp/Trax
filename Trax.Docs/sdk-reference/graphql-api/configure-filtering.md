@@ -80,3 +80,43 @@ Trax does not own migrations, so create these alongside your own schema. Without
 ## SDK Reference
 
 > [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
+
+## Scalar collection elements
+
+Filter inputs for the elements of a scalar collection (`Badge[]`, `string[]`, `List<int>`)
+are restricted automatically, with no configuration. They expose `eq`, `in`, `nin` and the
+comparable operators, but not `neq`.
+
+Inside a collection, `neq` lowers to `Any(x => x != value)` over a primitive collection,
+which no EF Core provider can translate. Left in place it would pass GraphQL validation
+and then throw at execution. Removing it from the shared scalar input was not an option,
+since `neq` translates correctly on ordinary scalar properties, so the element position
+gets its own input type instead:
+
+```graphql
+input ListBadgeOperationFilterInput {
+  all: BadgeListElementFilterInput
+  none: BadgeListElementFilterInput
+  some: BadgeListElementFilterInput
+  any: Boolean
+}
+
+input BadgeListElementFilterInput {
+  eq: Badge
+  in: [Badge!]
+  nin: [Badge!]
+}
+```
+
+`all: { neq: X }` is the only filter this removes. `none: { eq: X }` means the same thing
+and is still available. Scalar properties keep the full operation set including `neq`.
+
+The restriction applies to the auto-generated filter input, to
+[`ExposeAs`](/docs/sdk-reference/graphql-api/query-models#exposeas)-projected inputs, and
+to custom [`AddFilterType`](/docs/sdk-reference/graphql-api/query-models#custom-filter-and-sort-types)
+overrides, because it is bound by property type rather than per field. Navigation
+collections are untouched: their elements are entities, filtered by the entity's own
+filter input.
+
+See [Scalar collections](/docs/sdk-reference/graphql-api/query-models#scalar-collections-postgresql-arrays)
+for the operator table and the GIN index behaviour.
