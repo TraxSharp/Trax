@@ -73,7 +73,4 @@ Not covered:
 
 ## Changelog
 
-- **2026-09-11**: Corrected the RepoConventionGuards claim: it is shipped for consumers, unused here, and does not cover lockfiles.
-- **2026-09-11**: Corrected the TraxPinLockstepTests claim: it exists in five of eight
-  repos, not all of them, and is absent from Samples.
 - **2026-09-11**: Recorded.

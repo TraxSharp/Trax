@@ -57,7 +57,4 @@ Not covered:
 
 ## Changelog
 
-- **2026-09-11**: Narrowed the exceptions-list claim: three of eight repos carry one.
-- **2026-09-11**: Corrected the opening: three justified [Ignore] attributes exist, two
-  of them gating stress suites, which is a shape the original rationale did not admit.
 - **2026-09-11**: Recorded.

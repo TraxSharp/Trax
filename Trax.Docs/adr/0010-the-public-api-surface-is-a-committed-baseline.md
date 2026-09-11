@@ -65,6 +65,5 @@ Not covered:
 
 ## Changelog
 
-- **2026-09-11**: Corrected: Samples publishes a template package, seven of eight repos carry the test, and most of the surface has no baseline.
 - **2026-09-11**: Recorded. The census asked which decision `PublicApiSurfaceTests` enforces,
   and there was no answer.

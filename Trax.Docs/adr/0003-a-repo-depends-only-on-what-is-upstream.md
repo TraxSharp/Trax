@@ -17,7 +17,7 @@ everything. So `Trax.Api` referencing `Trax.Scheduler` is upstream and allowed; 
 is not.
 
 It is a **partial** order, not a total one. `Trax.Cli` and `Trax.Api` are both downstream of
-`Trax.Scheduler` and neither may reference the other, so some pairs genuinely have no
+`Trax.Scheduler` and neither may reference the other, so some pairs have no
 direction. What makes the rule checkable is that each repo's upstream set is written down,
 not that every pair is ordered.
 
@@ -57,7 +57,7 @@ pushes it upstream or keeps its own copy. The duplicated guard files across the
 identifies the repo from the root `.slnx` and allows only that repo's own family plus the
 upstreams named in its allow-map, which is where the order above is actually written down.
 
-Not covered, and worth knowing:
+Not covered:
 
 - The guard reads `PackageReference` entries, so a dependency taken by copying source
   across repos is invisible to it.
@@ -67,8 +67,4 @@ Not covered, and worth knowing:
 
 ## Changelog
 
-- **2026-09-11**: Corrected: the chain is a partial order, and Cli and Api have no direction between them.
-- **2026-09-11**: Corrected the chain. The repos are a total order, not Core and Effect
-  above an undifferentiated rest, and what the ADR called siblings the guard has always
-  allowed.
 - **2026-09-11**: Recorded.

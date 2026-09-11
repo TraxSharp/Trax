@@ -56,6 +56,5 @@ two provider assemblies would close it, and does not exist.
 
 ## Changelog
 
-- **2026-09-11**: Corrected the table count: four empty tables, not two.
 - **2026-09-11**: Recorded. Moved from the Trax.Effect corpus: the persisted-operations
   feature package lives in Trax.Api, so the decision binds both repos.

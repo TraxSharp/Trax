@@ -68,8 +68,4 @@ Not covered:
 
 ## Changelog
 
-- **2026-09-11**: Corrected the enforcement claim: the guard checks CanonicalName at
-  registration and none of the six downstream layers the ADR had said it walked.
-- **2026-09-11**: Corrected an earlier correction. This said none of the six downstream
-  layers was verified; five are, in the repos that own them, and only dashboard requeue is not.
 - **2026-09-11**: Recorded.

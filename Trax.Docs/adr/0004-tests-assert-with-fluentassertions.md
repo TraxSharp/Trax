@@ -55,7 +55,4 @@ most assertions in this repo's own test project are exactly that.
 
 ## Changelog
 
-- **2026-09-11**: Recorded the shipped guard fixtures as a deliberate exception: they use Assert.That because they cannot require FluentAssertions of consumers.
-- **2026-09-11**: Demoted ReasonsTests from an enforcement claim to an example, and
-  recorded that Trax.Docs has no Tests.Meta project to hold the guard.
 - **2026-09-11**: Recorded.

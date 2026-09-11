@@ -233,7 +233,7 @@ A new ADR gets one entry: `- **YYYY-MM-DD**: Recorded.`
 
 ## Optional sections
 
-Only include these when they add genuine value. Most ADRs will not need them.
+Only include these when they add something. Most ADRs will not need them.
 
 - **Considered options**, only when the rejected alternatives are worth remembering
 - **Consequences**, only when non-obvious downstream effects need calling out

@@ -64,6 +64,5 @@ one of these.
 
 ## Changelog
 
-- **2026-09-11**: Replaced a file count that was wrong and would go stale anyway.
 - **2026-09-11**: Recorded. The census asked which decision these four guards enforced, and
   there was no answer.

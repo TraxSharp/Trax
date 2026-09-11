@@ -46,7 +46,7 @@ the mechanism, not an allowlist of files.
 **Enforced elsewhere:** `NoFixedTaskDelayTests` in the eight code repos' `Tests.Meta`
 projects, and `HygieneGuards.NoFixedDelays` shipped from `Trax.Core.Testing`.
 
-Not covered, and the gap is larger than it looks:
+Not covered:
 
 - Seven of the eight repos carry a `BaselineOffenders` dictionary grandfathering the delays
   that already existed, with a per-file count, and fail only when a file exceeds its baseline.
@@ -59,8 +59,4 @@ Not covered, and the gap is larger than it looks:
 
 ## Changelog
 
-- **2026-09-11**: Corrected: seven of eight repos carry a baseline, the guard also matches Thread.Sleep, and the marker window looks upward only.
-- **2026-09-11**: Corrected the mechanism: legitimate delays are declared with marker
-  comments, not an exceptions list, and recorded the BaselineOffenders grandfathering
-  the per-repo guards carry.
 - **2026-09-11**: Recorded.

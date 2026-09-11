@@ -18,7 +18,7 @@ All three must be true:
 1. **Hard to reverse.** The cost of changing your mind later is meaningful.
 2. **Surprising without context.** A future reader will look at the code and wonder "why on
    earth did they do it this way?"
-3. **The result of a real trade-off.** There were genuine alternatives and you picked one
+3. **The result of a real trade-off.** There were alternatives and you picked one
    for specific reasons.
 
 If a decision is easy to reverse, skip it: you will just reverse it. If it is not

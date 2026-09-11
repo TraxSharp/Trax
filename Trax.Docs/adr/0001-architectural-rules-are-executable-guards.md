@@ -76,12 +76,4 @@ human step, and no test can detect a decision somebody chose not to record.
 
 ## Changelog
 
-- **2026-09-11**: Corrected the citation note again: it still said no shared copy carried
-  one, written before the census pass added 66 of them.
-- **2026-09-11**: Updated the citation note: repo-specific guards in Trax.Effect and
-  Trax.Api now cite their local ADRs, though no shared copy does.
-- **2026-09-11**: Corrected three claims an audit found false: the Inspected rule holds
-  only for the ADR guard and not for the shipped Trax.Core.Testing GuardResult, the
-  duplicated guard files are near-identical rather than byte-identical, and no
-  Tests.Meta guard cites an ADR yet.
 - **2026-09-11**: Recorded.
