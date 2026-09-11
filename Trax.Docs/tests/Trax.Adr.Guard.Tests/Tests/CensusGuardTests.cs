@@ -143,6 +143,74 @@ public class CensusGuardTests
         result.Inspected.Should().Be(0);
     }
 
+    #region Crediting a central ADR
+
+    /// <summary>
+    /// A repo's shared guards enforce decisions recorded in the central corpus, which is not
+    /// present in that repo. Nothing local can name them, so without this the census would
+    /// force a false "not ADR-enforcing" opt-out on every one of them.
+    /// </summary>
+    [Test]
+    public void Census_GuardCitingACentralAdr_IsClassified()
+    {
+        const string source = """
+            namespace Some.Tests.Meta;
+
+            /// <summary>
+            /// No inline Version on a cross-repo reference.
+            ///
+            /// <para>Enforces <c>Trax.Docs/adr/0002-cross-repo-dependencies-are-exact-pinned.md</c>.</para>
+            /// </summary>
+            public class CrossRepoPackageReferenceTests { }
+            """;
+
+        using var repo = WithGuardSource("CrossRepoPackageReferenceTests.cs", source);
+
+        Run(repo).Passed.Should().BeTrue();
+    }
+
+    [Test]
+    public void Census_GuardCitingALocalAdr_IsAlsoClassified()
+    {
+        const string source = """
+            namespace Some.Tests.Meta;
+
+            /// <summary>
+            /// Migrations are numbered.
+            ///
+            /// <para>Enforces <c>docs/adr/0001-schema-changes-are-hand-written-sql.md</c>.</para>
+            /// </summary>
+            public class MigrationsIntegrityTests { }
+            """;
+
+        using var repo = WithGuardSource("MigrationsIntegrityTests.cs", source);
+
+        Run(repo).Passed.Should().BeTrue();
+    }
+
+    [Test]
+    public void Census_GuardMentioningAdrsWithoutCitingOne_IsStillUnclassified()
+    {
+        const string source = """
+            namespace Some.Tests.Meta;
+
+            /// <summary>
+            /// Something about adr conventions in general, naming no file.
+            /// </summary>
+            public class VagueTests { }
+            """;
+
+        using var repo = WithGuardSource("VagueTests.cs", source);
+
+        Run(repo)
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("'VagueTests' is named by no ADR");
+    }
+
+    #endregion
+
     #region Reading the file correctly
 
     /// <summary>

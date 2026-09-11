@@ -20,13 +20,22 @@ public static class CensusGuards
         RegexOptions.Compiled
     );
 
+    /// <summary>
+    /// A citation of any ADR, local or central: <c>docs/adr/0003-x.md</c> or
+    /// <c>Trax.Docs/adr/0003-x.md</c>.
+    /// </summary>
+    private static readonly Regex AdrCitation = new(
+        @"adr/\d{4}-[a-z0-9-]+\.md",
+        RegexOptions.Compiled
+    );
+
     public static GuardResult EveryGuardIsClassified(IReadOnlyList<Adr> adrs, GuardOptions options)
     {
         var rule =
-            "Every guard class is either named by an ADR's '## Exemplars' section or declares "
-            + $"'{OptOutMarker} <reason>' in its own docstring. A new guard file is unclassified "
-            + "until you choose, and the reason has to be a reason: a rule that should be recorded "
-            + "and is not yet should be recorded, not exempted.";
+            "Every guard class is either named by an ADR's '## Exemplars' section, or itself "
+            + $"cites one itself, or declares '{OptOutMarker} <reason>' in its own docstring. A new "
+            + "guard file is unclassified until you choose, and the reason has to be a reason: a "
+            + "rule that should be recorded and is not yet should be recorded, not exempted.";
 
         if (options.CensusRoot is null)
             return new GuardResult("census/classified", [], 0, rule, AllowsEmpty: true);
@@ -63,7 +72,11 @@ public static class CensusGuards
 
             foreach (var (guard, docstring) in GuardClasses(File.ReadAllText(file)))
             {
-                var credited = claimed.Contains(guard);
+                // A guard is credited either because a local ADR names it, or because it names
+                // an ADR itself. The second case is what makes the census usable in a repo whose
+                // shared guards enforce decisions recorded in the central corpus: that corpus is
+                // not present here, so nothing local can name them.
+                var credited = claimed.Contains(guard) || AdrCitation.IsMatch(docstring);
                 var reason = OptOutReason(docstring);
 
                 if (credited && reason is not null)
