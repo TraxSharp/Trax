@@ -41,25 +41,30 @@ in a readable form.
 forty-line one reads as a refactor that got away from someone. That signal is the whole
 point, and it is lost if baselines are regenerated in bulk.
 
-**Trax.Samples has no baseline and should not.** It publishes no packages, so there is no
-surface to commit to.
+**Trax.Samples has no baseline and should not.** It publishes one package,
+`Trax.Samples.Templates`, and that is a `PackageType=Template` with no build output. There is
+no API surface to commit to.
 
 ## Exemplars
 
-**Enforced elsewhere:** `PublicApiSurfaceTests` in the `Tests.Meta` project of all seven
-publishing repos, using `PublicApiGenerator` with assembly attributes excluded and line
+**Enforced elsewhere:** `PublicApiSurfaceTests` in the `Tests.Meta` project of seven of the
+eight publishing repos, using `PublicApiGenerator` with assembly attributes excluded and line
 endings normalised so the comparison is stable across platforms.
 
 Not covered:
 
 - Nothing checks that the baseline is **current** for an assembly nobody listed. The guard
   iterates an explicit `Assemblies()` list per repo, so a new public assembly added to a repo
-  and not added to that list has no baseline and is never compared.
+  and not added to that list has no baseline and is never compared. Most of the surface is in
+  that position today: of 44 packable assemblies, 15 have a baseline.
+- `reconcile-dependabot.sh` regenerates the baselines in bulk, which is exactly the review
+  signal this decision depends on being lost.
 - The guard reports *that* the surface changed, not whether the change is breaking. That
   judgement is the reviewer's, and `BREAKING CHANGE:` in a commit footer is irreversible on
   NuGet.
 
 ## Changelog
 
+- **2026-09-11**: Corrected: Samples publishes a template package, seven of eight repos carry the test, and most of the surface has no baseline.
 - **2026-09-11**: Recorded. The census asked which decision `PublicApiSurfaceTests` enforces,
   and there was no answer.

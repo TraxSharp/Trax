@@ -56,10 +56,9 @@ That is the accepted cost of each repo checking itself alone.
 
 **A shared copy must cite a path that resolves in every repo holding it.** A citation of
 `docs/adr/0003-x.md` would have to exist eight times over; one of `Trax.Docs/adr/0003-x.md`
-is the same string everywhere. That is the convention a shared guard will need, and no
-shared copy carries one yet: the guards citing ADRs today are the repo-specific ones in
-Trax.Effect and Trax.Api, each pointing at a repo-local path. The only cross-repo citation
-in the workspace remains `Trax.Docs/reference/registration-order.md`.
+is the same string everywhere, which is why every shared guard uses that form. Repo-specific
+guards cite their own repo's path instead. Between them, 66 guard files across the eight code
+repos name the ADR they enforce.
 
 ## Exemplars
 
@@ -77,6 +76,8 @@ human step, and no test can detect a decision somebody chose not to record.
 
 ## Changelog
 
+- **2026-09-11**: Corrected the citation note again: it still said no shared copy carried
+  one, written before the census pass added 66 of them.
 - **2026-09-11**: Updated the citation note: repo-specific guards in Trax.Effect and
   Trax.Api now cite their local ADRs, though no shared copy does.
 - **2026-09-11**: Corrected three claims an audit found false: the Inspected rule holds

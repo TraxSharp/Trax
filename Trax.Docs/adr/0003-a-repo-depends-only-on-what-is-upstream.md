@@ -14,8 +14,12 @@ it:
 
 `Trax.Cli` sits after `Trax.Scheduler`, and `Trax.Samples` last of all, referencing
 everything. So `Trax.Api` referencing `Trax.Scheduler` is upstream and allowed; the reverse
-is not. There are no siblings in this model, which is what makes the rule checkable: every
-pair of repos has a direction.
+is not.
+
+It is a **partial** order, not a total one. `Trax.Cli` and `Trax.Api` are both downstream of
+`Trax.Scheduler` and neither may reference the other, so some pairs genuinely have no
+direction. What makes the rule checkable is that each repo's upstream set is written down,
+not that every pair is ordered.
 
 ## Status
 
@@ -63,6 +67,7 @@ Not covered, and worth knowing:
 
 ## Changelog
 
+- **2026-09-11**: Corrected: the chain is a partial order, and Cli and Api have no direction between them.
 - **2026-09-11**: Corrected the chain. The repos are a total order, not Core and Effect
   above an undifferentiated rest, and what the ADR called siblings the guard has always
   allowed.

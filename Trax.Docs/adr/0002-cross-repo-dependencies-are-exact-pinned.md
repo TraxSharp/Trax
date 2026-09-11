@@ -56,8 +56,9 @@ and lives on `main`, because intra-repo project references pick up `Directory.Bu
 
 **Enforced elsewhere:** `CrossRepoPackageReferenceTests` (no inline `Version` on a
 cross-repo reference) and `DirectoryBuildPropsVersionTests` (the `1.99.99` sentinel) in all
-eight code repos' `Tests.Meta` projects, plus `RepoConventionGuards` shipped from
-`Trax.Core.Testing` and a CI step that rejects any lockfile containing the local version.
+eight code repos' `Tests.Meta` projects, plus a CI step that rejects any lockfile containing
+the local version. `RepoConventionGuards` ships the same two checks from `Trax.Core.Testing`
+for consumers; no repo here subclasses it, and it covers pinning only, not lockfiles.
 A third, `TraxPinLockstepTests` (one publish family moves together), exists in only five of
 the eight: Effect, Mediator, Scheduler, Dashboard and Api.
 
@@ -72,6 +73,7 @@ Not covered:
 
 ## Changelog
 
+- **2026-09-11**: Corrected the RepoConventionGuards claim: it is shipped for consumers, unused here, and does not cover lockfiles.
 - **2026-09-11**: Corrected the TraxPinLockstepTests claim: it exists in five of eight
   repos, not all of them, and is absent from Samples.
 - **2026-09-11**: Recorded.

@@ -33,6 +33,12 @@ what the person who just tripped the guard actually reads.
 **The ban is on the legacy shapes, not on NUnit.** `[Test]`, `[TestFixture]`,
 `[TestCase]` and `Assert.Ignore` at runtime are all normal, and `Assert.Pass` is fine.
 
+**The shipped guard fixtures are the one exception, and it is deliberate.** The abstract
+`*GuardFixture` classes in `Trax.Core.Testing`, `Trax.Effect.Data.Testing`,
+`Trax.Api.GraphQL.Testing` and `Trax.Mediator.Testing` use `Assert.That`, because they
+depend on NUnit and forcing FluentAssertions on every consumer to inherit a fixture would be
+a worse trade. They live in `src/` and the guard scans `tests/`, so it cannot see them.
+
 ## Exemplars
 
 **Enforced elsewhere:** `NoLegacyAssertTests` in the eight code repos' `Tests.Meta`
@@ -49,6 +55,7 @@ most assertions in this repo's own test project are exactly that.
 
 ## Changelog
 
+- **2026-09-11**: Recorded the shipped guard fixtures as a deliberate exception: they use Assert.That because they cannot require FluentAssertions of consumers.
 - **2026-09-11**: Demoted ReasonsTests from an enforcement claim to an example, and
   recorded that Trax.Docs has no Tests.Meta project to hold the guard.
 - **2026-09-11**: Recorded.

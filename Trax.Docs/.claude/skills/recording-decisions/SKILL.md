@@ -62,8 +62,8 @@ ADR as `effect/0001`.
 
 A sixth step applies where the census is switched on with `--census-root`: every guard class
 under that root must be named by an ADR or carry `Not ADR-enforcing: <reason>` in its own
-docstring. Trax.Docs enables it over `tests/Trax.Docs.Tests`; the other repos will point it
-at their `Tests.Meta` project as they adopt.
+docstring. Every repo enables it, over its `Tests.Meta`
+project (`tests/Trax.Docs.Tests` in Trax.Docs).
 
 Step 1 is the only one you have to remember, because no test can detect a decision you
 chose not to record. Everything after it fails the build until it is done.
@@ -80,8 +80,7 @@ dotnet run --project ../Trax.Docs/tools/Trax.Adr.Guard -- \
 ```
 
 The same tool runs in CI through the `adr-guard` composite action, which Trax.Docs
-publishes. Only Trax.Docs calls it today; the other repos adopt it as they gain a
-`docs/adr/` directory.
+publishes. Every repo calls it and carries its own `docs/adr/`.
 
 ## Writing it
 

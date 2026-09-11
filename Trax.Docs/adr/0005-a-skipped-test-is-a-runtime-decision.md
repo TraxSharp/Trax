@@ -37,7 +37,7 @@ why in the same change. Neither of those is an attribute.
 reachability and calls `Assert.Ignore` with the endpoint in the message, rather than being
 disabled for everyone including the environments where it would pass.
 
-**The guard carries an exceptions list, and in one repo that list is itself checked.**
+**Three of the eight repos carry an exceptions list, and in one that list is itself checked.**
 Trax.Samples adds `KnownExceptions_AreNotStale` so an entry cannot outlive the file it
 exempts. The other seven copies have no such check, so a stale exemption there is invisible.
 
@@ -57,6 +57,7 @@ Not covered:
 
 ## Changelog
 
+- **2026-09-11**: Narrowed the exceptions-list claim: three of eight repos carry one.
 - **2026-09-11**: Corrected the opening: three justified [Ignore] attributes exist, two
   of them gating stress suites, which is a shape the original rationale did not admit.
 - **2026-09-11**: Recorded.

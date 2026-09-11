@@ -39,8 +39,10 @@ at query time in a way that points at the wrong place.
 **This does not invert the dependency.** The `.sql` is text, and the provider references
 nothing from the feature package.
 
-**A host that does not enable the feature carries empty tables.** That is the accepted
-price, and it is small: two unused tables against a silently missing one.
+**A host that does not enable both features carries empty tables.** Four of them:
+`snapshot_draft` and `effect_claim` from `040`, `persisted_operation` and
+`persisted_operation_history` from `035`. That is the accepted price, and it is small against
+a table that is silently missing when the feature is on.
 
 ## Exemplars
 
@@ -54,5 +56,6 @@ two provider assemblies would close it, and does not exist.
 
 ## Changelog
 
+- **2026-09-11**: Corrected the table count: four empty tables, not two.
 - **2026-09-11**: Recorded. Moved from the Trax.Effect corpus: the persisted-operations
   feature package lives in Trax.Api, so the decision binds both repos.

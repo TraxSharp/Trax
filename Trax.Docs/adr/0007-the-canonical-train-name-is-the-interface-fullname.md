@@ -48,26 +48,28 @@ interface, and the system stores `typeof(TTrain).FullName!`.
   resolution a consumer sees.
 - [Metadata](/docs/effect/metadata) shows the stored name on the persisted record.
 
-**Enforced elsewhere:** `InterfaceFullNameInvariantTests` in `Trax.Mediator`'s `Tests.Meta`
-project. Read it before relying on it: it registers a local fake and asserts that
-`CanonicalName` is the interface FullName at the point of registration. That is the
-**source** of the rule, and it is all that is checked.
+**Enforced elsewhere:** the rule is checked at its source and at five of the six places it
+reaches. InterfaceFullNameInvariantTests in Trax.Mediator registers a fake and asserts
+CanonicalName is the interface FullName at the point of registration. Downstream,
+PostgresContextTests in Trax.Mediator covers metadata.Name against a real database;
+TraxSchedulerCoverageGapTests and OperationsServiceTests in Trax.Scheduler cover manifest.Name
+and work_queue.train_name; GraphQLSubscriptionHookTests in Trax.Api covers the hooks including
+the negative case, where an implementation-type name is skipped; and
+SchedulerConfigurationBuilderSettingsTests covers the scheduler exclusions.
 
-Not covered, and this is most of the decision:
+Not covered:
 
-- **None of the six downstream layers is verified.** `metadata.Name`, `work_queue.train_name`,
-  `manifest.Name`, the GraphQL hooks, dashboard requeue and scheduler exclusions appear in
-  that guard only as prose. Nothing reads or compares them. Three of the six live in repos
-  that are downstream of Trax.Mediator and structurally invisible from it
-  ([0003](./0003-a-repo-depends-only-on-what-is-upstream.md)); the other three are reachable
-  and still unchecked.
-- Nothing stops a consumer registering a train without an interface, which leaves
-  `CanonicalName` null and falls back to the concrete FullName.
-  `TrainGuards.EveryTrainHasInterface` is the opt-in check for that, and it ships for
-  consumers rather than being applied across these repos.
+- **Dashboard requeue is the one layer nothing checks.** It compares against the stored name
+  in `MetadataDetailPage`, and a drift there is invisible.
+- Registering a train without its own interface does not leave `CanonicalName` null: it falls
+  back to the first interface, which for an interfaceless train is `IServiceTrain<TIn, TOut>`.
+  `TrainGuards.EveryTrainHasInterface` is the check for that, and Trax.Samples applies it to
+  Bookworm.
 
 ## Changelog
 
 - **2026-09-11**: Corrected the enforcement claim: the guard checks CanonicalName at
   registration and none of the six downstream layers the ADR had said it walked.
+- **2026-09-11**: Corrected an earlier correction. This said none of the six downstream
+  layers was verified; five are, in the repos that own them, and only dashboard requeue is not.
 - **2026-09-11**: Recorded.

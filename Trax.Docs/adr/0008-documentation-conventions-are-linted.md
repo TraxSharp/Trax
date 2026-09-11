@@ -17,7 +17,7 @@ tests in CI rather than left to a reviewer.
 
 ## Why this is written down
 
-Because the alternative looks reasonable and is not. `Trax.Docs` is 185 markdown files
+Because the alternative looks reasonable and is not. `Trax.Docs` is around two hundred markdown files
 rendered to a public site, and the failure modes are invisible at review time: a
 `/docs/` link that points at a page nobody wrote is a 404 on traxsharp.net, and it reads
 exactly like a working link in a diff. Nobody catches that by eye, and the person who would
@@ -64,5 +64,6 @@ one of these.
 
 ## Changelog
 
+- **2026-09-11**: Replaced a file count that was wrong and would go stale anyway.
 - **2026-09-11**: Recorded. The census asked which decision these four guards enforced, and
   there was no answer.
