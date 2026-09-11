@@ -56,9 +56,10 @@ That is the accepted cost of each repo checking itself alone.
 
 **A shared copy must cite a path that resolves in every repo holding it.** A citation of
 `docs/adr/0003-x.md` would have to exist eight times over; one of `Trax.Docs/adr/0003-x.md`
-is the same string everywhere. That is the convention for the back-citations this corpus
-expects, following `Trax.Docs/reference/registration-order.md`, which is the only
-cross-repo citation in the workspace today. No `Tests.Meta` guard cites an ADR yet.
+is the same string everywhere. That is the convention a shared guard will need, and no
+shared copy carries one yet: the guards citing ADRs today are the repo-specific ones in
+Trax.Effect and Trax.Api, each pointing at a repo-local path. The only cross-repo citation
+in the workspace remains `Trax.Docs/reference/registration-order.md`.
 
 ## Exemplars
 
@@ -76,6 +77,8 @@ human step, and no test can detect a decision somebody chose not to record.
 
 ## Changelog
 
+- **2026-09-11**: Updated the citation note: repo-specific guards in Trax.Effect and
+  Trax.Api now cite their local ADRs, though no shared copy does.
 - **2026-09-11**: Corrected three claims an audit found false: the Inspected rule holds
   only for the ADR guard and not for the shipped Trax.Core.Testing GuardResult, the
   duplicated guard files are near-identical rather than byte-identical, and no
