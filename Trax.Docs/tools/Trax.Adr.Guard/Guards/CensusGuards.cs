@@ -17,7 +17,7 @@ public static class CensusGuards
 
     private static readonly Regex ClassDeclaration = new(
         @"\bclass\s+(?<name>[A-Za-z0-9]*Tests)\b",
-        RegexOptions.Compiled
+        RegexOptions.Compiled | RegexOptions.Singleline
     );
 
     /// <summary>
@@ -114,34 +114,22 @@ public static class CensusGuards
     /// immediately above it.
     ///
     /// <para>
-    /// Two defects are avoided here. Taking only the first match censused one class per
-    /// file, so a second guard in the same file was never asked the question. And searching
-    /// the whole file for the opt-out marker read it out of string literals: a fixture
-    /// holding a template of a guard class was credited with the template's placeholder as
-    /// its reason.
+    /// Declarations are found in the blanked source, so a class inside a comment or a literal
+    /// is not counted, and the match runs over the whole text rather than line by line, so a
+    /// declaration split across lines is seen here exactly as the exemplar checks see it. The
+    /// two disagreeing let an uncredited guard escape the census while still satisfying a claim.
     /// </para>
     /// </summary>
     private static IEnumerable<(string Name, string Docstring)> GuardClasses(string source)
     {
         var lines = source.Replace("\r\n", "\n").Split('\n');
-        var inRawString = false;
+        var blanked = CSharp.WithoutCommentsAndLiterals(source).Replace("\r\n", "\n");
 
-        for (var i = 0; i < lines.Length; i++)
+        foreach (Match match in ClassDeclaration.Matches(blanked))
         {
-            // Raw string literals carry fixture source in this project's own tests. What is
-            // inside one is data, not a declaration.
-            if (lines[i].Contains("\"\"\"", StringComparison.Ordinal))
-            {
-                inRawString = !inRawString;
-                continue;
-            }
-
-            if (inRawString)
-                continue;
-
-            var match = ClassDeclaration.Match(lines[i]);
-            if (match.Success)
-                yield return (match.Groups["name"].Value, DocstringAbove(lines, i));
+            // The line the class NAME sits on, which is where the docstring search starts.
+            var line = blanked.Take(match.Groups["name"].Index).Count(c => c == '\n');
+            yield return (match.Groups["name"].Value, DocstringAbove(lines, line));
         }
     }
 

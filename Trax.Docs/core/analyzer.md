@@ -97,7 +97,16 @@ The analyzer mirrors the runtime's Memory behavior:
 
 ## Setup
 
-The analyzer ships with the Trax.Core NuGet package. If you're referencing Trax.Core, you already have it. No additional setup required.
+The analyzer is a **separate, opt-in package**. Referencing `Trax.Core` does not bring it
+in: `Trax.Core` ships only `lib/net10.0/Trax.Core.dll` and does not depend on it.
+
+```bash
+dotnet add package Trax.Core.Analyzers
+```
+
+It is marked as a development dependency, so it applies to the project that references it
+and does not flow to that project's own consumers. Add it to each project whose trains you
+want checked.
 
 For development within the Trax.Core solution itself, the analyzer is propagated to all projects via `Directory.Build.props`:
 

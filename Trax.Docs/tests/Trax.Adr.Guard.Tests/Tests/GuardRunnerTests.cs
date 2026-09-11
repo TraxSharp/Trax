@@ -65,7 +65,7 @@ public class GuardRunnerTests
                 "frontmatter/areas",
                 "frontmatter/repos",
                 "frontmatter/status",
-                "frontmatter/no-date",
+                "frontmatter/keys",
                 "frontmatter/file-names",
                 "lifecycle/status-section",
                 "lifecycle/supersessions",

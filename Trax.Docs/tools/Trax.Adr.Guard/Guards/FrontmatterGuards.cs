@@ -134,14 +134,34 @@ public static class FrontmatterGuards
                 + "first, and the two are checked against each other."
         );
 
+    /// <summary>The complete accepted key set. Anything else is a typo or an invention.</summary>
+    private static readonly string[] AcceptedKeys = ["authors", "repos", "areas", "status"];
+
     public static GuardResult NoDateKey(IReadOnlyList<Adr> adrs) =>
         Check(
             adrs,
-            "frontmatter/no-date",
+            "frontmatter/keys",
             adr =>
-                adr.Frontmatter.Parsed && adr.Frontmatter.Has("date")
-                    ? "'date' is not an accepted key"
-                    : null,
+            {
+                if (!adr.Frontmatter.Parsed)
+                    return null;
+
+                // Casing is not a loophole: 'Date' was accepted while 'date' was rejected.
+                var unexpected = adr
+                    .Frontmatter.Keys.Where(k =>
+                        !AcceptedKeys.Contains(k, StringComparer.OrdinalIgnoreCase)
+                    )
+                    .ToList();
+
+                if (unexpected.Contains("date", StringComparer.OrdinalIgnoreCase))
+                    return "'date' is not an accepted key: git records when the file was written, "
+                        + "and the '## Changelog' section says what changed as well as when";
+
+                return unexpected.Count > 0
+                    ? $"unexpected key(s) {string.Join(", ", unexpected)}; accepted: "
+                        + string.Join(", ", AcceptedKeys)
+                    : null;
+            },
             "Do not add a 'date' key. Git already records when the file was written, and a "
                 + "single hand-written date claims to be the whole story the first time the ADR "
                 + "is amended. The '## Changelog' section is where dates belong, because it says "

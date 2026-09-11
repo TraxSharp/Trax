@@ -16,9 +16,12 @@ public static class LifecycleGuards
     );
 
     private static readonly Regex ChangelogEntry = new(
-        @"^-\s+\*\*(?<date>\d{4}-\d{2}-\d{2})\*\*:\s*\S",
+        @"^[-*+]\s+\*\*(?<date>\d{4}-\d{2}-\d{2})\*\*:\s*\S",
         RegexOptions.Compiled
     );
+
+    /// <summary>Any list marker, so a '*' bullet is checked rather than silently skipped.</summary>
+    private static readonly Regex ListItem = new(@"^[-*+]\s", RegexOptions.Compiled);
 
     public static GuardResult StatusSection(IReadOnlyList<Adr> adrs)
     {
@@ -87,6 +90,15 @@ public static class LifecycleGuards
 
             inspected++;
             var targetNumber = declared["superseded-by-".Length..];
+
+            if (string.Equals(targetNumber, adr.Number, StringComparison.Ordinal))
+            {
+                offenders.Add(
+                    $"{adr.RelativePath}: declares itself superseded by itself. A supersession "
+                        + "replaces one decision with a different one."
+                );
+                continue;
+            }
             var section = adr.Section(StatusHeading) ?? string.Empty;
 
             if (!byNumber.TryGetValue(targetNumber, out var target))
@@ -168,7 +180,7 @@ public static class LifecycleGuards
                 var match = ChangelogEntry.Match(trimmed);
                 if (match.Success)
                     dates.Add(match.Groups["date"].Value);
-                else if (trimmed.StartsWith('-'))
+                else if (ListItem.IsMatch(trimmed))
                     malformed.Add(trimmed);
             }
 
@@ -183,6 +195,18 @@ public static class LifecycleGuards
             if (dates.Count == 0)
             {
                 offenders.Add($"{adr.RelativePath}: '## {ChangelogHeading}' has no entries");
+                continue;
+            }
+
+            var impossible = dates
+                .Where(d => !DateOnly.TryParseExact(d, "yyyy-MM-dd", out _))
+                .ToList();
+            if (impossible.Count > 0)
+            {
+                offenders.Add(
+                    $"{adr.RelativePath}: changelog date(s) are not real dates: "
+                        + string.Join(", ", impossible)
+                );
                 continue;
             }
 

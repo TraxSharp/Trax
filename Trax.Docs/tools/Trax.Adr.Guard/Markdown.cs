@@ -20,19 +20,13 @@ public static class Markdown
     public static string? Section(string text, string heading)
     {
         var lines = text.Replace("\r\n", "\n").Split('\n');
+        var code = CodeLines(lines);
         var wanted = $"## {heading}";
-        var inFence = false;
         var start = -1;
 
         for (var i = 0; i < lines.Length; i++)
         {
-            if (IsFence(lines[i]))
-            {
-                inFence = !inFence;
-                continue;
-            }
-
-            if (!inFence && string.Equals(lines[i].TrimEnd(), wanted, StringComparison.Ordinal))
+            if (!code[i] && string.Equals(lines[i].TrimEnd(), wanted, StringComparison.Ordinal))
             {
                 start = i + 1;
                 break;
@@ -43,20 +37,10 @@ public static class Markdown
             return null;
 
         var body = new List<string>();
-        inFence = false;
-
         for (var i = start; i < lines.Length; i++)
         {
-            if (IsFence(lines[i]))
-            {
-                inFence = !inFence;
-                body.Add(lines[i]);
-                continue;
-            }
-
-            if (!inFence && lines[i].StartsWith("## ", StringComparison.Ordinal))
+            if (!code[i] && lines[i].StartsWith("## ", StringComparison.Ordinal))
                 break;
-
             body.Add(lines[i]);
         }
 
@@ -64,24 +48,19 @@ public static class Markdown
     }
 
     /// <summary>
-    /// The same text with every fenced block removed, for the checks that read prose and
-    /// must not mistake an example for the real thing.
+    /// The same text with every code block removed, fenced or indented, for the checks that
+    /// read prose and must not mistake an example for the real thing.
     /// </summary>
     public static string WithoutFences(string text)
     {
+        var lines = text.Replace("\r\n", "\n").Split('\n');
+        var code = CodeLines(lines);
         var kept = new List<string>();
-        var inFence = false;
 
-        foreach (var line in text.Replace("\r\n", "\n").Split('\n'))
+        for (var i = 0; i < lines.Length; i++)
         {
-            if (IsFence(line))
-            {
-                inFence = !inFence;
-                continue;
-            }
-
-            if (!inFence)
-                kept.Add(line);
+            if (!code[i])
+                kept.Add(lines[i]);
         }
 
         return string.Join('\n', kept);
@@ -125,11 +104,88 @@ public static class Markdown
     private static string[] SplitCells(string line) =>
         Regex.Split(line.Trim('|'), @"(?<!\\)\|").Select(c => c.Replace("\\|", "|")).ToArray();
 
-    private static bool IsFence(string line)
+    /// <summary>
+    /// The fence marker a line opens or closes, or null if it is not a fence line.
+    ///
+    /// <para>
+    /// A fence closes only on the marker that opened it. Treating ``` and ~~~ as
+    /// interchangeable meant a tilde line shown inside a backtick block left the fence open,
+    /// and every section lookup after it failed on a document that was perfectly well formed.
+    /// </para>
+    /// </summary>
+    private static string? FenceMarker(string line)
     {
         var trimmed = line.TrimStart();
-        return trimmed.StartsWith("```", StringComparison.Ordinal)
-            || trimmed.StartsWith("~~~", StringComparison.Ordinal);
+        if (trimmed.StartsWith("```", StringComparison.Ordinal))
+            return "```";
+        return trimmed.StartsWith("~~~", StringComparison.Ordinal) ? "~~~" : null;
+    }
+
+    /// <summary>
+    /// Lines that markdown renders as code: fenced blocks, and blocks indented by four spaces
+    /// or a tab after a blank line. An exemplar claim shown as an indented example is an
+    /// example, not a claim, the same as a fenced one.
+    /// </summary>
+    private static bool[] CodeLines(string[] lines)
+    {
+        var code = new bool[lines.Length];
+        string? fence = null;
+        var previousBlank = true;
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var marker = FenceMarker(lines[i]);
+
+            if (fence is not null)
+            {
+                code[i] = true;
+                if (marker == fence)
+                    fence = null;
+                previousBlank = false;
+                continue;
+            }
+
+            if (marker is not null)
+            {
+                fence = marker;
+                code[i] = true;
+                previousBlank = false;
+                continue;
+            }
+
+            var blank = lines[i].Trim().Length == 0;
+            var indented =
+                !blank
+                && (
+                    lines[i].StartsWith("    ", StringComparison.Ordinal)
+                    || lines[i].StartsWith("\t", StringComparison.Ordinal)
+                );
+
+            // An indented block only opens after a blank line; otherwise it is a wrapped list
+            // item or a continuation, which ADRs use constantly.
+            if (indented && previousBlank)
+            {
+                while (
+                    i < lines.Length
+                    && (
+                        lines[i].Trim().Length == 0
+                        || lines[i].StartsWith("    ", StringComparison.Ordinal)
+                        || lines[i].StartsWith("\t", StringComparison.Ordinal)
+                    )
+                )
+                {
+                    code[i] = lines[i].Trim().Length != 0;
+                    i++;
+                }
+                i--;
+                previousBlank = false;
+                continue;
+            }
+
+            previousBlank = blank;
+        }
+
+        return code;
     }
 }
 
@@ -139,47 +195,131 @@ public static class Markdown
 public static class CSharp
 {
     /// <summary>
-    /// The source with comment bodies and raw string literals blanked out, so a class
-    /// named in a comment or held as fixture text is not read as a declaration.
+    /// The source with comment bodies and string literals blanked out, so a class named in a
+    /// comment or held as fixture text is not read as a declaration.
     /// </summary>
     /// <remarks>
-    /// Not a parser. It is deliberately crude, and it errs toward blanking: the cost of
-    /// missing a real declaration is an ADR claim that fails to resolve and gets looked at,
-    /// while the cost of keeping a commented one is an ADR claiming a guard that does not
-    /// exist. Only the second failure is silent.
+    /// A single left-to-right pass. The previous line-based version missed block comments
+    /// entirely, so an ADR could claim a guard that existed only inside a <c>/* */</c>, and it
+    /// toggled on any line containing a triple quote, so a single-line raw string turned the
+    /// scanner off for the rest of the file and hid every later class.
+    ///
+    /// <para>Output is the same length as the input, newlines preserved, so line numbers hold.</para>
     /// </remarks>
     public static string WithoutCommentsAndLiterals(string source)
     {
-        var kept = new List<string>();
-        var inRawString = false;
+        var output = source.ToCharArray();
+        var i = 0;
 
-        foreach (var line in source.Replace("\r\n", "\n").Split('\n'))
+        void Blank(int from, int to)
         {
-            if (line.Contains("\"\"\"", StringComparison.Ordinal))
+            for (var k = from; k < to && k < output.Length; k++)
             {
-                inRawString = !inRawString;
-                kept.Add(string.Empty);
-                continue;
+                if (output[k] != '\n' && output[k] != '\r')
+                    output[k] = ' ';
             }
-
-            if (inRawString)
-            {
-                kept.Add(string.Empty);
-                continue;
-            }
-
-            var trimmed = line.TrimStart();
-            if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith('*'))
-            {
-                kept.Add(string.Empty);
-                continue;
-            }
-
-            var comment = line.IndexOf("//", StringComparison.Ordinal);
-            kept.Add(comment >= 0 ? line[..comment] : line);
         }
 
-        return string.Join('\n', kept);
+        while (i < source.Length)
+        {
+            var c = source[i];
+
+            if (c == '/' && i + 1 < source.Length && source[i + 1] == '/')
+            {
+                var end = source.IndexOf('\n', i);
+                end = end < 0 ? source.Length : end;
+                Blank(i, end);
+                i = end;
+                continue;
+            }
+
+            if (c == '/' && i + 1 < source.Length && source[i + 1] == '*')
+            {
+                var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                end = end < 0 ? source.Length : end + 2;
+                Blank(i, end);
+                i = end;
+                continue;
+            }
+
+            if (c == '"' && i + 2 < source.Length && source[i + 1] == '"' && source[i + 2] == '"')
+            {
+                var open = 0;
+                while (i + open < source.Length && source[i + open] == '"')
+                    open++;
+
+                var scan = i + open;
+                while (scan < source.Length)
+                {
+                    if (source[scan] != '"')
+                    {
+                        scan++;
+                        continue;
+                    }
+
+                    var run = 0;
+                    while (scan + run < source.Length && source[scan + run] == '"')
+                        run++;
+                    if (run >= open)
+                        break;
+                    scan += run;
+                }
+
+                Blank(i + open, Math.Min(scan, source.Length));
+                i = scan >= source.Length ? source.Length : scan + open;
+                continue;
+            }
+
+            var verbatim = c == '@' && i + 1 < source.Length && source[i + 1] == '"';
+            var interpolated =
+                (c == '$' || c == '@')
+                && i + 2 < source.Length
+                && (
+                    (source[i + 1] == '@' && source[i + 2] == '"')
+                    || (source[i + 1] == '$' && source[i + 2] == '"')
+                );
+
+            if (verbatim || interpolated)
+            {
+                var quote = source.IndexOf('"', i);
+                var scan = quote + 1;
+                while (scan < source.Length)
+                {
+                    if (source[scan] != '"')
+                    {
+                        scan++;
+                        continue;
+                    }
+
+                    if (scan + 1 < source.Length && source[scan + 1] == '"')
+                    {
+                        scan += 2;
+                        continue;
+                    }
+
+                    break;
+                }
+
+                Blank(quote + 1, Math.Min(scan, source.Length));
+                i = scan < source.Length ? scan + 1 : source.Length;
+                continue;
+            }
+
+            if (c == '"' || c == '\'')
+            {
+                var scan = i + 1;
+                while (scan < source.Length && source[scan] != c)
+                    scan += source[scan] == '\\' ? 2 : 1;
+
+                Blank(i + 1, Math.Min(scan, source.Length));
+                i = scan < source.Length ? scan + 1 : source.Length;
+                continue;
+            }
+
+            i++;
+        }
+
+        return new string(output);
     }
 
     /// <summary>Which kind of line a citation was found on.</summary>

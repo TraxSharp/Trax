@@ -63,8 +63,24 @@ public static class AdrCorpus
     public static string AdrDirectory(GuardOptions options) =>
         Path.Combine(options.RepoRoot, options.AdrRoot.Replace('/', Path.DirectorySeparatorChar));
 
-    public static string IndexPath(GuardOptions options) =>
-        Path.Combine(AdrDirectory(options), IndexFileName);
+    /// <summary>
+    /// The corpus index. Matched case-insensitively so a <c>readme.md</c> behaves the same on a
+    /// case-insensitive filesystem as on Linux CI, rather than passing locally and failing there.
+    /// </summary>
+    public static string IndexPath(GuardOptions options)
+    {
+        var dir = AdrDirectory(options);
+        if (!Directory.Exists(dir))
+            return Path.Combine(dir, IndexFileName);
+
+        var found = Directory
+            .EnumerateFiles(dir, "*.md", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault(f =>
+                Path.GetFileName(f).Equals(IndexFileName, StringComparison.OrdinalIgnoreCase)
+            );
+
+        return found ?? Path.Combine(dir, IndexFileName);
+    }
 
     /// <summary>
     /// Every ADR in the configured directory, in file-name order. The index is not an ADR
@@ -77,8 +93,10 @@ public static class AdrCorpus
         if (!Directory.Exists(dir))
             return [];
 
+        // Recursive on purpose. Scanning only the top directory meant a file moved into an
+        // archive/ subfolder silently left enforcement while still looking like an ADR.
         return Directory
-            .EnumerateFiles(dir, "*.md", SearchOption.TopDirectoryOnly)
+            .EnumerateFiles(dir, "*.md", SearchOption.AllDirectories)
             .Where(f =>
                 !Path.GetFileName(f).Equals(IndexFileName, StringComparison.OrdinalIgnoreCase)
             )
