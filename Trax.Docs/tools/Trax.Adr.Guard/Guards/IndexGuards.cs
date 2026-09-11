@@ -50,7 +50,7 @@ public static class IndexGuards
         if (index is null)
             return new GuardResult(name, [], 0, Rule(heading, frontmatterKey));
 
-        var section = SectionOf(index, heading);
+        var section = Markdown.Section(index, heading);
         if (section is null)
         {
             return new GuardResult(
@@ -102,7 +102,7 @@ public static class IndexGuards
         return new GuardResult(name, offenders, adrs.Count, Rule(heading, frontmatterKey));
     }
 
-    /// <summary>The full table lists every ADR exactly once, with its title and both tag sets.</summary>
+    /// <summary>The full table lists every ADR exactly once, with its title and its tags.</summary>
     public static GuardResult FullList(IReadOnlyList<Adr> adrs, GuardOptions options)
     {
         var index = ReadIndex(options);
@@ -115,7 +115,7 @@ public static class IndexGuards
         if (index is null)
             return new GuardResult(name, [], 0, rule);
 
-        var section = SectionOf(index, FullListHeading);
+        var section = Markdown.Section(index, FullListHeading);
         if (section is null)
             return new GuardResult(
                 name,
@@ -124,21 +124,29 @@ public static class IndexGuards
                 rule
             );
 
-        var rows = ParseFullRows(section);
+        var rows = ParseFullRows(section, options.RequireReposKey);
 
         foreach (var adr in adrs)
         {
-            if (!rows.TryGetValue(adr.FileName, out var title))
+            if (!rows.TryGetValue(adr.FileName, out var row))
             {
                 offenders.Add($"'## {FullListHeading}': {adr.FileName} has no row");
                 continue;
             }
 
-            if (adr.Title is not null && !string.Equals(title, adr.Title, StringComparison.Ordinal))
+            if (
+                adr.Title is not null
+                && !string.Equals(row.Title, adr.Title, StringComparison.Ordinal)
+            )
                 offenders.Add(
-                    $"'## {FullListHeading}': the row for {adr.FileName} says '{title}' but the "
+                    $"'## {FullListHeading}': the row for {adr.FileName} says '{row.Title}' but the "
                         + $"document's title is '{adr.Title}'"
                 );
+
+            if (options.RequireReposKey)
+                CompareTags(offenders, adr, "repos", row.Repos);
+
+            CompareTags(offenders, adr, "areas", row.Areas);
         }
 
         var known = adrs.Select(a => a.FileName).ToHashSet(StringComparer.Ordinal);
@@ -159,40 +167,11 @@ public static class IndexGuards
         return File.Exists(path) ? File.ReadAllText(path).Replace("\r\n", "\n") : null;
     }
 
-    private static string? SectionOf(string text, string heading)
-    {
-        var lines = text.Split('\n');
-        var wanted = $"## {heading}";
-        var start = -1;
-
-        for (var i = 0; i < lines.Length; i++)
-        {
-            if (string.Equals(lines[i].TrimEnd(), wanted, StringComparison.Ordinal))
-            {
-                start = i + 1;
-                break;
-            }
-        }
-
-        if (start < 0)
-            return null;
-
-        var body = new List<string>();
-        for (var i = start; i < lines.Length; i++)
-        {
-            if (lines[i].StartsWith("## ", StringComparison.Ordinal))
-                break;
-            body.Add(lines[i]);
-        }
-
-        return string.Join('\n', body);
-    }
-
     private static Dictionary<string, HashSet<string>> ParseTagRows(string section)
     {
         var rows = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
-        foreach (var cells in TableRows(section, minimumCells: 2))
+        foreach (var cells in Markdown.TableRows(section, minimumCells: 2))
         {
             var tag = cells[0].Trim().Trim('`');
             if (tag.Length == 0)
@@ -209,40 +188,66 @@ public static class IndexGuards
         return rows;
     }
 
-    private static Dictionary<string, string> ParseFullRows(string section)
-    {
-        var rows = new Dictionary<string, string>(StringComparer.Ordinal);
+    /// <summary>One row of the full table: the title and the tag columns, as written.</summary>
+    private sealed record FullRow(
+        string Title,
+        IReadOnlyList<string> Repos,
+        IReadOnlyList<string> Areas
+    );
 
-        foreach (var cells in TableRows(section, minimumCells: 2))
+    private static Dictionary<string, FullRow> ParseFullRows(string section, bool withRepos)
+    {
+        var rows = new Dictionary<string, FullRow>(StringComparer.Ordinal);
+        var minimum = withRepos ? 4 : 3;
+
+        foreach (var cells in Markdown.TableRows(section, minimum))
         {
             var match = RowLink.Match(cells[0]);
             if (!match.Success)
                 continue;
 
-            rows[match.Groups["file"].Value] = cells[1].Trim();
+            rows[match.Groups["file"].Value] = new FullRow(
+                cells[1].Trim(),
+                withRepos ? SplitTags(cells[2]) : [],
+                SplitTags(withRepos ? cells[3] : cells[2])
+            );
         }
 
         return rows;
     }
 
-    /// <summary>Body rows of every markdown table in a section, header and separator skipped.</summary>
-    private static IEnumerable<string[]> TableRows(string section, int minimumCells)
+    private static List<string> SplitTags(string cell) =>
+        cell.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => t.Trim('`'))
+            .ToList();
+
+    /// <summary>
+    /// The tag columns are not decoration: a reader scanning the full table takes them as
+    /// the answer, so they are checked against the frontmatter like the tag tables are.
+    /// </summary>
+    private static void CompareTags(
+        List<string> offenders,
+        Adr adr,
+        string key,
+        IReadOnlyList<string> listed
+    )
     {
-        foreach (var raw in section.Split('\n'))
-        {
-            var line = raw.Trim();
-            if (!line.StartsWith('|'))
-                continue;
+        var declared = adr.Frontmatter.List(key) ?? [];
 
-            var cells = line.Trim('|').Split('|');
-            if (cells.Length < minimumCells)
-                continue;
+        var missing = declared.Except(listed, StringComparer.Ordinal).ToList();
+        var extra = listed.Except(declared, StringComparer.Ordinal).ToList();
 
-            // The '| --- | --- |' separator, and the header row above it, are not data.
-            if (cells.All(c => c.Trim().Trim('-', ':').Length == 0))
-                continue;
+        if (missing.Count > 0)
+            offenders.Add(
+                $"'## {FullListHeading}': the row for {adr.FileName} omits {key} "
+                    + string.Join(", ", missing)
+            );
 
-            yield return cells;
-        }
+        if (extra.Count > 0)
+            offenders.Add(
+                $"'## {FullListHeading}': the row for {adr.FileName} lists {key} "
+                    + string.Join(", ", extra)
+                    + ", which it does not declare"
+            );
     }
 }

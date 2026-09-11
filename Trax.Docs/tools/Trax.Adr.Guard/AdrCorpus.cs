@@ -36,36 +36,9 @@ public sealed class Adr
 
     /// <summary>
     /// The body of a <c>## Heading</c> section, or null when the document has no such
-    /// heading. Ends at the next <c>## </c>, so a <c>###</c> subsection is part of it.
+    /// heading. Fence-aware: see <see cref="Markdown.Section"/>.
     /// </summary>
-    public string? Section(string heading)
-    {
-        var lines = Text.Replace("\r\n", "\n").Split('\n');
-        var wanted = $"## {heading}";
-        var start = -1;
-
-        for (var i = 0; i < lines.Length; i++)
-        {
-            if (string.Equals(lines[i].TrimEnd(), wanted, StringComparison.Ordinal))
-            {
-                start = i + 1;
-                break;
-            }
-        }
-
-        if (start < 0)
-            return null;
-
-        var body = new List<string>();
-        for (var i = start; i < lines.Length; i++)
-        {
-            if (lines[i].StartsWith("## ", StringComparison.Ordinal))
-                break;
-            body.Add(lines[i]);
-        }
-
-        return string.Join('\n', body).Trim();
-    }
+    public string? Section(string heading) => Markdown.Section(Text, heading);
 }
 
 /// <summary>

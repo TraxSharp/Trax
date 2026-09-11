@@ -49,6 +49,9 @@ jobs:
 
   # The ADR corpus here binds every repo, so it is checked the same way the repo-local
   # corpora are: through the composite action this repo also publishes to the others.
+  # That means a second Release build of a project doc-lint already built. The duplication
+  # is the point: this job is the only place the action itself is exercised before another
+  # repo depends on it.
   adr-guard:
     runs-on: ubuntu-latest
     timeout-minutes: 5

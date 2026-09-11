@@ -55,14 +55,23 @@ and lives on `main`, because intra-repo project references pick up `Directory.Bu
   controls from the security side.
 
 **Enforced elsewhere:** `CrossRepoPackageReferenceTests` (no inline `Version` on a
-cross-repo reference), `DirectoryBuildPropsVersionTests` (the `1.99.99` sentinel) and
-`TraxPinLockstepTests` (one publish family moves together) in each repo's `Tests.Meta`
-project, plus `RepoConventionGuards` shipped from `Trax.Core.Testing` and a CI step that
-rejects any lockfile containing the local version.
+cross-repo reference) and `DirectoryBuildPropsVersionTests` (the `1.99.99` sentinel) in all
+eight code repos' `Tests.Meta` projects, plus `RepoConventionGuards` shipped from
+`Trax.Core.Testing` and a CI step that rejects any lockfile containing the local version.
+A third, `TraxPinLockstepTests` (one publish family moves together), exists in only five of
+the eight: Effect, Mediator, Scheduler, Dashboard and Api.
 
-Not covered: nothing checks that a pin is *current*. A repo can sit on an old upstream
-release indefinitely and every guard stays green.
+Not covered:
+
+- Nothing checks that a pin is *current*. A repo can sit on an old upstream release
+  indefinitely and every guard stays green.
+- The lockstep check is missing from Core, Cli and **Samples**, and Samples carries the most
+  pins of any repo and so has the most to drift.
+- Where it does run, a family with a single pin cannot disagree with itself, so the check
+  passes without having compared anything.
 
 ## Changelog
 
+- **2026-09-11**: Corrected the TraxPinLockstepTests claim: it exists in five of eight
+  repos, not all of them, and is absent from Samples.
 - **2026-09-11**: Recorded.

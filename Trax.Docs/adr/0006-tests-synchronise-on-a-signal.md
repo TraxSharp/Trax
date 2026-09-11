@@ -34,20 +34,30 @@ assertion carries the `because` that says what should have happened.
 
 **Two uses of a fixed delay remain legitimate**: measuring an interval ("these two
 timestamps are at least 50 ms apart"), and verifying a negative that requires the duration
-to elapse ("no job was reclaimed within its visibility timeout"). Both need a comment
-saying which, and both are why the guard has an exceptions list rather than a flat ban.
+to elapse ("no job was reclaimed within its visibility timeout"). Both are declared with a
+marker comment within three lines of the delay (`determinism:`, `allowed-delay:`,
+`measuring-interval:`, `negative-wait:`), which is what the guard looks for. The marker is
+the mechanism, not an allowlist of files.
 
 **A flaky test is never retried.** Retries are the same mistake one layer up.
 
 ## Exemplars
 
-**Enforced elsewhere:** `NoFixedTaskDelayTests` in each repo's `Tests.Meta` project, and
-`HygieneGuards.NoFixedDelays` shipped from `Trax.Core.Testing`.
+**Enforced elsewhere:** `NoFixedTaskDelayTests` in the eight code repos' `Tests.Meta`
+projects, and `HygieneGuards.NoFixedDelays` shipped from `Trax.Core.Testing`.
 
-Not covered: the guard finds `Task.Delay` in test code. It cannot see a fixed sleep reached
-through a helper, nor a poll whose timeout is too short to be safe, nor an unasserted
-polling result.
+Not covered, and the gap is larger than it looks:
+
+- The per-repo guards carry a `BaselineOffenders` dictionary grandfathering the delays that
+  already existed, with a per-file count, and fail only when a file exceeds its baseline.
+  One Trax.Mediator file is baselined at 13. Nothing fails when a file drops below its
+  baseline or disappears, so the numbers only ratchet by hand.
+- The guard finds `Task.Delay` in test code. It cannot see a fixed sleep reached through a
+  helper, a poll whose timeout is too short to be safe, or an unasserted polling result.
 
 ## Changelog
 
+- **2026-09-11**: Corrected the mechanism: legitimate delays are declared with marker
+  comments, not an exceptions list, and recorded the BaselineOffenders grandfathering
+  the per-repo guards carry.
 - **2026-09-11**: Recorded.

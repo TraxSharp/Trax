@@ -7,6 +7,7 @@ on:
     # documentation, so a commit touching only those has nothing for the site to rebuild.
     paths-ignore:
       - 'adr/**'
+      - '.claude/**'
       - 'tools/**'
       - 'tests/**'
       - '.github/**'

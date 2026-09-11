@@ -133,14 +133,13 @@ public static class LifecycleGuards
         return new GuardResult(
             "lifecycle/supersessions",
             offenders,
-            // A corpus with no supersessions has nothing to check and is not a failure.
-            adrs.Count == 0
-                ? 0
-                : Math.Max(inspected, 1),
+            inspected,
             "A supersession is written from both sides: the new ADR says 'Supersedes' and links "
                 + "back, the old one sets status 'superseded-by-NNNN' and links forward. Half of "
                 + "it is worse than none, because a reader arriving from a code comment lands on "
-                + "the old document."
+                + "the old document.",
+            // A corpus with no supersessions genuinely has nothing to check.
+            AllowsEmpty: true
         );
     }
 

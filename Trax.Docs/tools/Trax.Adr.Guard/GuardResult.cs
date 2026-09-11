@@ -11,11 +11,17 @@ namespace Trax.Adr.Guard;
 /// passed, it has failed to look: see <see cref="Passed"/>.
 /// </param>
 /// <param name="FailureMessage">The rule and how to fix a violation. Offenders are appended by the reporter.</param>
+/// <param name="AllowsEmpty">
+/// True when having nothing to inspect is a legitimate state rather than a broken scan.
+/// A corpus with no supersessions really has none. Set it deliberately and rarely: it
+/// switches off the protection below, so a check that sets it can go vacuous unnoticed.
+/// </param>
 public sealed record GuardResult(
     string Name,
     IReadOnlyList<string> Offenders,
     int Inspected,
-    string FailureMessage
+    string FailureMessage,
+    bool AllowsEmpty = false
 )
 {
     /// <summary>
@@ -28,10 +34,13 @@ public sealed record GuardResult(
     /// turns every "no violations" assertion vacuous at once, and nothing says so.
     /// </para>
     /// </summary>
-    public bool Passed => Offenders.Count == 0 && Inspected > 0;
+    public bool Passed => Offenders.Count == 0 && (Inspected > 0 || AllowsEmpty);
 
-    /// <summary>A check that looked at nothing, which is reported differently from a violation.</summary>
-    public bool InspectedNothing => Inspected == 0;
+    /// <summary>A check that should have looked at something and did not.</summary>
+    public bool InspectedNothing => Inspected == 0 && !AllowsEmpty;
+
+    /// <summary>A check that legitimately had nothing to look at, reported as such.</summary>
+    public bool NothingToCheck => Inspected == 0 && AllowsEmpty;
 
     public static GuardResult Ok(string name, int inspected, string rule) =>
         new(name, [], inspected, rule);

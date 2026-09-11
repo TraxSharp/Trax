@@ -49,15 +49,25 @@ interface, and the system stores `typeof(TTrain).FullName!`.
 - [Metadata](/docs/effect/metadata) shows the stored name on the persisted record.
 
 **Enforced elsewhere:** `InterfaceFullNameInvariantTests` in `Trax.Mediator`'s `Tests.Meta`
-project, which walks the layers that must agree (metadata, work queue, manifest, GraphQL
-hooks, dashboard requeue, scheduler exclusions) and fails when one drifts to a concrete or
-short name.
+project. Read it before relying on it: it registers a local fake and asserts that
+`CanonicalName` is the interface FullName at the point of registration. That is the
+**source** of the rule, and it is all that is checked.
 
-Not covered: nothing stops a consumer registering a train without an interface, which
-leaves `CanonicalName` null and falls back to the concrete FullName.
-`TrainGuards.EveryTrainHasInterface` is the opt-in check for that, and it ships rather than
-being applied here.
+Not covered, and this is most of the decision:
+
+- **None of the six downstream layers is verified.** `metadata.Name`, `work_queue.train_name`,
+  `manifest.Name`, the GraphQL hooks, dashboard requeue and scheduler exclusions appear in
+  that guard only as prose. Nothing reads or compares them. Three of the six live in repos
+  that are downstream of Trax.Mediator and structurally invisible from it
+  ([0003](./0003-a-repo-depends-only-on-what-is-upstream.md)); the other three are reachable
+  and still unchecked.
+- Nothing stops a consumer registering a train without an interface, which leaves
+  `CanonicalName` null and falls back to the concrete FullName.
+  `TrainGuards.EveryTrainHasInterface` is the opt-in check for that, and it ships for
+  consumers rather than being applied across these repos.
 
 ## Changelog
 
+- **2026-09-11**: Corrected the enforcement claim: the guard checks CanonicalName at
+  registration and none of the six downstream layers the ADR had said it walked.
 - **2026-09-11**: Recorded.

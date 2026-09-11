@@ -35,15 +35,20 @@ what the person who just tripped the guard actually reads.
 
 ## Exemplars
 
-- `ReasonsTests` in this repo shows the `because` argument carrying the reason rather than
-  the test name carrying it alone.
+**Enforced elsewhere:** `NoLegacyAssertTests` in the eight code repos' `Tests.Meta`
+projects, and `HygieneGuards.NoLegacyAsserts` shipped from `Trax.Core.Testing` for
+consumers. Trax.Docs is bound by this decision but has no `Tests.Meta` project and so no
+copy; its assertions are held to it by review alone.
 
-**Enforced elsewhere:** `NoLegacyAssertTests` in each repo's `Tests.Meta` project, and
-`HygieneGuards.NoLegacyAsserts` shipped from `Trax.Core.Testing` for consumers.
+`ReasonsTests.cs` in this repo is worth reading as an example of the `because` argument
+carrying the reason, but it is a unit test rather than a guard and enforces nothing.
 
 Not covered: nothing checks that a `because` argument is *present*, only that the assertion
-style allows one. A bare `.Should().BeEmpty()` passes the guard and teaches nobody.
+style allows one. A bare `.Should().BeEmpty()` passes the guard and teaches nobody, and
+most assertions in this repo's own test project are exactly that.
 
 ## Changelog
 
+- **2026-09-11**: Demoted ReasonsTests from an enforcement claim to an example, and
+  recorded that Trax.Docs has no Tests.Meta project to hold the guard.
 - **2026-09-11**: Recorded.

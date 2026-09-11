@@ -50,9 +50,13 @@ public static class ExemplarGuards
                 continue;
             }
 
+            // Markers are read from prose only. A fenced example quoting the template is
+            // not this document declaring anything, and reading it as one let an ADR whose
+            // real Exemplars section was silent satisfy the check.
+            var prose = Markdown.WithoutFences(section);
             var claims = Claims(section);
-            var unenforced = section.Contains(UnenforcedMarker, StringComparison.Ordinal);
-            var elsewhere = section.Contains(ElsewhereMarker, StringComparison.Ordinal);
+            var unenforced = prose.Contains(UnenforcedMarker, StringComparison.Ordinal);
+            var elsewhere = prose.Contains(ElsewhereMarker, StringComparison.Ordinal);
 
             if (unenforced && (claims.Count > 0 || elsewhere))
             {
@@ -75,14 +79,14 @@ public static class ExemplarGuards
 
             if (unenforced)
             {
-                var problem = Reasons.Problem(ReasonText(section, UnenforcedMarker));
+                var problem = Reasons.Problem(ReasonText(prose, UnenforcedMarker));
                 if (problem is not null)
                     offenders.Add($"{adr.RelativePath}: '{UnenforcedMarker}' {problem}");
             }
 
             if (elsewhere)
             {
-                var problem = Reasons.Problem(ReasonText(section, ElsewhereMarker));
+                var problem = Reasons.Problem(ReasonText(prose, ElsewhereMarker));
                 if (problem is not null)
                     offenders.Add($"{adr.RelativePath}: '{ElsewhereMarker}' {problem}");
             }
@@ -133,9 +137,10 @@ public static class ExemplarGuards
         return new GuardResult(
             "exemplars/guards-resolve",
             offenders,
-            adrs.Count == 0 ? 0 : Math.Max(inspected, 1),
+            inspected,
             "A backticked bare class name in '## Exemplars' is an enforcement claim, and must "
-                + "resolve to a real class in this repository's test roots."
+                + "resolve to a real class in this repository's test roots.",
+            AllowsEmpty: true
         );
     }
 
@@ -168,11 +173,11 @@ public static class ExemplarGuards
                     continue; // resolution owns this failure
 
                 inspected++;
-                var source = File.ReadAllText(sourcePath);
-                if (!source.Contains(adr.FileName, StringComparison.Ordinal))
+                var problem = CitationProblem(File.ReadAllText(sourcePath), adr.FileName);
+                if (problem is not null)
                     offenders.Add(
                         $"{AdrCorpus.Relative(sourcePath, options)}: '{claim}' is named by "
-                            + $"{adr.RelativePath} but does not cite it back. Name "
+                            + $"{adr.RelativePath} but {problem} Name "
                             + $"'{adr.FileName}' in the class docstring AND in the assertion failure "
                             + "message, so the person who trips the guard sees the authority."
                     );
@@ -182,21 +187,63 @@ public static class ExemplarGuards
         return new GuardResult(
             "exemplars/guards-cite-back",
             offenders,
-            adrs.Count == 0 ? 0 : Math.Max(inspected, 1),
+            inspected,
             "A guard an ADR names must cite that ADR back, so a rewrite that guts its assertions "
                 + "warns the person doing it. Follow NoSilentRegistrationOrderDependenceTests: the "
-                + "citation goes in the <remarks> and in the failure message."
+                + "citation goes in the class docstring and in the assertion failure message.",
+            AllowsEmpty: true
         );
     }
 
     /// <summary>
-    /// Bare class names claimed as local enforcement. The "enforced elsewhere" paragraph is
-    /// removed first: a class named there lives in another repo, so reading it as a local
-    /// claim would demand it resolve here and fail every cross-repo ADR.
+    /// Null when the source cites the ADR the way the standard asks: once in a documentation
+    /// comment, and once outside one, which in practice is the assertion failure message.
+    ///
+    /// <para>
+    /// Checking only that the name appeared somewhere was too weak to mean anything. A stray
+    /// comment or an unrelated string literal satisfied it, while the message the guard
+    /// prints told the reader to put it in two specific places.
+    /// </para>
     /// </summary>
-    private static List<string> Claims(string section) =>
+    private static string? CitationProblem(string source, string fileName)
+    {
+        var inDoc = false;
+        var inCode = false;
+
+        foreach (var line in source.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (!line.Contains(fileName, StringComparison.Ordinal))
+                continue;
+
+            if (line.TrimStart().StartsWith("///", StringComparison.Ordinal))
+                inDoc = true;
+            else
+                inCode = true;
+        }
+
+        return (inDoc, inCode) switch
+        {
+            (true, true) => null,
+            (false, false) => "does not cite it back.",
+            (true, false) => "cites it only in the docstring, not in a failure message.",
+            (false, true) => "cites it only in code, not in the class docstring.",
+        };
+    }
+
+    /// <summary>
+    /// Bare class names claimed as local enforcement. The "enforced elsewhere" paragraph and
+    /// any fenced example are removed first: a class named there is not a claim on this
+    /// repo, so reading it as one would demand it resolve here and fail every cross-repo ADR.
+    ///
+    /// <para>
+    /// Public because the census must ask the same question. When it asked a slightly
+    /// different one, moving a local class's name into the "enforced elsewhere" paragraph
+    /// credited it to the census while hiding it from resolution and cite-back at once.
+    /// </para>
+    /// </summary>
+    public static List<string> Claims(string section) =>
         ClaimedGuard
-            .Matches(WithoutParagraph(section, ElsewhereMarker))
+            .Matches(Markdown.WithoutFences(WithoutParagraph(section, ElsewhereMarker)))
             .Select(m => m.Groups["name"].Value)
             .Distinct(StringComparer.Ordinal)
             .ToList();

@@ -5,7 +5,7 @@ namespace Trax.Adr.Guard.Tests.Tests;
 /// something, so what it accepts matters as much as what the guards check.
 ///
 /// <para>
-/// Enforces <c>adr/0004-tests-assert-with-fluentassertions.md</c>: these assertions carry
+/// Illustrates <c>adr/0004-tests-assert-with-fluentassertions.md</c>: these assertions carry
 /// their reason in the <c>because</c> argument, which is what a failing run prints, rather
 /// than leaving it in the test name where a failure never shows it.
 /// </para>

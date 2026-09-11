@@ -41,13 +41,24 @@ introspection site with a justification, and raising the count to silence it is 
 violation.
 
 **A guard that cannot fail is worse than no guard**, because it reads as coverage while
-enforcing nothing. Every checker reports how many items it inspected, and inspecting zero
-is a failure rather than a pass. See `GuardResult.Passed`.
+enforcing nothing. The ADR guard therefore reports how many items each check inspected and
+treats zero as a failure unless the check declares that having nothing to check is
+legitimate (`Trax.Adr.Guard.GuardResult.Passed`). **The shipped `Trax.Core.Testing`
+`GuardResult` does not do this**: its `Passed` ignores `Inspected`, and no guard in any
+`Tests.Meta` project reads the count. Carrying that idea into the shipped packages is
+outstanding work, not a described state.
 
-**Rules that span repos are duplicated, not shared.** Nine guard files are byte-identical
-copies across up to eight `Tests.Meta` projects. That is the accepted cost of each repo
-being able to check itself alone, and it is why those copies cite ADRs in this central
-corpus by qualified path rather than by a local path that would have to exist eight times.
+**Rules that span repos are duplicated, not shared.** Eight guard file names appear in all
+eight `Tests.Meta` projects and eleven are duplicated across two or more. The copies are
+near-identical rather than identical: each carries its own namespace, and some have diverged
+further (Trax.Samples adds `KnownExceptions_AreNotStale` to its `NoIgnoreAttributeTests`).
+That is the accepted cost of each repo checking itself alone.
+
+**A shared copy must cite a path that resolves in every repo holding it.** A citation of
+`docs/adr/0003-x.md` would have to exist eight times over; one of `Trax.Docs/adr/0003-x.md`
+is the same string everywhere. That is the convention for the back-citations this corpus
+expects, following `Trax.Docs/reference/registration-order.md`, which is the only
+cross-repo citation in the workspace today. No `Tests.Meta` guard cites an ADR yet.
 
 ## Exemplars
 
@@ -65,4 +76,8 @@ human step, and no test can detect a decision somebody chose not to record.
 
 ## Changelog
 
+- **2026-09-11**: Corrected three claims an audit found false: the Inspected rule holds
+  only for the ADR guard and not for the shipped Trax.Core.Testing GuardResult, the
+  duplicated guard files are near-identical rather than byte-identical, and no
+  Tests.Meta guard cites an ADR yet.
 - **2026-09-11**: Recorded.

@@ -7,9 +7,15 @@ status: accepted
 
 # A repo depends only on what is upstream of it
 
-The dependency chain runs one way: `Trax.Core`, then `Trax.Effect`, then everything else
-(`Mediator`, `Scheduler`, `Dashboard`, `Api`, `Samples`). A repo may reference its own
-packages and those of a repo above it, never one below it and never a sibling.
+The repos are a **total order**, not a tree, and a repo may reference only the ones before
+it:
+
+`Trax.Core`, `Trax.Effect`, `Trax.Mediator`, `Trax.Scheduler`, `Trax.Api`, `Trax.Dashboard`
+
+`Trax.Cli` sits after `Trax.Scheduler`, and `Trax.Samples` last of all, referencing
+everything. So `Trax.Api` referencing `Trax.Scheduler` is upstream and allowed; the reverse
+is not. There are no siblings in this model, which is what makes the rule checkable: every
+pair of repos has a direction.
 
 ## Status
 
@@ -34,9 +40,9 @@ because the alternative needs edges pointing sideways.
 something that lives in `Trax.Api`, the answer is to push it down into `Trax.Effect` or
 `Trax.Core`, not to reach across.
 
-**Sibling reuse is duplication.** Two parallel repos that need the same helper either get
-it from a shared upstream or each keep their own copy. The nine duplicated guard files
-across the `Tests.Meta` projects are this rule in action.
+**Reuse below you is duplication.** A repo that needs a helper living downstream either
+pushes it upstream or keeps its own copy. The duplicated guard files across the
+`Tests.Meta` projects are this rule in action.
 
 ## Exemplars
 
@@ -44,12 +50,20 @@ across the `Tests.Meta` projects are this rule in action.
   same chain read from the outside.
 
 **Enforced elsewhere:** `DependencyDirectionTests` in each repo's `Tests.Meta` project. It
-detects the repo from the root `.slnx` and allows only that repo's own family plus its
-declared upstreams.
+identifies the repo from the root `.slnx` and allows only that repo's own family plus the
+upstreams named in its allow-map, which is where the order above is actually written down.
 
-Not covered: the guard reads `PackageReference` entries, so it cannot see a dependency
-taken by copying source across repos.
+Not covered, and worth knowing:
+
+- The guard reads `PackageReference` entries, so a dependency taken by copying source
+  across repos is invisible to it.
+- It only recognises the eight `Trax.*` families it lists. `Trax.Samples` references
+  `Trax.Runner.Lambda`, published out of Trax.Scheduler, and the guard skips it because the
+  name is not in that list.
 
 ## Changelog
 
+- **2026-09-11**: Corrected the chain. The repos are a total order, not Core and Effect
+  above an undifferentiated rest, and what the ADR called siblings the guard has always
+  allowed.
 - **2026-09-11**: Recorded.

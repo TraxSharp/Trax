@@ -70,7 +70,13 @@ public static class GuardRunner
         var failed = results.Where(r => !r.Passed).ToList();
 
         foreach (var result in results.Where(r => r.Passed))
-            output.WriteLine($"  ok    {result.Name} ({result.Inspected} inspected)");
+        {
+            output.WriteLine(
+                result.NothingToCheck
+                    ? $"  ok    {result.Name} (nothing to check)"
+                    : $"  ok    {result.Name} ({result.Inspected} inspected)"
+            );
+        }
 
         foreach (var result in failed)
         {

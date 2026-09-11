@@ -20,11 +20,6 @@ public static class CensusGuards
         RegexOptions.Compiled
     );
 
-    private static readonly Regex ClaimedGuard = new(
-        @"`(?<name>[A-Z][A-Za-z0-9]*Tests)`",
-        RegexOptions.Compiled
-    );
-
     public static GuardResult EveryGuardIsClassified(IReadOnlyList<Adr> adrs, GuardOptions options)
     {
         var rule =
@@ -50,7 +45,7 @@ public static class CensusGuards
 
         var claimed = adrs.Select(a => a.Section(ExemplarGuards.Heading))
             .Where(s => s is not null)
-            .SelectMany(s => ClaimedGuard.Matches(s!).Select(m => m.Groups["name"].Value))
+            .SelectMany(s => ExemplarGuards.Claims(s!))
             .ToHashSet(StringComparer.Ordinal);
 
         var offenders = new List<string>();

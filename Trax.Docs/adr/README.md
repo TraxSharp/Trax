@@ -21,9 +21,10 @@ product documentation, and `sync-docs.sh` skips this directory.
 
 ## How they are checked
 
-`tools/Trax.Adr.Guard` validates frontmatter, both index tables, the lifecycle sections and
-the exemplars, and it runs in every repo's CI through the `adr-guard` composite action. The
-format is
+`tools/Trax.Adr.Guard` validates frontmatter, the index tables, the lifecycle sections and
+the exemplars. It runs against this corpus in Trax.Docs CI, and is delivered to the other
+repos as the `adr-guard` composite action. **No other repo calls it yet**: the per-repo
+`docs/adr/` directories and their CI jobs are still to come. The format is
 [`.claude/skills/recording-decisions/ADR-FORMAT.md`](../.claude/skills/recording-decisions/ADR-FORMAT.md).
 
 Every ADR ends with `## Exemplars` in one of three states: guard classes in the same repo

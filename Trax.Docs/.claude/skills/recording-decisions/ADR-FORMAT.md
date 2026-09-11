@@ -149,8 +149,10 @@ anything it would otherwise have to explain goes here as a link instead.
 
 It must be in **one of three states**.
 
-**1. Guard classes in this repo.** A bare backticked class name is an enforcement claim.
-The guard checks the class exists under the repo's test roots, and that it **cites the ADR
+**1. Guard classes in this repo.** A bare backticked class name **ending in `Tests`** is an
+enforcement claim. A name carrying a dot (`Trax.Core.HygieneGuardsTests`) is prose, as is a
+file cited with its extension, and so is anything inside a fenced code block. The guard
+checks a claimed class exists under the repo's test roots, and that it **cites the ADR
 back**:
 
 ```md
@@ -193,7 +195,11 @@ without it, so there is no state of the repo where this is violated.
 
 That is a valid and useful answer. What is not allowed is **silence**: an ADR with no
 enforcement and no admission reads as a rule the build is holding for you. Claiming
-enforcement alongside `**Unenforced:**` is a contradiction and fails.
+enforcement alongside `**Unenforced:**` is a contradiction and fails. States 1 and 2 may be
+combined, when some of the enforcement is local and some is not.
+
+The same bar applies to the `**Enforced elsewhere:**` text as to `**Unenforced:**`: it must
+be specific, and a deferral is rejected.
 
 The reason has to be a reason. Under 40 characters fails, and so does anything reading as a
 deferral ("not yet", "TODO", "later", "a follow-up"). A rule that should be recorded and is
@@ -244,8 +250,11 @@ ADR as `effect/0001`, or by path.
 
 **Then add it to that directory's `README.md`**, every table: by area, the full list, and
 by repo in the central corpus. The guard checks each against the frontmatter in both
-directions and fails until they agree, so a new ADR is not finished when the file is
-written.
+directions, including the full table's tag columns, and fails until they agree, so a new
+ADR is not finished when the file is written.
+
+Index links must be written `[0007](./0007-slug.md)`, with the `./`. Without it the link is
+not recognised and the row reads as empty.
 
 ## Voice
 

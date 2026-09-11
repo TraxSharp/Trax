@@ -54,13 +54,39 @@ public class GuardRunnerTests
 
         var results = GuardRunner.Run(repo.Options());
 
-        results.Should().HaveCountGreaterThan(10);
+        // The roster is a contract. "more than ten" would still pass with eight deleted.
+        results
+            .Select(r => r.Name)
+            .Should()
+            .BeEquivalentTo([
+                "corpus/discovery",
+                "frontmatter/parseable",
+                "frontmatter/authors",
+                "frontmatter/areas",
+                "frontmatter/repos",
+                "frontmatter/status",
+                "frontmatter/no-date",
+                "frontmatter/file-names",
+                "lifecycle/status-section",
+                "lifecycle/supersessions",
+                "lifecycle/changelog",
+                "exemplars/section",
+                "exemplars/guards-resolve",
+                "exemplars/guards-cite-back",
+                "index/exists",
+                "index/areas-table",
+                "index/full-list",
+                "hygiene/no-em-dashes",
+                "hygiene/title",
+            ]);
+
         results
             .Where(r => r.InspectedNothing)
             .Should()
             .BeEmpty(
-                "a check that inspected nothing has not passed, it has failed to look. See "
-                    + "adr/0001-architectural-rules-are-executable-guards.md."
+                "a check that inspected nothing has not passed, it has failed to look. A check "
+                    + "that legitimately has nothing to check says so with AllowsEmpty instead. "
+                    + "See adr/0001-architectural-rules-are-executable-guards.md."
             );
     }
 
