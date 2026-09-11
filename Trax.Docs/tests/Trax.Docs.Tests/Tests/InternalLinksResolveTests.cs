@@ -1,5 +1,13 @@
 namespace Trax.Docs.Tests.Tests;
 
+/// <summary>
+/// Every internal /docs/ link resolves to a page that exists.
+///
+/// <para>The failure mode this exists for is invisible in a diff: a link to a page nobody wrote
+/// reads exactly like a working one, and ships as a 404.</para>
+///
+/// <para>Enforces <c>Trax.Docs/adr/0008-documentation-conventions-are-linted.md</c>.</para>
+/// </summary>
 [TestFixture]
 public class InternalLinksResolveTests
 {
@@ -72,7 +80,8 @@ public class InternalLinksResolveTests
                     + "file in the repo. `/docs/foo/bar` maps to `foo/bar.md` (or `foo/bar/index.md`) "
                     + "from the repo root. Broken links surface as 404s on traxsharp.net once Vercel "
                     + "rebuilds the site. If a link is intentionally broken (planned page, tech debt), "
-                    + "add it to KnownBrokenLinks with a justification. New offenders:\n  "
+                    + "add it to KnownBrokenLinks with a justification. See "
+                    + "Trax.Docs/adr/0008-documentation-conventions-are-linted.md. New offenders:\n  "
                     + string.Join("\n  ", offenders)
             );
     }

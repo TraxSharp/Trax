@@ -60,9 +60,10 @@ ADR as `effect/0001`.
 | 4 | Give it `## Exemplars` naming guards, or `**Enforced elsewhere:**`, or `**Unenforced:**` with a reason | `exemplars/section` |
 | 5 | Have each locally named guard cite the ADR back | `exemplars/guards-cite-back` |
 
-A sixth step applies only where the census is switched on with `--census-root`: every guard
-class there must be named by an ADR or carry `Not ADR-enforcing: <reason>` in its docstring.
-No repo enables it yet.
+A sixth step applies where the census is switched on with `--census-root`: every guard class
+under that root must be named by an ADR or carry `Not ADR-enforcing: <reason>` in its own
+docstring. Trax.Docs enables it over `tests/Trax.Docs.Tests`; the other repos will point it
+at their `Tests.Meta` project as they adopt.
 
 Step 1 is the only one you have to remember, because no test can detect a decision you
 chose not to record. Everything after it fails the build until it is done.

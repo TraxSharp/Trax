@@ -242,6 +242,27 @@ Only include these when they add genuine value. Most ADRs will not need them.
 Each earns its place by saying something a reader cannot get from the code. A "consequence"
 that restates the rule is the documentation page's job.
 
+## Coming from the other side: you wrote a guard
+
+Where the census is switched on, the question runs the other way too. Every guard class
+under the census root must be **named by an ADR**, or opt out in its own docstring:
+
+```csharp
+/// <summary>
+/// Migration files are numbered sequentially.
+///
+/// <para>Not ADR-enforcing: it pins a file naming convention nobody weighed an
+/// alternative for, and no reader would ask why it is like this.</para>
+/// </summary>
+```
+
+A new guard is **unclassified until you choose**, and the build says so. Opting out is a
+normal answer. The reason is held to the same bar as `**Unenforced:**`: specific, and not a
+deferral. Claiming both an ADR and the opt-out fails, because they contradict each other.
+
+The marker is read from the docstring directly above the class, so two guards in one file
+are asked separately and a marker inside a string literal is not an answer.
+
 ## Numbering and the index
 
 Scan the ADR's **own directory** for the highest existing number and increment by one.

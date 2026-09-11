@@ -1,5 +1,13 @@
 namespace Trax.Docs.Tests.Tests;
 
+/// <summary>
+/// Every concept page with code carries its SDK reference block.
+///
+/// <para>The block is how a reader gets from an example to the method-level documentation for the
+/// calls it makes.</para>
+///
+/// <para>Enforces <c>Trax.Docs/adr/0008-documentation-conventions-are-linted.md</c>.</para>
+/// </summary>
 [TestFixture]
 public class SdkReferenceBlockTests
 {
@@ -98,7 +106,9 @@ public class SdkReferenceBlockTests
                 "CLAUDE.md > SDK Reference Blocks: every concept/guide page in Trax.Docs (outside "
                     + "sdk-reference/) that contains fenced code blocks must end with a "
                     + "`## SDK Reference` section listing the SDK methods used. The block links readers "
-                    + "from the concept page to the canonical SDK reference. Pages missing the block:\n  "
+                    + "from the concept page to the canonical SDK reference. See "
+                    + "Trax.Docs/adr/0008-documentation-conventions-are-linted.md. "
+                    + "Pages missing the block:\n  "
                     + string.Join("\n  ", offenders)
             );
     }

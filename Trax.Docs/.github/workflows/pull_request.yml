@@ -75,3 +75,7 @@ jobs:
           known-areas: testing,platform,packaging,ci,naming,data-model,graphql,docs
           known-repos: core,effect,mediator,scheduler,dashboard,api,cli,samples,docs,website
           require-repos-key: 'true'
+          # Scoped to the project that holds this repo's guards. Trax.Adr.Guard.Tests is a
+          # tool's unit tests, not guards over the repo, so censusing it would only produce
+          # a dozen identical opt-outs.
+          census-root: tests/Trax.Docs.Tests

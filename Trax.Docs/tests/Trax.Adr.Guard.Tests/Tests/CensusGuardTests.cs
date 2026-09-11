@@ -143,6 +143,99 @@ public class CensusGuardTests
         result.Inspected.Should().Be(0);
     }
 
+    #region Reading the file correctly
+
+    /// <summary>
+    /// Only the first class in a file was censused, so a second guard beside it was never
+    /// asked whether it was credited to anything.
+    /// </summary>
+    [Test]
+    public void Census_SecondClassInTheSameFile_IsAlsoAsked()
+    {
+        const string source = """
+            namespace Some.Tests.Meta;
+
+            /// <summary>
+            /// First.
+            ///
+            /// <para>Not ADR-enforcing: it pins a file naming convention nobody weighed.</para>
+            /// </summary>
+            public class AlphaTests { }
+
+            /// <summary>Second, and deliberately unclassified.</summary>
+            public class BetaTests { }
+            """;
+
+        using var repo = WithGuardSource("TwoGuards.cs", source);
+
+        Run(repo)
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("'BetaTests' is named by no ADR");
+    }
+
+    /// <summary>
+    /// The marker was searched for across the whole file, so a fixture holding a template
+    /// of a guard class was credited with the template's placeholder text as its reason.
+    /// </summary>
+    [Test]
+    public void Census_MarkerInsideARawStringLiteral_IsNotALiveOptOut()
+    {
+        var quote = new string('"', 3);
+        var source =
+            "namespace Some.Tests.Meta;\n\n"
+            + "public class GammaTests\n{\n"
+            + $"    private const string Template = {quote}\n"
+            + "        /// Not ADR-enforcing: a placeholder inside a fixture, not a declaration.\n"
+            + "        public class SomethingTests { }\n"
+            + $"        {quote};\n"
+            + "}\n";
+
+        using var repo = WithGuardSource("Fixture.cs", source);
+
+        var offenders = Run(repo).Offenders;
+
+        offenders
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("'GammaTests' is named by no ADR");
+        offenders
+            .Should()
+            .NotContain(
+                o => o.Contains("SomethingTests"),
+                "a class inside a literal is data, not a declaration"
+            );
+    }
+
+    [Test]
+    public void Census_OptOutBelongingToAnotherClass_DoesNotCreditThisOne()
+    {
+        const string source = """
+            namespace Some.Tests.Meta;
+
+            /// <summary>
+            /// First.
+            ///
+            /// <para>Not ADR-enforcing: it pins a file naming convention nobody weighed.</para>
+            /// </summary>
+            public class AlphaTests { }
+
+            public class DeltaTests { }
+            """;
+
+        using var repo = WithGuardSource("Neighbours.cs", source);
+
+        Run(repo)
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("'DeltaTests' is named by no ADR");
+    }
+
+    #endregion
+
     [Test]
     public void Census_MissingRoot_Fails_RatherThanPassingOverNothing()
     {

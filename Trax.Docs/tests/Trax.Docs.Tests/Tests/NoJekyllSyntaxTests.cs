@@ -1,5 +1,13 @@
 namespace Trax.Docs.Tests.Tests;
 
+/// <summary>
+/// No leftover Jekyll template syntax in the documentation.
+///
+/// <para>The site is rendered by Next.js, not Jekyll. A surviving {{ site.baseurl }} or {% link %}
+/// renders as literal text on traxsharp.net.</para>
+///
+/// <para>Enforces <c>Trax.Docs/adr/0008-documentation-conventions-are-linted.md</c>.</para>
+/// </summary>
 [TestFixture]
 public class NoJekyllSyntaxTests
 {
@@ -49,7 +57,7 @@ public class NoJekyllSyntaxTests
                 "CLAUDE.md > Documentation Link Format requires plain Markdown — the docs are rendered "
                     + "by Trax.Website (Next.js/React), not Jekyll. Use direct `/docs/path/to/file` "
                     + "links instead of `{{ site.baseurl }}{% link %}` or `{: .classname }` IALs. "
-                    + "Offenders:\n  "
+                    + "See Trax.Docs/adr/0008-documentation-conventions-are-linted.md. Offenders:\n  "
                     + string.Join("\n  ", offenders)
             );
     }
