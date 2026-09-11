@@ -23,8 +23,8 @@ product documentation, and `sync-docs.sh` skips this directory.
 
 `tools/Trax.Adr.Guard` validates frontmatter, the index tables, the lifecycle sections and
 the exemplars. It runs against this corpus in Trax.Docs CI, and is delivered to the other
-repos as the `adr-guard` composite action. **No other repo calls it yet**: the per-repo
-`docs/adr/` directories and their CI jobs are still to come. The format is
+repos as the `adr-guard` composite action. `Trax.Effect` is the first repo to call it and
+carries its own `docs/adr/`; the rest adopt in turn. The format is
 [`.claude/skills/recording-decisions/ADR-FORMAT.md`](../.claude/skills/recording-decisions/ADR-FORMAT.md).
 
 Every ADR ends with `## Exemplars` in one of three states: guard classes in the same repo
@@ -44,12 +44,12 @@ realising. A repo-scoped ADR omits the key, because its path already says it.
 
 | Repo | ADRs |
 | --- | --- |
-| `api` | [0001](./0001-architectural-rules-are-executable-guards.md), [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md), [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0006](./0006-tests-synchronise-on-a-signal.md), [0007](./0007-the-canonical-train-name-is-the-interface-fullname.md), [0008](./0008-documentation-conventions-are-linted.md) |
+| `api` | [0001](./0001-architectural-rules-are-executable-guards.md), [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md), [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0006](./0006-tests-synchronise-on-a-signal.md), [0007](./0007-the-canonical-train-name-is-the-interface-fullname.md), [0008](./0008-documentation-conventions-are-linted.md), [0009](./0009-feature-tables-ship-in-the-core-provider-set.md) |
 | `cli` | [0001](./0001-architectural-rules-are-executable-guards.md), [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md), [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0006](./0006-tests-synchronise-on-a-signal.md), [0008](./0008-documentation-conventions-are-linted.md) |
 | `core` | [0001](./0001-architectural-rules-are-executable-guards.md), [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md), [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0006](./0006-tests-synchronise-on-a-signal.md), [0008](./0008-documentation-conventions-are-linted.md) |
 | `dashboard` | [0001](./0001-architectural-rules-are-executable-guards.md), [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md), [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0006](./0006-tests-synchronise-on-a-signal.md), [0007](./0007-the-canonical-train-name-is-the-interface-fullname.md), [0008](./0008-documentation-conventions-are-linted.md) |
 | `docs` | [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0008](./0008-documentation-conventions-are-linted.md) |
-| `effect` | [0001](./0001-architectural-rules-are-executable-guards.md), [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md), [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0006](./0006-tests-synchronise-on-a-signal.md), [0007](./0007-the-canonical-train-name-is-the-interface-fullname.md), [0008](./0008-documentation-conventions-are-linted.md) |
+| `effect` | [0001](./0001-architectural-rules-are-executable-guards.md), [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md), [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0006](./0006-tests-synchronise-on-a-signal.md), [0007](./0007-the-canonical-train-name-is-the-interface-fullname.md), [0008](./0008-documentation-conventions-are-linted.md), [0009](./0009-feature-tables-ship-in-the-core-provider-set.md) |
 | `mediator` | [0001](./0001-architectural-rules-are-executable-guards.md), [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md), [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0006](./0006-tests-synchronise-on-a-signal.md), [0007](./0007-the-canonical-train-name-is-the-interface-fullname.md), [0008](./0008-documentation-conventions-are-linted.md) |
 | `samples` | [0001](./0001-architectural-rules-are-executable-guards.md), [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md), [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0006](./0006-tests-synchronise-on-a-signal.md), [0008](./0008-documentation-conventions-are-linted.md) |
 | `scheduler` | [0001](./0001-architectural-rules-are-executable-guards.md), [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md), [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0006](./0006-tests-synchronise-on-a-signal.md), [0007](./0007-the-canonical-train-name-is-the-interface-fullname.md), [0008](./0008-documentation-conventions-are-linted.md) |
@@ -60,9 +60,11 @@ realising. A repo-scoped ADR omits the key, because its path already says it.
 | --- | --- |
 | `ci` | [0002](./0002-cross-repo-dependencies-are-exact-pinned.md) |
 | `docs` | [0008](./0008-documentation-conventions-are-linted.md) |
+| `migrations` | [0009](./0009-feature-tables-ship-in-the-core-provider-set.md) |
 | `naming` | [0007](./0007-the-canonical-train-name-is-the-interface-fullname.md) |
 | `packaging` | [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md) |
 | `platform` | [0001](./0001-architectural-rules-are-executable-guards.md), [0003](./0003-a-repo-depends-only-on-what-is-upstream.md), [0007](./0007-the-canonical-train-name-is-the-interface-fullname.md) |
+| `providers` | [0009](./0009-feature-tables-ship-in-the-core-provider-set.md) |
 | `testing` | [0001](./0001-architectural-rules-are-executable-guards.md), [0004](./0004-tests-assert-with-fluentassertions.md), [0005](./0005-a-skipped-test-is-a-runtime-decision.md), [0006](./0006-tests-synchronise-on-a-signal.md), [0008](./0008-documentation-conventions-are-linted.md) |
 
 ## All of them
@@ -77,3 +79,4 @@ realising. A repo-scoped ADR omits the key, because its path already says it.
 | [0006](./0006-tests-synchronise-on-a-signal.md) | Tests synchronise on a signal, never on a fixed delay | core, effect, mediator, scheduler, dashboard, api, cli, samples | testing |
 | [0007](./0007-the-canonical-train-name-is-the-interface-fullname.md) | The canonical train name is the interface FullName | effect, mediator, scheduler, dashboard, api | naming, platform |
 | [0008](./0008-documentation-conventions-are-linted.md) | Documentation conventions are enforced by lint, not by review | core, effect, mediator, scheduler, dashboard, api, cli, samples, docs | docs, testing |
+| [0009](./0009-feature-tables-ship-in-the-core-provider-set.md) | Feature-package tables ship in the core provider migration set | effect, api | migrations, providers |

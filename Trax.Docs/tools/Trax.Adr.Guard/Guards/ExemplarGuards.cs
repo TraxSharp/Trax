@@ -215,10 +215,18 @@ public static class ExemplarGuards
             if (!line.Contains(fileName, StringComparison.Ordinal))
                 continue;
 
-            if (line.TrimStart().StartsWith("///", StringComparison.Ordinal))
-                inDoc = true;
-            else
-                inCode = true;
+            switch (CSharp.Classify(line))
+            {
+                case CSharp.LineKind.Documentation:
+                    inDoc = true;
+                    break;
+                case CSharp.LineKind.Code:
+                    inCode = true;
+                    break;
+                // An ordinary // comment is neither. The standard asks for the docstring and
+                // the failure message, and a comment is not the message anybody reads when
+                // the guard goes red.
+            }
         }
 
         return (inDoc, inCode) switch
@@ -294,7 +302,8 @@ public static class ExemplarGuards
                 if (relative.Split('/').Any(p => p is "bin" or "obj"))
                     continue;
 
-                foreach (Match match in ClassDeclaration.Matches(File.ReadAllText(file)))
+                var source = CSharp.WithoutCommentsAndLiterals(File.ReadAllText(file));
+                foreach (Match match in ClassDeclaration.Matches(source))
                     map.TryAdd(match.Groups["name"].Value, file);
             }
         }

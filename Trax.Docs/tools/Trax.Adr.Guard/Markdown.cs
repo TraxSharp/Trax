@@ -132,3 +132,78 @@ public static class Markdown
             || trimmed.StartsWith("~~~", StringComparison.Ordinal);
     }
 }
+
+/// <summary>
+/// Reading C# source well enough to tell a declaration from a mention of one.
+/// </summary>
+public static class CSharp
+{
+    /// <summary>
+    /// The source with comment bodies and raw string literals blanked out, so a class
+    /// named in a comment or held as fixture text is not read as a declaration.
+    /// </summary>
+    /// <remarks>
+    /// Not a parser. It is deliberately crude, and it errs toward blanking: the cost of
+    /// missing a real declaration is an ADR claim that fails to resolve and gets looked at,
+    /// while the cost of keeping a commented one is an ADR claiming a guard that does not
+    /// exist. Only the second failure is silent.
+    /// </remarks>
+    public static string WithoutCommentsAndLiterals(string source)
+    {
+        var kept = new List<string>();
+        var inRawString = false;
+
+        foreach (var line in source.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (line.Contains("\"\"\"", StringComparison.Ordinal))
+            {
+                inRawString = !inRawString;
+                kept.Add(string.Empty);
+                continue;
+            }
+
+            if (inRawString)
+            {
+                kept.Add(string.Empty);
+                continue;
+            }
+
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith('*'))
+            {
+                kept.Add(string.Empty);
+                continue;
+            }
+
+            var comment = line.IndexOf("//", StringComparison.Ordinal);
+            kept.Add(comment >= 0 ? line[..comment] : line);
+        }
+
+        return string.Join('\n', kept);
+    }
+
+    /// <summary>Which kind of line a citation was found on.</summary>
+    public enum LineKind
+    {
+        /// <summary>A <c>///</c> documentation comment.</summary>
+        Documentation,
+
+        /// <summary>An ordinary <c>//</c> comment, which carries no weight as a citation.</summary>
+        Comment,
+
+        /// <summary>Anything else, which in practice is an assertion message or a constant.</summary>
+        Code,
+    }
+
+    public static LineKind Classify(string line)
+    {
+        var trimmed = line.TrimStart();
+
+        if (trimmed.StartsWith("///", StringComparison.Ordinal))
+            return LineKind.Documentation;
+
+        return trimmed.StartsWith("//", StringComparison.Ordinal)
+            ? LineKind.Comment
+            : LineKind.Code;
+    }
+}

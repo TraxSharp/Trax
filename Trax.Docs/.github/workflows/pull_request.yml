@@ -72,7 +72,7 @@ jobs:
         uses: ./.github/actions/adr-guard
         with:
           adr-root: adr
-          known-areas: testing,platform,packaging,ci,naming,data-model,graphql,docs
+          known-areas: testing,platform,packaging,ci,naming,data-model,graphql,docs,migrations,providers
           known-repos: core,effect,mediator,scheduler,dashboard,api,cli,samples,docs,website
           require-repos-key: 'true'
           # Scoped to the project that holds this repo's guards. Trax.Adr.Guard.Tests is a

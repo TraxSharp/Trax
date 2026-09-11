@@ -220,6 +220,87 @@ public class AuditRegressionTests
 
     #endregion
 
+    #region Reading C# source, not mentions of it
+
+    /// <summary>
+    /// An ADR could claim a guard that does not exist, because class resolution ran a regex
+    /// over raw file text: a commented-out declaration counted as the real thing.
+    /// </summary>
+    [Test]
+    public void CommentedOutClass_DoesNotSatisfyAnEnforcementClaim()
+    {
+        using var repo = TempAdrRepo.Valid();
+        repo.Adr(
+            Sample.DefaultSpec.FileName,
+            Sample.Adr(exemplars: "- `PhantomGuardTests` pins this.")
+        );
+        repo.Write(
+            "tests/Some.Tests.Meta/Real.cs",
+            "namespace Some.Tests.Meta;\n\n// public class PhantomGuardTests { }\npublic class RealTests { }\n"
+        );
+
+        ExemplarGuards
+            .NamedGuardsResolve(Load(repo), repo.Options())
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("PhantomGuardTests");
+    }
+
+    [Test]
+    public void ClassInsideARawStringLiteral_DoesNotSatisfyAnEnforcementClaim()
+    {
+        var quote = new string('"', 3);
+        using var repo = TempAdrRepo.Valid();
+        repo.Adr(
+            Sample.DefaultSpec.FileName,
+            Sample.Adr(exemplars: "- `TemplatedTests` pins this.")
+        );
+        repo.Write(
+            "tests/Some.Tests.Meta/Fixture.cs",
+            "namespace Some.Tests.Meta;\n\npublic class RealTests\n{\n"
+                + $"    const string T = {quote}\n        public class TemplatedTests {{ }}\n        {quote};\n}}\n"
+        );
+
+        ExemplarGuards
+            .NamedGuardsResolve(Load(repo), repo.Options())
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("TemplatedTests");
+    }
+
+    /// <summary>
+    /// Cite-back demanded the docstring and the failure message but accepted any line that
+    /// was not a docstring, so a plain comment satisfied it and a guard gutted to zero
+    /// assertions kept its ADR's enforcement claim intact.
+    /// </summary>
+    [Test]
+    public void CiteBack_InAnOrdinaryComment_DoesNotCountAsAFailureMessage()
+    {
+        using var repo = WithClaimedGuard(
+            $$"""
+            namespace Some.Tests.Meta;
+
+            /// <summary>Numbering. See {{Adr0001}}.</summary>
+            public class MigrationsIntegrityTests
+            {
+                // See {{Adr0001}} for why this exists.
+                public void Check() { }
+            }
+            """
+        );
+
+        ExemplarGuards
+            .NamedGuardsCiteBack(Load(repo), repo.Options())
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("only in the docstring");
+    }
+
+    #endregion
+
     /// <summary>A dotted name is prose. The suffix rule must not be what decides it.</summary>
     [Test]
     public void DottedClassName_IsProse_EvenWithTheTestsSuffix()
