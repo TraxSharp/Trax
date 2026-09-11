@@ -3,7 +3,10 @@ namespace Trax.Docs.Tests.Tests;
 [TestFixture]
 public class SdkReferenceBlockTests
 {
-    private static readonly Regex CodeBlock = new(@"^```", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex CodeBlock = new(
+        @"^```",
+        RegexOptions.Compiled | RegexOptions.Multiline
+    );
     private static readonly Regex SdkReferenceHeading = new(
         @"^##\s+SDK Reference\s*$",
         RegexOptions.Compiled | RegexOptions.Multiline
@@ -17,6 +20,11 @@ public class SdkReferenceBlockTests
     {
         "sdk-reference/",
         "migration-guides/",
+        // Neither of these is published to traxsharp.net (sync-docs.sh skips adr/, and
+        // .claude/ is agent tooling), so neither has SDK pages to link to. An ADR's code
+        // is illustrative, and the format spec's code is the ADR template itself.
+        "adr/",
+        ".claude/",
     };
 
     private static readonly HashSet<string> ExemptFiles = new(StringComparer.Ordinal)

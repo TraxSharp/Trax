@@ -17,9 +17,7 @@ internal static class RepoRoot
     /// </summary>
     public static IEnumerable<string> MarkdownFiles()
     {
-        foreach (
-            var file in Directory.EnumerateFiles(Path, "*.md", SearchOption.AllDirectories)
-        )
+        foreach (var file in Directory.EnumerateFiles(Path, "*.md", SearchOption.AllDirectories))
         {
             if (IsExcluded(file))
                 continue;

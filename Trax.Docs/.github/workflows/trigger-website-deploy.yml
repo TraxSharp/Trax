@@ -3,6 +3,13 @@ name: Trigger Website Deploy
 on:
   push:
     branches: [main]
+    # The ADR corpus and the guard that checks it are engineering record, not published
+    # documentation, so a commit touching only those has nothing for the site to rebuild.
+    paths-ignore:
+      - 'adr/**'
+      - 'tools/**'
+      - 'tests/**'
+      - '.github/**'
 
 # The deploy job calls no GitHub API; it needs no token permissions.
 permissions: {}

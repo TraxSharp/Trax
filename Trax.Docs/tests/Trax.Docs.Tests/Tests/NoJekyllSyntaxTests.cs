@@ -9,10 +9,7 @@ public class NoJekyllSyntaxTests
             "{{ site.baseurl }} (Jekyll baseurl template)",
             new Regex(@"\{\{\s*site\.baseurl\s*\}\}", RegexOptions.Compiled)
         ),
-        (
-            "{% link ... %} (Jekyll link tag)",
-            new Regex(@"\{%\s*link\s+", RegexOptions.Compiled)
-        ),
+        ("{% link ... %} (Jekyll link tag)", new Regex(@"\{%\s*link\s+", RegexOptions.Compiled)),
         (
             "{% include ... %} (Jekyll include tag)",
             new Regex(@"\{%\s*include\s+", RegexOptions.Compiled)
@@ -41,9 +38,7 @@ public class NoJekyllSyntaxTests
                 foreach (var (desc, pattern) in BannedPatterns)
                 {
                     if (pattern.IsMatch(lines[i]))
-                        offenders.Add(
-                            $"{rel}:{i + 1}  -> {desc}: {lines[i].Trim()}"
-                        );
+                        offenders.Add($"{rel}:{i + 1}  -> {desc}: {lines[i].Trim()}");
                 }
             }
         }

@@ -1,0 +1,88 @@
+name: 'Trax ADR Guard'
+description: >-
+  Validates the calling repository's architecture decision records: frontmatter, index
+  agreement, lifecycle, exemplars and hygiene. The checks read only the calling repo, so
+  no other Trax repository needs to be present.
+
+inputs:
+  adr-root:
+    description: 'ADR directory, relative to the repository root.'
+    required: false
+    default: 'docs/adr'
+  test-roots:
+    description: 'Comma-separated folders scanned for the guard classes an ADR names as exemplars.'
+    required: false
+    default: 'tests'
+  known-areas:
+    description: >-
+      Comma-separated closed vocabulary for the "areas" key. Required: the vocabulary is
+      closed on purpose, because one that grows freely stops discriminating.
+    required: true
+  known-repos:
+    description: 'Comma-separated closed vocabulary for the "repos" key. Central corpus only.'
+    required: false
+    default: ''
+  require-repos-key:
+    description: >-
+      "true" for the central corpus in Trax.Docs, where "repos" says which repos must obey.
+      Leave false in a repo-local corpus, where the path already says it.
+    required: false
+    default: 'false'
+  census-root:
+    description: >-
+      Folder whose every guard class must be credited to an ADR or opt out with a reason.
+      Empty disables the census.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Setup .NET
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+      with:
+        # The guard builds against Trax.Docs' pinned SDK, not the calling repo's.
+        global-json-file: ${{ github.action_path }}/../../../global.json
+
+    - name: Check ADRs
+      shell: bash
+      # Inputs are bound through the environment rather than interpolated into the script,
+      # so nothing a caller passes can reach the shell as code.
+      env:
+        ADR_ROOT: ${{ inputs.adr-root }}
+        TEST_ROOTS: ${{ inputs.test-roots }}
+        KNOWN_AREAS: ${{ inputs.known-areas }}
+        KNOWN_REPOS: ${{ inputs.known-repos }}
+        REQUIRE_REPOS_KEY: ${{ inputs.require-repos-key }}
+        CENSUS_ROOT: ${{ inputs.census-root }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+
+        guard_repo="$(cd "${ACTION_PATH}/../../.." && pwd)"
+
+        args=(
+          --repo "${GITHUB_WORKSPACE}"
+          --adr-root "${ADR_ROOT}"
+          --test-roots "${TEST_ROOTS}"
+          --known-areas "${KNOWN_AREAS}"
+        )
+
+        # Written as if-blocks, not '[ ... ] && ...': under 'set -e' a false test is a
+        # failing list, and the script would exit instead of skipping the argument.
+        if [ -n "${KNOWN_REPOS}" ]; then
+          args+=(--known-repos "${KNOWN_REPOS}")
+        fi
+
+        if [ -n "${CENSUS_ROOT}" ]; then
+          args+=(--census-root "${CENSUS_ROOT}")
+        fi
+
+        if [ "${REQUIRE_REPOS_KEY}" = "true" ]; then
+          args+=(--require-repos-key)
+        fi
+
+        # Run from the guard's own repository so its global.json and NuGet config apply,
+        # not the calling repository's.
+        cd "${guard_repo}"
+        dotnet run --project tools/Trax.Adr.Guard --configuration Release -- "${args[@]}"

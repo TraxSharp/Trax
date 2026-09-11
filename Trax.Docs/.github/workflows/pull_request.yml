@@ -32,6 +32,12 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Check formatting
+        run: dotnet csharpier check .
+
       - name: Restore
         run: dotnet restore
 
@@ -40,3 +46,29 @@ jobs:
 
       - name: Test
         run: dotnet test --configuration Release --no-build
+
+  # The ADR corpus here binds every repo, so it is checked the same way the repo-local
+  # corpora are: through the composite action this repo also publishes to the others.
+  adr-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check ADRs
+        uses: ./.github/actions/adr-guard
+        with:
+          adr-root: adr
+          known-areas: testing,platform,packaging,ci,naming,data-model,graphql,docs
+          known-repos: core,effect,mediator,scheduler,dashboard,api,cli,samples,docs,website
+          require-repos-key: 'true'
