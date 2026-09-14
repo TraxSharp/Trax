@@ -3,6 +3,16 @@ using PublicApiGenerator;
 
 namespace Trax.Core.Tests.Meta.Tests;
 
+/// <summary>
+/// The published surface of <c>Trax.Core</c> is a committed file, so a change to it lands in
+/// the diff. It is the only baseline in this repo. <c>Trax.Core.Testing</c> also publishes, and
+/// consumers bind to it by subclassing <c>HygieneGuardFixture</c> and reading
+/// <c>ArchitectureGuardOptions</c>, so its surface is unpinned today and a break there would not
+/// show up in a diff. <c>Trax.Core.Analyzers</c> ships as a development dependency.
+///
+/// <para>Enforces <c>Trax.Docs/adr/0010-the-public-api-surface-is-a-committed-baseline.md</c>.</para>
+/// </summary>
+[Property("adr", "Trax.Docs/adr/0010-the-public-api-surface-is-a-committed-baseline.md")]
 [TestFixture]
 public class PublicApiSurfaceTests
 {
@@ -22,6 +32,7 @@ public class PublicApiSurfaceTests
     public static IEnumerable<TestCaseData> Assemblies()
     {
         // Reference a single type from each in-scope assembly so it gets loaded.
+        // Trax.Core only: see the summary for the two published assemblies with no baseline.
         yield return new TestCaseData(typeof(Trax.Core.Exceptions.TrainException).Assembly).SetName(
             "Trax.Core"
         );
@@ -72,7 +83,7 @@ public class PublicApiSurfaceTests
                 $"public API of '{name}' must match the checked-in baseline at "
                     + $"PublicApi/{name}.received.txt. If this change is intentional, update the baseline. "
                     + "Adding, removing, or changing a public type/member is a potential breaking change — "
-                    + "the snapshot makes it deliberate. (CLAUDE.md > Versioning Strategy: a major version "
+                    + "the snapshot makes it deliberate. (Trax.Docs/reference/semantic-release.md > Commit Messages: a major version "
                     + "bump on NuGet is permanent.)"
             );
     }

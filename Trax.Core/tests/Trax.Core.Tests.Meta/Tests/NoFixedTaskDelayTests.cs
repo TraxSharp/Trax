@@ -1,5 +1,11 @@
 namespace Trax.Core.Tests.Meta.Tests;
 
+/// <summary>
+/// Tests wait on the condition that means the work finished, not on a duration.
+///
+/// <para>Enforces <c>Trax.Docs/adr/0006-tests-synchronise-on-a-signal.md</c>.</para>
+/// </summary>
+[Property("adr", "Trax.Docs/adr/0006-tests-synchronise-on-a-signal.md")]
 [TestFixture]
 public class NoFixedTaskDelayTests
 {
@@ -47,7 +53,7 @@ public class NoFixedTaskDelayTests
         offenders
             .Should()
             .BeEmpty(
-                "CLAUDE.md > Determinism forbids fixed-duration Task.Delay / Thread.Sleep in tests "
+                "Trax.Docs/reference/test-conventions.md > Determinism forbids fixed-duration Task.Delay / Thread.Sleep in tests "
                     + "because they race CI scheduling. Synchronise on the actual completion signal "
                     + "(poll a flag, TaskCompletionSource, etc.) with a generous timeout ceiling. "
                     + "If a fixed delay is legitimately required (measuring an interval, verifying a "
