@@ -50,9 +50,10 @@ public static class ExemplarGuards
                 continue;
             }
 
-            // Markers are read from prose only. A fenced example quoting the template is
-            // not this document declaring anything, and reading it as one let an ADR whose
-            // real Exemplars section was silent satisfy the check.
+            // Markers and claims are read from prose only, both here and in Claims below. A
+            // fenced example quoting the template is not this document declaring anything, and
+            // reading it as one let an ADR whose real Exemplars section was silent satisfy the
+            // check.
             var prose = Markdown.WithoutFences(section);
             var claims = Claims(section);
             var unenforced = prose.Contains(UnenforcedMarker, StringComparison.Ordinal);
@@ -96,7 +97,7 @@ public static class ExemplarGuards
             "exemplars/section",
             offenders,
             adrs.Count,
-            "Every ADR ends with '## Exemplars'. Name the guard tests that hold the decision up, "
+            "Every ADR carries '## Exemplars'. Name the guard tests that hold the decision up, "
                 + "or write '"
                 + UnenforcedMarker
                 + " <reason>' and say why nothing can. Both is a "
@@ -239,9 +240,15 @@ public static class ExemplarGuards
     }
 
     /// <summary>
-    /// Bare class names claimed as local enforcement. The "enforced elsewhere" paragraph and
-    /// any fenced example are removed first: a class named there is not a claim on this
-    /// repo, so reading it as one would demand it resolve here and fail every cross-repo ADR.
+    /// Bare class names claimed as local enforcement. Fenced examples go first, then the
+    /// "enforced elsewhere" paragraph: a class named there is not a claim on this repo, so
+    /// reading it as one would demand it resolve here and fail every cross-repo ADR.
+    ///
+    /// <para>
+    /// The order is the whole of it. Stripping the paragraph from the raw section meant a
+    /// fenced example quoting the marker took the prose below it as well, and a real claim
+    /// disappeared: resolution and cite-back both reported nothing to check instead of failing.
+    /// </para>
     ///
     /// <para>
     /// Public because the census must ask the same question. When it asked a slightly
@@ -251,7 +258,7 @@ public static class ExemplarGuards
     /// </summary>
     public static List<string> Claims(string section) =>
         ClaimedGuard
-            .Matches(Markdown.WithoutFences(WithoutParagraph(section, ElsewhereMarker)))
+            .Matches(WithoutParagraph(Markdown.WithoutFences(section), ElsewhereMarker))
             .Select(m => m.Groups["name"].Value)
             .Distinct(StringComparer.Ordinal)
             .ToList();

@@ -1,6 +1,6 @@
 ---
 authors: [Theauxm]
-repos: [effect, mediator, scheduler, dashboard, api]
+repos: [effect, mediator, scheduler, dashboard, api, samples]
 areas: [naming, platform]
 status: accepted
 ---
@@ -48,14 +48,17 @@ interface, and the system stores `typeof(TTrain).FullName!`.
   resolution a consumer sees.
 - [Metadata](/docs/effect/metadata) shows the stored name on the persisted record.
 
-**Enforced elsewhere:** the rule is checked at its source and at five of the six places it
+**Enforced elsewhere:** the rule is checked at its source and at six of the seven places it
 reaches. InterfaceFullNameInvariantTests in Trax.Mediator registers a fake and asserts
 CanonicalName is the interface FullName at the point of registration. Downstream,
 PostgresContextTests in Trax.Mediator covers metadata.Name against a real database;
 TraxSchedulerCoverageGapTests and OperationsServiceTests in Trax.Scheduler cover manifest.Name
 and work_queue.train_name; GraphQLSubscriptionHookTests in Trax.Api covers the hooks including
-the negative case, where an implementation-type name is skipped; and
-SchedulerConfigurationBuilderSettingsTests covers the scheduler exclusions.
+the negative case, where an implementation-type name is skipped;
+SchedulerConfigurationBuilderSettingsTests covers the scheduler exclusions; and in Trax.Samples
+ChatLifecycleHookTests and JobHuntLifecycleHookTests cover the consumer side, where a hook
+keys a dictionary on `typeof(ITrain).FullName!` and looks it up by `metadata.Name`, negative
+case included.
 
 Not covered:
 
@@ -68,4 +71,8 @@ Not covered:
 
 ## Changelog
 
+- **2026-09-11**: Added `samples` to `repos`. Two sample lifecycle hooks key a dictionary on
+  `typeof(I...Train).FullName!` and look it up by `metadata.Name`, which is exactly the
+  comparison the Consequences section warns about, so the decision binds that repo too. The
+  two hook test classes that cover it are now named in Exemplars.
 - **2026-09-11**: Recorded.

@@ -57,10 +57,14 @@ and lives on `main`, because intra-repo project references pick up `Directory.Bu
 **Enforced elsewhere:** `CrossRepoPackageReferenceTests` (no inline `Version` on a
 cross-repo reference) and `DirectoryBuildPropsVersionTests` (the `1.99.99` sentinel) in all
 eight code repos' `Tests.Meta` projects, plus a CI step that rejects any lockfile containing
-the local version. `RepoConventionGuards` ships the same two checks from `Trax.Core.Testing`
-for consumers; no repo here subclasses it, and it covers pinning only, not lockfiles.
-A third, `TraxPinLockstepTests` (one publish family moves together), exists in only five of
-the eight: Effect, Mediator, Scheduler, Dashboard and Api.
+the local version. `Trax.Core.Testing` ships both as `RepoConventionGuards`, a static class of
+checkers, wrapped for consumers by the abstract `RepoConventionGuardFixture`; the only
+subclass in this workspace is Trax.Core's own `RepoConventionGuardFixtureSelfTest`, which runs
+them against a synthetic repo. `CrossRepoPackageVersions` is the stricter of the two: as well
+as rejecting an inline `Version`, it requires a matching `<PackageVersion>` pin in
+`Directory.Packages.props`, so a reference that is centrally unmanaged fails too. Neither
+guard looks at lockfiles. A third check, `TraxPinLockstepTests` (one publish family moves
+together), exists in only five of the eight: Effect, Mediator, Scheduler, Dashboard and Api.
 
 Not covered:
 
@@ -73,4 +77,7 @@ Not covered:
 
 ## Changelog
 
+- **2026-09-11**: Replaced the vacuous "no repo here subclasses it" (`RepoConventionGuards` is
+  static) with what is actually subclassed, and recorded that `CrossRepoPackageVersions` also
+  requires a central `<PackageVersion>` pin.
 - **2026-09-11**: Recorded.

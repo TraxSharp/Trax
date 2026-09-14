@@ -281,8 +281,9 @@ not recognised and the row reads as empty.
 
 Match the rest of the Trax documentation.
 
-- **No em-dashes.** Use commas, periods, or parentheses. Both `NoEmDashesTests` and the
-  guard's hygiene check reject them.
+- **No em-dashes.** Use commas, periods, or parentheses. The guard's hygiene check rejects
+  them wherever the ADR lives. In Trax.Docs every `.md` in the repo is additionally covered by
+  `NoEmDashesTests`, the central ADR corpus included; it cannot see an ADR in another repo.
 - **No filler.** No "ensure", "leverage", "enhance", "it is worth noting". Say what the
   thing does.
 - **Write the title as the decision**, not as a topic: "Schema changes are hand-written

@@ -57,7 +57,7 @@ builder.AddTraxDashboard(options =>
 });
 
 var app = builder.Build();
-app.UseTraxDashboard(routePrefix: "/admin/trax");
+app.UseTraxDashboard();  // the dashboard is served at /trax
 ```
 
 ## What It Registers

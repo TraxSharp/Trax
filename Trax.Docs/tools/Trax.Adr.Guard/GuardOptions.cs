@@ -44,7 +44,18 @@ public sealed record GuardOptions
 
     /// <summary>
     /// Folder whose guard classes must each be credited to an ADR or opt out with a
-    /// reason. Null disables the census.
+    /// reason. Null or empty disables the census.
     /// </summary>
-    public string? CensusRoot { get; init; }
+    /// <remarks>
+    /// Empty and whitespace are normalised to null, because the value is combined with the
+    /// repo root: an empty path combined to the root itself and censused the whole tree,
+    /// which is the opposite of the switch-off the composite action documents. A relative
+    /// path that resolves to the root, "." for instance, still censuses everything; only the
+    /// empty forms are treated as "off".
+    /// </remarks>
+    public string? CensusRoot
+    {
+        get;
+        init => field = string.IsNullOrWhiteSpace(value) ? null : value;
+    }
 }

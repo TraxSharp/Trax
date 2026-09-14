@@ -43,42 +43,47 @@ public class GuardRunnerTests
     }
 
     /// <summary>
-    /// Every check must report that it looked at something. A check that inspected nothing
-    /// is not passing, it is failing to look, and this is what catches a checker whose
-    /// scan silently stopped matching.
+    /// The checks a repo-local corpus runs, as a contract. "More than ten" would still pass
+    /// with eight of them deleted. The census is absent because it only runs when a root is
+    /// passed, and is pinned separately below.
+    /// </summary>
+    private static readonly string[] RepoLocalRoster =
+    [
+        "corpus/discovery",
+        "frontmatter/parseable",
+        "frontmatter/authors",
+        "frontmatter/areas",
+        "frontmatter/repos",
+        "frontmatter/status",
+        "frontmatter/keys",
+        "frontmatter/file-names",
+        "lifecycle/status-section",
+        "lifecycle/supersessions",
+        "lifecycle/changelog",
+        "exemplars/section",
+        "exemplars/guards-resolve",
+        "exemplars/guards-cite-back",
+        "index/exists",
+        "index/areas-table",
+        "index/full-list",
+        "hygiene/no-em-dashes",
+        "hygiene/title",
+    ];
+
+    /// <summary>
+    /// Every check must account for what it looked at: it inspected something, or it said it
+    /// had nothing to inspect. The three that legitimately inspect nothing over this corpus
+    /// are named, because AllowsEmpty switches off the vacuous-pass protection and a fourth
+    /// check quietly claiming it is exactly what this test is here to catch.
     /// </summary>
     [Test]
-    public void Run_ValidCorpus_EveryCheckInspectsSomething()
+    public void Run_ValidCorpus_EveryCheckEitherInspectsSomethingOrSaysItHadNothingToCheck()
     {
         using var repo = TempAdrRepo.Valid();
 
         var results = GuardRunner.Run(repo.Options());
 
-        // The roster is a contract. "more than ten" would still pass with eight deleted.
-        results
-            .Select(r => r.Name)
-            .Should()
-            .BeEquivalentTo([
-                "corpus/discovery",
-                "frontmatter/parseable",
-                "frontmatter/authors",
-                "frontmatter/areas",
-                "frontmatter/repos",
-                "frontmatter/status",
-                "frontmatter/keys",
-                "frontmatter/file-names",
-                "lifecycle/status-section",
-                "lifecycle/supersessions",
-                "lifecycle/changelog",
-                "exemplars/section",
-                "exemplars/guards-resolve",
-                "exemplars/guards-cite-back",
-                "index/exists",
-                "index/areas-table",
-                "index/full-list",
-                "hygiene/no-em-dashes",
-                "hygiene/title",
-            ]);
+        results.Select(r => r.Name).Should().BeEquivalentTo(RepoLocalRoster);
 
         results
             .Where(r => r.InspectedNothing)
@@ -88,6 +93,55 @@ public class GuardRunnerTests
                     + "that legitimately has nothing to check says so with AllowsEmpty instead. "
                     + "See adr/0001-architectural-rules-are-executable-guards.md."
             );
+
+        results
+            .Where(r => r.NothingToCheck)
+            .Select(r => r.Name)
+            .Should()
+            .BeEquivalentTo(
+                [
+                    "lifecycle/supersessions",
+                    "exemplars/guards-resolve",
+                    "exemplars/guards-cite-back",
+                ],
+                "the baseline corpus supersedes nothing and names no local guard, so those "
+                    + "three have nothing to look at. Any other check reaching zero here has "
+                    + "gone vacuous, and its AllowsEmpty would hide it."
+            );
+    }
+
+    /// <summary>
+    /// The census is the one check no roster above can pin, because it is added only when a
+    /// root is passed. Left unpinned, switching it off is a quieter run rather than a failure.
+    /// </summary>
+    [Test]
+    public void Run_WithACensusRoot_AddsTheCensusToTheRoster_AndRunsIt()
+    {
+        using var repo = TempAdrRepo.Valid();
+        repo.Write(
+            "tests/Some.Tests.Meta/MigrationsIntegrityTests.cs",
+            """
+            namespace Some.Tests.Meta;
+
+            /// <summary>
+            /// Migration files are numbered sequentially.
+            ///
+            /// <para>Not ADR-enforcing: it pins a file naming convention nobody weighed an
+            /// alternative for.</para>
+            /// </summary>
+            public class MigrationsIntegrityTests { }
+            """
+        );
+
+        var results = GuardRunner.Run(repo.Options(censusRoot: "tests/Some.Tests.Meta"));
+        var failures = results.Where(r => !r.Passed).ToList();
+
+        results
+            .Select(r => r.Name)
+            .Should()
+            .BeEquivalentTo([.. RepoLocalRoster, "census/classified"]);
+        results.Single(r => r.Name == "census/classified").Inspected.Should().Be(1);
+        failures.Should().BeEmpty(string.Join("\n", failures.SelectMany(f => f.Offenders)));
     }
 
     #endregion

@@ -139,6 +139,34 @@ public class AuditRegressionTests
             .Contain("is named by no ADR and does not opt out");
     }
 
+    /// <summary>
+    /// The "enforced elsewhere" paragraph was stripped from the raw section, before the fences
+    /// were. A fenced example quoting the marker therefore deleted the prose that followed it,
+    /// taking a real claim with it: resolution and cite-back both went quiet rather than red.
+    /// </summary>
+    [Test]
+    public void FencedElsewhereExample_DoesNotDeleteTheClaimBelowIt()
+    {
+        using var repo = TempAdrRepo.Valid();
+        repo.Adr(
+            Sample.DefaultSpec.FileName,
+            Sample.Adr(
+                exemplars: "The third state is written like this:\n\n"
+                    + "```md\n**Enforced elsewhere:** `SomeOtherRepoTests` in every repo.\n```\n\n"
+                    + "- `RealLocalTests` pins it here."
+            )
+        );
+
+        var resolve = ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options());
+
+        resolve.NothingToCheck.Should().BeFalse("the section makes one claim, in prose");
+        resolve
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("RealLocalTests", "a claim under a fenced example is still a claim");
+    }
+
     #region Cite-back demanded two places and checked one
 
     private const string GuardPath = "tests/Some.Tests.Meta/MigrationsIntegrityTests.cs";

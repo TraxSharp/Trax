@@ -119,10 +119,16 @@ public static class CensusGuards
     /// declaration split across lines is seen here exactly as the exemplar checks see it. The
     /// two disagreeing let an uncredited guard escape the census while still satisfying a claim.
     /// </para>
+    ///
+    /// <para>
+    /// The docstring is read from the same scan with comments kept, not from the raw file. A
+    /// <c>///</c> line quoted inside a string literal is text, and reading the raw file let one
+    /// planted in an attribute argument sit directly above a class and opt it out.
+    /// </para>
     /// </summary>
     private static IEnumerable<(string Name, string Docstring)> GuardClasses(string source)
     {
-        var lines = source.Replace("\r\n", "\n").Split('\n');
+        var lines = CSharp.WithoutLiterals(source).Replace("\r\n", "\n").Split('\n');
         var blanked = CSharp.WithoutCommentsAndLiterals(source).Replace("\r\n", "\n");
 
         foreach (Match match in ClassDeclaration.Matches(blanked))

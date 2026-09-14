@@ -206,7 +206,23 @@ public static class CSharp
     ///
     /// <para>Output is the same length as the input, newlines preserved, so line numbers hold.</para>
     /// </remarks>
-    public static string WithoutCommentsAndLiterals(string source)
+    public static string WithoutCommentsAndLiterals(string source) =>
+        Blanked(source, blankComments: true);
+
+    /// <summary>
+    /// The source with string literals blanked and comments left as they are, for the scans
+    /// that have to read a documentation comment.
+    /// </summary>
+    /// <remarks>
+    /// The same pass as <see cref="WithoutCommentsAndLiterals"/>, so the two agree about what
+    /// a literal is and the output is the same length with newlines preserved: a line number
+    /// taken from one indexes the other unchanged. Reading a docstring from the raw text
+    /// instead let a <c>///</c> line quoted inside a literal sit above a class and answer for
+    /// it.
+    /// </remarks>
+    public static string WithoutLiterals(string source) => Blanked(source, blankComments: false);
+
+    private static string Blanked(string source, bool blankComments)
     {
         var output = source.ToCharArray();
         var i = 0;
@@ -224,11 +240,14 @@ public static class CSharp
         {
             var c = source[i];
 
+            // Comments are walked either way. Stepping over one is what stops a quote inside
+            // it from opening a literal and blanking the code that follows.
             if (c == '/' && i + 1 < source.Length && source[i + 1] == '/')
             {
                 var end = source.IndexOf('\n', i);
                 end = end < 0 ? source.Length : end;
-                Blank(i, end);
+                if (blankComments)
+                    Blank(i, end);
                 i = end;
                 continue;
             }
@@ -237,7 +256,8 @@ public static class CSharp
             {
                 var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
                 end = end < 0 ? source.Length : end + 2;
-                Blank(i, end);
+                if (blankComments)
+                    Blank(i, end);
                 i = end;
                 continue;
             }

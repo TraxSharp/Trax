@@ -14,7 +14,7 @@ Configuration class for the Trax.Core Dashboard. Passed via the `configure` call
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `RoutePrefix` | `string` | `"/trax"` | URL prefix where the dashboard is mounted. Set automatically by [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard). |
+| `RoutePrefix` | `string` | `"/trax"` | Prefix used to build the sidebar navigation links. Overwritten by [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard). It does not move the pages, whose routes are compile-time `/trax/...` templates. |
 | `Title` | `string` | `"Trax"` | Title displayed in the dashboard header and browser tab. |
 | `EnvironmentName` | `string` | `""` | The hosting environment name (e.g., "Development", "Production"). Auto-populated by `UseTraxDashboard`. |
 
@@ -26,12 +26,13 @@ builder.AddTraxDashboard(options =>
     options.Title = "My Application - Trains";
 });
 
-app.UseTraxDashboard(routePrefix: "/trains");
-// RoutePrefix is set to "/trains" by UseTraxDashboard
+app.UseTraxDashboard();
+// RoutePrefix stays at "/trax", which is where the pages are
 // EnvironmentName is set automatically from the hosting environment
 ```
 
 ## Remarks
 
-- `RoutePrefix` and `EnvironmentName` are typically set by `UseTraxDashboard`, not in the `configure` callback. Setting them in `configure` will be overwritten.
-- `Title` is the only property typically set by users in the `configure` callback.
+- `RoutePrefix` and `EnvironmentName` are set by `UseTraxDashboard`, not in the `configure` callback. Setting them in `configure` will be overwritten.
+- `RoutePrefix` is read only by the sidebar. Changing it from `/trax` leaves the pages where they are and points every navigation link somewhere that does not exist.
+- `Title` is the only property worth setting in the `configure` callback.

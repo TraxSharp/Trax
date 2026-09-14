@@ -62,8 +62,8 @@ ADR as `effect/0001`.
 
 A sixth step applies where the census is switched on with `--census-root`: every guard class
 under that root must be named by an ADR or carry `Not ADR-enforcing: <reason>` in its own
-docstring. Every repo enables it, over its `Tests.Meta`
-project (`tests/Trax.Docs.Tests` in Trax.Docs).
+docstring. Every repo that runs the guard switches it on over its `Tests.Meta` project
+(`tests/Trax.Docs.Tests` in Trax.Docs).
 
 Step 1 is the only one you have to remember, because no test can detect a decision you
 chose not to record. Everything after it fails the build until it is done.
@@ -80,7 +80,9 @@ dotnet run --project ../Trax.Docs/tools/Trax.Adr.Guard -- \
 ```
 
 The same tool runs in CI through the `adr-guard` composite action, which Trax.Docs
-publishes. Every repo calls it and carries its own `docs/adr/`.
+publishes. The eight code repos each call it over their own `docs/adr/`, and Trax.Docs over
+the central corpus. Trax.Website has no .NET project and no CI workflow, so nothing runs
+there, though `website` is a valid `repos` slug and a central ADR can bind it.
 
 ## Writing it
 
@@ -90,7 +92,9 @@ edit) belongs in a documentation page or next to the code, and goes in `## Exemp
 link. If you find yourself explaining *how*, you are writing the wrong document. If the
 explanation has no home yet, write it there and link it rather than growing the ADR.
 
-**No em-dashes.** `NoEmDashesTests` and the guard's hygiene check both reject them.
+**No em-dashes.** The guard's hygiene check rejects them wherever the ADR lives. In Trax.Docs
+`NoEmDashesTests` covers every `.md` in the repo as well, the central ADR corpus included; in
+the other repos the hygiene check is the only thing that sees an ADR.
 
 ## When your change contradicts one
 

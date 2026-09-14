@@ -72,6 +72,22 @@ public class CensusGuardTests
     }
 
     [Test]
+    public void Census_EmptyRoot_IsDisabled_NotPointedAtTheWholeRepository()
+    {
+        using var repo = WithGuardSource("MigrationsIntegrityTests.cs", PlainGuard);
+
+        var result = CensusGuards.EveryGuardIsClassified(
+            AdrCorpus.Discover(repo.Options()),
+            repo.Options(censusRoot: "")
+        );
+
+        result
+            .Offenders.Should()
+            .BeEmpty("an empty root reads as off, and an unclassified guard sits in this repo");
+        result.NothingToCheck.Should().BeTrue();
+    }
+
+    [Test]
     public void Census_GuardNamedByAnAdr_IsClassified()
     {
         using var repo = WithGuardSource(

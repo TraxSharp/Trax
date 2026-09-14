@@ -20,18 +20,18 @@ current file:
 [Metadata](/docs/effect/metadata#what-gets-persisted)
 ```
 
-Jekyll template syntax is rejected: the link and include tags, the baseurl variable, and
-kramdown inline attribute lists. All three are leftovers from the site's Jekyll era and
-render as literal text now. The lint names them precisely; this page does not spell them out,
-because writing one would trip the lint it describes.
+Jekyll template syntax is rejected: the link tag, the include tag, the baseurl variable, and
+kramdown inline attribute lists. All four are leftovers from the site's Jekyll era and render
+as literal text now. The lint names them precisely; this page does not spell them out, because
+writing one would trip the lint it describes.
 
 Every `/docs/` link must resolve to a real file. A broken one is a 404 on the live site and
 reads exactly like a working link in a diff, which is why it is machine-checked.
 
 ## SDK reference blocks
 
-Every page outside `sdk-reference/` that contains a fenced code block ends with a
-consolidated block listing the SDK methods its examples use:
+A page that contains a fenced code block carries a consolidated block listing the SDK methods
+its examples use:
 
 ```markdown
 ## SDK Reference
@@ -39,9 +39,17 @@ consolidated block listing the SDK methods its examples use:
 > [AddTrax](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
 ```
 
-One block per page, at the bottom, `|` as the separator. Only link methods that have a
-dedicated SDK page. A page whose code is shell commands or SQL rather than SDK calls is
-exempted by name in the lint, with a reason.
+`SdkReferenceBlockTests` checks one thing: that such a page has an `## SDK Reference` heading
+somewhere in it. Position, count, separator and what the links point at are convention, held
+up by review rather than by the lint.
+
+The lint exempts, in order: anything under `sdk-reference/`, `migration-guides/`, `adr/` or
+`.claude/`; thirteen filenames that are tables of contents wherever they appear (`README.md`,
+`index.md`, and the per-area overview pages such as `effect.md`); and thirteen named paths.
+Those last are not a licence to skip the block. Ten are pages whose code is shell commands,
+SQL, directory trees or csproj fragments, with no SDK method to link to, and this page is one
+of them. The other three are tracked tech debt: concept pages that should carry a block and do
+not. A new page is not added to that list.
 
 ## Voice
 

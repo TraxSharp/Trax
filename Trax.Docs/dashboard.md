@@ -207,10 +207,13 @@ builder.Services.AddTraxDashboard(options =>
 });
 ```
 
-The route prefix is set in `UseTraxDashboard`:
+The dashboard is served at `/trax` and the path is not configurable: every page carries a
+compile-time `@page "/trax/..."` route. The `routePrefix` argument to `UseTraxDashboard` only
+builds the sidebar navigation links, so passing anything else leaves the pages in place and
+breaks the links:
 
 ```csharp
-app.UseTraxDashboard("/admin/trax");
+app.UseTraxDashboard();  // served at /trax
 ```
 
 ## Layout

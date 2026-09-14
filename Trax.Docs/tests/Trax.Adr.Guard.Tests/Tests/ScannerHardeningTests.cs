@@ -76,6 +76,37 @@ public class ScannerHardeningTests
             );
     }
 
+    /// <summary>
+    /// A docstring planted inside a raw string literal, as an attribute argument, sat on the
+    /// line directly above the declaration. Declarations were read from the blanked source
+    /// and the docstring from the raw file, so the planted marker opted the class out and the
+    /// census reported it classified.
+    /// </summary>
+    [Test]
+    public void OptOutMarkerInsideAnAttributeLiteral_DoesNotAnswerForTheClassBelowIt()
+    {
+        var quote = new string('"', 3);
+        using var repo = TempAdrRepo.Valid();
+        repo.Write(
+            "tests/Some.Tests.Meta/Planted.cs",
+            "namespace Some.Tests.Meta;\n\n"
+                + $"[System.ComponentModel.Description({quote}\n"
+                + "/// <para>Not ADR-enforcing: it pins a naming convention nobody weighed an "
+                + $"alternative for.</para>{quote})]\n"
+                + "public class PlantedTests { }\n"
+        );
+
+        CensusGuards
+            .EveryGuardIsClassified(Load(repo), repo.Options(censusRoot: "tests/Some.Tests.Meta"))
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain(
+                "'PlantedTests' is named by no ADR",
+                "a marker inside a string literal is not an answer"
+            );
+    }
+
     #endregion
 
     #region Markdown scanning

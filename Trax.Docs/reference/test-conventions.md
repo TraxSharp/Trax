@@ -9,7 +9,7 @@ nav_order: 12
 
 ## Folder layout
 
-Every test project follows the same structure:
+These are the folder names to reach for, not a set every project has:
 
 ```
 Fixtures/           TestSetup base classes or static factories
@@ -20,14 +20,22 @@ UnitTests/          no shared DI container or database
 IntegrationTests/   shared DI container and/or database
 ```
 
-`TestFolderLayoutTests` enforces the top-level shape in each repo.
+A project takes the ones it needs. Most have two or three, and `Fakes/Models/` exists in
+exactly one project workspace-wide. Use a name from this list when it fits; invent one only
+when nothing here describes what the folder holds.
+
+`TestFolderLayoutTests` does not check that list. It checks three things, all of them shape
+rather than content: no folder named `Junk`, `Tmp`, `Temp`, `Misc`, `Old`, `Legacy`, `.vs`,
+`.idea` or `node_modules` directly under a test project; every other top-level folder name in
+PascalCase; and the repo `.gitignore` mentioning `TestResults`. A project whose only folder is
+`Banana/` passes all three.
 
 ## Fixture patterns
 
 | Pattern | When | Where |
 |---|---|---|
 | Abstract base class | Integration tests sharing one `ServiceProvider`. `[OneTimeSetUp]` builds it, `[SetUp]` opens a per-test scope. | `Fixtures/TestSetup.cs` |
-| Static factory | Tests needing several distinct DI configurations. Exposes `CreateTestServiceProvider()` and friends. | `Fixtures/TestSetup.cs` |
+| Static factory | Tests needing several distinct DI configurations. A `static class TestSetup` of `Create<Case>Services()` / `Create<Case>ServiceProvider()` methods, one per configuration. | `Fixtures/TestSetup.cs` |
 | Inline | Unit tests. A `new ServiceCollection()` per test, no `Fixtures/` folder. | in the test |
 
 ## Naming
@@ -71,6 +79,10 @@ enforces this, with marker comments (`determinism:`, `allowed-delay:`, `measurin
 
 ## Skipping
 
-`[Ignore]` is not used. A test that cannot run in the current environment calls
-`Assert.Ignore("...")` after an explicit reachability check, so the skip and its reason appear
-in the run output instead of hiding at declaration time.
+A test that cannot run in the current environment calls `Assert.Ignore("...")` after an
+explicit reachability check, so the skip and its reason appear in the run output instead of
+hiding at declaration time. `NoIgnoreAttributeTests` rejects new `[Ignore]` attributes.
+
+Three survive, each on its exceptions list: the Trax.Api and Trax.Scheduler stress fixtures,
+which gate suites meant to be run by hand, and one Trax.Samples E2E test waiting on an
+unreleased scheduler feature. Do not read them as precedent for a fourth.

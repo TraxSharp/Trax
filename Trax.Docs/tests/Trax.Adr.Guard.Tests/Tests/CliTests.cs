@@ -49,6 +49,23 @@ public class CliTests
         parsed.Options.CensusRoot.Should().Be("tests/Some.Tests.Meta");
     }
 
+    /// <summary>
+    /// An empty path combined to the repo root, so a census meant to be switched off censused
+    /// the whole tree instead. The composite action never passes one, which is why nothing
+    /// caught it.
+    /// </summary>
+    [TestCase("")]
+    [TestCase("/")]
+    public void Parse_EmptyCensusRoot_DisablesTheCensus_RatherThanWideningIt(string value)
+    {
+        using var repo = TempAdrRepo.Valid();
+
+        var parsed = Cli.Parse([.. Minimal(repo.Root), "--census-root", value]);
+
+        parsed.Error.Should().BeNull();
+        parsed.Options!.CensusRoot.Should().BeNull();
+    }
+
     [Test]
     public void Parse_WithoutKnownAreas_IsRejected_BecauseTheVocabularyIsClosedOnPurpose()
     {
