@@ -73,10 +73,10 @@ citation and the name matching, not the message. Whoever trips a guard has to se
 the point of failure, and an attribute never appears in output.
 
 **A claim can still be wrong, only differently.** Attaching the attribute to a test that does
-not enforce the decision is still possible, and this is exactly the defect this session found
-twice: `HostTrackingIntegrationTests` credited to Trax.Effect `0002` while asserting only host
-attribution, and a citation on a Trax.Scheduler class that constructs nothing. The attribute
-makes the link unambiguous, not honest.
+not enforce the decision remains possible, and that defect has already occurred twice in this
+corpus: `HostTrackingIntegrationTests` was credited to Trax.Effect `0002` while asserting only
+host attribution, and a Trax.Scheduler class carried a citation describing a record it never
+constructs. The attribute makes the link unambiguous, not honest.
 
 **Cross-repo claims are unaffected.** A central ADR still cannot name a class in another repo,
 because the guard reads one checkout. `**Enforced elsewhere:**` remains the form for those.
@@ -89,9 +89,9 @@ named class does not exist, it exists but claims no ADR back, or more than one c
 same ADR. `NamedGuardsCiteBack` still requires the ADR in a failure message, and skips the
 attribute line when looking, so tagging a class cannot satisfy the half a reader actually sees.
 
-Not covered: nothing checks that a tagged class enforces the decision it names. The attribute
-makes the link unambiguous, not honest, and this session produced two claims that were
-unambiguous and wrong.
+Not covered: nothing checks that a tagged class enforces the decision it names. Resolution
+proves a class answers to the ADR, not that its assertions have anything to do with it, and
+the two miscredited classes named under Consequences were both unambiguous and wrong.
 
 ## Changelog
 
