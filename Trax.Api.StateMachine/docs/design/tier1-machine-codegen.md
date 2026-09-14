@@ -1,12 +1,12 @@
 # Tier-1 State Machines: codegen, multi-language, and scaffolding
 
-Status: RFC, revised 2026-08-13 (originally 2026-08-07). The architecture below is decided and, for its
-core, built: the C#-source + IR + interpret-at-runtime pipeline ships and has a real product consumer
-(write-to-congress in nwyc). This revision reconciles the original draft with what actually landed. The
-per-section "Status" lines and §11 table are the source of truth for what is built vs. outstanding; the
-short version is that the source inversion, the declarative layer, the IR, full JCS, and the migration
-golden are built, while the oracle flip, the `trax machine` CLI, probe generation, and the trust-boundary
-enforcement are not.
+Status: RFC, revised 2026-09-11 (originally 2026-08-07, revised 2026-08-13). The architecture below is
+decided and, for its core, built: the C#-source + IR + interpret-at-runtime pipeline ships and has a real
+product consumer (write-to-congress in nwyc). This revision reconciles the draft with what actually landed.
+The per-section "Status" lines and §11 table are the source of truth for what is built vs. outstanding; the
+short version is that the source inversion, the declarative layer, the IR, full JCS, the migration golden and
+the `trax machine` CLI are built, while the oracle flip, probe generation, and the trust-boundary enforcement
+are not.
 
 ## Why this exists
 
@@ -20,11 +20,11 @@ write-to-congress as the proof of concept. That surfaces a tension:
    be impossible, not merely discouraged.
 
 The original baseline sat at the fully hand-written extreme: two hand-written twins, hand-authored
-differential contexts, structure restated in `machine.json`. That maximized friction and drift surface. As
-of 2026-08-13 that baseline is mostly retired. `turnstile` and the product machine `write-to-congress` are
-on the generated pipeline (declarative C# source, exported IR, an interpreted TypeScript twin generated from
-the IR); `checkout` is the last machine still on the old hand-written twin, pending the Increment E cleanup
-(phase0-codegen-scope.md §0). This document describes the Tier-1 architecture that resolves the tension:
+differential contexts, structure restated in `machine.json`. That maximized friction and drift surface. That
+baseline is now retired. `turnstile`, `checkout` and the product machine `write-to-congress` are all on the
+generated pipeline (declarative C# source, exported IR, an interpreted TypeScript twin generated from the IR),
+and `machine.json` is deleted everywhere (phase0-codegen-scope.md §5). This document describes the Tier-1
+architecture that resolves the tension:
 generate everything that is data, interpret the declarative logic from that same data, hand-write only the
 rare genuinely-custom behavior, and make every category of drift a build failure or a test failure.
 
@@ -60,10 +60,10 @@ The load-bearing decisions, so they are not buried under the caveats that follow
    TypeScript engine source at a pinned upstream commit and checks the generated twin, IR, and corpus into
    its own tree. This is the decided model, not an interim hack.
 
-What remains unbuilt, so it is not lost under the "done" list: the oracle flip to C# (§7), the `trax machine`
-CLI that replaces the fragile regen-via-golden-tests script (§9), probe generation (§7), and the
-trust-boundary enforcement (`serverFilled` field-strip + reachability check in `Rehydrate`, §2). The last is
-a *security* control, so it degrades to a vulnerability, not a failed build (§12).
+What remains unbuilt, so it is not lost under the "done" list: the oracle flip to C# (§7), probe generation
+(§7), and the trust-boundary enforcement (`serverFilled` field-strip + reachability check in `Rehydrate`, §2).
+The last is a *security* control, so it degrades to a vulnerability, not a failed build (§12). The `trax
+machine` CLI that replaces the fragile regen-via-golden-tests script (§9) has since shipped.
 
 ## 1. Tiering: what Tier 1 is, and what it is not
 
@@ -380,8 +380,11 @@ at runtime* (§2), the generators emit far less than the original draft assumed:
 factory, not logic.** Per language:
 
 - state/trigger types (unions/enums) and the context/spec types (`generateContextTypes`)
-- a typed factory that embeds the IR and constructs the running machine via `machineFromIr(ir)`
-  (`generateMachineFactory`), wrapped in the typed facade
+- a typed factory (`generateMachineFactory`) that embeds the IR and exports as `irHash` the SHA-256 of the
+  `*.ir.json` file with trailing newlines stripped, which is what the C# side hashes too. It is not the hash
+  of the embedded constant: that has the `differential` block stripped and is re-serialized. Used for the
+  version-skew handshake, and constructs the running machine via `typedMachineFromIr(ir, irHash)`, which wraps
+  `machineFromIr` in the typed facade
 - stubs/interfaces for any *named custom handlers* the machine binds (so a missing one is a compile error) --
   currently unexercised, since no machine has one
 - the differential `replay` entry point
@@ -392,11 +395,11 @@ There is **no per-machine C# artifact to generate.** C# is the source and runs t
 via `RuleEvaluator`, so the original "C# generator target" is subsumed by interpret-at-runtime. The generator
 set is: the TypeScript twin today, and one target per future frontend language.
 
-The starting precedent, `tools/state-machine-codegen/generate.mjs`, is the *old* pipeline: a Node script that
-read the hand-authored `machine.json` and emitted TypeScript structure with a `--check` gate. It still exists
-for the unmigrated `checkout`, but the migrated machines do not use it: they use `generateContextTypes` /
-`generateMachineFactory` (in `src/rules/generateTypes.ts`) driven off the IR. Retiring `generate.mjs` and
-`machine.json` for `checkout` is the Increment E cleanup.
+The starting precedent, `tools/state-machine-codegen/generate.mjs`, *was* the old pipeline: a Node script that
+read the hand-authored `machine.json` and emitted TypeScript structure with a `--check` gate. Increment E
+deleted both, along with the `*.g.ts` files they produced. Every machine now goes through
+`generateContextTypes` / `generateMachineFactory` (in `src/rules/generateTypes.ts`) driven off the IR, invoked
+through the thin `tools/generate-twin.mjs` entrypoint the CLI shells out to.
 
 ### Round-trip: how hand-written logic attaches to generated code
 
@@ -529,34 +532,42 @@ Adding or changing a persisted context field breaks existing stored drafts unles
   `turnstile` v2 migration golden (`machines/turnstile/migration.json`, driven by `TestTurnstileV2`) exist and
   stay green; deferral means not building *more* migration machinery, not removing what exists.
 
-## 9. The CLI (Trax.Cli) -- the near-term priority
+## 9. The CLI (Trax.Cli) -- shipped
 
-Trax.Cli is already a NuGet `dotnet tool` that turns a schema into generated Trax code (GraphQL/OpenAPI ->
-trains, via `GenerateCommand` / `TraxProjectGenerator` / a code renderer). A `machine` command group is the
-same architecture applied to state machines, and it is the **highest-value unbuilt item**: it replaces the
-fragile regen-via-golden-tests script (§6) that a real team is fighting today, so it is scheduled *before* the
-oracle flip (§12).
+Trax.Cli is a NuGet `dotnet tool` that turns a schema into generated Trax code (GraphQL/OpenAPI -> trains, via
+`GenerateCommand` / `TraxProjectGenerator` / a code renderer). The `machine` command group is the same
+architecture applied to state machines, and it **shipped** (`Trax.Cli/src/Trax.Cli/Commands/MachineCommand.cs`,
+with `Machines/{MachineGenerator,MachineLoader,NodeRunner,MachineScaffolder}.cs` behind it), ahead of the
+oracle flip as planned, because it replaced the fragile regen-via-golden-tests script (§6) a real team was
+fighting. Every machine in this repo is now regenerated through it.
 
 - `trax machine new <name>` — scaffold a new Tier-1 machine: the C# source skeleton (states/triggers/context
   + a couple of transitions), the differential wiring, and the mutation registration. The common case becomes
   a ~30-second scaffold, and consistency is by construction.
-- `trax machine generate` — export the IR from the C# source and regenerate every target language, running the
-  exporter and generators **directly** (not through a test runner), atomically (§6). It is a C# orchestrator
-  that crosses the runtime boundary explicitly: the **IR export is in-process C#** (`IrExporter.Export`), while
-  the **twin generation and the pre-flip corpus shell out to Node** (thin `tools/*.mjs` entrypoints that call
-  the TypeScript `generateContextTypes` / `generateMachineFactory` / `enumerate` against the engine `src`),
-  because after interpret-at-runtime the only generators are TypeScript. Consequence: the tool needs `node` on
-  `PATH` for the twin/corpus steps. Must take an output root per artifact (the IR/corpus and the twin live in
-  different trees, §4), must run against an arbitrary engine `src` (the consumer vendors it, §4), and must take
-  an **import style** option so the twin's imports collapse to the `@trax/state-machine` specifier without the
-  hard-coded string `.replace()` the codegen test does now. phase0 §5 has the full execution model and the
-  fallback (twin generation left in the consumer's Node toolchain, CLI owns only IR + `check`).
-- `trax machine check` — `--check` drift across the IR, the generated outputs, and the golden corpus (CI).
+- `trax machine generate --assembly <file> [--machine <name>]`: export the IR and regenerate every target
+  language, running the exporter and generators **directly** (not through a test runner), atomically (§6). It
+  is a C# orchestrator that crosses the runtime boundary explicitly: the **IR export is in-process C#**
+  (`IMachine.ExportIr()`, on a machine reflected out of the already-compiled assembly, so the CLI compiles
+  nothing), while the **twin generation and the pre-flip corpus shell out to Node** (the thin
+  `tools/generate-twin.mjs` / `tools/generate-corpus.mjs` entrypoints, which bundle the engine `src` and call
+  the TypeScript `generateContextTypes` / `generateMachineFactory` / `enumerate`), because after
+  interpret-at-runtime the only generators are TypeScript. It takes an output root per artifact (`--ir-out`,
+  `--twin-out`, `--corpus-out`, since the IR/corpus and the twin live in different trees, §4), runs against an
+  arbitrary engine `src` (`--engine-src`, because the consumer vendors it, §4), and takes an `--import-style`
+  (plus `--specifier`) so the twin's imports collapse to the `@trax/state-machine` specifier without the
+  hard-coded string `.replace()` the codegen test used to do; `--tools-dir` and `--node` locate the entrypoints
+  and the interpreter. **Consequence:** the twin and corpus steps need `node` on `PATH` *and* an engine
+  checkout with its `node_modules` installed, because the entrypoints bundle the engine `src` with esbuild and
+  esbuild is not a direct dependency of the engine package (it arrives transitively through `tsup`/`vitest`).
+  A missing esbuild is a hard error naming that fix, not a silent fall back to a stale `dist`. The IR-only path
+  needs neither. phase0 §5 has the full execution model.
+- `trax machine check`: `--check` drift across the IR, the generated outputs, and the golden corpus (CI), on
+  the same code path as `generate`, so the two cannot disagree.
 - `trax machine migrate` — diff the context schema and scaffold a forward migration (when migrations are wired
   into the IR, §8; `MigrateFrom` already exists at the engine level).
 
-phase0-codegen-scope.md §5 (Increment E) is the concrete build plan, grounded in exactly what
-`regen-state-machine.sh` does today and the frictions it exposes.
+phase0-codegen-scope.md §5 (Increment E) is the build plan it was built from, grounded in exactly what
+`regen-state-machine.sh` did and the frictions it exposed.
 
 ## 10. Persistence and runtime (unchanged)
 
@@ -577,7 +588,7 @@ and several guards are still unexercised or unbuilt. Read it as current-state, n
 
 | Drift | Guard | Failure mode | Status |
 |-------|-------|--------------|--------|
-| Structure (state/trigger in one runtime, not another) | generated from the IR + interpreted | build fails (`--check`) / compile error | built for migrated machines (turnstile, write-to-congress); no C# artifact (interpret-at-runtime) |
+| Structure (state/trigger in one runtime, not another) | generated from the IR + interpreted | build fails (`--check`) / compile error | built for every machine (turnstile, checkout, write-to-congress); no C# artifact (interpret-at-runtime) |
 | Data type (field is `string` here, `int` there) | generated types + schema validators | compile error | built (context/spec types generated) |
 | Declarative guard (a boundary differs) | interpreted from the same IR data both sides | replay divergence, or compile error | built (one rule vocabulary, two interpreters) |
 | Custom guard/reducer logic | differential replay | test fails, names the case | replay + corpus built; TS is the oracle; **unexercised** (no custom handler exists yet) |
@@ -597,8 +608,9 @@ security rows do not get to be tests at all (§2). Naming the gaps is the point.
 
 ## 12. Rollout (phased, learning-gated)
 
-The generator was grown from real machines, not built up front. Phase 0 is largely done; the remaining order
-puts the developer-facing CLI ahead of the oracle flip, because the CLI is what a real team is fighting now.
+The generator was grown from real machines, not built up front. Phases 0 through 2 are done bar two
+carve-outs, `structure.json` and `trax machine migrate`, both noted below; the developer-facing CLI went
+ahead of the oracle flip, which is now the next phase.
 
 **Prerequisites, revisited:**
 
@@ -629,11 +641,12 @@ oracle flip (phase0 Increment D).
   write-to-congress, a genuine Tier-1 flow (8 states, an effect-bound send, a guided/unguided branch), was
   built through the generator end to end and is the first product consumer. It surfaced the deploy-topology and
   CLI requirements folded into §4 and §9.
-- **Phase 2 — the `trax machine` CLI (phase0 Increment E) (§9).** Replace `regen-state-machine.sh` with real
-  `new`/`generate`/`check`/`migrate` commands that run the exporter and generators directly, take per-artifact
-  output roots and an import-style option, and run against a vendored engine `src`. Also re-author `checkout`
-  declaratively through the pipeline and retire `machine.json` + `generate.mjs`. **Scheduled before the oracle
-  flip** because it removes friction a real team hits on every machine edit today.
+- **Phase 2: the `trax machine` CLI (phase0 Increment E) (§9). (Done.)** `regen-state-machine.sh` is replaced
+  by real `new`/`generate`/`check` commands that run the exporter and generators directly, take
+  per-artifact output roots and an import-style option, and run against a vendored engine `src`. `checkout` was
+  re-authored declaratively through the pipeline in the same increment, and `machine.json` + `generate.mjs` are
+  deleted. It landed **before the oracle flip**, as scheduled, because it removed friction a real team hit on
+  every machine edit. One cleanup item did not land: `structure.json` is still committed and drift-checked.
 - **Phase 3 — the oracle flip (phase0 Increment D) (§7).** Port `enumerate()` (the BFS corpus generator) to
   C#, so C# produces the golden and every runtime replays it. The engines are already proven-equivalent, so
   this is about which side owns the golden. Also remove the upstream `Assert.Ignore`-on-missing behavior so
@@ -667,13 +680,14 @@ decided and, for its core, built. What is genuinely still open:
 
 - **Deploy topology (§4).** Decided: vendor the engine source at a pinned commit, check the IR/twin/corpus
   into the consuming repo. This also closes the §7 CI-skip problem on the consumer side.
-- **`machine.json`'s fate.** Retired for migrated machines: the IR is the sole spec, exported from C#.
-  `machine.json` survives only for the unmigrated `checkout`, pending Phase 2 cleanup.
+- **`machine.json`'s fate.** Retired: the IR is the sole spec, exported from C#, and `machine.json` is deleted
+  for every machine.
 - **Generator home and execution boundary.** The home is `Trax.Cli` (§9), not the node `generate.mjs`. The
   C#/Node boundary is resolved too: the CLI exports the IR in-process (C#) and shells thin `node` entrypoints
-  for the TypeScript twin/corpus generators (phase0 §5). The one residual unknown is whether bundling a Node
-  dependency into the dotnet tool is painful enough to prefer the split-toolchain fallback; decided when the
-  CLI is built.
+  for the TypeScript twin/corpus generators (phase0 §5). The residual unknown, whether the Node dependency in
+  the dotnet tool would prove painful enough to prefer the split-toolchain fallback, is **answered: the
+  single-orchestrator model shipped and the fallback was not needed.** Its price is stated in §9: `node` on
+  `PATH` and an engine checkout with `node_modules` installed, for the twin and corpus steps only.
 
 ## 14. Risks and tradeoffs
 

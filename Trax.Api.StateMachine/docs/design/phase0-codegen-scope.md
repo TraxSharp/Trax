@@ -1,7 +1,9 @@
 # Phase 0 codegen: scope and sequencing
 
-Status: Implementation in progress (2026-08-11). Increments A and B are built and proven; see
-**§0 Implementation status** below before reading the plan. Companion to
+Status: Increments A, B and E are built and shipped. Still open: Increment D (the oracle flip), retiring
+the derived `structure.json` golden, and `trax machine migrate`, which is registered but unimplemented. Last
+reconciled against the code 2026-09-11. §0 below is the original handoff, kept as a record of why the
+architecture diverged from the plan, and annotated where it has been overtaken. Companion to
 [tier1-machine-codegen.md](tier1-machine-codegen.md); this turns that RFC's §3/§6 (author in C#, export a
 neutral IR, generate the rest) into a concrete, code-grounded plan.
 
@@ -10,19 +12,29 @@ neutral IR, generate the rest) into a concrete, code-grounded plan.
 an IR `differential` block, and the harness enumerates off the IR. This supersedes part of Decision A (§6) —
 `machine.json` is no longer even the differential's home. (2) nwyc's **write-to-congress** adopted the whole
 pipeline as the first *product* consumer (declarative machine, generated twin, C#-authored differential,
-`AddStateMachines` on Trax.Effect 1.49.0), and its `machine.json` is **deleted**. Upstream `turnstile` /
-`checkout` `machine.json` still coexist here, pending the Increment E cleanup. The concrete frictions nwyc
-surfaced are folded into Increment E (§5).
+`AddStateMachines` on Trax.Effect 1.49.0), and its `machine.json` is **deleted**. The concrete frictions nwyc
+surfaced were folded into Increment E (§5).
+
+**Update (2026-09-11). Increment E has shipped.** The `trax machine` CLI is merged in Trax.Cli
+(`Commands/MachineCommand.cs`, with `Machines/{MachineGenerator,MachineLoader,NodeRunner,MachineScaffolder}.cs`
+behind it), `checkout` is re-authored declaratively and generated through it, and both `machine.json` files,
+`generate.mjs`, the orphaned `*.g.ts` and the codegen drift test are deleted. Two things from this plan are
+still open: **Increment D** (the oracle flip) and retiring the derived `structure.json` golden. Read the plan
+below with that in mind: the sections dated 2026-08-11 describe the state at the time they were written.
 
 This scopes the one remaining Phase-0 prerequisite from the RFC, the **round-trip codegen mechanism**. In
 practice that is the whole source-and-oracle inversion: a declarative C# authoring surface, the IR, the
 C#->IR exporter, the generators, the round-trip attachment, and the oracle flip. JCS canonicalization (§4 of
 the RFC) and the migration golden (§8) are already built.
 
-## 0. Implementation status (handoff, 2026-08-11)
+## 0. Implementation status (handoff, 2026-08-11), historical
 
-Read this first. Nothing below is committed to git; it lives in the working trees of `Trax.Effect` and
-`Trax.Api.StateMachine`. All tests pass: **C# state-machine suite 178, TypeScript suite 110**, zero warnings,
+This is the Increment A/B handoff from 2026-08-11, kept because it records why the built architecture diverged
+from the plan. It is **not current state**: everything it calls uncommitted has since been committed and merged
+(the Increment A and B artifacts are `3add783` and `66254bb` and the commits around them), and Increment E has
+shipped since. Read it against the 2026-09-11 update above.
+
+At the time of writing, all tests passed: **C# state-machine suite 178, TypeScript suite 110**, zero warnings,
 csharpier + prettier clean, `tsc --noEmit` clean.
 
 ### The architecture that emerged (differs from the plan in one big way)
@@ -59,7 +71,8 @@ In `Trax.Effect/src/Trax.Effect.StateMachine/Rules/`:
 ### What is built (Increment B: IR -> running + typed TypeScript)
 
 In `Trax.Api.StateMachine/src/rules/`:
-- `interpreter.ts` (the TS mirror of the C# evaluators; 24 tests mirror the C# suite case-for-case).
+- `interpreter.ts` (the TS mirror of the C# evaluators; 27 cases, recounted 2026-09-11, mirror the C# suite
+  case-for-case).
 - `irMachine.ts` (`machineFromIr(ir)` builds a runnable `MachineDefinition` from the IR).
 - `generateTypes.ts` (`generateContextTypes` -> per-state/-trigger `type` aliases + a `Spec`;
   `generateMachineFactory` -> a self-contained typed factory that embeds the IR).
@@ -72,28 +85,28 @@ In `Trax.Api.StateMachine/src/rules/`:
 - Proof: `irMachine.test.ts` shows the IR-driven TS machine reproduces the differential corpus, so
   **IR-driven TS == hand-written twin == C#**.
 
-### What remains
+### What remained at the handoff, and where it stands now
 
-Ordered by priority (E now goes before D; see §5 and Decision D):
-- **Increment E (the `trax machine` CLI + checkout):** replace `regen-state-machine.sh` with real
-  `new`/`generate`/`check`/`migrate` commands that run the exporter/generators directly (per-artifact output
-  roots, an arbitrary engine `src`, an import-style option), and re-author checkout declaratively (multi-key
-  context, count guards, an effect) through the whole pipeline. This is the friction a real team hits on every
-  machine edit today, so it is scheduled first. Detailed in §5.
-- **Increment D (oracle flip to C#):** port `enumerate()` (the BFS corpus generator in `src/differential.ts`)
-  to C#, so C# produces the golden and every runtime replays it. The engines are already proven-equivalent, so
-  this is about which side owns the golden, not correctness. Oracle-internal; nobody is blocked on it, so it
-  follows E.
-- **Cleanup:** the OLD pipeline still coexists. `machine.json` + `generate.mjs` + `turnstile.g.ts` +
-  `structure.json` are still present and drift-checked; the migrated `turnstile.ts` no longer imports
-  `turnstile.g.ts` (it is orphaned but valid). Deciding whether the IR replaces `machine.json` for real (per
-  Decision A) and retiring the old node generator is outstanding. `checkout` still uses the old hand-written
-  twin.
+Ordered by priority as it was written then (E before D; see §5 and Decision D):
+- **Increment E (the `trax machine` CLI + checkout). SHIPPED (2026-09-11).** Real
+  `new`/`generate`/`check` commands replaced `regen-state-machine.sh`, running the exporter and
+  generators directly with per-artifact output roots, an arbitrary engine `src` and an import-style option; and
+  `checkout` was re-authored declaratively (multi-key context, count guards, an effect) through the whole
+  pipeline. Detailed in §5.
+- **Increment D (oracle flip to C#). STILL OPEN.** Port `enumerate()` (the BFS corpus generator in
+  `src/differential.ts`) to C#, so C# produces the golden and every runtime replays it. The engines are already
+  proven-equivalent, so this is about which side owns the golden, not correctness. Oracle-internal; nobody is
+  blocked on it. This is the one increment left.
+- **Cleanup. MOSTLY DONE, one item left.** `machine.json` (both machines), `generate.mjs`, the orphaned
+  `turnstile.g.ts` / `checkout.g.ts` and `src/codegen-drift.test.ts` are deleted, and Decision A is settled in
+  the IR's favor. `structure.json` was **not** retired: it is still committed per machine and still
+  drift-checked against `describe()` (`src/fixtures.ts`, and the two `roundtrip.test.ts` suites). Retiring it,
+  or regenerating it from the IR, is the only piece of this cleanup still outstanding.
 
 ### Handoff gotchas
 
-- **Nothing is committed.** When ready, branch per repo (`./branch-and-push.sh`) across `Trax.Effect`,
-  `Trax.Api.StateMachine`, and (for the rename) `Trax.Samples` + `Trax.Docs`. Use `fix:`/`feat:` types.
+- **Nothing is committed** *(done since: the work was branched per repo with `./branch-and-push.sh` across
+  `Trax.Effect`, `Trax.Api.StateMachine`, and, for the rename, `Trax.Samples` + `Trax.Docs`, and merged)*.
 - **The sample needs a re-pack.** `Trax.Samples` consumes `Trax.Effect` by package; after C# changes run
   `./pack-local.sh` then `rm -rf ~/.nuget/packages/trax.*/1.99.99`. Revert any pack-induced
   `packages.lock.json` changes before committing (they are pollution, deps did not change).
@@ -103,9 +116,13 @@ Ordered by priority (E now goes before D; see §5 and Decision D):
 - **Run the suites:** C# `dotnet test Trax.Effect/tests/Trax.Effect.StateMachine.Tests/...`; TS
   `cd Trax.Api.StateMachine && npx vitest run` and `npx tsc --noEmit`.
 
-## 1. Current reality (grounded)
+## 1. The baseline this plan started from (grounded, 2026-08-11)
 
-The two runtimes sit at opposite ends of "how much is data", and that asymmetry is the whole story.
+Everything this section describes in the present tense is gone: `machine.json`, `tools/state-machine-codegen/
+generate.mjs` and the hand-written twins were all deleted by Increment E. It is kept because the asymmetry it
+names is the gap the whole plan exists to close.
+
+The two runtimes sat at opposite ends of "how much is data", and that asymmetry is the whole story.
 
 **The TypeScript side is already IR-shaped.** `machines/<m>/machine.json` is a hand-authored spec carrying:
 identity, structure (states/triggers/transitions), guard/reduce **bound by name** (`"guard": "acceptedCoin"`),
@@ -169,9 +186,12 @@ design (schema evolution is not vocabulary-shaped).
 The risk to manage (RFC §2): keep the vocabulary *small*. Let it grow to cover everything and it becomes the
 serialized-logic DSL the whole approach exists to avoid.
 
-## 4. Components
+## 4. Components (assessed 2026-08-11)
 
-Six pieces. For each: what exists, what is new, and the hard part.
+Six pieces. For each: what existed then, what was new, and the hard part. `machine.json` and `generate.mjs`,
+named below as what exists, are deleted now. Increments A, B and E built pieces 1, 2, 3 and 5; piece 4's C#
+generator target was subsumed rather than built, because the IR is interpreted at run time (see below); and
+piece 6 is Increment D.
 
 1. **The IR (schema + version).** *Exists:* `machine.json` is an informal, IR-shaped spec that already drives
    TS. *New:* a versioned JSON Schema formalizing it, plus the declarative layer (context schema for every
@@ -193,8 +213,9 @@ Six pieces. For each: what exists, what is new, and the hard part.
 4. **The generators (IR -> code).** *Exists:* `generate.mjs` emits TS structure + a `--check` drift gate.
    *New:* generalize it to consume the IR and emit, per language: the context type, the shape + declarative
    validators (TS can use valibot, already a dependency), custom-handler interface stubs, and a differential
-   replay entry; then add a **C# generator target** (unbuilt, the `csOut` the current generator leaves a stub
-   for). *Hard part:* the C# target is net-new; and validators-from-schema is new on both sides.
+   replay entry; then add a **C# generator target** (the `csOut` the generator of the day left a stub for).
+   *Hard part:* the C# target is net-new; and validators-from-schema is new on both sides. **Not built, and
+   will not be:** C# is the source and interprets the IR directly, so there is nothing to generate for it.
 
 5. **The round-trip attachment.** *Exists:* the TS name-binding registry (`guards[name]`) is a working
    precedent; C# has no equivalent (anonymous). *New:* the RFC §6 contract, generated interface of named
@@ -243,9 +264,11 @@ Increments A and B keep TS as the oracle, so early work does not destabilize the
 sequenced ahead of D; the flip (D) lands once the CLI and checkout are solid, and it does not block E because
 E is generator/authoring work that is oracle-agnostic.
 
-### Increment E in detail: the `trax machine` CLI
+### Increment E in detail: the `trax machine` CLI (SHIPPED 2026-09-11)
 
-**What it replaces.** nwyc regenerates every derived artifact with `scripts/regen-state-machine.sh` (invoked
+This is the plan the CLI was built from, updated to the surface that actually shipped.
+
+**What it replaced.** nwyc regenerated every derived artifact with `scripts/regen-state-machine.sh` (invoked
 as `pnpm regen:state-machine`), a three-step chain of env-var-gated golden tests run in strict order:
 
 ```
@@ -270,10 +293,13 @@ requirements, not incidental:
 
 - `trax machine new <name>` — scaffold the C# source skeleton (states/triggers/context + a couple of
   transitions), the effect stub if `--with-effect`, and the differential wiring. Consistency by construction.
-- `trax machine generate <MachineType|assembly> [--ir-out …] [--twin-out …] [--corpus-out …] [--engine-src …]
-  [--import-style …]` — build the machine, `IrExporter.Export` it, then emit the IR, the twin
-  (`generateContextTypes` + `generateMachineFactory`), and (post-D) the corpus, atomically (write to a staging
-  dir and swap; §RFC 6). Idempotent: a second run with no source change produces no diff.
+- `trax machine generate --assembly <file> [--machine <name>] [--ir-out …] [--twin-out …] [--corpus-out …]
+  [--engine-src …] [--import-style …] [--specifier …] [--tools-dir …] [--node …]`: reflect the machine out
+  of an already-compiled assembly, `ExportIr()` it, then emit the IR, the twin (`generateContextTypes` +
+  `generateMachineFactory`) and the corpus, atomically (write to a staging dir and swap; §RFC 6). Idempotent: a
+  second run with no source change produces no diff. `--assembly` is required; `--machine` is needed only when
+  the assembly holds more than one machine. The corpus does **not** wait for D: pre-D it comes from the
+  TypeScript `enumerate` through `tools/generate-corpus.mjs` (see the execution model below).
 - `trax machine check <…same roots…>` — regenerate to a temp location and diff against the committed
   artifacts; non-zero exit on drift. This is the CI gate, and it is the *same* code path as `generate`, so
   they cannot disagree (the property the golden-test chain gets today by construction).
@@ -287,32 +313,37 @@ export is C# (`IrExporter.Export`), but the twin generators (`generateContextTyp
 and the pre-D corpus enumerator (`enumerate`) are TypeScript, in the engine's `src/rules/`. So `generate` is a
 C# **orchestrator** that crosses the runtime boundary explicitly:
 
-- **IR — in-process C#.** The CLI references `Trax.Effect.StateMachine`, builds the machine, calls
-  `IrExporter.Export`, and writes `<machine>.ir.json` to `--ir-out`. No Node involved.
-- **Twin (and pre-D corpus) — shell out to Node.** The CLI spawns `node` against a thin entrypoint shipped in
-  the engine repo (`tools/generate-twin.mjs`, sibling to the existing `generate.mjs`) that imports the TS
-  generators from `--engine-src`, and writes the `.g.ts` files to `--twin-out` for the given `--ir` and
-  `--import-style`; a `tools/generate-corpus.mjs` does the same with `enumerate` / `serializeCorpus` for
-  `--corpus-out`. This *is* the "run the generators directly, not through a test runner" requirement: it
-  replaces nwyc's `npx jest … .codegen.test` invocation with a direct `node tools/generate-twin.mjs …`, and it
-  removes the `.replace()` import hack because the entrypoint passes `--import-style` into
-  `generateMachineFactory`'s new options arg. **New deliverables:** the two `tools/*.mjs` entrypoints, plus the
-  options arg on `generateMachineFactory`.
+- **IR, in-process C#.** The CLI references `Trax.Effect.StateMachine.Persistence`, loads the consumer's
+  already-compiled assembly, reflects the machine out of it (`MachineLoader`), calls `IMachine.ExportIr()`
+  (which is `IrExporter.Export` on the built machine), and writes `<machine>.ir.json` to `--ir-out`. It
+  compiles nothing, and no Node is involved.
+- **Twin (and pre-D corpus), shell out to Node.** The CLI spawns `node` against a thin entrypoint shipped in
+  the engine repo (`tools/generate-twin.mjs`) that bundles the TS generators from `--engine-src` and writes the
+  `.g.ts` files to `--twin-out` for the given `--ir` and `--import-style`; `tools/generate-corpus.mjs` does the
+  same with `enumerate` / `serializeCorpus` for `--corpus-out`. This *is* the "run the generators directly, not
+  through a test runner" requirement: it replaced nwyc's `npx jest … .codegen.test` invocation with a direct
+  `node tools/generate-twin.mjs …`, and it removed the `.replace()` import hack because the entrypoint passes
+  `--import-style` into `generateMachineFactory`'s options arg. **Delivered:** the two `tools/*.mjs`
+  entrypoints and the shared `tools/lib/`, plus the options arg on `generateMachineFactory`.
 - **Consequence.** The `dotnet tool` needs `node` on `PATH` for the twin/corpus steps (the IR-only path and a
-  `check` of the IR do not). Acceptable: the artifacts are produced by Node today, and Trax.Cli already ships a
-  `package.json`, so Node-in-the-repo has precedent.
-- **Alternative (fallback, not the default).** Keep twin generation entirely in the consumer's Node toolchain
-  (a `package.json` script running the same `tools/generate-twin.mjs`) and let the C# CLI own only the IR
-  export and `check`. This drops the Node dependency from the dotnet tool but splits the workflow across two
-  entry points. Prefer the single-orchestrator model; fall back only if bundling Node with the tool proves
-  painful for a consumer.
+  `check` of the IR do not) **and an engine checkout whose `node_modules` are installed**. The entrypoints
+  bundle the engine `src` with esbuild (`tools/lib/engine-loader.mjs`) so the CLI runs the exact source the
+  consumer ships rather than a possibly-stale `dist`, and esbuild is not a direct dependency of the engine
+  package: it arrives transitively through `tsup`/`vitest`. A missing esbuild throws with that instruction
+  rather than degrading silently. Acceptable: the artifacts are produced by Node anyway, and Trax.Cli already
+  ships a `package.json`, so Node-in-the-repo has precedent.
+- **Alternative (fallback, not taken).** Keep twin generation entirely in the consumer's Node toolchain (a
+  `package.json` script running the same `tools/generate-twin.mjs`) and let the C# CLI own only the IR export
+  and `check`. This drops the Node dependency from the dotnet tool but splits the workflow across two entry
+  points. **Decided (2026-09-11): the single-orchestrator model shipped** and the fallback was not needed; the
+  Node dependency has cost only the two requirements in the consequence above.
 
 **Scope of the first pass.** Build and test the CLI in this workspace against `turnstile` and `checkout` (the
 personal-repo machines); their committed IR/twin/corpus are the byte-parity oracle. write-to-congress lives in
 the nwyc work repo, so validate against it separately (point the CLI at nwyc's vendored engine `src` and its
 committed artifacts via `--engine-src`) rather than depending on nwyc from here. And note that Increment E
 deliberately bundles two real sub-projects, not incidental to the CLI: the `checkout` declarative migration
-(test item 6) and the `machine.json` / `generate.mjs` retirement (cleanup below).
+(test item 6) and the `machine.json` / `generate.mjs` retirement (cleanup below). Both landed.
 
 **Oracle-agnostic by design.** Pre-D the corpus comes from the TypeScript `enumerate()` (the
 `generate-corpus.mjs` step above); post-D the C# enumerator produces it in-process and `generate` owns all
@@ -321,8 +352,8 @@ three artifacts natively. Either way the IR export and the drift check are uncha
 **Test strategy (test-first, per the repo rules).** The regen script's three golden tests already *are* the
 oracle for what the CLI must reproduce, so the CLI is correct iff its output is byte-identical to theirs:
 1. **Byte-parity with the existing pipeline.** `trax machine generate` on `turnstile` (then `checkout`)
-   produces the exact committed `*.ir.json`, `*.contexts.g.ts`, `*.machine.g.ts` (and post-D
-   `differential.json`) the current pipeline produces. Assert byte-equality against the checked-in artifacts.
+   produces the exact committed `*.ir.json`, `*.contexts.g.ts`, `*.machine.g.ts` and `differential.json` the
+   current pipeline produces. Assert byte-equality against the checked-in artifacts.
    Then validate cross-repo: run it against nwyc's write-to-congress (`--engine-src` its vendored engine) and
    assert byte-parity with what `regen-state-machine.sh` produces there.
 2. **Idempotence.** A second `generate` with no source change yields no diff; `check` exits zero.
@@ -335,9 +366,10 @@ oracle for what the CLI must reproduce, so the CLI is correct iff its output is 
    exactly-once effect), `generate` its artifacts, and confirm its differential is green — the second machine
    is where the generator's real requirements surface.
 
-**Cleanup folded into E.** Retire `machine.json` + `generate.mjs` + the orphaned `turnstile.g.ts` +
-`structure.json` for the last machine still on the old node pipeline (`checkout`), so the IR is the sole spec
-everywhere.
+**Cleanup folded into E (done, except one item).** `machine.json` (both machines), `generate.mjs`, the
+orphaned `turnstile.g.ts` / `checkout.g.ts` and the codegen drift test are deleted, so the IR is the sole spec
+everywhere. `structure.json` was **not** retired: it is still committed per machine and still drift-checked
+against `describe()`, and retiring it (or regenerating it from the IR) is the one piece left.
 
 ## 6. Decisions this scope forces
 
@@ -348,11 +380,11 @@ everywhere.
   already read it, so this is the minimal-churn path, and it keeps one artifact as the interchange contract
   rather than introducing a second. Concretely, the pipeline becomes: C# machine (source) -> `machine.json`
   (IR, generated) -> `generate.mjs` (unchanged consumer) -> per-language code.
-  **Superseded in part (2026-08-13):** the differential seeds have since moved into the C# source
-  (`.Differential(...)` -> IR `differential` block), so `machine.json`'s last unique role is gone. For
-  write-to-congress the file is deleted outright and the IR is the sole spec; the "keep `machine.json` as the
-  generated IR artifact" framing above now holds only for the upstream machines still on `generate.mjs`
-  (turnstile / checkout), pending the Increment E cleanup.
+  **Superseded (2026-08-13, completed 2026-09-11):** the differential seeds moved into the C# source
+  (`.Differential(...)` -> IR `differential` block), so `machine.json`'s last unique role was gone, and
+  Increment E then deleted the file and `generate.mjs` for every machine. The "keep `machine.json` as the
+  generated IR artifact" framing above is dead. The pipeline as built is: C# machine (source) ->
+  `<id>.ir.json` (IR, exported) -> `generateContextTypes` / `generateMachineFactory` -> the typed twin.
 - **Decision B: the vocabulary boundary.** Recommended: ship the ~8 primitives in §3, everything else is a
   named hand-written handler, and migrations stay named lambdas. Revisit only with a real third machine
   (RFC's Phase 1), not speculatively.
@@ -388,7 +420,7 @@ everywhere.
   change invalidates in-flight drafts (fine for a POC, revisited before a product with valuable persisted
   drafts).
 
-## 7. Recommended first build: Increment A
+## 7. Recommended first build: Increment A (built)
 
 Smallest verifiable slice that de-risks the whole effort. Concretely:
 
@@ -429,7 +461,10 @@ escape hatch for the ~8%:
   logic; the name is what the generator emits as a required handler in every runtime.
 
 The vocabulary is a set of static factory helpers, imported with `using static` so the author writes them
-bare:
+bare. This section is the design sketch that preceded Increment A; the shipped helpers are in
+`Trax.Effect.StateMachine/Rules/Rules.cs` and read slightly differently (`Input((CoinInput i) => i.Coin)
+.IsOneOf(...)`, and the machine id is declared with `m.Id("turnstile")` rather than derived from the class
+name), but the shape below is what landed:
 
 | Surface | Helpers |
 |---|---|
@@ -452,11 +487,11 @@ public sealed record CoinInput { public string Coin { get; init; } = ""; }
 
 protected override void Configure(IMachineBuilder<TurnstileState, TurnstileTrigger> m)
 {
-    m.StartsAt(TurnstileState.Locked);                          // id derived from the class name
+    m.Id("turnstile").Version(1).StartsAt(TurnstileState.Locked, () => new JsonObject());
 
-    m.In(TurnstileState.Locked)                                 // empty context
+    m.In(TurnstileState.Locked).Context()                       // empty context
         .On(TurnstileTrigger.Coin).WithInput<CoinInput>()
-            .When(i => i.Coin, Is.OneOf("quarter", "dollar"))   // i.Coin, not "coin"
+            .When(Input((CoinInput i) => i.Coin).IsOneOf("quarter", "dollar"))   // i.Coin, not "coin"
             .Because("Only a quarter or a dollar is accepted.")
             .Reduce(Set((UnlockedContext u) => u.PaidWith).FromInput(i => i.Coin))
             .To(TurnstileState.Unlocked);
@@ -469,17 +504,19 @@ protected override void Configure(IMachineBuilder<TurnstileState, TurnstileTrigg
 ```
 
 The member expressions (`i => i.Coin`, `u => u.PaidWith`) are `Expression<>` trees: inspectable, so codegen
-still extracts the field name as data, but authoring is refactor-safe with zero structural strings. Three
+still extracts the field name as data, but authoring is refactor-safe with zero structural strings. Two
 strings removed for free along the way: the effect key (`RunsOnce<TEffect>()` derives it from the machine id
-+ trigger), the machine id (from the class name), and named-handler names (a `nameof` / method reference).
++ trigger) and named-handler names (a `nameof` / method reference). The machine id stayed an explicit
+`m.Id(...)` rather than being derived from the class name.
 The state-machine `IEffect` is renamed `ISnapshotEffect` to stop colliding, in a reader's head, with the core
 Trax.Effect abstractions.
 
 Two things that keep it straightforward:
 
-- **The initial context is derived from the initial state's schema** (`Array()` -> `[]`, nullable -> `null`,
-  `Number()` -> `0`), so `StartsAt(state)` needs no factory in the common case. A factory stays available as
-  an override for non-default seeds.
+- **The initial context was to be derived from the initial state's schema** (`Array()` -> `[]`, nullable ->
+  `null`, `Number()` -> `0`), so that `StartsAt(state)` would need no factory in the common case. That part
+  was not built: the shipped `StartsAt` takes the state and a context factory, and every machine supplies
+  one.
 - **The rules run through a shared interpreter, so behavior is identical to the lambda version.** A guard
   rule is data; the engine evaluates it. This is the key to Increment A: turnstile re-authored this way must
   produce a byte-identical differential corpus, which is exactly what the existing suite proves. Codegen (a
@@ -498,7 +535,7 @@ Per machine, the author writes **one C# file** and nothing else machine-shaped:
 |---|---|
 | `enum XState { ... }`, `enum XTrigger { ... }` | the states and triggers |
 | `class XMachine : Machine<XState, XTrigger>` with `Configure(m)` | the whole definition lives here |
-| &nbsp;&nbsp;· `m.Id("x").StartsAt(State.Initial)` | `Version()` optional (defaults to 1; rarely touched with migration deferred) |
+| &nbsp;&nbsp;· `m.Id("x").StartsAt(State.Initial, ctx)` | `Version()` optional (defaults to 1; rarely touched with migration deferred) |
 | &nbsp;&nbsp;· `.Context(...)` per state | the declarative context schema |
 | &nbsp;&nbsp;· `.In(s).On(t)...To(s)` | the transitions |
 | &nbsp;&nbsp;· `.When(...)`, `.Reduce(...)` | declarative helpers, or a `named("x", lambda)` for the rare custom case |
@@ -506,12 +543,12 @@ Per machine, the author writes **one C# file** and nothing else machine-shaped:
 | &nbsp;&nbsp;· `.Sample(t, input)` / `.Seed(s, ctx)` | differential probe inputs (test data; until probe-gen exists) |
 
 Plus, only when they apply:
-- **Effect** (if the machine has one): `interface IX : IEffect` + a class implementing it (server code).
+- **Effect** (if the machine has one): `interface IX : ISnapshotEffect` + a class implementing it (server code).
 - **Named custom handler bodies per frontend language**: only the bodies of any `named(...)` guards/reducers,
   hand-written in each frontend language. Often **zero**.
 
 One-time, not per machine:
-- **Host wiring**: `AddTraxStateMachines(assembly)`, an `ISnapshotPrincipal` (maps auth to a user key), and
+- **Host wiring**: `AddStateMachines(assembly)`, an `ISnapshotPrincipal` (maps auth to a user key), and
   the effect DI registrations.
 - **The frontend UI** that drives the machine (app code, uses the generated transport; not machine-shaped).
 
@@ -519,7 +556,7 @@ Everything else is **generated from that one C# file**:
 
 | Generated (from the C# machine) | For |
 |---|---|
-| the IR (`machine.json`) + `structure.json` | the interchange contract + its derivable golden |
+| the IR (`<id>.ir.json`) | the interchange contract |
 | state/trigger types + the transition table | every runtime |
 | the context type(s) | every runtime |
 | the shape validators + declarative guards | every runtime (TS via valibot) |
