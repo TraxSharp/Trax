@@ -48,8 +48,8 @@ legitimate (`Trax.Adr.Guard.GuardResult.Passed`). **The shipped `Trax.Core.Testi
 `Tests.Meta` project reads the count. Carrying that idea into the shipped packages is
 outstanding work, not a described state.
 
-**Rules that span repos are duplicated, not shared.** Eight guard file names appear in all
-eight `Tests.Meta` projects and eleven are duplicated across two or more. The copies are
+**Rules that span repos are duplicated, not shared.** Nine guard file names appear in all
+eight `Tests.Meta` projects and twelve appear in two or more. The copies are
 near-identical rather than identical: each carries its own namespace, and some have diverged
 further (Trax.Samples adds `KnownExceptions_AreNotStale` to its `NoIgnoreAttributeTests`).
 That is the accepted cost of each repo checking itself alone.
@@ -57,7 +57,7 @@ That is the accepted cost of each repo checking itself alone.
 **A shared copy must cite a path that resolves in every repo holding it.** A citation of
 `docs/adr/0003-x.md` would have to exist eight times over; one of `Trax.Docs/adr/0003-x.md`
 is the same string everywhere, which is why every shared guard uses that form. Repo-specific
-guards cite their own repo's path instead. Between them, 66 guard files across the eight code
+guards cite their own repo's path instead. Between them, 73 guard files across the eight code
 repos name the ADR they enforce.
 
 ## Exemplars
@@ -76,4 +76,6 @@ human step, and no test can detect a decision somebody chose not to record.
 
 ## Changelog
 
+- **2026-09-14**: Recounted the duplicated guard files after `NoTestFrameworkInSrcTests` was
+  added to all eight repos.
 - **2026-09-11**: Recorded.

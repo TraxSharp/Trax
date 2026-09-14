@@ -31,8 +31,9 @@ literal satisfied it. The two-place citation rule exists to patch that, and it p
 symptom. An attribute cannot be satisfied by prose, survives a rename, and identifies one
 declaration rather than a name that may have several.
 
-Scope, measured on 2026-09-14: 21 ADRs name 31 distinct classes, resolving to **91 class
-declarations**, 76 inside a census root and 15 outside it.
+Scope, measured on 2026-09-14: 21 ADRs name 31 distinct classes. Ninety declarations carry
+the attribute, 76 of them inside a census root. A ninety-first shares a claimed name and
+deliberately does not carry it, which is the ambiguity this decision exists to settle.
 
 ## Considered options
 
@@ -62,11 +63,10 @@ divergent copies is what prompted this audit.
 
 ## Consequences
 
-**Eight `Tests.Meta` projects take a dependency on `Trax.Core.Testing`.** None references any
-`Trax.*.Testing` package today, so this is new coupling, though it runs with the dependency
-chain rather than against it. It is also the first use of those packages from the Meta
-projects, which is worth noting against the finding that forty censused classes hand-roll five
-checks the packages already ship.
+**No repo takes a new dependency.** `[Property]` comes from NUnit, which every test project
+already references, so the marker costs nothing in packaging. That is the whole reason it beat
+a dedicated attribute, and it leaves untouched the separate finding that forty censused classes
+hand-roll five checks the `Trax.*.Testing` packages already ship.
 
 **The failure-message citation stays.** The attribute replaces the docstring half of the
 citation and the name matching, not the message. Whoever trips a guard has to see the ADR at
@@ -95,6 +95,8 @@ the two miscredited classes named under Consequences were both unambiguous and w
 
 ## Changelog
 
+- **2026-09-14**: Corrected a Consequence that described the rejected package home rather than
+  the accepted one, and reconciled the declaration count with what was tagged.
 - **2026-09-14**: Implemented. 90 declarations tagged, the resolver reads the attribute, and
   the marker is NUnit's `[Property]` rather than a dedicated attribute in a package, because
   the package home cost eight new pins and a first dependency for Trax.Docs.
