@@ -217,20 +217,20 @@ public class AuditRegressionTests
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
-            .Contain("only in the docstring");
+            .Contain("does not name it in a failure message");
     }
 
+    /// <summary>
+    /// The failure message alone is now enough. The docstring half of the old two-place rule
+    /// was replaced by the attribute, which is what establishes the link; the message is what
+    /// the person who trips the guard reads, so it is the half that still has to be there.
+    /// </summary>
     [Test]
-    public void CiteBack_InAFailureMessageOnly_Fails()
+    public void CiteBack_InAFailureMessageOnly_Passes()
     {
         using var repo = WithClaimedGuard(Guard("no citation here", $"See {Adr0001}."));
 
-        ExemplarGuards
-            .NamedGuardsCiteBack(Load(repo), repo.Options())
-            .Offenders.Should()
-            .ContainSingle()
-            .Which.Should()
-            .Contain("only in code");
+        ExemplarGuards.NamedGuardsCiteBack(Load(repo), repo.Options()).Passed.Should().BeTrue();
     }
 
     [Test]
@@ -243,7 +243,7 @@ public class AuditRegressionTests
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
-            .Contain("does not cite it back");
+            .Contain("does not name it in a failure message");
     }
 
     #endregion
@@ -324,7 +324,7 @@ public class AuditRegressionTests
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
-            .Contain("only in the docstring");
+            .Contain("does not name it in a failure message");
     }
 
     #endregion

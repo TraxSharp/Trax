@@ -37,6 +37,23 @@ public static class ExemplarGuards
         RegexOptions.Compiled
     );
 
+    /// <summary>
+    /// The declaration an ADR's claim resolves against: an NUnit property carrying the ADR
+    /// this class enforces, immediately above the class it applies to.
+    ///
+    /// <para>
+    /// Matching a bare class name was ambiguous, and the ambiguity was live: Trax.Scheduler
+    /// declares two classes called <c>HttpRunExecutorTests</c>, one pinning the outgoing
+    /// request shape and one covering response mapping. The claim resolved against whichever
+    /// the scan reached first, so deleting the one doing the work left the ADR green. A
+    /// declaration names the ADR back, so there is nothing to guess.
+    /// </para>
+    /// </summary>
+    private static readonly Regex GuardProperty = new(
+        @"\[\s*Property\(\s*""adr""\s*,\s*""(?<adr>[^""]+)""\s*\)\s*\]",
+        RegexOptions.Compiled
+    );
+
     public static GuardResult SectionPresent(IReadOnlyList<Adr> adrs)
     {
         var offenders = new List<string>();
@@ -113,7 +130,7 @@ public static class ExemplarGuards
     /// </summary>
     public static GuardResult NamedGuardsResolve(IReadOnlyList<Adr> adrs, GuardOptions options)
     {
-        var classes = DeclaredClasses(options);
+        var (classes, declared) = Scan(options);
         var offenders = new List<string>();
         var inspected = 0;
 
@@ -126,12 +143,41 @@ public static class ExemplarGuards
             foreach (var claim in Claims(section))
             {
                 inspected++;
-                if (!classes.ContainsKey(claim))
+
+                var answering = declared
+                    .Where(d =>
+                        d.Name == claim && d.Adr.EndsWith(adr.FileName, StringComparison.Ordinal)
+                    )
+                    .ToList();
+
+                if (answering.Count == 1)
+                    continue;
+
+                if (answering.Count > 1)
+                {
                     offenders.Add(
-                        $"{adr.RelativePath}: names '{claim}', which is not a class under "
-                            + $"{string.Join(" or ", options.TestRoots)}/. If it lives in another repo, "
-                            + "cite it by qualified path so it reads as prose rather than a claim."
+                        $"{adr.RelativePath}: names '{claim}', and {answering.Count} classes claim "
+                            + $"it back: {string.Join(", ", answering.Select(a => AdrCorpus.Relative(a.File, options)))}. "
+                            + "A claim must resolve to one declaration; drop the attribute from the others."
                     );
+                    continue;
+                }
+
+                if (classes.ContainsKey(claim))
+                {
+                    offenders.Add(
+                        $"{adr.RelativePath}: names '{claim}', which exists but does not claim this ADR "
+                            + $"back. Put [Property(\"adr\", \"...{adr.FileName}\")] on the class that "
+                            + "enforces it, so the claim resolves to one declaration rather than to a name."
+                    );
+                    continue;
+                }
+
+                offenders.Add(
+                    $"{adr.RelativePath}: names '{claim}', which is not a class under "
+                        + $"{string.Join(" or ", options.TestRoots)}/. If it lives in another repo, "
+                        + "cite it by qualified path so it reads as prose rather than a claim."
+                );
             }
         }
 
@@ -139,8 +185,9 @@ public static class ExemplarGuards
             "exemplars/guards-resolve",
             offenders,
             inspected,
-            "A backticked bare class name in '## Exemplars' is an enforcement claim, and must "
-                + "resolve to a real class in this repository's test roots.",
+            "A backticked bare class name in '## Exemplars' is an enforcement claim. It resolves "
+                + "to the class carrying [Property(\"adr\", \"...\")] for this ADR, not to whichever "
+                + "class happens to share the name.",
             AllowsEmpty: true
         );
     }
@@ -179,8 +226,9 @@ public static class ExemplarGuards
                     offenders.Add(
                         $"{AdrCorpus.Relative(sourcePath, options)}: '{claim}' is named by "
                             + $"{adr.RelativePath} but {problem} Name "
-                            + $"'{adr.FileName}' in the class docstring AND in the assertion failure "
-                            + "message, so the person who trips the guard sees the authority."
+                            + $"'{adr.FileName}' in the assertion failure message, so the person who "
+                            + "trips the guard sees the authority. The attribute establishes the link; "
+                            + "the message is what they read when it goes red."
                     );
             }
         }
@@ -216,6 +264,12 @@ public static class ExemplarGuards
             if (!line.Contains(fileName, StringComparison.Ordinal))
                 continue;
 
+            // The attribute names the ADR too, and it is Code. Letting it answer here would
+            // mean tagging a class also satisfied the message requirement, which is the half
+            // the person who trips the guard actually reads.
+            if (GuardProperty.IsMatch(line))
+                continue;
+
             switch (CSharp.Classify(line))
             {
                 case CSharp.LineKind.Documentation:
@@ -232,10 +286,9 @@ public static class ExemplarGuards
 
         return (inDoc, inCode) switch
         {
-            (true, true) => null,
-            (false, false) => "does not cite it back.",
-            (true, false) => "cites it only in the docstring, not in a failure message.",
-            (false, true) => "cites it only in code, not in the class docstring.",
+            (_, true) => null,
+            (_, false) =>
+                "does not name it in a failure message, only in the attribute or the docstring.",
         };
     }
 
@@ -290,9 +343,17 @@ public static class ExemplarGuards
     }
 
     /// <summary>Class name to the file declaring it, for every .cs file under the test roots.</summary>
-    private static Dictionary<string, string> DeclaredClasses(GuardOptions options)
+    private static Dictionary<string, string> DeclaredClasses(GuardOptions options) =>
+        Scan(options).Classes;
+
+    /// <summary>Every class an ADR could claim, and every class that claims an ADR back.</summary>
+    private static (
+        Dictionary<string, string> Classes,
+        List<(string Name, string Adr, string File)> Declared
+    ) Scan(GuardOptions options)
     {
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        var declared = new List<(string, string, string)>();
 
         foreach (var root in options.TestRoots)
         {
@@ -309,12 +370,45 @@ public static class ExemplarGuards
                 if (relative.Split('/').Any(p => p is "bin" or "obj"))
                     continue;
 
-                var source = CSharp.WithoutCommentsAndLiterals(File.ReadAllText(file));
-                foreach (Match match in ClassDeclaration.Matches(source))
+                var raw = File.ReadAllText(file);
+                foreach (
+                    Match match in ClassDeclaration.Matches(CSharp.WithoutCommentsAndLiterals(raw))
+                )
                     map.TryAdd(match.Groups["name"].Value, file);
+
+                // Line-based, because the attribute's value is a string literal: it does not
+                // survive the blanking pass the class scan uses. Classify is what keeps a
+                // commented-out attribute from counting.
+                string? pending = null;
+                foreach (var line in raw.Replace("\r\n", "\n").Split('\n'))
+                {
+                    if (CSharp.Classify(line) != CSharp.LineKind.Code)
+                        continue;
+
+                    var property = GuardProperty.Match(line);
+                    if (property.Success)
+                    {
+                        pending = property.Groups["adr"].Value;
+                        continue;
+                    }
+
+                    var declaration = ClassDeclaration.Match(line);
+                    if (declaration.Success)
+                    {
+                        if (pending is not null)
+                            declared.Add((declaration.Groups["name"].Value, pending, file));
+                        pending = null;
+                        continue;
+                    }
+
+                    // Anything else between the attribute and a class ends the pairing, so a
+                    // class declaration quoted in a fixture string cannot inherit it.
+                    if (!line.TrimStart().StartsWith('[') && line.Trim().Length > 0)
+                        pending = null;
+                }
             }
         }
 
-        return map;
+        return (map, declared);
     }
 }

@@ -9,6 +9,7 @@ namespace Trax.Adr.Guard.Tests.Tests;
 /// it inspected and inspecting zero is a failure rather than a pass.
 /// </para>
 /// </summary>
+[Property("adr", "adr/0001-architectural-rules-are-executable-guards.md")]
 [TestFixture]
 public class GuardRunnerTests
 {

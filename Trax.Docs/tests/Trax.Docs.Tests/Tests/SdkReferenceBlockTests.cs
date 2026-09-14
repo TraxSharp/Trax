@@ -8,6 +8,7 @@ namespace Trax.Docs.Tests.Tests;
 ///
 /// <para>Enforces <c>Trax.Docs/adr/0008-documentation-conventions-are-linted.md</c>.</para>
 /// </summary>
+[Property("adr", "Trax.Docs/adr/0008-documentation-conventions-are-linted.md")]
 [TestFixture]
 public class SdkReferenceBlockTests
 {

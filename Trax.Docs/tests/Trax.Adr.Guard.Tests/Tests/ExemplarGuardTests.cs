@@ -27,6 +27,7 @@ public class ExemplarGuardTests
             /// Migration files are numbered sequentially and shipped as embedded resources.
             /// </summary>
             /// <remarks>Enforces docs/adr/{{adrFileName}}.</remarks>
+            [Property("adr", "docs/adr/{{adrFileName}}")]
             [TestFixture]
             public class MigrationsIntegrityTests
             {
@@ -226,6 +227,36 @@ public class ExemplarGuardTests
         ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options()).Passed.Should().BeTrue();
     }
 
+    /// <summary>
+    /// The hole this replaced. Two classes shared a name, the claim resolved against whichever
+    /// the scan reached first, and deleting the one doing the work left the ADR green.
+    /// </summary>
+    [Test]
+    public void NamedGuardsResolve_WhenAClassSharesTheNameButDoesNotClaimTheAdr_Fails()
+    {
+        using var repo = WithGuard(GuardCitingNothing);
+
+        var result = ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options());
+
+        result.Passed.Should().BeFalse();
+        result.Offenders[0].Should().Contain("does not claim this ADR back");
+    }
+
+    [Test]
+    public void NamedGuardsResolve_WhenTwoClassesClaimTheSameAdr_Fails()
+    {
+        using var repo = WithGuard(GuardCiting(Sample.DefaultSpec.FileName));
+        repo.Write(
+            "tests/Other.Tests.Meta/Tests/MigrationsIntegrityTests.cs",
+            GuardCiting(Sample.DefaultSpec.FileName)
+        );
+
+        var result = ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options());
+
+        result.Passed.Should().BeFalse();
+        result.Offenders[0].Should().Contain("2 classes claim it back");
+    }
+
     [Test]
     public void NamedGuardsResolve_WhenTheClassIsGone_Fails()
     {
@@ -281,7 +312,7 @@ public class ExemplarGuardTests
             .Offenders.Should()
             .ContainSingle()
             .Which.Should()
-            .Contain("does not cite it back");
+            .Contain("does not name it in a failure message");
     }
 
     [Test]

@@ -7,14 +7,14 @@ status: accepted
 
 # An ADR's exemplars are declared by attribute, not matched by name
 
-A test an ADR names as an exemplar carries `[ArchitectureGuard("NNNN-slug.md")]`. The guard
-resolves a claim by reading that attribute rather than by matching a backticked class name
-against every class under `tests/`. The attribute lives in `Trax.Core.Testing`, which every
-repo is downstream of.
+A test an ADR names as an exemplar carries `[Property("adr", "<path>/NNNN-slug.md")]`. The
+guard resolves a claim by reading that attribute rather than by matching a backticked class
+name against every class under `tests/`. The marker is NUnit's own property attribute, which
+every test project in the workspace already has.
 
 ## Status
 
-**Accepted.** Not yet implemented; see Exemplars.
+**Accepted.**
 
 ## Why this is written down
 
@@ -49,9 +49,16 @@ thirteen checks living on fixtures in `src/`. Deferred rather than rejected, bec
 different decision: this one makes an existing link trustworthy, that one decides what belongs
 in the corpus at all. It should follow, not lead.
 
-**Put the attribute in each repo rather than in a package.** Rejected. A twelve-line attribute
-duplicated nine times is another `SourceText.cs`, and reconciling that file's five divergent
-copies is what prompted this audit.
+**A dedicated `[ArchitectureGuard]` attribute shipped in `Trax.Core.Testing`.** The first form
+of this decision, rejected on cost once it was implemented. No repo pins `Trax.Core.Testing`
+today, so it meant a new central pin and a `PackageReference` in eight `Tests.Meta` projects,
+and Trax.Docs has no `Directory.Packages.props` at all, so a documentation repo would have
+acquired package management and a dependency on Trax.Core to hold a twelve-line attribute.
+NUnit's `[Property]` is already present everywhere and is designed for exactly this.
+
+**Put a dedicated attribute in each repo rather than in a package.** Rejected. A twelve-line
+attribute duplicated nine times is another `SourceText.cs`, and reconciling that file's five
+divergent copies is what prompted this audit.
 
 ## Consequences
 
@@ -76,15 +83,21 @@ because the guard reads one checkout. `**Enforced elsewhere:**` remains the form
 
 ## Exemplars
 
-**Unenforced:** this decision is carried out by the resolver inside `Trax.Adr.Guard`, not
-asserted by a guard. Once `ExemplarGuards` reads the attribute the decision holds by
-construction, and a check that claims resolve by attribute would only restate the
-implementation. What a guard could usefully add, once the attribute exists, is the converse:
-that every class an ADR names carries one. The name matching described above is what runs
-today, and its ambiguity in Trax.Scheduler is live while it does.
+**Enforced elsewhere:** `ExemplarGuards.NamedGuardsResolve` in this repo's
+`tools/Trax.Adr.Guard` resolves every claim through the attribute and fails three ways: the
+named class does not exist, it exists but claims no ADR back, or more than one class claims the
+same ADR. `NamedGuardsCiteBack` still requires the ADR in a failure message, and skips the
+attribute line when looking, so tagging a class cannot satisfy the half a reader actually sees.
+
+Not covered: nothing checks that a tagged class enforces the decision it names. The attribute
+makes the link unambiguous, not honest, and this session produced two claims that were
+unambiguous and wrong.
 
 ## Changelog
 
+- **2026-09-14**: Implemented. 90 declarations tagged, the resolver reads the attribute, and
+  the marker is NUnit's `[Property]` rather than a dedicated attribute in a package, because
+  the package home cost eight new pins and a first dependency for Trax.Docs.
 - **2026-09-14**: Accepted, narrowed to the tests an ADR names. Tagging the whole guard corpus
   is split out as the follow-on decision.
 - **2026-09-14**: Proposed, from a workspace-wide audit of which tests are semantically guards.
