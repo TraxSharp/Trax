@@ -1,5 +1,11 @@
 namespace Trax.Mediator.Tests.Meta.Tests;
 
+/// <summary>
+/// Cross-repo references carry no inline Version; the pin lives in Directory.Packages.props.
+///
+/// <para>Enforces <c>Trax.Docs/adr/0002-cross-repo-dependencies-are-exact-pinned.md</c>.</para>
+/// </summary>
+[Property("adr", "Trax.Docs/adr/0002-cross-repo-dependencies-are-exact-pinned.md")]
 [TestFixture]
 public class CrossRepoPackageReferenceTests
 {

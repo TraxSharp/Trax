@@ -12,6 +12,8 @@ namespace Trax.Mediator.Tests.Meta.Tests;
 /// Smoke tests that the unified <c>AddTrax(...).AddEffects(UseInMemory).AddMediator()</c> fluent
 /// API composes end-to-end. If a wiring change accidentally drops a required registration, these
 /// fail at the registration point rather than at first use in a downstream consumer.
+///
+/// <para>Not ADR-enforcing: it is a composition smoke test rather than an architectural rule: it proves the wiring still resolves, and pins no choice.</para>
 /// </summary>
 [TestFixture]
 public class DICompositionSmokeTests

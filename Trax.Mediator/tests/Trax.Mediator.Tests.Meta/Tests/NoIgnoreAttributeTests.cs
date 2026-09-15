@@ -1,5 +1,11 @@
 namespace Trax.Mediator.Tests.Meta.Tests;
 
+/// <summary>
+/// A skip is a runtime decision with a reason in the output, not an attribute that hides.
+///
+/// <para>Enforces <c>Trax.Docs/adr/0005-a-skipped-test-is-a-runtime-decision.md</c>.</para>
+/// </summary>
+[Property("adr", "Trax.Docs/adr/0005-a-skipped-test-is-a-runtime-decision.md")]
 [TestFixture]
 public class NoIgnoreAttributeTests
 {
@@ -28,7 +34,7 @@ public class NoIgnoreAttributeTests
         offenders
             .Should()
             .BeEmpty(
-                "[Ignore] silently hides failing tests. CLAUDE.md > No [Ignore] requires either "
+                "[Ignore] silently hides failing tests. Trax.Docs/reference/test-conventions.md > Skipping requires either "
                     + "fixing the underlying code, fixing the test premise, or using Assert.Ignore(\"reason\") "
                     + "at runtime with an explicit reachability check. Offenders:\n  "
                     + string.Join("\n  ", offenders)

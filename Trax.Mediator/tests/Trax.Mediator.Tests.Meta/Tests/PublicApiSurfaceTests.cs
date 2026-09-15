@@ -3,6 +3,12 @@ using PublicApiGenerator;
 
 namespace Trax.Mediator.Tests.Meta.Tests;
 
+/// <summary>
+/// The published surface is a committed file, so a change to it lands in the diff.
+///
+/// <para>Enforces <c>Trax.Docs/adr/0010-the-public-api-surface-is-a-committed-baseline.md</c>.</para>
+/// </summary>
+[Property("adr", "Trax.Docs/adr/0010-the-public-api-surface-is-a-committed-baseline.md")]
 [TestFixture]
 public class PublicApiSurfaceTests
 {
@@ -66,7 +72,7 @@ public class PublicApiSurfaceTests
                 Normalize(baseline),
                 $"public API of '{name}' must match the checked-in baseline at "
                     + $"PublicApi/{name}.received.txt. If this change is intentional, update the baseline. "
-                    + "CLAUDE.md > Versioning Strategy: a major version bump on NuGet is permanent."
+                    + "Trax.Docs/reference/semantic-release.md > Commit Messages: a major version bump on NuGet is permanent."
             );
     }
 }

@@ -7,7 +7,10 @@ namespace Trax.Mediator.Tests.Meta.Tests;
 /// (moving <c>Trax.Effect</c> to a new release but leaving <c>Trax.Effect.StateMachine.Persistence</c> behind)
 /// is a latent break: the two halves of one release no longer agree, which surfaces as an NU1605 downgrade or a
 /// silent behaviour mismatch. This guard fails fast on that drift, offline, with no network or NuGet lookup.
+///
+/// <para>Enforces <c>Trax.Docs/adr/0002-cross-repo-dependencies-are-exact-pinned.md</c>.</para>
 /// </summary>
+[Property("adr", "Trax.Docs/adr/0002-cross-repo-dependencies-are-exact-pinned.md")]
 [TestFixture]
 public class TraxPinLockstepTests
 {

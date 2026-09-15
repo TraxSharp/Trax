@@ -12,6 +12,14 @@ using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;
 
+/// <summary>
+/// Authorization is fail-closed: a gated train with no authorization service stops the host.
+///
+/// <para>Covers both directions, the named opt-out, and the malformed-attribute cases.</para>
+///
+/// <para>Enforces <c>docs/adr/0001-authorization-is-fail-closed.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0001-authorization-is-fail-closed.md")]
 [TestFixture]
 public class AuthorizationRegistrationValidatorTests
 {
@@ -50,7 +58,11 @@ public class AuthorizationRegistrationValidatorTests
         var act = async () => await validator.StartAsync(CancellationToken.None);
 
         await act.Should()
-            .ThrowAsync<InvalidOperationException>()
+            .ThrowAsync<InvalidOperationException>(
+                "authorization is fail-closed: a gated train with no service must stop the host, "
+                    + "not serve traffic ungated while the attribute suggests otherwise. See "
+                    + "docs/adr/0001-authorization-is-fail-closed.md."
+            )
             .WithMessage("*no ITrainAuthorizationService is registered*");
     }
 

@@ -1,5 +1,11 @@
 namespace Trax.Mediator.Tests.Meta.Tests;
 
+/// <summary>
+/// FluentAssertions only, because the because argument is where a failure explains itself.
+///
+/// <para>Enforces <c>Trax.Docs/adr/0004-tests-assert-with-fluentassertions.md</c>.</para>
+/// </summary>
+[Property("adr", "Trax.Docs/adr/0004-tests-assert-with-fluentassertions.md")]
 [TestFixture]
 public class NoLegacyAssertTests
 {
@@ -43,7 +49,7 @@ public class NoLegacyAssertTests
         offenders
             .Should()
             .BeEmpty(
-                "CLAUDE.md > Naming Conventions requires FluentAssertions exclusively. "
+                "Trax.Docs/reference/test-conventions.md > Assertions requires FluentAssertions exclusively. "
                     + "Replace classic NUnit asserts with .Should().Be(...), .Should().BeTrue(), etc. "
                     + "Assert.Pass / Assert.Fail / Assert.Ignore remain acceptable. Offenders:\n  "
                     + string.Join("\n  ", offenders)

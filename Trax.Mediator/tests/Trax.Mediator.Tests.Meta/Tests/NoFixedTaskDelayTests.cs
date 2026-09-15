@@ -1,5 +1,11 @@
 namespace Trax.Mediator.Tests.Meta.Tests;
 
+/// <summary>
+/// Tests wait on the condition that means the work finished, not on a duration.
+///
+/// <para>Enforces <c>Trax.Docs/adr/0006-tests-synchronise-on-a-signal.md</c>.</para>
+/// </summary>
+[Property("adr", "Trax.Docs/adr/0006-tests-synchronise-on-a-signal.md")]
 [TestFixture]
 public class NoFixedTaskDelayTests
 {
@@ -17,7 +23,7 @@ public class NoFixedTaskDelayTests
     /// Pre-existing offenders that pre-date the determinism convention. Each entry is a
     /// repo-relative path with its current offender count. New code MUST NOT add fixed-duration
     /// Task.Delay / Thread.Sleep to these files. To remove an entry: refactor the test to
-    /// synchronise on the completion signal (TaskCompletionSource, polling) as in CLAUDE.md >
+    /// synchronise on the completion signal (TaskCompletionSource, polling) as in Trax.Docs/reference/test-conventions.md >
     /// Determinism, then delete the entry.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, int> BaselineOffenders = new Dictionary<
@@ -106,7 +112,7 @@ public class NoFixedTaskDelayTests
         newOffenders
             .Should()
             .BeEmpty(
-                "CLAUDE.md > Determinism forbids fixed-duration Task.Delay / Thread.Sleep in tests. "
+                "Trax.Docs/reference/test-conventions.md > Determinism forbids fixed-duration Task.Delay / Thread.Sleep in tests. "
                     + "Synchronise on the completion signal (TaskCompletionSource, polling) with a "
                     + "generous timeout. If a fixed delay is legitimately required, add a justification "
                     + "comment containing 'determinism:', 'allowed-delay:', 'measuring-interval:', or "

@@ -4,7 +4,7 @@ using Trax.Effect.Extensions;
 namespace Trax.Mediator.Tests.Meta.Tests;
 
 /// <summary>
-/// Verifies the load-bearing CLAUDE.md > Train Type Naming Rule: the canonical identifier for
+/// Verifies the load-bearing Trax.Docs/adr/0007-the-canonical-train-name-is-the-interface-fullname.md: the canonical identifier for
 /// a train is the INTERFACE FullName, set during DI registration via AddScopedTraxRoute. Every
 /// downstream layer (metadata.Name, work_queue.train_name, manifest.Name, GraphQL hooks,
 /// dashboard requeue, scheduler exclusions) compares against this value. Drift here corrupts
@@ -49,7 +49,8 @@ public class InterfaceFullNameInvariantTests
                 typeof(IFakeRoute).FullName,
                 "AddScopedTraxRoute<TService, TImpl> sets CanonicalName = typeof(TService).FullName. "
                     + "This is the train's canonical identifier across the entire system (metadata, "
-                    + "work_queue, manifest, GraphQL hooks). Any drift would silently break lookups."
+                    + "work_queue, manifest, GraphQL hooks). Any drift would silently break lookups. "
+                    + "See Trax.Docs/adr/0007-the-canonical-train-name-is-the-interface-fullname.md."
             );
     }
 

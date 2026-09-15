@@ -65,3 +65,31 @@ jobs:
           directory: ./TestResults
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ADRs for this repo live in docs/adr/ and are checked against this checkout alone. The
+  # guard is published by Trax.Docs; nothing else needs to be cloned.
+  #
+  # Pinned at ca1261920d0e on Trax.Docs main, which is where the guard now lives. Bump this only
+  # to adopt a guard change, and read what changed first: a newer guard can fail this repo
+  # on an ADR that was green before.
+  adr-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check ADRs
+        uses: TraxSharp/Trax.Docs/.github/actions/adr-guard@ca1261920d0efd76ce695f2e61576b15c0aded17
+        with:
+          known-areas: auth,platform,testing
+          census-root: tests/Trax.Mediator.Tests.Meta
