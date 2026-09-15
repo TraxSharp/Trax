@@ -5,11 +5,12 @@ using Trax.Effect.StateMachine.Persistence;
 namespace Trax.Cli.Machines;
 
 /// <summary>
-/// Loads a compiled machine assembly and hands back the <see cref="IMachine"/> to export. The CLI references
-/// <c>Trax.Effect.StateMachine.Persistence</c> at compile time, so a discovered machine unifies with the CLI's
-/// own <see cref="IMachine"/> only when the assembly was built against the same engine version; a mismatch is
-/// reported as a clear error rather than a raw cast failure. The consumer's non-Trax dependencies resolve from
-/// the assembly's own directory.
+/// Loads a compiled machine assembly and hands back the <see cref="IMachine"/> to export. The assembly goes into
+/// the default <see cref="AssemblyLoadContext"/>, so its reference to <c>Trax.Effect.StateMachine.Persistence</c>
+/// binds by simple name to the copy the CLI already has: type identity is preserved, and a machine built against
+/// an older engine still unifies with the CLI's own <see cref="IMachine"/>. A machine built against a newer one
+/// cannot: the default context already holds that simple name at a lower version. How that surfaces has not been
+/// observed. The consumer's non-Trax dependencies resolve from the assembly's own directory.
 /// </summary>
 internal static class MachineLoader
 {

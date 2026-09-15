@@ -9,7 +9,10 @@ namespace Trax.Cli.Tests.UnitTests;
 /// <see cref="MachineLoader"/> turns a compiled assembly into the <see cref="IMachine"/> the CLI exports. These
 /// pin discovery (only real machines, sorted), selection (single, named, ambiguous, unknown), and the file
 /// errors, since a wrong pick or a silent mis-load would generate the wrong machine's artifacts.
+///
+/// <para>Enforces <c>docs/adr/0001-the-machine-toolchain-is-half-in-process.md</c>.</para>
 /// </summary>
+[Property("adr", "docs/adr/0001-the-machine-toolchain-is-half-in-process.md")]
 public class MachineLoaderTests
 {
     private static string ThisAssemblyPath => typeof(DeclarativeTurnstileMachine).Assembly.Location;
@@ -25,7 +28,13 @@ public class MachineLoaderTests
     {
         var machines = MachineLoader.DiscoverMachines(typeof(DeclarativeTurnstileMachine).Assembly);
 
-        machines.Should().Contain(typeof(DeclarativeTurnstileMachine));
+        machines
+            .Should()
+            .Contain(
+                typeof(DeclarativeTurnstileMachine),
+                "the CLI asks the compiled machine what it is rather than parsing its source, so "
+                    + "discovery must find every real IMachine. See docs/adr/0001-the-machine-toolchain-is-half-in-process.md."
+            );
         machines.Should().Contain(typeof(SecondTurnstileMachine));
         // Abstract Machine<,> itself and non-machine types are excluded.
         machines.Should().OnlyContain(t => typeof(IMachine).IsAssignableFrom(t) && !t.IsAbstract);
@@ -121,8 +130,8 @@ public class MachineLoaderTests
     [Test]
     public void Load_throws_when_the_assembly_contains_no_machines()
     {
-        // The CLI's own assembly has the command code but no IMachine implementations. This is also the shape
-        // of the version-mismatch case (a machine built against a different engine is not recognized).
+        // The CLI's own assembly has the command code but no IMachine implementations. This is the empty-assembly
+        // path, not a real engine-version mismatch, which nothing here exercises; see docs/adr/0001.
         var load = () => MachineLoader.Load(typeof(MachineLoader).Assembly.Location, null);
 
         load.Should().Throw<InvalidOperationException>().WithMessage("*No machines found*");

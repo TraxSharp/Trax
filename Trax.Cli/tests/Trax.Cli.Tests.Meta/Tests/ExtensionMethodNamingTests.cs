@@ -4,6 +4,11 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Trax.Cli.Tests.Meta.Tests;
 
+/// <summary>
+/// Public extension methods in Extensions/ folders carry Trax in the name.
+///
+/// <para>Not ADR-enforcing: it pins a naming convention that was adopted rather than chosen, and nothing about it was a trade-off between real options.</para>
+/// </summary>
 [TestFixture]
 public class ExtensionMethodNamingTests
 {
@@ -82,7 +87,7 @@ public class ExtensionMethodNamingTests
         offenders
             .Should()
             .BeEmpty(
-                "CLAUDE.md > Extension Method Naming Convention requires public Add*/Use* extensions "
+                "Trax.Docs/reference/extension-method-naming.md requires public Add*/Use* extensions "
                     + "on IServiceCollection / IApplicationBuilder / WebApplication / "
                     + "IEndpointRouteBuilder / WebApplicationBuilder declared in any src/*/Extensions/ "
                     + "folder to contain 'Trax' in the method name (e.g. AddTraxApi, UseTraxDashboard, "
