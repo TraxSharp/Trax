@@ -16,9 +16,9 @@ public abstract class ApiTestFixture
     {
         if (!SharedBookwormSetup.DatabaseAvailable)
             Assert.Ignore(
-                "Bookworm test database not reachable. Start it with: docker run -d --name "
-                    + "trax_bookworm_pg -e POSTGRES_USER=trax -e POSTGRES_PASSWORD=trax123 "
-                    + "-e POSTGRES_DB=trax -p 5433:5432 postgres:16-alpine"
+                "Bookworm test database not reachable. Start it with: docker compose up -d "
+                    + "from the repository root, which provisions bookworm_e2e_tests on port "
+                    + "5432, the same database and port CI provisions."
             );
 
         GraphQL = new GraphQLClient(SharedBookwormSetup.Factory.CreateClient());

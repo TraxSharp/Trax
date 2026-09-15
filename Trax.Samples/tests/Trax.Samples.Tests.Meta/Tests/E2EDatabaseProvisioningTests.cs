@@ -1,13 +1,17 @@
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
-/// Every sample E2E factory boots its host against a PostgreSQL database, and CI provisions those
-/// databases up front: a fixed service port plus an explicit create-databases list. A factory that
+/// A sample E2E factory that boots its host against PostgreSQL names a port and a database CI
+/// provisions up front: a fixed service port plus an explicit create-databases list. A factory that
 /// points anywhere CI does not provision either fails to connect or, worse, silently skips, reporting
 /// a green build while testing nothing (which is exactly how the Bookworm suite once hid a
-/// 0%-coverage gap behind a local-only port 5433). This pins every factory's default connection
-/// string to the CI contract so the two cannot drift apart unnoticed.
+/// 0%-coverage gap behind a local-only port 5433). This pins every Postgres factory's default
+/// connection string to the CI contract so the two cannot drift apart unnoticed. Samples on SQLite
+/// or the in-memory provider declare no connection string, so there is nothing here to check.
+///
+/// <para>Enforces <c>docs/adr/0001-a-sample-e2e-database-must-be-one-ci-provisions.md</c>.</para>
 /// </summary>
+[Property("adr", "docs/adr/0001-a-sample-e2e-database-must-be-one-ci-provisions.md")]
 [TestFixture]
 public class E2EDatabaseProvisioningTests
 {
@@ -50,13 +54,16 @@ public class E2EDatabaseProvisioningTests
         var offenders = new List<string>();
         var inspected = 0;
 
+        // Most suites keep their factory in a Factories/ folder; PersistedOperations keeps its in
+        // Fixtures/. Match on either, because a factory this scan misses is a suite the guard
+        // cannot vouch for while still reporting green.
         var factories = SourceFiles
             .CSharp("tests")
             .Where(f =>
                 f.Contains(
                     $"{Path.DirectorySeparatorChar}Factories{Path.DirectorySeparatorChar}",
                     StringComparison.Ordinal
-                )
+                ) || Path.GetFileName(f).EndsWith("Factory.cs", StringComparison.Ordinal)
             );
 
         foreach (var file in factories)
@@ -83,14 +90,18 @@ public class E2EDatabaseProvisioningTests
         inspected
             .Should()
             .BeGreaterThan(
-                2,
-                "the scan should find the sample E2E factory connection strings; finding none means "
-                    + "the factory connection-string shape changed and this guard is silently passing"
+                4,
+                "the five Postgres factory connection strings in this repo must all be inspected. "
+                    + "Fewer means either a suite was deleted, in which case lower this floor "
+                    + "deliberately, or the connection-string shape changed and this guard is "
+                    + "silently passing"
             );
         offenders
             .Should()
             .BeEmpty(
-                "every E2E factory must target the CI Postgres port and a provisioned database:\n"
+                "every E2E factory must target the CI Postgres port and a provisioned database. A "
+                    + "factory pointing elsewhere skips and reports green while testing nothing. See "
+                    + "docs/adr/0001-a-sample-e2e-database-must-be-one-ci-provisions.md:\n"
                     + string.Join("\n", offenders)
             );
     }

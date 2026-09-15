@@ -4,9 +4,9 @@ namespace Trax.Samples.Bookworm.E2E.Factories;
 
 /// <summary>
 /// Boots the Bookworm API against a dedicated test PostgreSQL database. Defaults to the CI Postgres
-/// service (port 5432, database <c>bookworm_e2e_tests</c>), matching the other sample E2E suites. Set
-/// the <c>BOOKWORM_TEST_DB</c> environment variable to point at a throwaway local instance instead
-/// (e.g. the port-5433 container in the test docs), which keeps E2E runs off any shared database.
+/// service (port 5432, database <c>bookworm_e2e_tests</c>), matching the other sample E2E suites, and
+/// <c>docker compose up -d</c> provisions the same database locally. Set the <c>BOOKWORM_TEST_DB</c>
+/// environment variable to point at a throwaway instance instead.
 /// </summary>
 public sealed class BookwormApiFactory : SampleApiFactory<Api.Program>
 {
