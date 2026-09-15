@@ -169,6 +169,15 @@ otherwise `Id`, otherwise `{TypeName}Id`. A key configured only through the flue
 `HasKey` is not visible there, so resolvers on such an entity declare what they read with
 `[Parent(requires: ...)]`.
 
+### Such a field also declares its authorization posture
+
+A field added this way to a `[TraxAllowAnonymous]` entity inherits no gate, because there is no
+`@authorize` on the parent type to inherit, and the host refuses to start until the field says
+what it is. Use HotChocolate's `[Authorize]` or `[AllowAnonymous]` on the resolver method:
+`[TraxAuthorize]` targets classes and interfaces, so it does not compile there. A field on a
+`[TraxAuthorize]` entity inherits that gate and needs nothing. See
+[Fields Added by a Type Extension](/docs/authorization#fields-added-by-a-type-extension).
+
 `ExtensionResolversDeclareParentRequirements` in `Trax.Api.GraphQL.Testing` fails the build when
 a resolver reads an undeclared property. See
 [architecture guards](/docs/reference/architecture-guards).

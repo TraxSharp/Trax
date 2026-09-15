@@ -34,6 +34,37 @@ The one relaxation is endpoint-level gating: `RequireAuthorization()` on the Gra
 
 This rule applies only to surfaces that are actually exposed via GraphQL. A train with no `[TraxQuery]`/`[TraxMutation]` (run only through the scheduler, a remote worker, or `ITrainBus` directly) is never reachable over GraphQL and needs no marker.
 
+### Fields Added by a Type Extension
+
+An `[ExtendObjectType]` class adds a field to a type Trax owns. That field is neither a train nor a query model, so the census above cannot see it, and what gates it in practice is inheritance from the parent type's `@authorize`. That holds right up until the parent has no gate to inherit, and then the field is public because nobody looked.
+
+A field added this way must declare its own posture when the parent gives it nothing:
+
+| Parent type | Marker required on the field |
+|---|---|
+| Carries `[TraxAuthorize]` | No. It inherits the parent's gate. |
+| Carries `[TraxAllowAnonymous]` | **Yes.** It inherits nothing. |
+| A schema root type (`RootQuery`, `RootMutation`, `LifecycleSubscriptions`) | **Yes.** There is no parent to inherit from. |
+| Neither marker | No. The type reaches the schema only inside another surface's output, and that surface's posture governs. |
+
+The markers here are HotChocolate's own `[Authorize]` and `[AllowAnonymous]`, not Trax's. `[TraxAuthorize]` targets classes and interfaces, so writing it on a resolver method is a compile error (`CS0592`) rather than a silent no-op:
+
+```csharp
+[ExtendObjectType(typeof(Article))]     // Article is [TraxAllowAnonymous]
+public sealed class ArticleExtensions
+{
+    // Inherits nothing from Article, so it says what it is.
+    [Authorize(Roles = ["subscriber"])]
+    public async Task<IReadOnlyList<Excerpt>> GetExcerpts([Parent] Article article) => ...;
+}
+```
+
+Put the attribute on the **resolver method**, not on the extension class. HotChocolate applies a class-level attribute to the type being extended, so on a `[TraxAllowAnonymous]` entity it re-locks the whole entity, and on a root type it sets the posture of every operation in the schema. Trax reports both rather than honouring them.
+
+A subscription is the same construct: `[ExtendObjectType("LifecycleSubscriptions")]` adds a field to a root type, so every `[Subscribe]` field has to declare.
+
+The check walks the merged schema at host start, so it sees a type extension however it was registered, including one added from a `ConfigureSchema` callback. A field built from a lambda in such a callback has no member to carry an attribute and is skipped; it is gated by the code that builds it.
+
 ## Per-Train Authorization
 
 Decorate any train class with `[TraxAuthorize]` to declare authorization requirements:

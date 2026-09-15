@@ -64,7 +64,21 @@ See [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persis
 
 Also extends the GraphQL schema with the [management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations), and calls `ExposeOperationQueries()` / `ExposeOperationMutations()` on the builder so `RootQuery` and `RootMutation` are emitted even when the host has not registered any train-backed queries or mutations.
 
-Because this exposes the operation mutations (including the persisted-operation management mutations, which are admin operations), the host must gate the endpoint with [`RequireAuthorization()`](/docs/sdk-reference/graphql-api/add-trax-graphql), or explicitly opt into anonymous access with `AllowAnonymousOperations()`. Otherwise `AddTraxGraphQL()` fails at startup.
+Because this exposes the `operations` namespace (including the persisted-operation management mutations, which are admin operations), the host must answer for it, or `AddTraxGraphQL()` fails at startup: [`GateOperations(policy, roles)`](/docs/sdk-reference/graphql-api/add-trax-graphql) to gate the namespace while the rest of the endpoint stays open, `RequireAuthorization()` to gate the whole endpoint, or `AllowAnonymousOperations()` to opt into anonymous access.
+
+### Declining the namespace
+
+Persisted operations and a GraphQL-exposed scheduler console are separable. `ExposeOperationsNamespace(false)` wires storage, enforcement, the cache and cross-node invalidation without touching the schema, for a host that manages its operations out of band (a migration, a deploy step, a separate admin process):
+
+```csharp
+.UsePersistedOperations(po => po
+    .UseDatabase(connectionString)
+    .RequirePersisted(true)
+    .ExposeOperationsNamespace(false)
+)
+```
+
+With the namespace declined there is nothing to gate and nothing to acknowledge. The management mutations are not in the schema either: they are `[ExtendObjectType(typeof(OperationsMutations))]` classes, and their target type is not there to extend.
 
 ## Validation
 
