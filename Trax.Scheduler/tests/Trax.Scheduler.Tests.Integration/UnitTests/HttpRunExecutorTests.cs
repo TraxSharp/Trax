@@ -12,6 +12,16 @@ using Trax.Scheduler.Services.RunExecutor;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
 
+/// <summary>
+/// Drives <c>HttpRunExecutor</c> over a stubbed transport to pin the <em>response</em> half of the
+/// wire contract: how a <c>RemoteRunResponse</c> becomes a <c>RunTrainResult</c>, and how the four
+/// failure shapes (non-success status with a body, non-success with an empty body, a structured
+/// error payload, and a null response) each become a <c>TrainException</c>. It asserts nothing
+/// about the outgoing request; the sibling class of the same name in
+/// <c>Trax.Scheduler.Tests</c> covers that.
+///
+/// <para>Enforces <c>docs/adr/0001-remote-execution-is-a-json-wire-contract.md</c>.</para>
+/// </summary>
 [TestFixture]
 public class HttpRunExecutorTests
 {
@@ -51,7 +61,14 @@ public class HttpRunExecutorTests
             typeof(SimpleOutput)
         );
 
-        result.MetadataId.Should().Be(42);
+        result
+            .MetadataId.Should()
+            .Be(
+                42,
+                "the executor must carry every field of RemoteRunResponse through to the result "
+                    + "rather than reconstructing it "
+                    + "(docs/adr/0001-remote-execution-is-a-json-wire-contract.md)"
+            );
         result.ExternalId.Should().Be("ext-42");
         result.Output.Should().BeOfType<SimpleOutput>();
         ((SimpleOutput)result.Output!).Value.Should().Be("ok");

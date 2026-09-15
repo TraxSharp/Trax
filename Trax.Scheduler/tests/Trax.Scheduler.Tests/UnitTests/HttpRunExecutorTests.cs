@@ -10,6 +10,17 @@ using Trax.Scheduler.Services.RunExecutor;
 
 namespace Trax.Scheduler.Tests.UnitTests;
 
+/// <summary>
+/// The HTTP run executor, including the request it actually puts on the wire.
+///
+/// <para><c>ExecuteAsync_SerializesRequestCorrectly</c> is where a reordering of
+/// <c>RemoteRunRequest</c>'s three interchangeable strings shows up as a real failure: the
+/// executor constructs the record positionally, so a permutation compiles clean and swaps
+/// values that no round-trip test would notice.</para>
+///
+/// <para>Enforces <c>docs/adr/0001-remote-execution-is-a-json-wire-contract.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0001-remote-execution-is-a-json-wire-contract.md")]
 [TestFixture]
 public class HttpRunExecutorTests
 {
@@ -345,7 +356,14 @@ public class HttpRunExecutorTests
         await executor.ExecuteAsync("My.Train.FullName", input, typeof(TestOutput));
 
         capturedRequest.Should().NotBeNull();
-        capturedRequest!.TrainName.Should().Be("My.Train.FullName");
+        capturedRequest!
+            .TrainName.Should()
+            .Be(
+                "My.Train.FullName",
+                "the executor builds RemoteRunRequest positionally from three strings, so a "
+                    + "reordering of its parameters swaps values on the wire with no compile "
+                    + "error. See docs/adr/0001-remote-execution-is-a-json-wire-contract.md."
+            );
         capturedRequest.InputType.Should().Be(typeof(TestInput).FullName);
         capturedRequest.InputJson.Should().Contain("serialize-test");
     }

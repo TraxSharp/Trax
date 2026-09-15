@@ -5,6 +5,18 @@ using Trax.Scheduler.Services.RunExecutor;
 
 namespace Trax.Scheduler.Tests.UnitTests;
 
+/// <summary>
+/// The HTTP wire contract for a remote run, pinned by round-trip and by record equality.
+///
+/// <para>A property rename fails to compile here, since the assertions name every property. A
+/// reordering fails the positional constructions below: the executors build these records from
+/// interchangeable strings, so a permutation compiles clean and, because JSON binds by name,
+/// leaves the wire shape untouched while swapping which value each property carries. Either
+/// breaks here rather than in a deployed worker.</para>
+///
+/// <para>Enforces <c>docs/adr/0001-remote-execution-is-a-json-wire-contract.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0001-remote-execution-is-a-json-wire-contract.md")]
 [TestFixture]
 public class RemoteRunContractTests
 {
@@ -23,7 +35,14 @@ public class RemoteRunContractTests
         var deserialized = JsonSerializer.Deserialize<RemoteRunRequest>(json);
 
         deserialized.Should().NotBeNull();
-        deserialized!.TrainName.Should().Be("My.Namespace.MyTrain");
+        deserialized!
+            .TrainName.Should()
+            .Be(
+                "My.Namespace.MyTrain",
+                "the wire carries the canonical train name, not a compiled type, so the two ends "
+                    + "need not ship the same assemblies. See "
+                    + "docs/adr/0001-remote-execution-is-a-json-wire-contract.md."
+            );
         deserialized.InputJson.Should().Be("""{"name":"test"}""");
         deserialized.InputType.Should().Be("My.Namespace.MyInput");
     }
@@ -42,6 +61,27 @@ public class RemoteRunContractTests
         var a = new RemoteRunRequest("TrainA", "{}", "Input");
         var b = new RemoteRunRequest("TrainB", "{}", "Input");
         a.Should().NotBe(b);
+    }
+
+    [Test]
+    public void RemoteRunRequest_PositionalOrder_IsPinned()
+    {
+        // Constructed positionally on purpose. HttpRunExecutor and LambdaRunExecutor both build
+        // this record from three interchangeable strings, so a permutation of the parameters
+        // compiles clean and swaps values on the wire. Named arguments elsewhere in this file
+        // would not notice.
+        var request = new RemoteRunRequest("the-train-name", "the-input-json", "the-input-type");
+
+        request
+            .TrainName.Should()
+            .Be(
+                "the-train-name",
+                "the executors construct RemoteRunRequest positionally from three strings, so "
+                    + "reordering its parameters would swap values on the wire without a compile "
+                    + "error. See docs/adr/0001-remote-execution-is-a-json-wire-contract.md."
+            );
+        request.InputJson.Should().Be("the-input-json");
+        request.InputType.Should().Be("the-input-type");
     }
 
     #endregion
@@ -191,6 +231,31 @@ public class RemoteRunContractTests
         var a = new RemoteRunResponse(42);
         var b = new RemoteRunResponse(43);
         a.Should().NotBe(b);
+    }
+
+    [Test]
+    public void RemoteRunResponse_PositionalOrder_IsPinned()
+    {
+        // TraxRequestHandler builds the success response positionally, and ExternalId,
+        // OutputJson and OutputType are three consecutive nullable strings.
+        var response = new RemoteRunResponse(
+            42,
+            "the-external-id",
+            "the-output-json",
+            "the-output-type"
+        );
+
+        response
+            .ExternalId.Should()
+            .Be(
+                "the-external-id",
+                "TraxRequestHandler constructs RemoteRunResponse positionally, so reordering "
+                    + "its three consecutive string parameters would swap values on the wire "
+                    + "without a compile error. See "
+                    + "docs/adr/0001-remote-execution-is-a-json-wire-contract.md."
+            );
+        response.OutputJson.Should().Be("the-output-json");
+        response.OutputType.Should().Be("the-output-type");
     }
 
     #endregion

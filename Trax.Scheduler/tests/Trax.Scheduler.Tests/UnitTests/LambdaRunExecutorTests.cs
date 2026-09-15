@@ -15,6 +15,17 @@ using Trax.Scheduler.Services.RunExecutor;
 
 namespace Trax.Scheduler.Tests.UnitTests;
 
+/// <summary>
+/// The Lambda run executor, including the payload it actually invokes with.
+///
+/// <para>On a direct invoke there is no URL path to route on, so the run is double-encoded:
+/// a <c>RemoteRunRequest</c> serialized into the <c>PayloadJson</c> of a
+/// <c>LambdaEnvelope</c>. <c>ExecuteAsync_SendsCorrectEnvelope</c> decodes both layers, so a
+/// change to either shape fails here rather than at invoke time.</para>
+///
+/// <para>Enforces <c>docs/adr/0001-remote-execution-is-a-json-wire-contract.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0001-remote-execution-is-a-json-wire-contract.md")]
 [TestFixture]
 public class LambdaRunExecutorTests
 {
@@ -110,7 +121,14 @@ public class LambdaRunExecutorTests
         );
 
         envelope.Should().NotBeNull();
-        envelope!.Type.Should().Be(LambdaRequestType.Run);
+        envelope!
+            .Type.Should()
+            .Be(
+                LambdaRequestType.Run,
+                "a direct invoke has no URL path to route on, so the envelope type is the only "
+                    + "thing telling the receiver which request it holds. See "
+                    + "docs/adr/0001-remote-execution-is-a-json-wire-contract.md."
+            );
 
         var request = JsonSerializer.Deserialize<RemoteRunRequest>(
             envelope.PayloadJson,

@@ -11,6 +11,17 @@ using Trax.Scheduler.Trains.ManifestManager;
 
 namespace Trax.Scheduler.Tests.Sqlite.Integration.UnitTests;
 
+/// <summary>
+/// The scheduler builder under Sqlite, built against a throwaway database file.
+///
+/// <para>Overlaps <c>ProviderConsistencyTests</c> in the same project on the provider flag and
+/// the manifest manager, and adds the one that guard misses: that
+/// <c>JobDispatcherPollingService</c> is among the hosted services, so a service gated on
+/// Postgres alone fails here.</para>
+///
+/// <para>Enforces <c>docs/adr/0002-a-database-provider-is-interchangeable.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0002-a-database-provider-is-interchangeable.md")]
 [TestFixture]
 public class SqliteSchedulerBuilderTests
 {
@@ -77,7 +88,9 @@ public class SqliteSchedulerBuilderTests
             .Should()
             .Contain(
                 s => s.GetType().Name == "JobDispatcherPollingService",
-                "SQLite is a database provider, so the full scheduler pipeline should be registered"
+                "Sqlite is a database provider, so the full scheduler pipeline is registered. A "
+                    + "polling service gated on Postgres alone fails here. See "
+                    + "docs/adr/0002-a-database-provider-is-interchangeable.md."
             );
     }
 

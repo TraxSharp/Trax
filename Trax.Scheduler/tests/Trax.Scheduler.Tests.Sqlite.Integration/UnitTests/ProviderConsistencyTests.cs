@@ -11,6 +11,15 @@ using Trax.Scheduler.Trains.ManifestManager;
 
 namespace Trax.Scheduler.Tests.Sqlite.Integration.UnitTests;
 
+/// <summary>
+/// The scheduler registers the same services whatever database provider sits underneath.
+///
+/// <para>Spot-checks the registrations that would break first if a provider branch crept into the
+/// scheduler. It does not diff the two providers' service sets.</para>
+///
+/// <para>Enforces <c>docs/adr/0002-a-database-provider-is-interchangeable.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0002-a-database-provider-is-interchangeable.md")]
 [TestFixture]
 public class ProviderConsistencyTests
 {
@@ -59,7 +68,15 @@ public class ProviderConsistencyTests
     {
         using var scope = _sqliteProvider.CreateScope();
         var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
-        train.GetType().Name.Should().Be("ManifestManagerTrain");
+        train
+            .GetType()
+            .Name.Should()
+            .Be(
+                "ManifestManagerTrain",
+                "the scheduler registers the same services whatever provider sits underneath. A "
+                    + "provider branch here is the thing this guards against. See "
+                    + "docs/adr/0002-a-database-provider-is-interchangeable.md."
+            );
     }
 
     [Test]
