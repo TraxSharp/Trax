@@ -175,7 +175,7 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
         // [TraxAuthorize] attribute cannot both be set, so this check is
         // mutually exclusive with the directive emission below.
         if (!reg.AllowAnonymous)
-            ApplyAuthorizeDirectives(field, reg.AuthorizeAttributes);
+            AuthorizeDirectives.Apply(field, reg.AuthorizeAttributes);
 
         // Apply features in the correct middleware pipeline order:
         // Paging > Projection > Filtering > Sorting
@@ -269,7 +269,7 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
         // branches below. The build-time mutual-exclusion guard guarantees
         // AllowAnonymous and [TraxAuthorize] cannot both be set, but the
         // explicit `!allowAnonymous` checks make the intent visible in code
-        // so a future refactor of ApplyAuthorizeDirectives cannot accidentally
+        // so a future refactor of AuthorizeDirectives.Apply cannot accidentally
         // re-emit the directive on an anonymous entity.
         if (attr.ExposeAs is { } exposeAs)
         {
@@ -295,7 +295,7 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
                 }
 
                 if (!allowAnonymous)
-                    ApplyAuthorizeDirectives(descriptor, authorizeAttributes);
+                    AuthorizeDirectives.Apply(descriptor, authorizeAttributes);
             });
         }
 
@@ -305,7 +305,7 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
                 return new ObjectType<TEntity>();
 
             return new ObjectType<TEntity>(descriptor =>
-                ApplyAuthorizeDirectives(descriptor, authorizeAttributes)
+                AuthorizeDirectives.Apply(descriptor, authorizeAttributes)
             );
         }
 
@@ -324,94 +324,8 @@ public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : T
             }
 
             if (!allowAnonymous)
-                ApplyAuthorizeDirectives(descriptor, authorizeAttributes);
+                AuthorizeDirectives.Apply(descriptor, authorizeAttributes);
         });
-    }
-
-    /// <summary>
-    /// Attaches HotChocolate <c>@authorize</c> directives to an <see cref="IObjectTypeDescriptor"/>
-    /// according to the supplied <see cref="TraxAuthorizeAttribute"/> set. The directive
-    /// is applied at <em>type</em> level (not field level) so any field whose return
-    /// type is this object enforces the gate, including navigation properties reached
-    /// transitively from an ungated parent type.
-    ///
-    /// <para>
-    /// Combinator semantics mirror <see cref="Trax.Effect.Attributes.TraxAuthorizeAttribute"/>'s
-    /// documented behavior for trains:
-    /// </para>
-    /// <list type="bullet">
-    /// <item>Bare <c>[TraxAuthorize]</c> with no policy or roles is materialised by
-    /// emitting an empty <c>@authorize</c> directive, which the HotChocolate authorization
-    /// middleware treats as "require authenticated user."</item>
-    /// <item>Every <see cref="TraxAuthorizeAttribute.Policy"/> becomes its own directive;
-    /// HotChocolate evaluates them with AND semantics.</item>
-    /// <item>All <see cref="TraxAuthorizeAttribute.Roles"/> values across every attached
-    /// attribute are unioned (CSV split, trimmed, distinct) and emitted as a single
-    /// directive — the principal must hold at least one. Multiple role directives would
-    /// AND the OR-sets together, which is not the documented contract.</item>
-    /// </list>
-    /// </summary>
-    private static void ApplyAuthorizeDirectives<TEntity>(
-        IObjectTypeDescriptor<TEntity> descriptor,
-        IReadOnlyList<TraxAuthorizeAttribute> attributes
-    )
-        where TEntity : class
-    {
-        ExtractRules(attributes, out var policies, out var roles);
-
-        foreach (var policy in policies)
-            descriptor.Authorize(policy, ApplyPolicy.BeforeResolver);
-
-        if (roles.Length > 0)
-            descriptor.Authorize(roles);
-        else if (policies.Length == 0 && attributes.Count > 0)
-            descriptor.Authorize(ApplyPolicy.BeforeResolver);
-    }
-
-    private static void ApplyAuthorizeDirectives(
-        IObjectFieldDescriptor descriptor,
-        IReadOnlyList<TraxAuthorizeAttribute> attributes
-    )
-    {
-        ExtractRules(attributes, out var policies, out var roles);
-
-        foreach (var policy in policies)
-            descriptor.Authorize(policy, ApplyPolicy.BeforeResolver);
-
-        if (roles.Length > 0)
-            descriptor.Authorize(roles);
-        else if (policies.Length == 0 && attributes.Count > 0)
-            descriptor.Authorize(ApplyPolicy.BeforeResolver);
-    }
-
-    /// <summary>
-    /// Reduces a set of <see cref="TraxAuthorizeAttribute"/> instances into the
-    /// distinct policy and role lists used to emit <c>@authorize</c> directives.
-    /// Policies AND across attributes; roles OR within an attribute (CSV split)
-    /// and OR across attributes (unioned). The semantics mirror
-    /// <see cref="Trax.Api.Services.Authorization.TrainAuthorizationService"/>'s
-    /// train-side enforcement so a model and a train that declare the same
-    /// <c>[TraxAuthorize]</c> shape have identical access rules.
-    /// </summary>
-    private static void ExtractRules(
-        IReadOnlyList<TraxAuthorizeAttribute> attributes,
-        out string[] policies,
-        out string[] roles
-    )
-    {
-        roles = attributes
-            .Where(a => a.Roles is not null)
-            .SelectMany(a => a.Roles!.Split(',', StringSplitOptions.TrimEntries))
-            .Where(r => !string.IsNullOrEmpty(r))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
-        policies = attributes
-            .Select(a => a.Policy)
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(p => p!)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
     }
 
     private static readonly MethodInfo FilterFieldGeneric = typeof(QueryModelTypeModule).GetMethod(

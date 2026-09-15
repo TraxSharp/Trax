@@ -12,6 +12,7 @@ using Trax.Api.GraphQL.PersistedOperations.Storage;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 
+[Property("adr", "docs/adr/0004-the-operations-namespace-gates-independently-of-the-endpoint.md")]
 [TestFixture]
 public class ExtensionMethodTests
 {
@@ -364,4 +365,109 @@ public class ExtensionMethodTests
             new ServiceCollection().BuildServiceProvider(),
             NullLogger<HotChocolateOperationCacheInvalidator>.Instance
         );
+
+    // ── ExposeOperationsNamespace ───────────────────────────────────────
+
+    /// <summary>
+    /// Persisted operations exposes the namespace by default, which is where its own management
+    /// mutations live, and the host still has to answer for it.
+    /// </summary>
+    [Test]
+    public void UsePersistedOperations_ByDefault_ExposesTheOperationsNamespace()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+
+        builder.UsePersistedOperations(po => po.UseDatabase(FakeConn));
+
+        var config = builder.AllowAnonymousOperations().Build();
+        config.OperationQueriesExposed.Should().BeTrue();
+        config.OperationMutationsExposed.Should().BeTrue();
+        config.AdditionalTypeExtensions.Should().NotBeEmpty();
+    }
+
+    /// <summary>
+    /// Declining it keeps enforcement and storage, and leaves the schema without a control plane.
+    /// A host that manages its operations out of band should not have to publish one to get
+    /// enforcement.
+    /// </summary>
+    [Test]
+    public void ExposeOperationsNamespaceFalse_LeavesTheNamespaceOff()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+
+        builder.UsePersistedOperations(po =>
+            po.UseDatabase(FakeConn).ExposeOperationsNamespace(false)
+        );
+
+        var config = builder.Build();
+        config
+            .OperationQueriesExposed.Should()
+            .BeFalse(
+                "persisted operations and a GraphQL-exposed control plane are separable, per "
+                    + "docs/adr/0004-the-operations-namespace-gates-independently-of-the-endpoint.md"
+            );
+        config.OperationMutationsExposed.Should().BeFalse();
+        config
+            .AdditionalTypeExtensions.Should()
+            .BeEmpty(
+                "the management type extensions target OperationsMutations, which is not in the "
+                    + "schema when the namespace is declined"
+            );
+    }
+
+    /// <summary>
+    /// The enforcement middleware and storage are registered either way: the two features are
+    /// separable, which is the point of the switch.
+    /// </summary>
+    [Test]
+    public void ExposeOperationsNamespaceFalse_StillRegistersEnforcementAndStorage()
+    {
+        var sc = new ServiceCollection();
+        var builder = new TraxGraphQLBuilder(sc);
+
+        builder.UsePersistedOperations(po =>
+            po.UseDatabase(FakeConn).ExposeOperationsNamespace(false)
+        );
+
+        sc.Any(d => d.ServiceType == typeof(IPersistedOperationStore)).Should().BeTrue();
+        sc.Any(d => d.ServiceType == typeof(PersistedOperationsOptions)).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Without the namespace there is nothing to acknowledge, so a host that declines it does not
+    /// have to call AllowAnonymousOperations() or gate anything.
+    /// </summary>
+    [Test]
+    public void ExposeOperationsNamespaceFalse_NeedsNoAcknowledgement()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+        builder.UsePersistedOperations(po =>
+            po.UseDatabase(FakeConn).ExposeOperationsNamespace(false)
+        );
+
+        Action act = () => builder.Build();
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void ExposeOperationsNamespaceTrue_IsTheDefaultAndStillRequiresAnAnswer()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+        builder.UsePersistedOperations(po => po.UseDatabase(FakeConn));
+
+        Action act = () => builder.Build();
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*GateOperations(policy, roles)*");
+    }
+
+    [Test]
+    public void ExposeOperationsNamespace_ReturnsSameBuilder()
+    {
+        var po = new PersistedOperationsBuilder();
+
+        po.ExposeOperationsNamespace(false).Should().BeSameAs(po);
+    }
 }

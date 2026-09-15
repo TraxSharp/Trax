@@ -47,9 +47,12 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
     /// schema as the rest of the Trax tables.
     /// <para>
     /// This exposes the operations namespace, including the persisted-operation management
-    /// mutations. Those are admin operations, so the host must gate the endpoint with
-    /// <c>RequireAuthorization()</c>, or explicitly opt into anonymous access with
-    /// <c>AllowAnonymousOperations()</c>; otherwise <c>AddTraxGraphQL()</c> fails at startup.
+    /// mutations. Those are admin operations, so the host must gate them: <c>GateOperations(...)</c>
+    /// to gate the namespace while the rest of the endpoint stays open,
+    /// <c>RequireAuthorization()</c> to gate the whole endpoint, or
+    /// <c>AllowAnonymousOperations()</c> to explicitly opt into anonymous access. Otherwise
+    /// <c>AddTraxGraphQL()</c> fails at startup. A host that wants enforcement without the
+    /// namespace calls <c>ExposeOperationsNamespace(false)</c> and answers none of this.
     /// </para>
     /// </remarks>
     public static TraxGraphQLBuilder UsePersistedOperations(
@@ -117,9 +120,16 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         // TraxGraphQLBuilder.AddTypeExtensions helper. Also flip the
         // operations-exposed flags so AddTraxGraphQL emits the OperationsQueries
         // and OperationsMutations namespaces that our type extensions graft onto.
-        builder.ExposeOperationQueries();
-        builder.ExposeOperationMutations();
-        builder.AddTypeExtensions(typeof(GraphQL.PersistedOperationMutations).Assembly);
+        //
+        // Declinable: the type extensions are registered only alongside the namespace they
+        // extend, because an [ExtendObjectType(typeof(OperationsMutations))] class whose target
+        // type is not in the schema is a build error, not a no-op.
+        if (options.ExposeOperationsNamespace)
+        {
+            builder.ExposeOperationQueries();
+            builder.ExposeOperationMutations();
+            builder.AddTypeExtensions(typeof(GraphQL.PersistedOperationMutations).Assembly);
+        }
 
         // HotChocolate cache invalidator. The schema name is captured below
         // inside ConfigureSchema so the invalidator can evict the right executor.

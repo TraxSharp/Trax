@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
+using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Postgres.Utils;
@@ -76,8 +77,13 @@ public static class GraphQLFixture
     [ExtendObjectType("RootQuery")]
     public class HelloQuery
     {
+        // The fixture endpoint is open by design (it asserts persisted-operation enforcement,
+        // not authorization), so both fields say so rather than inheriting a gate that is not
+        // there.
+        [TraxAllowAnonymous]
         public string Hello() => "world";
 
+        [TraxAllowAnonymous]
         public string Version() => "v1";
     }
 }

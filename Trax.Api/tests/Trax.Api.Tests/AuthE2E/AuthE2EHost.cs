@@ -177,9 +177,10 @@ public static class AuthE2EHost
                                 // without needing an explicit override.
                                 .AddDbContext<TestDbContext>()
                                 .AddDbContext<AuthzTestDbContext>()
-                                .AddTypeExtensions(typeof(AuthE2EHost).Assembly)
-                                // Add custom subscription + mutation type
-                                // extensions for principal-propagation tests.
+                                // Registered by name rather than by scanning the test
+                                // assembly. A scan pulls in every [ExtendObjectType] any other
+                                // test file happens to declare, which is how unrelated fixtures
+                                // ended up in this host's schema.
                                 .ConfigureSchema(b =>
                                     b.AddTypeExtension<TestSubscriptions>()
                                         .AddTypeExtension<TestMutations>()

@@ -2,7 +2,7 @@ namespace Trax.Api.GraphQL.Configuration
 {
     public class GraphQLConfiguration
     {
-        public GraphQLConfiguration(System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Configuration.QueryModelRegistration> modelRegistrations, System.Collections.Generic.IReadOnlyList<System.Type> additionalTypeModules, System.Collections.Generic.IReadOnlyList<System.Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder>> schemaConfigurations, System.Collections.Generic.IReadOnlyList<System.Type> additionalTypeExtensions, int maxExecutionDepth = 15, System.Action<HotChocolate.CostAnalysis.CostOptions>? costOverride = null, System.Predicate<Microsoft.AspNetCore.Http.HttpContext>? introspectionPredicate = null, int maxOperationsPerRequest = 50, bool authorizationRequired = false, string? authorizationPolicy = null, bool operationQueriesExposed = false, bool operationMutationsExposed = false, System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Filtering.ITraxFilterModule>? filterModules = null) { }
+        public GraphQLConfiguration(System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Configuration.QueryModelRegistration> modelRegistrations, System.Collections.Generic.IReadOnlyList<System.Type> additionalTypeModules, System.Collections.Generic.IReadOnlyList<System.Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder>> schemaConfigurations, System.Collections.Generic.IReadOnlyList<System.Type> additionalTypeExtensions, int maxExecutionDepth = 15, System.Action<HotChocolate.CostAnalysis.CostOptions>? costOverride = null, System.Predicate<Microsoft.AspNetCore.Http.HttpContext>? introspectionPredicate = null, int maxOperationsPerRequest = 50, bool authorizationRequired = false, string? authorizationPolicy = null, bool operationQueriesExposed = false, bool operationMutationsExposed = false, System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Filtering.ITraxFilterModule>? filterModules = null, System.Collections.Generic.IReadOnlyList<Trax.Effect.Attributes.TraxAuthorizeAttribute>? operationsAuthorizeAttributes = null) { }
         public int MaxExecutionDepth { get; }
         public int MaxOperationsPerRequest { get; }
         public System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Configuration.QueryModelRegistration> ModelRegistrations { get; }
@@ -54,6 +54,7 @@ namespace Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ConfigureSchema(System.Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder> configure) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ExposeOperationMutations() { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder ExposeOperationQueries() { }
+        public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder GateOperations(string? policy = null, string? roles = null) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder MaxExecutionDepth(int depth) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder MaxOperationsPerRequest(int maxOperations) { }
         public Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder RequireAuthorization(string? policy = null) { }

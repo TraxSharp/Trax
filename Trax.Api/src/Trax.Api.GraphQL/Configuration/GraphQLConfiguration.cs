@@ -2,6 +2,7 @@ using HotChocolate.CostAnalysis;
 using HotChocolate.Execution.Configuration;
 using Microsoft.AspNetCore.Http;
 using Trax.Api.GraphQL.Filtering;
+using Trax.Effect.Attributes;
 
 namespace Trax.Api.GraphQL.Configuration;
 
@@ -91,6 +92,14 @@ public class GraphQLConfiguration
     public bool OperationMutationsExposed { get; }
 
     /// <summary>
+    /// Every <c>[TraxAuthorize]</c> shape passed to
+    /// <c>TraxGraphQLBuilder.GateOperations()</c>. Empty when the namespace carries no gate of
+    /// its own, in which case the endpoint gate (or
+    /// <c>AllowAnonymousOperations()</c>) is what governs it.
+    /// </summary>
+    internal IReadOnlyList<TraxAuthorizeAttribute> OperationsAuthorizeAttributes { get; }
+
+    /// <summary>
     /// Opt-in filter convention modules registered via
     /// <c>TraxGraphQLBuilder.ConfigureFiltering()</c>. Empty by default, in which case
     /// HotChocolate's stock filtering convention is used unchanged. When non-empty, each
@@ -111,7 +120,8 @@ public class GraphQLConfiguration
         string? authorizationPolicy = null,
         bool operationQueriesExposed = false,
         bool operationMutationsExposed = false,
-        IReadOnlyList<ITraxFilterModule>? filterModules = null
+        IReadOnlyList<ITraxFilterModule>? filterModules = null,
+        IReadOnlyList<TraxAuthorizeAttribute>? operationsAuthorizeAttributes = null
     )
     {
         ModelRegistrations = modelRegistrations;
@@ -127,5 +137,6 @@ public class GraphQLConfiguration
         OperationQueriesExposed = operationQueriesExposed;
         OperationMutationsExposed = operationMutationsExposed;
         FilterModules = filterModules ?? [];
+        OperationsAuthorizeAttributes = operationsAuthorizeAttributes ?? [];
     }
 }

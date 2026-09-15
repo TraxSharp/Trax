@@ -83,19 +83,26 @@ public partial class TraxGraphQLBuilder
             AuthorizationPolicy,
             OperationQueriesExposed,
             OperationMutationsExposed,
-            FilterModules
+            FilterModules,
+            OperationsAuthorizeAttributes
         );
     }
 
     /// <summary>
-    /// Fails at build when the operations mutations are exposed without an endpoint gate. Those
-    /// mutations drive the scheduler directly (trigger/enable/disable/cancel, dead-letter
-    /// requeue/acknowledge, config changes), so anonymous access to them must be a deliberate choice
-    /// (<c>RequireAuthorization()</c> to gate, or <c>AllowAnonymousOperations()</c> to opt in), never
-    /// a forgotten one. Extends the "anonymous access is always deliberate" stance of
+    /// Fails at build when the operations namespace is exposed without a gate. Its mutations drive
+    /// the scheduler directly (trigger/enable/disable/cancel, dead-letter requeue/acknowledge,
+    /// config changes) and its queries report internal hostnames, execution volumes and scheduler
+    /// configuration, so anonymous access to either must be a deliberate choice, never a forgotten
+    /// one. Extends the "anonymous access is always deliberate" stance of
     /// <see cref="ExposureAuthorizationRule"/> to the built-in admin namespace, which is otherwise
     /// exempt from the per-surface rule.
     /// </summary>
+    /// <remarks>
+    /// There are three ways to answer, and the third is usually the right one for a host with
+    /// pre-login surfaces: <c>RequireAuthorization()</c> gates the whole endpoint,
+    /// <c>GateOperations(...)</c> gates only this namespace, and
+    /// <c>AllowAnonymousOperations()</c> opts into a public control plane.
+    /// </remarks>
     private void ValidateOperationsAuthorization()
     {
         if (AuthorizationRequired && AnonymousOperationsAllowed)
@@ -105,16 +112,47 @@ public partial class TraxGraphQLBuilder
                     + "anonymous opt-in can never take effect. Remove AllowAnonymousOperations()."
             );
 
-        if (OperationMutationsExposed && !AuthorizationRequired && !AnonymousOperationsAllowed)
+        if (OperationsGated && !OperationMutationsExposed && !OperationQueriesExposed)
             throw new InvalidOperationException(
-                "ExposeOperationMutations() exposes scheduler-control mutations "
-                    + "(trigger/enable/disable/cancel, dead-letter requeue/acknowledge, config "
-                    + "changes), but the GraphQL endpoint is not gated, so an unauthenticated caller "
-                    + "could disrupt scheduled work. Gate it with RequireAuthorization(...) (optionally "
-                    + "a dedicated admin policy), or, if the surface is protected another way (a "
-                    + "private network, a sidecar, ASP.NET endpoint authorization) or is intentionally "
-                    + "public, call AllowAnonymousOperations() to acknowledge that."
+                "GateOperations() was called but the operations namespace is not exposed, so there "
+                    + "is no field to put the gate on and the call does nothing. Expose it with "
+                    + "ExposeOperationQueries() / ExposeOperationMutations(), or remove "
+                    + "GateOperations()."
             );
+
+        if (AnonymousOperationsAllowed && OperationsGated)
+            throw new InvalidOperationException(
+                "AllowAnonymousOperations() was called together with GateOperations(). They "
+                    + "contradict: GateOperations() puts @authorize on the operations field, so the "
+                    + "anonymous opt-in can never take effect. Remove one."
+            );
+
+        if (
+            (OperationMutationsExposed || OperationQueriesExposed)
+            && !AuthorizationRequired
+            && !OperationsGated
+            && !AnonymousOperationsAllowed
+        )
+            throw new InvalidOperationException(
+                Exposed()
+                    + " but the GraphQL endpoint is not gated and the namespace carries no gate of "
+                    + "its own, so an unauthenticated caller can reach it. Pick one: "
+                    + "GateOperations(policy, roles) to gate just this namespace and leave the rest "
+                    + "of the endpoint open, RequireAuthorization(...) to gate the whole endpoint, "
+                    + "or, if the surface is protected another way (a private network, a sidecar, "
+                    + "ASP.NET endpoint authorization) or is intentionally public, "
+                    + "AllowAnonymousOperations() to acknowledge that."
+            );
+
+        string Exposed() =>
+            OperationMutationsExposed
+                ? "ExposeOperationMutations() exposes scheduler-control mutations "
+                    + "(trigger/enable/disable/cancel, dead-letter requeue/acknowledge, config "
+                    + "changes)"
+                : "ExposeOperationQueries() exposes the scheduler control plane's read surface "
+                    + "(hosts, logs, executions, work queue, dead letters, manifests, config), "
+                    + "which reports internal hostnames, private-network topology and workload "
+                    + "volume";
     }
 
     /// <summary>

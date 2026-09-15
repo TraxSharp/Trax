@@ -28,4 +28,7 @@ public sealed partial class PersistedOperationsBuilder
 
     // ----- database -----
     private string? _databaseConnectionString;
+
+    // ----- schema exposure -----
+    private bool _exposeOperationsNamespace = true;
 }

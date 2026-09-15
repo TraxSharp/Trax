@@ -5,6 +5,7 @@ using HotChocolate.Subscriptions;
 using HotChocolate.Types;
 using Microsoft.AspNetCore.Http;
 using Trax.Api.Auth;
+using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests.AuthE2E;
 
@@ -27,6 +28,9 @@ public sealed class TestSubscriptions
 {
     public const string TopicName = "trax-auth-e2e-whoami";
 
+    // Anonymous on purpose: the probe exists to observe what an unauthenticated subscriber
+    // looks like, and returns "anonymous" when there is no principal.
+    [TraxAllowAnonymous]
     [Subscribe(With = nameof(SubscribeWhoAmIAsync))]
     public string WhoAmI([EventMessage] string _, IHttpContextAccessor httpContextAccessor)
     {
@@ -54,6 +58,8 @@ public sealed class TestSubscriptions
 [ExtendObjectType("RootMutation")]
 public sealed class TestMutations
 {
+    // Anonymous on purpose: the tests poke this without credentials to fan an event out.
+    [TraxAllowAnonymous]
     public async Task<bool> PokeWhoAmI(
         string tag,
         [Service] ITopicEventSender sender,

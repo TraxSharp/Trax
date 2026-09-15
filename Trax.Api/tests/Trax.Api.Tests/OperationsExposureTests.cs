@@ -20,6 +20,7 @@ namespace Trax.Api.Tests;
 /// surface is reachable only as a nested namespace under <c>operations</c>.
 /// Each test wires its own minimal DI graph and inspects the resulting schema.
 /// </summary>
+[Property("adr", "docs/adr/0004-the-operations-namespace-gates-independently-of-the-endpoint.md")]
 [TestFixture]
 public class OperationsExposureTests
 {
@@ -209,7 +210,7 @@ public class OperationsExposureTests
 
         var executor = await BuildExecutor(
             _emptyDiscovery,
-            graphql => graphql.ExposeOperationQueries(),
+            graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations(),
             registerHealth: true
         );
 
@@ -226,7 +227,7 @@ public class OperationsExposureTests
     {
         var executor = await BuildExecutor(
             _emptyDiscovery,
-            graphql => graphql.ExposeOperationQueries(),
+            graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations(),
             registerHealth: true
         );
 
@@ -245,7 +246,7 @@ public class OperationsExposureTests
     {
         var executor = await BuildExecutor(
             _emptyDiscovery,
-            graphql => graphql.ExposeOperationQueries(),
+            graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations(),
             registerHealth: true
         );
 
@@ -323,7 +324,7 @@ public class OperationsExposureTests
     {
         var executor = await BuildExecutor(
             _queryOnlyDiscovery,
-            graphql => graphql.ExposeOperationQueries(),
+            graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations(),
             registerHealth: true
         );
 
@@ -417,10 +418,11 @@ public class OperationsExposureTests
     }
 
     [Test]
-    public void ExposeOperationQueriesOnly_WithoutAuthorization_DoesNotThrow()
+    public void ExposeOperationQueriesOnly_WithoutAuthorization_Throws()
     {
-        // The guard is about scheduler-control mutations. Read-only operation queries stay reachable
-        // without a gate (health checks and dashboards commonly want that).
+        // The read surface is an infrastructure disclosure in its own right: operations.hosts
+        // reports internal hostnames and execution volume, operations.config the scheduler's
+        // settings. Exposing it anonymously has to be as deliberate as exposing the mutations.
         var services = BuildBaseServices(_emptyDiscovery);
 
         Action act = () =>
@@ -429,7 +431,13 @@ public class OperationsExposureTests
                 g => g.ExposeOperationQueries()
             );
 
-        act.Should().NotThrow();
+        act.Should()
+            .Throw<InvalidOperationException>(
+                "the read surface needs an acknowledgement too, per "
+                    + "docs/adr/0004-the-operations-namespace-gates-independently-of-the-endpoint.md"
+            )
+            .WithMessage("*ExposeOperationQueries()*")
+            .WithMessage("*GateOperations(policy, roles)*");
     }
 
     [Test]
@@ -452,6 +460,199 @@ public class OperationsExposureTests
 
     private ITraxHealthService? _healthService;
     private ITraxScheduler? _scheduler;
+
+    #region GateOperations
+
+    [Test]
+    public void GateOperations_WithQueriesExposed_DoesNotThrow()
+    {
+        var services = BuildBaseServices(_emptyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g => g.ExposeOperationQueries().GateOperations()
+            );
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void GateOperations_WithMutationsExposed_DoesNotThrow()
+    {
+        // A query train supplies the root Query type, which a mutations-only host would lack.
+        var services = BuildBaseServices(_queryOnlyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g => g.ExposeOperationMutations().GateOperations(roles: "admin")
+            );
+
+        act.Should().NotThrow();
+    }
+
+    /// <summary>
+    /// The namespace gate and the endpoint gate are not exclusive: the first layers a finer policy
+    /// on a surface the second already covers, the same way <c>[TraxAuthorize]</c> does under
+    /// <c>RequireAuthorization()</c>.
+    /// </summary>
+    [Test]
+    public void GateOperations_WithRequireAuthorization_DoesNotThrow()
+    {
+        var services = BuildBaseServices(_emptyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g =>
+                    g.ExposeOperationQueries().RequireAuthorization().GateOperations(roles: "admin")
+            );
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void GateOperations_WithAllowAnonymousOperations_ThrowsContradiction()
+    {
+        var services = BuildBaseServices(_emptyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g => g.ExposeOperationQueries().GateOperations().AllowAnonymousOperations()
+            );
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*AllowAnonymousOperations() was called together with GateOperations()*");
+    }
+
+    /// <summary>
+    /// Order must not matter: the contradiction is a property of the pair, not of which call came
+    /// first.
+    /// </summary>
+    [Test]
+    public void AllowAnonymousOperations_ThenGateOperations_ThrowsContradiction()
+    {
+        var services = BuildBaseServices(_emptyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g => g.ExposeOperationQueries().AllowAnonymousOperations().GateOperations()
+            );
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*GateOperations()*");
+    }
+
+    [Test]
+    public void GateOperations_WithNothingExposed_ThrowsDeadConfiguration()
+    {
+        var services = BuildBaseServices(_queryOnlyDiscovery);
+
+        Action act = () =>
+            Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                g => g.GateOperations(roles: "admin")
+            );
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*the operations namespace is not exposed*");
+    }
+
+    [Test]
+    public void GateOperations_ReturnsSameBuilder()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+
+        builder.GateOperations().Should().BeSameAs(builder);
+    }
+
+    [Test]
+    public void GateOperations_Repeated_AccumulatesPoliciesAndRoles()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+
+        builder.ExposeOperationQueries();
+        builder.GateOperations(policy: "AdminOnly");
+        builder.GateOperations(roles: "ops,sre");
+
+        var config = builder.Build();
+
+        config.OperationsAuthorizeAttributes.Should().HaveCount(2);
+        config.OperationsAuthorizeAttributes.Select(a => a.Policy).Should().Contain("AdminOnly");
+        config.OperationsAuthorizeAttributes.Select(a => a.Roles).Should().Contain("ops,sre");
+    }
+
+    [Test]
+    public void NoGateOperations_LeavesTheAttributeListEmpty()
+    {
+        var builder = new TraxGraphQLBuilder(new ServiceCollection());
+        builder.ExposeOperationQueries().AllowAnonymousOperations();
+
+        builder.Build().OperationsAuthorizeAttributes.Should().BeEmpty();
+    }
+
+    // ── The directive actually reaches the schema ────────────────────────
+
+    [Test]
+    public async Task GateOperations_PutsAuthorizeOnTheRootQueryOperationsField()
+    {
+        var executor = await BuildExecutor(
+            _emptyDiscovery,
+            graphql => graphql.ExposeOperationQueries().GateOperations(roles: "admin"),
+            registerHealth: true
+        );
+
+        var field = executor.Schema.QueryType.Fields["operations"];
+
+        field.Directives.Any(d => d.Definition.Name == "authorize").Should().BeTrue();
+    }
+
+    [Test]
+    public async Task GateOperations_PutsAuthorizeOnTheRootMutationOperationsField()
+    {
+        var executor = await BuildExecutor(
+            _emptyDiscovery,
+            graphql =>
+                graphql
+                    .ExposeOperationQueries()
+                    .ExposeOperationMutations()
+                    .GateOperations(roles: "admin"),
+            registerHealth: true,
+            registerScheduler: true
+        );
+
+        executor
+            .Schema.MutationType!.Fields["operations"]
+            .Directives.Any(d => d.Definition.Name == "authorize")
+            .Should()
+            .BeTrue();
+    }
+
+    /// <summary>
+    /// Without the gate the field carries no directive. Asserting the negative is what makes the
+    /// positive above mean something.
+    /// </summary>
+    [Test]
+    public async Task WithoutGateOperations_TheOperationsFieldCarriesNoAuthorizeDirective()
+    {
+        var executor = await BuildExecutor(
+            _emptyDiscovery,
+            graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations(),
+            registerHealth: true
+        );
+
+        executor
+            .Schema.QueryType.Fields["operations"]
+            .Directives.Any(d => d.Definition.Name == "authorize")
+            .Should()
+            .BeFalse();
+    }
+
+    #endregion
 
     private static IServiceCollection BuildBaseServices(ITrainDiscoveryService discovery)
     {

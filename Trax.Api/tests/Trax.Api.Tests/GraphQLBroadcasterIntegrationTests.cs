@@ -76,7 +76,7 @@ internal static class TestGraphQLExtensions
         // would otherwise be empty and AddTraxGraphQL would refuse the build.
         return Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
             services,
-            graphql => graphql.ExposeOperationQueries()
+            graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations()
         );
     }
 }

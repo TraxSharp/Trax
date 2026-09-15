@@ -31,6 +31,7 @@ using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.GraphQL.Types;
 using Trax.Api.GraphQL.Validation;
+using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.TrainEventBroadcaster;
@@ -197,9 +198,10 @@ public static class GraphQLServiceExtensions
                 new ObjectTypeExtension(d =>
                 {
                     d.Name("RootQuery");
-                    d.Field("operations")
+                    var operations = d.Field("operations")
                         .Type<ObjectType<OperationsQueries>>()
                         .Resolve(_ => new OperationsQueries());
+                    AuthorizeDirectives.Apply(operations, config.OperationsAuthorizeAttributes);
                 })
             );
         }
@@ -215,11 +217,45 @@ public static class GraphQLServiceExtensions
                 new ObjectTypeExtension(d =>
                 {
                     d.Name("RootMutation");
-                    d.Field("operations")
+                    var operations = d.Field("operations")
                         .Type<ObjectType<OperationsMutations>>()
                         .Resolve(_ => new OperationsMutations());
+                    AuthorizeDirectives.Apply(operations, config.OperationsAuthorizeAttributes);
                 })
             );
+        }
+
+        // Wire HotChocolate's @authorize directive handler whenever an @authorize can reach the
+        // schema. The directive runs against ASP.NET Core's IAuthorizationService, so RequireRole
+        // and policy definitions registered via services.AddAuthorization(...) apply. Wiring is
+        // conditional so the dependency stays opt-in for hosts with nothing gated: the interceptor
+        // resolves IAuthenticationSchemeProvider, which a host that never called AddAuthentication()
+        // does not have.
+        //
+        // Three things can put one in the schema: a [TraxAuthorize] query model, GateOperations()
+        // on the operations namespace, and [TraxAuthorize] or [TraxAllowAnonymous] on a
+        // type-extension resolver, which is what TypeExtensionExposureInterceptor requires of a
+        // field that inherits no gate and turns into an @authorize directive.
+        var authorizationInSchema =
+            config.ModelRegistrations.Any(r => r.AuthorizeAttributes.Count > 0)
+            || config.OperationsAuthorizeAttributes.Count > 0
+            || AnyTypeExtensionDeclaresPosture(config.AdditionalTypeExtensions);
+
+        if (authorizationInSchema)
+        {
+            // HotChocolate's authorization handler resolves ASP.NET Core's IAuthorizationService,
+            // which a host that never called AddAuthorization() does not have: without this the
+            // schema builds and then fails to activate the handler. Both calls are additive and
+            // idempotent (they TryAdd), so a host that configured its own policies keeps them.
+            services.AddLogging();
+            services.AddAuthorization();
+
+            graphqlBuilder.AddAuthorization();
+            // HotChocolate 16 activates interceptors out of the schema container, which no longer
+            // forwards to the application container. Bridge the ASP.NET Core services the
+            // interceptor needs across the boundary.
+            graphqlBuilder.BridgeApplicationService<IAuthenticationSchemeProvider>();
+            graphqlBuilder.AddHttpRequestInterceptor<QueryModelAuthenticationInterceptor>();
         }
 
         ApplyHardeningDefaults(services, graphqlBuilder, config);
@@ -229,26 +265,11 @@ public static class GraphQLServiceExtensions
             services.AddSingleton<QueryModelTypeModule>();
             graphqlBuilder.AddTypeModule<QueryModelTypeModule>();
 
-            // Wire HotChocolate's @authorize directive handler whenever any
-            // model entity carries [TraxAuthorize]. The directive runs against
-            // ASP.NET Core's IAuthorizationService, so RequireRole / policy
-            // definitions registered via services.AddAuthorization(...) apply.
-            // Wiring is conditional so the dependency is opt-in for hosts that
-            // expose no gated models (the directive handler pulls in ASP.NET
-            // Core authorization machinery).
             var hasGated = config.ModelRegistrations.Any(r => r.AuthorizeAttributes.Count > 0);
             var hasAnonymous = config.ModelRegistrations.Any(r => r.AllowAnonymous);
 
             if (hasGated)
-            {
-                graphqlBuilder.AddAuthorization();
-                // HotChocolate 16 activates interceptors out of the schema container,
-                // which no longer forwards to the application container. Bridge the
-                // ASP.NET Core services the interceptor needs across the boundary.
-                graphqlBuilder.BridgeApplicationService<IAuthenticationSchemeProvider>();
-                graphqlBuilder.AddHttpRequestInterceptor<QueryModelAuthenticationInterceptor>();
                 services.AddHostedService<QueryModelAuthorizationValidator>();
-            }
 
             // Schema validator covers both positive (gated has @authorize) and
             // inverse ([TraxAllowAnonymous] has no @authorize) invariants. Run
@@ -346,6 +367,20 @@ public static class GraphQLServiceExtensions
             schemaConfiguration(graphqlBuilder);
         }
 
+        // The exposure census for type-extension fields. Registered whenever a type extension
+        // could exist: through Trax's own AddTypeExtension(s), or through a ConfigureSchema
+        // callback, which has full builder access and can add one Trax never sees. A host with
+        // neither cannot have a type-extension field, and pays nothing.
+        if (config.AdditionalTypeExtensions.Count > 0 || config.SchemaConfigurations.Count > 0)
+        {
+            var exposureReport = new TypeExtensionExposureReport();
+            services.AddSingleton(exposureReport);
+            graphqlBuilder.TryAddTypeInterceptor(
+                new TypeExtensionExposureInterceptor(config, exposureReport)
+            );
+            services.AddHostedService<TypeExtensionExposureValidator>();
+        }
+
         // If a broadcaster receiver is registered (via UseBroadcaster()),
         // wire up the GraphQL handlers so remote lifecycle events and data-change
         // signals are forwarded to HotChocolate subscriptions.
@@ -357,6 +392,39 @@ public static class GraphQLServiceExtensions
 
         return services;
     }
+
+    /// <summary>
+    /// Whether any registered type-extension class declares an authorization posture, on the class
+    /// or on one of its resolvers. A declaration becomes a directive, so either flavour means the
+    /// schema needs the authorization types registered.
+    /// </summary>
+    /// <remarks>
+    /// Deciding this from the registration list rather than the built schema is deliberate: the
+    /// answer is needed while the schema is still being configured, and a consumer who adds a
+    /// declared type extension from a <c>ConfigureSchema</c> callback has the builder in hand and
+    /// can call <c>AddAuthorization()</c> there.
+    /// </remarks>
+    private static bool AnyTypeExtensionDeclaresPosture(IReadOnlyList<Type> typeExtensions) =>
+        typeExtensions.Any(type =>
+            DeclaresPosture(type)
+            || type.GetMembers(
+                    BindingFlags.Public
+                        | BindingFlags.NonPublic
+                        | BindingFlags.Instance
+                        | BindingFlags.Static
+                        | BindingFlags.DeclaredOnly
+                )
+                .Any(DeclaresPosture)
+        );
+
+    private static bool DeclaresPosture(MemberInfo member) =>
+        member.IsDefined(typeof(TraxAuthorizeAttribute), inherit: true)
+        || member.IsDefined(typeof(TraxAllowAnonymousAttribute), inherit: true)
+        // A foreign attribute is refused rather than honoured, but the refusal happens at schema
+        // build, so the authorization types still have to be there for the schema to get that far.
+        || TraxAuthorization.ForeignAuthorizationAttributes.Any(name =>
+            member.GetCustomAttributes(inherit: true).Any(a => a.GetType().FullName == name)
+        );
 
     /// <summary>
     /// Registers the Trax GraphQL schema on a named HotChocolate server ("trax").

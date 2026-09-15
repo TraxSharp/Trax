@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using HotChocolate.Types;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -11,6 +12,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
+using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -20,20 +22,46 @@ using Trax.Scheduler.Services.TraxScheduler;
 namespace Trax.Api.Tests.Auth;
 
 /// <summary>
-/// Confirms the security posture of the admin <c>operations</c> namespace end to end over HTTP:
-/// it is NOT auto-authenticated by being exposed (auth stays the deployer's decision), and when
-/// the endpoint opts into <c>RequireAuthorization()</c> the admin surface is gated by the exact
-/// same endpoint policy as everything else on that schema. There is no admin-specific auth built
-/// in: separation between an admin surface and a client surface is achieved by exposing operations
-/// on a distinct, gated host, not by a per-namespace policy.
+/// Confirms the security posture of the admin <c>operations</c> namespace end to end over HTTP.
+/// Exposing it does not authenticate it: which of the three postures applies is the deployer's
+/// decision, and the host refuses to start until one is chosen.
 /// </summary>
+/// <remarks>
+/// <list type="bullet">
+/// <item><c>RequireAuthorization()</c> gates the whole endpoint, admin surface included.</item>
+/// <item><c>GateOperations(...)</c> gates the namespace alone, which is what a host with public
+/// pre-login surfaces needs: the sibling public field on the same endpoint stays reachable.</item>
+/// <item><c>AllowAnonymousOperations()</c> publishes the control plane deliberately.</item>
+/// </list>
+/// </remarks>
+[Property("adr", "docs/adr/0004-the-operations-namespace-gates-independently-of-the-endpoint.md")]
 [TestFixture]
 public class AdminOperationsAuthorizationTests
 {
-    private const string AdminApiKey = "admin-ops-key";
+    internal const string AdminApiKey = "admin-ops-key";
+    internal const string ReaderApiKey = "reader-ops-key";
     private const string OperationsHealthQuery = "{ operations { health { status } } }";
+    internal const string PublicQuery = "{ publicPing }";
+    internal const string GatedQuery = "{ gatedPing }";
+    internal const string AuthenticatedQuery = "{ authenticatedPing }";
 
-    private static async Task<IHost> StartHostAsync(bool requireAuthorization)
+    /// <summary>How the host answers for the operations namespace.</summary>
+    internal enum Posture
+    {
+        /// <summary>RequireAuthorization(): the whole endpoint is gated.</summary>
+        EndpointGated,
+
+        /// <summary>AllowAnonymousOperations(): the control plane is deliberately public.</summary>
+        AnonymousAcknowledged,
+
+        /// <summary>GateOperations(): the namespace is gated, the endpoint stays open.</summary>
+        NamespaceGated,
+
+        /// <summary>GateOperations(roles: "Admin"): the namespace needs a role.</summary>
+        NamespaceGatedByRole,
+    }
+
+    internal static async Task<IHost> StartHostAsync(Posture posture)
     {
         var health = Substitute.For<ITraxHealthService>();
         health
@@ -52,6 +80,7 @@ public class AdminOperationsAuthorizationTests
                         // the builder's RequireAuthorization() gates on by default.
                         services.AddTraxApiKeyAuth(keys =>
                             keys.Add(AdminApiKey, id: "admin", "Admin")
+                                .Add(ReaderApiKey, id: "reader", "Reader")
                         );
 
                         // Minimal graph the GraphQL builder needs, plus the backing
@@ -65,8 +94,24 @@ public class AdminOperationsAuthorizationTests
                         services.AddTraxGraphQL(graphql =>
                         {
                             graphql.ExposeOperationQueries();
-                            if (requireAuthorization)
-                                graphql.RequireAuthorization();
+                            graphql.AddTypeExtension<PublicRootQueryExtension>();
+
+                            switch (posture)
+                            {
+                                case Posture.EndpointGated:
+                                    graphql.RequireAuthorization();
+                                    break;
+                                case Posture.AnonymousAcknowledged:
+                                    graphql.AllowAnonymousOperations();
+                                    break;
+                                case Posture.NamespaceGated:
+                                    graphql.GateOperations();
+                                    break;
+                                case Posture.NamespaceGatedByRole:
+                                    graphql.GateOperations(roles: "Admin");
+                                    break;
+                            }
+
                             return graphql;
                         });
 
@@ -91,12 +136,16 @@ public class AdminOperationsAuthorizationTests
         return host;
     }
 
-    private static async Task<JsonDocument> PostAsync(IHost host, string? apiKey)
+    internal static async Task<JsonDocument> PostAsync(
+        IHost host,
+        string? apiKey,
+        string query = OperationsHealthQuery
+    )
     {
         var client = host.GetTestServer().CreateClient();
         using var req = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
-            Content = JsonContent.Create(new { query = OperationsHealthQuery }),
+            Content = JsonContent.Create(new { query }),
         };
         if (apiKey is not null)
             req.Headers.Add("X-Api-Key", apiKey);
@@ -105,7 +154,7 @@ public class AdminOperationsAuthorizationTests
         return JsonDocument.Parse(await res.Content.ReadAsStringAsync());
     }
 
-    private static bool HasErrorCode(JsonDocument doc, string code) =>
+    internal static bool HasErrorCode(JsonDocument doc, string code) =>
         doc.RootElement.TryGetProperty("errors", out var errors)
         && errors
             .EnumerateArray()
@@ -118,7 +167,7 @@ public class AdminOperationsAuthorizationTests
     [Test]
     public async Task Exposed_WithRequireAuthorization_Anonymous_IsRejected()
     {
-        using var host = await StartHostAsync(requireAuthorization: true);
+        using var host = await StartHostAsync(Posture.EndpointGated);
 
         var doc = await PostAsync(host, apiKey: null);
 
@@ -138,7 +187,7 @@ public class AdminOperationsAuthorizationTests
     [Test]
     public async Task Exposed_WithRequireAuthorization_AuthenticatedAdmin_Succeeds()
     {
-        using var host = await StartHostAsync(requireAuthorization: true);
+        using var host = await StartHostAsync(Posture.EndpointGated);
 
         var doc = await PostAsync(host, apiKey: AdminApiKey);
 
@@ -159,16 +208,18 @@ public class AdminOperationsAuthorizationTests
     [Test]
     public async Task Exposed_WithoutRequireAuthorization_Anonymous_IsReachable()
     {
-        // Exposing the admin surface does NOT force authentication. Gating is the deployer's
-        // decision; this test pins that so a future change can't silently start rejecting or,
-        // worse, be assumed to gate when it does not.
-        using var host = await StartHostAsync(requireAuthorization: false);
+        // AllowAnonymousOperations() means what it says. Gating is the deployer's decision;
+        // this pins that the acknowledged-anonymous posture really does serve anonymous callers,
+        // so it can never be mistaken for a gate.
+        using var host = await StartHostAsync(Posture.AnonymousAcknowledged);
 
         var doc = await PostAsync(host, apiKey: null);
 
         doc.RootElement.TryGetProperty("errors", out _)
             .Should()
-            .BeFalse("without RequireAuthorization the operations surface is publicly reachable");
+            .BeFalse(
+                "AllowAnonymousOperations() is an opt-in to a publicly reachable control plane"
+            );
         doc.RootElement.GetProperty("data")
             .GetProperty("operations")
             .GetProperty("health")
@@ -179,4 +230,275 @@ public class AdminOperationsAuthorizationTests
 
         await host.StopAsync();
     }
+
+    [Test]
+    public async Task NamespaceGated_Anonymous_IsRejected()
+    {
+        using var host = await StartHostAsync(Posture.NamespaceGated);
+
+        var doc = await PostAsync(host, apiKey: null);
+
+        HasErrorCode(doc, "TRAX_AUTHORIZATION")
+            .Should()
+            .BeTrue("GateOperations() puts @authorize on the operations field itself");
+
+        await host.StopAsync();
+    }
+
+    [Test]
+    public async Task NamespaceGated_Authenticated_IsReachable()
+    {
+        using var host = await StartHostAsync(Posture.NamespaceGated);
+
+        var doc = await PostAsync(host, apiKey: ReaderApiKey);
+
+        doc.RootElement.TryGetProperty("errors", out _)
+            .Should()
+            .BeFalse("a bare GateOperations() asks only for an authenticated caller");
+        doc.RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("health")
+            .GetProperty("status")
+            .GetString()
+            .Should()
+            .Be("Healthy");
+
+        await host.StopAsync();
+    }
+
+    [Test]
+    public async Task NamespaceGated_PublicSiblingField_StaysReachableAnonymously()
+    {
+        // The whole point of the namespace gate: an open endpoint keeps its public surfaces.
+        // RequireAuthorization() cannot express this, which is why hosts with pre-login pages
+        // reached for AllowAnonymousOperations() and published the control plane.
+        using var host = await StartHostAsync(Posture.NamespaceGated);
+
+        var doc = await PostAsync(host, apiKey: null, query: PublicQuery);
+
+        doc.RootElement.TryGetProperty("errors", out _)
+            .Should()
+            .BeFalse(
+                "gating the namespace must not gate the rest of the endpoint, which is the whole "
+                    + "point of "
+                    + "docs/adr/0004-the-operations-namespace-gates-independently-of-the-endpoint.md"
+            );
+        doc.RootElement.GetProperty("data")
+            .GetProperty("publicPing")
+            .GetString()
+            .Should()
+            .Be("pong");
+
+        await host.StopAsync();
+    }
+
+    [Test]
+    public async Task NamespaceGatedByRole_WrongRole_IsRejected()
+    {
+        using var host = await StartHostAsync(Posture.NamespaceGatedByRole);
+
+        var doc = await PostAsync(host, apiKey: ReaderApiKey);
+
+        HasErrorCode(doc, "TRAX_AUTHORIZATION")
+            .Should()
+            .BeTrue("an authenticated caller without the role is still refused");
+
+        await host.StopAsync();
+    }
+
+    [Test]
+    public async Task NamespaceGatedByRole_RoleHolder_IsReachable()
+    {
+        using var host = await StartHostAsync(Posture.NamespaceGatedByRole);
+
+        var doc = await PostAsync(host, apiKey: AdminApiKey);
+
+        doc.RootElement.TryGetProperty("errors", out _).Should().BeFalse();
+        doc.RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("health")
+            .GetProperty("status")
+            .GetString()
+            .Should()
+            .Be("Healthy");
+
+        await host.StopAsync();
+    }
+
+    [Test]
+    public async Task EndpointGated_PublicSiblingField_IsAlsoRejected()
+    {
+        // The contrast that makes the namespace gate worth having: the endpoint gate takes the
+        // public field down with it.
+        using var host = await StartHostAsync(Posture.EndpointGated);
+
+        var doc = await PostAsync(host, apiKey: null, query: PublicQuery);
+
+        doc.RootElement.TryGetProperty("errors", out _)
+            .Should()
+            .BeTrue("RequireAuthorization() rejects the whole endpoint, public fields included");
+
+        await host.StopAsync();
+    }
+}
+
+/// <summary>
+/// <c>[TraxAuthorize]</c> and <c>[TraxAllowAnonymous]</c> on a resolver, end to end over HTTP.
+/// The census refuses a field that declares nothing; these prove the other half, that a field
+/// which does declare is actually enforced rather than merely annotated.
+///
+/// <para>Enforces <c>docs/adr/0003-a-type-extension-field-declares-its-own-posture.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md")]
+[TestFixture]
+public class ResolverAuthorizationTests
+{
+    private const string Adr = "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md";
+
+    // ── [TraxAuthorize] on a resolver is a real gate ─────────────────────
+
+    /// <summary>
+    /// The whole point of owning the vocabulary: Trax reads its own attribute off the resolver
+    /// and emits the server's directive, so the field is enforced, not merely annotated.
+    /// </summary>
+    [Test]
+    public async Task TraxAuthorizeOnAResolver_RefusesAnAnonymousCaller()
+    {
+        using var host = await AdminOperationsAuthorizationTests.StartHostAsync(
+            AdminOperationsAuthorizationTests.Posture.NamespaceGated
+        );
+
+        var doc = await AdminOperationsAuthorizationTests.PostAsync(
+            host,
+            apiKey: null,
+            query: AdminOperationsAuthorizationTests.GatedQuery
+        );
+
+        AdminOperationsAuthorizationTests
+            .HasErrorCode(doc, "TRAX_AUTHORIZATION")
+            .Should()
+            .BeTrue(
+                "[TraxAuthorize] on a resolver method emits @authorize on that field, per " + Adr
+            );
+
+        await host.StopAsync();
+    }
+
+    [Test]
+    public async Task TraxAuthorizeOnAResolver_RefusesAnAuthenticatedCallerWithoutTheRole()
+    {
+        using var host = await AdminOperationsAuthorizationTests.StartHostAsync(
+            AdminOperationsAuthorizationTests.Posture.NamespaceGated
+        );
+
+        var doc = await AdminOperationsAuthorizationTests.PostAsync(
+            host,
+            apiKey: AdminOperationsAuthorizationTests.ReaderApiKey,
+            query: AdminOperationsAuthorizationTests.GatedQuery
+        );
+
+        AdminOperationsAuthorizationTests
+            .HasErrorCode(doc, "TRAX_AUTHORIZATION")
+            .Should()
+            .BeTrue("Roles on the attribute reach the directive, not just the census");
+
+        await host.StopAsync();
+    }
+
+    [Test]
+    public async Task TraxAuthorizeOnAResolver_ServesTheRoleHolder()
+    {
+        using var host = await AdminOperationsAuthorizationTests.StartHostAsync(
+            AdminOperationsAuthorizationTests.Posture.NamespaceGated
+        );
+
+        var doc = await AdminOperationsAuthorizationTests.PostAsync(
+            host,
+            apiKey: AdminOperationsAuthorizationTests.AdminApiKey,
+            query: AdminOperationsAuthorizationTests.GatedQuery
+        );
+
+        doc.RootElement.TryGetProperty("errors", out _).Should().BeFalse();
+        doc.RootElement.GetProperty("data")
+            .GetProperty("gatedPing")
+            .GetString()
+            .Should()
+            .Be("pong");
+
+        await host.StopAsync();
+    }
+
+    /// <summary>
+    /// A bare [TraxAuthorize] with no policy and no roles asks only for an authenticated caller,
+    /// the same as it does on a train or an entity.
+    /// </summary>
+    [Test]
+    public async Task BareTraxAuthorizeOnAResolver_AsksOnlyForAuthentication()
+    {
+        using var host = await AdminOperationsAuthorizationTests.StartHostAsync(
+            AdminOperationsAuthorizationTests.Posture.NamespaceGated
+        );
+
+        var anonymous = await AdminOperationsAuthorizationTests.PostAsync(
+            host,
+            apiKey: null,
+            query: AdminOperationsAuthorizationTests.AuthenticatedQuery
+        );
+        AdminOperationsAuthorizationTests
+            .HasErrorCode(anonymous, "TRAX_AUTHORIZATION")
+            .Should()
+            .BeTrue();
+
+        var reader = await AdminOperationsAuthorizationTests.PostAsync(
+            host,
+            apiKey: AdminOperationsAuthorizationTests.ReaderApiKey,
+            query: AdminOperationsAuthorizationTests.AuthenticatedQuery
+        );
+        reader
+            .RootElement.TryGetProperty("errors", out _)
+            .Should()
+            .BeFalse("any authenticated caller satisfies a bare [TraxAuthorize]");
+
+        await host.StopAsync();
+    }
+
+    /// <summary>
+    /// The sibling stays open. Gating one field on a root type must not gate the root.
+    /// </summary>
+    [Test]
+    public async Task TraxAllowAnonymousSibling_StaysOpenBesideAGatedField()
+    {
+        using var host = await AdminOperationsAuthorizationTests.StartHostAsync(
+            AdminOperationsAuthorizationTests.Posture.NamespaceGated
+        );
+
+        var doc = await AdminOperationsAuthorizationTests.PostAsync(
+            host,
+            apiKey: null,
+            query: AdminOperationsAuthorizationTests.PublicQuery
+        );
+
+        doc.RootElement.TryGetProperty("errors", out _).Should().BeFalse();
+
+        await host.StopAsync();
+    }
+}
+
+/// <summary>
+/// Two root-type extension fields, one of each posture. Both declare, because a root-type
+/// extension field inherits nothing. <c>publicPing</c> stands in for the pre-login surfaces a
+/// host cannot gate; <c>gatedPing</c> is what proves Trax's own attribute produces a working
+/// gate and not just a schema annotation.
+/// </summary>
+[ExtendObjectType("RootQuery")]
+public sealed class PublicRootQueryExtension
+{
+    [TraxAllowAnonymous]
+    public string PublicPing() => "pong";
+
+    [TraxAuthorize(Roles = "Admin")]
+    public string GatedPing() => "pong";
+
+    [TraxAuthorize]
+    public string AuthenticatedPing() => "pong";
 }

@@ -38,7 +38,10 @@ public class GraphQLServiceExtensionsTests
         var services = new ServiceCollection();
 
         Action act = () =>
-            GraphQLServiceExtensions.AddTraxGraphQL(services, b => b.ExposeOperationQueries());
+            GraphQLServiceExtensions.AddTraxGraphQL(
+                services,
+                b => b.ExposeOperationQueries().AllowAnonymousOperations()
+            );
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*AddTrax*");
     }
@@ -58,7 +61,10 @@ public class GraphQLServiceExtensionsTests
     {
         var services = NewMinimalServices();
         services.AddTraxGraphQL(graphql =>
-            graphql.ExposeOperationQueries().AddTypeModule<MarkerTypeModule>()
+            graphql
+                .ExposeOperationQueries()
+                .AllowAnonymousOperations()
+                .AddTypeModule<MarkerTypeModule>()
         );
 
         await using var sp = services.BuildServiceProvider();
@@ -75,7 +81,10 @@ public class GraphQLServiceExtensionsTests
         var services = NewMinimalServices();
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         services.AddTraxGraphQL(graphql =>
-            graphql.ExposeOperationQueries().AllowIntrospection(_ => true)
+            graphql
+                .ExposeOperationQueries()
+                .AllowAnonymousOperations()
+                .AllowIntrospection(_ => true)
         );
 
         await using var sp = services.BuildServiceProvider();
@@ -119,7 +128,9 @@ public class GraphQLServiceExtensionsTests
                         s.AddSingleton(Substitute.For<ITrainDiscoveryService>());
                         s.AddSingleton(Substitute.For<IEffectRegistry>());
                         s.AddRouting();
-                        s.AddTraxGraphQL(g => g.ExposeOperationQueries());
+                        s.AddTraxGraphQL(g =>
+                            g.ExposeOperationQueries().AllowAnonymousOperations()
+                        );
                         s.AddSingleton(Substitute.For<ITraxScheduler>());
                         s.AddSingleton(Substitute.For<IOperationsService>());
                         s.AddSingleton(Substitute.For<ITraxHealthService>());
@@ -161,7 +172,9 @@ public class GraphQLServiceExtensionsTests
                         s.AddSingleton(Substitute.For<ITrainDiscoveryService>());
                         s.AddSingleton(Substitute.For<IEffectRegistry>());
                         s.AddRouting();
-                        s.AddTraxGraphQL(g => g.ExposeOperationQueries());
+                        s.AddTraxGraphQL(g =>
+                            g.ExposeOperationQueries().AllowAnonymousOperations()
+                        );
                         s.AddSingleton(Substitute.For<ITraxScheduler>());
                         s.AddSingleton(Substitute.For<IOperationsService>());
                         s.AddSingleton(Substitute.For<ITraxHealthService>());
@@ -206,7 +219,7 @@ public class GraphQLServiceExtensionsTests
         AddTraxMarkerOnly(builder.Services);
         builder.Services.AddSingleton(Substitute.For<ITrainDiscoveryService>());
         builder.Services.AddSingleton(Substitute.For<IEffectRegistry>());
-        builder.Services.AddTraxGraphQL(g => g.ExposeOperationQueries());
+        builder.Services.AddTraxGraphQL(g => g.ExposeOperationQueries().AllowAnonymousOperations());
         builder.Services.AddSingleton(Substitute.For<ITraxScheduler>());
         builder.Services.AddSingleton(Substitute.For<IOperationsService>());
         builder.Services.AddSingleton(Substitute.For<ITraxHealthService>());
@@ -234,7 +247,7 @@ public class GraphQLServiceExtensionsTests
     public void AddTraxGraphQL_RegistersSingleWebSocketsStartupFilter()
     {
         var services = NewMinimalServices();
-        services.AddTraxGraphQL(g => g.ExposeOperationQueries());
+        services.AddTraxGraphQL(g => g.ExposeOperationQueries().AllowAnonymousOperations());
 
         services
             .Where(sd =>

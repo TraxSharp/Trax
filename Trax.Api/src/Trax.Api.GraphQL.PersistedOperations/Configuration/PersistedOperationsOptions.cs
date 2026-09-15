@@ -8,6 +8,13 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration;
 public sealed class PersistedOperationsOptions
 {
     /// <summary>
+    /// When true (the default), <c>UsePersistedOperations</c> grafts the <c>operations</c>
+    /// namespace onto the schema, which is where the persisted-operation management mutations
+    /// live. When false, enforcement and storage are wired without it.
+    /// </summary>
+    public bool ExposeOperationsNamespace { get; internal set; } = true;
+
+    /// <summary>
     /// When true, requests carrying an inline <c>query</c> body (rather than
     /// referencing a persisted operation by id) are rejected with
     /// <c>PERSISTED_OPERATION_REQUIRED</c>. Allowlist and introspection

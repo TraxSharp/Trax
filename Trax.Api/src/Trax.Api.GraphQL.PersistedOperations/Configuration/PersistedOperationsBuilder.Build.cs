@@ -50,6 +50,7 @@ public sealed partial class PersistedOperationsBuilder
             CacheTtl = _cacheTtl,
             RabbitMqConnectionString = _rabbitMqConnectionString,
             DatabaseConnectionString = _databaseConnectionString!,
+            ExposeOperationsNamespace = _exposeOperationsNamespace,
         };
     }
 }
