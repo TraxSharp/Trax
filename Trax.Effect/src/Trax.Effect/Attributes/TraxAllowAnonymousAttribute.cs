@@ -27,6 +27,14 @@ namespace Trax.Effect.Attributes;
 /// naming it.
 /// </para>
 /// <para>
+/// <b>On a method</b> it declares a single GraphQL field intentionally public. A resolver on an
+/// <c>[ExtendObjectType]</c> class whose parent type has no gate to inherit must declare one
+/// posture or the other; this is the answer when the field really is public. Unlike the
+/// entity-level case, it is <i>not</i> contradictory under an endpoint gate: on a role-gated
+/// parent type it still means something, namely any authenticated caller rather than only the
+/// role.
+/// </para>
+/// <para>
 /// Contradictory with an endpoint-level gate. If the GraphQL endpoint is gated (e.g.
 /// <c>UseTraxGraphQL(configure: e =&gt; e.RequireAuthorization(...))</c>), the HTTP layer
 /// rejects unauthenticated callers before the surface is ever reached, so this attribute
@@ -35,7 +43,7 @@ namespace Trax.Effect.Attributes;
 /// </para>
 /// </remarks>
 [AttributeUsage(
-    AttributeTargets.Class | AttributeTargets.Interface,
+    AttributeTargets.Class | AttributeTargets.Interface | AttributeTargets.Method,
     AllowMultiple = false,
     Inherited = true
 )]

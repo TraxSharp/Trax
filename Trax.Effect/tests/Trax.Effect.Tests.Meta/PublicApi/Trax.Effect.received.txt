@@ -16,12 +16,31 @@ namespace Trax.Effect.Attributes
     {
         public InjectAttribute() { }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Interface, AllowMultiple=false, Inherited=true)]
+    [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Method | System.AttributeTargets.Interface, AllowMultiple=false, Inherited=true)]
     public sealed class TraxAllowAnonymousAttribute : System.Attribute
     {
         public TraxAllowAnonymousAttribute() { }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Interface, AllowMultiple=true, Inherited=true)]
+    public static class TraxAuthorization
+    {
+        public static System.Collections.Generic.IReadOnlyList<string> ForeignAuthorizationAttributes { get; }
+        public static string ForeignAttributeMessage(string subject, System.Collections.Generic.IReadOnlyList<string> foreignAttributes) { }
+        public static Trax.Effect.Attributes.TraxAuthorizationDeclaration Read(System.Reflection.MethodInfo method) { }
+        public static Trax.Effect.Attributes.TraxAuthorizationDeclaration Read(System.Type type) { }
+        public static void Validate(Trax.Effect.Attributes.TraxAuthorizationDeclaration declaration, string subject) { }
+    }
+    public sealed class TraxAuthorizationDeclaration : System.IEquatable<Trax.Effect.Attributes.TraxAuthorizationDeclaration>
+    {
+        public TraxAuthorizationDeclaration(System.Collections.Generic.IReadOnlyList<Trax.Effect.Attributes.TraxAuthorizeAttribute> Authorize, bool AllowAnonymous, System.Collections.Generic.IReadOnlyList<string> ForeignAttributes) { }
+        public bool AllowAnonymous { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Effect.Attributes.TraxAuthorizeAttribute> Authorize { get; init; }
+        public bool Conflicts { get; }
+        public bool Declares { get; }
+        public System.Collections.Generic.IReadOnlyList<string> ForeignAttributes { get; init; }
+        public bool HasAuthorize { get; }
+        public bool HasForeign { get; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Method | System.AttributeTargets.Interface, AllowMultiple=true, Inherited=true)]
     public class TraxAuthorizeAttribute : System.Attribute
     {
         public TraxAuthorizeAttribute() { }

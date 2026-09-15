@@ -40,8 +40,10 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 
 | Area | ADRs |
 | --- | --- |
+| `auth` | [0004](./0004-trax-owns-the-authorization-vocabulary.md) |
 | `data-model` | [0002](./0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md), [0003](./0003-a-model-and-its-persistent-mapping-are-a-pair.md) |
 | `migrations` | [0001](./0001-schema-changes-are-hand-written-sql.md), [0002](./0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md) |
+| `platform` | [0004](./0004-trax-owns-the-authorization-vocabulary.md) |
 | `providers` | [0001](./0001-schema-changes-are-hand-written-sql.md) |
 
 ## All of them
@@ -51,3 +53,4 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0001](./0001-schema-changes-are-hand-written-sql.md) | Schema changes are hand-written SQL journaled by DbUp | migrations, providers |
 | [0002](./0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md) | Trax's tables are migrated; a consumer's domain tables are bootstrapped | migrations, data-model |
 | [0003](./0003-a-model-and-its-persistent-mapping-are-a-pair.md) | A model and its persistent mapping are a pair | data-model |
+| [0004](./0004-trax-owns-the-authorization-vocabulary.md) | Trax owns the authorization vocabulary | auth, platform |

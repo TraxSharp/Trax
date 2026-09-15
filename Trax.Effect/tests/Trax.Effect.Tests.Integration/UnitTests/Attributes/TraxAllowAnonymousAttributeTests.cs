@@ -16,15 +16,22 @@ namespace Trax.Effect.Tests.Integration.UnitTests.Attributes;
 [TestFixture]
 public class TraxAllowAnonymousAttributeTests
 {
+    /// <summary>
+    /// Methods joined the targets so a resolver can declare its own posture without reaching for
+    /// another framework's attribute. See
+    /// <c>docs/adr/0004-trax-owns-the-authorization-vocabulary.md</c>.
+    /// </summary>
     [Test]
-    public void Attribute_HasUsageWithClassAndInterfaceTargets()
+    public void Attribute_HasUsageWithClassInterfaceAndMethodTargets()
     {
         var usage = typeof(TraxAllowAnonymousAttribute)
             .GetCustomAttributes(typeof(AttributeUsageAttribute), inherit: false)
             .Cast<AttributeUsageAttribute>()
             .Single();
 
-        usage.ValidOn.Should().Be(AttributeTargets.Class | AttributeTargets.Interface);
+        usage
+            .ValidOn.Should()
+            .Be(AttributeTargets.Class | AttributeTargets.Interface | AttributeTargets.Method);
     }
 
     [Test]

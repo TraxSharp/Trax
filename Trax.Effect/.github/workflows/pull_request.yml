@@ -107,5 +107,5 @@ jobs:
       - name: Check ADRs
         uses: TraxSharp/Trax.Docs/.github/actions/adr-guard@ca1261920d0efd76ce695f2e61576b15c0aded17
         with:
-          known-areas: migrations,providers,data-model,testing,platform
+          known-areas: migrations,providers,data-model,testing,platform,auth
           census-root: tests/Trax.Effect.Tests.Meta
