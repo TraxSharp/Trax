@@ -173,9 +173,10 @@ otherwise `Id`, otherwise `{TypeName}Id`. A key configured only through the flue
 
 A field added this way to a `[TraxAllowAnonymous]` entity inherits no gate, because there is no
 `@authorize` on the parent type to inherit, and the host refuses to start until the field says
-what it is. Use HotChocolate's `[Authorize]` or `[AllowAnonymous]` on the resolver method:
-`[TraxAuthorize]` targets classes and interfaces, so it does not compile there. A field on a
-`[TraxAuthorize]` entity inherits that gate and needs nothing. See
+what it is. Put `[TraxAuthorize]` or `[TraxAllowAnonymous]` on the resolver method; both apply to
+a method and Trax emits the matching directive. HotChocolate's `[Authorize]` and
+`[AllowAnonymous]` are refused in their place. A field on a `[TraxAuthorize]` entity inherits that
+gate and needs nothing. See
 [Fields Added by a Type Extension](/docs/authorization#fields-added-by-a-type-extension).
 
 `ExtensionResolversDeclareParentRequirements` in `Trax.Api.GraphQL.Testing` fails the build when

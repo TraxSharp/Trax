@@ -47,23 +47,52 @@ A field added this way must declare its own posture when the parent gives it not
 | A schema root type (`RootQuery`, `RootMutation`, `LifecycleSubscriptions`) | **Yes.** There is no parent to inherit from. |
 | Neither marker | No. The type reaches the schema only inside another surface's output, and that surface's posture governs. |
 
-The markers here are HotChocolate's own `[Authorize]` and `[AllowAnonymous]`, not Trax's. `[TraxAuthorize]` targets classes and interfaces, so writing it on a resolver method is a compile error (`CS0592`) rather than a silent no-op:
+`[TraxAuthorize]` and `[TraxAllowAnonymous]` both apply to a method, so a resolver declares its posture directly and Trax emits the matching `@authorize` directive for it. The combinator semantics are the same as on a train or an entity: policies AND, roles union and OR.
 
 ```csharp
 [ExtendObjectType(typeof(Article))]     // Article is [TraxAllowAnonymous]
 public sealed class ArticleExtensions
 {
     // Inherits nothing from Article, so it says what it is.
-    [Authorize(Roles = ["subscriber"])]
+    [TraxAuthorize(Roles = "subscriber")]
     public async Task<IReadOnlyList<Excerpt>> GetExcerpts([Parent] Article article) => ...;
 }
 ```
 
-Put the attribute on the **resolver method**, not on the extension class. HotChocolate applies a class-level attribute to the type being extended, so on a `[TraxAllowAnonymous]` entity it re-locks the whole entity, and on a root type it sets the posture of every operation in the schema. Trax reports both rather than honouring them.
+On the extension **class**, `[TraxAuthorize]` applies to every field that extension contributes. It does not touch the type being extended, so gating an extension of a `[TraxAllowAnonymous]` entity does not re-gate the entity.
 
 A subscription is the same construct: `[ExtendObjectType("LifecycleSubscriptions")]` adds a field to a root type, so every `[Subscribe]` field has to declare.
 
 The check walks the merged schema at host start, so it sees a type extension however it was registered, including one added from a `ConfigureSchema` callback. A field built from a lambda in such a callback has no member to carry an attribute and is skipped; it is gated by the code that builds it.
+
+### Do Not Use HotChocolate's [Authorize] or [AllowAnonymous]
+
+**Trax refuses them.** A surface that declares its posture with `HotChocolate.Authorization.Authorize` or `HotChocolate.Authorization.AllowAnonymous` fails at host startup, with a message naming the Trax replacement:
+
+```
+GraphQL field 'Issue.content' (Nwyc.IssueContentExtension.GetContent) declares its authorization
+posture with [Authorize], which Trax does not read. Trax owns this vocabulary so a surface
+declares the same way wherever it lives and whatever GraphQL server is underneath: use
+[TraxAuthorize] to gate it, or [TraxAllowAnonymous] to open it to anonymous callers.
+```
+
+This is not a style preference. `[TraxAuthorize]` exists so that a consumer declares authorization once, in one vocabulary, on a train or an entity or a resolver, and Trax translates it into whatever the server underneath needs. Accepting the server's attributes alongside Trax's would mean the same question is answered by two attributes with different combinator rules and different inheritance behaviour, and it would couple consumer code to the dependency `[TraxAuthorize]` exists to hide.
+
+Two concrete differences, not just naming:
+
+- **Class-level placement.** HotChocolate applies a class-level attribute on an `[ExtendObjectType]` to *the type being extended*. On a `[TraxAllowAnonymous]` entity that re-locks the whole entity; on a root type it sets the posture of every operation in the schema. `[TraxAuthorize]` applies to the fields the extension contributes.
+- **Reach.** `[TraxAuthorize]` works on a train, an entity, an interface and a resolver. HotChocolate's attribute means nothing on a train, which never reaches the schema as a type.
+
+ASP.NET Core's `[Authorize]` is a different matter and is not banned: it governs endpoints and MVC actions, a surface Trax does not own. `RequireAuthorization()` on the GraphQL endpoint is the supported way to gate the transport.
+
+Migrating is mechanical:
+
+| Replace | With |
+|---|---|
+| `[Authorize]` | `[TraxAuthorize]` |
+| `[Authorize(Policy = "P")]` | `[TraxAuthorize(Policy = "P")]` |
+| `[Authorize(Roles = ["a", "b"])]` | `[TraxAuthorize(Roles = "a,b")]` |
+| `[AllowAnonymous]` | `[TraxAllowAnonymous]` |
 
 ## Per-Train Authorization
 
