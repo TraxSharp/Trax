@@ -142,7 +142,11 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
                 throw new InvalidOperationException(
                     $"[TraxAuthorize] invariant violated: namespace field "
                         + $"'{nsFieldName}' is missing under `discover` for "
-                        + $"'{reg.EntityType.FullName}'."
+                        + $"'{reg.EntityType.FullName}', so the entry field cannot be "
+                        + "located and its @authorize directive cannot be checked. A "
+                        + "ConfigureSchema callback has removed or renamed the namespace. "
+                        + "Restore it, or change Namespace on the entity's "
+                        + "[TraxQueryModel] to match."
                 );
             container = (IObjectTypeDefinition)nsField.Type.NamedType();
         }
@@ -153,7 +157,10 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
         if (entryField is null)
             throw new InvalidOperationException(
                 $"[TraxAuthorize] invariant violated: entry field '{fieldName}' is "
-                    + $"missing under `discover` for '{reg.EntityType.FullName}'."
+                    + $"missing under `discover` for '{reg.EntityType.FullName}', so "
+                    + "there is no field left to carry the @authorize directive. A "
+                    + "ConfigureSchema callback has removed or renamed it. Restore the "
+                    + "field, or change Name on the entity's [TraxQueryModel] to match."
             );
 
         if (!HasAuthorizeDirective(entryField.Directives))

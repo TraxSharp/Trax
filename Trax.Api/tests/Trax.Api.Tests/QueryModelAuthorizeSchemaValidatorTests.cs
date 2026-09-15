@@ -20,7 +20,10 @@ namespace Trax.Api.Tests;
 /// failure paths — the corresponding success path runs through the full
 /// <c>AddTraxGraphQL</c> pipeline in
 /// <c>QueryModelAuthorizeSchemaInvariantE2ETests</c>.
+///
+/// <para>Enforces <c>docs/adr/0001-a-misconfigured-host-fails-at-startup.md</c>.</para>
 /// </summary>
+[Property("adr", "docs/adr/0001-a-misconfigured-host-fails-at-startup.md")]
 [TestFixture]
 public class QueryModelAuthorizeSchemaValidatorTests
 {
@@ -48,7 +51,13 @@ public class QueryModelAuthorizeSchemaValidatorTests
 
         var act = async () => await validator.StartAsync(CancellationToken.None);
 
-        (await act.Should().ThrowAsync<InvalidOperationException>())
+        (
+            await act.Should()
+                .ThrowAsync<InvalidOperationException>(
+                    "a stripped directive must fail the host at startup, not leave an entity "
+                        + "silently ungated at request time. See docs/adr/0001-a-misconfigured-host-fails-at-startup.md."
+                )
+        )
             .WithMessage("*[TraxAuthorize] invariant violated*")
             .WithMessage("*GatedThing*");
     }

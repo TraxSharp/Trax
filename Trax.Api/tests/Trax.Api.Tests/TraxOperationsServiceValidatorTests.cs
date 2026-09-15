@@ -10,7 +10,10 @@ namespace Trax.Api.Tests;
 /// <summary>
 /// The startup guard that fails fast when the operations surface is exposed without the services
 /// its resolvers depend on, instead of masking a per-request "Unexpected Execution Error".
+///
+/// <para>Enforces <c>docs/adr/0001-a-misconfigured-host-fails-at-startup.md</c>.</para>
 /// </summary>
+[Property("adr", "docs/adr/0001-a-misconfigured-host-fails-at-startup.md")]
 [TestFixture]
 public class TraxOperationsServiceValidatorTests
 {
@@ -32,7 +35,10 @@ public class TraxOperationsServiceValidatorTests
         await validator
             .Invoking(v => v.StartAsync(CancellationToken.None))
             .Should()
-            .ThrowAsync<InvalidOperationException>()
+            .ThrowAsync<InvalidOperationException>(
+                "a half-wired operations surface must fail at startup, not as a masked error "
+                    + "on the first request. See docs/adr/0001-a-misconfigured-host-fails-at-startup.md."
+            )
             .WithMessage("*IOperationsService*");
     }
 

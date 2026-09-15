@@ -21,7 +21,9 @@ namespace Trax.Api.Tests.Meta.Tests;
 /// container is complete, or assert the ordering at startup and throw. See
 /// <c>Trax.Docs/reference/registration-order.md</c>.
 /// </para>
+/// <para>Enforces <c>docs/adr/0002-reading-the-service-collection-is-order-dependent.md</c>.</para>
 /// </remarks>
+[Property("adr", "docs/adr/0002-reading-the-service-collection-is-order-dependent.md")]
 [TestFixture]
 public class NoSilentRegistrationOrderDependenceTests
 {
@@ -31,9 +33,12 @@ public class NoSilentRegistrationOrderDependenceTests
     );
 
     /// <summary>
-    /// Every site that reads the collection today, with the count it reads it at. Each is
-    /// either an idempotency guard, a precondition that throws, or a decision backed by a
-    /// startup validator that fails loudly when the ordering was wrong.
+    /// Every site that reads the collection today, with the count it reads it at. Most are an
+    /// idempotency guard, a precondition that throws, or a decision backed by a startup
+    /// validator that fails loudly when the ordering was wrong. Two are neither, and both are
+    /// knowingly accepted: the broadcaster branch, which is settled by the precondition only
+    /// for the registrations Trax itself ships, and the train-discovery snapshot. The
+    /// per-entry comments below say which is which, and adr/0002 records why.
     /// </summary>
     /// <remarks>
     /// To add an entry you must first make the site safe: pair it with a validator that throws
@@ -92,7 +97,8 @@ public class NoSilentRegistrationOrderDependenceTests
                     + "where the caller is in their startup code. Either defer the decision until "
                     + "the container is complete, or add a startup validator that throws when the "
                     + "ordering was wrong, then add the site to ReviewedSites with a reason. See "
-                    + "Trax.Docs/reference/registration-order.md.\n  "
+                    + "Trax.Docs/reference/registration-order.md and "
+                    + "docs/adr/0002-reading-the-service-collection-is-order-dependent.md.\n  "
                     + string.Join("\n  ", offenders)
             );
     }
