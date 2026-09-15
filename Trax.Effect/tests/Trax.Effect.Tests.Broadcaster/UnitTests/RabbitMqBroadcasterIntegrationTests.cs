@@ -66,6 +66,8 @@ public class RabbitMqBroadcasterIntegrationTests
 
         await broadcaster.PublishAsync(SampleMessage("RoundTrip.Train"), CancellationToken.None);
 
+        // determinism: the wait is on the TaskCompletionSource; the delay is only the
+        // fail-safe ceiling so a lost message fails the test instead of hanging it.
         var awaited = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         awaited.Should().Be(received.Task);
         received.Task.Result.TrainName.Should().Be("RoundTrip.Train");
@@ -139,6 +141,8 @@ public class RabbitMqBroadcasterIntegrationTests
         );
         await broadcaster.PublishAsync(message, CancellationToken.None);
 
+        // determinism: the wait is on the TaskCompletionSource; the delay is only the
+        // fail-safe ceiling so a lost message fails the test instead of hanging it.
         var awaited = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         awaited
             .Should()
@@ -182,6 +186,8 @@ public class RabbitMqBroadcasterIntegrationTests
         await broadcaster.PublishAsync(SampleMessage("first"), CancellationToken.None);
         await broadcaster.PublishAsync(SampleMessage("second"), CancellationToken.None);
 
+        // determinism: the wait is on the TaskCompletionSource; the delay is only the
+        // fail-safe ceiling so a lost message fails the test instead of hanging it.
         var awaited = await Task.WhenAny(second.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         awaited.Should().Be(second.Task);
         calls.Should().BeGreaterThanOrEqualTo(2);

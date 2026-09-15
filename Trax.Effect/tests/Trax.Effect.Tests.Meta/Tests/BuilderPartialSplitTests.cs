@@ -1,5 +1,10 @@
 namespace Trax.Effect.Tests.Meta.Tests;
 
+/// <summary>
+/// Each builder has a state file, and its Build() lives in the .Build partial.
+///
+/// <para>Not ADR-enforcing: the partial-class split is a pattern documented at reference/builder-pattern, not a decision taken against alternatives.</para>
+/// </summary>
 [TestFixture]
 public class BuilderPartialSplitTests
 {
@@ -45,8 +50,8 @@ public class BuilderPartialSplitTests
             .Should()
             .BeTrue(
                 $"every '<Name>Builder/' directory must contain a '<Name>Builder.cs' file holding the "
-                    + "state and constructor. CLAUDE.md > Builder Pattern Convention > Builder Class "
-                    + $"Structure. Missing: '{RepoRoot.Relative(stateFile)}'."
+                    + "state and constructor. Trax.Docs/reference/builder-pattern.md > Class "
+                    + $"structure. Missing: '{RepoRoot.Relative(stateFile)}'."
             );
     }
 
@@ -77,7 +82,7 @@ public class BuilderPartialSplitTests
             .Should()
             .BeEmpty(
                 $"the Build() method for '{builderName}' must live in '{dotBuildFile}', not in another "
-                    + "file. CLAUDE.md > Builder Pattern Convention > Build() Method requires this split "
+                    + "file. Trax.Docs/reference/builder-pattern.md > Build() requires this split "
                     + "so build-time validation lives in a dedicated file. Found Build() in:\n  "
                     + string.Join("\n  ", found)
             );

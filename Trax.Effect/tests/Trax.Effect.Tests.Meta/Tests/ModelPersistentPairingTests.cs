@@ -1,5 +1,14 @@
 namespace Trax.Effect.Tests.Meta.Tests;
 
+/// <summary>
+/// A model and its Persistent mapping exist as a pair.
+///
+/// <para>Both directions are checked. A model with no mapping must be listed in
+/// ModelsWithoutPersistent with its reason; a mapping with no model is always an error.</para>
+///
+/// <para>Enforces <c>docs/adr/0003-a-model-and-its-persistent-mapping-are-a-pair.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0003-a-model-and-its-persistent-mapping-are-a-pair.md")]
 [TestFixture]
 public class ModelPersistentPairingTests
 {
@@ -53,7 +62,7 @@ public class ModelPersistentPairingTests
             .Should()
             .BeEmpty(
                 "Every Persistent<Entity>.cs in Trax.Effect.Data/Models/<Entity>/ must have a matching "
-                    + "<Entity>.cs in Trax.Effect/Models/<Entity>/. CLAUDE.md > Pattern Matching > Data "
+                    + "<Entity>.cs in Trax.Effect/Models/<Entity>/. Trax.Docs/reference/project-layout.md > Data "
                     + "models requires this layout. Orphans:\n  "
                     + string.Join("\n  ", orphans)
             );
@@ -100,7 +109,8 @@ public class ModelPersistentPairingTests
             .BeEmpty(
                 "Every <Entity>.cs in Trax.Effect/Models/<Entity>/ must have a matching "
                     + "Persistent<Entity>.cs in Trax.Effect.Data/Models/<Entity>/, OR be added to "
-                    + "ModelsWithoutPersistent with a justification. Orphans:\n  "
+                    + "ModelsWithoutPersistent with a justification. See "
+                    + "docs/adr/0003-a-model-and-its-persistent-mapping-are-a-pair.md. Orphans:\n  "
                     + string.Join("\n  ", orphans)
             );
     }

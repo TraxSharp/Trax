@@ -1,5 +1,14 @@
 namespace Trax.Effect.Tests.Meta.Tests;
 
+/// <summary>
+/// Migration files are numbered sequentially and shipped as embedded resources.
+///
+/// <para>Naming and numbering are what a test can check here. The SQL itself is not, so this
+/// guard is narrower than the decision it holds up.</para>
+///
+/// <para>Enforces <c>docs/adr/0001-schema-changes-are-hand-written-sql.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0001-schema-changes-are-hand-written-sql.md")]
 [TestFixture]
 public class MigrationsIntegrityTests
 {
@@ -53,7 +62,8 @@ public class MigrationsIntegrityTests
             .Should()
             .BeEmpty(
                 $"{provider} migrations must be named '<NNN>_<description>.sql' where NNN is a 3-digit "
-                    + "sequence number (see CLAUDE.md > Pattern Matching > Migrations). Malformed:\n  "
+                    + "sequence number. See docs/adr/0001-schema-changes-are-hand-written-sql.md. "
+                    + "Malformed:\n  "
                     + string.Join("\n  ", malformed)
             );
 

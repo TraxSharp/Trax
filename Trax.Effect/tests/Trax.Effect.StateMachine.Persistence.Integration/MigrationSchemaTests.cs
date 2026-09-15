@@ -15,7 +15,10 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 /// <c>SnapshotRecord</c>/<c>EffectClaim</c> without updating the migration fails here, because the store's
 /// query hits a column the migration never created. This is the DDL-vs-EF-model drift guard, and it also
 /// proves the two providers auto-apply their tables (no EnsureCreated, no manual DDL).
+///
+/// <para>Enforces <c>docs/adr/0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md</c>.</para>
 /// </summary>
+[Property("adr", "docs/adr/0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md")]
 public class MigrationSchemaTests
 {
     private const string Maintenance =
@@ -103,7 +106,13 @@ public class MigrationSchemaTests
             .BeTrue();
 
         var stored = await With(ctx, c => new EfSnapshotStore(c).Get(userKey, id));
-        stored.Should().NotBeNull();
+        stored
+            .Should()
+            .NotBeNull(
+                "the shipped migration must create every column the store queries. A model "
+                    + "change without a migration fails here. See "
+                    + "docs/adr/0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md."
+            );
         stored!.Json.Should().Contain("quarter");
 
         var advanced = Sample() with { State = "Locked", Context = new JsonObject() };
