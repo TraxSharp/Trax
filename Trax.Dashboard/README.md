@@ -45,25 +45,29 @@ dotnet add package Trax.Dashboard
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-builder.AddTraxDashboard();
-
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects => effects.UsePostgres(connectionString))
         .AddMediator(typeof(Program).Assembly)
 );
 
+builder.AddTraxDashboard();    // must follow AddTrax; it checks for it and throws otherwise
+
 var app = builder.Build();
 
-app.UseTraxDashboard();    // Mounts at /trax by default
+app.UseTraxDashboard();    // Mounts at /trax
 
 app.Run();
 ```
 
-Custom route prefix:
+The mount path is fixed. Every page carries a compile-time `@page "/trax/..."` route, so the
+route prefix argument to `UseTraxDashboard()` only changes the links the sidebar builds and
+leaves the pages where they are. Passing one gives you navigation that points at nothing.
 
-```csharp
-app.UseTraxDashboard("/my-dashboard");
-```
+The dashboard applies no authorization of its own. It is served wherever you mount it, gated
+by whatever your application already applies to that path: everything if you have registered
+a fallback authorization policy, nothing if your `[Authorize]` attributes sit on your own
+controllers and pages. Put a fallback policy or path-scoped middleware in front of `/trax`
+before you expose the host.
 
 ## Pages
 
