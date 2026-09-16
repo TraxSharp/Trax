@@ -9,6 +9,13 @@ updates:
       nuget-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # A Trax major is a deliberate migration, never a bot PR. This also keeps
+      # Dependabot away from the unlisted 2.0.0 packages that still sit on
+      # nuget.org for trax.core and trax.scheduler: unlisted versions stay
+      # resolvable, so a major-update proposal could walk straight into one.
+      - dependency-name: "Trax.*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule: { interval: "weekly" }

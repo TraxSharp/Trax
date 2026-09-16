@@ -71,8 +71,10 @@ public class TraxPinLockstepTests
         return parts.Length >= 2 ? $"{parts[0]}.{parts[1]}" : packageId;
     }
 
-    // Pins read $([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '<real>')) so local dev can override to the
-    // packed 1.99.99; the guard checks the committed fallback, not the override. Falls back to a plain version.
+    // Pins are plain literal versions so Dependabot can read them; local dev overrides them through a
+    // separate `PackageVersion Update=` group that trax-local.props switches on, and those carry no
+    // Include so they never reach here. The ValueOrDefault form is still accepted for a repo that has
+    // not been converted yet.
     private static string? ExtractVersion(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
