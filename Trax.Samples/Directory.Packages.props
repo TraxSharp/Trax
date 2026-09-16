@@ -11,129 +11,42 @@
   <Import Project="trax-local.props" Condition="Exists('trax-local.props')" />
 
   <ItemGroup Label="Trax">
-    <PackageVersion
-      Include="Trax.Api"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.40.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Api.Auth"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.40.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Api.Auth.ApiKey"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.40.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Api.Auth.Jwt"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.40.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Api.GraphQL"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.40.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Api.GraphQL.Audit"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.40.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Api.GraphQL.Client"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.40.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Api.GraphQL.Client.Trax"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.40.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Api.GraphQL.Client.Typed"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.40.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Api.GraphQL.PersistedOperations"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.40.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Api.GraphQL.Testing"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.40.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Dashboard"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.14.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Broadcaster.RabbitMQ"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Broadcaster.SignalR"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Data"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Data.InMemory"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Data.Postgres"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Data.Sqlite"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Data.Testing"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.JunctionProvider.Progress"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Provider.Json"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Provider.Parameter"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.StateMachine"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.StateMachine.Persistence"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.47.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Mediator"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.20.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Mediator.Testing"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.20.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Runner.Lambda"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.31.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Scheduler"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.31.0'))"
-    />
+    <PackageVersion Include="Trax.Api" Version="1.43.1" />
+    <PackageVersion Include="Trax.Api.Auth" Version="1.43.1" />
+    <PackageVersion Include="Trax.Api.Auth.ApiKey" Version="1.43.1" />
+    <PackageVersion Include="Trax.Api.Auth.Jwt" Version="1.43.1" />
+    <PackageVersion Include="Trax.Api.GraphQL" Version="1.43.1" />
+    <PackageVersion Include="Trax.Api.GraphQL.Audit" Version="1.43.1" />
+    <PackageVersion Include="Trax.Api.GraphQL.Client" Version="1.43.1" />
+    <PackageVersion Include="Trax.Api.GraphQL.Client.Trax" Version="1.43.1" />
+    <PackageVersion Include="Trax.Api.GraphQL.Client.Typed" Version="1.43.1" />
+    <PackageVersion Include="Trax.Api.GraphQL.PersistedOperations" Version="1.43.1" />
+    <PackageVersion Include="Trax.Api.GraphQL.Testing" Version="1.43.1" />
+    <PackageVersion Include="Trax.Dashboard" Version="1.15.0" />
+    <PackageVersion Include="Trax.Effect" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Broadcaster.RabbitMQ" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Broadcaster.SignalR" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Data" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Data.Sqlite" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Data.Testing" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.JunctionProvider.Progress" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Provider.Json" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.StateMachine" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.StateMachine.Persistence" Version="1.54.0" />
+    <PackageVersion Include="Trax.Mediator" Version="1.22.0" />
+    <PackageVersion Include="Trax.Mediator.Testing" Version="1.22.0" />
+    <PackageVersion Include="Trax.Runner.Lambda" Version="1.32.0" />
+    <PackageVersion Include="Trax.Scheduler" Version="1.32.0" />
   </ItemGroup>
 
   <ItemGroup Label="Third-party">
     <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.5" />
     <PackageVersion Include="Flowthru" Version="0.26.0" />
     <PackageVersion Include="FluentAssertions" Version="8.10.0" />
-    <PackageVersion Include="HotChocolate.AspNetCore" Version="15.1.18" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="16.6.2" />
     <PackageVersion Include="MathNet.Numerics" Version="5.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.12" />
@@ -157,5 +70,44 @@
     <PackageVersion Include="Plotly.NET.CSharp" Version="0.13.0" />
     <PackageVersion Include="Plotly.NET.ImageExport" Version="6.1.0" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+  </ItemGroup>
+
+  <!--
+    Local development override. pack-local.sh writes a gitignored trax-local.props
+    setting TraxLocalVersion=1.99.99; this redirects every Trax.* pin above to the
+    locally packed build. The pins themselves stay plain literal versions so they
+    stay machine-readable: an MSBuild expression in the Version attribute is not a
+    version Dependabot can parse, and it silently skipped every one of them.
+  -->
+  <ItemGroup Condition="'$(TraxLocalVersion)' != ''">
+    <PackageVersion Update="Trax.Api" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Api.Auth" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Api.Auth.ApiKey" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Api.Auth.Jwt" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Api.GraphQL" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Api.GraphQL.Audit" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Api.GraphQL.Client" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Api.GraphQL.Client.Trax" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Api.GraphQL.Client.Typed" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Api.GraphQL.PersistedOperations" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Api.GraphQL.Testing" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Dashboard" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Broadcaster.RabbitMQ" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Broadcaster.SignalR" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Data" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Data.InMemory" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Data.Postgres" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Data.Sqlite" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Data.Testing" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.JunctionProvider.Progress" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Provider.Json" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Provider.Parameter" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.StateMachine" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.StateMachine.Persistence" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Mediator" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Mediator.Testing" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Runner.Lambda" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Scheduler" Version="$(TraxLocalVersion)" />
   </ItemGroup>
 </Project>

@@ -1,3 +1,4 @@
+using Trax.Samples.GameServer.Auth;
 using Trax.Samples.GameServer.E2E.Factories;
 using Trax.Samples.GameServer.E2E.Fixtures;
 using Trax.Samples.GameServer.E2E.Utilities;
@@ -13,6 +14,12 @@ namespace Trax.Samples.GameServer.E2E.SchedulerTests;
 [TestFixture]
 public class ManifestOperationsQueryTests : SchedulerTestFixture
 {
+    /// <summary>
+    /// The operations namespace is gated with GateOperations(roles: "Admin"), so these queries
+    /// carry the admin key. SchedulerTestFixture does not expose it the way ApiTestFixture does.
+    /// </summary>
+    private static string AdminKey => ApiKeyDefaults.AdminKey;
+
     private GameServerApiFactory ApiFactory { get; set; } = null!;
     private HttpClient ApiHttpClient { get; set; } = null!;
     private GraphQLClient GraphQL { get; set; } = null!;
@@ -51,7 +58,8 @@ public class ManifestOperationsQueryTests : SchedulerTestFixture
                     }
                 }
             }
-            """
+            """,
+            apiKey: AdminKey
         );
 
         result
@@ -78,7 +86,8 @@ public class ManifestOperationsQueryTests : SchedulerTestFixture
                     }
                 }
             }
-            """
+            """,
+            apiKey: AdminKey
         );
 
         listResult.HasErrors.Should().BeFalse();
@@ -101,7 +110,8 @@ public class ManifestOperationsQueryTests : SchedulerTestFixture
                     }
                 }
             }
-            """
+            """,
+            apiKey: AdminKey
         );
 
         result

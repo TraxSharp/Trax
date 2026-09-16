@@ -6,6 +6,15 @@ using Trax.Effect.Models.Metadata;
 
 namespace Trax.Samples.GameServer.E2E.Utilities;
 
+/// <summary>
+/// Polls the database for a train to reach an expected state.
+/// </summary>
+/// <remarks>
+/// ADR 0014: every wait here owns its ceiling. Each method derives a token from
+/// the caller's budget and passes it to its queries, because Npgsql's command
+/// default is 30s while callers pass budgets as short as 5s. Without it a
+/// stalled query outlives the budget and reports as a state that never arrived.
+/// </remarks>
 public static class TrainStatePoller
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
@@ -18,20 +27,29 @@ public static class TrainStatePoller
         TimeSpan? timeout = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+        var budget = timeout ?? DefaultTimeout;
+        var deadline = DateTime.UtcNow + budget;
+        using var cts = new CancellationTokenSource(budget);
 
-        while (DateTime.UtcNow < deadline)
+        try
         {
-            dataContext.Reset();
+            while (DateTime.UtcNow < deadline)
+            {
+                dataContext.Reset();
 
-            var metadata = await dataContext
-                .Metadatas.AsNoTracking()
-                .FirstOrDefaultAsync(m => m.Id == metadataId);
+                var metadata = await dataContext
+                    .Metadatas.AsNoTracking()
+                    .FirstOrDefaultAsync(m => m.Id == metadataId, cts.Token);
 
-            if (metadata?.TrainState == expectedState)
-                return metadata;
+                if (metadata?.TrainState == expectedState)
+                    return metadata;
 
-            await Task.Delay(PollInterval);
+                await Task.Delay(PollInterval, cts.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The budget expired mid-query; fall through to the path below.
         }
 
         dataContext.Reset();
@@ -40,7 +58,7 @@ public static class TrainStatePoller
             .FirstOrDefaultAsync(m => m.Id == metadataId);
 
         throw new TimeoutException(
-            $"Metadata {metadataId} did not reach state {expectedState} within {(timeout ?? DefaultTimeout).TotalSeconds}s. "
+            $"Metadata {metadataId} did not reach state {expectedState} within {budget.TotalSeconds}s. "
                 + $"Current state: {final?.TrainState.ToString() ?? "not found"}, "
                 + $"Failure: {final?.FailureReason ?? "none"}"
         );
@@ -54,32 +72,41 @@ public static class TrainStatePoller
         long? afterMetadataId = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+        var budget = timeout ?? DefaultTimeout;
+        var deadline = DateTime.UtcNow + budget;
+        using var cts = new CancellationTokenSource(budget);
 
-        while (DateTime.UtcNow < deadline)
+        try
         {
-            dataContext.Reset();
+            while (DateTime.UtcNow < deadline)
+            {
+                dataContext.Reset();
 
-            var query = dataContext
-                .Metadatas.AsNoTracking()
-                .Where(m => m.Name != null && m.Name.Contains(trainNameContains));
+                var query = dataContext
+                    .Metadatas.AsNoTracking()
+                    .Where(m => m.Name != null && m.Name.Contains(trainNameContains));
 
-            if (afterMetadataId.HasValue)
-                query = query.Where(m => m.Id > afterMetadataId.Value);
+                if (afterMetadataId.HasValue)
+                    query = query.Where(m => m.Id > afterMetadataId.Value);
 
-            var metadata = await query
-                .OrderByDescending(m => m.Id)
-                .FirstOrDefaultAsync(m => m.TrainState == expectedState);
+                var metadata = await query
+                    .OrderByDescending(m => m.Id)
+                    .FirstOrDefaultAsync(m => m.TrainState == expectedState, cts.Token);
 
-            if (metadata != null)
-                return metadata;
+                if (metadata != null)
+                    return metadata;
 
-            await Task.Delay(PollInterval);
+                await Task.Delay(PollInterval, cts.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The budget expired mid-query; fall through to the path below.
         }
 
         throw new TimeoutException(
             $"No metadata containing '{trainNameContains}' reached state {expectedState} "
-                + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+                + $"within {budget.TotalSeconds}s."
         );
     }
 
@@ -91,30 +118,41 @@ public static class TrainStatePoller
         long? afterMetadataId = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+        var budget = timeout ?? DefaultTimeout;
+        var deadline = DateTime.UtcNow + budget;
+        using var cts = new CancellationTokenSource(budget);
 
-        while (DateTime.UtcNow < deadline)
+        try
         {
-            dataContext.Reset();
+            while (DateTime.UtcNow < deadline)
+            {
+                dataContext.Reset();
 
-            var query = dataContext.Metadatas.AsNoTracking().Where(m => m.ManifestId == manifestId);
+                var query = dataContext
+                    .Metadatas.AsNoTracking()
+                    .Where(m => m.ManifestId == manifestId);
 
-            if (afterMetadataId.HasValue)
-                query = query.Where(m => m.Id > afterMetadataId.Value);
+                if (afterMetadataId.HasValue)
+                    query = query.Where(m => m.Id > afterMetadataId.Value);
 
-            var metadata = await query
-                .OrderByDescending(m => m.Id)
-                .FirstOrDefaultAsync(m => m.TrainState == expectedState);
+                var metadata = await query
+                    .OrderByDescending(m => m.Id)
+                    .FirstOrDefaultAsync(m => m.TrainState == expectedState, cts.Token);
 
-            if (metadata != null)
-                return metadata;
+                if (metadata != null)
+                    return metadata;
 
-            await Task.Delay(PollInterval);
+                await Task.Delay(PollInterval, cts.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The budget expired mid-query; fall through to the path below.
         }
 
         throw new TimeoutException(
             $"No metadata for manifest {manifestId} reached state {expectedState} "
-                + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+                + $"within {budget.TotalSeconds}s."
         );
     }
 
@@ -124,25 +162,34 @@ public static class TrainStatePoller
         TimeSpan? timeout = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+        var budget = timeout ?? DefaultTimeout;
+        var deadline = DateTime.UtcNow + budget;
+        using var cts = new CancellationTokenSource(budget);
 
-        while (DateTime.UtcNow < deadline)
+        try
         {
-            dataContext.Reset();
+            while (DateTime.UtcNow < deadline)
+            {
+                dataContext.Reset();
 
-            var deadLetter = await dataContext
-                .DeadLetters.AsNoTracking()
-                .FirstOrDefaultAsync(dl => dl.ManifestId == manifestId);
+                var deadLetter = await dataContext
+                    .DeadLetters.AsNoTracking()
+                    .FirstOrDefaultAsync(dl => dl.ManifestId == manifestId, cts.Token);
 
-            if (deadLetter != null)
-                return;
+                if (deadLetter != null)
+                    return;
 
-            await Task.Delay(PollInterval);
+                await Task.Delay(PollInterval, cts.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The budget expired mid-query; fall through to the path below.
         }
 
         throw new TimeoutException(
             $"No dead letter for manifest {manifestId} appeared "
-                + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+                + $"within {budget.TotalSeconds}s."
         );
     }
 
@@ -153,25 +200,34 @@ public static class TrainStatePoller
         TimeSpan? timeout = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+        var budget = timeout ?? DefaultTimeout;
+        var deadline = DateTime.UtcNow + budget;
+        using var cts = new CancellationTokenSource(budget);
 
-        while (DateTime.UtcNow < deadline)
+        try
         {
-            dataContext.Reset();
+            while (DateTime.UtcNow < deadline)
+            {
+                dataContext.Reset();
 
-            var deadLetter = await dataContext
-                .DeadLetters.AsNoTracking()
-                .FirstOrDefaultAsync(dl => dl.Id == deadLetterId);
+                var deadLetter = await dataContext
+                    .DeadLetters.AsNoTracking()
+                    .FirstOrDefaultAsync(dl => dl.Id == deadLetterId, cts.Token);
 
-            if (deadLetter?.Status == expectedStatus)
-                return;
+                if (deadLetter?.Status == expectedStatus)
+                    return;
 
-            await Task.Delay(PollInterval);
+                await Task.Delay(PollInterval, cts.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The budget expired mid-query; fall through to the path below.
         }
 
         throw new TimeoutException(
             $"Dead letter {deadLetterId} did not reach status {expectedStatus} "
-                + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+                + $"within {budget.TotalSeconds}s."
         );
     }
 
@@ -182,30 +238,41 @@ public static class TrainStatePoller
         long? afterWorkQueueId = null
     )
     {
-        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+        var budget = timeout ?? DefaultTimeout;
+        var deadline = DateTime.UtcNow + budget;
+        using var cts = new CancellationTokenSource(budget);
 
-        while (DateTime.UtcNow < deadline)
+        try
         {
-            dataContext.Reset();
+            while (DateTime.UtcNow < deadline)
+            {
+                dataContext.Reset();
 
-            var query = dataContext
-                .WorkQueues.AsNoTracking()
-                .Where(wq => wq.ManifestId == manifestId);
+                var query = dataContext
+                    .WorkQueues.AsNoTracking()
+                    .Where(wq => wq.ManifestId == manifestId);
 
-            if (afterWorkQueueId.HasValue)
-                query = query.Where(wq => wq.Id > afterWorkQueueId.Value);
+                if (afterWorkQueueId.HasValue)
+                    query = query.Where(wq => wq.Id > afterWorkQueueId.Value);
 
-            var entry = await query.OrderByDescending(wq => wq.Id).FirstOrDefaultAsync();
+                var entry = await query
+                    .OrderByDescending(wq => wq.Id)
+                    .FirstOrDefaultAsync(cts.Token);
 
-            if (entry != null)
-                return entry;
+                if (entry != null)
+                    return entry;
 
-            await Task.Delay(PollInterval);
+                await Task.Delay(PollInterval, cts.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The budget expired mid-query; fall through to the path below.
         }
 
         throw new TimeoutException(
             $"No work queue entry for manifest {manifestId} appeared "
-                + $"within {(timeout ?? DefaultTimeout).TotalSeconds}s."
+                + $"within {budget.TotalSeconds}s."
         );
     }
 
@@ -217,27 +284,35 @@ public static class TrainStatePoller
     )
     {
         var deadline = DateTime.UtcNow + waitDuration;
+        using var cts = new CancellationTokenSource(waitDuration);
 
-        while (DateTime.UtcNow < deadline)
+        try
         {
-            dataContext.Reset();
+            while (DateTime.UtcNow < deadline)
+            {
+                dataContext.Reset();
 
-            var query = dataContext
-                .Metadatas.AsNoTracking()
-                .Where(m => m.Name != null && m.Name.Contains(trainNameContains));
+                var query = dataContext
+                    .Metadatas.AsNoTracking()
+                    .Where(m => m.Name != null && m.Name.Contains(trainNameContains));
 
-            if (afterMetadataId.HasValue)
-                query = query.Where(m => m.Id > afterMetadataId.Value);
+                if (afterMetadataId.HasValue)
+                    query = query.Where(m => m.Id > afterMetadataId.Value);
 
-            var found = await query.AnyAsync();
+                var found = await query.AnyAsync(cts.Token);
 
-            if (found)
-                throw new InvalidOperationException(
-                    $"Unexpected metadata containing '{trainNameContains}' appeared "
-                        + $"when none was expected."
-                );
+                if (found)
+                    throw new InvalidOperationException(
+                        $"Unexpected metadata containing '{trainNameContains}' appeared "
+                            + $"when none was expected."
+                    );
 
-            await Task.Delay(PollInterval);
+                await Task.Delay(PollInterval, cts.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The budget expired mid-query; fall through to the path below.
         }
     }
 }

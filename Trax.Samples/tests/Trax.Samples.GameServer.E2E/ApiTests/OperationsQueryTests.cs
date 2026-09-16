@@ -20,7 +20,8 @@ public class OperationsQueryTests : ApiTestFixture
                     }
                 }
             }
-            """
+            """,
+            apiKey: AdminKey
         );
 
         result
@@ -47,7 +48,8 @@ public class OperationsQueryTests : ApiTestFixture
                     }
                 }
             }
-            """
+            """,
+            apiKey: AdminKey
         );
 
         result
@@ -130,7 +132,8 @@ public class OperationsQueryTests : ApiTestFixture
                     }
                 }
             }
-            """
+            """,
+            apiKey: AdminKey
         );
 
         result
@@ -187,7 +190,8 @@ public class OperationsQueryTests : ApiTestFixture
                     }
                 }
             }
-            """
+            """,
+            apiKey: AdminKey
         );
 
         result

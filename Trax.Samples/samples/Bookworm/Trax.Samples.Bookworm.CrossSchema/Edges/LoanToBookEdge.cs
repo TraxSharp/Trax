@@ -1,6 +1,7 @@
 using HotChocolate;
 using HotChocolate.Types;
 using Trax.Api.GraphQL.DataLoaders.CrossSchema;
+using Trax.Effect.Attributes;
 using Trax.Samples.Bookworm.Catalog.Context;
 using Trax.Samples.Bookworm.Catalog.Models.Books;
 using Trax.Samples.Bookworm.Lending.Models.Loans;
@@ -20,8 +21,16 @@ namespace Trax.Samples.Bookworm.CrossSchema.Edges;
 [ExtendObjectType(typeof(Loan))]
 public sealed class LoanToBookEdge
 {
+    /// <summary>
+    /// Anonymous, stated explicitly. A field added by a type extension onto a
+    /// <c>[TraxAllowAnonymous]</c> type inherits no gate, so it has to declare its own posture even
+    /// when that posture is "open". Both sides are already anonymous: <see cref="Loan"/> carries
+    /// <c>[TraxAllowAnonymous]</c> and so does <see cref="Book"/>, so the edge exposes nothing the
+    /// catalog does not already expose.
+    /// </summary>
+    [TraxAllowAnonymous]
     public async Task<Book?> GetBook(
-        [Parent] Loan loan,
+        [Parent(requires: nameof(Loan.BookId))] Loan loan,
         CrossSchemaLoader<CatalogDbContext, Book> books,
         CancellationToken cancellationToken
     ) => await books.LoadAsync(loan.BookId, cancellationToken);

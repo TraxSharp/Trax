@@ -251,11 +251,13 @@ builder.Services.AddTraxGraphQL(graphql =>
         // cancel jobs. Both surfaces are off by default; opt in here.
         .ExposeOperationQueries()
         .ExposeOperationMutations()
-        // Per-train [TraxAuthorize] gates individual operations (see the endpoint-mapping
-        // note below); the ops namespace itself is intentionally reachable, and the sample
-        // keeps per-train auth rather than an endpoint-wide gate so anonymous player trains
-        // (leaderboard, player lookup) and the Banana Cake Pop IDE still work.
-        .AllowAnonymousOperations()
+        // The ops namespace is admin-only, and the rest of the endpoint stays open. An
+        // endpoint-wide RequireAuthorization() cannot express that: it would take the
+        // anonymous player trains (leaderboard, player lookup) and the Banana Cake Pop IDE
+        // down with it. GateOperations() puts @authorize on the `operations` field alone, so
+        // an anonymous caller still reads the leaderboard and gets TRAX_AUTHORIZATION from
+        // `operations`. Per-train [TraxAuthorize] continues to gate individual trains.
+        .GateOperations(roles: nameof(GameRole.Admin))
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
