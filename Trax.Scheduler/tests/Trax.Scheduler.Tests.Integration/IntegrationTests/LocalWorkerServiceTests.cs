@@ -142,9 +142,12 @@ public class LocalWorkerServiceTests : TestSetup
 
         var workerTask = workerService.StartAsync(cts.Token);
         var advanced = await WaitUntilAsync(
-            async () =>
+            async ct =>
             {
-                var m = await DataContext.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
+                var m = await DataContext.Metadatas.FirstOrDefaultAsync(
+                    x => x.Id == metadata.Id,
+                    ct
+                );
                 return m is not null && m.TrainState != TrainState.Pending;
             },
             WorkerCompletionTimeout
@@ -529,29 +532,38 @@ public class LocalWorkerServiceTests : TestSetup
     /// signal and finishes as soon as it appears, with the timeout serving only
     /// as a safety ceiling.
     /// </remarks>
-    private async Task<bool> WaitUntilAsync(Func<Task<bool>> predicate, TimeSpan timeout)
+    private async Task<bool> WaitUntilAsync(
+        Func<CancellationToken, Task<bool>> predicate,
+        TimeSpan timeout
+    )
     {
+        // ADR 0014: the predicate receives this wait's own token, so a stalled
+        // query cannot outlive the ceiling. Npgsql's command default is 30s,
+        // twice the budget here, and would otherwise surface as a poll that
+        // simply never saw the state change.
+        using var cts = new CancellationTokenSource(timeout);
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
             DataContext.Reset();
-            if (await predicate())
+            if (await predicate(cts.Token))
                 return true;
-            await Task.Delay(50);
+            await Task.Delay(50, cts.Token);
         }
         return false;
     }
 
     private Task<bool> WaitForJobCount(int expected, TimeSpan timeout) =>
         WaitUntilAsync(
-            async () => await DataContext.BackgroundJobs.CountAsync() == expected,
+            async ct => await DataContext.BackgroundJobs.CountAsync(ct) == expected,
             timeout
         );
 
     private Task<bool> WaitForJobAbsent(long jobId, TimeSpan timeout) =>
         WaitUntilAsync(
-            async () =>
-                await DataContext.BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId) is null,
+            async ct =>
+                await DataContext.BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId, ct)
+                    is null,
             timeout
         );
 
