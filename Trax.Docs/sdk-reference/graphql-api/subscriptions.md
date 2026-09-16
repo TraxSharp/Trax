@@ -200,6 +200,8 @@ Both are wired automatically, but only when the matching principal resolver is a
 
 The JWT interceptor validates against the same `JwtBearerOptions` as the HTTP handler, including Authority/JWKS schemes (Cognito, Google, any OIDC provider): it fetches signing keys from the scheme's discovery document when the options carry no static key.
 
+Each connection gets its own DI scope. The interceptor itself is a singleton (HotChocolate builds one per schema), so it opens a scope when `connection_init` arrives, resolves your scoped `ITraxPrincipalResolver<T>` inside it, and disposes it once the principal is resolved. A resolver holding a `DbContext` works on subscriptions exactly as it does on HTTP. The scope covers the handshake only, not the lifetime of the socket: the principal is captured onto the connection's `HttpContext.User` and reused for every subsequent operation, so a credential revoked mid-connection is not re-checked.
+
 Cookie auth (`Trax.Api.Auth.Oidc`) needs no interceptor. The browser sends cookies on the upgrade request and the cookie scheme authenticates it like any HTTP request.
 
 HotChocolate runs a single interceptor per schema. When both the API-key and JWT interceptors are wired, the last one registered wins (JWT), so a connection presenting an API-key token while both are active is rejected. Use one credential type on subscriptions, or supply a custom interceptor (below).

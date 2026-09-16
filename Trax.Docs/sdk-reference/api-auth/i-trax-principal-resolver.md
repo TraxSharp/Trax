@@ -31,3 +31,5 @@ API-key schemes use `ITraxPrincipalResolver<string>` (the raw header value). JWT
 ## Lifetime
 
 `AddTraxApiKeyAuth<TResolver>()` registers the resolver as **scoped**. Inject scoped dependencies (DbContext, distributed cache, HTTP client) freely. `AddTraxApiKeyAuth(keys => ...)` registers a singleton `HashedApiKeyResolver` built from the configured entries; the entry set is immutable once built.
+
+On subscriptions the resolver is scoped per **connection** rather than per request: the socket interceptor opens a scope when `connection_init` arrives and disposes it once the principal is resolved. See [subscriptions](/docs/sdk-reference/graphql-api/subscriptions).
