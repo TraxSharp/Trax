@@ -37,6 +37,7 @@ public class TraxJwtDispatcherSocketE2ETests
     private const string InternalIssuer = "https://internal-issuer";
     private static readonly byte[] InternalKey = Encoding.UTF8.GetBytes(new string('i', 32));
     private const string WsUri = "ws://localhost/trax/graphql";
+    private static readonly TimeSpan WarmupBudget = TimeSpan.FromSeconds(30);
 
     private static async Task<(IHost Host, TestJwksServer Jwks)> StartAsync()
     {
@@ -56,12 +57,16 @@ public class TraxJwtDispatcherSocketE2ETests
                             jwt =>
                                 jwt.UseAuthority(jwks.Issuer, Audience)
                                     .AllowHttpMetadata()
-                                    // ADR 0014: the receive below allows 10s, and the
-                                    // JwtBearer backchannel default is 60s. Without this
-                                    // a stalled metadata fetch outlives the assertion and
-                                    // reports a bare cancellation instead of the reason.
+                                    // Generous on purpose. ADR 0014 asks that nothing
+                                    // slower than a deadline sit under it, and warming
+                                    // the configuration below achieves that directly:
+                                    // once it is cached no HTTP happens under the socket
+                                    // receive at all. Pinning this under the receive
+                                    // instead only moved the failure into setup, where a
+                                    // slow first connect to the loopback JWKS server blew
+                                    // a 5s budget on a loaded CI runner.
                                     .CustomizeBearerOptions(o =>
-                                        o.BackchannelTimeout = TimeSpan.FromSeconds(5)
+                                        o.BackchannelTimeout = WarmupBudget
                                     )
                         );
                         s.AddTraxJwtAuth(
@@ -92,24 +97,51 @@ public class TraxJwtDispatcherSocketE2ETests
             .Build();
 
         await host.StartAsync();
-        await WarmJwksMetadataAsync(host);
+        await WarmJwksMetadataAsync(host, jwks);
         return (host, jwks);
     }
 
     /// <summary>
-    /// Fetches the "cognito" scheme's discovery document once, before any test
-    /// opens a socket. The first <c>connection_init</c> on a JWKS-backed scheme
-    /// would otherwise pay for it inside the receive deadline, which is the
-    /// shape ADR 0014 exists to stop. Failing here reports the metadata problem
-    /// itself rather than a timed-out receive.
+    /// Loads the "cognito" scheme's discovery document once, before any test
+    /// opens a socket, so the first <c>connection_init</c> on a JWKS-backed
+    /// scheme does not pay for it inside the receive deadline. That is what
+    /// keeps ADR 0014 satisfied here: after this returns the socket path
+    /// resolves signing keys from cache and makes no HTTP call.
     /// </summary>
-    private static async Task WarmJwksMetadataAsync(IHost host)
+    /// <remarks>
+    /// Patient on purpose. The first connection to the in-process JWKS server
+    /// has taken more than five seconds on a loaded CI runner, waiting inside
+    /// HttpConnectionPool for a connection rather than on a reply. A slow
+    /// connect wants one generous attempt, not several short ones. This runs in
+    /// setup under no assertion, so the budget costs nothing when things are
+    /// healthy, and a genuine failure names the metadata address instead of
+    /// surfacing later as a socket that never acked.
+    /// </remarks>
+    private static async Task WarmJwksMetadataAsync(IHost host, TestJwksServer jwks)
     {
         var options = host
             .Services.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
             .Get("cognito");
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        await options.ConfigurationManager!.GetConfigurationAsync(cts.Token);
+        var discovery = $"{jwks.Issuer}/.well-known/openid-configuration";
+
+        try
+        {
+            // Prove the endpoint answers on a client we control before the
+            // bearer handler's backchannel spends its attempt on it.
+            using var probe = new HttpClient { Timeout = WarmupBudget };
+            (await probe.GetAsync(discovery)).EnsureSuccessStatusCode();
+
+            using var cts = new CancellationTokenSource(WarmupBudget);
+            await options.ConfigurationManager!.GetConfigurationAsync(cts.Token);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"The cognito scheme's discovery document at {discovery} did not load within "
+                    + $"{WarmupBudget.TotalSeconds}s of host start.",
+                ex
+            );
+        }
     }
 
     [Test]
