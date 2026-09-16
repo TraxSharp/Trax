@@ -139,7 +139,7 @@
         "type": "Project",
         "dependencies": {
           "NUnit": "[4.6.1, )",
-          "Trax.Core.Testing": "[1.6.0, )"
+          "Trax.Core.Testing": "[1.7.0, )"
         }
       },
       "Microsoft.CodeAnalysis.CSharp": {
@@ -154,9 +154,9 @@
       },
       "Trax.Core.Testing": {
         "type": "CentralTransitive",
-        "requested": "[1.6.0, )",
-        "resolved": "1.6.0",
-        "contentHash": "B7JVnjyoXwObP2kEZRDkUsHrOV+VSNw2+Hz9Bx1YlqXYDXvtcmUyUk5nDTEllQnaR8+6fRm7+wnN3GM1kAsGLw==",
+        "requested": "[1.7.0, )",
+        "resolved": "1.7.0",
+        "contentHash": "N1pb8O9WXMk/aMeZeLi/sy4855yPujdU/NUtCGaLrs8S7aZbErNto/C1l1QFRy/TgA5I0Dlec0RKKKwbOGRCQQ==",
         "dependencies": {
           "Microsoft.CodeAnalysis.CSharp": "4.14.0",
           "NUnit": "4.4.0"
