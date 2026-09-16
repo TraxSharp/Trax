@@ -1,0 +1,146 @@
+name: Dependabot Lockfiles
+
+# Dependabot edits Directory.Packages.props but does not reliably regenerate the
+# packages.lock.json files beside it. The pull-request build restores with
+# --locked-mode, so a lockfile that disagrees with the manifest fails the PR with
+# NU1004 and the bump stalls until somebody regenerates by hand. This workflow
+# does that regeneration on the PR branch so the pull request heals itself.
+#
+# Split into two jobs on purpose, per GITHUB_ACTIONS_SECURITY.md triage item 2:
+# `dotnet restore` resolves and downloads third-party packages, which is
+# dependency code, and it must not share a job with a write token. The resolve
+# job holds a read-only token; the commit job holds contents: write and runs
+# nothing but git.
+#
+# Note that `pull_request` is only restricted for forks. Dependabot branches live
+# in this repository, so this workflow does get the permissions declared below.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Directory.Packages.props'
+      - '**/packages.lock.json'
+
+permissions: {}
+
+concurrency:
+  group: dependabot-lockfiles-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    # The PR author, not github.actor: a human re-running the workflow changes
+    # the actor but not the author. This is the guard GitHub documents.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout the pull request branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Regenerate lockfiles
+        # trax-local.props is gitignored and absent here, so this resolves the
+        # committed pins rather than the locally packed 1.99.99.
+        run: dotnet restore --use-lock-file --force-evaluate
+
+      - name: Guard against local-dev lockfile versions
+        run: |
+          if grep -rln '"resolved": "1.99.99"' --include=packages.lock.json . ; then
+            echo "::error::Regenerated lockfiles contain the local-dev version 1.99.99."
+            exit 1
+          fi
+
+      - name: Collect the lockfile changes
+        id: collect
+        run: |
+          git diff --binary -- '*packages.lock.json' > lockfiles.patch
+          if [ -s lockfiles.patch ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Lockfiles already agree with the manifest; nothing to do."
+          fi
+
+      - name: Upload the patch
+        if: steps.collect.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v5.0.0
+        with:
+          name: lockfiles-patch
+          path: lockfiles.patch
+          retention-days: 1
+    outputs:
+      changed: ${{ steps.collect.outputs.changed }}
+
+  commit:
+    needs: resolve
+    if: needs.resolve.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # The only elevated token in this workflow, in the only job that runs no
+      # dependency code.
+      contents: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout the pull request branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.head_ref }}
+          # Kept on purpose: this job pushes. Every other checkout in this
+          # repository sets it to false.
+          persist-credentials: true
+
+      - name: Download the patch
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v6.0.0
+        with:
+          name: lockfiles-patch
+
+      - name: Apply, restricted to lockfiles
+        # The patch comes from a job that ran dependency code, so it is treated
+        # as untrusted: git apply is restricted to lockfile paths, and the
+        # working tree is checked afterwards in case that restriction ever slips.
+        run: |
+          git apply --include='*packages.lock.json' lockfiles.patch
+          rm -f lockfiles.patch
+
+          unexpected=$(git status --porcelain | grep -v 'packages\.lock\.json$' || true)
+          if [ -n "$unexpected" ]; then
+            echo "::error::The patch touched files other than lockfiles:"
+            echo "$unexpected"
+            exit 1
+          fi
+
+          if grep -rln '"resolved": "1.99.99"' --include=packages.lock.json . ; then
+            echo "::error::Lockfiles contain the local-dev version 1.99.99."
+            exit 1
+          fi
+
+      - name: Commit and push
+        run: |
+          git config user.name 'dependabot[bot]'
+          git config user.email '49699333+dependabot[bot]@users.noreply.github.com'
+          git add -- '*packages.lock.json'
+          git commit -m 'chore(deps): regenerate lockfiles for the dependency bump'
+          git push origin HEAD:"$HEAD_REF"
+        env:
+          HEAD_REF: ${{ github.head_ref }}

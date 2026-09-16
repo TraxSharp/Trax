@@ -16,54 +16,18 @@
 
   <!-- Trax cross-repo packages. CI pins below; overridable via TraxLocalVersion. -->
   <ItemGroup>
-    <PackageVersion
-      Include="Trax.Core.Testing"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.6.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.54.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Data"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.54.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Data.InMemory"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.54.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Data.Postgres"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.54.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Data.Sqlite"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.54.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Provider.Json"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.54.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.Provider.Parameter"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.54.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.StateMachine"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.54.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Effect.StateMachine.Persistence"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.54.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Mediator"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.20.0'))"
-    />
-    <PackageVersion
-      Include="Trax.Scheduler"
-      Version="$([MSBuild]::ValueOrDefault('$(TraxLocalVersion)', '1.31.0'))"
-    />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.7.0" />
+    <PackageVersion Include="Trax.Effect" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Data" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Data.Sqlite" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Provider.Json" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.StateMachine" Version="1.54.0" />
+    <PackageVersion Include="Trax.Effect.StateMachine.Persistence" Version="1.54.0" />
+    <PackageVersion Include="Trax.Mediator" Version="1.22.0" />
+    <PackageVersion Include="Trax.Scheduler" Version="1.32.0" />
   </ItemGroup>
 
   <!-- Third-party packages, pinned to exact resolved versions. -->
@@ -104,5 +68,27 @@
     <PackageVersion Include="RabbitMQ.Client" Version="7.2.1" />
     <!-- Transitive (via EF Core Sqlite): pull the patched native SQLite lib (CVE-2025-6965). -->
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+  </ItemGroup>
+
+  <!--
+    Local development override. pack-local.sh writes a gitignored trax-local.props
+    setting TraxLocalVersion=1.99.99; this redirects every Trax.* pin above to the
+    locally packed build. The pins themselves stay plain literal versions so they
+    stay machine-readable: an MSBuild expression in the Version attribute is not a
+    version Dependabot can parse, and it silently skipped every one of them.
+  -->
+  <ItemGroup Condition="'$(TraxLocalVersion)' != ''">
+    <PackageVersion Update="Trax.Core.Testing" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Data" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Data.InMemory" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Data.Postgres" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Data.Sqlite" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Provider.Json" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.Provider.Parameter" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.StateMachine" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Effect.StateMachine.Persistence" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Mediator" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Scheduler" Version="$(TraxLocalVersion)" />
   </ItemGroup>
 </Project>

@@ -2,12 +2,14 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
 using Trax.Api.Extensions;
@@ -51,7 +53,16 @@ public class TraxJwtDispatcherSocketE2ETests
                         s.AddRouting();
                         s.AddTraxJwtAuth(
                             "cognito",
-                            jwt => jwt.UseAuthority(jwks.Issuer, Audience).AllowHttpMetadata()
+                            jwt =>
+                                jwt.UseAuthority(jwks.Issuer, Audience)
+                                    .AllowHttpMetadata()
+                                    // ADR 0014: the receive below allows 10s, and the
+                                    // JwtBearer backchannel default is 60s. Without this
+                                    // a stalled metadata fetch outlives the assertion and
+                                    // reports a bare cancellation instead of the reason.
+                                    .CustomizeBearerOptions(o =>
+                                        o.BackchannelTimeout = TimeSpan.FromSeconds(5)
+                                    )
                         );
                         s.AddTraxJwtAuth(
                             "internal",
@@ -81,7 +92,24 @@ public class TraxJwtDispatcherSocketE2ETests
             .Build();
 
         await host.StartAsync();
+        await WarmJwksMetadataAsync(host);
         return (host, jwks);
+    }
+
+    /// <summary>
+    /// Fetches the "cognito" scheme's discovery document once, before any test
+    /// opens a socket. The first <c>connection_init</c> on a JWKS-backed scheme
+    /// would otherwise pay for it inside the receive deadline, which is the
+    /// shape ADR 0014 exists to stop. Failing here reports the metadata problem
+    /// itself rather than a timed-out receive.
+    /// </summary>
+    private static async Task WarmJwksMetadataAsync(IHost host)
+    {
+        var options = host
+            .Services.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get("cognito");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        await options.ConfigurationManager!.GetConfigurationAsync(cts.Token);
     }
 
     [Test]
@@ -155,11 +183,24 @@ public class TraxJwtDispatcherSocketE2ETests
     private static async Task<JsonElement> ReceiveAsync(WebSocket ws)
     {
         var buffer = new byte[4096];
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var budget = TimeSpan.FromSeconds(10);
+        using var cts = new CancellationTokenSource(budget);
         using var ms = new MemoryStream();
         while (true)
         {
-            var result = await ws.ReceiveAsync(buffer, cts.Token);
+            WebSocketReceiveResult result;
+            try
+            {
+                result = await ws.ReceiveAsync(buffer, cts.Token);
+            }
+            catch (OperationCanceledException ex)
+            {
+                throw new TimeoutException(
+                    $"No frame arrived within {budget.TotalSeconds}s. Every timeout under "
+                        + "this wait must be shorter than it (ADR 0014).",
+                    ex
+                );
+            }
             if (result.MessageType == WebSocketMessageType.Close)
                 throw new InvalidOperationException(
                     $"WebSocket closed unexpectedly: {result.CloseStatus} {result.CloseStatusDescription}"
