@@ -77,6 +77,23 @@ that requires the duration to elapse, and a comment must say which. `NoFixedTask
 enforces this, with marker comments (`determinism:`, `allowed-delay:`, `measuring-interval:`,
 `negative-wait:`) for the legitimate cases.
 
+A deadline is only as good as the timeouts underneath it. Set every component timeout that
+can delay what the test is waiting for to something shorter than the test's own ceiling, so
+a stall is reported as the error that caused it rather than as a cancellation with only the
+test helper in the stack:
+
+```csharp
+jwt.UseAuthority(jwks.Issuer, Audience)
+    .AllowHttpMetadata()
+    // The receive below allows 10s; the JwtBearer backchannel default is 60s.
+    .CustomizeBearerOptions(o => o.BackchannelTimeout = TimeSpan.FromSeconds(5));
+```
+
+Backchannel and connection timeouts, command timeouts, broker acknowledgement windows and
+host shutdown timeouts all sit behind ordinary awaits with defaults measured in tens of
+seconds. `Trax.Docs/adr/0014` records why this is a rule, and what it costs: a default a
+test overrides is a default nothing exercises.
+
 ## Skipping
 
 A test that cannot run in the current environment calls `Assert.Ignore("...")` after an
