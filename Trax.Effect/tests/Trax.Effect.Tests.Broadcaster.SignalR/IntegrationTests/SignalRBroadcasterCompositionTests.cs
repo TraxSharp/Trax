@@ -110,6 +110,9 @@ public class SignalRBroadcasterCompositionTests
                 )
                 .Build();
 
+            // ADR 0014: the Timeout below is 10s and the handshake default is 15s.
+            connection.HandshakeTimeout = TimeSpan.FromSeconds(5);
+
             var tcs = new TaskCompletionSource<TraxClientEvent>();
             connection.On<TraxClientEvent>("TrainEvent", evt => tcs.TrySetResult(evt));
             await connection.StartAsync().WaitAsync(Timeout);

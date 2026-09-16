@@ -63,7 +63,7 @@ internal sealed class SignalRTestServer : IAsyncDisposable
     public HubConnection CreateClient()
     {
         var server = Host.GetTestServer();
-        return new HubConnectionBuilder()
+        var connection = new HubConnectionBuilder()
             .WithUrl(
                 new Uri(server.BaseAddress, HubPath.TrimStart('/')),
                 options =>
@@ -78,6 +78,15 @@ internal sealed class SignalRTestServer : IAsyncDisposable
                 }
             )
             .Build();
+
+        // ADR 0014: tests wait on StartAsync under their own ceiling, the
+        // tightest of which is 10s. The HubConnection handshake default is 15s,
+        // so a stalled handshake would outlive the assertion and report a bare
+        // cancellation. ServerTimeout is left alone: it detects a dead server
+        // rather than delaying a wait, and shortening it below the server's
+        // keep-alive interval would drop healthy connections mid-test.
+        connection.HandshakeTimeout = TimeSpan.FromSeconds(5);
+        return connection;
     }
 
     public T GetService<T>()
