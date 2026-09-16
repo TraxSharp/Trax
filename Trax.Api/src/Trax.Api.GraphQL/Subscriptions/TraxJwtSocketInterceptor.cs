@@ -5,11 +5,13 @@ using HotChocolate.AspNetCore.Subscriptions;
 using HotChocolate.AspNetCore.Subscriptions.Protocols;
 using HotChocolate.Execution;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
+using Trax.Api.GraphQL.Extensions;
 
 namespace Trax.Api.GraphQL.Subscriptions;
 
@@ -37,7 +39,7 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// </remarks>
 public sealed class TraxJwtSocketInterceptor(
     IOptionsMonitor<JwtBearerOptions> optionsMonitor,
-    ITraxPrincipalResolver<JwtTokenInput> resolver,
+    TraxApplicationServices applicationServices,
     ILogger<TraxJwtSocketInterceptor> logger
 ) : DefaultSocketSessionInterceptor
 {
@@ -78,6 +80,13 @@ public sealed class TraxJwtSocketInterceptor(
         TraxPrincipal? traxPrincipal;
         try
         {
+            // The resolver is scoped: it is the host's code and typically hits a database.
+            // A socket interceptor is a singleton, so it cannot hold one, and the connection
+            // gets its own scope instead.
+            await using var scope = applicationServices.Services.CreateAsyncScope();
+            var resolver = scope.ServiceProvider.GetRequiredService<
+                ITraxPrincipalResolver<JwtTokenInput>
+            >();
             traxPrincipal = await resolver.ResolveAsync(input, cancellationToken);
         }
         catch (Exception ex)

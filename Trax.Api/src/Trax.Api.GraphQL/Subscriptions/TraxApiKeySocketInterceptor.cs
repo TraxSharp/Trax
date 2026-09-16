@@ -4,8 +4,10 @@ using HotChocolate.AspNetCore;
 using HotChocolate.AspNetCore.Subscriptions;
 using HotChocolate.AspNetCore.Subscriptions.Protocols;
 using HotChocolate.Execution;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Api.Auth;
+using Trax.Api.GraphQL.Extensions;
 
 namespace Trax.Api.GraphQL.Subscriptions;
 
@@ -28,7 +30,7 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// </para>
 /// </remarks>
 public sealed class TraxApiKeySocketInterceptor(
-    ITraxPrincipalResolver<string> resolver,
+    TraxApplicationServices applicationServices,
     ILogger<TraxApiKeySocketInterceptor> logger
 ) : DefaultSocketSessionInterceptor
 {
@@ -46,6 +48,13 @@ public sealed class TraxApiKeySocketInterceptor(
         TraxPrincipal? principal;
         try
         {
+            // The resolver is scoped: it is the host's code and typically hits a database.
+            // A socket interceptor is a singleton, so it cannot hold one, and the connection
+            // gets its own scope instead.
+            await using var scope = applicationServices.Services.CreateAsyncScope();
+            var resolver = scope.ServiceProvider.GetRequiredService<
+                ITraxPrincipalResolver<string>
+            >();
             principal = await resolver.ResolveAsync(apiKey, cancellationToken);
         }
         catch (Exception ex)

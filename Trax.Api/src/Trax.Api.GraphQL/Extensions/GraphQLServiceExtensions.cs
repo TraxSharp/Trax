@@ -538,7 +538,10 @@ public static class GraphQLServiceExtensions
             )
         )
         {
-            graphqlBuilder.BridgeApplicationService<Trax.Api.Auth.ITraxPrincipalResolver<string>>();
+            // The resolver is scoped and cannot be bridged as a singleton; the interceptor
+            // takes the application container and opens a scope per connection instead.
+            services.TryAddSingleton(sp => new TraxApplicationServices(sp));
+            graphqlBuilder.BridgeApplicationService<TraxApplicationServices>();
             graphqlBuilder.BridgeApplicationService<ILogger<TraxApiKeySocketInterceptor>>();
             graphqlBuilder.AddSocketSessionInterceptor<TraxApiKeySocketInterceptor>();
             wiredSocketInterceptors.Add(nameof(TraxApiKeySocketInterceptor));
@@ -568,7 +571,8 @@ public static class GraphQLServiceExtensions
         )
         {
             graphqlBuilder.BridgeApplicationService<IOptionsMonitor<JwtBearerOptions>>();
-            graphqlBuilder.BridgeApplicationService<Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput>>();
+            services.TryAddSingleton(sp => new TraxApplicationServices(sp));
+            graphqlBuilder.BridgeApplicationService<TraxApplicationServices>();
             graphqlBuilder.BridgeApplicationService<ILogger<TraxJwtSocketInterceptor>>();
             graphqlBuilder.AddSocketSessionInterceptor<TraxJwtSocketInterceptor>();
             wiredSocketInterceptors.Add(nameof(TraxJwtSocketInterceptor));

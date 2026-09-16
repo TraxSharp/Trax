@@ -2,7 +2,10 @@ using System.Text.Json;
 using HotChocolate.AspNetCore.Subscriptions;
 using HotChocolate.AspNetCore.Subscriptions.Protocols;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Api.Auth;
+using Trax.Api.GraphQL.Extensions;
 
 namespace Trax.Api.Tests.Auth;
 
@@ -41,6 +44,28 @@ internal static class SocketInterceptorTestHelpers
         var payload = Substitute.For<IOperationMessagePayload>();
         payload.Payload.Returns((JsonElement?)null);
         return payload;
+    }
+
+    /// <summary>
+    /// Wraps <paramref name="resolver"/> in an application container the interceptor can open a
+    /// scope against, registered <b>scoped</b> to match how a host registers it.
+    /// </summary>
+    /// <remarks>
+    /// The interceptor is a singleton and cannot hold a scoped resolver, so it takes the container
+    /// and resolves per connection. Registering the resolver scoped here means these tests fail the
+    /// same way production did if that ever regresses.
+    /// </remarks>
+    public static TraxApplicationServices AppServicesWith<TInput>(
+        ITraxPrincipalResolver<TInput> resolver
+    )
+    {
+        var services = new ServiceCollection();
+        services.AddScoped(_ => resolver);
+        return new TraxApplicationServices(
+            services.BuildServiceProvider(
+                new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }
+            )
+        );
     }
 
     private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web);

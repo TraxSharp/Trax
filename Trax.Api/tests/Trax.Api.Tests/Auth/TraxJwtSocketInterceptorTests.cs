@@ -79,7 +79,7 @@ public class TraxJwtSocketInterceptorTests
     ) =>
         new(
             OptionsMonitor(customize),
-            resolver ?? new DefaultJwtPrincipalResolver(),
+            AppServicesWith(resolver ?? new DefaultJwtPrincipalResolver()),
             NullLogger<TraxJwtSocketInterceptor>.Instance
         );
 

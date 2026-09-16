@@ -48,7 +48,7 @@ public class TraxJwtSocketInterceptorJwksTests
     private static TraxJwtSocketInterceptor NewInterceptor(
         IOptionsMonitor<JwtBearerOptions> monitor,
         ITraxPrincipalResolver<JwtTokenInput> resolver
-    ) => new(monitor, resolver, NullLogger<TraxJwtSocketInterceptor>.Instance);
+    ) => new(monitor, AppServicesWith(resolver), NullLogger<TraxJwtSocketInterceptor>.Instance);
 
     [Test]
     public async Task JwksScheme_ValidToken_Accepts_AttachesPrincipal()

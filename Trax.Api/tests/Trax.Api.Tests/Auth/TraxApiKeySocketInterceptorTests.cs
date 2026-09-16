@@ -12,7 +12,7 @@ public class TraxApiKeySocketInterceptorTests
 {
     private static TraxApiKeySocketInterceptor NewInterceptor(
         ITraxPrincipalResolver<string> resolver
-    ) => new(resolver, NullLogger<TraxApiKeySocketInterceptor>.Instance);
+    ) => new(AppServicesWith(resolver), NullLogger<TraxApiKeySocketInterceptor>.Instance);
 
     private static ITraxPrincipalResolver<string> ResolverReturning(TraxPrincipal? principal)
     {
