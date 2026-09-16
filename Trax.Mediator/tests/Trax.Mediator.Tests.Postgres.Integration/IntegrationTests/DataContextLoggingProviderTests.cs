@@ -53,15 +53,21 @@ public class DataContextLoggingProviderTests : TestSetup
         var deadline = DateTime.UtcNow + timeout.Value;
         var count = 0;
 
+        // ADR 0014: the query carries this wait's own token so a stalled command
+        // cannot outlive the ceiling. Npgsql's command default is 30s, three
+        // times the budget here, and would otherwise report as a poll that
+        // simply never saw the count.
+        using var cts = new CancellationTokenSource(timeout.Value);
+
         while (DateTime.UtcNow < deadline)
         {
             using var context = (IDataContext)factory.Create();
-            count = await context.Logs.Where(l => l.Category == category).CountAsync();
+            count = await context.Logs.Where(l => l.Category == category).CountAsync(cts.Token);
 
             if (count >= expectedCount)
                 return count;
 
-            await Task.Delay(250);
+            await Task.Delay(250, cts.Token);
         }
 
         return count;
