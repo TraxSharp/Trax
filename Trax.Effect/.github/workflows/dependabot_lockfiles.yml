@@ -1,32 +1,77 @@
 name: Dependabot Lockfiles
 
-# Dependabot edits Directory.Packages.props but does not reliably regenerate the
-# packages.lock.json files beside it. The pull-request build restores with
-# --locked-mode, so a lockfile that disagrees with the manifest fails the PR with
-# NU1004 and the bump stalls until somebody regenerates by hand. This workflow
-# does that regeneration on the PR branch so the pull request heals itself.
+# Dependabot leaves two kinds of damage behind on a grouped NuGet bump, and the
+# pull-request build fails on both:
+#
+#   1. Lockfile drift. The PR build restores with --locked-mode, so a
+#      packages.lock.json that disagrees with the manifest fails with NU1004.
+#   2. VersionOverride injection. When a grouped bump would resolve one package
+#      at different versions in different projects, Dependabot edits the csproj
+#      files rather than leave Central Package Management alone, adding lines
+#      like
+#          <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.14.0" />
+#      to projects that never referenced the package, several of them pinned to
+#      the version being bumped *away* from. It re-does this every week.
+#
+# This workflow reverts (2), regenerates the lockfiles that (2) invalidated, and
+# pushes both back to the PR branch, so the pull request heals itself.
+#
+# If the revert leaves a genuine conflict -- a transitive downgrade the injected
+# override was papering over -- the restore below fails and the PR stays red.
+# That is the intended outcome: it means a pin needs raising by hand, which is a
+# review, not a regeneration.
 #
 # Split into two jobs on purpose, per GITHUB_ACTIONS_SECURITY.md triage item 2:
 # `dotnet restore` resolves and downloads third-party packages, which is
-# dependency code, and it must not share a job with a write token. The resolve
-# job holds a read-only token; the commit job holds contents: write and runs
-# nothing but git.
+# dependency code, and it must not share a job with a write credential. The
+# resolve job holds a read-only token and hands over a patch restricted to
+# lockfiles; the commit job runs nothing but git, and re-derives the csproj
+# revert itself rather than trusting it from the job that ran dependency code.
 #
-# Note that `pull_request` is only restricted for forks. Dependabot branches live
-# in this repository, so this workflow does get the permissions declared below.
+# Two things decide how the commit gets made, and both are worth knowing before
+# anyone "simplifies" this back into a git push:
+#
+#   - It is written through the createCommitOnBranch GraphQL mutation, not
+#     `git push`, because the repository ruleset requires verified signatures
+#     and a runner has no signing key. GitHub signs commits made through that
+#     mutation, so the heal lands Verified like Dependabot's own commits, and
+#     the ruleset only has to stop requiring a pull request on bot branches.
+#   - It authenticates with GITHUB_TOKEN, deliberately, in preference to a
+#     GitHub App or a PAT. Either of those would avoid the "Approve and run"
+#     click below, but both mean a long-lived credential sitting in Dependabot
+#     secrets -- an App private key never expires and can mint write tokens for
+#     every repo it is installed on. GITHUB_TOKEN stores nothing: it is minted
+#     per job, scoped by the platform to this repository, and expires when the
+#     job ends. There is no secret here to leak.
+#
+#     The cost is one click. GitHub creates the `synchronize` run that follows
+#     a GITHUB_TOKEN write in an approval-required state, so after the heal
+#     lands, somebody with write access presses "Approve and run" on the PR and
+#     CI then goes green. These PRs are merged by hand anyway, so that click
+#     happens on a visit already being made. If it ever gets tiresome, swapping
+#     in an App token is a five-line change and nothing else has to move.
+#
+# Note that `pull_request` permissions are restricted for Dependabot in the same
+# way as for forks, which is why the commit job raises contents: write
+# explicitly -- the default for a Dependabot-triggered run is read-only.
 
 on:
   pull_request:
     branches: [main]
     paths:
       - 'Directory.Packages.props'
+      - '.config/dotnet-tools.json'
       - '**/packages.lock.json'
+      - '**/*.csproj'
 
 permissions: {}
 
 concurrency:
   group: dependabot-lockfiles-${{ github.head_ref }}
   cancel-in-progress: true
+
+env:
+  HEAL_COMMIT_SUBJECT: 'chore(deps): drop the injected VersionOverrides and regenerate lockfiles'
 
 jobs:
   resolve:
@@ -49,32 +94,74 @@ jobs:
           ref: ${{ github.head_ref }}
           persist-credentials: false
 
+      - name: Stop if this branch has already been healed
+        id: healed
+        # The write below raises a `synchronize`, so once that run is approved
+        # this workflow fires again on the healed branch. It would be a no-op
+        # anyway, but the guard makes that explicit and costs nothing.
+        run: |
+          if [ "$(git log -1 --format=%s)" = "$HEAL_COMMIT_SUBJECT" ]; then
+            echo "The tip commit is this workflow's own heal commit; nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Revert Dependabot's csproj edits
+        if: steps.healed.outputs.skip == 'false'
+        # Restores every csproj from the base commit. A Dependabot PR has no
+        # legitimate csproj change to lose: under Central Package Management the
+        # project files carry no versions at all.
+        #
+        # Repeated verbatim in the commit job, which is the one trusted to stage
+        # it. Done here only so the restore below resolves against a clean tree.
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          git checkout "$BASE_SHA" -- '*.csproj'
+          reverted=$(git status --porcelain -- '*.csproj')
+          if [ -n "$reverted" ]; then
+            echo "Reverted project files:"
+            echo "$reverted"
+          else
+            echo "No csproj edits to revert."
+          fi
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
       - name: Setup .NET
+        if: steps.healed.outputs.skip == 'false'
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
           global-json-file: global.json
 
       - name: Regenerate lockfiles
+        if: steps.healed.outputs.skip == 'false'
         # trax-local.props is gitignored and absent here, so this resolves the
         # committed pins rather than the locally packed 1.99.99.
-        run: dotnet restore --use-lock-file --force-evaluate
+        #
+        # NuGetAudit is off for this restore alone. Directory.Build.props
+        # promotes NU1901-NU1904 to errors, so an advisory anywhere in the graph
+        # would abort the regeneration -- which is exactly the state a security
+        # bump arrives in. The PR build still runs the audit with its own gate.
+        run: dotnet restore --use-lock-file --force-evaluate -p:NuGetAudit=false
 
-      - name: Guard against local-dev lockfile versions
+      - name: Collect the lockfile changes
+        id: collect
+        if: steps.healed.outputs.skip == 'false'
         run: |
           if grep -rln '"resolved": "1.99.99"' --include=packages.lock.json . ; then
             echo "::error::Regenerated lockfiles contain the local-dev version 1.99.99."
             exit 1
           fi
 
-      - name: Collect the lockfile changes
-        id: collect
-        run: |
           git diff --binary -- '*packages.lock.json' > lockfiles.patch
-          if [ -s lockfiles.patch ]; then
+          csproj_reverted=$(git status --porcelain -- '*.csproj' | wc -l | tr -d ' ')
+
+          if [ -s lockfiles.patch ] || [ "$csproj_reverted" != "0" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "Lockfiles already agree with the manifest; nothing to do."
+            echo "Lockfiles and project files already agree with the manifest; nothing to do."
           fi
 
       - name: Upload the patch
@@ -93,18 +180,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # The only elevated token in this workflow, in the only job that runs no
-      # dependency code.
+      # The only elevated scope in this workflow, in the only job that runs no
+      # dependency code. Dependabot runs get a read-only token by default; this
+      # key is what raises it.
       contents: write
+      actions: read
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
         with:
           egress-policy: audit
 
-      # Downloaded before the checkout, and outside the workspace: nothing
-      # third-party then runs while the push credentials sit in .git/config, and
-      # the patch can never be picked up by the commit below.
+      # Downloaded outside the workspace, so the patch can never be picked up as
+      # a file change by the commit below.
       - name: Download the patch
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
@@ -115,20 +203,33 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.head_ref }}
-          # Kept on purpose: this job pushes. Every other checkout in this
-          # repository sets it to false.
+          # Kept on purpose: the base-sha fetch below needs to authenticate.
+          # Nothing here writes with git, though -- the commit is made through
+          # the API, so what sits in .git/config is only ever used to read.
           persist-credentials: true
+
+      - name: Revert Dependabot's csproj edits
+        # Re-derived here with git alone, rather than taken from the resolve
+        # job's patch, so nothing produced by a job that ran dependency code can
+        # reach a project file.
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          git checkout "$BASE_SHA" -- '*.csproj'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
 
       - name: Apply, restricted to lockfiles
         # The patch comes from a job that ran dependency code, so it is treated
         # as untrusted: git apply is restricted to lockfile paths, and the
         # working tree is checked afterwards in case that restriction ever slips.
         run: |
-          git apply --include='*packages.lock.json' "$RUNNER_TEMP/lockfiles/lockfiles.patch"
+          if [ -s "$RUNNER_TEMP/lockfiles/lockfiles.patch" ]; then
+            git apply --include='*packages.lock.json' "$RUNNER_TEMP/lockfiles/lockfiles.patch"
+          fi
 
-          unexpected=$(git status --porcelain | grep -v 'packages\.lock\.json$' || true)
+          unexpected=$(git status --porcelain | grep -vE '(packages\.lock\.json|\.csproj)$' || true)
           if [ -n "$unexpected" ]; then
-            echo "::error::The patch touched files other than lockfiles:"
+            echo "::error::The heal touched files other than lockfiles and project files:"
             echo "$unexpected"
             exit 1
           fi
@@ -138,12 +239,78 @@ jobs:
             exit 1
           fi
 
-      - name: Commit and push
+      - name: Commit through the API, so the commit is signed
+        # `git push` is rejected here: the repository ruleset requires verified
+        # signatures, and a runner has no signing key. Commits created through
+        # createCommitOnBranch are signed by GitHub itself, so they land
+        # Verified without a key ever existing in CI.
+        #
+        # Nothing is committed locally -- the heal is still working-tree edits,
+        # read off disk below -- so expectedHeadOid is the tip we checked out.
+        # If Dependabot force-pushed in the meantime the mutation fails rather
+        # than clobbering it.
+        #
+        # git diff is taken against HEAD, not the index: `git checkout <base> --`
+        # above stages its reverts, so an unstaged-only diff would miss them.
         run: |
-          git config user.name 'dependabot[bot]'
-          git config user.email '49699333+dependabot[bot]@users.noreply.github.com'
-          git add -- '*packages.lock.json'
-          git commit -m 'chore(deps): regenerate lockfiles for the dependency bump'
-          git push origin HEAD:"$HEAD_REF"
+          changed=$(git diff HEAD --name-only --diff-filter=d -- '*packages.lock.json' '*.csproj')
+          if [ -z "$changed" ]; then
+            echo "Nothing left to commit."
+            exit 0
+          fi
+
+          removed=$(git diff HEAD --name-only --diff-filter=D -- '*packages.lock.json' '*.csproj')
+          if [ -n "$removed" ]; then
+            echo "::error::The heal would delete files, which it never should:"
+            echo "$removed"
+            exit 1
+          fi
+
+          echo "$changed" | while IFS= read -r f; do
+            jq -n --arg path "$f" --arg contents "$(base64 -w0 "$f")" \
+              '{path: $path, contents: $contents}'
+          done | jq -s '{additions: ., deletions: []}' > "$RUNNER_TEMP/changes.json"
+
+          jq -n \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg branch "$HEAD_REF" \
+            --arg oid "$(git rev-parse HEAD)" \
+            --arg headline "$HEAL_COMMIT_SUBJECT" \
+            --slurpfile changes "$RUNNER_TEMP/changes.json" \
+            '{
+               query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }",
+               variables: {
+                 input: {
+                   branch: {
+                     repositoryNameWithOwner: $repo,
+                     branchName: $branch
+                   },
+                   expectedHeadOid: $oid,
+                   message: { headline: $headline },
+                   fileChanges: $changes[0]
+                 }
+               }
+             }' > "$RUNNER_TEMP/payload.json"
+
+          echo "Committing $(echo "$changed" | wc -l | tr -d ' ') file(s) to $HEAD_REF"
+
+          if ! gh api graphql --input "$RUNNER_TEMP/payload.json" > "$RUNNER_TEMP/response.json"; then
+            echo "::error::createCommitOnBranch failed:"
+            cat "$RUNNER_TEMP/response.json" || true
+            exit 1
+          fi
+
+          # GraphQL answers 200 with an errors array, so a clean exit is not
+          # enough on its own.
+          if jq -e 'has("errors")' "$RUNNER_TEMP/response.json" >/dev/null; then
+            echo "::error::createCommitOnBranch returned errors:"
+            jq '.errors' "$RUNNER_TEMP/response.json"
+            exit 1
+          fi
+
+          jq -r '"Committed " + .data.createCommitOnBranch.commit.oid
+                 + " -> " + .data.createCommitOnBranch.commit.url' \
+            "$RUNNER_TEMP/response.json"
         env:
           HEAD_REF: ${{ github.head_ref }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
