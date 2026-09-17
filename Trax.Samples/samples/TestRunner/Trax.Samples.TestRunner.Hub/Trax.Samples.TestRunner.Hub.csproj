@@ -12,6 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="HotChocolate.AspNetCore" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Trax.Effect.Provider.Json" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" />

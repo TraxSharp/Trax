@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="HotChocolate.AspNetCore" />
     <PackageReference Include="Trax.Effect.Provider.Json" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" />
     <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />
@@ -20,5 +21,6 @@
     <PackageReference Include="Trax.Api" />
     <PackageReference Include="Trax.Api.GraphQL" />
     <PackageReference Include="Trax.Effect.Broadcaster.RabbitMQ" />
+    <PackageReference Include="Trax.Scheduler" />
   </ItemGroup>
 </Project>

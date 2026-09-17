@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="HotChocolate.AspNetCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="Trax.Api" />
@@ -18,5 +19,6 @@
     <PackageReference Include="Trax.Effect.Data.InMemory" />
     <PackageReference Include="Trax.Effect.Provider.Json" />
     <PackageReference Include="Trax.Mediator" />
+    <PackageReference Include="Trax.Scheduler" />
   </ItemGroup>
 </Project>

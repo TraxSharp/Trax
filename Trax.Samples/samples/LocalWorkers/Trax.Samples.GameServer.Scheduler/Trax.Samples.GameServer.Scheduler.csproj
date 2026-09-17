@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="HotChocolate.AspNetCore" VersionOverride="15.1.18" />
     <PackageReference Include="Trax.Effect.Broadcaster.RabbitMQ" />
     <PackageReference Include="Trax.Effect.Provider.Json" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" />

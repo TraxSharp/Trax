@@ -67,9 +67,9 @@
       },
       "Trax.Scheduler": {
         "type": "Direct",
-        "requested": "[1.32.0, )",
-        "resolved": "1.32.0",
-        "contentHash": "lzn71nxAsNbS8Y7OmauOPFxY8uP5c9x2m1ehMISSB5fmtiUaaONe/zsQW/BRyiqXPqoWKu99Z31ikaV3O6wYGg==",
+        "requested": "[1.32.1, )",
+        "resolved": "1.32.1",
+        "contentHash": "2n9gJ6fFKx3q86Iw+/8lh6GG+AdCQqfWY8mRdexMnE/PtfqthxcNiOAsqpF/Asvmg9n5+wPRjBQfEQ4Tbz6QTg==",
         "dependencies": {
           "Cronos": "0.13.0",
           "Npgsql": "10.0.3",

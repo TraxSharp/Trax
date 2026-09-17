@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="HotChocolate.AspNetCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="Trax.Effect" />
@@ -21,5 +22,6 @@
     <PackageReference Include="Trax.Api.Auth.ApiKey" />
     <PackageReference Include="Trax.Api.GraphQL" />
     <PackageReference Include="Trax.Api.GraphQL.Audit" />
+    <PackageReference Include="Trax.Scheduler" />
   </ItemGroup>
 </Project>

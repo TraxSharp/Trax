@@ -23,9 +23,9 @@
       },
       "Trax.Runner.Lambda": {
         "type": "Direct",
-        "requested": "[1.32.0, )",
-        "resolved": "1.32.0",
-        "contentHash": "mO7QPrQjdgRAP9dms3BFrwJKBdRLRJAaUQhEtqpZamadNOBA2ScQb/EvdkpDqWXE4SCp0BQ0VJ9rsVyiTrQjgg==",
+        "requested": "[1.32.1, )",
+        "resolved": "1.32.1",
+        "contentHash": "gXp1BX9OpcEq5s22/c4cngSAb8+kXb1RTKR9HZoShqK1jUYsVu7o1yrw3vphQDpZndU07Wyu9BF0xZwfQP9nsw==",
         "dependencies": {
           "Amazon.Lambda.Core": "3.1.1",
           "Amazon.Lambda.Serialization.SystemTextJson": "3.0.0",
@@ -34,7 +34,7 @@
           "Trax.Effect": "1.43.0",
           "Trax.Effect.Data": "1.43.0",
           "Trax.Mediator": "1.20.0",
-          "Trax.Scheduler": "1.32.0"
+          "Trax.Scheduler": "1.32.1"
         }
       },
       "Amazon.Lambda.Core": {
@@ -344,9 +344,9 @@
       },
       "Trax.Scheduler": {
         "type": "CentralTransitive",
-        "requested": "[1.32.0, )",
-        "resolved": "1.32.0",
-        "contentHash": "lzn71nxAsNbS8Y7OmauOPFxY8uP5c9x2m1ehMISSB5fmtiUaaONe/zsQW/BRyiqXPqoWKu99Z31ikaV3O6wYGg==",
+        "requested": "[1.32.1, )",
+        "resolved": "1.32.1",
+        "contentHash": "2n9gJ6fFKx3q86Iw+/8lh6GG+AdCQqfWY8mRdexMnE/PtfqthxcNiOAsqpF/Asvmg9n5+wPRjBQfEQ4Tbz6QTg==",
         "dependencies": {
           "Cronos": "0.13.0",
           "Npgsql": "10.0.3",
