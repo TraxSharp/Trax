@@ -13,29 +13,29 @@
   <!-- Trax.* cross-repo packages. CI pins the exact resolved version; a local build
        can override via TraxLocalVersion (set by trax-local.props). -->
   <ItemGroup>
-    <PackageVersion Include="Trax.Api.GraphQL.PersistedOperations" Version="1.42.0" />
+    <PackageVersion Include="Trax.Api.GraphQL.PersistedOperations" Version="1.43.1" />
     <PackageVersion Include="Trax.Effect" Version="1.54.0" />
     <PackageVersion Include="Trax.Effect.Data" Version="1.54.0" />
     <PackageVersion Include="Trax.Mediator" Version="1.22.0" />
-    <PackageVersion Include="Trax.Scheduler" Version="1.32.0" />
+    <PackageVersion Include="Trax.Scheduler" Version="1.32.1" />
   </ItemGroup>
 
   <!-- Third-party packages, pinned to exact versions. -->
   <ItemGroup>
     <!-- bunit pulls AngleSharp transitively; pin it to 1.5.0 to clear GHSA-pgww-w46g-26qg (mXSS,
          all versions before 1.5.0). bunit 1.40.0 accepts the whole 1.x range. -->
-    <PackageVersion Include="AngleSharp" Version="1.5.0" />
-    <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.2" />
+    <PackageVersion Include="AngleSharp" Version="1.8.1" />
+    <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.5" />
     <PackageVersion Include="bunit" Version="1.40.0" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
-    <PackageVersion Include="FluentAssertions" Version="8.8.0" />
+    <PackageVersion Include="FluentAssertions" Version="8.11.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.*" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
-    <PackageVersion Include="NUnit" Version="4.4.0" />
-    <PackageVersion Include="NUnit.Analyzers" Version="4.11.2" />
-    <PackageVersion Include="NUnit3TestAdapter" Version="6.1.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="NUnit" Version="4.6.1" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.15.0" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
     <PackageVersion Include="PublicApiGenerator" Version="11.4.5" />
     <PackageVersion Include="Radzen.Blazor" Version="11.*" />
   </ItemGroup>
