@@ -3,12 +3,23 @@ updates:
   - package-ecosystem: "nuget"
     directory: "/"
     schedule: { interval: "weekly" }
-    open-pull-requests-limit: 10
+    # Three at a time. A bump that needs a human costs a review either way, and
+    # ten open at once only made the pile deeper than the week's attention span.
+    open-pull-requests-limit: 3
     groups:
       # Group only minor + patch; major bumps get their own reviewable PRs.
       nuget-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # The tools whose bump invalidates something committed beside them. Each has
+      # to move in one commit with the artefact it regenerates, which a bot PR
+      # cannot do -- it bumps the tool and leaves the check failing, every time.
+      # Bump these by hand.
+      #
+      # csharpier lives in .config/dotnet-tools.json, and a minor bump changes how
+      # it formats: bump it and run `dotnet csharpier format .` in one commit.
+      - dependency-name: "csharpier"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule: { interval: "weekly" }
