@@ -96,9 +96,9 @@ jobs:
 
       - name: Stop if this branch has already been healed
         id: healed
-        # The App token means our own push re-triggers this workflow. One no-op
-        # run would be harmless, but a loop guard is cheap and a runaway push
-        # loop on a bot branch is not.
+        # The write below raises a `synchronize`, so once that run is approved
+        # this workflow fires again on the healed branch. It would be a no-op
+        # anyway, but the guard makes that explicit and costs nothing.
         run: |
           if [ "$(git log -1 --format=%s)" = "$HEAL_COMMIT_SUBJECT" ]; then
             echo "The tip commit is this workflow's own heal commit; nothing to do."
