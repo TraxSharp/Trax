@@ -1,8 +1,10 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    <!-- Let a central PackageVersion pin a transitively-referenced package
-         (used to force a patched SQLite native lib below). -->
+    <!-- Let a central PackageVersion apply to a package that also arrives
+         transitively, so one version wins across the graph. It does NOT mean a
+         PackageVersion can stand alone: one with no PackageReference anywhere is
+         invisible to Dependabot and freezes. See the Tests.Meta pin guard. -->
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <!-- Local-dev override: pack-local.sh writes trax-local.props (gitignored) with TraxLocalVersion=1.99.99. -->
@@ -51,9 +53,12 @@
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
     <PackageVersion Include="PublicApiGenerator" Version="11.5.4" />
     <PackageVersion Include="RabbitMQ.Client" Version="7.2.2" />
-    <!-- Transitively pulled by EF Core Sqlite. bundle 3.0.3 brings the native
-         lib.e_sqlite3 3.50.3 (SQLite 3.50.3), fixing CVE-2025-6965. -->
-    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <!-- Referenced directly by the SQLite-using project(s) below rather than pinned
+         transitively: a PackageVersion with no PackageReference is invisible to
+         Dependabot and freezes, which for a CVE floor means it silently stops
+         working. Overrides the vulnerable native lib EF Core Sqlite pulls
+         transitively (CVE-2025-6965). -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
   </ItemGroup>
 
   <!--
