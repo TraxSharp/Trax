@@ -3,11 +3,23 @@ updates:
   - package-ecosystem: "nuget"
     directory: "/"
     schedule: { interval: "weekly" }
-    open-pull-requests-limit: 10
+    # Three at a time. A bump that needs a human costs a review either way, and
+    # ten open at once only made the pile deeper than the week's attention span.
+    open-pull-requests-limit: 3
     groups:
       # Group only minor + patch; major bumps get their own reviewable PRs.
       nuget-minor-patch:
         patterns: ["*"]
+        exclude-patterns: ["Microsoft.CodeAnalysis.*"]
+        update-types: ["minor", "patch"]
+      # Roslyn on its own. It is the package whose grouped bump makes Dependabot
+      # inject <PackageReference ... VersionOverride="..."> into project files
+      # that never referenced it, because the transitive graph resolves it at
+      # different versions in different projects. The lockfile workflow reverts
+      # that, but if the underlying conflict is real the PR still needs a human
+      # -- and grouped in, it takes the rest of the week's bumps down with it.
+      roslyn:
+        patterns: ["Microsoft.CodeAnalysis.*"]
         update-types: ["minor", "patch"]
     ignore:
       # A Trax major is a deliberate migration, never a bot PR. This also keeps
@@ -16,6 +28,18 @@ updates:
       # resolvable, so a major-update proposal could walk straight into one.
       - dependency-name: "Trax.*"
         update-types: ["version-update:semver-major"]
+      # The two tools whose bump invalidates something committed beside it. Each
+      # has to move in one commit with the artefact it regenerates, which a bot
+      # PR cannot do -- it bumps the tool and leaves the check failing, every
+      # time. Bump these by hand.
+      #
+      # csharpier lives in .config/dotnet-tools.json, and a minor bump changes
+      # how it formats: bump it and run `dotnet csharpier format .` together.
+      - dependency-name: "csharpier"
+      # PublicApiGenerator changes how it renders members, which rewrites
+      # tests/Trax.Mediator.Tests.Meta/PublicApi/: bump it and regenerate the
+      # baseline together.
+      - dependency-name: "PublicApiGenerator"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule: { interval: "weekly" }
