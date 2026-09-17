@@ -7,7 +7,7 @@
     Condition="Exists('$(MSBuildThisFileDirectory)trax-local.props')"
   />
   <ItemGroup>
-    <PackageVersion Include="Trax.Core.Testing" Version="1.7.0" />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.7.1" />
     <PackageVersion Include="Trax.Effect" Version="1.54.0" />
     <PackageVersion Include="Trax.Effect.Data" Version="1.54.0" />
     <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.54.0" />
@@ -17,16 +17,16 @@
     <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.54.0" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.5" />
-    <PackageVersion Include="FluentAssertions" Version="8.10.0" />
+    <PackageVersion Include="FluentAssertions" Version="8.11.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="NUnit" Version="4.6.1" />
-    <PackageVersion Include="NUnit.Analyzers" Version="4.14.0" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.15.0" />
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
     <PackageVersion Include="PublicApiGenerator" Version="11.5.4" />
     <PackageVersion Include="System.Diagnostics.PerformanceCounter" Version="10.0.12" />
