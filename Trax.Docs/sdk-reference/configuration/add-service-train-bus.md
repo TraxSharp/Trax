@@ -52,6 +52,7 @@ The builder overload passes a `TraxMediatorBuilder` with the following methods:
 |--------|---------|-------------|
 | `ScanAssemblies(params Assembly[])` | `TraxMediatorBuilder` | Adds assemblies to scan for `IServiceTrain<,>` implementations |
 | `TrainLifetime(ServiceLifetime)` | `TraxMediatorBuilder` | Sets the DI lifetime for discovered train registrations (default: `Transient`) |
+| `SkipChainVerification()` | `TraxMediatorBuilder` | Turns off the startup chain check. Logs a warning at startup instead. Use it for the check's blind spot (a junction asking for an interface only a subtype of the declared input implements), or temporarily while migrating a codebase whose chains do not pass yet. See [Trains & Junctions](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) |
 
 ## Returns
 
@@ -106,6 +107,7 @@ services.AddTrax(trax => trax
 2. Registers each discovered train with the DI container at the specified lifetime
 3. Registers `ITrainBus` for dynamic train dispatch
 4. Registers `ITrainRegistry` for train type lookup
+5. Registers the startup chain validator, a hosted service that reads every registered train's `Junctions()` declaration when the host starts and refuses to start if any chain cannot run, reporting every failing train at once. A train it cannot build (its constructor needs something only a request provides) or that does not derive from `Train<,>` is logged as a warning and skipped rather than refused. A train it can build whose `Junctions()` throws is refused, whatever the exception: a `Junctions()` that dereferences `Metadata`, which is null at startup, fails the start, reported as a train whose chain could not be read. Being a hosted service, the check runs only where hosted services start: not with `SkipChainVerification()`, and not on the Lambda runner or any other bare `ServiceProvider`, where such a train fails when it first runs instead. See [Trains & Junctions](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic)
 
 ## How Discovery Works
 

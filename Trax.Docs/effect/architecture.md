@@ -21,7 +21,6 @@ public abstract class Train<TIn, TOut>
 {
     public Task<TOut> Run(TIn input);
 
-    public Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs);
 }
 
 // Junction interface for individual operations
@@ -31,8 +30,8 @@ public interface IJunction<TIn, TOut>
 }
 
 // Chaining is done via methods on Train<TIn, TOut> itself
-// Primary:  override Junctions() => Chain<MyJunction>().Chain<MyOtherJunction>();
-// Advanced: override RunInternal(input) => Activate(input).Chain<...>().Resolve();
+// Primary:  override Junctions() => Chain<MyJunction>().Chain<MyOtherJunction>().Resolve();
+// A chain that names no junctions: Junctions() => Task.FromResult(Resolve());
 // See SDK Reference > Train Methods for all overloads
 ```
 
@@ -44,7 +43,7 @@ Extends core trains with dependency injection, metadata tracking, and effect man
 
 ### ServiceTrain<TIn, TOut>
 
-`ServiceTrain` extends `Train` with framework-injected properties and a lifecycle that wraps `Junctions()` (or `RunInternal`):
+`ServiceTrain` extends `Train` with framework-injected properties and a lifecycle that wraps `Junctions()`:
 
 ```csharp
 public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<TIn, TOut>
@@ -61,12 +60,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public string TrainName => CanonicalName ?? GetType().FullName ?? GetType().Name;
     public long? ParentId { get; internal set; }
 
-    protected virtual TOut Junctions() => ...;     // Override for standard pattern
-    protected virtual Task<Either<Exception, TOut>> RunInternal(TIn input) => ...; // Override for advanced cases
+    protected virtual Task<Either<Exception, TOut>> Junctions() => ...;  // Inherited from Train; override to declare the chain
 }
 ```
 
-The `Run` method wraps the user-defined method (`Junctions()` or `RunInternal`) with a lifecycle that follows these steps:
+The `Run` method wraps the train's `Junctions()` declaration with a lifecycle that follows these steps:
 
 1. **Initialize**: Create `Metadata`, set `TrainState.InProgress`, persist via `SaveChanges`
 2. **Hooks**: Fire `OnStarted` (global lifecycle hooks, then per-train override)
@@ -150,12 +148,12 @@ The full lifecycle of a `ServiceTrain` execution:
 [Set Output] -> Update
        |
        v
-   Success? --No--> [FinishTrain: Failed] -> Update
+   Success? --No--> [FinishServiceTrain: Failed or Cancelled] -> Update
        |                      |
       Yes                     |
        |                      |
        v                      v
-[FinishTrain: Completed]      |
+[FinishServiceTrain: Completed]
   -> Update                   |
        |                      |
        +----------+-----------+

@@ -15,12 +15,12 @@ The `TrainRegistry` scans the specified assemblies at startup for all types impl
 
 ## TrainBus
 
-When `RunAsync<TOut>(input, parentMetadata?)` is called, the `TrainBus`:
+When `RunAsync<TOut>(input, metadata?)` is called, the `TrainBus`:
 
 1. Looks up the train type from the registry by `input.GetType()`
 2. Resolves the train from the DI container in a new scope
 3. Injects framework-level properties (`EffectRunner`, `Metadata`, etc.)
-4. Invokes the train's `Run` method via reflection, passing the input and optional parent metadata for parent-child linking
+4. Invokes the train's `Run` method via reflection. With no `metadata` the train creates its own record; with one, which must be `Pending` (anything else throws `TrainException`), it runs as that pre-created record, the way the scheduler runs a dispatched job. The metadata is not a parent link, and nothing sets the run's `ParentId`
 
 ## Key Constraints and Design Decisions
 
@@ -30,11 +30,12 @@ Each input type maps to exactly one train. When duplicate input types are found,
 
 ### Train Name Resolution
 
-When looking up a train by name (e.g., via `ITrainExecutionService`), the system tries three matches in order:
+When looking up a train by name (e.g., via `ITrainExecutionService`), the system tries two matches in order:
 
 1. **Canonical name**: `ServiceType.FullName` (the interface's fully-qualified name, e.g. `MyApp.Trains.IProcessOrderTrain`)
-2. **Friendly name**: `ServiceTypeName` (the display name from the registration)
-3. **Short name**: `ServiceType.Name` (the unqualified interface name, e.g. `IProcessOrderTrain`)
+2. **Friendly name**: `ServiceTypeName` (the display name from the registration). A name that matches more than one train's friendly name throws `AmbiguousTrainNameException`.
+
+There is no short-name fallback.
 
 The canonical name is the preferred identifier. It is stable across implementation class renames and matches what is stored in metadata and work queue entries.
 

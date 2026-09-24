@@ -39,15 +39,16 @@ Every `ServiceTrain` execution creates a `Metadata` row:
 | `Name` | Train class name |
 | `TrainState` | Pending -> InProgress -> Completed or Failed |
 | `StartTime` / `EndTime` | Execution duration |
-| `Input` / `Output` | Serialized JSON (requires [Parameter Effect](parameter-effect.md)) |
+| `Input` / `Output` | Serialized JSON (requires [Parameter Effect](/docs/effect/effect-providers/parameter-effect)) |
 | `FailureJunction` | Which junction threw |
 | `FailureException` | Exception type |
 | `FailureReason` | Error message |
 | `StackTrace` | Full stack trace on failure |
-| `ParentId` | Links to parent train for [nested trains](/docs/mediator#nested-trains) |
+| `FailureClass` | [Failure classification](/docs/core/trains-and-junctions#classifying-failures), stored in the `failure_class` column (the `trax.failure_class` enum type on Postgres). `Unclassified` unless a classifier assigned one |
+| `ParentId` | The parent run's id. Not set by any Trax code path at present, including a train dispatched from a junction; see [nested trains](/docs/mediator#nested-trains) |
 | `ManifestId` | Links to scheduling manifest |
 
-Without the [Parameter Effect](parameter-effect.md), the `Input` and `Output` columns are null. Metadata is still persisted, but without the serialized request/response data.
+Without the [Parameter Effect](/docs/effect/effect-providers/parameter-effect), the `Input` and `Output` columns are null. Metadata is still persisted, but without the serialized request/response data.
 
 ## SQLite
 

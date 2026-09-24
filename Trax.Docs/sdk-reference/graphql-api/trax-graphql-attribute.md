@@ -172,7 +172,7 @@ A `[TraxQuery]`/`[TraxMutation]` train is exposed via GraphQL, so it must declar
 public class LookupPlayerTrain
     : ServiceTrain<LookupPlayerInput, LookupPlayerOutput>, ILookupPlayerTrain
 {
-    protected override LookupPlayerOutput Junctions() => Chain<FetchPlayerJunction>();
+    protected override Task<Either<Exception, LookupPlayerOutput>> Junctions() => Chain<FetchPlayerJunction>().Resolve();
 }
 ```
 
@@ -199,7 +199,7 @@ query {
 [TraxMutation(Description = "Bans a player (admin only)")]
 public class BanPlayerTrain : ServiceTrain<BanPlayerInput, Unit>, IBanPlayerTrain
 {
-    protected override Unit Junctions() => Chain<ApplyBanJunction>();
+    protected override Task<Either<Exception, Unit>> Junctions() => Chain<ApplyBanJunction>().Resolve();
 }
 ```
 
@@ -237,7 +237,7 @@ mutation {
 [TraxMutation(GraphQLOperation.Run, Description = "Pings the server")]
 public class PingTrain : ServiceTrain<PingInput, PongOutput>, IPingTrain
 {
-    protected override PongOutput Junctions() => Chain<PingJunction>();
+    protected override Task<Either<Exception, PongOutput>> Junctions() => Chain<PingJunction>().Resolve();
 }
 ```
 
@@ -250,8 +250,8 @@ Generates only `ping` under `dispatch`. No `mode` or `priority` parameters.
 public class RecalculateLeaderboardTrain
     : ServiceTrain<RecalculateLeaderboardInput, Unit>, IRecalculateLeaderboardTrain
 {
-    protected override Unit Junctions() =>
-        Chain<AggregateScoresJunction>().Chain<RankPlayersJunction>();
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<AggregateScoresJunction>().Chain<RankPlayersJunction>().Resolve();
 }
 ```
 

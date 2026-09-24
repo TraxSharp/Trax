@@ -12,7 +12,7 @@ Executes a junction that can **return early** from the train. If the junction su
 
 If the junction **fails** (returns Left), the failure is **ignored**. No exception is set and the train continues normally.
 
-> **Important:** Subsequent `Chain` calls after a successful `ShortCircuit` still execute. The short-circuit value only affects `Resolve()`: it returns the captured value instead of doing a Memory lookup. If you need to skip remaining junctions entirely, combine `ShortCircuit` with a conditional pattern or use the railway error path.
+> **Important:** Subsequent `Chain` calls after a successful `ShortCircuit` still execute. The short-circuit value only affects `Resolve()`: it returns the captured value instead of doing a Memory lookup. Nothing in a chain skips the remaining junctions and still returns the short-circuit value. `Junctions()` cannot branch on its input, because a chain is declared once and checked at startup (`Trax.Docs/adr/0016`), and a later junction that fails puts the train on the left track, where `Resolve()` returns that failure rather than the captured value. A junction after a `ShortCircuit` that should not repeat work has to decide that itself, from what it is given.
 
 ## ShortCircuit\<TJunction\>()
 

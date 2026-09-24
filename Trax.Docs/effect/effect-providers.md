@@ -35,9 +35,9 @@ This persists a `Metadata` record for each train execution containing:
 - Start and end timestamps
 - Serialized input and output
 - Exception details if failed
-- Parent train ID for nested trains
+- A parent run ID column, which nothing in Trax sets at present (see [Nested Trains](/docs/mediator#nested-trains))
 
-See [Data Persistence](effect-providers/data-persistence.md) for the full breakdown of both backends, what gets persisted, and DataContext logging.
+See [Data Persistence](/docs/effect/effect-providers/data-persistence) for the full breakdown of both backends, what gets persisted, and DataContext logging.
 
 ## JSON Effect (`AddJson`)
 
@@ -53,7 +53,7 @@ services.AddTrax(trax => trax
 
 This doesn't persist anything. It just logs. Useful for seeing what's happening without setting up a database.
 
-See [JSON Effect](effect-providers/json-effect.md) for how change detection works.
+See [JSON Effect](/docs/effect/effect-providers/json-effect) for how change detection works.
 
 ## Parameter Effect (`SaveTrainParameters`)
 
@@ -80,7 +80,7 @@ Without this, the `Input` and `Output` columns in `Metadata` are null. With it, 
 
 This configuration can also be changed at runtime from the dashboard's [Effects page](/docs/dashboard#effects-page).
 
-See [Parameter Effect](effect-providers/parameter-effect.md) for details, custom serialization options, and configuration properties.
+See [Parameter Effect](/docs/effect/effect-providers/parameter-effect) for details, custom serialization options, and configuration properties.
 
 ## Junction Logger (`AddJunctionLogger`)
 
@@ -98,7 +98,7 @@ This hooks into `EffectJunction` (not base `Junction`) lifecycle events. Before 
 
 Requires junctions to inherit from `EffectJunction<TIn, TOut>` instead of `Junction<TIn, TOut>`. See [EffectJunction vs Junction](/docs/core/trains-and-junctions#effectjunction-vs-junction).
 
-See [Junction Logger](effect-providers/junction-logger.md) for the full JunctionMetadata field reference.
+See [Junction Logger](/docs/effect/effect-providers/junction-logger) for the full JunctionMetadata field reference.
 
 ## Junction Progress & Cancellation Check (`AddJunctionProgress`)
 
@@ -119,7 +119,7 @@ This registers two junction-level effect providers:
 
 The cancellation check runs first so a cancelled train never writes progress columns for a junction that won't execute. Requires junctions to inherit from `EffectJunction<TIn, TOut>`.
 
-See [Junction Progress](effect-providers/junction-progress.md) for the dual-path cancellation architecture and dashboard integration.
+See [Junction Progress](/docs/effect/effect-providers/junction-progress) for the dual-path cancellation architecture and dashboard integration.
 
 ## Lifecycle Hooks (`AddLifecycleHook`)
 

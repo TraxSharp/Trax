@@ -10,12 +10,14 @@ nav_order: 2
 
 Executes a junction, wiring its input from Memory and storing its output back into Memory. This is the primary method for composing junctions into a train pipeline. If any junction fails (returns `Left`), subsequent junctions are short-circuited.
 
+Every `Chain` overload is a protected method on `Train<TInput, TReturn>` and returns a `MonadTask<TInput, TReturn>`, an awaitable wrapper around the chain that carries the same `Chain`, `IChain`, `ShortCircuit`, `Extract`, `AddServices` and `Resolve` methods, so calls continue fluently across async junctions. A chain always ends in `.Resolve()`.
+
 ## Chain\<TJunction\>()
 
 Creates and executes a junction. Input is auto-extracted from Memory. The junction's `TIn`/`TOut` types are resolved via reflection from its `IJunction<TIn, TOut>` implementation.
 
 ```csharp
-public Monad<TInput, TReturn> Chain<TJunction>() where TJunction : class
+protected MonadTask<TInput, TReturn> Chain<TJunction>() where TJunction : class
 ```
 
 | Type Parameter | Constraint | Description |
@@ -26,8 +28,9 @@ This is the overload used in most trains:
 
 ```csharp
 protected override Task<Either<Exception, OrderResult>> Junctions() =>
-        Chain<ValidateOrder>()          // Creates ValidateOrder, extracts its input from Memory
-        .Chain<ProcessPayment>().Resolve();   // Creates ProcessPayment, extracts its input from Memory
+    Chain<ValidateOrder>()          // Creates ValidateOrder, extracts its input from Memory
+        .Chain<ProcessPayment>()    // Creates ProcessPayment, extracts its input from Memory
+        .Resolve();
 ```
 
 ## Chain\<TJunction\>(TJunction junctionInstance)
@@ -35,7 +38,7 @@ protected override Task<Either<Exception, OrderResult>> Junctions() =>
 Executes a pre-created junction instance. Input is auto-extracted from Memory.
 
 ```csharp
-public Monad<TInput, TReturn> Chain<TJunction>(TJunction junctionInstance) where TJunction : class
+protected MonadTask<TInput, TReturn> Chain<TJunction>(TJunction junctionInstance) where TJunction : class
 ```
 
 | Parameter | Type | Description |
@@ -45,9 +48,36 @@ public Monad<TInput, TReturn> Chain<TJunction>(TJunction junctionInstance) where
 Useful when you need to configure a junction before executing it:
 
 ```csharp
-var junction = new ProcessPayment { Gateway = "stripe" };
-return Chain<ProcessPayment>(junction);
+protected override Task<Either<Exception, OrderResult>> Junctions() =>
+    Chain(new ProcessPayment { Gateway = "stripe" }).Resolve();
 ```
+
+## Chain\<TJunction, TIn, TOut\>() and Chain\<TJunction, TIn\>()
+
+Explicit-typed overloads for a junction whose input and output types cannot be inferred from its interface, for example one that implements `IJunction<,>` more than once. The types are stated rather than discovered by reflection.
+
+```csharp
+protected MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
+    where TJunction : IJunction<TIn, TOut>
+
+protected MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>()
+    where TJunction : IJunction<TIn, TOut>, new()
+
+// Unit output
+protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
+    where TJunction : IJunction<TIn, Unit>
+
+protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
+    where TJunction : IJunction<TIn, Unit>, new()
+```
+
+| Type Parameter | Description |
+|---------------|-------------|
+| `TJunction` | The junction type |
+| `TIn` | The input type taken from Memory |
+| `TOut` | The output type stored in Memory (`Unit` for the two-parameter form) |
+
+The parameterless forms construct the junction with `new()`, so they take no constructor dependencies. Pass an instance when the junction needs them.
 
 ---
 
@@ -67,4 +97,4 @@ return Chain<ProcessPayment>(junction);
 
 ## SynchronizationContext Safety
 
-Chain suppresses the current `SynchronizationContext` when awaiting an incomplete junction task via `.GetAwaiter().GetResult()`. This prevents deadlocks in environments with a single-threaded `SynchronizationContext` such as Blazor Server, WPF, WinForms, and legacy ASP.NET. The original context is restored after the junction completes (or throws).
+The chain is asynchronous end to end: each junction is awaited with `ConfigureAwait(false)`, and nothing blocks on a junction's task. That keeps chains safe in environments with a single-threaded `SynchronizationContext` such as Blazor Server, WPF, WinForms, and legacy ASP.NET.

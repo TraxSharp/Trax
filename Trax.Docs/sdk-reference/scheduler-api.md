@@ -40,6 +40,7 @@ Both share the same concepts: external IDs for upsert semantics, `Schedule` obje
 | [Manifest Management](/docs/sdk-reference/scheduler-api/manifest-management) | `DisableAsync`, `EnableAsync`, `TriggerAsync`: runtime control of scheduled jobs |
 | [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Enables automatic purging of old metadata for high-frequency trains |
 | [AddTraxSchedulerLiveness](/docs/sdk-reference/scheduler-api/add-trax-scheduler-liveness) | Health check that fails when the JobDispatcher stops completing cycles |
+| [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) | Confirms entries staged by a deferred enqueue, and cancels or promotes stale ones |
 
 ### Helpers
 

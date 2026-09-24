@@ -207,6 +207,8 @@ The response type still uses the unified format, but `metadataId` and `output` w
 
 ## Operations Mutations
 
+The whole namespace sits behind the operations gate (`GateOperations`, `RequireAuthorization` or `AllowAnonymousOperations`; see [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)). Mutations that enqueue a train and input the caller chose (`requeueExecution`, `workQueue.queueTrain`) also apply that train's `[TraxAuthorize]` requirements. Mutations that enqueue what a manifest fixed (`triggerManifest`, `triggerManifestDelayed`, `triggerGroup`, dead-letter requeues) are governed by the gate alone. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
+
 ### triggerManifest
 
 Triggers an immediate execution of a manifest, bypassing its normal schedule.
@@ -400,7 +402,19 @@ mutation {
 ### requeueExecution
 
 Re-queues an execution: reads its train name + input from the metadata row and enqueues a
-fresh work queue entry for the dispatcher (the dashboard's Re-queue action).
+fresh work queue entry for the dispatcher (the GraphQL counterpart of the dashboard's Re-queue
+button). It goes through the same path as [`queueTrain`](#queuetrain), so a caller who may not
+run the train gets a GraphQL error with code `TRAX_AUTHORIZATION` (`"Not authorized."`) rather
+than `success: false`.
+
+An execution with no saved input is refused with `success: false` and a message saying inputs are
+saved only when [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save-train-parameters)
+is on. So is one whose input was too large to save in full and was stored as the truncation
+placeholder (`{"_truncated": true, ...}`). Enqueue refusals (a throwing `OnQueue`, an unusable
+subject key, a deferred entry cancelled before confirmation) come back as `success: false` with
+`"The enqueue was refused: ..."`, as does any other failure of the enqueue, as for `queueTrain`. An enqueue reads a missing input as `{}`, so re-queueing it would re-run the train with
+defaults rather than with what it ran with. This check runs before authorization, so it answers
+the same for every caller; a missing execution id also returns `success: false`.
 
 ```graphql
 mutation {
@@ -551,7 +565,13 @@ The `operations.workQueue` namespace lets the dashboard (and other API clients) 
 
 #### queueTrain
 
-Creates a new work queue entry. The dispatcher picks it up on its next poll. Validation happens before any DB write: an unknown `trainName`, malformed `inputJson`, or JSON that deserializes to `null` returns `OperationResponse(success: false, message: ...)` and inserts nothing.
+Creates a new work queue entry. The dispatcher picks it up on its next poll. An unknown `trainName`, malformed or oversized `inputJson`, or JSON that deserializes to `null` returns `OperationResponse(success: false, message: ...)` and inserts nothing. For most trains nothing is written until every check has passed. A train that sets [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable) is the exception: its entry is committed unconfirmed (never dispatched) before its `OnQueue` hook runs, and removed again if the hook throws, so a refused enqueue of such a train does briefly write a row.
+
+Upgrading from a version where this mutation wrote the row itself: it now authorizes, fires `OnQueue` and stamps the subject key. See [Enqueue and Outcome Changes](/docs/migration-guides/enqueue-and-outcome-changes).
+
+The entry is created through [`ITrainExecutionService.QueueAsync`](/docs/sdk-reference/mediator-api/train-execution#queueasync), so the train's `[TraxAuthorize]` requirements apply on top of the operations gate. Authorization runs before `inputJson` is read: a caller who may not run the train gets a GraphQL error with code `TRAX_AUTHORIZATION` and message `"Not authorized."`, not `success: false`, even when the input is malformed, and nothing is inserted. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
+
+Only two kinds of exception propagate out of the mutation: authorization (an `UnauthorizedAccessException`, which `TrainAuthorizationException` is), surfacing as the `TRAX_AUTHORIZATION` error above, and cancellation of the request. Every other exception from the enqueue becomes `success: false`: invalid JSON as `"Invalid InputJson: "` followed by the parser's message, an oversized input as the size-cap message, and anything else as `"The enqueue was refused: "` followed by the exception's message. That last group covers the train's `OnQueue` hook throwing, `QueueSubjectKey` throwing or returning an empty key or one longer than 512 characters, and a deferred entry being cancelled before it was confirmed (in which case the hook's side-effect may already have landed). It also covers failures that are not refusals of the input: an infrastructure error such as the database being unreachable, and the mediator's `InvalidOperationException` for a `[TraxAuthorize]` train on a host with no `ITrainAuthorizationService` registered, both arrive as `success: false` with the same prefix. Read the message rather than the prefix to tell them apart.
 
 ```graphql
 mutation {
@@ -574,7 +594,7 @@ mutation {
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `trainName` | `String!` | Yes | N/A | Train interface FullName (matches the `serviceTypeName` returned by `operations.trains`) |
-| `inputJson` | `String` | No | `null` | JSON payload that deserializes to the train's input type. Use `null` for trains with `Unit` input |
+| `inputJson` | `String` | No | `null` | JSON payload that deserializes to the train's input type. `null` or blank is read as `{}`, so a train whose input needs no values can be queued without one; an input type that cannot be built from `{}` (one with a `required` member, say) is refused. The JSON literal `null` is refused |
 | `priority` | `Int` | No | `0` | Dispatch priority 0-31. Values outside that range are clamped |
 | `scheduledAt` | `DateTime` | No | `null` | Earliest UTC time the entry should be picked up. Null means dispatch immediately |
 

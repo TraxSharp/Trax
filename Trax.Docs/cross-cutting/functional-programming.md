@@ -25,7 +25,7 @@ protected override Task<Either<Exception, User>> Junctions() =>
         .Chain<CreateUserJunction>().Resolve();
 ```
 
-Under the hood, the chain handles the wrapping. If a junction throws, the chain catches it and returns `Left(exception)`. If everything succeeds, you get `Right(result)`. When using `Junctions()`, this is invisible to you. When using `RunInternal`, you work with `Either` directly.
+Under the hood, the chain handles the wrapping. If a junction throws, the chain catches it and returns `Left(exception)`. If everything succeeds, you get `Right(result)`. Inside `Junctions()` this is invisible to you: you name junctions, and the `Either` is what the chain hands back to the caller.
 
 To inspect the result:
 
@@ -43,7 +43,7 @@ if (result.IsRight)
 }
 ```
 
-This is the foundation of [Railway Oriented Programming](railway-programming.md). The right track carries `Right` values, the left track carries `Left` values.
+This is the foundation of [Railway Oriented Programming](/docs/core#the-railway). The right track carries `Right` values, the left track carries `Left` values.
 
 ## Unit
 
@@ -92,7 +92,7 @@ Remove any line and the train still runs. It just passes through fewer junctions
 
 The `ServiceTrain` base class manages this lifecycle. When you use a plain `Train`, you get routing and error propagation but no effect providers. When you use `ServiceTrain`, you get the full effect provider network on top.
 
-See [Effect Providers](../effect/effect-providers.md) for configuring each provider, and [Core & Effects](../effect/architecture.md) for how the `EffectRunner` coordinates them internally.
+See [Effect Providers](/docs/effect/effect-providers) for configuring each provider, and [Core & Effects](/docs/effect/architecture) for how the `EffectRunner` coordinates them internally.
 
 ## Null Assertion Helpers
 

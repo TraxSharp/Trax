@@ -188,9 +188,10 @@ public record SyncCustomersInput : IManifestProperties
 
 public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, Unit>, ISyncCustomersTrain
 {
-    protected override Unit Junctions() =>
+    protected override Task<Either<Exception, Unit>> Junctions() =>
         Chain<FetchCustomersJunction>()
-            .Chain<UpsertCustomersJunction>();
+            .Chain<UpsertCustomersJunction>()
+            .Resolve();
 }
 ```
 

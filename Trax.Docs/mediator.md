@@ -67,16 +67,16 @@ Each input type maps to exactly one train. If two trains accept the same `TIn`, 
 
 ## Nested Trains
 
-Junctions and trains can dispatch other trains through the `TrainBus`. Pass the current `Metadata` to link parent and child journeys:
+A junction can dispatch another train through the `TrainBus`. Inject `ITrainBus` into the junction and pass the input, plus the junction's `CancellationToken` so cancelling the parent reaches the child:
 
 ```csharp
-var result = await TrainBus.RunAsync<ChildResult>(
+var result = await trainBus.RunAsync<ChildResult>(
     new ChildRequest { Data = input.ChildData },
-    Metadata  // Links parent -> child
+    CancellationToken
 );
 ```
 
-This creates a tree of journey logs you can query to trace execution across trains.
+The child runs as a train of its own, with its own metadata record, and that record is **not linked to the parent**: nothing sets its `ParentId`. The optional `Metadata` argument to `RunAsync` is not a parent link. It is a pre-created `Pending` record for the train to run *as*, the way the scheduler uses it, and passing the running parent's `Metadata` throws a `TrainException`. To trace a child back to its parent today, correlate them yourself, for example by carrying the parent's `ExternalId` in the child's input.
 
 ## Scope Isolation
 
@@ -102,7 +102,7 @@ public class UpdateUserMutation(IUpdateUserTrain updateUserTrain)
 - When trains trigger other trains (nested dispatch)
 - When you want to decouple callers from train implementations
 
-When you need recurring background jobs, add [Trax.Scheduler](scheduler.md).
+When you need recurring background jobs, add [Trax.Scheduler](/docs/scheduler).
 
 ## SDK Reference
 

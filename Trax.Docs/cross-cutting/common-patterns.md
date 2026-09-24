@@ -11,34 +11,32 @@ nav_order: 2
 
 ### Train-Level Error Handling
 
-For custom error handling, use `RunInternal`. This is one of the cases where it's more appropriate than `Junctions()`:
+Train-level error handling belongs in the `OnFailed` lifecycle hook. A junction that throws puts
+the chain on the error track, and `OnFailed` sees the exception with the train's metadata.
 
 ```csharp
 public class RobustTrain : ServiceTrain<ProcessOrderRequest, ProcessOrderResult>
 {
-    protected override async Task<Either<Exception, ProcessOrderResult>> RunInternal(ProcessOrderRequest input)
+    protected override Task<Either<Exception, ProcessOrderResult>> Junctions() =>
+        Chain<ValidateOrderJunction>()
+            .Chain<ProcessPaymentJunction>()
+            .Chain<FulfillOrderJunction>()
+            .Resolve();
+
+    protected override Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {
-        try
-        {
-            return Activate(input)
-                .Chain<ValidateOrderJunction>()
-                .Chain<ProcessPaymentJunction>()
-                .Chain<FulfillOrderJunction>()
-                .Resolve();
-        }
-        catch (PaymentException ex)
-        {
+        if (exception is PaymentException payment)
             Logger?.LogWarning("Payment failed for order {OrderId}: {Error}",
-                input.OrderId, ex.Message);
-            return new OrderProcessingException("Payment processing failed", ex);
-        }
-        catch (InventoryException ex)
-        {
-            return new OrderProcessingException("Insufficient inventory", ex);
-        }
+                metadata.GetInput<ProcessOrderRequest>()?.OrderId, payment.Message);
+
+        return Task.CompletedTask;
     }
 }
 ```
+
+To turn one exception into another, catch it in the junction that raises it and throw the
+exception you want the caller to see. The chain preserves the type and message.
+
 
 ### Junction-Level Error Handling
 
@@ -120,4 +118,4 @@ public class BatchProcessJunction : Junction<BatchInput, BatchResult>
 
 ## SDK Reference
 
-> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [Activate](/docs/sdk-reference/train-methods/activate) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)

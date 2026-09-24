@@ -88,7 +88,7 @@ Multi-server coordination (advisory locks, concurrent job dequeue across process
 
 - Returns `TraxEffectBuilderWithData`, which makes `AddDataContextLogging()` available at compile time.
 - The database migration runs synchronously on startup. To skip migration (e.g., in Lambda runners), call [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) before `UseSqlite()`.
-- SQLite stores enum values as strings (not native database enums like PostgreSQL) and JSON data as TEXT (not JSONB). EF Core handles the serialization transparently.
+- SQLite stores enum values as their integers (EF Core's default there, not native database enums like PostgreSQL) and JSON data as TEXT (not JSONB). EF Core handles the conversion transparently, but raw SQL against a SQLite database compares enum columns to integers such as `0` for `TrainState.Pending`, not to the Postgres labels. The enums Trax's SQLite SQL depends on (`TrainState`, `WorkQueueStatus`, `FailureClass`) pin their values explicitly for that reason.
 - For production multi-server deployments, use [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect). For tests without any persistence, use [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect).
 
 ## Package

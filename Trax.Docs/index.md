@@ -32,9 +32,9 @@ Each package adds one layer of capability. Stop at whatever layer solves your pr
 
 | Layer | What it adds |
 |-------|-------------|
-| [**Core**](/docs/core) | Typed pipelines, error propagation, compile-time analyzer |
+| [**Core**](/docs/core) | Typed pipelines, error propagation, chains declared in `Junctions()` that can be checked before they run |
 | [**Effect**](/docs/effect) | Execution metadata, dependency injection, pluggable effect providers |
-| [**Mediator**](/docs/mediator) | Decoupled dispatch: route by input type instead of direct injection |
+| [**Mediator**](/docs/mediator) | Decoupled dispatch: route by input type instead of direct injection, and the startup check that refuses to start a host whose chains cannot run |
 | [**Scheduling**](/docs/scheduler) | Cron/interval scheduling, retries, dead-letter handling, job dependencies |
 | [**API**](/docs/api) | Auto-generated GraphQL via HotChocolate |
 | [**Dashboard**](/docs/dashboard) | Blazor monitoring UI that mounts into your existing app |

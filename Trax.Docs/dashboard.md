@@ -102,6 +102,7 @@ When `Trax.Effect.Data` is registered, the dashboard exposes pages for browsing 
 | **Manifests** | Scheduled job definitions (requires Scheduler) |
 | **Manifest Groups** | Manifest group settings and aggregate execution stats (requires Scheduler). Includes a "Cancel All Running" button. |
 | **Dead Letters** | Failed jobs that exhausted their retry budget (requires Scheduler) |
+| **Work Queue** | Entries waiting for dispatch (requires Scheduler). The **Subject** column shows the entry's [subject key](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) when the train sets one. The **Confirmed** column shows **Yes** for a confirmed entry, and a **Staged** badge on a queued entry that is not yet confirmed, which the dispatcher will not claim (an unconfirmed entry that is no longer queued, such as one the stale sweep cancelled, shows a dash). The subject key is computed by your train, so it may carry record identifiers. An entry's detail page shows **Waiting On** when the entry cannot be dispatched yet because of its subject: "Entry N, which is running for the same subject" when another entry's run holds the subject, or "Entry N, which is ahead of it for the same subject" when an older queued sibling comes first, since dispatch offers only the first queued entry per subject each cycle. |
 
 These pages are accessible from the **Data** section in the sidebar navigation.
 
@@ -125,7 +126,7 @@ Clicking a metadata row opens a detail page with train state, timing, input/outp
 
 **State Transition Timeline.** A visual horizontal stepper at the top of the detail page shows the train's state progression: Pending -> InProgress -> Completed/Failed/Cancelled. Each state is color-coded and displays the timestamp when that state was reached, along with the duration between transitions (wait time, execution time). Past states are filled, the current state pulses, and future states are dimmed.
 
-**Exception Viewer.** When a train has failed, the failure details card includes a collapsible stack trace viewer with:
+**Exception Viewer.** When a train has failed, the failure details card shows a **Failure Class** field with the run's [failure classification](/docs/core/trains-and-junctions#classifying-failures) (`Unclassified` unless a registered classifier assigned one), and a collapsible stack trace viewer with:
 - Syntax highlighting for C# stack traces (method names, file paths, and line numbers each in distinct colors)
 - A **Copy** button for copying the raw stack trace to the clipboard
 - Auto-collapse for long stack traces (expanded by default for short ones)
@@ -143,6 +144,8 @@ The dashboard supports running any registered train with **custom inputs**, a ca
 
 - **From the Trains page**: Click the **Queue** button next to any train to open a dialog with a form builder (auto-generated from the input type's properties) or a raw JSON editor.
 - **From the Metadata Detail page**: Click the **Re-queue** button to re-run a train with its original input.
+
+Both go through `ITrainExecutionService.QueueAsync`, the same path as the GraphQL `queueTrain` mutation, so the train's `OnQueue` hook fires, its subject key is stamped and the input size cap applies. They enqueue inside a trusted scope (`"dashboard"`), so per-train `[TraxAuthorize]` requirements do **not** apply: the dashboard is the admin surface, gated as a whole by its host, and anyone who can reach it can queue any train. The scope also covers the train's `OnQueue` hook and `QueueSubjectKey`, and anything they run or enqueue through `ITrainExecutionService` (including work started with `Task.Run`), so those skip their own `[TraxAuthorize]` requirements too. Protect the dashboard route accordingly. The **Run** dialog submits directly to the job submitter. Dead-letter **Re-queue** and manifest triggers re-run what a manifest fixed and are likewise governed by access to the dashboard itself. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
 
 #### Real-Time Metrics on Home Page
 
@@ -171,7 +174,7 @@ The **Effects** page (`/trax/settings/effects`) shows all registered effect and 
 - **Enable/disable** toggleable effects at runtime (changes apply to the next train execution scope)
 - **Configure** effects that expose runtime settings. Click the gear icon to open a dynamic form dialog
 
-Configurable effects (those whose factory implements `IConfigurableEffectProviderFactory<TConfiguration>`) show a settings button in the grid. Clicking it opens a form auto-generated from the configuration type's properties. For example, the [Parameter Effect](usage-guide/effect-providers/parameter-effect.md) exposes `SaveInputs` and `SaveOutputs` toggles.
+Configurable effects (those whose factory implements `IConfigurableEffectProviderFactory<TConfiguration>`) show a settings button in the grid. Clicking it opens a form auto-generated from the configuration type's properties. For example, the [Parameter Effect](/docs/effect/effect-providers/parameter-effect) exposes `SaveInputs` and `SaveOutputs` toggles.
 
 The Effects page was previously a section within Server Settings and has been moved to its own dedicated page under **Settings > Effects** in the sidebar.
 

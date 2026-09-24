@@ -47,7 +47,7 @@ Runs **before** each junction to set two columns on the train's `Metadata`:
 
 After each junction completes, it clears both columns back to `null`. The provider calls `EffectRunner.Update()` and `EffectRunner.SaveChanges(ct)` on both paths so the changes are persisted immediately.
 
-As a safety net, `FinishTrain` always clears both junction progress columns regardless of outcome. This prevents stale values if a train crashes mid-junction.
+As a safety net, `FinishServiceTrain` always clears both junction progress columns regardless of outcome. This prevents stale values if a train crashes mid-junction.
 
 ## Execution Order
 

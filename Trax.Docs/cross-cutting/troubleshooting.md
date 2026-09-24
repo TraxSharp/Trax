@@ -84,7 +84,7 @@ Chain<ValidateJunction>()              // Takes CreateUserRequest, returns Unit
     .Chain<SendEmailJunction>();       // Takes User (from previous junction)
 ```
 
-The [Analyzer](../core/analyzer.md) catches most of these issues at compile time. If you see CHAIN001, the message tells you exactly which type is missing and what's available.
+The [startup chain verification](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) catches these before the host serves traffic: it refuses to start and names the junction and the missing type. (The compile-time [Analyzer](/docs/core/analyzer) is deprecated and no longer reports CHAIN001.)
 
 ## Train completes but metadata shows "Failed"
 
@@ -96,7 +96,7 @@ If you catch the exception outside Trax, you'll see the original exception type 
 
 ## Junctions execute out of order or skip unexpectedly
 
-If you're using `ShortCircuit`, remember that throwing an exception means "continue" not "stop." See [ShortCircuit](short-circuit.md) for details or [SDK Reference: ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) for all overloads.
+If you're using `ShortCircuit`, remember that throwing an exception means "continue" not "stop." See [ShortCircuit](/docs/core/building-chains#shortcircuit) for details or [SDK Reference: ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) for all overloads.
 
 ## Scheduled jobs don't execute (no errors)
 

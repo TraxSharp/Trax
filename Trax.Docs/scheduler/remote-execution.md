@@ -574,7 +574,7 @@ The ManifestManager also runs a `ReapStaleInProgressMetadataJunction` on every p
 )
 ```
 
-This timeout should be longer than `DefaultJobTimeout` (default: 20 minutes) to give cooperative cancellation time to propagate before force-failing. The ordering in the ManifestManager pipeline is: `CancelTimedOutJobsJunction` (cooperative cancel) → `ReapStalePendingMetadataJunction` → `ReapStaleInProgressMetadataJunction` (force-fail) → `ReapFailedJobsJunction` (dead-letter).
+This timeout should be longer than `DefaultJobTimeout` (default: 20 minutes) to give cooperative cancellation time to propagate before force-failing. The ordering in the ManifestManager pipeline is: `CancelTimedOutJobsJunction` (cooperative cancel) → `ReapStalePendingMetadataJunction` → `ReapStaleInProgressMetadataJunction` (force-fail) → `ResolveStaleStagedEntriesJunction` → `ReapFailedJobsJunction` (dead-letter).
 
 ### 5. Dead-Lettering
 
@@ -604,8 +604,9 @@ When a train fails on a remote worker, Trax preserves the full exception context
 | `ExceptionType` | The .NET exception type name (e.g., `"InvalidOperationException"`) |
 | `FailureJunction` | The train junction where the failure occurred (extracted from `TrainExceptionData`) |
 | `StackTrace` | The remote stack trace |
+| `FailureClass` | `/trax/run` only (`RemoteRunResponse`). The [failure class](/docs/core/trains-and-junctions#classifying-failures) the worker's classifier assigned, or null when the worker sent none |
 
-On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. `Metadata.AddException()` populates `FailureException`, `FailureJunction`, `FailureReason`, and `StackTrace` from the reconstructed exception. Locally-executed trains attach this data via `Exception.Data["TrainExceptionData"]`; remote trains carry it as JSON in the exception message instead.
+On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. `Metadata.AddException()` populates `FailureException`, `FailureJunction`, `FailureReason`, `StackTrace`, and (for `/trax/run`) `FailureClass` from the reconstructed exception. The class is carried rather than recomputed, because the original exception type is gone by the time the response arrives; a null `FailureClass` records as `Unclassified`, and the calling side's own classifier is never asked about a failure rebuilt from the response. The job-runner HTTP endpoint and the Lambda runner's local HTTP route write `RemoteRunResponse` with Trax's own JSON options (enums as integers) whatever the host's JSON configuration. A Lambda function's own invocation response is serialized by the function's Lambda serializer, which Trax does not control. Both `HttpRunExecutor` and `LambdaRunExecutor` therefore read `FailureClass` as either an integer or a name, and a class they do not know (an unknown number or name from a newer worker) reads as `Unclassified` while the worker's error is kept. `/trax/execute` needs no such field: the worker writes to the same metadata row, so its classification is already recorded. Locally-executed trains attach this data via `Exception.Data["TrainExceptionData"]`; remote trains carry it as JSON in the exception message instead.
 
 ```
 Runner Process                         API Process

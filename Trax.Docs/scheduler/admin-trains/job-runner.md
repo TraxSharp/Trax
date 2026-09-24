@@ -23,7 +23,7 @@ LoadMetadataJunction → ValidateMetadataStateJunction → RunScheduledTrainJunc
 public record RunJobRequest(long MetadataId, object? Input = null);
 ```
 
-The `MetadataId` points to the `Metadata` row created by the [JobDispatcher](job-dispatcher.md). The `Input` is the deserialized train input passed through from the work queue.
+The `MetadataId` points to the `Metadata` row created by the [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher). The `Input` is the deserialized train input passed through from the work queue.
 
 ## Junctions
 
@@ -37,11 +37,11 @@ Checks that the loaded metadata is in `TrainState.Pending`. If it's already `InP
 
 ### RunScheduledTrainJunction
 
-Resolves the target train via `ITrainBus` using the deserialized input and invokes it. The train name stored in the metadata record is the canonical interface name (set via `CanonicalName` during DI registration), which `ITrainBus` uses for resolution. This is where your train's `Junctions()` (or `RunInternal`) method gets called. The train runs as a nested train under the JobRunner's own metadata, maintaining the parent-child relationship in the metadata tree.
+Resolves the target train via `ITrainBus` using the deserialized input and invokes it. The train name stored in the metadata record is the canonical interface name (set via `CanonicalName` during DI registration), which `ITrainBus` uses for resolution. This is where your train's `Junctions()` declaration gets run. The train runs as the `Pending` metadata record the dispatcher created (the request's `MetadataId`), passed to `ITrainBus.RunAsync`, so its execution is recorded on that row. The JobRunner's own run is a separate record, and the two are not linked by `ParentId`.
 
 ### UpdateManifestSuccessJunction
 
-If the train completed successfully and the metadata has an associated manifest, updates `Manifest.LastSuccessfulRun` to `DateTime.UtcNow`. This timestamp is what drives [dependent train](../dependent-trains.md) evaluation, downstream manifests won't fire until this value advances past their own `LastSuccessfulRun`.
+If the train completed successfully and the metadata has an associated manifest, updates `Manifest.LastSuccessfulRun` to `DateTime.UtcNow`. This timestamp is what drives [dependent train](/docs/scheduler/dependent-trains) evaluation, downstream manifests won't fire until this value advances past their own `LastSuccessfulRun`.
 
 If there's no manifest (e.g., an ad-hoc execution), this junction is a no-op.
 
@@ -55,7 +55,7 @@ The JobRunner does not use any database-level locking of its own. Its safety rel
 
 ### Upstream Single-Dispatch Guarantee
 
-The [JobDispatcher](job-dispatcher.md) uses `FOR UPDATE SKIP LOCKED` to atomically claim each WorkQueue entry before creating its Metadata record. This guarantees that for any given WorkQueue entry, exactly one Metadata record is created and exactly one background task is enqueued. The JobRunner inherits this guarantee, it is only invoked once per Metadata ID.
+The [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher) uses `FOR UPDATE SKIP LOCKED` to atomically claim each WorkQueue entry before creating its Metadata record. This guarantees that for any given WorkQueue entry, exactly one Metadata record is created and exactly one background task is enqueued. The JobRunner inherits this guarantee, it is only invoked once per Metadata ID.
 
 ### State Validation Guard
 
@@ -67,7 +67,7 @@ This is an **optimistic** guard, it reads the state without acquiring a lock. In
 
 The train does not wrap its junctions in an explicit transaction. `LoadMetadataJunction` loads the Metadata and its Manifest as **tracked EF Core entities** (not `AsNoTracking`), so `UpdateManifestSuccessJunction` can mutate `Manifest.LastSuccessfulRun` in memory and `SaveDatabaseChangesJunction` persists the change at the end. If the train fails before `SaveDatabaseChangesJunction`, `LastSuccessfulRun` is not updated, which is the correct behavior, since a failed execution should not advance the dependent train chain.
 
-See [Multi-Server Concurrency](../concurrency.md) for the full cross-service concurrency model.
+See [Multi-Server Concurrency](/docs/scheduler/concurrency) for the full cross-service concurrency model.
 
 ## Registration
 

@@ -8,56 +8,61 @@ nav_order: 7
 
 # Resolve
 
-Extracts the final `TReturn` result from the train. Used in the `RunInternal` path as the **last** method call. Follows a priority chain: exception > short-circuit value > Memory lookup.
+Ends a chain, taking the train's `TReturn` out of Memory. Follows a priority chain: exception >
+short-circuit value > Memory lookup.
 
-> **Note:** When using `Junctions()`, resolution happens automatically via an implicit conversion and you do not call `Resolve` yourself. This method is only needed when overriding `RunInternal`.
+Every chain ends with it. On a chain that names junctions it is the last call in the fluent
+sequence; on a chain that names none, because the train's return type is already in Memory as the
+input type or as `Unit`, it is the only call.
 
-## Signatures
-
-### Resolve()
-
-Extracts the result from Memory (or exception/short-circuit).
+## Signature
 
 ```csharp
+// On the train: ends a chain that names no junctions
+protected Either<Exception, TReturn> Resolve()
+
+// On MonadTask<TInput, TReturn>, returned by Chain, IChain and ShortCircuit
+public Task<Either<Exception, TReturn>> Resolve()
+public Task<Either<Exception, TReturn>> Resolve(Either<Exception, TReturn> returnType)
+
+// On Monad<TInput, TReturn>, returned by Extract and AddServices on the train
 public Either<Exception, TReturn> Resolve()
-```
-
-### Resolve(Either\<Exception, TReturn\> returnType)
-
-Returns an explicit result (or the exception if one exists).
-
-```csharp
 public Either<Exception, TReturn> Resolve(Either<Exception, TReturn> returnType)
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `returnType` | `Either<Exception, TReturn>` | An explicit Either result. Only used if the train has no exception. |
+The train's own `Resolve()` has no overload taking a value. A declaration says which junctions
+run, so stating a result directly would let it return something the junctions it names never
+produced. The chain types `Monad` and `MonadTask` do carry a public `Resolve(returnType)`
+overload, but a `Junctions()` that ends in it is refused by the startup chain check, and the host
+will not start. It exists for code that drives a `Monad` directly, outside a train's declaration.
 
 ## Returns
 
-`Either<Exception, TReturn>`, the train result. `Left` contains the exception on failure; `Right` contains the `TReturn` value on success.
+`Either<Exception, TReturn>` (wrapped in a `Task` on `MonadTask`), the train result. `Left`
+contains the exception on failure; `Right` contains the `TReturn` value on success. A chain whose
+last step is synchronous (`Resolve()` on the train, or after `Extract` with no junction) is
+wrapped in `Task.FromResult` to match the `Junctions()` return type.
 
 ## Examples
 
-### Standard Usage (RunInternal path)
+### Ending a chain of junctions
 
 ```csharp
-protected override async Task<Either<Exception, OrderResult>> RunInternal(OrderInput input) =>
-    Activate(input)
-        .Chain<ValidateOrder>()
-        .Chain<ProcessPayment>()     // Stores OrderResult in Memory
-        .Resolve();                  // Extracts OrderResult from Memory
+protected override Task<Either<Exception, OrderResult>> Junctions() =>
+    Chain<ValidateOrder>()
+        .Chain<ProcessPayment>()   // Stores OrderResult in Memory
+        .Resolve();                // Takes OrderResult back out
 ```
 
-### With Explicit Result
+### A chain that names no junctions
+
+The train's return type is already in Memory, so there is nothing to chain.
 
 ```csharp
-protected override async Task<Either<Exception, string>> RunInternal(Unit input)
+public class EchoTrain : ServiceTrain<string, string>, IEchoTrain
 {
-    Either<Exception, string> result = "hello";
-    return Activate(input)
-        .Resolve(result);    // Returns "hello" (unless an exception occurred)
+    protected override Task<Either<Exception, string>> Junctions() =>
+        Task.FromResult(Resolve());
 }
 ```
 
@@ -65,12 +70,13 @@ protected override async Task<Either<Exception, string>> RunInternal(Unit input)
 
 `Resolve()` follows this order:
 
-1. **Exception**: If any junction set an exception, return `Left(exception)`.
-2. **Short-circuit value**: If [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) captured a value, return `Right(shortCircuitValue)`.
-3. **Memory lookup**: Extract `TReturn` from Memory by type.
-4. **Fallback**: If `TReturn` is not found in Memory, return `Left(TrainException("Could not find type: ({TReturn})."))`.
+1. **Exception**: if any junction set an exception, return `Left(exception)`.
+2. **Short-circuit value**: if a [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) junction returned `Right`, return `Right(shortCircuitValue)`.
+3. **Memory lookup**: take `TReturn` from Memory by its exact type.
+4. **Container**: if Memory does not hold it, ask the service provider the chain carries.
+5. **Fallback**: if neither has it, return `Left(TrainException("Could not find type: (TReturn)."))`.
 
 ## Remarks
 
 - `Resolve()` does not throw. It returns an `Either`. The calling `Run()` method unwraps the Either and throws if needed.
-- The parameterized `Resolve(returnType)` is simpler: it returns the exception if one exists, otherwise returns the provided value. It does **not** check short-circuit or Memory.
+- The parameterized `Resolve(returnType)` on `Monad` and `MonadTask` is simpler: it returns the chain's exception if one exists, otherwise the provided value. It does **not** check short-circuit or Memory. Inside `Junctions()` it is refused at startup, as is returning a value without `Resolve()` at all (`Task.FromResult(value)`).

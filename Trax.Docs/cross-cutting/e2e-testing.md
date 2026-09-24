@@ -148,6 +148,15 @@ await DataContext.SaveChanges(CancellationToken.None);
 DataContext.Reset();
 ```
 
+Build the entry with `WorkQueue.Create`, not `new WorkQueue { ... }`. `Create` stamps `ConfirmedAt` (unless you ask it to defer); an object initializer leaves it null, and an entry with a null `ConfirmedAt` is a staged entry: the dispatcher never claims it, and once it is older than `StaleStagedEntryTimeout` the ManifestManager's sweep cancels it. A test that inserts one waits for a dispatch that never comes.
+
+An entry built this way skips everything `ITrainExecutionService.QueueAsync` does: authorization, the `OnQueue` hook and `QueueSubjectKey`. `CreateWorkQueue` has two more fields for tests that need them:
+
+| Field | Default | Effect |
+|-------|---------|--------|
+| `SubjectKey` | `null` | The [subject](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) the entry is serialized against. Entries sharing a non-null key are not dispatched concurrently |
+| `DeferPromotion` | `false` | Commits the entry unconfirmed, so the dispatcher will not claim it until [`IWorkQueuePromotion`](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) promotes it |
+
 ## Polling for State
 
 Use a poller utility to wait for metadata or dead letters to reach expected states. Poll every 250ms with `AsNoTracking()` and `dataContext.Reset()` between polls to get fresh data from the database:
@@ -222,4 +231,4 @@ All E2E tests share one database. Add `[assembly: NonParallelizable]` to prevent
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler/scheduler-configuration-builder) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion)

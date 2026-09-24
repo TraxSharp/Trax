@@ -7,7 +7,7 @@ nav_order: 7
 
 # Multi-Server Concurrency
 
-Trax.Core's scheduler is safe to run across multiple server instances sharing the same PostgreSQL database. Each polling service uses a different concurrency strategy matched to its semantics, advisory locks for leader election, row-level locking for parallel dispatch, and idempotent operations where neither is needed.
+Trax.Core's scheduler is safe to run across multiple server instances sharing the same PostgreSQL database. Each polling service uses a different concurrency strategy matched to its semantics: an advisory lock for leader election, row-level locking for parallel dispatch, a per-subject advisory lock for work that names the same subject, and idempotent operations where none of these is needed.
 
 This page documents the concurrency model, the guarantees it provides, and the implications for multi-server deployments.
 
@@ -16,7 +16,7 @@ This page documents the concurrency model, the guarantees it provides, and the i
 | Service | Strategy | Parallelism | Guarantee |
 |---------|----------|-------------|-----------|
 | **ManifestManagerPollingService** | Advisory lock (single-leader) | One server per cycle | No duplicate WorkQueue entries |
-| **JobDispatcherPollingService** | `FOR UPDATE SKIP LOCKED` (per-entry) | All servers dispatch concurrently | No duplicate Metadata or double-dispatch |
+| **JobDispatcherPollingService** | `FOR UPDATE SKIP LOCKED` (per-entry), plus an advisory lock per subject key | All servers dispatch concurrently | No duplicate Metadata or double-dispatch; at most one run in flight per subject |
 | **LocalWorkerService** | `FOR UPDATE SKIP LOCKED` (per-job) | All servers execute concurrently | No duplicate job execution |
 | **MetadataCleanupPollingService** | None (idempotent) | All servers run concurrently | Deleting already-deleted rows is a no-op |
 
@@ -58,13 +58,13 @@ PostgreSQL advisory locks are application-level locks managed by the database bu
 - **Session-level** (`pg_advisory_lock`): held until explicitly released or the connection closes. Risky with connection pooling, if the connection returns to the pool with the lock held, it stays held until the connection is eventually closed.
 - **Transaction-scoped** (`pg_try_advisory_xact_lock`): automatically released when the transaction commits or rolls back. This is what Trax.Core uses. No risk of leaked locks.
 
-The lock key is `hashtext('trax_manifest_manager')`, which produces a stable 32-bit integer from the string. This key is unique to Trax.Core's ManifestManager, other applications using advisory locks on the same database would need to use the same key to conflict (which is astronomically unlikely with a descriptive string).
+The lock key is `hashtext('trax_manifest_manager')`, which produces a stable 32-bit integer from the string. It uses the single-key form of the advisory lock functions. Another application's single-key advisory lock on the same database would conflict only if its key hashed to the same integer, which is unlikely with a descriptive string. The dispatcher's [subject lock](#subject-serialization-advisory-lock-per-subject) uses the two-key form, which Postgres keeps in a separate space, so it can never contend with the leader lock.
 
 ### Transaction Scope
 
 The advisory lock wraps the entire ManifestManager train in a single transaction. This has two implications:
 
-1. **Atomicity**: All `SaveChanges()` calls within the train junctions (ReapFailedJobsJunction, CreateWorkQueueEntriesJunction) are buffered within the transaction. If the train fails partway through, everything rolls back. No partial state (e.g., dead letters created but WorkQueue entries missing).
+1. **Atomicity**: All `SaveChanges()` calls the junctions make on the train's own data context (ReapFailedJobsJunction, CreateWorkQueueEntriesJunction) are buffered within the transaction. If the train fails partway through, those roll back together. No partial state (e.g., dead letters created but WorkQueue entries missing). One write is outside it: `ResolveStaleStagedEntriesJunction` cancels or promotes stranded staged entries through `IWorkQueuePromotion`, which opens its own context and commits immediately, so it is not undone if the train fails later in the cycle. That is safe because the update only touches entries that are still unconfirmed and queued, so repeating it on the next cycle changes nothing already resolved.
 
 2. **Visibility delay**: WorkQueue entries created by CreateWorkQueueEntriesJunction are not visible to the JobDispatcher until the ManifestManager transaction commits. This is typically a few milliseconds of additional latency. The JobDispatcher picks them up on its next polling tick. No work is lost.
 
@@ -98,7 +98,8 @@ The DispatchJobsJunction uses PostgreSQL's `FOR UPDATE SKIP LOCKED` to atomicall
 
 ```sql
 SELECT * FROM trax.work_queue
-WHERE id = :entry_id AND status = 'queued'
+WHERE id = :entry_id AND status = 'queued' AND confirmed_at IS NOT NULL
+  -- and, for an entry with a subject key, no run in flight for that subject
 FOR UPDATE SKIP LOCKED
 ```
 
@@ -127,11 +128,39 @@ SELECT ... WHERE id=3 FOR UPDATE        SKIP LOCKED → row returned ✓
                                       Enqueue to job submitter
 ```
 
-### Why Not an Advisory Lock?
+### Why Not a Leader Lock?
 
-Unlike the ManifestManager, the JobDispatcher benefits from **parallel dispatch** across servers. Each server can claim and dispatch different entries simultaneously, increasing throughput. An advisory lock would serialize all dispatch activity to a single server, wasteful when the work queue has many entries.
+Unlike the ManifestManager, the JobDispatcher benefits from **parallel dispatch** across servers. Each server can claim and dispatch different entries simultaneously, increasing throughput. A single dispatch-wide advisory lock, like the ManifestManager's leader lock, would serialize all dispatch activity to a single server, wasteful when the work queue has many entries.
 
-The `FOR UPDATE SKIP LOCKED` pattern allows fine-grained, per-entry parallelism: multiple servers work through the queue concurrently, each atomically claiming the next available entry. This is the same pattern used by the [LocalWorkerService](job-submission.md#worker-lifecycle) for job execution.
+The `FOR UPDATE SKIP LOCKED` pattern allows fine-grained, per-entry parallelism: multiple servers work through the queue concurrently, each atomically claiming the next available entry. This is the same pattern used by the [LocalWorkerService](/docs/scheduler/job-submission#worker-lifecycle) for job execution.
+
+The dispatcher does take an advisory lock, but a much narrower one: per subject key, and only for entries that have one.
+
+### Subject Serialization: Advisory Lock per Subject
+
+A train can name the [subject](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) its queued work touches, and entries for one subject must not run at the same time. The claim query refuses an entry whose subject already has a dispatched run that is `Pending` or `InProgress`. That check alone has a race that `FOR UPDATE SKIP LOCKED` does not close:
+
+```
+Server A                              Server B
+────────                              ────────
+BEGIN; claim entry 1 (subject S)      BEGIN; claim entry 2 (subject S)
+  no dispatched sibling for S ✓         no dispatched sibling for S ✓
+  lock row 1                            lock row 2 (a different row, no contention)
+COMMIT                                COMMIT
+→ two runs for S in flight
+```
+
+The two entries are different rows, so row locks never make them contend, and while both are still queued neither transaction can see the other's dispatched sibling. So the claim first takes a transaction-scoped advisory lock on the subject:
+
+```sql
+SELECT pg_advisory_xact_lock(hashtext('trax_subject'), hashtext(:subject_key))
+```
+
+This is the blocking two-key form. The second claimant waits until the first commits, then runs its claim query, sees the dispatched sibling, and gets no row. The fixed class key `hashtext('trax_subject')` keeps subject locks in the two-key space, apart from the single-key space the ManifestManager's leader lock and any consumer's own single-key locks use, whatever a subject hashes to. The lock is held only for the claim transaction, which commits before the job is submitted, so nothing remote happens while it is held. Entries without a subject key take no lock.
+
+SQLite needs no lock: it has a single writer, so two claims cannot interleave. Its dialect's lock is a no-op.
+
+Candidate loading also drops entries whose subject is busy and keeps only the first queued entry per subject in a cycle, so entries the claim will refuse do not consume `MaxActiveJobs` slots. See [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher#loadqueuedjobsjunction).
 
 ### Intra-Cycle Parallelism
 
@@ -139,7 +168,7 @@ In addition to multi-server parallelism, a single server can dispatch multiple e
 
 With `MaxConcurrentDispatch(10)`, the same 50 entries are dispatched in ~10 seconds (5 batches of 10). The `FOR UPDATE SKIP LOCKED` pattern prevents conflicts: concurrent dispatches within the same cycle cannot claim the same entry, just as concurrent dispatches across servers cannot.
 
-See [JobDispatcher. Parallel Dispatch](admin-trains/job-dispatcher.md#parallel-dispatch) for configuration details.
+See [JobDispatcher. Parallel Dispatch](/docs/scheduler/admin-trains/job-dispatcher#parallel-dispatch) for configuration details.
 
 ### Per-Entry DI Scope
 
@@ -161,7 +190,7 @@ In practice, the overshoot is bounded by the number of servers multiplied by the
 
 The LocalWorkerService has used `FOR UPDATE SKIP LOCKED` since its introduction. Multiple worker threads (across one or many servers) atomically claim jobs from the `background_job` table. Each claim is a separate transaction: lock the row, set `fetched_at`, commit. Other workers skip locked rows and move to the next available job.
 
-See [Job Submission. Worker Lifecycle](job-submission.md#worker-lifecycle) for the full dequeue SQL and crash recovery details.
+See [Job Submission. Worker Lifecycle](/docs/scheduler/job-submission#worker-lifecycle) for the full dequeue SQL and crash recovery details.
 
 ## MetadataCleanupPollingService: Idempotent
 
@@ -171,7 +200,7 @@ The cleanup service deletes old Metadata records based on a retention period. Mu
 
 ### Minimum Configuration
 
-No configuration changes are needed for multi-server deployments. The concurrency controls are always active, advisory locks and row-level locking work correctly even with a single server (the lock is always acquired, the `FOR UPDATE` always succeeds).
+No configuration changes are needed for multi-server deployments. The concurrency controls are always active, advisory locks and row-level locking work correctly even with a single server (the leader lock is always acquired, the `FOR UPDATE` always succeeds).
 
 ### Polling Interval Tuning
 
@@ -213,6 +242,7 @@ These are `Debug`-level messages. In production, set the log level to `Informati
 |----------|-----------|-----------|
 | Two servers evaluate the same manifest as "due" | Only one creates a WorkQueue entry | Advisory lock + unique partial index |
 | Two servers try to dispatch the same WorkQueue entry | Only one creates the Metadata and enqueues | `FOR UPDATE SKIP LOCKED` |
+| Two servers try to dispatch different entries for the same subject | At most one run for the subject is in flight | Per-subject advisory lock + in-flight check in the claim |
 | Two workers try to execute the same BackgroundJob | Only one claims and runs it | `FOR UPDATE SKIP LOCKED` |
 | Two servers run metadata cleanup concurrently | Both succeed, no side effects | Idempotent deletes |
 | A server crashes mid-ManifestManager cycle | Transaction rolls back, lock released, no partial state | Transaction-scoped advisory lock |

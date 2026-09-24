@@ -25,11 +25,11 @@ Task<TOut> RunAsync<TOut>(object trainInput, CancellationToken cancellationToken
 |-----------|------|----------|---------|-------------|
 | `trainInput` | `object` | Yes | N/A | The input object. Its runtime type is used to discover the registered train. |
 | `cancellationToken` | `CancellationToken` | No | N/A | Token to monitor for cancellation requests. Forwarded to the train's `Run` method and propagated to all steps. |
-| `metadata` | `Metadata?` | No | `null` | Optional parent metadata. When provided, establishes a parent-child relationship: the new train's `Metadata.ParentId` is set to this metadata's ID. |
+| `metadata` | `Metadata?` | No | `null` | A pre-created metadata record, in the `Pending` state, for the train to run as instead of creating its own. The scheduler and the dashboard's ad-hoc run use it. It is not a parent link: any other state, including a running train's metadata, is refused with a `TrainException`, and the run's `ParentId` is not set. |
 
 **Returns**: `Task<TOut>`, the train's output.
 
-**Throws**: `TrainException` if no train is registered for the input's type. `OperationCanceledException` if the token is cancelled.
+**Throws**: `TrainException` if no train is registered for the input's type, or if `metadata` is not `Pending`. `OperationCanceledException` if the token is cancelled.
 
 ### RunAsync (void)
 
@@ -87,24 +87,25 @@ public class OrderController(ITrainBus trainBus) : ControllerBase
 }
 ```
 
-### Nested Trains (Parent-Child Metadata)
+### Nested Trains
 
 ```csharp
 // Inside a train junction
-public class ProcessOrderJunction(ITrainBus trainBus) : EffectJunction<OrderInput, OrderResult>
+public class ProcessOrderJunction(ITrainBus trainBus) : Junction<OrderInput, OrderResult>
 {
     public override async Task<OrderResult> Run(OrderInput input)
     {
-        // Pass both CancellationToken and parent metadata
+        // Forward the junction's token so cancelling the parent reaches the child
         var paymentResult = await trainBus.RunAsync<PaymentResult>(
             new PaymentInput { Amount = input.Total },
-            CancellationToken,
-            metadata: Metadata);
+            CancellationToken);
 
         return new OrderResult { PaymentId = paymentResult.Id };
     }
 }
 ```
+
+The child runs as a train of its own and is not linked to the parent run: its metadata's `ParentId` stays null. Passing the parent's `Metadata` as the `metadata` argument does not link them; it throws, because that argument must be a `Pending` record for the child to run as. See [Mediator: Nested Trains](/docs/mediator#nested-trains).
 
 ## Scope Isolation
 
@@ -120,6 +121,6 @@ Each `RunAsync` call creates a child DI scope. The train and all its dependencie
 ## Remarks
 
 - Trains are discovered by input type at registration time (via [AddMediator](/docs/sdk-reference/configuration/add-service-train-bus)). Each input type maps to exactly one train.
-- The `metadata` parameter enables parent-child train chains, which is useful for tracking nested train executions in the dashboard.
+- The `metadata` parameter is for running a train as a record created beforehand, which is how the scheduler and the dashboard's ad-hoc run execute a train. It does not link a child run to a parent.
 - `RunAsync` calls the train's `Run` method internally, which means exceptions are thrown (not returned as `Either`). Use try/catch for error handling.
 - The `cancellationToken` overloads forward the token to `train.Run(input, cancellationToken)`, which propagates it to all steps. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) for details.

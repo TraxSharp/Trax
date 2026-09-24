@@ -10,7 +10,7 @@ nav_order: 8
 
 Executes the train from the outside. `Run` throws on failure; `RunEither` returns an `Either<Exception, TReturn>` for Railway-oriented error handling.
 
-These are called by **consumers** of the train, not inside `Junctions()` or `RunInternal`.
+These are called by **consumers** of the train, not inside `Junctions()`.
 
 ## Signatures
 
@@ -84,7 +84,7 @@ public async Task<IActionResult> ProcessOrder(
 
 1. If a `CancellationToken` is provided, stores it on the `Train.CancellationToken` property.
 2. Initializes `Memory` with `Unit.Default`.
-3. Calls the user-implemented method (`Junctions()` or `RunInternal(input)`).
+3. Calls the train's `Junctions()` declaration.
 4. **`Run`**: Unwraps the `Either` result. If `Left`, rethrows the exception. If `Right`, returns the value.
 5. **`RunEither`**: Returns the `Either` directly without unwrapping.
 

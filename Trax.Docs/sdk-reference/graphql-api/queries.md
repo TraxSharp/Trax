@@ -521,8 +521,9 @@ query {
 | `manifestId` | `Long` | `null` | Only executions of this manifest. The dashboard uses it for a manifest's execution history |
 | `manifestGroupId` | `Long` | `null` | Only executions of any manifest in this group (resolved through `manifest.manifest_group_id`). The dashboard uses it for a group's recent executions |
 | `hideAdminTrains` | `Boolean` | `false` | When `true`, excludes the framework's internal scheduler trains (matches `AdminTrains.FullNames` against `metadata.Name`, which stores the interface FullName). The dashboard sets this from its "Hide admin trains" toggle |
+| `failureClass` | `FailureClass` | `null` | Only executions recorded with this [failure class](/docs/core/trains-and-junctions#classifying-failures): `UNCLASSIFIED`, `TRANSIENT`, `CONFLICT`, or `PERMANENT`. Every run that did not fail records `UNCLASSIFIED`, so `failureClass: UNCLASSIFIED` on its own also matches every completed, pending, in-progress and cancelled run; combine it with `trainState: FAILED` for unclassified failures only |
 
-When any filter or `afterId` is supplied the count is exact (`isEstimatedCount: false`); the unfiltered first page uses the fast `pg_class.reltuples` estimator. `startedAfter`/`startedBefore` use the `ix_metadata_start_time_desc` index so they stay fast at scale. `manifestId` and `manifestGroupId` are served by the covering index `ix_metadata_manifest_state`, so a manifest's or group's history stays index-only even against millions of rows. Arbitrary-column sorting is deliberately not offered: it is incompatible with keyset pagination over millions of rows (it forces OFFSET scans or a full sort). Filter to narrow the set instead.
+When any filter or `afterId` is supplied the count is exact (`isEstimatedCount: false`); the unfiltered first page uses the fast `pg_class.reltuples` estimator. `startedAfter`/`startedBefore` use the `ix_metadata_start_time_desc` index so they stay fast at scale. `manifestId` and `manifestGroupId` are served by the covering index `ix_metadata_manifest_state`, so a manifest's or group's history stays index-only even against millions of rows. `failureClass` is served by `ix_metadata_failure_class` on `(failure_class, id DESC)` (Postgres). It covers every row rather than only classified ones: the class arrives as a query parameter, and a generic plan cannot prove a parameter satisfies a partial index's predicate, so a partial index would go unused. Arbitrary-column sorting is deliberately not offered: it is incompatible with keyset pagination over millions of rows (it forces OFFSET scans or a full sort). Filter to narrow the set instead.
 
 **Returns**: `PagedResult<ExecutionSummary>`
 
@@ -540,6 +541,7 @@ When any filter or `afterId` is supplied the count is exact (`isEstimatedCount: 
 | `failureReason` | `String` | Exception message on failure |
 | `manifestId` | `Long` | Associated manifest ID (null if not scheduler-initiated) |
 | `cancellationRequested` | `Boolean!` | Whether cancellation was requested |
+| `failureClass` | `FailureClass!` | How the failure was classified: `UNCLASSIFIED`, `TRANSIENT`, `CONFLICT`, or `PERMANENT`. `UNCLASSIFIED` when the run did not fail, no [failure classifier](/docs/core/trains-and-junctions#classifying-failures) is registered, or it did not recognise the failure. Later releases may add values to `FailureClass`; a client generated from an older schema should treat a value it does not know as `UNCLASSIFIED` rather than failing to read the response |
 
 ---
 
@@ -601,6 +603,7 @@ query {
       hostName
       hostEnvironment
       hostInstanceId
+      failureClass
     }
   }
 }
@@ -616,7 +619,10 @@ query {
 canonical form). There is no separate junction table: junction context is the
 `currentlyRunningJunction` (while `IN_PROGRESS`) and `failureJunction` (on failure) fields.
 `childCount` is the number of sub-executions (metadata rows whose `parentId` is this
-execution), for rendering a parent/child tree.
+execution), for rendering a parent/child tree. Nothing in Trax sets `parentId` at present, a
+train dispatched from a junction included (see [Nested Trains](/docs/mediator#nested-trains)), so
+it is `0` unless something outside Trax writes the column. `failureClass` is the same `FailureClass` enum as
+on [`ExecutionSummary`](#executionsummary-fields).
 
 ---
 
@@ -1208,6 +1214,8 @@ When any filter or `afterId` is supplied, the count is exact and `isEstimatedCou
 | `metadataId` | `Long` | Metadata ID created at dispatch, if dispatched |
 | `deadLetterId` | `Long` | Dead letter that triggered this requeue, if applicable |
 | `inputTypeName` | `String` | Fully qualified type name of the input, for deserialization |
+| `confirmedAt` | `DateTime` | When the entry became eligible for dispatch. Null while it is still being staged, and stays null on a staged entry that was cancelled (by an operator, or by the stale staged entry sweep); the dispatcher never claims an unconfirmed entry |
+| `subjectKey` | `String` | The subject the entry is serialized against, from the train's [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing). Null when the train does not set one. The value is computed by the consumer's train, so it may carry record identifiers |
 
 ### workQueue (single)
 

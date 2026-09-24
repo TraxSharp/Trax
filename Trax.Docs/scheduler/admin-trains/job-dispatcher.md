@@ -20,7 +20,14 @@ LoadQueuedJobsJunction → LoadDispatchCapacityJunction → ApplyCapacityLimitsJ
 
 ### LoadQueuedJobsJunction
 
-Loads `WorkQueue` entries with `Status = Queued`, filtering out entries whose `ManifestGroup` has `IsEnabled = false` and entries whose `ScheduledAt` is in the future.
+Loads `WorkQueue` entries with `Status = Queued`, filtering out:
+
+- entries whose `ManifestGroup` has `IsEnabled = false`
+- entries whose `ScheduledAt` is in the future
+- unconfirmed entries (`ConfirmedAt` is null), staged by a train with [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable) and not yet promoted
+- manual entries whose [subject key](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) already has a run in flight (a dispatched entry whose metadata is `Pending` or `InProgress`)
+
+Both load paths apply these filters, the group-fair SQL and the load-all path used when `MaxQueuedJobsPerCycle` is `null`. After loading, the batch keeps only the **first queued entry per subject key**, in dispatch order; the rest are loaded again on a later cycle. The claim would refuse all of these anyway, but a candidate the claim refuses still takes a capacity slot in the cycle that loaded it, so without the filtering a backlog for one subject, or a few stranded staged entries, could fill `MaxActiveJobs` while ready work waited.
 
 #### Group-Fair Batching
 
@@ -55,12 +62,19 @@ The core of the dispatcher. For each entry that passes the capacity checks in ea
 **Atomic claim via `FOR UPDATE SKIP LOCKED`**: before dispatching an entry, the junction re-selects it from the database with a row-level lock:
 
 ```sql
-SELECT * FROM trax.work_queue
-WHERE id = :entry_id AND status = 'queued'
+SELECT * FROM trax.work_queue w
+WHERE w.id = :entry_id
+  AND w.status = 'queued'
+  AND w.confirmed_at IS NOT NULL
+  AND (w.subject_key IS NULL OR NOT EXISTS (
+      -- a dispatched entry for the same subject whose run is Pending or InProgress
+  ))
 FOR UPDATE SKIP LOCKED
 ```
 
-If the entry has already been claimed by another server (locked in another transaction or already `Dispatched`), the query returns no rows and the entry is skipped. This prevents duplicate dispatch in multi-server deployments. See [Multi-Server Concurrency](../concurrency.md#jobdispatcher-row-level-locking) for details.
+If the entry has already been claimed by another server (locked in another transaction or already `Dispatched`), is unconfirmed, or its subject has a run in flight, the query returns no rows and the entry is skipped. This prevents duplicate dispatch in multi-server deployments. See [Multi-Server Concurrency](/docs/scheduler/concurrency#jobdispatcher-row-level-locking) for details.
+
+**Subject lock**: for an entry with a subject key, the claim transaction first takes a per-subject advisory lock on Postgres, `pg_advisory_xact_lock(hashtext('trax_subject'), hashtext(key))`. Row locking alone cannot serialize two entries for one subject, because they are different rows. The lock is released when the claim commits, before the job is submitted. SQLite relies on its single writer and takes no lock. See [Multi-Server Concurrency](/docs/scheduler/concurrency#subject-serialization-advisory-lock-per-subject).
 
 For each successfully claimed entry, the dispatcher:
 

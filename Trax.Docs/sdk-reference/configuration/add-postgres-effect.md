@@ -69,7 +69,7 @@ services.AddTrax(trax => trax
 ## What It Registers
 
 1. Migrates the database schema to the latest version via `DatabaseMigrator` (unless [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) was called)
-2. Creates an `NpgsqlDataSource` with enum mappings (`TrainState`, `LogLevel`, `ScheduleType`, `DeadLetterStatus`, `WorkQueueStatus`, `MisfirePolicy`)
+2. Creates an `NpgsqlDataSource` with enum mappings (`TrainState`, `FailureClass`, `LogLevel`, `ScheduleType`, `DeadLetterStatus`, `WorkQueueStatus`, `MisfirePolicy`)
 3. Registers `IDbContextFactory<PostgresContext>` for creating database contexts
 4. Registers `IDataContext` (scoped) for direct database access
 5. Enables data context logging support (for [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging))

@@ -187,3 +187,9 @@ These properties can be set directly on the `TraxEffectBuilder`:
 | [AddEffect / AddJunctionEffect](/docs/sdk-reference/configuration/add-effect) | Registers custom effect provider factories |
 | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | Registers lifecycle hooks that fire on train state transitions |
 | [SetEffectLogLevel](/docs/sdk-reference/configuration/set-effect-log-level) | Sets the minimum log level for effect logging |
+
+### Services you register
+
+| Service | Description |
+|--------|-------------|
+| [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier) | Classifies a failed run's exception into a `FailureClass`; registered in the container, not through the builder |

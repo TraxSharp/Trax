@@ -77,7 +77,7 @@ result.Match(
 );
 ```
 
-**Next:** [Core docs](/docs/core) for Memory, the Analyzer, chain methods, and IDE extensions.
+**Next:** [Core docs](/docs/core) for Memory, chain methods, and IDE extensions.
 
 ---
 
@@ -119,10 +119,11 @@ public interface ICreateUserTrain : IServiceTrain<CreateUserRequest, User>;
 
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
-    protected override User Junctions() =>
+    protected override Task<Either<Exception, User>> Junctions() =>
         Chain<ValidateEmailJunction>()
             .Chain<CreateUserInDatabaseJunction>()
-            .Chain<SendWelcomeEmailJunction>();
+            .Chain<SendWelcomeEmailJunction>()
+            .Resolve();
 }
 ```
 

@@ -145,10 +145,11 @@ public interface ISyncCustomersTrain : IServiceTrain<SyncCustomersInput, SyncRes
 
 public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, SyncResult>, ISyncCustomersTrain
 {
-    protected override SyncResult Junctions() =>
+    protected override Task<Either<Exception, SyncResult>> Junctions() =>
         Chain<FetchCustomersJunction>()
             .Chain<TransformDataJunction>()
-            .Chain<WriteToDestinationJunction>();
+            .Chain<WriteToDestinationJunction>()
+            .Resolve();
 }
 ```
 

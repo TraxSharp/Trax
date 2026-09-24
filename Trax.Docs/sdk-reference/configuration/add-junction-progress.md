@@ -44,7 +44,7 @@ services.AddTrax(trax => trax
 
 - This is a **junction-level effect** (runs per junction, not per train).
 - Registers two providers: `CancellationCheckProvider` (runs first) and `JunctionProgressProvider`.
-- `CancellationCheckProvider` queries the database before each junction to check `Metadata.CancellationRequested`. If `true`, it throws `OperationCanceledException`, which `FinishTrain` maps to `TrainState.Cancelled`.
+- `CancellationCheckProvider` queries the database before each junction to check `Metadata.CancellationRequested`. If `true`, it throws `OperationCanceledException`, which `FinishServiceTrain` maps to `TrainState.Cancelled`.
 - `JunctionProgressProvider` sets `Metadata.CurrentlyRunningJunction` and `Metadata.JunctionStartedAt` before each junction, and clears them after.
 - Both providers are registered as toggleable junction effects visible on the dashboard Effects page.
 - Requires a data provider (`UsePostgres` or `UseInMemory`) to be registered. **Build-time validation:** If no data provider is configured, the application throws `InvalidOperationException` at startup with a message explaining the required configuration.

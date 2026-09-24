@@ -7,6 +7,17 @@ nav_order: 4
 
 # Analyzer
 
+> **Deprecated.** The `TrainChainAnalyzer` in `Trax.Core.Analyzers` no longer checks anything.
+> It only inspects chains that start at `Activate()`, and `Activate` is now internal, so no
+> train can write a chain the analyzer recognises. A chain declared in `Junctions()` produces no
+> CHAIN001 or CHAIN002 diagnostics, whether it is correct or not.
+>
+> The [startup chain verification](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic)
+> replaces it. At host startup Trax reads every registered train's `Junctions()` declaration and
+> refuses to start if a junction's input never reaches Memory or the chain ends without the
+> train's return type, which are the same two faults the analyzer reported. The rest of this page
+> describes the analyzer as it was designed, for projects that still reference the package.
+
 Trax.Core includes a Roslyn analyzer that validates your train's route at compile time, like a route planner that checks every junction has the cargo it needs before the train ever departs. When you chain junctions via `.Chain<TJunction>()`, the analyzer simulates the runtime Memory dictionary to verify that each junction's input type is available before that junction executes.
 
 ## The Problem
@@ -26,18 +37,18 @@ The analyzer makes it a compile-time error. You see the problem immediately in y
 
 ## What It Checks
 
-The analyzer triggers on `Junctions()` overrides and `.Resolve()` calls in `Train<,>` or `ServiceTrain<,>` subclasses. It walks through the chain and simulates Memory forward:
+The analyzer triggers on `.Resolve()` calls in `Train<,>` or `ServiceTrain<,>` subclasses whose chain starts at `Activate()` (which is why it no longer fires). It walks through the chain and simulates Memory forward:
 
 ```
-Junctions()           -> Memory = { TInput, Unit }
-Chain<JunctionA>()    -> Check: is JunctionA's TIn in Memory? Add JunctionA's TOut.
+Activate(input)       -> Memory = { TInput, Unit }
+.Chain<JunctionA>()   -> Check: is JunctionA's TIn in Memory? Add JunctionA's TOut.
 .Chain<JunctionB>()   -> Check: is JunctionB's TIn in Memory? Add JunctionB's TOut.
                       -> Check: is TReturn in Memory?
 ```
 
 | Method | What the analyzer does |
 |--------|----------------------|
-| `Junctions()` / `Activate(input)` | Seeds Memory with `TInput` and `Unit` |
+| `Activate(input, otherInputs...)` | Seeds Memory with `TInput` and `Unit`, plus the type of each extra argument. A chain that does not start here is not analyzed, which is why a `Junctions()` declaration never was |
 | `.Chain<TJunction>()` | Checks `TIn` in Memory, then adds `TOut` |
 | `.ShortCircuit<TJunction>()` | Same as `Chain`: checks `TIn` in Memory, adds `TOut` |
 | `.AddServices<T1, T2>()` | Adds each type argument to Memory |
@@ -53,9 +64,10 @@ Fires when a junction needs a type that no previous junction has produced.
 ```csharp
 public class BrokenTrain : ServiceTrain<string, Unit>
 {
-    protected override Task<Either<Exception, Unit>> Junctions() =>
-        Chain<LogGreetingJunction>().Resolve();  // <- CHAIN001: LogGreetingJunction requires HelloWorldInput,
-                                      //   but Memory only has [string, Unit]
+    // The RunInternal and Activate form this was written for; neither is reachable any more.
+    protected override Task<Either<Exception, Unit>> RunInternal(string input) =>
+        Activate(input).Chain<LogGreetingJunction>().Resolve();  // <- CHAIN001: LogGreetingJunction
+                                      //   requires HelloWorldInput, but Memory only has [string, Unit]
 }
 ```
 
@@ -73,9 +85,10 @@ Fires when `Resolve()` needs a type that hasn't been produced. The analyzer trac
 ```csharp
 public class MissingReturnTrain : ServiceTrain<OrderRequest, Receipt>
 {
-    protected override Receipt Junctions() =>
-        Chain<ValidateOrderJunction>();  // Returns Unit
-                                         // <- CHAIN002: Receipt not in Memory
+    protected override Task<Either<Exception, Receipt>> RunInternal(OrderRequest input) =>
+        Activate(input)
+            .Chain<ValidateOrderJunction>()  // Returns Unit
+            .Resolve();                      // <- CHAIN002: Receipt not in Memory
 }
 ```
 
@@ -105,8 +118,9 @@ dotnet add package Trax.Core.Analyzers
 ```
 
 It is marked as a development dependency, so it applies to the project that references it
-and does not flow to that project's own consumers. Add it to each project whose trains you
-want checked.
+and does not flow to that project's own consumers. Its NuGet description says it is
+deprecated; there is no reason to add it to a new project, and an existing reference can be
+removed.
 
 For development within the Trax.Core solution itself, the analyzer is propagated to all projects via `Directory.Build.props`:
 
@@ -138,4 +152,4 @@ Or suppress at the project level in your `.csproj`:
 
 ## SDK Reference
 
-> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) | [Extract](/docs/sdk-reference/train-methods/extract) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [Activate](/docs/sdk-reference/train-methods/activate) | [Resolve](/docs/sdk-reference/train-methods/resolve)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) | [Extract](/docs/sdk-reference/train-methods/extract) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [Resolve](/docs/sdk-reference/train-methods/resolve)

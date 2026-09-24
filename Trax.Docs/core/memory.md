@@ -21,7 +21,7 @@ Chain<ValidateEmailJunction>()         // Takes CreateUserRequest, returns Unit 
 // User is resolved from Memory automatically
 ```
 
-Each junction declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the junction, and stores `TOut` back. If `TIn` isn't in Memory, the train fails at runtime, though the [Analyzer](analyzer.md) catches this at compile time.
+Each junction declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the junction, and stores `TOut` back. If `TIn` isn't in Memory, the train fails at runtime, though the [startup chain verification](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) catches this before the host serves traffic.
 
 ## Storage by Type
 

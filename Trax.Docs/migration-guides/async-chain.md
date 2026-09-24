@@ -1,6 +1,21 @@
+---
+layout: default
+title: Async Chain Migration
+parent: Reference
+nav_order: 15
+---
+
 # Async Chain Migration
 
 Trax 1.x ships `Junctions()`, `Chain`, `Resolve`, `Extract`, `ShortCircuit`, and `AddServices` as async-by-default. The same names you used before are still there, the fluent shape is unchanged, but the return types now wrap in `Task` so the framework no longer blocks on async work mid-chain.
+
+> **Since this guide was written, `RunInternal` has been closed.** It is private and `Activate`
+> is internal, so `Junctions()` is the only way to declare a chain. The patterns below that
+> override `RunInternal` are kept because they describe a migration that happened; for a train
+> being written now, only the `Junctions()` shapes apply. See
+> [Trains and Junctions](/docs/core/trains-and-junctions), and
+> [Removal of RunInternal and Activate](/docs/migration-guides/runinternal-and-activate) for
+> moving a train off them.
 
 ## Why
 

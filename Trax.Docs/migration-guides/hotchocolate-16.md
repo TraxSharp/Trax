@@ -1,3 +1,10 @@
+---
+layout: default
+title: HotChocolate 16 Migration
+parent: Reference
+nav_order: 16
+---
+
 # HotChocolate 16 Migration
 
 `Trax.Api.GraphQL` and its companion packages now build against HotChocolate 16. Most of the

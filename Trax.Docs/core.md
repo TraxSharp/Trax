@@ -20,7 +20,7 @@ dotnet add package Trax.Core
 - **Junctions**: single-responsibility units of work with typed input/output
 - **Memory**: a type-keyed store that wires junction outputs to junction inputs automatically
 - **Railway error propagation**: if any junction fails, the train switches to the left track and skips the rest
-- **Compile-time analyzer**: catches broken chains before you run anything
+- **Declared chains**: a chain declared in `Junctions()` is readable without running it. Trax.Mediator's startup check (registered by `AddMediator`) uses that to refuse to start a host whose chains cannot run
 - **IDE extensions**: inlay hints showing cargo types at each junction
 
 ## The Railway
@@ -68,7 +68,7 @@ result.Match(
 - Lightweight junction composition without infrastructure overhead
 - Prototyping trains before adding persistence
 
-When you need execution logging, DI, or persistent metadata, add [Trax.Effect](effect.md).
+When you need execution logging, DI, or persistent metadata, add [Trax.Effect](/docs/effect).
 
 ## SDK Reference
 

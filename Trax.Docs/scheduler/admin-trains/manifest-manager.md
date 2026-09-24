@@ -8,12 +8,12 @@ nav_order: 1
 
 # ManifestManagerTrain
 
-The ManifestManager is the first half of each polling cycle. It figures out which manifests are due for execution and writes them to the work queue. It doesn't dispatch anything; that's the [JobDispatcher's](job-dispatcher.md) job.
+The ManifestManager is the first half of each polling cycle. It figures out which manifests are due for execution and writes them to the work queue. It doesn't dispatch anything; that's the [JobDispatcher's](/docs/scheduler/admin-trains/job-dispatcher) job.
 
 ## Chain
 
 ```
-LoadManifestsJunction → CancelTimedOutJobsJunction → ReapStalePendingMetadataJunction → ReapStaleInProgressMetadataJunction → ReapFailedJobsJunction → DetermineJobsToQueueJunction → CreateWorkQueueEntriesJunction
+LoadManifestsJunction → CancelTimedOutJobsJunction → ReapStalePendingMetadataJunction → ReapStaleInProgressMetadataJunction → ResolveStaleStagedEntriesJunction → ReapFailedJobsJunction → DetermineJobsToQueueJunction → CreateWorkQueueEntriesJunction
 ```
 
 ## Junctions
@@ -40,6 +40,19 @@ Fails InProgress metadata that has not completed within `StaleInProgressTimeout`
 
 Newly-failed metadata from both stale reapers is visible to `ReapFailedJobsJunction` in the same ManifestManager cycle, enabling dead-lettering if retries are exhausted.
 
+Failing a run, from either reaper, also releases its [subject key](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing), so a run still pending past `StalePendingTimeout` or still working past `StaleInProgressTimeout` stops holding its subject.
+
+### ResolveStaleStagedEntriesJunction
+
+Resolves work queue entries that a crash left unconfirmed. A train with [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable) commits its entry unconfirmed, runs `OnQueue`, then confirms it; a process that stopped in between leaves an entry the dispatcher will never claim. Any entry still `Queued` and unconfirmed after `StaleStagedEntryTimeout` (default: 10 minutes) is:
+
+| Setting | Outcome |
+|---|---|
+| Default | **Cancelled**, via `IWorkQueuePromotion.CancelStaleAsync`. Nothing recorded tells a hook that succeeded from one that never ran or one that rejected the mutation, so the entry is kept visible rather than run |
+| `PromoteStaleStagedEntries()` | **Promoted**, via `IWorkQueuePromotion.PromoteStaleAsync`, and dispatched like any other entry. The run re-executes the whole chain, so this assumes idempotent hooks and a chain that re-checks what the hook checked |
+
+`IWorkQueuePromotion.PromoteAsync`, which an enqueue calls once its hook returns, only confirms an entry that is still `Queued`, so an entry this junction has already cancelled stays cancelled. The promotion methods work on every data provider, the InMemory provider included. Like the rest of the train, this runs only on the server holding the leader lock, and not at all while the ManifestManager is disabled (`ManifestManagerEnabled = false`). A deployment that turns the ManifestManager off everywhere leaves stranded staged entries unresolved.
+
 ### ReapFailedJobsJunction
 
 Scans loaded manifests for any whose failure count meets or exceeds `MaxRetries`. For each, it creates a `DeadLetter` record with status `AwaitingIntervention` and persists immediately.
@@ -56,9 +69,9 @@ The decision junction. It runs two passes over the loaded manifests:
 
 **Pass 1: Time-based manifests** (Cron and Interval). For each, it checks whether the manifest is due using `SchedulingHelpers.ShouldRunNow()`, which dispatches to either cron parsing or interval arithmetic based on the schedule type.
 
-**Pass 2: Dependent manifests**. For each manifest with `ScheduleType.Dependent`, it finds the parent in the loaded set and checks whether `parent.LastSuccessfulRun > dependent.LastSuccessfulRun`. Before comparing timestamps, the junction verifies that the parent has at least one `Completed` metadata record (`HasSuccessfulMetadata`). If the parent has a `LastSuccessfulRun` timestamp but no successful metadata to back it up (e.g., metadata was truncated or pruned), the timestamp is considered stale and the dependent is not queued. See [Dependent Trains](../dependent-trains.md).
+**Pass 2: Dependent manifests**. For each manifest with `ScheduleType.Dependent`, it finds the parent in the loaded set and checks whether `parent.LastSuccessfulRun > dependent.LastSuccessfulRun`. Before comparing timestamps, the junction verifies that the parent has at least one `Completed` metadata record (`HasSuccessfulMetadata`). If the parent has a `LastSuccessfulRun` timestamp but no successful metadata to back it up (e.g., metadata was truncated or pruned), the timestamp is considered stale and the dependent is not queued. See [Dependent Trains](/docs/scheduler/dependent-trains).
 
-Manifests with `ScheduleType.DormantDependent` are excluded from **both** passes. They are never auto-queued by the ManifestManager, dormant dependents must be explicitly activated at runtime by the parent train via [`IDormantDependentContext`](../dependent-trains.md#dormant-dependents).
+Manifests with `ScheduleType.DormantDependent` are excluded from **both** passes. They are never auto-queued by the ManifestManager, dormant dependents must be explicitly activated at runtime by the parent train via [`IDormantDependentContext`](/docs/scheduler/dependent-trains#dormant-dependents).
 
 Both passes apply the same per-manifest guards before evaluating the schedule:
 - Skip if the manifest's ManifestGroup has `IsEnabled = false`
@@ -137,13 +150,13 @@ If the advisory lock is somehow bypassed (e.g., a bug, a code path that doesn't 
 
 The advisory lock is only acquired when the `IDataContext` is backed by Entity Framework Core (`DbContext`). When using the InMemory provider for tests, the lock is skipped and the train runs directly, safe because InMemory implies a single-process setup.
 
-See [Multi-Server Concurrency](../concurrency.md) for the full cross-service concurrency model.
+See [Multi-Server Concurrency](/docs/scheduler/concurrency) for the full cross-service concurrency model.
 
 ## What Changed
 
 Previously, this train had an `EnqueueJobsJunction` as its final junction. That junction would directly create Metadata records and enqueue to the job submitter (Hangfire). `MaxActiveJobs` was enforced there, meaning the ManifestManager was both the scheduler and the dispatcher.
 
-Now those responsibilities are split. The ManifestManager writes intent to the work queue. The [JobDispatcher](job-dispatcher.md) reads from it and handles the actual dispatch. This means `TriggerAsync`, dashboard re-runs, and scheduled manifests all converge on the same dispatch path.
+Now those responsibilities are split. The ManifestManager writes intent to the work queue. The [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher) reads from it and handles the actual dispatch. This means `TriggerAsync`, dashboard re-runs, and scheduled manifests all converge on the same dispatch path.
 
 ## SDK Reference
 
