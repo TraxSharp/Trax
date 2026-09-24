@@ -34,12 +34,12 @@ internal class SqliteSqlDialect : ISqlDialect
               AND w.confirmed_at IS NOT NULL
               AND (
                 w.subject_key IS NULL
-                OR NOT EXISTS (
-                    SELECT 1
+                OR w.subject_key NOT IN (
+                    SELECT b.subject_key
                     FROM work_queue b
                     JOIN metadata m ON m.id = b.metadata_id
-                    WHERE b.subject_key = w.subject_key
-                      AND b.status = {{Dispatched}}
+                    WHERE b.status = {{Dispatched}}
+                      AND b.subject_key IS NOT NULL
                       AND m.train_state IN ({{Pending}}, {{InProgress}})
                 )
               )
@@ -84,12 +84,12 @@ internal class SqliteSqlDialect : ISqlDialect
                    AND (wq.scheduled_at IS NULL OR wq.scheduled_at <= datetime('now'))
                    AND (
                      wq.subject_key IS NULL
-                     OR NOT EXISTS (
-                         SELECT 1
+                     OR wq.subject_key NOT IN (
+                         SELECT b.subject_key
                          FROM work_queue b
                          JOIN metadata bm ON bm.id = b.metadata_id
-                         WHERE b.subject_key = wq.subject_key
-                           AND b.status = {{Dispatched}}
+                         WHERE b.status = {{Dispatched}}
+                           AND b.subject_key IS NOT NULL
                            AND bm.train_state IN ({{Pending}}, {{InProgress}})
                      )
                    ))

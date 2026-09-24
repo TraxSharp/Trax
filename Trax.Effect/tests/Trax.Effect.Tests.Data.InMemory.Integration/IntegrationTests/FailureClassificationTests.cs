@@ -66,6 +66,27 @@ public class FailureClassificationTests : TestSetup
     }
 
     [Test]
+    public async Task A_classifier_returning_a_value_outside_the_enum_records_unclassified()
+    {
+        // A classifier is consumer code, so it can return any value the enum's underlying type
+        // holds. An undefined one reaches the provider as an enum it cannot map: on Postgres the
+        // write throws inside SaveOutcome, the row stays InProgress, and the reaper records Failed
+        // an hour later. The remote wire already normalises this; the classifier path did not.
+        Classifier.Result = (FailureClass)42;
+        var train = Resolve();
+
+        await Run(train);
+
+        train
+            .SeenClass.Should()
+            .Be(
+                FailureClass.Unclassified,
+                "an undefined class is normalised rather than carried to a write that cannot "
+                    + "store it, matching RemoteRunJson.TolerantFailureClassConverter"
+            );
+    }
+
+    [Test]
     public async Task The_classifier_sees_the_original_exception_type()
     {
         Classifier.Result = FailureClass.Permanent;

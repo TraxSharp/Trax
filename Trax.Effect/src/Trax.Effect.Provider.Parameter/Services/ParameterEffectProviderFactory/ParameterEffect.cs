@@ -143,6 +143,10 @@ public class ParameterEffect(
                 {
                     metadata.Input = ex.Placeholder;
                 }
+                catch (Exception ex) when (ex is JsonException or NotSupportedException)
+                {
+                    metadata.Input = UnserializablePlaceholder(ex);
+                }
                 catch (ObjectDisposedException)
                 {
                     // Input object contains disposed JsonDocument, skip serialization
@@ -170,6 +174,10 @@ public class ParameterEffect(
                 {
                     metadata.Output = ex.Placeholder;
                 }
+                catch (Exception ex) when (ex is JsonException or NotSupportedException)
+                {
+                    metadata.Output = UnserializablePlaceholder(ex);
+                }
                 catch (ObjectDisposedException)
                 {
                     // Output object contains disposed JsonDocument, skip serialization
@@ -180,6 +188,26 @@ public class ParameterEffect(
             }
         }
     }
+
+    /// <summary>
+    /// Stands in for a parameter System.Text.Json cannot represent, so the run still records what
+    /// it did.
+    /// </summary>
+    /// <remarks>
+    /// A reference cycle raises <see cref="JsonException"/> and an unsupported type raises
+    /// <see cref="NotSupportedException"/>. Neither is a reason to fail a run that already
+    /// succeeded: thrown out of the success path, the outcome write never happened, the row stayed
+    /// <c>InProgress</c> until the reaper marked it <c>Failed</c>, and the manifest's retry policy
+    /// then re-ran work that had completed, failing the same way every time. Degrading is the same
+    /// answer the byte ceiling already gives.
+    /// <para>
+    /// Only the exception's type is recorded. The messages carry unbounded detail (a cycle's is the
+    /// whole path it walked), which is the wrong thing to put in the column a ceiling exists to
+    /// bound.
+    /// </para>
+    /// </remarks>
+    private static string UnserializablePlaceholder(Exception ex) =>
+        JsonSerializer.Serialize(new { _unserializable = true, _error = ex.GetType().Name });
 
     /// <summary>
     /// Serializes <paramref name="value"/> to a JSON string, aborting if it would exceed

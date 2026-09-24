@@ -234,7 +234,15 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             await this.InitializeServiceTrain();
 
         Metadata.AssertLoaded();
-        await EffectRunner.SaveChanges(CancellationToken);
+
+        // Not the caller's token, for the same reason SaveOutcome does not take it. An
+        // already-cancelled caller, which is what a host shutting down or a timed-out request
+        // looks like, made this throw before the try below, so nothing terminal was written: the
+        // row sat Pending until StalePendingTimeout and the reaper then recorded Failed, which a
+        // manifest counts toward retries and dead letters. Persisting it regardless costs one
+        // write and lets the cancellation surface inside the try, where it is recorded as what it
+        // is.
+        await EffectRunner.SaveChanges(CancellationToken.None);
 
         // Make the typed input available to lifecycle hooks before any of them fire, so
         // OnStarted observes the same input as OnCompleted/OnFailed. This sets the in-memory
@@ -300,10 +308,20 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
             if (exception is OperationCanceledException)
             {
-                await LifecycleHookRunner.OnCancelled(Metadata, CancellationToken);
+                // Registered lifecycle hooks do not take the caller's token, for the reason
+                // SaveOutcome does not: reporting the outcome is not part of the work the caller
+                // cancelled. Handed that token, a hook that passes it to a publish (the broadcaster
+                // passes it to BasicPublishAsync, the GraphQL hook to SendAsync) is cancelled by the
+                // very cancellation it is reporting, and LifecycleHookRunner swallows hook failures
+                // by design, so the event is dropped with nothing to show for it. A run that
+                // completes despite cancellation loses its Completed event the same way.
+                await LifecycleHookRunner.OnCancelled(Metadata, CancellationToken.None);
 
                 try
                 {
+                    // The train's own override keeps the caller's token: it is consumer code that
+                    // may legitimately want to honour the cancellation, and
+                    // TrainLifecycleOverrideTests pins the passthrough deliberately.
                     await OnCancelled(Metadata, CancellationToken);
                 }
                 catch (Exception hookEx)
@@ -317,10 +335,12 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             }
             else
             {
-                await LifecycleHookRunner.OnFailed(Metadata, exception, CancellationToken);
+                // Not the caller's token; see the OnCancelled branch above.
+                await LifecycleHookRunner.OnFailed(Metadata, exception, CancellationToken.None);
 
                 try
                 {
+                    // The train's own override keeps the caller's token; see OnCancelled above.
                     await OnFailed(Metadata, exception, CancellationToken);
                 }
                 catch (Exception hookEx)
@@ -375,10 +395,13 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             }
         }
 
-        await LifecycleHookRunner.OnCompleted(Metadata, CancellationToken);
+        // Not the caller's token. A caller that cancelled while the work finished anyway still
+        // gets Completed recorded (effect/0005), so the matching event has to survive too.
+        await LifecycleHookRunner.OnCompleted(Metadata, CancellationToken.None);
 
         try
         {
+            // The train's own override keeps the caller's token; see the OnCancelled branch.
             await OnCompleted(Metadata, CancellationToken);
         }
         catch (Exception hookEx)

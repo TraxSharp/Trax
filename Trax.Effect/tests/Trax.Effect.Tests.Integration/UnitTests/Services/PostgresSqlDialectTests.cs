@@ -40,6 +40,54 @@ public class PostgresSqlDialectTests
         sql.Should().Contain("trax.work_queue");
     }
 
+    /// <summary>
+    /// The subject test is bounded by the runs in flight, not by the subject's history.
+    /// </summary>
+    /// <remarks>
+    /// Both the correlated and the set form give the same answers, so every behavioural test
+    /// passes either way and nothing else would notice a change back. What differs is the cost:
+    /// correlated, the subquery re-walked one subject's dispatched rows, which accumulate for the
+    /// life of the subject because a dispatched row never reaches a terminal status of its own, and
+    /// it did so inside the transaction holding that subject's advisory lock. This pins the shape
+    /// the measurement was taken against.
+    /// </remarks>
+    [Test]
+    public void ClaimWorkQueueEntry_TestsTheSubjectAgainstAnUncorrelatedSet()
+    {
+        var dialect = Create();
+        var sql = (string)
+            dialect.GetType().GetMethod("ClaimWorkQueueEntry")!.Invoke(dialect, null)!;
+
+        sql.Should()
+            .Contain(
+                "NOT IN (",
+                "the busy subjects are gathered once, so the cost follows the work in flight"
+            );
+        sql.Should()
+            .NotContain(
+                "b.subject_key = w.subject_key",
+                "correlating the subquery to the outer row is what made the claim walk the "
+                    + "subject's whole dispatched history"
+            );
+        sql.Should()
+            .Contain(
+                "b.subject_key IS NOT NULL",
+                "x NOT IN (a, NULL) is never true, so without this one dispatched run carrying no "
+                    + "subject would refuse every keyed claim in the system"
+            );
+    }
+
+    [Test]
+    public void LoadGroupFairQueuedJobs_TestsTheSubjectAgainstAnUncorrelatedSet()
+    {
+        var dialect = Create();
+        var sql = (string)
+            dialect.GetType().GetMethod("LoadGroupFairQueuedJobs")!.Invoke(dialect, null)!;
+
+        sql.Should().NotContain("b.subject_key = wq.subject_key");
+        sql.Should().Contain("b.subject_key IS NOT NULL");
+    }
+
     [Test]
     public void DequeueBackgroundJobs_BuildsLimitOrderedSql()
     {

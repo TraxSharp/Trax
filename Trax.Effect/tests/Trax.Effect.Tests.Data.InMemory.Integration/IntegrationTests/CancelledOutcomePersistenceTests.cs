@@ -28,6 +28,7 @@ public class CancelledOutcomePersistenceTests : TestSetup
     public override ServiceProvider ConfigureServices(IServiceCollection services) =>
         services
             .AddScopedTraxRoute<IParkedTrain, ParkedTrain>()
+            .AddScopedTraxRoute<IPreStartCancelledTrain, PreStartCancelledTrain>()
             .AddScopedTraxRoute<IUninterruptibleTrain, UninterruptibleTrain>()
             .BuildServiceProvider();
 
@@ -103,6 +104,34 @@ public class CancelledOutcomePersistenceTests : TestSetup
         row.EndTime.Should().NotBeNull();
     }
 
+    [Test]
+    public async Task Run_CancelledBeforeItStarts_PersistsCancelledRatherThanStayingPending()
+    {
+        var train = Scope.ServiceProvider.GetRequiredService<IPreStartCancelledTrain>();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        // The token is already cancelled, so the parked body's registration fires at once rather
+        // than waiting for anything.
+        var awaiting = async () => await train.Run(Unit.Default, cts.Token);
+        await awaiting.Should().ThrowAsync<OperationCanceledException>();
+
+        var row = await PersistedRow(typeof(IPreStartCancelledTrain).FullName!);
+
+        row.TrainState.Should()
+            .Be(
+                TrainState.Cancelled,
+                "the initial save took the caller's token, so an already-cancelled caller threw "
+                    + "before the try that records outcomes: nothing terminal was written, the row "
+                    + "sat Pending until StalePendingTimeout, and the reaper then recorded Failed, "
+                    + "which a manifest counts toward retries and dead letters"
+            );
+        row.EndTime.Should()
+            .NotBeNull(
+                "a terminal state without an EndTime is an execution that cannot say when it ended"
+            );
+    }
+
     /// <summary>
     /// Waits for the train's body to start, bounded, and watching the run itself: a run that
     /// faults before its body starts never signals the probe, so waiting on the probe alone
@@ -168,6 +197,28 @@ public class CancelledOutcomePersistenceTests : TestSetup
         }
     }
 
+    /// <summary>
+    /// Parks like <see cref="ParkedTrain"/>, but registered under its own interface so the
+    /// pre-start case gets a metadata row of its own. <c>PersistedRow</c> reads one row per train
+    /// name, so sharing a train between two cases makes both read ambiguous.
+    /// </summary>
+    private class PreStartCancelledTrain : ServiceTrain<Unit, Unit>, IPreStartCancelledTrain
+    {
+        protected override async Task<Either<Exception, Unit>> Junctions()
+        {
+            var parked = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            await using var registration = CancellationToken.Register(() =>
+                parked.TrySetCanceled()
+            );
+
+            await parked.Task;
+
+            return Resolve();
+        }
+    }
+
     /// <summary>Takes no token, as a downstream SDK without cancellation support would.</summary>
     private class UninterruptibleTrain : ServiceTrain<Unit, Unit>, IUninterruptibleTrain
     {
@@ -181,6 +232,8 @@ public class CancelledOutcomePersistenceTests : TestSetup
     }
 
     private interface IParkedTrain : IServiceTrain<Unit, Unit> { }
+
+    private interface IPreStartCancelledTrain : IServiceTrain<Unit, Unit> { }
 
     private interface IUninterruptibleTrain : IServiceTrain<Unit, Unit> { }
 }

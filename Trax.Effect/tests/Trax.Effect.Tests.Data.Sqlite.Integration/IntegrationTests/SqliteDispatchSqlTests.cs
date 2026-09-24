@@ -118,6 +118,128 @@ public class SqliteDispatchSqlTests : TestSetup
         candidates.Should().Contain(other.Id).And.NotContain(sibling.Id);
     }
 
+    /// <summary>
+    /// A dispatched run carrying no subject must not block subjects it has nothing to do with.
+    /// </summary>
+    /// <remarks>
+    /// The busy-subject test says which entries are refused; this says which are not, and it is the
+    /// half a set-based rewrite of the claim can silently break. Asking whether a subject is in a
+    /// set of busy subjects has to exclude the null ones: in SQL <c>x NOT IN (a, NULL)</c> is never
+    /// true, so a single dispatched run without a subject would refuse every keyed claim in the
+    /// system.
+    /// </remarks>
+    [Test]
+    public async Task A_dispatched_entry_with_no_subject_does_not_block_other_subjects()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
+        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+
+        var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
+            new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
+            {
+                Name = "Sqlite.NullSubject",
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+        await context.Track(metadata);
+        await context.SaveChanges(CancellationToken.None);
+
+        // In flight, and carrying no subject: a manifest entry looks exactly like this.
+        var subjectless = WorkQueue.Create(
+            new CreateWorkQueue { TrainName = "Sqlite.NullSubject", InputTypeName = "Sqlite.Input" }
+        );
+        subjectless.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
+        subjectless.MetadataId = metadata.Id;
+
+        var keyed = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "Sqlite.NullSubject",
+                InputTypeName = "Sqlite.Input",
+                SubjectKey = "unrelated-subject",
+            }
+        );
+
+        await context.Track(subjectless);
+        await context.Track(keyed);
+        await context.SaveChanges(CancellationToken.None);
+
+        (
+            await context
+                .WorkQueues.FromSqlRaw(dialect.ClaimWorkQueueEntry(), keyed.Id)
+                .AsNoTracking()
+                .FirstOrDefaultAsync()
+        )
+            .Should()
+            .NotBeNull(
+                "a run with no subject holds no subject, so it cannot make another subject busy"
+            );
+    }
+
+    /// <summary>
+    /// A subject's finished history does not make it busy. Only a run still in flight does.
+    /// </summary>
+    /// <remarks>
+    /// Dispatched rows never reach a terminal status of their own, so a subject accumulates them
+    /// for every run it has ever had. What decides busyness is the joined run's state, and this
+    /// pins that: without it, a rewrite could pass the busy-subject test by treating any dispatched
+    /// history as busy and quietly serialize a subject against its own past.
+    /// </remarks>
+    [Test]
+    public async Task A_subjects_finished_history_does_not_block_the_next_entry()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var dialect = Scope.ServiceProvider.GetRequiredService<ISqlDialect>();
+        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+
+        var finished = Trax.Effect.Models.Metadata.Metadata.Create(
+            new Trax.Effect.Models.Metadata.DTOs.CreateMetadata
+            {
+                Name = "Sqlite.History",
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+        finished.TrainState = Trax.Effect.Enums.TrainState.Completed;
+        await context.Track(finished);
+        await context.SaveChanges(CancellationToken.None);
+
+        var past = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "Sqlite.History",
+                InputTypeName = "Sqlite.Input",
+                SubjectKey = "customer-history",
+            }
+        );
+        past.Status = Trax.Effect.Enums.WorkQueueStatus.Dispatched;
+        past.MetadataId = finished.Id;
+
+        var next = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "Sqlite.History",
+                InputTypeName = "Sqlite.Input",
+                SubjectKey = "customer-history",
+            }
+        );
+
+        await context.Track(past);
+        await context.Track(next);
+        await context.SaveChanges(CancellationToken.None);
+
+        (
+            await context
+                .WorkQueues.FromSqlRaw(dialect.ClaimWorkQueueEntry(), next.Id)
+                .AsNoTracking()
+                .FirstOrDefaultAsync()
+        )
+            .Should()
+            .NotBeNull("the subject's only other run has completed, so the subject is free");
+    }
+
     [Test]
     public async Task A_row_written_without_a_failure_class_reads_and_filters_as_unclassified()
     {

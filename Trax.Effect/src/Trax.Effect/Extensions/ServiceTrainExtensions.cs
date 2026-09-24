@@ -178,6 +178,14 @@ internal static class ServiceTrainExtensions
             if (classifier?.Classify(failureReason) is not { } failureClass)
                 return null;
 
+            // A classifier is consumer code, so it can return any value the enum's underlying type
+            // holds. An undefined one reaches the provider as an enum it cannot map: the write
+            // throws inside SaveOutcome, the row is left InProgress holding its subject, and the
+            // stale reaper records Failed an hour later. Normalised here the same way
+            // RemoteRunJson.TolerantFailureClassConverter normalises a class off the remote wire.
+            if (!Enum.IsDefined(failureClass))
+                failureClass = FailureClass.Unclassified;
+
             if (failureReason.Data["TrainExceptionData"] is TrainExceptionData data)
             {
                 data.FailureClass ??= failureClass;

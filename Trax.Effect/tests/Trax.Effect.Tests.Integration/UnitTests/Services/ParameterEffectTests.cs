@@ -197,6 +197,54 @@ public class ParameterEffectTests
     }
 
     [Test]
+    public async Task Track_OutputContainsAReferenceCycle_FallsBackToPlaceholderJson()
+    {
+        // A cycle is the common way an output stops being serializable: a parent holding children
+        // that point back at it. System.Text.Json throws rather than recursing.
+        var effect = NewEffect();
+        var node = new CyclicNode();
+        node.Self = node;
+        var meta = NewMetadata();
+        meta.Output = null;
+        meta.SetOutputObject(node);
+
+        var track = async () => await effect.Track(meta);
+
+        await track
+            .Should()
+            .NotThrowAsync(
+                "an output that cannot be serialized is a recording problem, not a reason to fail "
+                    + "a run that already succeeded; thrown from the success path it left the row "
+                    + "InProgress for the reaper, and the manifest then re-ran completed work"
+            );
+        meta.Output.Should()
+            .Contain(
+                "_unserializable",
+                "the row records that the output could not be stored, the same way an oversized "
+                    + "one records that it was truncated"
+            );
+    }
+
+    [Test]
+    public async Task Track_InputContainsAReferenceCycle_FallsBackToPlaceholderJson()
+    {
+        var effect = NewEffect();
+        var node = new CyclicNode();
+        node.Self = node;
+        var meta = NewMetadata(input: node);
+
+        var track = async () => await effect.Track(meta);
+
+        await track.Should().NotThrowAsync();
+        meta.Input.Should().Contain("_unserializable");
+    }
+
+    private sealed class CyclicNode
+    {
+        public CyclicNode? Self { get; set; }
+    }
+
+    [Test]
     public void Dispose_ClearsTrackedAndDetachesObjects()
     {
         var effect = NewEffect();
