@@ -84,6 +84,9 @@ public class TypeExtensionExposureTests
                 // not fail for an unrelated reason.
                 services.AddScoped(_ => Substitute.For<ITraxHealthService>());
                 services.AddScoped(_ => Substitute.For<IOperationsService>());
+                services.AddScoped(_ =>
+                    Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+                );
                 services.AddScoped(_ => Substitute.For<ITraxScheduler>());
             })
             .Build();

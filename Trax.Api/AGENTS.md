@@ -18,12 +18,19 @@ if your work contradicts one, say so rather than silently overriding it.
 | anything in an `AddTrax*` extension | [0002](./docs/adr/0002-reading-the-service-collection-is-order-dependent.md), before you read the `IServiceCollection` |
 | a new host-configuration surface | [0001](./docs/adr/0001-a-misconfigured-host-fails-at-startup.md), it needs a startup validator |
 | subscriptions or socket auth | both, in that order. This is where the silent failure happened |
+| `queueTrain` or `requeueExecution` | central `docs/0017`, they enqueue through the mediator so per-train authorization applies; manifest triggers and dead-letter requeues are governed by the operations gate |
+| `failureClass` on executions, or the `executions(failureClass:)` filter | central `docs/0020`, a failure is classified where it happens |
+| `subjectKey` or `confirmedAt` on work queue reads | central `docs/0019` and `docs/0018` |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Ten name `api`: executable guards, exact version pinning, the
+index lists them by repo. Twenty name `api`: executable guards, exact version pinning, the
 dependency direction, the three test conventions, the canonical train name being the
 interface FullName, the documentation lints, feature-package tables shipping in the core
-provider migration set, and the public API baseline. In a workspace checkout the index is at
+provider migration set, the public API baseline, test frameworks staying out of shipped
+libraries, exemplars declared by attribute, Trax owning its vocabulary, tests owning their
+timeouts, every `PackageVersion` naming a referenced package, a chain being a declaration
+(`0016`), and the enqueue, staging, subject and failure-classification decisions (`0017` to
+`0020`). In a workspace checkout the index is at
 `../Trax.Docs/adr/README.md`; that path does not resolve on GitHub, because it crosses a
 repository boundary.
 
@@ -47,9 +54,11 @@ not to record. The format is
 
 ## Guards and validators
 
-`tests/Trax.Api.Tests.Meta/` holds eleven convention guards. Ten are shared with other repos
-and enforce workspace-wide rules; `NoSilentRegistrationOrderDependenceTests` is unique to
-this repo and is the census behind [0002](./docs/adr/0002-reading-the-service-collection-is-order-dependent.md).
+`tests/Trax.Api.Tests.Meta/` holds fifteen convention guards. Fourteen are shared with other
+repos and enforce workspace-wide rules, among them `WorkQueueCreationSitesTests`, which allows
+no site in this repo to build a work queue row (`docs/0017`);
+`NoSilentRegistrationOrderDependenceTests` is unique to this repo and is the census behind
+[0002](./docs/adr/0002-reading-the-service-collection-is-order-dependent.md).
 
 Five runtime validators fail the host at startup rather than at request time: four under
 `src/Trax.Api.GraphQL/Startup/` and `TraxGraphQLAuthPolicyValidator` alongside the

@@ -289,6 +289,47 @@ public class WorkQueueOperationsTests
     }
 
     [Test]
+    public async Task GetWorkQueues_SaysWhichEntriesAreStagedAndWhatTheyTouch()
+    {
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            await db.Track(
+                WorkQueue.Create(
+                    new CreateWorkQueue
+                    {
+                        TrainName = "Trax.Tests.IStagedTrain",
+                        InputTypeName = "Trax.Tests.StagedInput",
+                        DeferPromotion = true,
+                        SubjectKey = "customer-7",
+                    }
+                )
+            );
+            await db.Track(
+                WorkQueue.Create(
+                    new CreateWorkQueue
+                    {
+                        TrainName = "Trax.Tests.IReadyTrain",
+                        InputTypeName = "Trax.Tests.ReadyInput",
+                    }
+                )
+            );
+            await db.SaveChanges(default);
+        }
+
+        var items = (await new WorkQueueQueries().GetWorkQueues(_factory, default)).Items;
+
+        var staged = items.Single(i => i.TrainName == "Trax.Tests.IStagedTrain");
+        staged
+            .ConfirmedAt.Should()
+            .BeNull("a staged entry reads as Queued, and this is what tells it apart");
+        staged.SubjectKey.Should().Be("customer-7");
+
+        var ready = items.Single(i => i.TrainName == "Trax.Tests.IReadyTrain");
+        ready.ConfirmedAt.Should().NotBeNull();
+        ready.SubjectKey.Should().BeNull();
+    }
+
+    [Test]
     public async Task GetWorkQueue_AllSummaryFields_PopulatedFromRow()
     {
         var when = DateTime.UtcNow.AddMinutes(15);

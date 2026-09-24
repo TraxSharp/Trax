@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -29,8 +30,19 @@ internal sealed class TraxOperationsServiceValidator(
                     + "operations would throw at request time. Register the backing services before the "
                     + "host starts:\n"
                     + "  - call AddScheduler(...) (registers IOperationsService + ITraxScheduler), or\n"
-                    + "  - for an API-only host, call AddTraxJobRunner() and\n"
-                    + "    services.AddScoped<IOperationsService, OperationsService>();"
+                    + "  - for an API-only host, call AddMediator(...) and AddTraxJobRunner(), then\n"
+                    + "    services.AddScoped<IOperationsService, OperationsService>(); OperationsService\n"
+                    + "    enqueues through the mediator, so it cannot be built without it."
+            );
+
+        // OperationsService enqueues through the mediator. Registered without it, the schema
+        // builds and queueTrain fails at request time, which is what this validator is for.
+        if (!isService.IsService(typeof(ITrainExecutionService)))
+            throw new InvalidOperationException(
+                "AddTraxGraphQL() exposes the operations surface, but ITrainExecutionService is not "
+                    + "registered, so queueTrain and requeueExecution would throw at request time: "
+                    + "OperationsService enqueues through the mediator. Call AddMediator(...) before "
+                    + "the host starts."
             );
 
         if (mutationsExposed && !isService.IsService(typeof(ITraxScheduler)))

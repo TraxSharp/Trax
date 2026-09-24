@@ -158,7 +158,7 @@ public partial class TrainTypeModule
             registration.ServiceTypeName,
             inputJson,
             priority,
-            ctx.RequestAborted
+            ct: ctx.RequestAborted
         );
     }
 

@@ -29,5 +29,6 @@ public record ExecutionDetail(
     string? HostName,
     string? HostEnvironment,
     string? HostInstanceId,
-    int ChildCount = 0
+    int ChildCount = 0,
+    Trax.Core.Exceptions.FailureClass FailureClass = Trax.Core.Exceptions.FailureClass.Unclassified
 );

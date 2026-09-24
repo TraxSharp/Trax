@@ -58,6 +58,7 @@ public class CoverageGapTests
             StartTime: DateTime.UtcNow,
             EndTime: null,
             FailureJunction: null,
+            FailureClass: Trax.Core.Exceptions.FailureClass.Unclassified,
             FailureReason: null,
             ManifestId: 42,
             CancellationRequested: true,

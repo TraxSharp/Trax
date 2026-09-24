@@ -15,5 +15,7 @@ public record WorkQueueSummary(
     long? ManifestId,
     long? MetadataId,
     long? DeadLetterId,
-    string? InputTypeName
+    string? InputTypeName,
+    DateTime? ConfirmedAt = null,
+    string? SubjectKey = null
 );

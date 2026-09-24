@@ -18,18 +18,18 @@
 
   <!-- Trax cross-repo packages. CI pins below; overridable via TraxLocalVersion. -->
   <ItemGroup>
-    <PackageVersion Include="Trax.Core.Testing" Version="1.7.0" />
-    <PackageVersion Include="Trax.Effect" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Data" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Data.Sqlite" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Provider.Json" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.StateMachine" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.StateMachine.Persistence" Version="1.54.0" />
-    <PackageVersion Include="Trax.Mediator" Version="1.22.0" />
-    <PackageVersion Include="Trax.Scheduler" Version="1.32.0" />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.7.2" />
+    <PackageVersion Include="Trax.Effect" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Data" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Data.Sqlite" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Provider.Json" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.StateMachine" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.StateMachine.Persistence" Version="1.54.2" />
+    <PackageVersion Include="Trax.Mediator" Version="1.22.1" />
+    <PackageVersion Include="Trax.Scheduler" Version="1.32.2" />
   </ItemGroup>
 
   <!-- Third-party packages, pinned to exact resolved versions. -->
@@ -58,8 +58,8 @@
       Include="Microsoft.Extensions.DependencyInjection.Abstractions"
       Version="10.0.12"
     />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
     <PackageVersion Include="NSubstitute" Version="6.0.0" />
     <PackageVersion Include="NUnit" Version="4.6.1" />

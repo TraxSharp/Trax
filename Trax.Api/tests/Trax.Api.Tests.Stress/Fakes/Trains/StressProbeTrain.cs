@@ -11,8 +11,7 @@ namespace Trax.Api.Tests.Stress.Fakes.Trains;
 /// </summary>
 public class StressProbeTrain : ServiceTrain<StressProbeInput, Unit>, IStressProbeTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(StressProbeInput input) =>
-        Activate(input, Unit.Default).Resolve();
+    protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 }
 
 public record StressProbeInput : IManifestProperties

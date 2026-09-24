@@ -133,6 +133,9 @@ public class GraphQLServiceExtensionsTests
                         );
                         s.AddSingleton(Substitute.For<ITraxScheduler>());
                         s.AddSingleton(Substitute.For<IOperationsService>());
+                        s.AddSingleton(
+                            Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+                        );
                         s.AddSingleton(Substitute.For<ITraxHealthService>());
                     })
                     .Configure(app =>
@@ -177,6 +180,9 @@ public class GraphQLServiceExtensionsTests
                         );
                         s.AddSingleton(Substitute.For<ITraxScheduler>());
                         s.AddSingleton(Substitute.For<IOperationsService>());
+                        s.AddSingleton(
+                            Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+                        );
                         s.AddSingleton(Substitute.For<ITraxHealthService>());
                     })
                     .Configure(app =>
@@ -222,6 +228,9 @@ public class GraphQLServiceExtensionsTests
         builder.Services.AddTraxGraphQL(g => g.ExposeOperationQueries().AllowAnonymousOperations());
         builder.Services.AddSingleton(Substitute.For<ITraxScheduler>());
         builder.Services.AddSingleton(Substitute.For<IOperationsService>());
+        builder.Services.AddSingleton(
+            Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+        );
         builder.Services.AddSingleton(Substitute.For<ITraxHealthService>());
 
         await using var app = builder.Build();

@@ -15,5 +15,6 @@ public record ExecutionSummary(
     bool CancellationRequested,
     string? HostName = null,
     string? HostEnvironment = null,
-    string? HostInstanceId = null
+    string? HostInstanceId = null,
+    Trax.Core.Exceptions.FailureClass FailureClass = Trax.Core.Exceptions.FailureClass.Unclassified
 );

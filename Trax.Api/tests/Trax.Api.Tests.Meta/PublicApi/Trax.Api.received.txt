@@ -50,12 +50,14 @@ namespace Trax.Api.DTOs
                     string? HostName,
                     string? HostEnvironment,
                     string? HostInstanceId,
-                    int ChildCount = 0) { }
+                    int ChildCount = 0,
+                    Trax.Core.Exceptions.FailureClass FailureClass = 0) { }
         public bool CancellationRequested { get; init; }
         public int ChildCount { get; init; }
         public string? CurrentlyRunningJunction { get; init; }
         public System.DateTime? EndTime { get; init; }
         public string ExternalId { get; init; }
+        public Trax.Core.Exceptions.FailureClass FailureClass { get; init; }
         public string? FailureException { get; init; }
         public string? FailureJunction { get; init; }
         public string? FailureReason { get; init; }
@@ -74,10 +76,11 @@ namespace Trax.Api.DTOs
     }
     public class ExecutionSummary : System.IEquatable<Trax.Api.DTOs.ExecutionSummary>
     {
-        public ExecutionSummary(long Id, string ExternalId, string Name, Trax.Effect.Enums.TrainState TrainState, System.DateTime StartTime, System.DateTime? EndTime, string? FailureJunction, string? FailureReason, long? ManifestId, bool CancellationRequested, string? HostName = null, string? HostEnvironment = null, string? HostInstanceId = null) { }
+        public ExecutionSummary(long Id, string ExternalId, string Name, Trax.Effect.Enums.TrainState TrainState, System.DateTime StartTime, System.DateTime? EndTime, string? FailureJunction, string? FailureReason, long? ManifestId, bool CancellationRequested, string? HostName = null, string? HostEnvironment = null, string? HostInstanceId = null, Trax.Core.Exceptions.FailureClass FailureClass = 0) { }
         public bool CancellationRequested { get; init; }
         public System.DateTime? EndTime { get; init; }
         public string ExternalId { get; init; }
+        public Trax.Core.Exceptions.FailureClass FailureClass { get; init; }
         public string? FailureJunction { get; init; }
         public string? FailureReason { get; init; }
         public string? HostEnvironment { get; init; }
@@ -307,7 +310,8 @@ namespace Trax.Api.DTOs
     }
     public class WorkQueueSummary : System.IEquatable<Trax.Api.DTOs.WorkQueueSummary>
     {
-        public WorkQueueSummary(long Id, string ExternalId, string TrainName, Trax.Effect.Enums.WorkQueueStatus Status, System.DateTime CreatedAt, System.DateTime? DispatchedAt, System.DateTime? ScheduledAt, int Priority, int DispatchAttempts, long? ManifestId, long? MetadataId, long? DeadLetterId, string? InputTypeName) { }
+        public WorkQueueSummary(long Id, string ExternalId, string TrainName, Trax.Effect.Enums.WorkQueueStatus Status, System.DateTime CreatedAt, System.DateTime? DispatchedAt, System.DateTime? ScheduledAt, int Priority, int DispatchAttempts, long? ManifestId, long? MetadataId, long? DeadLetterId, string? InputTypeName, System.DateTime? ConfirmedAt = default, string? SubjectKey = null) { }
+        public System.DateTime? ConfirmedAt { get; init; }
         public System.DateTime CreatedAt { get; init; }
         public long? DeadLetterId { get; init; }
         public int DispatchAttempts { get; init; }
@@ -320,6 +324,7 @@ namespace Trax.Api.DTOs
         public int Priority { get; init; }
         public System.DateTime? ScheduledAt { get; init; }
         public Trax.Effect.Enums.WorkQueueStatus Status { get; init; }
+        public string? SubjectKey { get; init; }
         public string TrainName { get; init; }
     }
 }

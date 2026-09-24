@@ -67,7 +67,9 @@ public class WorkQueueQueries
                 q.ManifestId,
                 q.MetadataId,
                 q.DeadLetterId,
-                q.InputTypeName
+                q.InputTypeName,
+                q.ConfirmedAt,
+                q.SubjectKey
             ))
             .ToListAsync(ct);
 
@@ -107,7 +109,9 @@ public class WorkQueueQueries
                 q.ManifestId,
                 q.MetadataId,
                 q.DeadLetterId,
-                q.InputTypeName
+                q.InputTypeName,
+                q.ConfirmedAt,
+                q.SubjectKey
             ))
             .FirstOrDefaultAsync(ct);
     }

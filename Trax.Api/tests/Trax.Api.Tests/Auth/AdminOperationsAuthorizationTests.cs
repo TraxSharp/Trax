@@ -120,6 +120,9 @@ public class AdminOperationsAuthorizationTests
                         // Last registration wins for resolution.
                         services.AddScoped(_ => health);
                         services.AddScoped(_ => Substitute.For<IOperationsService>());
+                        services.AddScoped(_ =>
+                            Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+                        );
                         services.AddScoped(_ => Substitute.For<ITraxScheduler>());
                     })
                     .Configure(app =>

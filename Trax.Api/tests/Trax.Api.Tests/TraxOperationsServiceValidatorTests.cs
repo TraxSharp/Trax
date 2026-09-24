@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Startup;
+using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -46,7 +47,11 @@ public class TraxOperationsServiceValidatorTests
     public async Task Throws_WhenMutationsExposedButITraxSchedulerMissing()
     {
         var validator = new TraxOperationsServiceValidator(
-            IsService(s => s.AddScoped(_ => Substitute.For<IOperationsService>())),
+            IsService(s =>
+            {
+                s.AddScoped(_ => Substitute.For<IOperationsService>());
+                s.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+            }),
             mutationsExposed: true
         );
 
@@ -58,12 +63,29 @@ public class TraxOperationsServiceValidatorTests
     }
 
     [Test]
+    public async Task Throws_WhenTheMediatorIsMissing()
+    {
+        var validator = new TraxOperationsServiceValidator(
+            IsService(s => s.AddScoped(_ => Substitute.For<IOperationsService>())),
+            mutationsExposed: false
+        );
+
+        var act = async () => await validator.StartAsync(CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "*ITrainExecutionService*",
+            "OperationsService enqueues through the mediator, so queueTrain would fail at request time"
+        );
+    }
+
+    [Test]
     public async Task DoesNotThrow_WhenBothRegistered()
     {
         var validator = new TraxOperationsServiceValidator(
             IsService(s =>
             {
                 s.AddScoped(_ => Substitute.For<IOperationsService>());
+                s.AddScoped(_ => Substitute.For<ITrainExecutionService>());
                 s.AddScoped(_ => Substitute.For<ITraxScheduler>());
             }),
             mutationsExposed: true
@@ -79,7 +101,11 @@ public class TraxOperationsServiceValidatorTests
     public async Task QueriesOnly_WithIOperationsService_DoesNotRequireScheduler()
     {
         var validator = new TraxOperationsServiceValidator(
-            IsService(s => s.AddScoped(_ => Substitute.For<IOperationsService>())),
+            IsService(s =>
+            {
+                s.AddScoped(_ => Substitute.For<IOperationsService>());
+                s.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+            }),
             mutationsExposed: false
         );
 

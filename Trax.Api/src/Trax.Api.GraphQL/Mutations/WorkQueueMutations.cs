@@ -9,8 +9,9 @@ namespace Trax.Api.GraphQL.Mutations;
 
 /// <summary>
 /// Mutations for the work queue: queue a train for execution and cancel queued entries.
-/// Thin wrappers around <see cref="IOperationsService"/>; the dashboard UI calls the same
-/// service directly so both surfaces share validation and persistence.
+/// Thin wrappers around <see cref="IOperationsService"/>, which the dashboard also calls. Both
+/// share validation and the enqueue path; the train's own authorization applies here, while the
+/// dashboard enqueues as the admin surface its host gates (see docs/0017).
 /// </summary>
 public class WorkQueueMutations
 {

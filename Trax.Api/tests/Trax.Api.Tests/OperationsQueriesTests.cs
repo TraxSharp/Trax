@@ -7,6 +7,7 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.Fakes;
+using Trax.Core.Exceptions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -345,6 +346,96 @@ public class OperationsQueriesTests
         result.Items.Should().OnlyContain(e => e.TrainState == TrainState.Failed);
         result.TotalCount.Should().Be(2);
         result.IsEstimatedCount.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task GetExecutions_ReportsHowARunFailed_AndFiltersOnIt()
+    {
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            foreach (var failureClass in new[] { FailureClass.Conflict, FailureClass.Transient })
+            {
+                var meta = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = "Trax.X.Classified",
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    }
+                );
+                meta.TrainState = TrainState.Failed;
+                meta.AddException(
+                    new TrainException(
+                        System.Text.Json.JsonSerializer.Serialize(
+                            new TrainExceptionData
+                            {
+                                TrainName = "Classified",
+                                TrainExternalId = meta.ExternalId,
+                                Type = "SomeException",
+                                Junction = "SomeJunction",
+                                Message = "failed",
+                                FailureClass = failureClass,
+                            }
+                        )
+                    )
+                );
+                await db.Track(meta);
+            }
+            await db.SaveChanges(default);
+        }
+
+        // Rows the filter must leave out: a completed run and an unclassified failure.
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var completed = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.Classified",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            completed.TrainState = TrainState.Completed;
+            var unclassified = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.Classified",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            unclassified.TrainState = TrainState.Failed;
+            await db.Track(completed);
+            await db.Track(unclassified);
+            await db.SaveChanges(default);
+        }
+
+        var all = await new OperationsQueries().GetExecutions(_factory, default);
+        all.Items.Select(e => e.FailureClass)
+            .Should()
+            .BeEquivalentTo(
+                [
+                    FailureClass.Conflict,
+                    FailureClass.Transient,
+                    FailureClass.Unclassified,
+                    FailureClass.Unclassified,
+                ],
+                "the stored class is what the dashboard and API consumers read"
+            );
+
+        var conflicts = await new OperationsQueries().GetExecutions(
+            _factory,
+            default,
+            failureClass: FailureClass.Conflict
+        );
+
+        conflicts
+            .Items.Should()
+            .ContainSingle()
+            .Which.FailureClass.Should()
+            .Be(FailureClass.Conflict);
+        conflicts.TotalCount.Should().Be(1, "the count covers the filter, not the table");
+        conflicts.IsEstimatedCount.Should().BeFalse("a filtered page is counted exactly");
     }
 
     [Test]
@@ -1090,6 +1181,66 @@ public class OperationsQueriesTests
                 ),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Test]
+    public async Task RequeueExecution_WithNoSavedInput_ReturnsFalseWithoutQueuing()
+    {
+        long id;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var meta = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.RequeueTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            await db.Track(meta);
+            await db.SaveChanges(default);
+            id = meta.Id;
+        }
+
+        var ops = Substitute.For<IOperationsService>();
+
+        var resp = await new OperationsMutations().RequeueExecution(id, _factory, ops, default);
+
+        resp.Success.Should().BeFalse();
+        resp.Message.Should().Contain("no saved input");
+        await ops.DidNotReceive()
+            .QueueTrainAsync(Arg.Any<QueueTrainInput>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RequeueExecution_WithATruncatedSavedInput_ReturnsFalseWithoutQueuing()
+    {
+        long id;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var meta = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.RequeueTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            // What an input over MaxParameterBytes is saved as.
+            meta.Input = "{\"_truncated\": true, \"_maxBytes\": 1024}";
+            await db.Track(meta);
+            await db.SaveChanges(default);
+            id = meta.Id;
+        }
+
+        var ops = Substitute.For<IOperationsService>();
+
+        var resp = await new OperationsMutations().RequeueExecution(id, _factory, ops, default);
+
+        resp.Success.Should().BeFalse();
+        resp.Message.Should().Contain("too large to save");
+        await ops.DidNotReceive()
+            .QueueTrainAsync(Arg.Any<QueueTrainInput>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
