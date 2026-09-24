@@ -98,6 +98,11 @@ public class ProcessCheckoutJunction : Junction<(User, Order, Payment), Receipt>
 // Memory finds User, Order, and Payment individually, constructs the tuple, and passes it in
 ```
 
+Two limits, both refused by the startup chain check rather than left to fail when the train runs:
+
+- **A tuple holds at most seven elements.** Memory cannot store a longer one, so group the extra values into a type of their own.
+- **Deconstruction is one level deep.** A tuple nested inside a tuple goes into Memory as a single value under its own type, and its inner elements are not separately findable. Returning `(int, (Guid, bool))` puts `int` and `(Guid, bool)` in Memory, not `Guid`. Return a flat tuple, or a type that names its parts.
+
 This lets you load multiple entities in one junction and consume them individually, or as a group, in later junctions:
 
 ```csharp
