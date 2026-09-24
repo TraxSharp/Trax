@@ -37,7 +37,7 @@ internal sealed class TrainChainStartupValidator(
     ILogger<TrainChainStartupValidator>? logger = null
 ) : IHostedService
 {
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (configuration.SkipChainVerification)
         {
@@ -46,15 +46,22 @@ internal sealed class TrainChainStartupValidator(
                     + "until something runs it."
             );
 
-            return Task.CompletedTask;
+            return;
         }
 
-        using var scope = scopeFactory.CreateScope();
+        // An async scope, because a train's scoped dependency may implement only
+        // IAsyncDisposable, which a synchronous Dispose refuses outright. Request scopes are
+        // disposed asynchronously, so such a train runs fine — disposing this one synchronously
+        // would refuse the host over a disposal problem, reported as a chain problem, with
+        // SkipChainVerification() the only way past it.
+        await using var scope = scopeFactory.CreateAsyncScope();
         var problems = new List<string>();
         var checkedTrains = 0;
 
         foreach (var registration in discoveryService.DiscoverTrains())
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var problem = Check(scope.ServiceProvider, registration, out var skipped);
 
             if (skipped is not null)
@@ -82,8 +89,6 @@ internal sealed class TrainChainStartupValidator(
             );
 
         logger?.LogDebug("Verified the chains of {TrainCount} trains.", checkedTrains);
-
-        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -141,7 +146,12 @@ internal sealed class TrainChainStartupValidator(
         }
         catch (Exception ex)
         {
-            return $"{registration.ServiceTypeName}: its chain could not be read ({ex.Message})";
+            // Invoke wraps whatever Junctions() threw. The wrapper's message says only that an
+            // invocation target threw, which leaves the operator nothing to act on, so report
+            // the inner exception's message as the reason.
+            var cause = ex.InnerException ?? ex;
+
+            return $"{registration.ServiceTypeName}: its chain could not be read ({cause.Message})";
         }
 
         // Asks whether the container can supply a type without building one. Resolving each

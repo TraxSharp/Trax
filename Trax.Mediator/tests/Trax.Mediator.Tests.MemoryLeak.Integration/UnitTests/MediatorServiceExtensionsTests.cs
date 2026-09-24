@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
@@ -15,6 +16,49 @@ namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;
 public class MediatorServiceExtensionsTests
 {
     #region Existing Registration Tests
+
+    /// <summary>
+    /// A singleton train may inject the enqueue services. <c>TrainLifetime(Singleton)</c> is the
+    /// supported route to such a train, and <c>ValidateScopes</c> and <c>ValidateOnBuild</c> are
+    /// both on by default in Development for <c>WebApplication</c> — so registering those
+    /// services scoped fails the host at startup rather than leaving a latent risk.
+    ///
+    /// <para>The train is registered directly rather than scanned, so what is asserted is the
+    /// lifetime of the two enqueue services and not the dependencies of every train in this
+    /// assembly; several are deliberately unresolvable.</para>
+    /// </summary>
+    [Test]
+    public void AddMediator_WhenASingletonTrainInjectsTheEnqueueContext_PassesScopeValidation()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UseInMemory())
+                .AddMediator(mediator =>
+                    mediator
+                        .TrainLifetime(ServiceLifetime.Singleton)
+                        // Trax.Mediator itself declares no trains, so the scan contributes none
+                        // and the container holds exactly the train registered below.
+                        .ScanAssemblies(typeof(ITrainBus).Assembly)
+                )
+        );
+        services.AddSingleton<IEnqueueContextConsumingTrain, EnqueueContextConsumingTrain>();
+
+        // Act
+        var build = () =>
+            services.BuildServiceProvider(
+                new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }
+            );
+
+        // Assert
+        build
+            .Should()
+            .NotThrow(
+                "neither enqueue service holds per-scope state, so a singleton train consuming "
+                    + "one is a supported shape"
+            );
+    }
 
     [Test]
     public void AddServiceTrainBus_RegistersITrainBus()

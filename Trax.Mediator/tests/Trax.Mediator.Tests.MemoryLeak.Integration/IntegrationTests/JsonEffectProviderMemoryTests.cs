@@ -87,10 +87,9 @@ public class JsonEffectProviderMemoryTests
                 "JsonEffectProvider should not retain significant memory after disposal"
             );
 
-        // Most memory should be freed (allow for reasonable baseline retention)
-        result
-            .MemoryRetained.Should()
-            .BeLessThan(500_000, "Memory retained should be reasonable after disposal");
+        // A second, tighter bound used to follow. 500KB is below the noise floor of a process-wide
+        // heap delta (see MemoryProfiler.RetainedNoiseFloorBytes); the sibling test that keeps weak
+        // references to the tracked models is what actually establishes they are freed.
     }
 
     [Test]

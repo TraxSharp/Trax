@@ -17,6 +17,8 @@ public class ArrayLoggerMemoryTests
     public async Task ArrayLoggingProvider_ShouldNotLeakMemory_WhenCreatingManyLoggers()
     {
         // Test creating many loggers without proper disposal
+        var loggerReferences = new List<WeakReference>();
+
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
             {
@@ -28,6 +30,8 @@ public class ArrayLoggerMemoryTests
                     for (int j = 0; j < 10; j++)
                     {
                         var logger = provider.CreateLogger($"TestLogger_{i}_{j}");
+
+                        loggerReferences.Add(new WeakReference(logger));
 
                         // Generate some log entries
                         for (int k = 0; k < 20; k++)
@@ -57,10 +61,18 @@ public class ArrayLoggerMemoryTests
                 "ArrayLoggingProvider should not retain significant memory after disposal"
             );
 
-        // Most memory should be freed (allow for some baseline overhead)
-        result
-            .MemoryRetained.Should()
-            .BeLessThan(2000, "Memory retained should be minimal after disposal");
+        // "Everything was freed" is a claim about reachability, not about the process's heap, so it
+        // is asserted on the loggers themselves. A byte bound tight enough to mean the same thing
+        // sits below the measurement's noise floor — see MemoryProfiler.RetainedNoiseFloorBytes.
+        var aliveLoggers = await MemoryProfiler.CountAliveAsync(loggerReferences);
+
+        aliveLoggers
+            .Should()
+            .Be(
+                0,
+                "every logger's provider was disposed and nothing else references them, so a logger "
+                    + "still reachable is a provider that did not let go of it"
+            );
     }
 
     [Test]
@@ -250,13 +262,9 @@ public class ArrayLoggerMemoryTests
                 "Some logger effects should be collected by GC after disposal"
             );
 
-        // Memory retention should be minimal
-        result
-            .MemoryRetained.Should()
-            .BeLessThan(
-                result.MemoryAllocated / 3,
-                "Most memory should be freed with proper disposal"
-            );
+        // No ratio of MemoryAllocated: both sides are the same process-wide measurement, so the
+        // bound tightens on its own whenever a collection lands inside the window. The reachability
+        // check above is the claim this was reaching for.
     }
 
     [Test]

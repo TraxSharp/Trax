@@ -63,6 +63,11 @@ public class DataContextLoggerMemoryTests
         using var provider = new DataContextLoggingProvider(factory, config);
         var logger = provider.CreateLogger("HighVolumeTest");
 
+        // Warm up first: the very first log call jits the logging path and starts the channel's
+        // consumer, which is one-off cost and not the blocking this test is about. ADR 0014 reached
+        // the same conclusion about CI timing — warm up rather than widen the bound.
+        logger.LogInformation("Warm up {Index}", 0);
+
         // This should complete near-instantly since writes are non-blocking
         var sw = System.Diagnostics.Stopwatch.StartNew();
 

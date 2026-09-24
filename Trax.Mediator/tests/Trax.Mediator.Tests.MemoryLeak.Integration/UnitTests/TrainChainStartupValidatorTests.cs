@@ -36,7 +36,8 @@ public class TrainChainStartupValidatorTests
         bool skip = false,
         Action<IServiceCollection>? configure = null,
         RecordingLogger? logger = null,
-        Func<IServiceScopeFactory, IServiceScopeFactory>? wrapScopes = null
+        Func<IServiceScopeFactory, IServiceScopeFactory>? wrapScopes = null,
+        CancellationToken token = default
     )
         where TService : class
         where TTrain : class, TService =>
@@ -45,7 +46,8 @@ public class TrainChainStartupValidatorTests
             skip,
             configure,
             logger,
-            wrapScopes
+            wrapScopes,
+            token
         );
 
     private static async Task<Exception?> StartMany(
@@ -53,7 +55,8 @@ public class TrainChainStartupValidatorTests
         bool skip = false,
         Action<IServiceCollection>? configure = null,
         RecordingLogger? logger = null,
-        Func<IServiceScopeFactory, IServiceScopeFactory>? wrapScopes = null
+        Func<IServiceScopeFactory, IServiceScopeFactory>? wrapScopes = null,
+        CancellationToken token = default
     )
     {
         var services = new ServiceCollection();
@@ -81,7 +84,7 @@ public class TrainChainStartupValidatorTests
 
         try
         {
-            await validator.StartAsync(CancellationToken.None);
+            await validator.StartAsync(token);
             return null;
         }
         catch (Exception ex)
@@ -310,7 +313,12 @@ public class TrainChainStartupValidatorTests
         failure.Should().BeOfType<TrainException>();
         failure!
             .Message.Should()
-            .Contain($"{nameof(IThrowingDeclarationTrain)}: its chain could not be read (");
+            .Contain($"{nameof(IThrowingDeclarationTrain)}: its chain could not be read (")
+            .And.Contain(
+                ThrowingDeclarationTrain.Reason,
+                "the reflection wrapper says only that an invocation target threw, which leaves "
+                    + "the operator no way to tell what is actually wrong"
+            );
     }
 
     [Test]
@@ -328,6 +336,37 @@ public class TrainChainStartupValidatorTests
             .Contain(
                 $"{nameof(IBrokenFlowTrain)}: its chain could not be verified "
                     + $"({ThrowingIsService.Reason})"
+            );
+    }
+
+    [Test]
+    public async Task Startup_WhenATrainDependsOnAnAsyncOnlyDisposable_Starts() =>
+        (
+            await Start<IAsyncDisposingTrain, AsyncDisposingTrain>(configure: services =>
+                services.AddScoped<IAsyncOnlyService, AsyncOnlyService>()
+            )
+        )
+            .Should()
+            .BeNull(
+                "a request scope disposes such a dependency asynchronously, so the same train "
+                    + "runs fine; refusing the host over it reports a disposal problem as a "
+                    + "chain problem, and the only workaround is to turn the check off"
+            );
+
+    [Test]
+    public async Task Startup_WhenTheHostIsAlreadyStopping_StopsRatherThanWorkingThrough()
+    {
+        using var stopping = new CancellationTokenSource();
+        await stopping.CancelAsync();
+
+        var outcome = await Start<IBrokenFlowTrain, BrokenFlowTrain>(token: stopping.Token);
+
+        outcome
+            .Should()
+            .BeAssignableTo<OperationCanceledException>(
+                "a host already shutting down should stop reading chains rather than work through "
+                    + "every registered train; this train's chain cannot run, so reporting that "
+                    + "instead would mean the check ran anyway"
             );
     }
 
@@ -505,6 +544,31 @@ public class TrainChainStartupValidatorTests
     {
         public IRequestOnlyService RequestOnly { get; } = requestOnly;
 
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+    }
+
+    public interface IAsyncOnlyService;
+
+    /// <summary>
+    /// Implements <see cref="IAsyncDisposable"/> and not <see cref="IDisposable"/>, which a
+    /// scoped EF context or an HTTP-based client commonly does. Disposing a scope holding one
+    /// synchronously throws, which is the failure the train below provokes.
+    /// </summary>
+    private sealed class AsyncOnlyService : IAsyncOnlyService, IAsyncDisposable
+    {
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    public interface IAsyncDisposingTrain : IServiceTrain<ChainProbeInput, bool>;
+
+    public class AsyncDisposingTrain(IAsyncOnlyService asyncOnly)
+        : ServiceTrain<ChainProbeInput, bool>,
+            IAsyncDisposingTrain
+    {
+        public IAsyncOnlyService AsyncOnly { get; } = asyncOnly;
+
+        // The chain itself is fine. Only the scope the check builds it in is at issue.
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
     }

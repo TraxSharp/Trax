@@ -200,8 +200,13 @@ public static class ServiceExtensions
             .AddHostedService<AuthorizationRegistrationValidator>()
             .AddScoped<ITrainBus, TrainBus>()
             .AddScoped<IRunExecutor, LocalRunExecutor>()
-            .AddScoped<IEnqueueContextAccessor, EnqueueContextAccessor>()
-            .AddScoped<IWorkQueuePromotion, WorkQueuePromotion>()
+            // Singletons, because a singleton train may inject either one and ValidateScopes is
+            // on by default in Development, so scoped would fail such a host at startup. Neither
+            // holds per-scope state: EnqueueContextAccessor keeps its value in a static
+            // AsyncLocal (it had to, or a singleton train's accessor read null), and
+            // WorkQueuePromotion creates a context per call from a singleton factory.
+            .AddSingleton<IEnqueueContextAccessor, EnqueueContextAccessor>()
+            .AddSingleton<IWorkQueuePromotion, WorkQueuePromotion>()
             .AddScoped<ITrainExecutionService, TrainExecutionService>()
             .RegisterServiceTrains(trainRegistry.DiscoveredTrains, serviceTrainLifetime);
     }

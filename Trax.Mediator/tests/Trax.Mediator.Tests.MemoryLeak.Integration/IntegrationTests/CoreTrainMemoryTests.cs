@@ -20,6 +20,7 @@ public class CoreTrainMemoryTests
     {
         // This test validates that the Memory dictionary doesn't cause memory leaks
         var trainFactory = () => new LargeDataTrain();
+        var trainReferences = new List<WeakReference>();
 
         var result = await MemoryProfiler.MonitorMemoryUsageAsync(
             async () =>
@@ -28,6 +29,8 @@ public class CoreTrainMemoryTests
                 for (int i = 0; i < 50; i++)
                 {
                     var train = trainFactory();
+
+                    trainReferences.Add(new WeakReference(train));
                     var largeInput = new LargeDataModel($"test_{i}", new byte[100_000]); // 100KB each
 
                     var output = await train.Run(largeInput);
@@ -41,12 +44,18 @@ public class CoreTrainMemoryTests
 
         Console.WriteLine(result.GetSummary());
 
-        // Memory should be freed after GC since trains are out of scope
-        result
-            .MemoryRetained.Should()
-            .BeLessThan(
-                result.MemoryAllocated / 2,
-                "Most memory should be freed when trains go out of scope"
+        // Whether the Memory dictionary let go is a question about reachability, so it is asked of
+        // the trains. Bounding MemoryRetained against MemoryAllocated cannot answer it: both sides
+        // are the same process-wide measurement and the ratio tightens whenever a collection lands
+        // inside the window.
+        var aliveTrains = await MemoryProfiler.CountAliveAsync(trainReferences);
+
+        aliveTrains
+            .Should()
+            .Be(
+                0,
+                "each train and the Memory dictionary holding its 100KB input went out of scope, so "
+                    + "one still reachable is the retention this test exists to catch"
             );
 
         // Should not retain more than 10MB after processing 50x100KB trains
@@ -175,13 +184,8 @@ public class CoreTrainMemoryTests
                 "Some trains should be collected by GC after going out of scope"
             );
 
-        // Memory retention should be minimal compared to allocation
-        result
-            .MemoryRetained.Should()
-            .BeLessThan(
-                result.MemoryAllocated / 3,
-                "Most memory should be freed for large object trains"
-            );
+        // No ratio of MemoryAllocated; the reachability check above is the claim. See
+        // MemoryProfiler.MemoryRetained.
     }
 
     [Test]

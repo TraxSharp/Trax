@@ -4,6 +4,7 @@ using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Core.Extensions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.DataContext;
@@ -123,7 +124,7 @@ public class TrainExecutionService(
         // Only a train with a hook needs the transaction: without one there is a single write,
         // and an explicit BEGIN/COMMIT would add two round trips to every enqueue for nothing.
         var hasHook = ResolveOnQueueOverride(registration.ImplementationType) is not null;
-        var transaction = hasHook ? await TryBeginTransactionAsync(dataContext, ct) : null;
+        using var transaction = hasHook ? await TryBeginTransactionAsync(dataContext, ct) : null;
         try
         {
             await dataContext.Track(entry);
@@ -147,7 +148,8 @@ public class TrainExecutionService(
         catch
         {
             if (transaction is not null)
-                await transaction.Rollback();
+                await RollbackQuietlyAsync(transaction);
+
             throw;
         }
 
@@ -440,7 +442,18 @@ public class TrainExecutionService(
             return false;
 
         var train = serviceProvider.GetRequiredService(registration.ServiceType);
-        return property.GetValue(train) is true;
+
+        try
+        {
+            return property.GetValue(train) is true;
+        }
+        catch (TargetInvocationException ex)
+        {
+            // Unwrap so the caller sees the train's real exception, not the reflection wrapper.
+            // OperationsService reports this message to GraphQL clients verbatim.
+            ExceptionDispatchInfo.Throw(ex.InnerException ?? ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -468,6 +481,38 @@ public class TrainExecutionService(
         catch (NotSupportedException)
         {
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Rolls back an enqueue that failed, without letting the rollback's own failure replace the
+    /// reason the enqueue failed.
+    /// </summary>
+    /// <remarks>
+    /// The two arrive together: a connection that drops mid-write fails the <c>SaveChanges</c> and
+    /// then the rollback, and the caller needs the first. The deferred path already guards its
+    /// cleanup for the same reason ("A failure to remove it must not hide why the enqueue
+    /// failed"), so both paths now answer the same way. The rollback's failure is logged rather
+    /// than dropped: it usually means the transaction is gone with its connection, which an
+    /// operator reading a failed enqueue wants to know.
+    /// </remarks>
+    private async Task RollbackQuietlyAsync(IDataContextTransaction transaction)
+    {
+        try
+        {
+            await transaction.Rollback();
+        }
+        catch (Exception rollbackFailure)
+        {
+            // Resolved rather than injected: adding a constructor parameter to a public service
+            // type is a breaking change for anyone constructing it directly.
+            serviceProvider
+                .GetService<ILogger<TrainExecutionService>>()
+                ?.LogWarning(
+                    rollbackFailure,
+                    "Rolling back a failed enqueue threw. The enqueue's own failure is the one "
+                        + "reported to the caller."
+                );
         }
     }
 
