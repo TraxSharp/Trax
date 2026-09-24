@@ -95,14 +95,34 @@ public abstract class TraxLambdaFunction
     }
 
     /// <summary>
+    /// How much of <see cref="ILambdaContext.RemainingTime"/> is held back so a run cancelled by
+    /// the function timing out can still record its outcome.
+    /// </summary>
+    /// <remarks>
+    /// Cancelling at <c>RemainingTime</c> itself cancels at the instant Lambda freezes or kills the
+    /// environment, so the uncancellable terminal write has nowhere to happen: the row stays
+    /// <c>InProgress</c> holding its subject until <c>StaleInProgressTimeout</c>, and the reaper
+    /// then records <c>Failed</c> rather than <c>Cancelled</c>, which a manifest counts toward
+    /// retries and dead letters. Widen this for a data provider with a slower write path.
+    /// </remarks>
+    protected virtual TimeSpan TerminalWriteMargin => TimeSpan.FromSeconds(5);
+
+    /// <summary>
     /// Lambda entry point for direct SDK invocation.
     /// Receives a <see cref="LambdaEnvelope"/> and dispatches to the appropriate handler
     /// based on <see cref="LambdaEnvelope.Type"/>.
-    /// Cancellation is derived from <see cref="ILambdaContext.RemainingTime"/>.
+    /// Cancellation is derived from <see cref="ILambdaContext.RemainingTime"/>, less
+    /// <see cref="TerminalWriteMargin"/>.
     /// </summary>
     public async Task<object?> FunctionHandler(LambdaEnvelope envelope, ILambdaContext context)
     {
-        using var cts = new CancellationTokenSource(context.RemainingTime);
+        // Clamped rather than allowed to go negative: with less time left than the write needs,
+        // cancelling immediately reports the run as cancelled, where starting it would leave work
+        // that cannot be recorded.
+        var budget = context.RemainingTime - TerminalWriteMargin;
+        using var cts = new CancellationTokenSource(
+            budget > TimeSpan.Zero ? budget : TimeSpan.Zero
+        );
         using var scope = _serviceProvider.Value.CreateScope();
         var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraxLambdaFunction>>();

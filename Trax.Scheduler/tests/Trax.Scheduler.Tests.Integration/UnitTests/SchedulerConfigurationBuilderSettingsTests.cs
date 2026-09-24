@@ -177,6 +177,34 @@ public class SchedulerConfigurationBuilderSettingsTests
         config.RecoverStuckJobsOnStartup.Should().BeFalse();
     }
 
+    /// <summary>
+    /// Takes a parameter, so a host can drive the choice from configuration rather than branching
+    /// around the call. Its neighbours already did; this one set the flag unconditionally.
+    /// </summary>
+    [Test]
+    public void PromoteStaleStagedEntries_False_SetsValue()
+    {
+        // Act
+        var config = ResolveConfiguration(b => b.PromoteStaleStagedEntries(false));
+
+        // Assert
+        config
+            .PromoteStaleStagedEntries.Should()
+            .BeFalse("passing false must cancel stale entries rather than promote them");
+    }
+
+    [Test]
+    public void PromoteStaleStagedEntries_NoArgument_StillPromotes()
+    {
+        // Act
+        var config = ResolveConfiguration(b => b.PromoteStaleStagedEntries());
+
+        // Assert
+        config
+            .PromoteStaleStagedEntries.Should()
+            .BeTrue("the parameter defaults to true, so every existing call site is unchanged");
+    }
+
     #endregion
 
     #region Misfire Policy

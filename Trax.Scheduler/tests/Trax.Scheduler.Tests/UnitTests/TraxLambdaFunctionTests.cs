@@ -216,10 +216,65 @@ public class TraxLambdaFunctionTests
 
     #endregion
 
+    #region RemainingTime margin
+
+    /// <summary>
+    /// With less time left than the outcome write needs, the work is not started.
+    /// </summary>
+    /// <remarks>
+    /// Cancellation used to be derived from <c>RemainingTime</c> itself, which fires at the instant
+    /// Lambda freezes or kills the environment, so the uncancellable terminal write had no time to
+    /// land. The row stayed InProgress holding its subject until StaleInProgressTimeout, and the
+    /// reaper then recorded Failed rather than Cancelled, which a manifest counts toward retries and
+    /// dead letters. Holding back a margin is what gives the write somewhere to happen.
+    /// </remarks>
+    [Test]
+    public async Task FunctionHandler_LessTimeLeftThanTheWriteMargin_HandsTheHandlerACancelledToken()
+    {
+        var fn = new TestFunction();
+        fn.Handler.ExecuteResult = new ExecuteJobResult(MetadataId: 1);
+
+        var envelope = new LambdaEnvelope(
+            LambdaRequestType.Execute,
+            JsonSerializer.Serialize(new RemoteJobRequest(MetadataId: 1))
+        );
+
+        await fn.FunctionHandler(envelope, CreateContext(TimeSpan.FromSeconds(1)));
+
+        fn.Handler.ExecuteTokenCancelled.Should()
+            .Equal(
+                [true],
+                "one second is less than the margin the outcome write needs, so starting work that "
+                    + "cannot be recorded is worse than reporting it cancelled straight away"
+            );
+    }
+
+    [Test]
+    public async Task FunctionHandler_AmpleTimeLeft_HandsTheHandlerALiveToken()
+    {
+        var fn = new TestFunction();
+        fn.Handler.ExecuteResult = new ExecuteJobResult(MetadataId: 2);
+
+        var envelope = new LambdaEnvelope(
+            LambdaRequestType.Execute,
+            JsonSerializer.Serialize(new RemoteJobRequest(MetadataId: 2))
+        );
+
+        await fn.FunctionHandler(envelope, CreateContext(TimeSpan.FromMinutes(5)));
+
+        fn.Handler.ExecuteTokenCancelled.Should()
+            .Equal([false], "the margin comes off the budget; it does not shrink it to nothing");
+    }
+
+    #endregion
+
     #region Helpers
 
     private static TestLambdaContext CreateContext() =>
         new() { RemainingTime = TimeSpan.FromMinutes(5) };
+
+    private static TestLambdaContext CreateContext(TimeSpan remaining) =>
+        new() { RemainingTime = remaining };
 
     private static async Task<IHost> CreateRouteHost(TestFunction fn)
     {
@@ -271,6 +326,9 @@ public class TraxLambdaFunctionTests
     {
         public List<RemoteJobRequest> ExecuteCalls { get; } = [];
         public List<RemoteRunRequest> RunCalls { get; } = [];
+
+        /// <summary>Whether the token each Execute call arrived with was already cancelled.</summary>
+        public List<bool> ExecuteTokenCancelled { get; } = [];
         public ExecuteJobResult ExecuteResult { get; set; } = new(MetadataId: 0);
         public RemoteRunResponse RunResult { get; set; } = new(MetadataId: 0);
         public Exception? ExecuteException { get; set; }
@@ -282,6 +340,7 @@ public class TraxLambdaFunctionTests
         )
         {
             ExecuteCalls.Add(request);
+            ExecuteTokenCancelled.Add(ct.IsCancellationRequested);
             if (ExecuteException is not null)
                 throw ExecuteException;
             return Task.FromResult(ExecuteResult);

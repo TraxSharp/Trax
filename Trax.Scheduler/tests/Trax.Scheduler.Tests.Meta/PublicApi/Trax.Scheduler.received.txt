@@ -184,7 +184,7 @@ namespace Trax.Scheduler.Configuration
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder MaxWorkQueueEntriesPerCycle(int? limit) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder OverrideSubmitter(System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection> registration) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder PollingInterval(System.TimeSpan interval) { }
-        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder PromoteStaleStagedEntries() { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder PromoteStaleStagedEntries(bool promote = true) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder PruneOrphanedManifests(bool prune = true) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder RecoverStuckJobsOnStartup(bool recover = true) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder RetryBackoffMultiplier(double multiplier) { }

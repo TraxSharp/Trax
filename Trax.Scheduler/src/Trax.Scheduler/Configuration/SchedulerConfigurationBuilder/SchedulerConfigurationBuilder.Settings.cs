@@ -269,10 +269,16 @@ public partial class SchedulerConfigurationBuilder
     /// <c>OnQueue</c> hook checked, and whose hooks are idempotent: a promoted entry may be a
     /// mutation whose hook never ran, or one the hook rejected.
     /// </remarks>
+    /// <param name="promote">
+    /// Whether to promote rather than cancel (default: <c>true</c>). Takes a parameter so the
+    /// choice can come from configuration, which is what its neighbours
+    /// <see cref="RecoverStuckJobsOnStartup"/> and <see cref="PruneOrphanedManifests"/> already do;
+    /// without one, a host reading this from settings had to branch around the call.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
-    public SchedulerConfigurationBuilder PromoteStaleStagedEntries()
+    public SchedulerConfigurationBuilder PromoteStaleStagedEntries(bool promote = true)
     {
-        _configuration.PromoteStaleStagedEntries = true;
+        _configuration.PromoteStaleStagedEntries = promote;
         return this;
     }
 
