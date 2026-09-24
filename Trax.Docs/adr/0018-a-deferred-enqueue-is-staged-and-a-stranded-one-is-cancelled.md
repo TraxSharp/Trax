@@ -49,7 +49,14 @@ before it backfills existing rows, not after: DbUp runs the statements without a
 older instance can insert between any two of them, and a row inserted after the backfill but before
 the default existed would be left with a null `confirmed_at`, never dispatched, and cancelled by
 the sweep. The column is added bare, then the default is set, then existing rows are backfilled
-from `created_at`. A deferring train's hook has no enqueue
+from `created_at`. The backfill covers only rows that can still be dispatched: queued and
+cancelled entries, and entries created in the last day, since a failed dispatch returns its entry
+to queued without touching `confirmed_at` and one in flight across the migration must come out
+confirmed. Older dispatched entries keep a null nothing reads; rewriting them took 17 s and doubled
+the table on 2M rows while locking every row against dispatch. For the same reason
+`ix_work_queue_unconfirmed` covers queued rows only. `WorkQueue`'s parameterless constructor is
+protected, so `WorkQueue.Create`, which stamps `confirmed_at`, is the only way to build an entry.
+A deferring train's hook has no enqueue
 context to join, because its entry is already committed.
 
 If the entry is cancelled while its hook runs, by an operator or by the sweep after the hook
@@ -85,10 +92,14 @@ Not covered: nothing checks that a deferring train's hook is idempotent, which p
 on, or that `StaleStagedEntryTimeout` is longer than the slowest hook. The rolling-deploy default
 is exercised by `Trax.Effect.Tests.Integration.IntegrationTests.PostgresMigrationTests`, which
 inserts rows as an older writer between each of migration 041's statements and requires every one
-to end confirmed; that test does not cite this decision.
+to end confirmed, and checks which existing rows the backfill touches; that test does not cite
+this decision.
 
 ## Changelog
 
+- **2026-09-24**: Recorded that migration 041 backfills only rows that can still be dispatched,
+  that `ix_work_queue_unconfirmed` covers queued rows only, and that `WorkQueue.Create` is the only
+  way to build an entry.
 - **2026-09-23**: Recorded that migration 041 must set the `confirmed_at` default before the
   backfill, that the default path holds a transaction and connection open for the hook's
   duration, and that an enqueue nested in a hook commits independently of the outer one.

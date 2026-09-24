@@ -59,7 +59,7 @@ services.AddTrax(trax => trax
 
 ## What It Registers
 
-1. Migrates the database schema via `DatabaseMigrator` (unless [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) was called)
+1. Migrates the database schema via `DatabaseMigrator` (unless [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) was called). Each migration script runs in its own transaction with its journal entry, so a script that fails partway leaves nothing behind and runs again cleanly on the next start
 2. Enables WAL mode (`PRAGMA journal_mode=WAL`) for concurrent read/write performance
 3. Registers `IDbContextFactory<SqliteContext>` for creating database contexts
 4. Registers `IDataContext` (scoped) for direct database access

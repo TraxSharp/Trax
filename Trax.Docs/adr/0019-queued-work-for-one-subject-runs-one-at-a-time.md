@@ -38,7 +38,9 @@ dispatchers would need a per-subject queue.
 ## Consequences
 
 The key is an opaque string compared exactly across every train, so two trains returning the same
-key serialize against each other. It is refused when empty or longer than 512 characters. The
+key serialize against each other. It is refused when empty or longer than 512 characters, both at
+enqueue and by `WorkQueue.Create`, so an entry built directly cannot carry a key the index cannot
+claim. The
 guarantee holds only until something writes a terminal state for a run that has not finished,
 and the subject is released even if that run is still working. Three things do: the two reapers
 in the ManifestManager (pending longer than `StalePendingTimeout`, or in progress longer than
@@ -81,6 +83,7 @@ overrides `LockSubject()`.
 
 ## Changelog
 
+- **2026-09-24**: Recorded that `WorkQueue.Create` refuses the same keys the enqueue does.
 - **2026-09-23**: Corrected dispatch order (group priority, then priority, then age, after
   dropping future-scheduled entries and disabled groups), recorded that the scheduler's startup
   recovery also releases subjects and that trains excluded from `MaxActiveJobs` escape both

@@ -85,12 +85,14 @@ operations service against the real mediator. `QueueTrainAuthorizationTests` in 
 only the error shape, the `TRAX_AUTHORIZATION` error `queueTrain` returns.
 
 Not covered: nothing checks that the dashboard is actually gated by its host, which is what its
-trusted scope assumes. The guards find `WorkQueue.Create` by text, so a row built another way, or through
-a helper outside `src`, would pass. Nothing checks that the manifest paths stay behind the admin
+trusted scope assumes. The guards find `WorkQueue.Create` by text, so a call through a helper outside `src` would pass.
+`WorkQueue`'s parameterless constructor is protected, so there is no other way to build a row. Nothing checks that the manifest paths stay behind the admin
 gate; that posture is api/0004's.
 
 ## Changelog
 
+- **2026-09-24**: `WorkQueue.Create` is now the only way to build a row, so the guards' text
+  match no longer misses an object initializer.
 - **2026-09-23**: Recorded that the dashboard's trusted scope flows into the `OnQueue` hook and
   `QueueSubjectKey`, so trains they run or enqueue, including from `Task.Run`, skip their own
   `[TraxAuthorize]`.

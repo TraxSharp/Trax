@@ -1214,7 +1214,7 @@ When any filter or `afterId` is supplied, the count is exact and `isEstimatedCou
 | `metadataId` | `Long` | Metadata ID created at dispatch, if dispatched |
 | `deadLetterId` | `Long` | Dead letter that triggered this requeue, if applicable |
 | `inputTypeName` | `String` | Fully qualified type name of the input, for deserialization |
-| `confirmedAt` | `DateTime` | When the entry became eligible for dispatch. Null while it is still being staged, and stays null on a staged entry that was cancelled (by an operator, or by the stale staged entry sweep); the dispatcher never claims an unconfirmed entry |
+| `confirmedAt` | `DateTime` | When the entry became eligible for dispatch. Null while it is still being staged, and stays null on a staged entry that was cancelled (by an operator, or by the stale staged entry sweep); the dispatcher never claims an unconfirmed entry. Also null on an entry dispatched more than a day before the database was migrated to the version that added it, which the migration does not backfill |
 | `subjectKey` | `String` | The subject the entry is serialized against, from the train's [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing). Null when the train does not set one. The value is computed by the consumer's train, so it may carry record identifiers |
 
 ### workQueue (single)

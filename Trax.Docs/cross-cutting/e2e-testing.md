@@ -148,13 +148,13 @@ await DataContext.SaveChanges(CancellationToken.None);
 DataContext.Reset();
 ```
 
-Build the entry with `WorkQueue.Create`, not `new WorkQueue { ... }`. `Create` stamps `ConfirmedAt` (unless you ask it to defer); an object initializer leaves it null, and an entry with a null `ConfirmedAt` is a staged entry: the dispatcher never claims it, and once it is older than `StaleStagedEntryTimeout` the ManifestManager's sweep cancels it. A test that inserts one waits for a dispatch that never comes.
+Build the entry with `WorkQueue.Create`; it is the only way to build one, because `WorkQueue`'s parameterless constructor is protected. `Create` stamps `ConfirmedAt` unless you ask it to defer. An entry with a null `ConfirmedAt` is a staged entry: the dispatcher never claims it, and once it is older than `StaleStagedEntryTimeout` the ManifestManager's sweep cancels it.
 
 An entry built this way skips everything `ITrainExecutionService.QueueAsync` does: authorization, the `OnQueue` hook and `QueueSubjectKey`. `CreateWorkQueue` has two more fields for tests that need them:
 
 | Field | Default | Effect |
 |-------|---------|--------|
-| `SubjectKey` | `null` | The [subject](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) the entry is serialized against. Entries sharing a non-null key are not dispatched concurrently |
+| `SubjectKey` | `null` | The [subject](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) the entry is serialized against. Entries sharing a non-null key are not dispatched concurrently. `Create` throws `ArgumentException` for an empty key or one longer than 512 characters |
 | `DeferPromotion` | `false` | Commits the entry unconfirmed, so the dispatcher will not claim it until [`IWorkQueuePromotion`](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) promotes it |
 
 ## Polling for State

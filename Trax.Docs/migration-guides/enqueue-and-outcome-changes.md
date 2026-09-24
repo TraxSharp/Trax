@@ -102,6 +102,19 @@ check the result instead. See
 [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens#servicetrain-token-propagation);
 `effect/0005` in Trax.Effect records the decision.
 
+## Work queue entries are built only by `WorkQueue.Create`
+
+`WorkQueue`'s parameterless constructor is now `protected`, so `new WorkQueue { ... }` no longer
+compiles. It used to compile and then fail silently: an entry built that way has a null
+`ConfirmedAt`, which makes it a staged entry the dispatcher never claims and the stale-staged
+sweep eventually cancels. Build entries with `WorkQueue.Create(new CreateWorkQueue { ... })`,
+which stamps `ConfirmedAt` unless you set `DeferPromotion`.
+
+`WorkQueue.Create` also checks `CreateWorkQueue.SubjectKey` now, the same way an enqueue through
+the mediator does. An empty key, or one longer than `WorkQueue.MaxSubjectKeyLength` (512
+characters), throws `ArgumentException`. Leave the key null when the entry should not be
+serialized.
+
 ## Records that gained parameters
 
 These positional records gained optional trailing parameters:
@@ -129,6 +142,13 @@ runs the JobDispatcher before any train uses them:
 - `QueueSubjectKey`: an older dispatcher claims without the subject check, so two entries for one
   subject can run at once. See
   [QueueSubjectKey](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing).
+
+Postgres migration 041 adds `work_queue.confirmed_at` and backfills it from `created_at` on every
+row that can still be dispatched: queued and cancelled entries, and anything created in the last
+day. Older dispatched entries are left null rather than rewritten, because `work_queue` keeps
+every dispatched entry until metadata cleanup removes it, and rewriting them all locks and
+rewrites the whole table. Nothing reads `confirmed_at` on a dispatched entry, but a report or
+query of your own that does will see null there.
 
 ## SDK Reference
 
