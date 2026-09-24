@@ -56,7 +56,7 @@ Task<QueueTrainResult> QueueAsync(
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `trainName` | `string` | Yes | N/A | Train name, matched by canonical name (`ServiceType.FullName`), then friendly name (`ServiceTypeName`). Prefer the fully-qualified interface name (e.g. `"MyApp.Trains.IProcessOrderTrain"`). |
-| `inputJson` | `string?` | Yes | N/A | JSON-serialized input matching the train's `InputType`. Null or blank is read as an empty object, `{}`. |
+| `inputJson` | `string?` | Yes | N/A | JSON-serialized input matching the train's `InputType`. Null or blank is read as an empty object, `{}`, which is refused when the input type needs values (see **Throws**). |
 | `priority` | `int` | No | `0` | Dispatch priority (0-31, higher runs first) |
 | `scheduledAt` | `DateTime?` | No | `null` | Earliest time the entry may be dispatched, stored as UTC. A `Local` value is converted; an `Unspecified` one is taken to already be UTC, which is how a timestamp without an offset arrives from JSON. Null dispatches as soon as a worker is free. |
 | `ct` | `CancellationToken` | No | `default` | Cancellation token |
@@ -72,14 +72,14 @@ Task<QueueTrainResult> QueueAsync(
 - `TrainNotFoundException` (an `InvalidOperationException`) if no train is registered with the given name. Use `ITrainDiscoveryService.DiscoverTrains()` to list available trains.
 - `AmbiguousTrainNameException` if the name matches more than one train's friendly name.
 - `TrainInputValidationException` if `inputJson` exceeds the configured size cap (`WithMaxInputJsonBytes`, 256 KiB by default).
-- `JsonException` if `inputJson` does not deserialize to the train's input type. That includes a null or blank `inputJson` for an input type that cannot be built from `{}`, such as one with a `required` member: it fails here, at enqueue, rather than at dispatch.
-- `JsonException` if `inputJson` is the JSON literal `null`, which is well-formed but is not an input.
+- `JsonException` if `inputJson` does not deserialize to the train's input type. That includes a null or blank `inputJson` for an input type that needs values: a constructor parameter with no default (a positional record such as `record RenamePlayer(string Id, string NewName)`) or a `required` member. It fails here, at enqueue, rather than queueing a run whose input is full of nulls. `Unit`, an input with only settable properties, and parameters with defaults are built from `{}` as before, and an explicit `"{}"` is read like any other input.
+- `JsonException` if `inputJson` is the JSON literal `null`, which is well-formed but is not an input, or is blank and the input type needs values, as for `QueueAsync`.
 - `TrainAuthorizationException` if the train has `[TraxAuthorize]` requirements the caller does not meet. Authorization runs before the input is read, and applies to every caller-built enqueue, including the operations surface (`queueTrain`, `requeueExecution`). The dashboard's queue dialog and re-queue button also route through this method, but inside a trusted execution scope, so per-train requirements are skipped there; the dashboard is gated by its host. `Trax.Docs/adr/0017` records why.
 - `InvalidOperationException` if the train declares `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered, unless the call runs inside a trusted execution scope. In a hosted app this rarely fires, because `AuthorizationRegistrationValidator` already refuses to start such a host; the runtime check covers hosts where hosted services do not run, such as the Lambda runner. The check fails closed; a host that serves no API submissions opts out with `AddMediator(m => m.AllowMissingAuthorizationService())`, after which the missing service is a no-op.
 - Any exception thrown by the train's `QueueSubjectKey` override. A key that cannot be computed aborts the enqueue rather than becoming null.
 - `InvalidOperationException` if `QueueSubjectKey` returns an empty string or a key longer than 512 characters. Return null for an entry that should not be serialized.
 - Any exception thrown by the train's [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) hook, if the train overrides it. A throw aborts the enqueue and leaves no entry behind: on the default path the hook runs before the entry is committed, and for a train that defers promotion the already-staged entry is removed (only if it is still staged, never once promoted or dispatched), whether or not the caller has cancelled. A failure to remove it does not replace the hook's exception; the stale staged entry sweep resolves an entry left behind.
-- `InvalidOperationException` for a train that defers promotion, when its staged entry was cancelled while the hook ran (by an operator, or by the stale staged entry sweep because the hook outlived `StaleStagedEntryTimeout`). If the sweep promoted it instead (`PromoteStaleStagedEntries()`), the entry will run and `QueueAsync` succeeds. When it throws, the work will not run, but the hook's side-effect may already have been applied, and the message says so.
+- `QueuedWorkCancelledException` (an `InvalidOperationException`, carrying `WorkQueueId` and `TrainName`) for a train that defers promotion, when its staged entry was cancelled while the hook ran (by an operator, or by the stale staged entry sweep because the hook outlived `StaleStagedEntryTimeout`). If the sweep promoted it instead (`PromoteStaleStagedEntries()`), the entry will run and `QueueAsync` succeeds. When it throws, the work will not run, but the hook's side-effect may already have been applied, and the message says so.
 
 ### What it does
 
@@ -94,7 +94,7 @@ Task<QueueTrainResult> QueueAsync(
 
 Tracking the entry before the hook runs does not insert it (`Track` is change tracking only), so the hook still runs before the row exists, as its contract states.
 
-When the train sets [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable), the shape changes to three steps instead: the entry is committed **unconfirmed** and undispatchable, the hook runs outside that transaction, and a second commit promotes it. A throwing hook removes the staged entry if it is still staged, so the observable contract is the same. Once the hook has returned the mutation counts as accepted, so the promotion runs even if the caller cancels. If the entry was cancelled while the hook ran, the promotion finds nothing to confirm and `QueueAsync` throws `InvalidOperationException` instead of reporting success; if something else already confirmed it (the sweep, with promotion opted in), it will run and `QueueAsync` succeeds. `IEnqueueContextAccessor.Current` is null inside such a hook, because the entry is already committed and there is no transaction to join. A crash between the two commits leaves the entry unconfirmed, and the scheduler's [stale staged entry sweep](/docs/scheduler/admin-trains/manifest-manager#resolvestalestagedentriesjunction) cancels it (or promotes it, if the host opted in) once it is older than `StaleStagedEntryTimeout`. The sweep runs in the ManifestManager, so it does not run while the ManifestManager is disabled (`SchedulerConfiguration.ManifestManagerEnabled = false`, also the dashboard's Server Settings switch); some host sharing the database must run it.
+When the train sets [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable), the shape changes to three steps instead: the entry is committed **unconfirmed** and undispatchable, the hook runs outside that transaction, and a second commit promotes it. A throwing hook removes the staged entry if it is still staged, so the observable contract is the same. Once the hook has returned the mutation counts as accepted, so the promotion runs even if the caller cancels. If the entry was cancelled while the hook ran, the promotion finds nothing to confirm and `QueueAsync` throws `QueuedWorkCancelledException` instead of reporting success; if something else already confirmed it (the sweep, with promotion opted in), it will run and `QueueAsync` succeeds. `IEnqueueContextAccessor.Current` is null inside such a hook, because the entry is already committed and there is no transaction to join. A crash between the two commits leaves the entry unconfirmed, and the scheduler's [stale staged entry sweep](/docs/scheduler/admin-trains/manifest-manager#resolvestalestagedentriesjunction) cancels it (or promotes it, if the host opted in) once it is older than `StaleStagedEntryTimeout`. The sweep runs in the ManifestManager, so it does not run while the ManifestManager is disabled (`SchedulerConfiguration.ManifestManagerEnabled = false`, also the dashboard's Server Settings switch); some host sharing the database must run it.
 
 Providers without transaction support (the in-memory provider) degrade to a single `SaveChanges` with no explicit transaction.
 
@@ -113,7 +113,7 @@ Task<RunTrainResult> RunAsync(
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `trainName` | `string` | Yes | N/A | Train name (matched by canonical name, then friendly name) |
-| `inputJson` | `string` | Yes | N/A | JSON-serialized input matching the train's `InputType` |
+| `inputJson` | `string` | Yes | N/A | JSON-serialized input matching the train's `InputType`. Blank is read the way `QueueAsync` reads a missing input |
 | `ct` | `CancellationToken` | No | `default` | Cancellation token forwarded to `ITrainBus.RunAsync` |
 
 **Returns**: `RunTrainResult`
@@ -135,7 +135,7 @@ Task<RunTrainResult> RunAsync(
 
 1. Looks up the train by `trainName` via `ITrainDiscoveryService`.
 2. Authorizes the caller against the train's requirements, failing closed as described under **Throws**.
-3. Deserializes `inputJson` to the train's `InputType`.
+3. Deserializes `inputJson` to the train's `InputType`, reading blank as `QueueAsync` does.
 4. Creates a `Metadata` record with a generated external ID.
 5. Persists the metadata via the data context.
 6. Calls the typed `ITrainBus.RunAsync<TOut>(input, ct, metadata)` via reflection, using the train's `OutputType` from its registration.

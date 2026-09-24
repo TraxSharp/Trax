@@ -594,7 +594,7 @@ mutation {
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `trainName` | `String!` | Yes | N/A | Train interface FullName (matches the `serviceTypeName` returned by `operations.trains`) |
-| `inputJson` | `String` | No | `null` | JSON payload that deserializes to the train's input type. `null` or blank is read as `{}`, so a train whose input needs no values can be queued without one; an input type that cannot be built from `{}` (one with a `required` member, say) is refused. The JSON literal `null` is refused |
+| `inputJson` | `String` | No | `null` | JSON payload that deserializes to the train's input type. `null` or blank is read as `{}`, so a train whose input needs no values can be queued without one; an input type that needs values (a positional record whose parameters have no defaults, or a `required` member) is refused. The JSON literal `null` is refused |
 | `priority` | `Int` | No | `0` | Dispatch priority 0-31. Values outside that range are clamped |
 | `scheduledAt` | `DateTime` | No | `null` | Earliest UTC time the entry should be picked up. Null means dispatch immediately |
 

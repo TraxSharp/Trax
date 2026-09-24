@@ -55,8 +55,14 @@ should catch `JsonException`, which a malformed input already threw.
 
 **A null or blank input is read as `{}`.** The parameter is now `string?`. Through the GraphQL
 `queueTrain` mutation, a null input used to be stored as null and failed at dispatch; it is now
-read as `{}`, and an input type that cannot be built from `{}` is refused at enqueue with
-`JsonException`.
+read as `{}`, and an input type that needs values is refused at enqueue with `JsonException`:
+a constructor parameter with no default, as in a positional record, or a `required` member.
+`RunAsync` reads a blank input the same way.
+
+**A deferred entry cancelled under its hook throws `QueuedWorkCancelledException`.** It used to
+throw a plain `InvalidOperationException`, the same type as an empty subject key. The new type
+derives from `InvalidOperationException`, so existing catches still work, and carries
+`WorkQueueId` and `TrainName` for a caller that has to compensate for the hook's side-effect.
 
 See [TrainExecution](/docs/sdk-reference/mediator-api/train-execution#queueasync).
 

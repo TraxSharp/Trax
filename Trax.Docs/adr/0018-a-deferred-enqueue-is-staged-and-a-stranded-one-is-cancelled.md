@@ -60,8 +60,9 @@ A deferring train's hook has no enqueue
 context to join, because its entry is already committed.
 
 If the entry is cancelled while its hook runs, by an operator or by the sweep after the hook
-outlived `StaleStagedEntryTimeout`, the enqueue throws `InvalidOperationException` rather than
-reporting success: the work will not run, and the hook's side-effect may already have landed. If
+outlived `StaleStagedEntryTimeout`, the enqueue throws `QueuedWorkCancelledException` (an
+`InvalidOperationException`) rather than reporting success: the work will not run, and the hook's
+side-effect may already have landed. If
 the sweep promoted it instead (a host that opted in), the entry will run and the enqueue
 succeeds. Removing the entry after a hook throws deletes it only while
 it is still staged, never once promoted or dispatched, and a failure to remove it does not
@@ -97,6 +98,8 @@ this decision.
 
 ## Changelog
 
+- **2026-09-24**: The enqueue of an entry cancelled under its hook throws
+  `QueuedWorkCancelledException`, so a caller can tell it from the other refusals.
 - **2026-09-24**: Recorded that migration 041 backfills only rows that can still be dispatched,
   that `ix_work_queue_unconfirmed` covers queued rows only, and that `WorkQueue.Create` is the only
   way to build an entry.
