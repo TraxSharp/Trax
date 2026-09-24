@@ -181,6 +181,58 @@ public class ChainVerificationTests : TestSetup
                     + "each element being present is what satisfies it"
             );
 
+    /// <summary>
+    /// A tuple nested inside a tuple goes into Memory as one value, so its elements are not
+    /// separately findable, and the check has to agree.
+    /// </summary>
+    /// <remarks>
+    /// The replay used to recurse into a nested tuple and claim its inner elements were available.
+    /// <c>AddTupleToMemory</c> does not: it stores each element under its own type and stops, and
+    /// <c>ExtractTypeTuples</c> never takes the inner one apart again. So this shape verified
+    /// cleanly and then failed at runtime with exactly the "could not find type" the check exists
+    /// to predict, which is the check's purpose inverted.
+    /// </remarks>
+    [Test]
+    public async Task Verify_AJunctionNeedingAnElementOfANestedTuple_IsReportedAndAlsoFailsAtRuntime()
+    {
+        var faults = Verify<NestedTupleTrain, string, bool>();
+
+        faults
+            .Should()
+            .ContainSingle(
+                "the inner tuple is one value in Memory, so nothing puts a Guid there. The needed "
+                    + "type is deliberately not the train's input, which would satisfy it on its own"
+            );
+        faults[0].Reason.Should().Contain("Guid");
+
+        // The other half of the claim: the check is refusing something that really does fail.
+        var running = async () => await new NestedTupleTrain().Run("abc");
+
+        await running
+            .Should()
+            .ThrowAsync<Exception>(
+                "a check that refused a chain which actually runs would be worse than no check"
+            );
+    }
+
+    /// <summary>
+    /// A tuple longer than seven cannot enter Memory at all, so the chain is refused rather than
+    /// verified and then thrown at.
+    /// </summary>
+    [Test]
+    public void Verify_AJunctionProducingMoreThanSevenElements_IsReported()
+    {
+        var faults = Verify<WideTupleTrain, string, bool>();
+
+        faults
+            .Should()
+            .Contain(
+                f => f.Reason.Contains("more than seven elements"),
+                "AddTupleToMemory refuses it, so the value never reaches Memory and the chain "
+                    + "cannot run"
+            );
+    }
+
     [Test]
     public void Verify_AJunctionTakingAnInjectedService_IsSatisfiedByTheContainer()
     {
@@ -303,6 +355,36 @@ public class ChainVerificationTests : TestSetup
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringToPair>().Chain<PairToFlag>().Resolve();
+    }
+
+    private class StringToNestedPair : Junction<string, (int, (Guid, bool))>
+    {
+        public override Task<(int, (Guid, bool))> Run(string input) =>
+            Task.FromResult((input.Length, (Guid.NewGuid(), true)));
+    }
+
+    private class GuidToFlag : Junction<Guid, bool>
+    {
+        public override Task<bool> Run(Guid input) => Task.FromResult(input != Guid.Empty);
+    }
+
+    private class StringToWideTuple : Junction<string, (int, int, int, int, int, int, int, int)>
+    {
+        public override Task<(int, int, int, int, int, int, int, int)> Run(string input) =>
+            Task.FromResult((1, 2, 3, 4, 5, 6, 7, 8));
+    }
+
+    /// <summary>Needs a String, which only the inner tuple holds.</summary>
+    private class NestedTupleTrain : Train<string, bool>
+    {
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<StringToNestedPair>().Chain<GuidToFlag>().Resolve();
+    }
+
+    private class WideTupleTrain : Train<string, bool>
+    {
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<StringToWideTuple>().Chain<IntToBool>().Resolve();
     }
 
     private class ServiceConsumingTrain : Train<string, bool>

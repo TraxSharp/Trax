@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using LanguageExt;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
@@ -74,8 +75,24 @@ public static class MonadExtensions
         if (monad.Exception is not null)
             return null;
 
-        // Create an instance of the junction
-        var initializedJunction = (TJunction?)constructor.Invoke(constructorParameters);
+        // Create an instance of the junction. Invoke wraps whatever the constructor threw in a
+        // TargetInvocationException, whose message says only that an invocation target threw.
+        // Unwrapped here so the train records the junction's own reason and the failure classifier
+        // is handed the type it actually threw: left wrapped, a constructor that cancels is never
+        // an OperationCanceledException, so the run was recorded Failed rather than Cancelled and a
+        // manifest counted it toward retries. TrainExecutionService unwraps its own reflection call
+        // sites the same way.
+        TJunction? initializedJunction;
+
+        try
+        {
+            initializedJunction = (TJunction?)constructor.Invoke(constructorParameters);
+        }
+        catch (TargetInvocationException ex)
+        {
+            ExceptionDispatchInfo.Throw(ex.InnerException ?? ex);
+            throw;
+        }
 
         if (initializedJunction is null)
         {

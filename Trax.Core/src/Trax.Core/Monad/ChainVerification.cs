@@ -62,10 +62,15 @@ public static class ChainVerification
     )
     {
         var memory = new System.Collections.Generic.HashSet<Type> { typeof(Unit) };
-        Remember(memory, input, withInterfaces: true);
-
         var faults = new List<ChainFault>();
         var steps = chain.Steps;
+
+        Remember(memory, input, withInterfaces: true);
+
+        if (TooManyTupleElements(input) is { } inputShape)
+            faults.Add(
+                new ChainFault(0, ChainStepKind.Seed, null, $"the train's input {inputShape}")
+            );
 
         for (var i = 0; i < steps.Count; i++)
         {
@@ -169,7 +174,19 @@ public static class ChainVerification
             // path the chain's result is already decided. The path that continues past it is
             // the one where it returned Left and stored nothing.
             if (step.Kind != ChainStepKind.ShortCircuit && step.Out is { } produced)
+            {
                 Remember(memory, produced, withInterfaces: false);
+
+                if (TooManyTupleElements(produced) is { } producedShape)
+                    faults.Add(
+                        new ChainFault(
+                            i,
+                            step.Kind,
+                            step.Junction,
+                            $"produces a value that {producedShape}"
+                        )
+                    );
+            }
         }
 
         foreach (var refusal in chain.Refusals)
@@ -213,12 +230,30 @@ public static class ChainVerification
     {
         if (type.IsTuple())
         {
+            // Deliberately not recursive. AddTupleToMemory stores each element under its own type
+            // and stops: an element that is itself a tuple goes in as one value, and
+            // ExtractTypeTuples does not take it apart again. Recursing here claimed the inner
+            // elements were available, so a chain needing one passed the check and then failed at
+            // runtime with the very "could not find type" this check exists to predict.
             foreach (var element in type.GetGenericArguments())
-                Remember(memory, element, withInterfaces: true);
+                Contribute(memory, element, withInterfaces: true);
 
             return;
         }
 
+        Contribute(memory, type, withInterfaces);
+    }
+
+    /// <summary>
+    /// Adds one value's own type, and its interfaces when they are findable, without looking
+    /// inside it.
+    /// </summary>
+    private static void Contribute(
+        System.Collections.Generic.HashSet<Type> memory,
+        Type type,
+        bool withInterfaces
+    )
+    {
         memory.Add(type);
 
         if (!withInterfaces)
@@ -227,6 +262,21 @@ public static class ChainVerification
         foreach (var contract in type.GetInterfaces())
             memory.Add(contract);
     }
+
+    /// <summary>
+    /// Why a tuple entering Memory cannot be stored, or null when it can.
+    /// </summary>
+    /// <remarks>
+    /// <c>AddTupleToMemory</c> refuses a tuple longer than seven, and C# represents a longer one by
+    /// nesting the remainder in an eighth generic argument, so that is what this looks for. Without
+    /// the check the chain verified cleanly and threw the moment the value reached Memory, which
+    /// inverts the whole point of verifying.
+    /// </remarks>
+    private static string? TooManyTupleElements(Type type) =>
+        type.IsTuple() && type.GetGenericArguments().Length > 7
+            ? $"'{Name(type)}' holds more than seven elements, which Memory cannot store. "
+                + "Group the extra values into a type of their own."
+            : null;
 
     private static string Name(Type type) => type.FullName ?? type.Name;
 }
