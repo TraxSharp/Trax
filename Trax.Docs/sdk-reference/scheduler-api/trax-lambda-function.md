@@ -24,6 +24,7 @@ public abstract class TraxLambdaFunction
     protected abstract void ConfigureServices(IServiceCollection services, IConfiguration configuration);
     protected virtual void ConfigureLogging(ILoggingBuilder logging);
     protected virtual IServiceProvider BuildServiceProvider();
+    protected virtual TimeSpan TerminalWriteMargin { get; }
 
     public Task<object?> FunctionHandler(
         LambdaEnvelope envelope,
@@ -41,6 +42,7 @@ public abstract class TraxLambdaFunction
 |--------|----------|-------------|
 | `ConfigureServices(IServiceCollection, IConfiguration)` | Yes | Register your Trax effects, mediator, data contexts, and application services. `IConfiguration` is loaded from `appsettings.json` (if present) and environment variables. Do **not** call `AddTraxJobRunner()` because the base class does this automatically. |
 | `ConfigureLogging(ILoggingBuilder)` | No | Customize logging. Default: console logging at `Information` level. |
+| `TerminalWriteMargin` | No | How much of `ILambdaContext.RemainingTime` is held back so a run cancelled by the function timing out can still record its outcome. Default 5 seconds. Cancellation is derived from `RemainingTime` less this margin: cancelling at `RemainingTime` itself fires at the instant Lambda freezes or kills the environment, leaving the uncancellable terminal write nowhere to happen, so the row stayed `InProgress` holding its subject until `StaleInProgressTimeout` and the reaper then recorded `Failed` rather than `Cancelled`. Widen it for a data provider with a slower write path. With less time left than the margin, the handler receives an already-cancelled token, because starting work that cannot be recorded is worse than reporting it cancelled. |
 | `BuildServiceProvider()` | No | Replace the entire DI graph. The default builds `IConfiguration`, registers logging, calls `ConfigureServices`, and finishes with `AddTraxJobRunner()`. Override only when you need full control (test harnesses are the typical case). Production code should override `ConfigureServices`, not this. |
 
 ## Envelope Dispatching
