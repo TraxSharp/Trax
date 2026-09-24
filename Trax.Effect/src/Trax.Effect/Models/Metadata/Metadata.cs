@@ -135,6 +135,13 @@ public class Metadata : IModel, IDisposable
     public string? FailureReason { get; private set; }
 
     /// <summary>
+    /// What kind of failure this was, as classified where it happened.
+    /// <see cref="FailureClass.Unclassified"/> when nothing classified it.
+    /// </summary>
+    [Column("failure_class")]
+    public FailureClass FailureClass { get; internal set; } = FailureClass.Unclassified;
+
+    /// <summary>
     /// Gets or sets the stack trace associated with the train failure, if applicable.
     /// </summary>
     /// <remarks>
@@ -406,6 +413,8 @@ public class Metadata : IModel, IDisposable
             FailureReason = data.Message;
             FailureJunction = data.Junction;
             StackTrace = data.StackTrace ?? trainException.StackTrace;
+            if (data.FailureClass is { } local)
+                FailureClass = local;
             return Unit.Default;
         }
 
@@ -419,6 +428,8 @@ public class Metadata : IModel, IDisposable
             {
                 FailureException = deserialized.Type;
                 FailureReason = deserialized.Message;
+                if (deserialized.FailureClass is { } remote)
+                    FailureClass = remote;
                 FailureJunction = deserialized.Junction;
                 StackTrace = deserialized.StackTrace ?? trainException.StackTrace;
                 return Unit.Default;

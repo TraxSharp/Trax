@@ -189,7 +189,7 @@ public class DataContextChangeTrackingTests
         // 1. InitializeServiceTrain → Track(metadata)
         // 2. StartServiceTrain → Update(metadata) [state = InProgress]
         // 3. ServiceTrain.Run → SaveChanges() [first persist]
-        // 4. RunInternal completes
+        // 4. The chain completes
         // 5. FinishServiceTrain → Update(metadata) [state = Completed]
         // 6. ServiceTrain.Run → SaveChanges() [second persist]
         var context = CreateContext(nameof(FullFlow_Track_Update_Save_Mutate_Update_Save));

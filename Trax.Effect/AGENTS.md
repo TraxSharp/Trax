@@ -18,16 +18,26 @@ if your work contradicts one, say so rather than silently overriding it.
 | Working on | Read first |
 | --- | --- |
 | a schema change | [0001](./docs/adr/0001-schema-changes-are-hand-written-sql.md), hand-written SQL journaled by DbUp, no EF migrations |
+| an enum stored in a column, or a new value for one | [0006](./docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md), a Postgres enum mapped in three places, and a new value ships before its writer |
 | anything that creates a table | [0002](./docs/adr/0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md), which half of the split you are in |
 | a new data model | [0003](./docs/adr/0003-a-model-and-its-persistent-mapping-are-a-pair.md), and [0001](./docs/adr/0001-schema-changes-are-hand-written-sql.md) for the migration it needs |
 | a table for a feature package | `Trax.Docs/adr/0009`, the DDL ships in the core provider set or it never runs |
+| authorization types a consumer writes | [0004](./docs/adr/0004-trax-owns-the-authorization-vocabulary.md), Trax owns the authorization vocabulary: `[TraxAuthorize]` and `[TraxAllowAnonymous]` declare it on every surface, and the server's own attribute is refused at startup |
+| `work_queue.confirmed_at`, `subject_key`, or `IWorkQueuePromotion` | central `docs/0018` (a deferred enqueue is staged, and a stranded one is cancelled) and `docs/0019` (one subject's queued work runs one at a time) |
+| `IEnqueueContextAccessor` | central `docs/0018`, the context flows with the async call and is null for a deferring train |
+| `Metadata.FailureClass`, the `failure_class` column, or `IFailureClassifier` | central `docs/0020`, and [0006](./docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md) for how the enum is stored |
+| `ServiceTrain.Run`, `SaveOutcome`, or anything on a train's terminal write | [0005](./docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), the outcome is written on a token the caller cannot cancel |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Ten name `effect`: executable guards, exact version pinning, the
+index lists them by repo. Nineteen name `effect`: executable guards, exact version pinning, the
 dependency direction, the three test conventions (FluentAssertions, no `[Ignore]`, no fixed
 delays), the canonical train name being the interface FullName, the documentation lints,
-feature-package tables shipping in the core provider migration set, and the public API
-baseline. In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path
+feature-package tables shipping in the core provider migration set, the public API baseline,
+test frameworks staying out of shipped libraries, exemplars declared by attribute, Trax owning
+its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced package,
+a chain being a declaration (`0016`), a deferred enqueue being staged (`0018`), one subject's
+queued work running one at a time (`0019`), and failures being classified where they happen
+(`0020`). In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path
 does not resolve on GitHub, because it crosses a repository boundary.
 
 ## When your change makes a decision
@@ -50,11 +60,13 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Effect.Tests.Meta/` holds the convention guards. Eleven of the thirteen are
-shared with other repos and enforce workspace-wide rules: eight appear in all eight code
+`tests/Trax.Effect.Tests.Meta/` holds the convention guards. Thirteen of the sixteen are
+shared with other repos and enforce workspace-wide rules: ten appear in all eight code
 repos, `PublicApiSurfaceTests` in the seven that publish an API surface,
-`TraxPinLockstepTests` in five and `BuilderPartialSplitTests` in three. Only
-`MigrationsIntegrityTests` and `ModelPersistentPairingTests` are unique to this repo.
+`TraxPinLockstepTests` in five and `BuilderPartialSplitTests` in three. Three are unique to
+this repo: `MigrationsIntegrityTests`, `ModelPersistentPairingTests`, and
+`PostgresEnumVocabularyTests`, which checks that the three Postgres enum mappings name the same
+enums and that each enum's members match its migrations (`0006`).
 
 The census is on: every guard class under that folder is either credited to an ADR or
 carries `Not ADR-enforcing:` with a reason, and the `adr-guard` job checks it. A new guard is

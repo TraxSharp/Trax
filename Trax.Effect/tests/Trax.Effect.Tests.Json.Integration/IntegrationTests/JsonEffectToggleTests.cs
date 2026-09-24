@@ -131,8 +131,7 @@ public class JsonEffectToggleTests
 
     private class ToggleTestTrain : ServiceTrain<Unit, Unit>, IToggleTestTrain
     {
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
-            Activate(input).Resolve();
+        protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
     }
 
     private interface IToggleTestTrain : IServiceTrain<Unit, Unit> { }

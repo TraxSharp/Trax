@@ -3,6 +3,7 @@ using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Junction;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -779,18 +780,15 @@ public class InMemoryProviderTests : TestSetup
 
     private class TestTrain : ServiceTrain<Unit, Unit>, ITestTrain
     {
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input)
-        {
-            CancellationToken.ThrowIfCancellationRequested();
-            return Activate(input).Resolve();
-        }
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Chain<ObserveCancellation>().Resolve();
     }
 
     private interface ITestTrain : IServiceTrain<Unit, Unit> { }
 
     private class FailingTrain : ServiceTrain<Unit, Unit>, IFailingTrain
     {
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
+        protected override async Task<Either<Exception, Unit>> Junctions() =>
             new TrainException("Intentional failure for testing");
     }
 
@@ -798,11 +796,22 @@ public class InMemoryProviderTests : TestSetup
 
     private class TypedTrain : ServiceTrain<string, int>, ITypedTrain
     {
-        protected override async Task<Either<Exception, int>> RunInternal(string input) =>
-            input.Length;
+        protected override Task<Either<Exception, int>> Junctions() =>
+            Task.FromResult(Extract<string, int>().Resolve());
     }
 
     private interface ITypedTrain : IServiceTrain<string, int> { }
 
     #endregion
+}
+
+/// <summary>Observes the train's token before any work, so a pre-cancelled run stops here.</summary>
+internal sealed class ObserveCancellation : Junction<Unit, Unit>
+{
+    public override Task<Unit> Run(Unit input)
+    {
+        CancellationToken.ThrowIfCancellationRequested();
+
+        return Task.FromResult(Unit.Default);
+    }
 }

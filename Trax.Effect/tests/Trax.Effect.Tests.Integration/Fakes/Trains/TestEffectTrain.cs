@@ -5,9 +5,8 @@ namespace Trax.Effect.Tests.Integration.Fakes.Trains;
 
 public class TestEffectTrain : ServiceTrain<TestEffectTrainInput, TestEffectTrain>, ITestEffectTrain
 {
-    protected override async Task<Either<Exception, TestEffectTrain>> RunInternal(
-        TestEffectTrainInput input
-    ) => Activate(input, this).Resolve();
+    protected override Task<Either<Exception, TestEffectTrain>> Junctions() =>
+        Task.FromResult(AddServices(this).Resolve());
 }
 
 public record TestEffectTrainInput();

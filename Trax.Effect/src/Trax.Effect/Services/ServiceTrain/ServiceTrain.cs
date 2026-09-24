@@ -76,13 +76,21 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     public string? CanonicalName { get; set; }
 
     /// <summary>
-    /// Gets the typed input that was passed to this train. Set before <see cref="RunInternal"/>
-    /// executes, so it is available in all lifecycle hooks: <see cref="OnStarted"/>,
+    /// Gets the typed input that was passed to this train. Set before the chain
+    /// runs, so it is available in all lifecycle hooks: <see cref="OnStarted"/>,
     /// <see cref="OnCompleted"/>, <see cref="OnFailed"/>, and <see cref="OnCancelled"/>.
-    /// Returns <c>default</c> before the train has been run.
     /// </summary>
+    /// <remarks>
+    /// Throws <see cref="ChainDeclarationException"/> while the chain is being read, because
+    /// <c>Junctions()</c> is then run to record its declaration and no input exists. Returns
+    /// <c>default</c> whenever the train has no metadata carrying an input, which includes
+    /// <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>: they are called on an instance
+    /// that has not run, so read the input from their <c>metadata</c> argument instead.
+    /// </remarks>
     protected TIn TrainInput =>
-        Metadata is not null && Metadata.GetInputObject() is TIn typed ? typed : default!;
+        IsDeclaringChain ? throw new ChainDeclarationException(TrainName, nameof(TrainInput))
+        : Metadata is not null && Metadata.GetInputObject() is TIn typed ? typed
+        : default!;
 
     /// <summary>
     /// Gets the typed output produced by this train. Set after a successful run, so it is
@@ -90,8 +98,16 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// <see cref="OnStarted"/>, <see cref="OnFailed"/>, and <see cref="OnCancelled"/>
     /// because the train either hasn't run yet, failed before producing output, or was cancelled.
     /// </summary>
+    /// <remarks>
+    /// Throws <see cref="ChainDeclarationException"/> while the chain is being read, because
+    /// <c>Junctions()</c> is then run to record its declaration and no output exists. Returns
+    /// <c>default</c> in <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>, which are
+    /// called on an instance that has not run and has no metadata.
+    /// </remarks>
     protected TOut TrainOutput =>
-        Metadata is not null && Metadata.GetOutputObject() is TOut typed ? typed : default!;
+        IsDeclaringChain ? throw new ChainDeclarationException(TrainName, nameof(TrainOutput))
+        : Metadata is not null && Metadata.GetOutputObject() is TOut typed ? typed
+        : default!;
 
     /// <summary>
     /// Gets the canonical train name. Prefers the interface name set at registration time
@@ -104,7 +120,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         ?? throw new TrainException($"Could not find FullName for ({GetType().Name})");
 
     /// <summary>
-    /// Called after the train's metadata is initialized and persisted, before RunInternal executes.
+    /// Called after the train's metadata is initialized and persisted, before the chain runs.
     /// Override to add per-train startup logic. Exceptions are caught and logged — they will not
     /// prevent the train from running.
     /// </summary>
@@ -135,14 +151,56 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         Task.CompletedTask;
 
     /// <summary>
-    /// Called synchronously at ENQUEUE time (inside the mediator's queue path), BEFORE the
-    /// work queue row is inserted. Does NOT fire on the synchronous run path, and does NOT
-    /// fire again when the background dispatcher later runs the train.
+    /// Identifies the thing this mutation touches, so two entries naming the same subject are not
+    /// dispatched at the same time. Returns null by default, which means no serialization.
     /// </summary>
     /// <remarks>
+    /// Called at enqueue time with a metadata carrying the input, so the key can vary per mutation
+    /// rather than being fixed per train. Read it with <c>metadata.GetInput&lt;T&gt;()</c>.
+    ///
+    /// Throwing aborts the enqueue. That is deliberate: a key that cannot be computed must not
+    /// silently become null, because that would drop the serialization guarantee at exactly the
+    /// moment the caller was relying on it.
+    ///
+    /// The key is compared as an exact, case-sensitive string across every train, so two trains
+    /// returning the same key serialize against each other. Prefix it with something the train
+    /// owns when that is not what you want. Only entries created through the mediator's queue
+    /// path carry a key; work queued from a manifest is not about a record and has no subject.
+    /// </remarks>
+    protected virtual string? QueueSubjectKey(Metadata metadata) => null;
+
+    /// <summary>
+    /// Whether this train's queue entry should be held unconfirmed until its <see cref="OnQueue"/>
+    /// hook has returned. Defaults to false: the entry is dispatchable the moment it is written.
+    /// </summary>
+    /// <remarks>
+    /// Override to true when the hook's side-effect lives outside Trax's own data context. A
+    /// separate <c>DbContext</c> has its own connection and therefore its own transaction, so it
+    /// cannot be rolled back with the entry. Deferring promotion does not make the two atomic, but
+    /// it makes a failure between them findable: the entry is left unconfirmed instead of the
+    /// side-effect being left with no entry, and the scheduler's stale-entry sweep resolves it.
+    ///
+    /// A deferring train's hook runs after its entry is committed, so there is no enqueue
+    /// transaction to join and <c>IEnqueueContextAccessor.Current</c> is null inside it.
+    ///
+    /// Has no effect unless <see cref="OnQueue"/> is also overridden.
+    /// </remarks>
+    protected virtual bool DeferQueuePromotion => false;
+
+    /// <summary>
+    /// Called synchronously at ENQUEUE time, inside the mediator's queue path. Does NOT fire on
+    /// the synchronous run path, and does NOT fire again when the background dispatcher later runs
+    /// the train.
+    /// </summary>
+    /// <remarks>
+    /// For most trains the hook runs before the work queue row is committed, and writes it tracks
+    /// on <c>IEnqueueContextAccessor.Current</c> commit in the same transaction as the row. For a
+    /// train with <see cref="DeferQueuePromotion"/> set, the row is committed first, unconfirmed,
+    /// and confirmed once the hook returns.
+    ///
     /// Unlike <see cref="OnStarted"/>/<see cref="OnCompleted"/>/<see cref="OnFailed"/>, an
-    /// exception thrown here is NOT swallowed: it propagates out of the enqueue call and
-    /// aborts the enqueue (no work queue row is written). Use this only for work that must
+    /// exception thrown here is NOT swallowed: it propagates out of the enqueue call and aborts
+    /// the enqueue, leaving no dispatchable work queue row. Use this only for work that must
     /// succeed for the mutation to be accepted.
     ///
     /// Idempotency: the deferred background run re-executes the full <c>Junctions()</c> chain,
@@ -184,6 +242,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // is unchanged.
         Metadata.SetInputObject(input);
 
+        // Everything up to the result is captured rather than allowed to propagate, so a failure
+        // takes exactly one path: the terminal write and the failure hooks run once. Rethrowing
+        // from inside a try whose catch also finishes the train ran both of them twice.
+        Either<Exception, TOut> result;
+
         try
         {
             await LifecycleHookRunner.OnStarted(Metadata, CancellationToken);
@@ -202,123 +265,40 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             }
 
             Logger?.LogTrace("Running Train: ({TrainName})", TrainName);
-            var result = await RunInternal(input);
+            result = await RunEither(input);
+        }
+        catch (Exception e)
+        {
+            result = e;
+        }
 
-            if (result.IsLeft)
-            {
-                var exception = result.Swap().ValueUnsafe();
-                Logger?.LogError(
-                    "Caught Exception ({Type}) with Message ({Message}).",
-                    exception.GetType(),
-                    exception.Message
-                );
-                await this.FinishServiceTrain(result);
-                await EffectRunner.SaveChanges(CancellationToken);
+        if (result.IsLeft)
+        {
+            var exception = result.Swap().ValueUnsafe();
+            Logger?.LogError(
+                "Caught Exception ({Type}) with Message ({Message}).",
+                exception.GetType(),
+                exception.Message
+            );
 
-                if (exception is OperationCanceledException)
-                {
-                    await LifecycleHookRunner.OnCancelled(Metadata, CancellationToken);
-
-                    try
-                    {
-                        await OnCancelled(Metadata, CancellationToken);
-                    }
-                    catch (Exception hookEx)
-                    {
-                        Logger?.LogError(
-                            hookEx,
-                            "Train-level OnCancelled hook threw for train ({TrainName}).",
-                            TrainName
-                        );
-                    }
-                }
-                else
-                {
-                    await LifecycleHookRunner.OnFailed(Metadata, exception, CancellationToken);
-
-                    try
-                    {
-                        await OnFailed(Metadata, exception, CancellationToken);
-                    }
-                    catch (Exception hookEx)
-                    {
-                        Logger?.LogError(
-                            hookEx,
-                            "Train-level OnFailed hook threw for train ({TrainName}).",
-                            TrainName
-                        );
-                    }
-                }
-
-                exception.Rethrow();
-            }
-
-            var output = result.Unwrap();
-            Logger?.LogTrace("({TrainName}) completed successfully.", TrainName);
-            Metadata.SetOutputObject(output);
-
-            await EffectRunner.Update(Metadata);
-            await this.FinishServiceTrain(result);
-            await EffectRunner.SaveChanges(CancellationToken);
-
-            // Ensure output is available as serialized JSON for lifecycle hooks,
-            // even when SaveTrainParameters() is not configured. Runs AFTER
-            // SaveChanges() so it is NOT persisted to the database.
-            if (Metadata.Output is null)
-            {
-                var outputObject = Metadata.GetOutputObject();
-                if (outputObject is not null)
-                {
-                    try
-                    {
-                        Metadata.Output = System.Text.Json.JsonSerializer.Serialize(
-                            (object)outputObject,
-                            Configuration
-                                .TraxEffectConfiguration
-                                .TraxEffectConfiguration
-                                .StaticSystemJsonSerializerOptions
-                        );
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger?.LogDebug(
-                            ex,
-                            "Failed to serialize output for lifecycle hooks in train ({TrainName}).",
-                            TrainName
-                        );
-                    }
-                }
-            }
-
-            await LifecycleHookRunner.OnCompleted(Metadata, CancellationToken);
-
+            // The train's own failure is what the caller needs. If recording it fails too, that
+            // is logged and the failure still propagates, with its hooks; the stale-run reaper
+            // fails a row left in progress.
             try
             {
-                await OnCompleted(Metadata, CancellationToken);
+                await this.FinishServiceTrain(result);
+                await SaveOutcome();
             }
-            catch (Exception hookEx)
+            catch (Exception recordEx)
             {
                 Logger?.LogError(
-                    hookEx,
-                    "Train-level OnCompleted hook threw for train ({TrainName}).",
+                    recordEx,
+                    "Could not record the failure of train ({TrainName}); the original failure still propagates.",
                     TrainName
                 );
             }
 
-            return output;
-        }
-        catch (Exception e)
-        {
-            Logger?.LogError(
-                "Caught Exception ({Type}) with Message ({Message}).",
-                e.GetType(),
-                e.Message
-            );
-
-            await this.FinishServiceTrain(e);
-            await EffectRunner.SaveChanges(CancellationToken);
-
-            if (e is OperationCanceledException)
+            if (exception is OperationCanceledException)
             {
                 await LifecycleHookRunner.OnCancelled(Metadata, CancellationToken);
 
@@ -337,11 +317,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             }
             else
             {
-                await LifecycleHookRunner.OnFailed(Metadata, e, CancellationToken);
+                await LifecycleHookRunner.OnFailed(Metadata, exception, CancellationToken);
 
                 try
                 {
-                    await OnFailed(Metadata, e, CancellationToken);
+                    await OnFailed(Metadata, exception, CancellationToken);
                 }
                 catch (Exception hookEx)
                 {
@@ -353,8 +333,82 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                 }
             }
 
-            throw;
+            exception.Rethrow();
         }
+
+        var output = result.Unwrap();
+        Logger?.LogTrace("({TrainName}) completed successfully.", TrainName);
+        Metadata.SetOutputObject(output);
+
+        // A failure to record a completed run propagates as it is. It is not turned into a
+        // Failed outcome: the work happened, and recording that it failed would be false.
+        await EffectRunner.Update(Metadata);
+        await this.FinishServiceTrain(result);
+        await SaveOutcome();
+
+        // Ensure output is available as serialized JSON for lifecycle hooks,
+        // even when SaveTrainParameters() is not configured. Runs AFTER
+        // SaveChanges() so it is NOT persisted to the database.
+        if (Metadata.Output is null)
+        {
+            var outputObject = Metadata.GetOutputObject();
+            if (outputObject is not null)
+            {
+                try
+                {
+                    Metadata.Output = System.Text.Json.JsonSerializer.Serialize(
+                        (object)outputObject,
+                        Configuration
+                            .TraxEffectConfiguration
+                            .TraxEffectConfiguration
+                            .StaticSystemJsonSerializerOptions
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Logger?.LogDebug(
+                        ex,
+                        "Failed to serialize output for lifecycle hooks in train ({TrainName}).",
+                        TrainName
+                    );
+                }
+            }
+        }
+
+        await LifecycleHookRunner.OnCompleted(Metadata, CancellationToken);
+
+        try
+        {
+            await OnCompleted(Metadata, CancellationToken);
+        }
+        catch (Exception hookEx)
+        {
+            Logger?.LogError(
+                hookEx,
+                "Train-level OnCompleted hook threw for train ({TrainName}).",
+                TrainName
+            );
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Persists the train's terminal state.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not given the caller's token. That token is cancelled in exactly the case
+    /// this write exists to record, so handing it over would abandon the row at
+    /// <c>InProgress</c> with no <c>EndTime</c> — an execution that finished but cannot say how,
+    /// and one a scheduler's stale-in-progress reaper later rewrites to <c>Failed</c> whatever
+    /// actually happened. The outcome is the audit record of the work, not part of the work the
+    /// caller is entitled to cancel.
+    /// </remarks>
+    private Task SaveOutcome()
+    {
+        EffectRunner.AssertLoaded();
+
+        return EffectRunner.SaveChanges(CancellationToken.None);
     }
 
     public virtual async Task<TOut> Run(TIn input, Metadata metadata)
@@ -378,39 +432,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     }
 
     /// <summary>
-    /// The core implementation method that executes the train's logic.
-    /// Override this for full control over the railway pipeline (advanced).
-    /// If not overridden, the default implementation calls Junctions().
+    /// Supplies the container alongside the train, so junctions named by the chain resolve
+    /// through dependency injection rather than needing a parameterless constructor.
     /// </summary>
-    protected override async Task<Either<Exception, TOut>> RunInternal(TIn input)
-    {
-        TrainMonad = new Monad<TIn, TOut>(this, ServiceProvider!, CancellationToken).Activate(
-            input
-        );
-
-        try
-        {
-            return await Junctions().ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            return ex;
-        }
-    }
-
-    /// <summary>
-    /// Creates a composable Monad helper with ServiceProvider for junction DI.
-    /// Overrides the base Train.Activate to inject the ServiceProvider, enabling
-    /// automatic dependency resolution for junctions via the Chain API.
-    /// </summary>
-    /// <param name="input">The primary input for the train</param>
-    /// <param name="otherInputs">Additional objects to store in the Monad's Memory</param>
-    /// <returns>A Monad instance for method chaining with DI support</returns>
-    public new Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs) =>
-        new Monad<TIn, TOut>(this, ServiceProvider!, CancellationToken).Activate(
-            input,
-            otherInputs
-        );
+    protected override Monad<TIn, TOut> NewMonad() =>
+        new(this, ServiceProvider!, CancellationToken);
 
     public void Dispose()
     {

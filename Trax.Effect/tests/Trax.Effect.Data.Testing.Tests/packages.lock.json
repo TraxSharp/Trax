@@ -227,7 +227,7 @@
         "dependencies": {
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.12, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )",
-          "Trax.Core": "[1.7.1, )"
+          "Trax.Core": "[1.7.2, )"
         }
       },
       "trax.effect.data": {
@@ -244,7 +244,7 @@
         "dependencies": {
           "NUnit": "[4.6.1, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.0, )",
-          "Trax.Core.Testing": "[1.7.1, )",
+          "Trax.Core.Testing": "[1.7.2, )",
           "Trax.Effect.Data": "[1.99.99, )"
         }
       },
@@ -346,9 +346,9 @@
       },
       "Trax.Core": {
         "type": "CentralTransitive",
-        "requested": "[1.7.1, )",
-        "resolved": "1.7.1",
-        "contentHash": "XJFN/xvfJ3WpYbjkVmYPtp8JGjXnVndv3truGsiUGZ5Kk/eXINHbishSZZCojz7CDMMlfgseXUrKlip/ElEGJg==",
+        "requested": "[1.7.2, )",
+        "resolved": "1.7.2",
+        "contentHash": "ViEkycLMeec2Q9F3tNesJvSrhbWtidtec+yiapLd9PctCnjwCWSaK3rwUdEJtzXaIk212RXS19uNcXAxO9+QNw==",
         "dependencies": {
           "LanguageExt.Core": "4.4.9",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.3",
@@ -357,9 +357,9 @@
       },
       "Trax.Core.Testing": {
         "type": "CentralTransitive",
-        "requested": "[1.7.1, )",
-        "resolved": "1.7.1",
-        "contentHash": "B/SoMiLcP5VyMcZQGo65EBad+TqexzlelIHrROsrnMx9iMZ/4O5r27CYAGzCfHeiV6ukBIoE9WuOmsLTKJAZbw==",
+        "requested": "[1.7.2, )",
+        "resolved": "1.7.2",
+        "contentHash": "/+KY640Hv0aK4+ITlKhBnrZjWGbLY4qGGCsYyJgndj3yY7AZnqvSV/N2lr5NmYYCw1S+KFTMjSI0RfY6yeCFhg==",
         "dependencies": {
           "Microsoft.CodeAnalysis.CSharp": "4.14.0",
           "NUnit": "4.4.0"

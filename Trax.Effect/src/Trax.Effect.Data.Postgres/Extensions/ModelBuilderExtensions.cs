@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Trax.Core.Exceptions;
 using Trax.Effect.Data.Utils;
 using Trax.Effect.Enums;
 using Trax.Effect.Models;
@@ -43,6 +44,7 @@ public static class ModelBuilderExtensions
     public static ModelBuilder AddPostgresEnums(this ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresEnum<TrainState>(schema: "trax");
+        modelBuilder.HasPostgresEnum<FailureClass>(schema: "trax");
         modelBuilder.HasPostgresEnum<LogLevel>(schema: "trax");
         modelBuilder.HasPostgresEnum<ScheduleType>(schema: "trax");
         modelBuilder.HasPostgresEnum<DeadLetterStatus>(schema: "trax");
@@ -85,6 +87,7 @@ public static class ModelBuilderExtensions
         var npgsqlDataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
 
         npgsqlDataSourceBuilder.MapEnum<TrainState>("trax.train_state");
+        npgsqlDataSourceBuilder.MapEnum<FailureClass>("trax.failure_class");
         npgsqlDataSourceBuilder.MapEnum<LogLevel>("trax.log_level");
         npgsqlDataSourceBuilder.MapEnum<ScheduleType>("trax.schedule_type");
         npgsqlDataSourceBuilder.MapEnum<DeadLetterStatus>("trax.dead_letter_status");

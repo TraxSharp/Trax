@@ -13,6 +13,9 @@ namespace Trax.Effect.Enums;
 /// 2. Determining which trains need attention (e.g., failed trains)
 /// 3. Understanding the overall health of the train system
 /// 4. Tracking the progress of long-running trains
+///
+/// The values are pinned because SQLite stores the integer, and its dispatch SQL and partial
+/// indexes compare against it; reordering the members would silently change what they match.
 /// </remarks>
 public enum TrainState
 {
@@ -23,7 +26,7 @@ public enum TrainState
     /// This is the initial state of a train when it is first created.
     /// Trains in this state are waiting to be executed.
     /// </remarks>
-    Pending,
+    Pending = 0,
 
     /// <summary>
     /// The train has successfully completed execution.
@@ -32,7 +35,7 @@ public enum TrainState
     /// This state indicates that the train ran to completion without errors.
     /// The train's output should be available in the metadata.
     /// </remarks>
-    Completed,
+    Completed = 1,
 
     /// <summary>
     /// The train encountered an error during execution and did not complete successfully.
@@ -42,7 +45,7 @@ public enum TrainState
     /// Details about the failure, including the exception type, message, and stack trace,
     /// should be available in the metadata.
     /// </remarks>
-    Failed,
+    Failed = 2,
 
     /// <summary>
     /// The train is currently executing.
@@ -51,7 +54,7 @@ public enum TrainState
     /// This state indicates that the train has started but has not yet completed.
     /// Trains in this state are actively processing their junctions.
     /// </remarks>
-    InProgress,
+    InProgress = 3,
 
     /// <summary>
     /// The train was explicitly cancelled by an operator or system signal.
@@ -61,5 +64,5 @@ public enum TrainState
     /// either via the dashboard cancel button or a system cancellation signal.
     /// Cancelled trains are not retried and do not create dead letters.
     /// </remarks>
-    Cancelled,
+    Cancelled = 4,
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Enums;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
@@ -132,6 +133,7 @@ public static class ServiceExtensions
                         o =>
                         {
                             o.MapEnum<TrainState>("train_state", "trax");
+                            o.MapEnum<FailureClass>("failure_class", "trax");
                             o.MapEnum<LogLevel>("log_level", "trax");
                             o.MapEnum<ScheduleType>("schedule_type", "trax");
                             o.MapEnum<DeadLetterStatus>("dead_letter_status", "trax");

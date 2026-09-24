@@ -3,6 +3,7 @@ using FluentAssertions;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Core.Junction;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
@@ -95,8 +96,13 @@ public class CancellationCheckProviderTests
 
     private class TestTrain : ServiceTrain<string, string>
     {
-        protected override Task<Either<Exception, string>> RunInternal(string input) =>
-            Task.FromResult<Either<Exception, string>>(input);
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<PassThrough1_263>().Resolve();
+
+        private sealed class PassThrough1_263 : Junction<string, string>
+        {
+            public override Task<string> Run(string input) => Task.FromResult(input);
+        }
     }
 
     private class TestEffectJunction : EffectJunction<string, string>

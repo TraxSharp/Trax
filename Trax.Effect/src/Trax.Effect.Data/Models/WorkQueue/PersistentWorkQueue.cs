@@ -7,6 +7,10 @@ namespace Trax.Effect.Data.Models.WorkQueue;
 /// </summary>
 public class PersistentWorkQueue : Effect.Models.WorkQueue.WorkQueue
 {
+    // Holds the EF configuration and is never instantiated. Private so it is not a way around
+    // WorkQueue.Create, which is the only way to build an entry that dispatches.
+    private PersistentWorkQueue() { }
+
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Effect.Models.WorkQueue.WorkQueue>(entity =>

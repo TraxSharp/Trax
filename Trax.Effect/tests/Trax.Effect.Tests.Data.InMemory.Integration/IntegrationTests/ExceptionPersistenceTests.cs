@@ -177,7 +177,7 @@ public class ExceptionPersistenceTests : TestSetup
 
     #endregion
 
-    #region Plain Exception (not from junction — RunInternal override)
+    #region Plain Exception (not from a junction)
 
     [Test]
     public async Task PlainException_NotFromJunction_StillPersistsFailureFields()
@@ -400,7 +400,7 @@ public class ExceptionPersistenceTests : TestSetup
 
     private class PlainExceptionTrain : ServiceTrain<Unit, Unit>, IPlainExceptionTrain
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(Unit input) =>
+        protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(new ArgumentException("plain failure"));
     }
 

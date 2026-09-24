@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Junction;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -1939,20 +1940,28 @@ public class SqliteProviderTests : TestSetup
 
     private class TestTrain : ServiceTrain<Unit, Unit>, ITestTrain
     {
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input)
-        {
-            CancellationToken.ThrowIfCancellationRequested();
-            return Activate(input).Resolve();
-        }
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Chain<ObserveCancellation>().Resolve();
     }
 
     private interface IFailingTrain : IServiceTrain<Unit, Unit> { }
 
     private class FailingTrain : ServiceTrain<Unit, Unit>, IFailingTrain
     {
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
+        protected override async Task<Either<Exception, Unit>> Junctions() =>
             new TrainException("Test failure");
     }
 
     #endregion
+}
+
+/// <summary>Observes the train's token before any work, so a pre-cancelled run stops here.</summary>
+internal sealed class ObserveCancellation : Junction<Unit, Unit>
+{
+    public override Task<Unit> Run(Unit input)
+    {
+        CancellationToken.ThrowIfCancellationRequested();
+
+        return Task.FromResult(Unit.Default);
+    }
 }

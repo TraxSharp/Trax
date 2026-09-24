@@ -3,6 +3,7 @@ using FluentAssertions;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Core.Junction;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -537,8 +538,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         public CancellationToken CompletedCancellationToken { get; private set; }
         public List<string> CallOrder { get; } = [];
 
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
-            Activate(input).Resolve();
+        protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 
         protected override Task OnStarted(Metadata metadata, CancellationToken ct)
         {
@@ -592,7 +592,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         public Exception? FailedException { get; private set; }
         public List<string> CallOrder { get; } = [];
 
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
+        protected override async Task<Either<Exception, Unit>> Junctions() =>
             new TrainException("Intentional train failure");
 
         protected override Task OnStarted(Metadata metadata, CancellationToken ct)
@@ -637,7 +637,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         public bool CancelledCalled { get; private set; }
         public Metadata? CancelledMetadata { get; private set; }
 
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
+        protected override async Task<Either<Exception, Unit>> Junctions() =>
             throw new OperationCanceledException("Intentional cancellation");
 
         protected override Task OnCancelled(Metadata metadata, CancellationToken ct)
@@ -652,8 +652,7 @@ public class TrainLifecycleOverrideTests : TestSetup
 
     private class ThrowingHookTrain : ServiceTrain<Unit, Unit>, IThrowingHookTrain
     {
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
-            Activate(input).Resolve();
+        protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 
         protected override Task OnStarted(Metadata metadata, CancellationToken ct) =>
             throw new InvalidOperationException("OnStarted hook failed");
@@ -666,7 +665,7 @@ public class TrainLifecycleOverrideTests : TestSetup
 
     private class ThrowingOnFailedHookTrain : ServiceTrain<Unit, Unit>, IThrowingOnFailedHookTrain
     {
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
+        protected override async Task<Either<Exception, Unit>> Junctions() =>
             new TrainException("Intentional train failure");
 
         protected override Task OnFailed(
@@ -682,7 +681,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         : ServiceTrain<Unit, Unit>,
             IThrowingOnCancelledHookTrain
     {
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
+        protected override async Task<Either<Exception, Unit>> Junctions() =>
             throw new OperationCanceledException("Intentional cancellation");
 
         protected override Task OnCancelled(Metadata metadata, CancellationToken ct) =>
@@ -696,8 +695,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         public bool CompletedCalled { get; private set; }
         public List<string> CallOrder { get; } = [];
 
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
-            Activate(input).Resolve();
+        protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 
         protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
         {
@@ -711,8 +709,20 @@ public class TrainLifecycleOverrideTests : TestSetup
 
     private class NoOverrideTrain : ServiceTrain<Unit, Unit>, INoOverrideTrain
     {
-        protected override async Task<Either<Exception, Unit>> RunInternal(Unit input) =>
-            Activate(input).Resolve();
+        protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
+    }
+
+    /// <summary>Builds the output these lifecycle tests assert on, from the train's input.</summary>
+    private sealed class BuildTestOutput : Junction<string, TestOutputDto>
+    {
+        public override Task<TestOutputDto> Run(string input) =>
+            Task.FromResult(new TestOutputDto($"processed:{input}", 42));
+    }
+
+    /// <summary>Hands the input straight back, for trains whose output is their input.</summary>
+    private sealed class EchoInput : Junction<string, string>
+    {
+        public override Task<string> Run(string input) => Task.FromResult(input);
     }
 
     private record TestOutputDto(
@@ -728,8 +738,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         public string? CapturedOutput { get; private set; }
         public dynamic? CapturedOutputObject { get; private set; }
 
-        protected override async Task<Either<Exception, TestOutputDto>> RunInternal(string input) =>
-            new TestOutputDto($"processed:{input}", 42);
+        protected override Task<Either<Exception, TestOutputDto>> Junctions() =>
+            Chain<BuildTestOutput>().Resolve();
 
         protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
         {
@@ -752,8 +762,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         public string? CapturedStartedInput { get; private set; }
         public string? CapturedStartedMetadataInput { get; private set; }
 
-        protected override async Task<Either<Exception, TestOutputDto>> RunInternal(string input) =>
-            new TestOutputDto($"processed:{input}", 42);
+        protected override Task<Either<Exception, TestOutputDto>> Junctions() =>
+            Chain<BuildTestOutput>().Resolve();
 
         protected override Task OnStarted(Metadata metadata, CancellationToken ct)
         {
@@ -782,7 +792,7 @@ public class TrainLifecycleOverrideTests : TestSetup
         public string? CapturedInput { get; private set; }
         public TestOutputDto? CapturedOutput { get; private set; }
 
-        protected override async Task<Either<Exception, TestOutputDto>> RunInternal(string input) =>
+        protected override async Task<Either<Exception, TestOutputDto>> Junctions() =>
             new TrainException("Intentional failure");
 
         protected override Task OnFailed(
@@ -805,7 +815,8 @@ public class TrainLifecycleOverrideTests : TestSetup
         public string? QueuedExternalId { get; private set; }
         public string? QueuedInput { get; private set; }
 
-        protected override async Task<Either<Exception, string>> RunInternal(string input) => input;
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<EchoInput>().Resolve();
 
         // OnQueue is protected; expose it so the test can drive it directly the same way the
         // mediator's queue path does (via reflection).

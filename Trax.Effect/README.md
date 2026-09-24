@@ -92,16 +92,15 @@ public interface ICreateUserTrain : IServiceTrain<CreateUserRequest, User> { }
 
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
-    protected override async Task<Either<Exception, User>> RunInternal(CreateUserRequest input)
-        => Activate(input)
-            .Chain<ValidateEmailJunction>()
+    protected override Task<Either<Exception, User>> Junctions()
+        => Chain<ValidateEmailJunction>()
             .Chain<CreateUserInDatabaseJunction>()
             .Chain<SendWelcomeEmailJunction>()
             .Resolve();
 }
 ```
 
-The route syntax is identical to `Train`. The difference is what happens around it. `ServiceTrain` automatically opens a journey log when the train departs, updates it when it arrives, persists effect data at each station, and records the derailment details if any stop fails.
+The chain syntax is identical to `Train`. The difference is what happens around it. `ServiceTrain` automatically opens a journey log when the train departs, updates it when it arrives, persists effect data at each station, and records the derailment details if any stop fails.
 
 Junctions work the same way, with full DI:
 

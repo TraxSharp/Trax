@@ -200,7 +200,7 @@ public class ServiceExtensionsRegistrationTests
 
     public class FakeTrain : ServiceTrain<string, Unit>, IFakeTrain
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(string input) =>
+        protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 

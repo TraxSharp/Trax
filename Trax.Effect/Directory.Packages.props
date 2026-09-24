@@ -14,8 +14,8 @@
   />
   <ItemGroup>
     <!-- Trax.* : exact CI pin, overridable by TraxLocalVersion -->
-    <PackageVersion Include="Trax.Core" Version="1.7.1" />
-    <PackageVersion Include="Trax.Core.Testing" Version="1.7.1" />
+    <PackageVersion Include="Trax.Core" Version="1.7.2" />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.7.2" />
   </ItemGroup>
   <ItemGroup>
     <!-- third-party : plain exact -->

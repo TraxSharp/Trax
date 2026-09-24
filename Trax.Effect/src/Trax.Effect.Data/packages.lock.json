@@ -133,7 +133,7 @@
         "dependencies": {
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.12, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )",
-          "Trax.Core": "[1.7.1, )"
+          "Trax.Core": "[1.7.2, )"
         }
       },
       "Microsoft.Extensions.DependencyInjection": {
@@ -180,9 +180,9 @@
       },
       "Trax.Core": {
         "type": "CentralTransitive",
-        "requested": "[1.7.1, )",
-        "resolved": "1.7.1",
-        "contentHash": "XJFN/xvfJ3WpYbjkVmYPtp8JGjXnVndv3truGsiUGZ5Kk/eXINHbishSZZCojz7CDMMlfgseXUrKlip/ElEGJg==",
+        "requested": "[1.7.2, )",
+        "resolved": "1.7.2",
+        "contentHash": "ViEkycLMeec2Q9F3tNesJvSrhbWtidtec+yiapLd9PctCnjwCWSaK3rwUdEJtzXaIk212RXS19uNcXAxO9+QNw==",
         "dependencies": {
           "LanguageExt.Core": "4.4.9",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.3",

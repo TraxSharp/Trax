@@ -1,6 +1,7 @@
 using System.Reflection;
 using FluentAssertions;
 using LanguageExt;
+using Trax.Core.Junction;
 using Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressProvider;
 using Trax.Effect.Models;
 using Trax.Effect.Models.JunctionMetadata;
@@ -365,8 +366,13 @@ public class JunctionProgressProviderTests
     /// </summary>
     private class TestTrain : ServiceTrain<string, string>
     {
-        protected override Task<Either<Exception, string>> RunInternal(string input) =>
-            Task.FromResult<Either<Exception, string>>(input);
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<PassThrough1_263>().Resolve();
+
+        private sealed class PassThrough1_263 : Junction<string, string>
+        {
+            public override Task<string> Run(string input) => Task.FromResult(input);
+        }
     }
 
     /// <summary>

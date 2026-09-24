@@ -52,11 +52,14 @@ public class SqliteSqlDialectTests
     }
 
     [Test]
-    public void ClaimWorkQueueEntry_ContainsStatusQueued()
+    public void ClaimWorkQueueEntry_ComparesStatusToTheStoredInteger()
     {
         var sql = _dialect.ClaimWorkQueueEntry();
 
-        sql.Should().Contain("'queued'");
+        // EF stores the enum's integer on SQLite, so a label here would match no row. Whether
+        // the claim actually finds an entry is SqliteDispatchSqlTests' job.
+        sql.Should().Contain($"w.status = {(int)Trax.Effect.Enums.WorkQueueStatus.Queued}");
+        sql.Should().NotContain("'queued'");
     }
 
     #endregion

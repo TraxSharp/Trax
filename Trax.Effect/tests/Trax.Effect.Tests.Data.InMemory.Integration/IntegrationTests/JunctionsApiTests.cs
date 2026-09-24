@@ -20,7 +20,6 @@ public class JunctionsApiTests : TestSetup
             .AddScopedTraxRoute<IJunctionsTrain, JunctionsTrain>()
             .AddScopedTraxRoute<IJunctionsMultiTrain, JunctionsMultiTrain>()
             .AddScopedTraxRoute<IJunctionsFailingTrain, JunctionsFailingTrain>()
-            .AddScopedTraxRoute<IRunInternalTrain, RunInternalTrain>()
             .BuildServiceProvider();
 
     #region Junctions API — happy path
@@ -77,32 +76,6 @@ public class JunctionsApiTests : TestSetup
 
     #endregion
 
-    #region Backwards compatibility
-
-    [Test]
-    public async Task RunInternal_Override_StillWorks()
-    {
-        var train = Scope.ServiceProvider.GetRequiredService<IRunInternalTrain>();
-
-        var result = await train.Run("hello");
-
-        result.Should().Be(5);
-    }
-
-    [Test]
-    public async Task RunInternal_MetadataTracked()
-    {
-        var train = Scope.ServiceProvider.GetRequiredService<IRunInternalTrain>();
-
-        await train.Run("hello");
-
-        var serviceTrain = (ServiceTrain<string, int>)train;
-        serviceTrain.Metadata.Should().NotBeNull();
-        serviceTrain.Metadata!.TrainState.Should().Be(TrainState.Completed);
-    }
-
-    #endregion
-
     #region Fakes
 
     private class StringLengthJunction : Junction<string, int>
@@ -144,14 +117,6 @@ public class JunctionsApiTests : TestSetup
     }
 
     private interface IJunctionsFailingTrain : IServiceTrain<string, int> { }
-
-    private class RunInternalTrain : ServiceTrain<string, int>, IRunInternalTrain
-    {
-        protected override Task<Either<Exception, int>> RunInternal(string input) =>
-            Activate(input).Chain<StringLengthJunction>().Resolve();
-    }
-
-    private interface IRunInternalTrain : IServiceTrain<string, int> { }
 
     #endregion
 }

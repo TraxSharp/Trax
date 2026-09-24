@@ -112,10 +112,7 @@ namespace Trax.Effect.Data.Models.SchedulerConfig
 }
 namespace Trax.Effect.Data.Models.WorkQueue
 {
-    public class PersistentWorkQueue : Trax.Effect.Models.WorkQueue.WorkQueue
-    {
-        public PersistentWorkQueue() { }
-    }
+    public class PersistentWorkQueue : Trax.Effect.Models.WorkQueue.WorkQueue { }
 }
 namespace Trax.Effect.Data.Services.DataContext
 {
@@ -238,6 +235,20 @@ namespace Trax.Effect.Data.Services.DomainContext
         System.Threading.Tasks.Task<int> SaveChangesAsync(System.Threading.CancellationToken cancellationToken = default);
     }
 }
+namespace Trax.Effect.Data.Services.EnqueueContext
+{
+    public class EnqueueContextAccessor : Trax.Effect.Data.Services.EnqueueContext.IEnqueueContextAccessor
+    {
+        public EnqueueContextAccessor() { }
+        public Trax.Effect.Data.Services.DataContext.IDataContext? Current { get; }
+        public System.IDisposable Enter(Trax.Effect.Data.Services.DataContext.IDataContext context) { }
+    }
+    public interface IEnqueueContextAccessor
+    {
+        Trax.Effect.Data.Services.DataContext.IDataContext? Current { get; }
+        System.IDisposable Enter(Trax.Effect.Data.Services.DataContext.IDataContext context);
+    }
+}
 namespace Trax.Effect.Data.Services.FeatureDbConfigurator
 {
     public sealed class DelegateFeatureDbConfigurator : Trax.Effect.Data.Services.FeatureDbConfigurator.ITraxFeatureDbConfigurator
@@ -264,7 +275,24 @@ namespace Trax.Effect.Data.Services.SqlDialect
         string ClaimWorkQueueEntry();
         string DequeueBackgroundJobs();
         string LoadGroupFairQueuedJobs();
+        string LockSubject();
         System.FormattableString TryAcquireLeaderLock(string lockName);
+    }
+}
+namespace Trax.Effect.Data.Services.WorkQueuePromotion
+{
+    public interface IWorkQueuePromotion
+    {
+        System.Threading.Tasks.Task<int> CancelStaleAsync(System.TimeSpan olderThan, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<bool> PromoteAsync(long workQueueId, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<int> PromoteStaleAsync(System.TimeSpan olderThan, System.Threading.CancellationToken cancellationToken);
+    }
+    public class WorkQueuePromotion : Trax.Effect.Data.Services.WorkQueuePromotion.IWorkQueuePromotion
+    {
+        public WorkQueuePromotion(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory) { }
+        public System.Threading.Tasks.Task<int> CancelStaleAsync(System.TimeSpan olderThan, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task<bool> PromoteAsync(long workQueueId, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task<int> PromoteStaleAsync(System.TimeSpan olderThan, System.Threading.CancellationToken cancellationToken) { }
     }
 }
 namespace Trax.Effect.Data.Utils

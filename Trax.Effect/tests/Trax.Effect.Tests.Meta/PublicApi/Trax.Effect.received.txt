@@ -674,6 +674,8 @@ namespace Trax.Effect.Models.Metadata
         public string? Executor { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("external_id")]
         public string ExternalId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("failure_class")]
+        public Trax.Core.Exceptions.FailureClass FailureClass { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("failure_exception")]
         public string? FailureException { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("failure_junction")]
@@ -839,11 +841,13 @@ namespace Trax.Effect.Models.WorkQueue.DTOs
     {
         public CreateWorkQueue() { }
         public long? DeadLetterId { get; set; }
+        public bool DeferPromotion { get; set; }
         public string? Input { get; set; }
         public string? InputTypeName { get; set; }
         public long? ManifestId { get; set; }
         public int Priority { get; set; }
         public System.DateTime? ScheduledAt { get; set; }
+        public string? SubjectKey { get; set; }
         public required string TrainName { get; set; }
     }
 }
@@ -852,9 +856,12 @@ namespace Trax.Effect.Models.WorkQueue
     public class WorkQueue : Trax.Effect.Models.IModel
     {
         public const int MaxPriority = 31;
+        public const int MaxSubjectKeyLength = 512;
         public const int MinPriority = 0;
         [System.Text.Json.Serialization.JsonConstructor]
-        public WorkQueue() { }
+        protected WorkQueue() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("confirmed_at")]
+        public System.DateTime? ConfirmedAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
         public System.DateTime CreatedAt { get; set; }
         public Trax.Effect.Models.DeadLetter.DeadLetter? DeadLetter { get; set; }
@@ -884,6 +891,8 @@ namespace Trax.Effect.Models.WorkQueue
         public System.DateTime? ScheduledAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("status")]
         public Trax.Effect.Enums.WorkQueueStatus Status { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("subject_key")]
+        public string? SubjectKey { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("train_name")]
         public string TrainName { get; set; }
         public override string ToString() { }
@@ -1021,6 +1030,13 @@ namespace Trax.Effect.Services.EffectRunner
         System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model);
     }
 }
+namespace Trax.Effect.Services.FailureClassifier
+{
+    public interface IFailureClassifier
+    {
+        Trax.Core.Exceptions.FailureClass? Classify(System.Exception exception);
+    }
+}
 namespace Trax.Effect.Services.JunctionEffectProvider
 {
     public interface IJunctionEffectProvider : System.IDisposable
@@ -1089,6 +1105,7 @@ namespace Trax.Effect.Services.ServiceTrain
         protected ServiceTrain() { }
         [System.Text.Json.Serialization.JsonIgnore]
         public string? CanonicalName { get; set; }
+        protected virtual bool DeferQueuePromotion { get; }
         [System.Text.Json.Serialization.JsonIgnore]
         [Trax.Effect.Attributes.Inject]
         public Trax.Effect.Services.EffectRunner.IEffectRunner? EffectRunner { get; set; }
@@ -1110,17 +1127,17 @@ namespace Trax.Effect.Services.ServiceTrain
         protected TIn TrainInput { get; }
         public string TrainName { get; }
         protected TOut TrainOutput { get; }
-        public new Trax.Core.Monad.Monad<TIn, TOut> Activate(TIn input, params object[] otherInputs) { }
         public void Dispose() { }
+        protected override Trax.Core.Monad.Monad<TIn, TOut> NewMonad() { }
         protected virtual System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         protected virtual System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         protected virtual System.Threading.Tasks.Task OnFailed(Trax.Effect.Models.Metadata.Metadata metadata, System.Exception exception, System.Threading.CancellationToken ct) { }
         protected virtual System.Threading.Tasks.Task OnQueue(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         protected virtual System.Threading.Tasks.Task OnStarted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
+        protected virtual string? QueueSubjectKey(Trax.Effect.Models.Metadata.Metadata metadata) { }
         public override System.Threading.Tasks.Task<TOut> Run(TIn input, System.Threading.CancellationToken cancellationToken = default) { }
         public virtual System.Threading.Tasks.Task<TOut> Run(TIn input, Trax.Effect.Models.Metadata.Metadata metadata) { }
         public virtual System.Threading.Tasks.Task<TOut> Run(TIn input, Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken cancellationToken) { }
-        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RunInternal(TIn input) { }
     }
 }
 namespace Trax.Effect.Services.TrainEventBroadcaster
