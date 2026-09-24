@@ -18,9 +18,13 @@ if your work contradicts one, say so rather than silently overriding it.
 | a guard fixture, here or upstream | [0002](./docs/adr/0002-the-samples-adopt-the-guards-as-a-consumer-would.md), Bookworm is the only place the fixtures are adopted across a real PackageReference |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Eight name `samples`: executable guards, exact version pinning, the
-dependency direction, the three test conventions, the canonical train name, and the
-documentation lints. In a workspace checkout the index is at
+index lists them by repo. Fourteen name `samples`: executable guards, exact version pinning, the
+dependency direction, the three test conventions, the canonical train name, the documentation
+lints, test frameworks staying out of shipped libraries, exemplars declared by attribute, Trax
+owning its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced
+package, and a chain being a declaration (`0016`). Once the samples consume a Trax.Mediator with
+the startup chain check, every sample train's `Junctions()` must satisfy it for its host to
+start; until the pins move to that version, nothing here enforces it. In a workspace checkout the index is at
 `../Trax.Docs/adr/README.md`; that path does not resolve on GitHub, because it crosses a
 repository boundary.
 
@@ -44,7 +48,7 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Samples.Tests.Meta/` holds nine convention guards. Eight are shared with other
+`tests/Trax.Samples.Tests.Meta/` holds twelve convention guards. Eleven are shared with other
 repos; `E2EDatabaseProvisioningTests` is this repo's own and reads the CI workflow, checking
 every sample factory's *default* connection string against the ports and databases CI actually
 creates. A factory that declares none, because its sample runs on SQLite or the in-memory
