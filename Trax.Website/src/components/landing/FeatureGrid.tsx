@@ -1,9 +1,9 @@
 const features = [
   {
-    title: "Compile-time chain validation",
+    title: "Chains verified at startup",
     description:
-      "A Roslyn analyzer checks your chains at build time. Mismatched types between junctions? You\u2019ll know before you run anything.",
-    packages: ["Trax.Core"],
+      "AddMediator checks the chain of every train it registers as the host starts. A junction whose input nothing before it provides? The host refuses to start and names the train, before it serves a single request. SkipChainVerification() turns it off.",
+    packages: ["Trax.Mediator"],
   },
   {
     title: "Execution metadata",

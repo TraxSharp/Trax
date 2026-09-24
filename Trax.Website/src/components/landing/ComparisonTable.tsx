@@ -45,7 +45,7 @@ export default function ComparisonTable() {
                 />
                 <Row
                   label="Type-safe pipelines"
-                  trax="Compile-time"
+                  trax="Verified at startup"
                   quartz="No"
                   hangfire="No"
                 />

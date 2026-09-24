@@ -14,10 +14,11 @@ if (shipment == null)
 
 return new OrderReceipt(payment, shipment);`;
 
-const solutionCode = `protected override OrderReceipt Junctions() =>
+const solutionCode = `protected override Task<Either<Exception, OrderReceipt>> Junctions() =>
     Chain<CheckInventoryJunction>()
         .Chain<ChargePaymentJunction>()
-        .Chain<CreateShipmentJunction>();`;
+        .Chain<CreateShipmentJunction>()
+        .Resolve();`;
 
 export default async function ProblemSolution() {
   const [problemHtml, solutionHtml] = await Promise.all([
@@ -71,8 +72,8 @@ export default async function ProblemSolution() {
         <p className="mt-6 text-sm text-text-muted lg:ml-auto lg:max-w-2xl">
           Each junction&apos;s output is stored in Memory by type. The next junction
           declares what it needs as its input, and Trax wires them together
-          automatically. A compile-time analyzer catches broken chains before
-          you ever run the code.
+          automatically. Every chain is verified when the host starts, so a
+          broken one stops the deploy instead of failing a request.
         </p>
       </div>
     </section>

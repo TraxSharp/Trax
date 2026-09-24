@@ -19,10 +19,11 @@ Trax brings Railway Oriented Programming to .NET. Instead of scattering error ha
 ```csharp
 public class ProcessOrderTrain : Train<OrderRequest, OrderReceipt>
 {
-    protected override OrderReceipt Junctions() =>
+    protected override Task<Either<Exception, OrderReceipt>> Junctions() =>
         Chain<CheckInventoryJunction>()
             .Chain<ChargePaymentJunction>()
-            .Chain<CreateShipmentJunction>();
+            .Chain<CreateShipmentJunction>()
+            .Resolve();
 }
 ```
 
