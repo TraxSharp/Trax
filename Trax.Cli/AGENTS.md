@@ -21,9 +21,11 @@ if your work contradicts one, say so rather than silently overriding it.
 | anything under `Machines/` | [0001](./docs/adr/0001-the-machine-toolchain-is-half-in-process.md), the C# half loads a compiled assembly and the TypeScript half spawns node |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Eight name `cli`: executable guards, exact version pinning, the
-dependency direction, the three test conventions, the documentation lints, and the public API
-baseline. In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path does
+index lists them by repo. Fourteen name `cli`: executable guards, exact version pinning, the
+dependency direction, the three test conventions, the documentation lints, the public API
+baseline, test frameworks staying out of shipped libraries, exemplars declared by attribute, Trax
+owning its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced
+package, and a chain being a declaration (`0016`). In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path does
 not resolve on GitHub, because it crosses a repository boundary.
 
 ## When your change makes a decision
@@ -46,7 +48,7 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Cli.Tests.Meta/` holds nine convention guards, and **all nine are shared** with
+`tests/Trax.Cli.Tests.Meta/` holds eleven convention guards, and **all eleven are shared** with
 the other repos. This repo owns no convention guard of its own.
 
 The census is on: every guard class under that folder is either credited to an ADR or
