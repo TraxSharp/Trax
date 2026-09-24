@@ -9,6 +9,8 @@
     <!-- IncludeBuildOutput must remain true for ProjectReference OutputItemType="Analyzer" to work.
              The Pack path in analyzers/dotnet/cs handles NuGet packaging separately. -->
     <NoWarn>RS2008</NoWarn>
+    <!-- Shown on nuget.org and in the package manager, where a consumer decides to install it. -->
+    <Description>Deprecated. Checked chains rooted at Activate(), which can no longer be written, so it no longer checks anything. Trax verifies every registered train's chain at host startup instead.</Description>
   </PropertyGroup>
 
   <ItemGroup>

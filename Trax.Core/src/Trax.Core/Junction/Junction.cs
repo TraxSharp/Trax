@@ -102,6 +102,7 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
                 Type = e.GetType().Name,
                 Message = e.Message,
                 StackTrace = e.StackTrace,
+                FailureClass = CarriedFailureClass(e),
             };
 
             ExceptionData = exceptionData;
@@ -112,6 +113,34 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
             e.Data["TrainExceptionData"] = exceptionData;
 
             return e;
+        }
+    }
+
+    /// <summary>
+    /// The classification an exception already carries, from wherever it was first recorded.
+    /// </summary>
+    /// <remarks>
+    /// A failure that reached this junction from somewhere that classified it, such as a remote
+    /// worker or a nested train, keeps that answer. The data attached here replaces whatever the
+    /// exception carried before, so without this the class would be dropped on the way through.
+    /// </remarks>
+    private static FailureClass? CarriedFailureClass(Exception e)
+    {
+        if (e.Data["TrainExceptionData"] is TrainExceptionData attached)
+            return attached.FailureClass;
+
+        if (!e.Message.StartsWith('{'))
+            return null;
+
+        try
+        {
+            return System
+                .Text.Json.JsonSerializer.Deserialize<TrainExceptionData>(e.Message)
+                ?.FailureClass;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
         }
     }
 }

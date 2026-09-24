@@ -141,7 +141,6 @@ public class ExtractTypeFromMemoryTests : TestSetup
 
     private class TestTrain : Train<int, string>
     {
-        protected override async Task<Either<Exception, string>> RunInternal(int input) =>
-            Activate(input).Resolve();
+        protected override async Task<Either<Exception, string>> Junctions() => Resolve();
     }
 }

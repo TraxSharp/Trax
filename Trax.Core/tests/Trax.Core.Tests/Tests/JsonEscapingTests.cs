@@ -18,8 +18,13 @@ public class JsonEscapingTests
 {
     private class DummyTrain : Train<string, string>
     {
-        protected override Task<Either<Exception, string>> RunInternal(string input) =>
-            Task.FromResult(Either<Exception, string>.Right(input));
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<PassThrough1_963>().Resolve();
+
+        private sealed class PassThrough1_963 : Junction<string, string>
+        {
+            public override Task<string> Run(string input) => Task.FromResult(input);
+        }
     }
 
     /// <summary>

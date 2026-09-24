@@ -8,6 +8,17 @@ namespace Trax.Core.Exceptions;
 /// </summary>
 public class TrainExceptionData
 {
+    /// <summary>
+    /// How the failure was classified where it happened, or null when nothing classified it.
+    /// </summary>
+    /// <remarks>
+    /// Carried here so a remotely-executed run's classification survives the trip home. The worker
+    /// classifies while it still holds the real exception; the API side reads the result rather
+    /// than trying to re-classify a reconstruction, which would be matching on a type name.
+    /// </remarks>
+    [JsonPropertyName("failureClass")]
+    public FailureClass? FailureClass { get; set; }
+
     [JsonPropertyName("trainName")]
     public required string TrainName { get; set; }
 

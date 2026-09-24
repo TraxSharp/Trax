@@ -218,8 +218,8 @@ public class JunctionsTests : TestSetup
 
     private class RunInternalTrain : Train<string, int>
     {
-        protected override Task<Either<Exception, int>> RunInternal(string input) =>
-            Activate(input).Chain<StringLengthJunction>().Resolve();
+        protected override Task<Either<Exception, int>> Junctions() =>
+            Chain<StringLengthJunction>().Resolve();
     }
 
     #endregion

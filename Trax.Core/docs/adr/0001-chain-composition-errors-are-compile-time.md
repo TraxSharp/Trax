@@ -1,7 +1,7 @@
 ---
 authors: [Theauxm]
 areas: [platform]
-status: accepted
+status: deprecated
 ---
 
 # A mis-composed chain does not compile
@@ -16,7 +16,13 @@ Both are `DiagnosticSeverity.Error`, not warnings. The build stops.
 
 ## Status
 
-**Accepted.**
+**Deprecated.** The analyzer only walks chains that start with `Activate()`, and since
+central `docs/0016` (a junction chain is a declaration)
+a chain is declared in `Junctions()` and cannot start that way, so neither diagnostic fires on
+any train that can be written today. Its job moved to the host: `AddMediator` reads every
+registered train's declared chain at startup and refuses to start when one cannot run, which
+is the "validate at registration" option below. The package still ships and nothing is
+removed; it is no longer maintained, and a chain it does not flag is not thereby sound.
 
 ## Considered options
 
@@ -87,6 +93,8 @@ follow from it go unasserted.
 
 ## Changelog
 
+- **2026-09-23**: Deprecated. `Junctions()` chains never start with `Activate()`, so the
+  analyzer checks nothing; startup chain verification replaced it.
 - **2026-09-11**: Corrected the claim that the analyzer stays silent whenever it cannot see
   the whole chain. An unresolvable junction is skipped and the walk continues, so false
   positives are possible and are suppressed with a pragma.

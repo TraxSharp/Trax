@@ -89,7 +89,10 @@ public readonly struct MonadTask<TInput, TReturn>
         where TJunction : IJunction<TIn, TOut>
     {
         var monad = await Source.ConfigureAwait(false);
-        return await monad.ChainJunction<TJunction, TIn, TOut>(junction).ConfigureAwait(false);
+
+        // Through the public overload rather than ChainJunction, so a chain being read records
+        // this step instead of running the junction.
+        return await monad.Chain<TJunction, TIn, TOut>(junction).Source.ConfigureAwait(false);
     }
 
     #endregion

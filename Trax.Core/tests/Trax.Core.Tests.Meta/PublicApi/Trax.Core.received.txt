@@ -1,5 +1,20 @@
 namespace Trax.Core.Exceptions
 {
+    public sealed class ChainDeclarationException : System.Exception
+    {
+        public ChainDeclarationException(string trainName, string member) { }
+    }
+    public sealed class ChainRecordedException : System.Exception
+    {
+        public ChainRecordedException() { }
+    }
+    public enum FailureClass
+    {
+        Unclassified = 0,
+        Transient = 1,
+        Conflict = 2,
+        Permanent = 3,
+    }
     public class TrainException : System.Exception
     {
         public TrainException(string message) { }
@@ -10,6 +25,8 @@ namespace Trax.Core.Exceptions
         [System.Obsolete("Constructors of types with required members are not supported in this version of " +
             "your compiler.", true)]
         public TrainExceptionData() { }
+        [System.Text.Json.Serialization.JsonPropertyName("failureClass")]
+        public Trax.Core.Exceptions.FailureClass? FailureClass { get; set; }
         [System.Runtime.CompilerServices.RequiredMember]
         [System.Text.Json.Serialization.JsonPropertyName("junction")]
         public string Junction { get; set; }
@@ -77,9 +94,43 @@ namespace Trax.Core.Junction
 }
 namespace Trax.Core.Monad
 {
+    public readonly struct ChainFault : System.IEquatable<Trax.Core.Monad.ChainFault>
+    {
+        public ChainFault(int StepIndex, Trax.Core.Monad.ChainStepKind Kind, System.Type? Junction, string Reason) { }
+        public System.Type? Junction { get; init; }
+        public Trax.Core.Monad.ChainStepKind Kind { get; init; }
+        public string Reason { get; init; }
+        public int StepIndex { get; init; }
+    }
+    public sealed class ChainRecorder
+    {
+        public ChainRecorder() { }
+        public System.Collections.Generic.IReadOnlyList<string> Refusals { get; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainStep> Steps { get; }
+    }
+    public readonly struct ChainStep : System.IEquatable<Trax.Core.Monad.ChainStep>
+    {
+        public ChainStep(Trax.Core.Monad.ChainStepKind Kind, System.Type? Junction, System.Type? In, System.Type? Out) { }
+        public System.Type? In { get; init; }
+        public System.Type? Junction { get; init; }
+        public Trax.Core.Monad.ChainStepKind Kind { get; init; }
+        public System.Type? Out { get; init; }
+    }
+    public enum ChainStepKind
+    {
+        Chain = 0,
+        IChain = 1,
+        ShortCircuit = 2,
+        Extract = 3,
+        Resolve = 4,
+        Seed = 5,
+    }
+    public static class ChainVerification
+    {
+        public static System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainFault> Verify(Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, System.Func<System.Type, bool>? availableElsewhere = null) { }
+    }
     public class Monad<TInput, TReturn>
     {
-        public Trax.Core.Monad.Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs) { }
         public Trax.Core.Monad.Monad<TInput, TReturn> AddServices<T1>(T1 service) { }
         public Trax.Core.Monad.Monad<TInput, TReturn> AddServices<T1, T2>(T1 service1, T2 service2) { }
         public Trax.Core.Monad.Monad<TInput, TReturn> AddServices<T1, T2, T3>(T1 service1, T2 service2, T3 service3) { }
@@ -166,7 +217,7 @@ namespace Trax.Core.Train
         [System.Text.Json.Serialization.JsonIgnore]
         public System.Threading.CancellationToken CancellationToken { get; protected set; }
         public string ExternalId { get; set; }
-        public Trax.Core.Monad.Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs) { }
+        public bool IsDeclaringChain { get; }
         protected Trax.Core.Monad.Monad<TInput, TReturn> AddServices<T1>(T1 service) { }
         protected Trax.Core.Monad.Monad<TInput, TReturn> AddServices<T1, T2>(T1 s1, T2 s2) { }
         protected Trax.Core.Monad.Monad<TInput, TReturn> AddServices<T1, T2, T3>(T1 s1, T2 s2, T3 s3) { }
@@ -178,14 +229,24 @@ namespace Trax.Core.Train
             where TJunction :  class { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction>(TJunction instance)
             where TJunction :  class { }
+        protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
+            where TJunction : Trax.Core.Junction.IJunction<TIn, LanguageExt.Unit>, new () { }
+        protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
+            where TJunction : Trax.Core.Junction.IJunction<TIn, LanguageExt.Unit> { }
+        protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>()
+            where TJunction : Trax.Core.Junction.IJunction<TIn, TOut>, new () { }
+        protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
+            where TJunction : Trax.Core.Junction.IJunction<TIn, TOut> { }
+        public Trax.Core.Monad.ChainRecorder DeclaredChain() { }
         protected Trax.Core.Monad.Monad<TInput, TReturn> Extract<TIn, TOut>() { }
         protected Trax.Core.Monad.Monad<TInput, TReturn> Extract<TIn, TOut>(TIn input) { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> IChain<TJunction>()
             where TJunction :  class { }
         protected virtual System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TReturn>> Junctions() { }
+        protected virtual Trax.Core.Monad.Monad<TInput, TReturn> NewMonad() { }
+        protected LanguageExt.Either<System.Exception, TReturn> Resolve() { }
         public virtual System.Threading.Tasks.Task<TReturn> Run(TInput input, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TReturn>> RunEither(TInput input) { }
-        protected virtual System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TReturn>> RunInternal(TInput input) { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> ShortCircuit<TJunction>()
             where TJunction :  class { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction instance)

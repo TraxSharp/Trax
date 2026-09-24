@@ -410,15 +410,14 @@ public class TrainTests : TestSetup
 
     private class AccessInnerPropertyTypeTrain : Train<OuterProperty, InnerProperty>
     {
-        protected override Task<Either<Exception, InnerProperty>> RunInternal(
-            OuterProperty input
-        ) => Task.FromResult(Activate(input).Extract<OuterProperty, InnerProperty>().Resolve());
+        protected override Task<Either<Exception, InnerProperty>> Junctions() =>
+            Task.FromResult(Extract<OuterProperty, InnerProperty>().Resolve());
     }
 
     private class AccessInnerFieldTypeTrain : Train<OuterField, InnerField>
     {
-        protected override Task<Either<Exception, InnerField>> RunInternal(OuterField input) =>
-            Task.FromResult(Activate(input).Extract<OuterField, InnerField>().Resolve());
+        protected override Task<Either<Exception, InnerField>> Junctions() =>
+            Task.FromResult(Extract<OuterField, InnerField>().Resolve());
     }
 
     private class TwoTupleJunctionTest : Junction<(Ingredients, BrewingJug), Unit>
@@ -514,11 +513,8 @@ public class TrainTests : TestSetup
     private class ChainTest(IBrew brew, IPrepare prepare, IBottle bottle)
         : Train<Ingredients, List<GlassBottle>>
     {
-        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(
-            Ingredients input
-        ) =>
-            Activate(input, "this is a test string to make sure it gets added to memory")
-                .Chain<IPrepare, Ingredients, BrewingJug>(prepare)
+        protected override Task<Either<Exception, List<GlassBottle>>> Junctions() =>
+            Chain<IPrepare, Ingredients, BrewingJug>(prepare)
                 .Chain<Ferment, BrewingJug>()
                 .Chain<TwoTupleJunctionTest, (Ingredients, BrewingJug)>()
                 .Chain<ThreeTupleJunctionTest, (Ingredients, BrewingJug, Unit)>()
@@ -529,23 +525,20 @@ public class TrainTests : TestSetup
 
     private class MemoryInterfaceTest : Train<IFirstInheritedInterface, Unit>
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(
-            IFirstInheritedInterface input
-        ) => Activate(input)
+        protected override Task<Either<Exception, Unit>> Junctions() =>
 #pragma warning disable CHAIN001 // Analyzer sees TInput as IFirstInheritedInterface; runtime concrete type also implements ISecondInheritedInterface
-            .Chain<TestMemoryJunction>()
+            Chain<TestMemoryJunction>()
 #pragma warning restore CHAIN001
             .Resolve();
     }
 
     private class ChainTestWithNoInputs : Train<Ingredients, List<GlassBottle>>
     {
-        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
+        protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
             var brew = new Brew();
             var ferment = new Ferment() as IFerment;
-            return Activate(input, "this is a test string to make sure it gets added to memory")
-                .AddServices(ferment)
+            return AddServices(ferment)
                 .Chain<Prepare>()
                 .Chain<Ferment>()
                 .Chain<TwoTupleJunctionTest>()
@@ -558,12 +551,11 @@ public class TrainTests : TestSetup
 
     private class ChainTestWithInterfaceTuple : Train<Ingredients, List<GlassBottle>>
     {
-        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
+        protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
             var brew = new Brew();
             var ferment = new Ferment() as IFerment;
-            return Activate(input, "this is a test string to make sure it gets added to memory")
-                .AddServices(ferment)
+            return AddServices(ferment)
                 .Chain<PrepareWithInterface>()
                 .Chain<TwoTupleJunctionInterfaceTest>() // What we're really testing here
                 .Chain<CastBrewingJug>()
@@ -577,7 +569,7 @@ public class TrainTests : TestSetup
 
     private class ChainTestWithOneTypedService : Train<Ingredients, List<GlassBottle>>
     {
-        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
+        protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
             var brew = new Brew();
             var ferment = new Ferment();
@@ -587,8 +579,7 @@ public class TrainTests : TestSetup
             // This uses a Type argument to do a Service addition to find IFerment
             // (which is actually the second interface that it implements)
 
-            return Activate(input, "this is a test string to make sure it gets added to memory")
-                .AddServices<IFerment>(ferment)
+            return AddServices<IFerment>(ferment)
                 .Chain<Prepare>()
                 .IChain<IFerment>()
                 .Chain<TwoTupleJunctionTest>()
@@ -601,7 +592,7 @@ public class TrainTests : TestSetup
 
     private class ChainTestWithTwoTypedServices : Train<Ingredients, List<GlassBottle>>
     {
-        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
+        protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
             var brew = new Brew();
             var ferment = new Ferment();
@@ -612,8 +603,7 @@ public class TrainTests : TestSetup
             // This uses a Type argument to do a Service addition to find IFerment
             // (which is actually the second interface that it implements)
 
-            return Activate(input, "this is a test string to make sure it gets added to memory")
-                .AddServices<IPrepare, IFerment>(prepare, ferment)
+            return AddServices<IPrepare, IFerment>(prepare, ferment)
                 .IChain<IPrepare>()
                 .IChain<IFerment>()
                 .Chain<TwoTupleJunctionTest>()
@@ -626,12 +616,11 @@ public class TrainTests : TestSetup
 
     private class ChainTestWithMockedService : Train<Ingredients, List<GlassBottle>>
     {
-        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
+        protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
             var brew = new Brew();
             var ferment = new StubFerment() as IFerment;
-            return Activate(input, "this is a test string to make sure it gets added to memory")
-                .AddServices(ferment)
+            return AddServices(ferment)
                 .Chain<Prepare>()
                 .Chain<Ferment>()
                 .Chain<TwoTupleJunctionTest>()
@@ -644,23 +633,17 @@ public class TrainTests : TestSetup
 
     private class TrainTestWithTupleInput : Train<(int, string, object), (bool, double, object)>
     {
-        protected override Task<Either<Exception, (bool, double, object)>> RunInternal(
-            (int, string, object) input
-        ) =>
-            Activate(input)
-                .Chain<TupleReturnJunction>()
-                .ShortCircuit<TupleReturnJunction>()
-                .Resolve();
+        protected override Task<Either<Exception, (bool, double, object)>> Junctions() =>
+            Chain<TupleReturnJunction>().ShortCircuit<TupleReturnJunction>().Resolve();
     }
 
     private class ChainTestWithUnitInput : Train<Ingredients, List<GlassBottle>>
     {
-        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
+        protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
             var brew = new Brew();
             var ferment = new Ferment() as IFerment;
-            return Activate(input, "this is a test string to make sure it gets added to memory")
-                .AddServices(ferment)
+            return AddServices(ferment)
                 .Chain<Meditate>()
                 .Chain<Prepare>()
                 .Chain<Ferment>()
@@ -675,11 +658,10 @@ public class TrainTests : TestSetup
     private class ChainTestWithShortCircuit(IPrepare prepare, IFerment ferment)
         : Train<Ingredients, List<GlassBottle>>
     {
-        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
+        protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
             var brew = new Brew();
-            return Activate(input)
-                .AddServices(prepare, ferment)
+            return AddServices(prepare, ferment)
                 .IChain<IPrepare>()
                 .Chain<Ferment>()
                 .Chain<TwoTupleJunctionTest>()
@@ -694,11 +676,10 @@ public class TrainTests : TestSetup
     private class ChainTestWithShortCircuitStaysLeft(IPrepare prepare, IFerment ferment)
         : Train<Ingredients, List<GlassBottle>>
     {
-        protected override Task<Either<Exception, List<GlassBottle>>> RunInternal(Ingredients input)
+        protected override Task<Either<Exception, List<GlassBottle>>> Junctions()
         {
             var brew = new Brew();
-            return Activate(input)
-                .AddServices(prepare, ferment)
+            return AddServices(prepare, ferment)
                 .IChain<IPrepare>()
                 .ShortCircuit<TripTryingToSteal>()
                 .Chain<Ferment>()
@@ -712,8 +693,8 @@ public class TrainTests : TestSetup
 
     private class ChainTestWithException : Train<Unit, Unit>
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(Unit input) =>
-            Activate(input).Chain<ThrowsJunction>().Resolve();
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Chain<ThrowsJunction>().Resolve();
     }
 
     private class ChainTestWithLoggerProvider(
@@ -721,13 +702,13 @@ public class TrainTests : TestSetup
         ITestService testService
     ) : Train<Unit, Unit>
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(Unit input) =>
-            Activate(input).AddServices(loggerFactory, testService).Chain<LoggerTest>().Resolve();
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            AddServices(loggerFactory, testService).Chain<LoggerTest>().Resolve();
     }
 
     private class ChainTestWithServiceProvider(IServiceProvider serviceProvider) : Train<Unit, Unit>
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(Unit input) =>
-            Activate(input, serviceProvider).Chain<LoggerTest>().Resolve();
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            AddServices(serviceProvider).Chain<LoggerTest>().Resolve();
     }
 }

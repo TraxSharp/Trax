@@ -76,7 +76,20 @@ public partial class Monad<TInput, TReturn>
     /// </summary>
     // ReSharper disable once InconsistentNaming
     public MonadTask<TInput, TReturn> IChain<TJunction>()
-        where TJunction : class => new(IChainAsync<TJunction>());
+        where TJunction : class
+    {
+        if (Recorder is null)
+            return new(IChainAsync<TJunction>());
+
+        // The runtime refuses a non-interface on every run, so the declaration is refused too.
+        if (!typeof(TJunction).IsInterface)
+            Recorder.Refuse(
+                $"IChain<{typeof(TJunction).Name}> names a class; IChain resolves a junction by "
+                    + "its interface. Use Chain with a class."
+            );
+
+        return RecordStep<TJunction>(ChainStepKind.IChain);
+    }
 
     private Task<Monad<TInput, TReturn>> IChainAsync<TJunction>()
         where TJunction : class
@@ -104,7 +117,10 @@ public partial class Monad<TInput, TReturn>
     /// Creates and executes a junction by its type.
     /// </summary>
     public MonadTask<TInput, TReturn> Chain<TJunction>()
-        where TJunction : class => new(ChainAsync<TJunction>());
+        where TJunction : class =>
+        Recorder is not null
+            ? RecordStep<TJunction>(ChainStepKind.Chain)
+            : new(ChainAsync<TJunction>());
 
     private Task<Monad<TInput, TReturn>> ChainAsync<TJunction>()
         where TJunction : class
@@ -124,7 +140,10 @@ public partial class Monad<TInput, TReturn>
     /// Executes a junction instance.
     /// </summary>
     public MonadTask<TInput, TReturn> Chain<TJunction>(TJunction junctionInstance)
-        where TJunction : class => new(ChainAsync(junctionInstance));
+        where TJunction : class =>
+        Recorder is not null
+            ? RecordStep<TJunction>(ChainStepKind.Chain)
+            : new(ChainAsync(junctionInstance));
 
     private Task<Monad<TInput, TReturn>> ChainAsync<TJunction>(TJunction junctionInstance)
         where TJunction : class
@@ -151,28 +170,81 @@ public partial class Monad<TInput, TReturn>
     /// </summary>
     public MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
         where TJunction : IJunction<TIn, TOut> =>
-        new(ChainJunction<TJunction, TIn, TOut>(junction));
+        Recorder is not null
+            ? RecordStep<TJunction>(ChainStepKind.Chain, typeof(TIn), typeof(TOut))
+            : new(ChainJunction<TJunction, TIn, TOut>(junction));
 
     /// <summary>
     /// Creates and executes a junction with explicit input/output types.
     /// </summary>
     public MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>()
         where TJunction : IJunction<TIn, TOut>, new() =>
-        new(ChainJunction<TJunction, TIn, TOut>(new TJunction()));
+        Recorder is not null
+            ? RecordStep<TJunction>(ChainStepKind.Chain, typeof(TIn), typeof(TOut))
+            : new(ChainJunction<TJunction, TIn, TOut>(new TJunction()));
 
     /// <summary>
     /// Executes a junction instance with explicit input type and Unit output.
     /// </summary>
     public MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
         where TJunction : IJunction<TIn, Unit> =>
-        new(ChainJunction<TJunction, TIn, Unit>(junction));
+        Recorder is not null
+            ? RecordStep<TJunction>(ChainStepKind.Chain, typeof(TIn), typeof(Unit))
+            : new(ChainJunction<TJunction, TIn, Unit>(junction));
 
     /// <summary>
     /// Creates and executes a junction with explicit input type and Unit output.
     /// </summary>
     public MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
         where TJunction : IJunction<TIn, Unit>, new() =>
-        new(ChainJunction<TJunction, TIn, Unit>(new TJunction()));
+        Recorder is not null
+            ? RecordStep<TJunction>(ChainStepKind.Chain, typeof(TIn), typeof(Unit))
+            : new(ChainJunction<TJunction, TIn, Unit>(new TJunction()));
 
     #endregion
+
+    /// <summary>
+    /// Writes one step to the recorder and hands back a completed monad, so a route reads as a
+    /// sequence of types without resolving a junction or running one.
+    /// </summary>
+    private MonadTask<TInput, TReturn> RecordStep<TJunction>(ChainStepKind kind)
+    {
+        Type tIn,
+            tOut;
+
+        try
+        {
+            (tIn, tOut) = ReflectionHelpers.ExtractJunctionTypeArguments<TJunction>();
+        }
+        catch (InvalidOperationException)
+        {
+            // A type that is not a junction fails every run; reading the chain reports it
+            // alongside everything else instead of throwing out of DeclaredChain.
+            Recorder!.Refuse(
+                $"{kind} names {typeof(TJunction).Name}, which does not implement "
+                    + "IJunction<TIn, TOut>."
+            );
+
+            return new MonadTask<TInput, TReturn>(Task.FromResult(this));
+        }
+
+        Recorder!.Record(kind, typeof(TJunction), tIn, tOut);
+
+        return new MonadTask<TInput, TReturn>(Task.FromResult(this));
+    }
+
+    /// <summary>
+    /// Records a step whose input and output types the caller stated explicitly, rather than
+    /// ones inferred from the junction's interface.
+    /// </summary>
+    private MonadTask<TInput, TReturn> RecordStep<TJunction>(
+        ChainStepKind kind,
+        Type tIn,
+        Type tOut
+    )
+    {
+        Recorder!.Record(kind, typeof(TJunction), tIn, tOut);
+
+        return new MonadTask<TInput, TReturn>(Task.FromResult(this));
+    }
 }

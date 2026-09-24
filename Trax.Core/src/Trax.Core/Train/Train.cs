@@ -1,7 +1,9 @@
 using System.Text.Json.Serialization;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
+using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
+using Trax.Core.Junction;
 using Trax.Core.Monad;
 using Trax.Core.Route;
 
@@ -28,15 +30,9 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
 
     /// <summary>
     /// Internal Monad instance used by the Junctions() API.
-    /// Set by the default RunInternal before calling Junctions().
-    /// Accessible via internal setter for ServiceTrain to initialize with ServiceProvider.
+    /// Set before Junctions() is called, whether the chain is being run or read.
     /// </summary>
     private Monad<TInput, TReturn>? _monad;
-
-    internal Monad<TInput, TReturn>? TrainMonad
-    {
-        set => _monad = value;
-    }
 
     /// <summary>
     /// Executes the train with the provided input.
@@ -69,15 +65,16 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     public Task<Either<Exception, TReturn>> RunEither(TInput input) => RunInternal(input);
 
     /// <summary>
-    /// The core implementation method that executes the train's logic.
-    /// Override this for full control over the railway pipeline (advanced).
-    /// If not overridden, the default implementation calls Junctions().
+    /// Seeds the chain with the input and runs the junctions the train declares.
     /// </summary>
-    /// <param name="input">The input data for the train</param>
-    /// <returns>Either the result of the train or an exception</returns>
-    protected virtual async Task<Either<Exception, TReturn>> RunInternal(TInput input)
+    /// <remarks>
+    /// Private on purpose. A train says which junctions run, and nothing else: an override here
+    /// could build its chain imperatively, which would put the chain out of reach of the startup
+    /// check that reads every train's declaration before the host serves traffic.
+    /// </remarks>
+    private async Task<Either<Exception, TReturn>> RunInternal(TInput input)
     {
-        _monad = new Monad<TInput, TReturn>(this, CancellationToken).Activate(input);
+        _monad = NewMonad().Activate(input);
 
         try
         {
@@ -90,23 +87,118 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     }
 
     /// <summary>
+    /// Builds the monad this train chains through. Overridden where the monad needs more than
+    /// the train itself, such as a <c>ServiceTrain</c> supplying the container that resolves
+    /// junctions.
+    /// </summary>
+    protected virtual Monad<TInput, TReturn> NewMonad() => new(this, CancellationToken);
+
+    /// <summary>
+    /// True while this train's chain is being read rather than run.
+    /// </summary>
+    /// <remarks>
+    /// Per-execution state is unavailable while a chain is read and accessors for it throw, so a
+    /// chain cannot come to depend on the value being processed. See
+    /// <see cref="ChainDeclarationException"/>.
+    /// </remarks>
+    public bool IsDeclaringChain { get; private set; }
+
+    /// <summary>
+    /// The recorder a chain is being read into, so that a monad created while declaring, by
+    /// <see cref="NewMonad"/> as much as by the train itself, records instead of running.
+    /// </summary>
+    internal ChainRecorder? ActiveRecorder { get; private set; }
+
+    /// <summary>
+    /// Reads this train's declared chain without resolving or running any junction.
+    /// </summary>
+    /// <remarks>
+    /// Every chain call answers by recording its type arguments, so the result is the sequence
+    /// of types the train declares. Nothing touches the container and no junction executes.
+    ///
+    /// <para><c>Junctions()</c> itself does run, which is why it has to be a pure declaration. A
+    /// body that awaits before returning, or that returns a result instead of ending in
+    /// <c>Resolve()</c>, has no chain to read, and that is recorded in
+    /// <see cref="ChainRecorder.Refusals"/> rather than reported as a clean train. Whatever such a
+    /// body started is not undone.</para>
+    /// </remarks>
+    /// <exception cref="ChainDeclarationException">
+    /// The train read per-execution state while declaring its chain.
+    /// </exception>
+    public ChainRecorder DeclaredChain()
+    {
+        var recorder = new ChainRecorder();
+        ActiveRecorder = recorder;
+        IsDeclaringChain = true;
+
+        _monad = NewMonad();
+
+        try
+        {
+            var declared = Junctions();
+
+            if (!declared.IsCompleted)
+            {
+                // Every step completes synchronously while recording, so a task still running
+                // here is waiting on something the body started itself. Its outcome belongs to
+                // no one, so it is observed and dropped rather than left to surface unobserved.
+                _ = declared.ContinueWith(
+                    t => _ = t.Exception,
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted
+                        | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default
+                );
+
+                recorder.Refuse(
+                    "Junctions() awaited something before returning, so it does work instead of "
+                        + "declaring a chain. Declare the chain without awaiting and move the work "
+                        + "into a junction."
+                );
+            }
+            else
+            {
+                // An async body's exceptions, ChainDeclarationException included, land in the
+                // task rather than propagating, so they are rethrown here.
+                var result = declared.GetAwaiter().GetResult();
+
+                if (!result.IsLeft || result.Swap().ValueUnsafe() is not ChainRecordedException)
+                    recorder.Refuse(
+                        "Junctions() returned a result instead of ending its chain with "
+                            + "Resolve(), so there is no chain to verify. Chain the junction that "
+                            + "produces the result and end with Resolve()."
+                    );
+            }
+        }
+        finally
+        {
+            IsDeclaringChain = false;
+            ActiveRecorder = null;
+            _monad = null;
+        }
+
+        return recorder;
+    }
+
+    /// <summary>
     /// Defines the train's junction chain. Override this to declare which junctions
     /// the train executes. The chain returns Task&lt;Either&lt;Exception, TReturn&gt;&gt;,
-    /// which the default RunInternal awaits and propagates.
+    /// which the train awaits and propagates when it runs.
     /// </summary>
     /// <returns>The train's railway result</returns>
     protected virtual Task<Either<Exception, TReturn>> Junctions() =>
-        throw new NotImplementedException("Override either Junctions() or RunInternal().");
+        throw new NotImplementedException("Override Junctions() to declare this train's chain.");
 
     /// <summary>
-    /// Creates a composable Monad helper for chaining junctions.
-    /// Used with the RunInternal API. Not needed when overriding Junctions().
+    /// Builds a monad seeded with the input, for code that needs one directly.
     /// </summary>
-    /// <param name="input">The primary input for the train</param>
-    /// <param name="otherInputs">Additional objects to store in the Monad's Memory</param>
-    /// <returns>A Monad instance for method chaining</returns>
-    public Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs) =>
-        new Monad<TInput, TReturn>(this, CancellationToken).Activate(input, otherInputs);
+    /// <remarks>
+    /// Internal on purpose. A train declares its chain through <c>Junctions()</c>; handing out a
+    /// seeded monad would let a caller build a chain imperatively, which is what keeps a chain
+    /// out of reach of the startup check. Trax's own tests use it to exercise the monad itself.
+    /// </remarks>
+    internal Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs) =>
+        NewMonad().Activate(input, otherInputs);
 
     #region Protected chain methods (Junctions API)
 
@@ -129,6 +221,37 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         where TJunction : class => _monad!.IChain<TJunction>();
 
     /// <summary>
+    /// Executes a junction instance whose input and output types are stated explicitly, for
+    /// chains where they cannot be inferred from the junction's interface.
+    /// </summary>
+    protected MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
+        where TJunction : IJunction<TIn, TOut> => _monad!.Chain<TJunction, TIn, TOut>(junction);
+
+    /// <inheritdoc cref="Chain{TJunction,TIn,TOut}(TJunction)"/>
+    protected MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>()
+        where TJunction : IJunction<TIn, TOut>, new() => _monad!.Chain<TJunction, TIn, TOut>();
+
+    /// <inheritdoc cref="Chain{TJunction,TIn,TOut}(TJunction)"/>
+    protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
+        where TJunction : IJunction<TIn, Unit> => _monad!.Chain<TJunction, TIn>(junction);
+
+    /// <inheritdoc cref="Chain{TJunction,TIn,TOut}(TJunction)"/>
+    protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
+        where TJunction : IJunction<TIn, Unit>, new() => _monad!.Chain<TJunction, TIn>();
+
+    /// <summary>
+    /// Ends a chain that declares no junctions, taking the train's return value from Memory.
+    /// </summary>
+    /// <remarks>
+    /// A train whose return type is already in Memory, because it is the input type or the
+    /// seeded <c>Unit</c>, declares a chain of zero junctions. This is the terminal step for
+    /// that chain. It takes no value and computes nothing: a declaration states which junctions
+    /// run, and stating a result directly would make the chain depend on something other than
+    /// the junctions it names.
+    /// </remarks>
+    protected Either<Exception, TReturn> Resolve() => _monad!.Resolve();
+
+    /// <summary>
     /// Extracts a value of type TOut from an object of type TIn in Memory.
     /// </summary>
     protected Monad<TInput, TReturn> Extract<TIn, TOut>() => _monad!.Extract<TIn, TOut>();
@@ -140,9 +263,16 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         _monad!.Extract<TIn, TOut>(input);
 
     /// <summary>
-    /// Executes a junction with short-circuit behavior.
-    /// If the junction produces TReturn, the chain ends early with that value.
+    /// Executes a junction with short-circuit behavior. If the junction returns Right, its
+    /// TReturn value becomes the train's result; if it returns Left, the failure is ignored.
     /// </summary>
+    /// <remarks>
+    /// A short circuit does not end the chain: the junctions after it still run, and a failure
+    /// in one of them still fails the train. What it decides is what <c>Resolve()</c> returns,
+    /// which is the short-circuited value in preference to anything later in Memory. A Right
+    /// output is also stored in Memory, but a Left stores nothing, so the chain check does not
+    /// count a short circuit's output as available to the junctions after it.
+    /// </remarks>
     protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>()
         where TJunction : class => _monad!.ShortCircuit<TJunction>();
 

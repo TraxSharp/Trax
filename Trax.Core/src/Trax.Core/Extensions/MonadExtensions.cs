@@ -235,10 +235,23 @@ public static class MonadExtensions
                 $"Tuple input ({typeof(TIn)}) cannot have a length greater than 7."
             );
 
-        var tupleList = Enumerable.Range(0, inputTuple.Length).Select(i => inputTuple[i]!).ToList();
+        // The declared element types, when the caller's static type is the tuple itself. A
+        // junction taking a declared element type, a base class say, finds the value whatever
+        // subtype it holds; the startup chain check assumes exactly that.
+        var declaredTypes = typeof(TIn).IsTuple() ? typeof(TIn).GetGenericArguments() : [];
 
-        foreach (var tupleValue in tupleList)
+        for (var i = 0; i < inputTuple.Length; i++)
         {
+            var tupleValue = inputTuple[i];
+
+            // A null element has no value to find; a junction asking for it fails with the
+            // ordinary "could not find type" rather than a NullReferenceException here.
+            if (tupleValue is null)
+                continue;
+
+            if (i < declaredTypes.Length)
+                monad.Memory[declaredTypes[i]] = tupleValue;
+
             var tupleValueType = tupleValue.GetType();
 
             monad.Memory[tupleValueType] = tupleValue;

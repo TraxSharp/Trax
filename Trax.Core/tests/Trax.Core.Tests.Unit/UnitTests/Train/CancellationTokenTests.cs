@@ -204,10 +204,10 @@ public class CancellationTokenTests : TestSetup
     {
         public CancellationToken CapturedToken { get; private set; }
 
-        protected override Task<Either<Exception, string>> RunInternal(string input)
+        protected override Task<Either<Exception, string>> Junctions()
         {
             CapturedToken = CancellationToken;
-            return Task.FromResult<Either<Exception, string>>(input);
+            return Task.FromResult(Resolve());
         }
     }
 
@@ -277,8 +277,8 @@ public class CancellationTokenTests : TestSetup
 
         public SingleJunctionTrain(Junction<string, string> junction) => _junction = junction;
 
-        protected override Task<Either<Exception, string>> RunInternal(string input) =>
-            Activate(input).Chain(_junction).Resolve();
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain(_junction).Resolve();
     }
 
     private class TwoJunctionTrain : Train<string, string>
@@ -295,8 +295,8 @@ public class CancellationTokenTests : TestSetup
             _junction2 = junction2;
         }
 
-        protected override Task<Either<Exception, string>> RunInternal(string input) =>
-            Activate(input).Chain(_junction1).Chain(_junction2).Resolve();
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain(_junction1).Chain(_junction2).Resolve();
     }
 
     #endregion

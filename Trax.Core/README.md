@@ -129,14 +129,11 @@ Either<Exception, User> result = await train.RunEither(request);
 User user = await train.Run(request);
 ```
 
-## Compile-Time Validation
+## Startup Chain Verification
 
-Trax.Core ships with a Roslyn analyzer that validates your route at build time. If a stop expects cargo that no previous stop has loaded, you get a compiler error, not a runtime derailment.
+A train's chain is a declaration, so a host can check it before serving traffic. With the mediator registered, every train's `Junctions()` is read at startup and replayed over the types Memory would hold; if a junction expects cargo no earlier stop loads, or the chain ends without the train's result, the host refuses to start and names every train that cannot run.
 
-| Diagnostic | Meaning |
-|------------|---------|
-| **CHAIN001** | A junction expects cargo that isn't on the train at that point in the route |
-| **CHAIN002** | The train's final delivery type isn't on board when `Resolve()` is called |
+The Roslyn analyzer this package used to describe here (CHAIN001, CHAIN002) is deprecated: it only reads chains rooted at `Activate()`, which can no longer be written.
 
 ## IDE Extensions
 

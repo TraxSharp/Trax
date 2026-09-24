@@ -230,7 +230,7 @@ public class JunctionCancellationTests : TestSetup
 
     private class TestTrain : Train<string, string>
     {
-        protected override Task<Either<Exception, string>> RunInternal(string input) =>
+        protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();
     }
 

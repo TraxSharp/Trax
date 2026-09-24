@@ -214,7 +214,7 @@ public class ChainTests : TestSetup
 
     private class TestTrain : Train<int, string>
     {
-        protected override Task<Either<Exception, string>> RunInternal(int input) =>
+        protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();
     }
 
