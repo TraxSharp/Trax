@@ -8,7 +8,7 @@ nav_order: 6
 
 # IEnqueueContextAccessor
 
-Exposes the data context an enqueue is committing on, so a train's [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) hook can make its side-effect part of the same transaction as the work queue row. Registered as a scoped service by `AddMediator()`.
+Exposes the data context an enqueue is committing on, so a train's [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) hook can make its side-effect part of the same transaction as the work queue row. Registered as a singleton by `AddMediator()`, so a train registered with any lifetime may inject it.
 
 ## Signature
 
