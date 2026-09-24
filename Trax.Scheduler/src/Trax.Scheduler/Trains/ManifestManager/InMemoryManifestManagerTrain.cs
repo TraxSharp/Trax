@@ -20,9 +20,8 @@ namespace Trax.Scheduler.Trains.ManifestManager;
 /// </remarks>
 public class InMemoryManifestManagerTrain : ServiceTrain<Unit, Unit>, IManifestManagerTrain
 {
-    protected override Task<Either<Exception, Unit>> RunInternal(Unit input) =>
-        Activate(input)
-            .Chain<LoadManifestsJunction>()
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<LoadManifestsJunction>()
             .Chain<ReapFailedJobsJunction>()
             .Chain<DetermineJobsToQueueJunction>()
             .Chain<InMemoryDispatchJobsJunction>()

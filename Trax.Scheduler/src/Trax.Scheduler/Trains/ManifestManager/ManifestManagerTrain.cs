@@ -9,12 +9,12 @@ namespace Trax.Scheduler.Trains.ManifestManager;
 /// </summary>
 public class ManifestManagerTrain : ServiceTrain<Unit, Unit>, IManifestManagerTrain
 {
-    protected override Task<Either<Exception, Unit>> RunInternal(Unit input) =>
-        Activate(input)
-            .Chain<LoadManifestsJunction>()
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<LoadManifestsJunction>()
             .Chain<CancelTimedOutJobsJunction>()
             .Chain<ReapStalePendingMetadataJunction>()
             .Chain<ReapStaleInProgressMetadataJunction>()
+            .Chain<ResolveStaleStagedEntriesJunction>()
             .Chain<ReapFailedJobsJunction>()
             .Chain<DetermineJobsToQueueJunction>()
             .Chain<CreateWorkQueueEntriesJunction>()

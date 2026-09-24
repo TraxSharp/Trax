@@ -11,8 +11,8 @@ namespace Trax.Scheduler.Services.Operations;
 /// <c>operations.getTrains</c> returns as <c>ServiceTypeName</c>).
 /// </param>
 /// <param name="InputJson">
-/// JSON payload that deserializes to the train's input type. Use <c>null</c> for trains
-/// whose input type is <c>Unit</c>.
+/// JSON payload that deserializes to the train's input type. <c>null</c> or blank is read as
+/// an empty object, so a train whose input needs no values can be queued without one.
 /// </param>
 /// <param name="Priority">Dispatch priority 0-31. Higher values run first. Defaults to 0.</param>
 /// <param name="ScheduledAt">

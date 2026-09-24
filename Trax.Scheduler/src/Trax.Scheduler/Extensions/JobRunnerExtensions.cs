@@ -139,7 +139,7 @@ public static class JobRunnerExtensions
             {
                 try
                 {
-                    return Results.Ok(await handler.RunTrainAsync(request));
+                    return Results.Json(await handler.RunTrainAsync(request), RemoteRunJson.Write);
                 }
                 catch (Exception ex)
                 {
@@ -148,7 +148,10 @@ public static class JobRunnerExtensions
                         "Remote run execution failed for train {TrainName}",
                         request.TrainName
                     );
-                    return Results.Ok(TraxRequestHandler.BuildErrorResponse(ex));
+                    return Results.Json(
+                        TraxRequestHandler.BuildErrorResponse(ex),
+                        RemoteRunJson.Write
+                    );
                 }
             }
         );

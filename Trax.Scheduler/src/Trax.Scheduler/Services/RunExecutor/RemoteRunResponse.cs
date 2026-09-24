@@ -1,3 +1,6 @@
+using System.Text.Json;
+using Trax.Core.Exceptions;
+
 namespace Trax.Scheduler.Services.RunExecutor;
 
 /// <summary>
@@ -26,5 +29,41 @@ public record RemoteRunResponse(
     string? ErrorMessage = null,
     string? ExceptionType = null,
     string? FailureJunction = null,
-    string? StackTrace = null
-);
+    string? StackTrace = null,
+    FailureClass? FailureClass = null
+)
+{
+    /// <summary>
+    /// Rebuilds the failure this response reports as the <see cref="TrainException"/> the calling
+    /// side records.
+    /// </summary>
+    /// <remarks>
+    /// When the worker sent structured error fields (<see cref="ExceptionType"/> and
+    /// <see cref="FailureJunction"/>), the exception's message is the <see cref="TrainExceptionData"/>
+    /// JSON, so <c>Metadata.AddException()</c> on the calling side parses it into its structured
+    /// fields (FailureException, FailureJunction, FailureReason) and keeps the worker's
+    /// <see cref="FailureClass"/>. Every executor that reads a remote response uses this, so the
+    /// HTTP and Lambda paths record a remote failure the same way.
+    /// </remarks>
+    public TrainException ToTrainException()
+    {
+        if (ExceptionType is not null)
+        {
+            var data = new TrainExceptionData
+            {
+                TrainName = "",
+                TrainExternalId = "",
+                Type = ExceptionType,
+                Junction = FailureJunction ?? "Unknown",
+                Message = ErrorMessage ?? "Remote train execution failed",
+                // Carried rather than recomputed: the original exception type is gone by now, so
+                // re-classifying here would mean matching a type name.
+                FailureClass = FailureClass,
+            };
+
+            return new TrainException(JsonSerializer.Serialize(data));
+        }
+
+        return new TrainException($"Remote train execution failed: {ErrorMessage}");
+    }
+}

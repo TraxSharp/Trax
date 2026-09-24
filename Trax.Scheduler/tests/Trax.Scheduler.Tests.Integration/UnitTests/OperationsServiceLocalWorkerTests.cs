@@ -5,6 +5,7 @@ using NSubstitute;
 using NUnit.Framework;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
 
@@ -34,7 +35,16 @@ public class OperationsServiceLocalWorkerTests
         // Provide a no-op data context for PersistAsync calls. Use a real InMemory
         // context if persistence is needed; for change-detection tests below we only
         // need the singleton mutation path, and a stubbed factory throws if persisted.
-        return new OperationsService(discovery, factory, cfg, workerOpts);
+        // These tests exercise scheduler-config mutation, not enqueueing, so the execution
+        // service is never called — but it is required rather than optional so that no code
+        // path can enqueue without going through authorization.
+        return new OperationsService(
+            discovery,
+            factory,
+            cfg,
+            Substitute.For<ITrainExecutionService>(),
+            workerOpts
+        );
     }
 
     [Test]

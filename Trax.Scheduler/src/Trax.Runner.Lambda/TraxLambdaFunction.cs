@@ -170,7 +170,9 @@ public abstract class TraxLambdaFunction
                 var result = await HandleExecute(body, handler, logger, ctx.RequestAborted);
 
                 ctx.Response.ContentType = "application/json";
-                await ctx.Response.WriteAsync(JsonSerializer.Serialize(result));
+                await ctx.Response.WriteAsync(
+                    JsonSerializer.Serialize(result, RemoteRunJson.Write)
+                );
             }
         );
 
@@ -189,7 +191,9 @@ public abstract class TraxLambdaFunction
                 var result = await HandleRun(body, handler, logger, ctx.RequestAborted);
 
                 ctx.Response.ContentType = "application/json";
-                await ctx.Response.WriteAsync(JsonSerializer.Serialize(result));
+                await ctx.Response.WriteAsync(
+                    JsonSerializer.Serialize(result, RemoteRunJson.Write)
+                );
             }
         );
     }

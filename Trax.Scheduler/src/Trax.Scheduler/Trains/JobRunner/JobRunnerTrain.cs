@@ -16,9 +16,8 @@ namespace Trax.Scheduler.Trains.JobRunner;
 /// </remarks>
 public class JobRunnerTrain : ServiceTrain<RunJobRequest, Unit>, IJobRunnerTrain
 {
-    protected override Task<Either<Exception, Unit>> RunInternal(RunJobRequest input) =>
-        Activate(input)
-            .Chain<LoadMetadataJunction>()
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<LoadMetadataJunction>()
             .Chain<ValidateMetadataStateJunction>()
             .Chain<RunScheduledTrainJunction>()
             .Chain<UpdateManifestSuccessJunction>()

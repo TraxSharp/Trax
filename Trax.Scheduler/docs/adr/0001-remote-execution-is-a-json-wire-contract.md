@@ -32,8 +32,24 @@ interface FullName is the identifier every other layer already stores.
 ## Consequences
 
 **The contract is a public record, and changing it is a breaking change for anyone running
-a worker built against the old shape.** Adding a property is safe; renaming or removing one
-is not, and neither end validates a version.
+a worker built against the old shape.** Adding a nullable property is safe, because an older
+peer omits or ignores it; renaming or removing one is not, and neither end validates a version.
+An enum crosses as its integer, so its values are pinned explicitly (`FailureClass` does this).
+The run response does not depend on the worker host's JSON options where Trax writes it: the
+job-runner HTTP endpoint and the Lambda runner's local HTTP route both serialize it with Trax's
+own options (`RemoteRunJson.Write`, web defaults, enums as integers). A Lambda function's own
+invocation response is serialized by the function's Lambda serializer, which Trax does not
+control, so that path relies on the reader instead: both `HttpRunExecutor` and
+`LambdaRunExecutor` read with options that accept an enum as its integer or its name. A class the
+reader does not know, an unknown integer or name from a newer worker, reads as `Unclassified` and
+the worker's error is kept.
+
+The wire's own code is public: `RemoteRunJson` (both options read-only) and
+`RemoteRunResponse.ToTrainException()`, which rebuilds the failure a response reports. The Lambda
+packages ship separately and depend on Trax.Scheduler only as a version floor, so reaching these
+through `InternalsVisibleTo` would break with `MissingMethodException` once a consumer picked up
+a newer Trax.Scheduler than the Lambda package was built against. Trax.Scheduler grants neither
+Lambda package `InternalsVisibleTo`.
 
 **`InputType` is read only on the job path.** `TraxRequestHandler.ExecuteJobAsync` resolves
 it to a `Type` to deserialize a `RemoteJobRequest`'s input, because at that point the handler
@@ -77,6 +93,8 @@ its members is part of the contract too.
   property rename is caught by the compiler here rather than by the round-trip.
 - `HttpRunExecutorTests` captures the request `HttpRunExecutor` actually put on the wire and
   asserts each of the three strings landed in the property it belongs to.
+- `HttpRunExecutorTests` also reads an error response whose `FailureClass` arrives as an integer
+  and as a name, the second being what a worker whose host writes enums as strings would send.
 - `LambdaRunExecutorTests` decodes both layers of the Lambda payload, the envelope and the
   `RemoteRunRequest` inside it, so a change to either shape fails before an invoke does.
 
@@ -91,6 +109,15 @@ Not covered:
 
 ## Changelog
 
+- **2026-09-24**: The wire's serializer options and failure rebuilding are public, and the Lambda
+  packages no longer reach Trax.Scheduler's internals.
+- **2026-09-23**: `RemoteRunResponse` gained `FailureClass`, the first enum on the run path.
+  Narrowed "adding a property is safe" to nullable properties, recorded that an enum travels as
+  its integer, which `RemoteRunContractTests` pins. The job-runner endpoint and the Lambda
+  runner's local HTTP route write the response with Trax's own JSON options; a Lambda
+  invocation's response is serialized by the function's own Lambda serializer, so both executors
+  read an enum as integer or name, and read an unknown class as `Unclassified` without losing the
+  worker's error.
 - **2026-09-12**: Corrected the `TrainNotFoundException` claim (its message never names
   the train, by design) and the exemplar description of what the positional tests pin.
 - **2026-09-11**: Corrected `InputType` (read only on the job path, dead on the run path) and

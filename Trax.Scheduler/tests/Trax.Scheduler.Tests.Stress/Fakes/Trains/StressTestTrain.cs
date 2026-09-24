@@ -6,8 +6,7 @@ namespace Trax.Scheduler.Tests.Stress.Fakes.Trains;
 
 public class StressTestTrain : ServiceTrain<StressTestInput, Unit>, IStressTestTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(StressTestInput input) =>
-        Activate(input, Unit.Default).Resolve();
+    protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 }
 
 public record StressTestInput : IManifestProperties

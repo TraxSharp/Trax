@@ -83,11 +83,14 @@ public class LambdaRunExecutor(
         var response =
             await JsonSerializer.DeserializeAsync<RemoteRunResponse>(
                 invokeResponse.Payload,
+                RemoteRunJson.Read,
                 cancellationToken: ct
             ) ?? throw new TrainException("Lambda function returned null response.");
 
+        // Shared with the HTTP executor, so a field the worker sends back, such as its failure
+        // classification, is carried by both transports rather than by whichever was updated.
         if (response.IsError)
-            throw BuildExceptionFromErrorResponse(response);
+            throw response.ToTrainException();
 
         object? output = null;
         if (response.OutputJson is not null && response.OutputType is not null)
@@ -101,26 +104,6 @@ public class LambdaRunExecutor(
         }
 
         return new RunTrainResult(response.MetadataId, response.ExternalId ?? "", output);
-    }
-
-    private static TrainException BuildExceptionFromErrorResponse(RemoteRunResponse response)
-    {
-        if (response.ExceptionType is not null)
-        {
-            var data = new TrainExceptionData
-            {
-                TrainName = "",
-                TrainExternalId = "",
-                Type = response.ExceptionType,
-                Junction = response.FailureJunction ?? "Unknown",
-                Message = response.ErrorMessage ?? "Remote train execution failed",
-            };
-
-            var json = JsonSerializer.Serialize(data);
-            return new TrainException(json);
-        }
-
-        return new TrainException($"Remote train execution failed: {response.ErrorMessage}");
     }
 
     private static async Task<string> ReadPayloadAsync(InvokeResponse response)

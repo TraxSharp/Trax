@@ -94,6 +94,24 @@ internal class TraxRequestHandler(
     /// </summary>
     internal static RemoteRunResponse BuildErrorResponse(Exception ex)
     {
+        // Priority 1: structured data on the exception object. A train rethrows the original
+        // exception with its junction context — and its failure classification — attached here, so
+        // this is the path a locally-run train actually takes. The message is only JSON when the
+        // failure already crossed a boundary once.
+        if (ex.Data["TrainExceptionData"] is TrainExceptionData attached)
+        {
+            return new RemoteRunResponse(
+                MetadataId: 0,
+                IsError: true,
+                ErrorMessage: attached.Message,
+                ExceptionType: attached.Type,
+                FailureJunction: attached.Junction,
+                StackTrace: attached.StackTrace ?? ex.StackTrace,
+                FailureClass: attached.FailureClass
+            );
+        }
+
+        // Priority 2: JSON-serialized data in the message (already crossed a boundary).
         try
         {
             var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
@@ -106,7 +124,8 @@ internal class TraxRequestHandler(
                     ErrorMessage: data.Message,
                     ExceptionType: data.Type,
                     FailureJunction: data.Junction,
-                    StackTrace: ex.StackTrace
+                    StackTrace: ex.StackTrace,
+                    FailureClass: data.FailureClass
                 );
             }
         }

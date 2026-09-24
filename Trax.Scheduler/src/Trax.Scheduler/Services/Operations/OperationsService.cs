@@ -9,7 +9,9 @@ using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Utils;
+using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Services.Operations;
@@ -22,11 +24,16 @@ public class OperationsService : IOperationsService
     private readonly SchedulerConfiguration _schedulerConfiguration;
     private readonly LocalWorkerOptions? _localWorkerOptions;
     private readonly ITraxChangeSignal? _changeSignal;
+    private readonly ITrainExecutionService _trainExecution;
 
     public OperationsService(
         ITrainDiscoveryService discoveryService,
         IDataContextProviderFactory dataContextFactory,
         SchedulerConfiguration schedulerConfiguration,
+        // Required, not optional: enqueueing goes through it so that train authorization,
+        // the OnQueue hook and the subject key all apply. A fallback path here would be a
+        // second way to enqueue that skips all three.
+        ITrainExecutionService trainExecution,
         // LocalWorkerOptions is only registered when UseLocalWorkers() is called; treat as optional.
         LocalWorkerOptions? localWorkerOptions = null,
         // Optional so direct construction in tests stays simple; always resolved via DI in a host.
@@ -38,6 +45,7 @@ public class OperationsService : IOperationsService
         _schedulerConfiguration = schedulerConfiguration;
         _localWorkerOptions = localWorkerOptions;
         _changeSignal = changeSignal;
+        _trainExecution = trainExecution;
     }
 
     /// <inheritdoc />
@@ -59,57 +67,52 @@ public class OperationsService : IOperationsService
                 Message: $"Unknown train: {input.TrainName}. Use operations.getTrains to list registered trains."
             );
 
-        string? serializedInput = null;
+        // Enqueue through the mediator rather than writing the row here. That is what applies
+        // the train's [TraxAuthorize] requirements, fires OnQueue, and stamps the subject key,
+        // none of which a hand-built entry got. The input is handed over unparsed: the mediator
+        // authorizes before it reads it, so a caller who may not run the train learns nothing
+        // about the input it expects. A TrainAuthorizationException propagates rather than being
+        // flattened into a failed OperationResult: not being allowed to run something is not a
+        // validation outcome.
+        QueueTrainResult queued;
 
-        if (!string.IsNullOrWhiteSpace(input.InputJson))
+        try
         {
-            try
-            {
-                var parsed = JsonSerializer.Deserialize(
-                    input.InputJson,
-                    registration.InputType,
-                    TraxEffectConfiguration.StaticSystemJsonSerializerOptions
-                );
-
-                if (parsed is null)
-                    return new OperationResult(
-                        false,
-                        Message: $"InputJson deserialized to null. Expected an instance of {registration.InputTypeName}."
-                    );
-
-                serializedInput = JsonSerializer.Serialize(
-                    parsed,
-                    registration.InputType,
-                    TraxJsonSerializationOptions.ManifestProperties
-                );
-            }
-            catch (JsonException ex)
-            {
-                return new OperationResult(false, Message: $"Invalid InputJson: {ex.Message}");
-            }
+            queued = await _trainExecution.QueueAsync(
+                registration.ServiceType.FullName!,
+                input.InputJson,
+                input.Priority,
+                input.ScheduledAt,
+                ct
+            );
+        }
+        catch (JsonException ex)
+        {
+            return new OperationResult(false, Message: $"Invalid InputJson: {ex.Message}");
+        }
+        catch (TrainInputValidationException ex)
+        {
+            return new OperationResult(false, Message: ex.Message);
+        }
+        catch (Exception ex)
+            when (ex is not UnauthorizedAccessException and not OperationCanceledException)
+        {
+            // Meant for the enqueue refusing: the train's OnQueue hook threw, its subject key
+            // could not be used, or a deferred entry was cancelled before it was confirmed. The
+            // filter does not tell those apart from anything else, though, so an infrastructure
+            // failure (the database unreachable) or the mediator's missing-enforcer
+            // InvalidOperationException is reported the same way. Only authorization and
+            // cancellation stay exceptions.
+            return new OperationResult(false, Message: $"The enqueue was refused: {ex.Message}");
         }
 
-        var entry = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = registration.ServiceType.FullName!,
-                Input = serializedInput,
-                InputTypeName = registration.InputType.FullName,
-                Priority = input.Priority,
-                ScheduledAt = input.ScheduledAt,
-            }
-        );
-
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
-        await db.Track(entry);
-        await db.SaveChanges(ct);
         _changeSignal?.Notify(ChangeDomain.WorkQueue);
 
         return new OperationResult(
             true,
-            Id: entry.Id,
+            Id: queued.WorkQueueId,
             Count: 1,
-            Message: $"Work queue entry {entry.Id} created."
+            Message: $"Work queue entry {queued.WorkQueueId} created."
         );
     }
 

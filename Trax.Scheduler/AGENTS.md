@@ -17,9 +17,15 @@ if your work contradicts one, say so rather than silently overriding it.
 | --- | --- |
 | the remote run request or response | [0001](./docs/adr/0001-remote-execution-is-a-json-wire-contract.md), the shape is a deployed contract with no version field |
 | SQL, or anything provider-shaped | [0002](./docs/adr/0002-a-database-provider-is-interchangeable.md), the difference belongs behind `ISqlDialect` |
+| `OperationsService`, or anywhere that builds a work queue row | central `docs/0017`, a caller's enqueue goes through the mediator; only the allow-listed system and admin paths build their own |
+| the dispatch claim, `LoadQueuedJobsJunction`, or the subject lock | central `docs/0019`, one subject's queued work runs one at a time |
+| `ResolveStaleStagedEntriesJunction`, `StaleStagedEntryTimeout` or `PromoteStaleStagedEntries` | central `docs/0018`, a stranded staged entry is cancelled by default |
+| a train's `Junctions()`, including the ManifestManager, JobDispatcher and JobRunner chains | central `docs/0016`, a chain is a declaration read at host startup, so it may not read the input |
+| `RemoteRunResponse.FailureClass`, or how either executor reads it | central `docs/0020`, the worker's class is carried, and [0001](./docs/adr/0001-remote-execution-is-a-json-wire-contract.md) for its encoding on the wire |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Nine name `scheduler`, and `0007` (the canonical train name is the
+index lists them by repo. Nineteen name `scheduler`. Besides the workspace-wide conventions and
+`0016` to `0020` (routed above), `0007` (the canonical train name is the
 interface FullName) is the one this repo touches most, since it is the string stored in
 `work_queue.train_name` and the one a remote run puts on the wire. The wire is lenient about
 it: the executing side falls back to the short type name when the FullName does not match. In
@@ -46,8 +52,11 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Scheduler.Tests.Meta/` holds eleven convention guards, and **all eleven are
-shared** with the other repos. The guards this repo's own ADRs name live with the suites they
+`tests/Trax.Scheduler.Tests.Meta/` holds fourteen convention guards. Thirteen are the
+workspace-wide conventions shared with the other repos. The fourteenth,
+`WorkQueueCreationSitesTests`, also runs in Trax.Api and Trax.Dashboard with a different
+allow-list in each; here it permits only the ManifestManager's enqueue, dormant dependents, and
+`TraxScheduler`'s manifest trigger and dead-letter requeue (`docs/0017`). The guards this repo's own ADRs name live with the suites they
 belong to rather than in `Tests.Meta`: `RemoteRunContractTests`, `HttpRunExecutorTests` and
 `LambdaRunExecutorTests` for the wire contract, `ProviderConsistencyTests` and
 `SqliteSchedulerBuilderTests` for the provider swap.

@@ -180,6 +180,28 @@ public class SchedulerConfiguration
     public TimeSpan StaleInProgressTimeout { get; set; } = TimeSpan.FromMinutes(60);
 
     /// <summary>
+    /// How long a work queue entry may stay unconfirmed before the ManifestManager resolves it.
+    /// </summary>
+    /// <remarks>
+    /// Only a train with <c>DeferQueuePromotion</c> stages an entry unconfirmed, and normally it
+    /// is confirmed a moment later, once its <c>OnQueue</c> hook returns. One still unconfirmed
+    /// after this long belongs to a process that stopped in between. Keep it well above the
+    /// slowest hook, because an entry resolved while its hook is still running is resolved
+    /// wrongly.
+    /// </remarks>
+    public TimeSpan StaleStagedEntryTimeout { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// Whether a stale unconfirmed entry is promoted instead of cancelled. Defaults to false.
+    /// </summary>
+    /// <remarks>
+    /// Cancelling is the safe default: nothing recorded tells a hook that succeeded from one that
+    /// never ran or one that rejected the mutation. Promote only when every deferring train's
+    /// chain re-checks what its hook checked and its hook is idempotent.
+    /// </remarks>
+    public bool PromoteStaleStagedEntries { get; set; }
+
+    /// <summary>
     /// The default misfire policy applied to manifests that do not specify one.
     /// </summary>
     /// <remarks>
@@ -203,8 +225,14 @@ public class SchedulerConfiguration
     /// Whether to automatically recover stuck jobs on scheduler startup.
     /// </summary>
     /// <remarks>
-    /// If true, jobs that were "InProgress" when the system shut down will be
-    /// re-evaluated on startup and potentially requeued.
+    /// If true, every <c>InProgress</c> run in the shared database whose <c>StartTime</c> is
+    /// earlier than this host's start is marked <c>Failed</c> ("Server restarted while job was in
+    /// progress").
+    /// That is every such run, whichever host or worker is executing it: the recovery does not
+    /// know which runs belonged to this process, so on a deployment where several hosts or
+    /// remote workers share the database, starting one host also fails runs that are still
+    /// executing elsewhere. The recovery itself requeues nothing. Skipped when no database
+    /// provider is registered.
     /// </remarks>
     public bool RecoverStuckJobsOnStartup { get; set; } = true;
 

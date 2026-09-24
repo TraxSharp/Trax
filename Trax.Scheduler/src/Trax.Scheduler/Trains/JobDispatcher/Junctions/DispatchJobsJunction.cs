@@ -133,7 +133,22 @@ internal class DispatchJobsJunction(
 
         using var transaction = await dataContext.BeginTransaction(CancellationToken);
 
-        // Atomically claim the entry — skips entries locked by other dispatchers
+        // Serialize claims for this subject before looking at the entry. Row locking is not enough:
+        // two entries for one subject are two different rows, so FOR UPDATE SKIP LOCKED does not
+        // make them contend, and while both are still queued neither can see a dispatched sibling
+        // to refuse itself. The lock is held for this transaction only, which commits before the
+        // job is submitted, so nothing remote happens while it is held.
+        if (entry.SubjectKey is not null && dataContext is DbContext database)
+        {
+            await database.Database.ExecuteSqlRawAsync(
+                sqlDialect.LockSubject(),
+                [entry.SubjectKey],
+                CancellationToken
+            );
+        }
+
+        // Atomically claim the entry — skips entries locked by other dispatchers, and refuses one
+        // whose subject already has a run in flight.
         var claimed = await dataContext
             .WorkQueues.FromSqlRaw(sqlDialect.ClaimWorkQueueEntry(), entry.Id)
             .FirstOrDefaultAsync(CancellationToken);

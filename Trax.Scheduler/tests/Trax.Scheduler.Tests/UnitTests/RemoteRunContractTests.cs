@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RunExecutor;
@@ -21,6 +22,20 @@ namespace Trax.Scheduler.Tests.UnitTests;
 public class RemoteRunContractTests
 {
     #region RemoteRunRequest Serialization
+
+    [Test]
+    public void The_wire_options_cannot_be_changed_by_anything_that_uses_them()
+    {
+        // RemoteRunJson is public so the separately shipped Lambda packages can use it without
+        // InternalsVisibleTo. A consumer that could add a converter to it would change the wire
+        // for every worker and scheduler in the process.
+        RemoteRunJson.Write.IsReadOnly.Should().BeTrue();
+        RemoteRunJson.Read.IsReadOnly.Should().BeTrue();
+
+        var act = () => RemoteRunJson.Write.Converters.Add(new JsonStringEnumConverter());
+
+        act.Should().Throw<InvalidOperationException>();
+    }
 
     [Test]
     public void RemoteRunRequest_RoundTrips()
@@ -153,6 +168,40 @@ public class RemoteRunContractTests
         deserialized.ExceptionType.Should().Be("InvalidOperationException");
         deserialized.FailureJunction.Should().Be("ValidateInputJunction");
         deserialized.StackTrace.Should().Contain("ValidateInputJunction");
+    }
+
+    [TestCase(Trax.Core.Exceptions.FailureClass.Unclassified, 0)]
+    [TestCase(Trax.Core.Exceptions.FailureClass.Transient, 1)]
+    [TestCase(Trax.Core.Exceptions.FailureClass.Conflict, 2)]
+    [TestCase(Trax.Core.Exceptions.FailureClass.Permanent, 3)]
+    public void RemoteRunResponse_FailureClass_TravelsAsItsPinnedInteger(
+        Trax.Core.Exceptions.FailureClass failureClass,
+        int wireValue
+    )
+    {
+        // A worker writes its response with RemoteRunJson.Write, which sends the class as the
+        // enum's integer whatever the host's own JSON options say, and the executors read it with
+        // RemoteRunJson.Read. FailureClass pins those integers explicitly; this pins every one of
+        // them as what goes on the wire, and that the reader maps each back.
+        var response = new RemoteRunResponse(
+            MetadataId: 1,
+            IsError: true,
+            ErrorMessage: "row changed",
+            FailureClass: failureClass
+        );
+
+        var json = JsonSerializer.Serialize(response, RemoteRunJson.Write);
+
+        json.Should()
+            .Contain(
+                $"\"failureClass\":{wireValue}",
+                "reordering FailureClass's members must not change what an older worker's value "
+                    + "means. See docs/adr/0001-remote-execution-is-a-json-wire-contract.md"
+            );
+        JsonSerializer
+            .Deserialize<RemoteRunResponse>(json, RemoteRunJson.Read)!
+            .FailureClass.Should()
+            .Be(failureClass);
     }
 
     [Test]

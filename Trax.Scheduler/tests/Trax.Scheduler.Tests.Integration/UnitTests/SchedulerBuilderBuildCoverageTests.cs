@@ -237,8 +237,7 @@ public class SchedulerBuilderBuildCoverageTests
 [TraxRemote]
 internal class RemoteCoverageTrain : ServiceTrain<RemoteCoverageInput, Unit>, IRemoteCoverageTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(RemoteCoverageInput input) =>
-        Activate(input, Unit.Default).Resolve();
+    protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 }
 
 internal record RemoteCoverageInput : IManifestProperties { }
@@ -253,9 +252,7 @@ internal class NonRemoteCoverageTrain
     : ServiceTrain<NonRemoteCoverageInput, Unit>,
         INonRemoteCoverageTrain
 {
-    protected override async Task<Either<Exception, Unit>> RunInternal(
-        NonRemoteCoverageInput input
-    ) => Activate(input, Unit.Default).Resolve();
+    protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 }
 
 internal record NonRemoteCoverageInput : IManifestProperties { }

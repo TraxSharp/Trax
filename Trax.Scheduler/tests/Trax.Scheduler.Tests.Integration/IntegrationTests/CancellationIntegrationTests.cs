@@ -3,6 +3,7 @@ using FluentAssertions;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Junction;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.JunctionProvider.Progress.Services.CancellationCheckProvider;
@@ -390,8 +391,13 @@ public class CancellationIntegrationTests : TestSetup
 /// </summary>
 public class TestProgressTrain : ServiceTrain<string, string>
 {
-    protected override Task<Either<Exception, string>> RunInternal(string input) =>
-        Task.FromResult<Either<Exception, string>>(input);
+    protected override Task<Either<Exception, string>> Junctions() =>
+        Chain<PassThrough1_736>().Resolve();
+
+    private sealed class PassThrough1_736 : Junction<string, string>
+    {
+        public override Task<string> Run(string input) => Task.FromResult(input);
+    }
 }
 
 /// <summary>

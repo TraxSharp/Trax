@@ -53,7 +53,7 @@ public class OperationsServiceTests : TestSetup
     }
 
     [Test]
-    public async Task QueueTrainAsync_NullInputJson_PersistsWithNullInput()
+    public async Task QueueTrainAsync_NullInputJson_PersistsAnEmptyInput()
     {
         var result = await _operations.QueueTrainAsync(
             new QueueTrainInput(TrainName),
@@ -61,11 +61,14 @@ public class OperationsServiceTests : TestSetup
         );
 
         result.Success.Should().BeTrue();
-        DataContext.WorkQueues.Single().Input.Should().BeNull();
+        DataContext
+            .WorkQueues.Single()
+            .Input.Should()
+            .NotBeNull("the runner refuses an entry with no input, so none is read as {}");
     }
 
     [Test]
-    public async Task QueueTrainAsync_WhitespaceInputJson_PersistsWithNullInput()
+    public async Task QueueTrainAsync_WhitespaceInputJson_PersistsAnEmptyInput()
     {
         var result = await _operations.QueueTrainAsync(
             new QueueTrainInput(TrainName, InputJson: "   "),
@@ -73,7 +76,7 @@ public class OperationsServiceTests : TestSetup
         );
 
         result.Success.Should().BeTrue();
-        DataContext.WorkQueues.Single().Input.Should().BeNull();
+        DataContext.WorkQueues.Single().Input.Should().NotBeNull();
     }
 
     [Test]

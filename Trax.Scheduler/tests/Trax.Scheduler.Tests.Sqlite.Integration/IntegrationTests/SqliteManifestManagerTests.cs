@@ -5,6 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
+using Trax.Effect.Models.WorkQueue;
+using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Tests.Sqlite.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Sqlite.Integration.Fixtures;
 using Trax.Scheduler.Trains.ManifestManager;
@@ -15,16 +18,23 @@ namespace Trax.Scheduler.Tests.Sqlite.Integration.IntegrationTests;
 public class SqliteManifestManagerTests : TestSetup
 {
     private IManifestManagerTrain _train = null!;
+    private SchedulerConfiguration _config = null!;
 
     public override async Task TestSetUp()
     {
         await base.TestSetUp();
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
+        _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
+        _config.StaleStagedEntryTimeout = TimeSpan.FromMinutes(10);
+        _config.PromoteStaleStagedEntries = false;
     }
 
     [TearDown]
     public async Task ManifestManagerTestsTearDown()
     {
+        _config.StaleStagedEntryTimeout = new SchedulerConfiguration().StaleStagedEntryTimeout;
+        _config.PromoteStaleStagedEntries = false;
+
         if (_train is IDisposable disposable)
             disposable.Dispose();
     }
@@ -140,6 +150,77 @@ public class SqliteManifestManagerTests : TestSetup
             .ToList();
 
         matchingEntries.Should().HaveCount(3);
+    }
+
+    #endregion
+
+    #region Stale Staged Entry Tests
+
+    // SQLite stores DateTime as TEXT, so the sweep's CreatedAt < cutoff is a string comparison.
+    // These run actual staged rows through the ManifestManager, a day past the cutoff and a
+    // minute either side of it, so a stored format that stopped sorting like the instant it
+    // encodes would put an entry on the wrong side.
+
+    [Test]
+    public async Task ManifestManager_StaleStagedEntries_AreCancelledAndRecentOnesLeftAlone()
+    {
+        var daysOld = await Stage(age: TimeSpan.FromDays(1));
+        var justPastTimeout = await Stage(age: TimeSpan.FromMinutes(11));
+        var justInsideTimeout = await Stage(age: TimeSpan.FromMinutes(9));
+        var confirmed = await Stage(age: TimeSpan.FromDays(1), confirm: true);
+
+        await _train.Run(Unit.Default);
+
+        (await Load(daysOld)).Status.Should().Be(WorkQueueStatus.Cancelled);
+        (await Load(justPastTimeout)).Status.Should().Be(WorkQueueStatus.Cancelled);
+
+        var recent = await Load(justInsideTimeout);
+        recent.Status.Should().Be(WorkQueueStatus.Queued, "its hook may still be running");
+        recent.ConfirmedAt.Should().BeNull();
+
+        (await Load(confirmed))
+            .Status.Should()
+            .Be(WorkQueueStatus.Queued, "only unconfirmed entries are stranded");
+    }
+
+    [Test]
+    public async Task ManifestManager_StaleStagedEntry_IsPromotedWhenTheHostOptsIn()
+    {
+        _config.PromoteStaleStagedEntries = true;
+        var stale = await Stage(age: TimeSpan.FromMinutes(11));
+        var recent = await Stage(age: TimeSpan.FromMinutes(9));
+
+        await _train.Run(Unit.Default);
+
+        var promoted = await Load(stale);
+        promoted.Status.Should().Be(WorkQueueStatus.Queued);
+        promoted.ConfirmedAt.Should().NotBeNull();
+        (await Load(recent)).ConfirmedAt.Should().BeNull();
+    }
+
+    private async Task<long> Stage(TimeSpan age, bool confirm = false)
+    {
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(SchedulerTestTrain).FullName!,
+                Input = "{}",
+                InputTypeName = typeof(SchedulerTestInput).FullName,
+                DeferPromotion = !confirm,
+            }
+        );
+        entry.CreatedAt = DateTime.UtcNow - age;
+
+        await DataContext.Track(entry);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+        return entry.Id;
+    }
+
+    private async Task<WorkQueue> Load(long id)
+    {
+        DataContext.Reset();
+        return await DataContext.WorkQueues.AsNoTracking().FirstAsync(w => w.Id == id);
     }
 
     #endregion

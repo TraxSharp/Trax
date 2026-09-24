@@ -32,10 +32,27 @@ internal class LoadQueuedJobsJunction(
 {
     public override async Task<List<WorkQueue>> Run(Unit input)
     {
-        if (!config.MaxQueuedJobsPerCycle.HasValue)
-            return await LoadAllQueued();
+        var entries = config.MaxQueuedJobsPerCycle.HasValue
+            ? await LoadGroupFair(config.MaxQueuedJobsPerCycle.Value)
+            : await LoadAllQueued();
 
-        return await LoadGroupFair(config.MaxQueuedJobsPerCycle.Value);
+        return FirstPerSubject(entries);
+    }
+
+    /// <summary>
+    /// Keeps only the first entry for each subject, in dispatch order.
+    /// </summary>
+    /// <remarks>
+    /// Loading drops subjects that already have a run in flight, but not queued siblings of a
+    /// subject that is free. Only one of those can be claimed in a cycle, and each of the rest
+    /// would still take a capacity slot before the claim refused it, so a burst for one subject
+    /// could fill the cycle. The ones left out are loaded again on a later cycle.
+    /// </remarks>
+    private static List<WorkQueue> FirstPerSubject(List<WorkQueue> entries)
+    {
+        var subjects = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+
+        return entries.Where(e => e.SubjectKey is null || subjects.Add(e.SubjectKey)).ToList();
     }
 
     /// <summary>
@@ -48,8 +65,26 @@ internal class LoadQueuedJobsJunction(
             .Include(q => q.Manifest)
                 .ThenInclude(m => m!.ManifestGroup)
             .Where(q => q.Status == WorkQueueStatus.Queued)
+            // An entry staged by a two-phase enqueue is not dispatchable until promoted. The claim
+            // query rejects it anyway; excluding it here keeps it out of the candidate batch so it
+            // cannot crowd out work that is actually ready.
+            .Where(q => q.ConfirmedAt != null)
             .Where(q => q.ManifestId == null || q.Manifest!.ManifestGroup!.IsEnabled)
             .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
+            // Subjects with a run still in flight are not candidates. The claim refuses them
+            // anyway; dropping them here keeps a blocked subject from crowding the batch.
+            .Where(q =>
+                q.SubjectKey == null
+                || !dataContext.WorkQueues.Any(b =>
+                    b.SubjectKey == q.SubjectKey
+                    && b.Status == WorkQueueStatus.Dispatched
+                    && b.Metadata != null
+                    && (
+                        b.Metadata.TrainState == TrainState.Pending
+                        || b.Metadata.TrainState == TrainState.InProgress
+                    )
+                )
+            )
             .OrderByDescending(q => q.Manifest != null ? q.Manifest.ManifestGroup!.Priority : 0)
             .ThenByDescending(q => q.Priority)
             .ThenBy(q => q.CreatedAt)

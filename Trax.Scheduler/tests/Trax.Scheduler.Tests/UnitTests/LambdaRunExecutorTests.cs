@@ -23,8 +23,10 @@ namespace Trax.Scheduler.Tests.UnitTests;
 /// <c>LambdaEnvelope</c>. <c>ExecuteAsync_SendsCorrectEnvelope</c> decodes both layers, so a
 /// change to either shape fails here rather than at invoke time.</para>
 ///
-/// <para>Enforces <c>docs/adr/0001-remote-execution-is-a-json-wire-contract.md</c>.</para>
+/// <para>Enforces <c>docs/adr/0001-remote-execution-is-a-json-wire-contract.md</c> and, for the
+/// failure class it carries, <c>Trax.Docs/adr/0020-a-failure-is-classified-where-it-happens-and-carried.md</c>.</para>
 /// </summary>
+[Property("adr", "Trax.Docs/adr/0020-a-failure-is-classified-where-it-happens-and-carried.md")]
 [Property("adr", "docs/adr/0001-remote-execution-is-a-json-wire-contract.md")]
 [TestFixture]
 public class LambdaRunExecutorTests
@@ -203,6 +205,92 @@ public class LambdaRunExecutorTests
     }
 
     [Test]
+    public async Task ExecuteAsync_ErrorResponse_CarriesTheWorkersFailureClass()
+    {
+        // The worker classified the failure where it held the real exception. The response
+        // crosses the wire as JSON here, as it does from a real function, so this also pins that
+        // the class survives serialization.
+        var response = new RemoteRunResponse(
+            MetadataId: 0,
+            IsError: true,
+            ErrorMessage: "Row changed underneath the write",
+            ExceptionType: "DbUpdateConcurrencyException",
+            FailureJunction: "SaveOrderJunction",
+            FailureClass: FailureClass.Conflict
+        );
+        var client = CreateMockClient(response);
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.FailingTrain",
+                new TestRunInput { Name = "fail" },
+                typeof(TestRunOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        JsonSerializer
+            .Deserialize<TrainExceptionData>(ex.Message)!
+            .FailureClass.Should()
+            .Be(
+                FailureClass.Conflict,
+                "the Lambda transport has to carry the class home just as the HTTP one does"
+            );
+    }
+
+    // A Lambda worker's response is written by its function's Lambda serializer, which Trax does
+    // not configure, so the class can arrive as an integer or a name and the property names in
+    // either case. The reader has to take all of them (docs/adr/0001).
+    [TestCase(
+        "{\"metadataId\":0,\"isError\":true,\"errorMessage\":\"row changed\",\"exceptionType\":\"DbUpdateConcurrencyException\",\"failureJunction\":\"Save\",\"failureClass\":2}",
+        TestName = "ExecuteAsync_ErrorResponse_ReadsAFailureClassSentAsAnInteger"
+    )]
+    [TestCase(
+        "{\"metadataId\":0,\"isError\":true,\"errorMessage\":\"row changed\",\"exceptionType\":\"DbUpdateConcurrencyException\",\"failureJunction\":\"Save\",\"failureClass\":\"Conflict\"}",
+        TestName = "ExecuteAsync_ErrorResponse_ReadsAFailureClassSentAsAName"
+    )]
+    [TestCase(
+        "{\"MetadataId\":0,\"IsError\":true,\"ErrorMessage\":\"row changed\",\"ExceptionType\":\"DbUpdateConcurrencyException\",\"FailureJunction\":\"Save\",\"FailureClass\":\"Conflict\"}",
+        TestName = "ExecuteAsync_ErrorResponse_ReadsAPascalCaseResponseWithTheClassAsAName"
+    )]
+    public async Task ExecuteAsync_ErrorResponse_ReadsTheFailureClassInEveryForm(string body)
+    {
+        var executor = CreateExecutor(CreateRawMockClient(body));
+
+        var ex = (await FailingRun(executor).Should().ThrowAsync<TrainException>()).Which;
+        JsonSerializer
+            .Deserialize<TrainExceptionData>(ex.Message)!
+            .FailureClass.Should()
+            .Be(FailureClass.Conflict);
+    }
+
+    [TestCase(
+        "99",
+        TestName = "ExecuteAsync_ErrorResponse_AnUnknownFailureClassNumberIsUnclassified"
+    )]
+    [TestCase(
+        "\"Retryable\"",
+        TestName = "ExecuteAsync_ErrorResponse_AnUnknownFailureClassNameIsUnclassified"
+    )]
+    public async Task ExecuteAsync_ErrorResponse_KeepsTheFailureWhenTheClassIsUnknown(
+        string encoded
+    )
+    {
+        // A newer worker can send a class this scheduler predates. The worker's error has to
+        // survive; the class degrades to unclassified.
+        var body =
+            "{\"metadataId\":0,\"isError\":true,\"errorMessage\":\"row changed\","
+            + "\"exceptionType\":\"SomeException\",\"failureJunction\":\"Save\","
+            + $"\"failureClass\":{encoded}}}";
+        var executor = CreateExecutor(CreateRawMockClient(body));
+
+        var ex = (await FailingRun(executor).Should().ThrowAsync<TrainException>()).Which;
+        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message)!;
+        data.Message.Should().Be("row changed");
+        data.FailureClass.Should().Be(FailureClass.Unclassified);
+    }
+
+    [Test]
     public async Task ExecuteAsync_ErrorResponse_WithPlainMessage_FallsBackToFlatString()
     {
         // Arrange
@@ -368,6 +456,17 @@ public class LambdaRunExecutorTests
             ResponsePayload = new MemoryStream(Encoding.UTF8.GetBytes(json)),
         };
     }
+
+    private static MockLambdaClient CreateRawMockClient(string json) =>
+        new() { ResponsePayload = new MemoryStream(Encoding.UTF8.GetBytes(json)) };
+
+    private static Func<Task> FailingRun(LambdaRunExecutor executor) =>
+        async () =>
+            await executor.ExecuteAsync(
+                "My.FailingTrain",
+                new TestRunInput { Name = "fail" },
+                typeof(TestRunOutput)
+            );
 
     #endregion
 

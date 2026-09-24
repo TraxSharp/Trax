@@ -64,7 +64,7 @@ public class HttpRunExecutor(
         }
 
         var response =
-            await httpResponse.Content.ReadFromJsonAsync<RemoteRunResponse>(ct)
+            await httpResponse.Content.ReadFromJsonAsync<RemoteRunResponse>(RemoteRunJson.Read, ct)
             ?? throw new TrainException("Remote run endpoint returned null response.");
 
         if (response.IsError)
@@ -84,32 +84,9 @@ public class HttpRunExecutor(
         return new RunTrainResult(response.MetadataId, response.ExternalId ?? "", output);
     }
 
-    /// <summary>
-    /// Builds a <see cref="TrainException"/> from a <see cref="RemoteRunResponse"/> error.
-    /// If the response includes structured error fields (<see cref="RemoteRunResponse.ExceptionType"/>
-    /// and <see cref="RemoteRunResponse.FailureJunction"/>), reconstructs a <see cref="TrainExceptionData"/>
-    /// JSON message so that <c>Metadata.AddException()</c> on the API side correctly parses
-    /// the failure into structured fields (FailureException, FailureJunction, FailureReason).
-    /// </summary>
-    private static TrainException BuildExceptionFromErrorResponse(RemoteRunResponse response)
-    {
-        if (response.ExceptionType is not null)
-        {
-            var data = new TrainExceptionData
-            {
-                TrainName = "",
-                TrainExternalId = "",
-                Type = response.ExceptionType,
-                Junction = response.FailureJunction ?? "Unknown",
-                Message = response.ErrorMessage ?? "Remote train execution failed",
-            };
-
-            var json = JsonSerializer.Serialize(data);
-            return new TrainException(json);
-        }
-
-        return new TrainException($"Remote train execution failed: {response.ErrorMessage}");
-    }
+    /// <summary>Kept for the tests that call it; see <see cref="RemoteRunResponse.ToTrainException"/>.</summary>
+    internal static TrainException BuildExceptionFromErrorResponse(RemoteRunResponse response) =>
+        response.ToTrainException();
 
     private static async Task<string> ReadErrorBodyAsync(HttpResponseMessage response)
     {

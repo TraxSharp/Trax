@@ -13,9 +13,16 @@ namespace Trax.Scheduler.Services.SchedulerStartupService;
 /// One-shot hosted service that runs startup tasks before the polling services begin.
 /// </summary>
 /// <remarks>
+/// With <see cref="SchedulerConfiguration.RecoverStuckJobsOnStartup"/> on (the default) and a
+/// database provider registered, it first fails every <c>InProgress</c> run in the shared
+/// database whose <c>StartTime</c> precedes this host's start, regardless of which host or worker
+/// is running it.
+///
+/// <para>
 /// Registered first in DI so that .NET's sequential IHostedService startup order
 /// guarantees this completes before ManifestManagerPollingService or
 /// JobDispatcherPollingService begin polling.
+/// </para>
 /// </remarks>
 internal class SchedulerStartupService(
     IServiceProvider serviceProvider,
@@ -35,6 +42,16 @@ internal class SchedulerStartupService(
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
+    /// <summary>
+    /// Fails every <c>InProgress</c> run in the shared database whose <c>StartTime</c> precedes
+    /// this host's start, regardless of which host or worker is running it.
+    /// </summary>
+    /// <remarks>
+    /// Nothing records which process owns a run, so "started before this host" is the whole
+    /// test. When one process runs everything, that is exactly the runs a crash or restart
+    /// orphaned. Where several hosts or remote workers share the database, a run still executing
+    /// on one of them is failed too. The recovery itself requeues nothing.
+    /// </remarks>
     private async Task RecoverStuckJobs(CancellationToken cancellationToken)
     {
         var serverStartTime = DateTime.UtcNow;

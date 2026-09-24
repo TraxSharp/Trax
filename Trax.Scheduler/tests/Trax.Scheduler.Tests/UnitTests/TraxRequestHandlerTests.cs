@@ -357,8 +357,9 @@ public class TraxRequestHandlerTests
 
         public Task<QueueTrainResult> QueueAsync(
             string trainName,
-            string inputJson,
+            string? inputJson,
             int priority = 0,
+            DateTime? scheduledAt = null,
             CancellationToken ct = default
         )
         {

@@ -98,6 +98,76 @@ public class HttpRunExecutorTests
             .WithMessage("*Train failed: something went wrong*");
     }
 
+    [TestCase(
+        "99",
+        TestName = "ExecuteAsync_ErrorResponse_AnUnknownFailureClassNumberIsUnclassified"
+    )]
+    [TestCase(
+        "\"Retryable\"",
+        TestName = "ExecuteAsync_ErrorResponse_AnUnknownFailureClassNameIsUnclassified"
+    )]
+    public async Task ExecuteAsync_ErrorResponse_KeepsTheFailureWhenTheClassIsUnknown(
+        string encoded
+    )
+    {
+        // A newer worker can send a class this scheduler predates. The worker's error has to
+        // survive; the class degrades to unclassified.
+        var body =
+            "{\"metadataId\":0,\"isError\":true,\"errorMessage\":\"row changed\","
+            + "\"exceptionType\":\"SomeException\",\"failureJunction\":\"Save\","
+            + $"\"failureClass\":{encoded}}}";
+        var client = new HttpClient(new FakeHttpMessageHandler(HttpStatusCode.OK, body))
+        {
+            BaseAddress = new Uri("http://test/"),
+        };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.FailingTrain",
+                new TestInput { Name = "fail" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message)!;
+        data.Message.Should().Be("row changed");
+        data.FailureClass.Should().Be(FailureClass.Unclassified);
+    }
+
+    [TestCase(
+        "\"Conflict\"",
+        TestName = "ExecuteAsync_ErrorResponse_ReadsAFailureClassSentAsAName"
+    )]
+    [TestCase("2", TestName = "ExecuteAsync_ErrorResponse_ReadsAFailureClassSentAsAnInteger")]
+    public async Task ExecuteAsync_ErrorResponse_ReadsTheFailureClassInEitherForm(string encoded)
+    {
+        // A worker host whose JSON options write enums as names used to break every error
+        // response carrying a class; the reader must not depend on the worker's configuration.
+        var body =
+            "{\"metadataId\":0,\"isError\":true,\"errorMessage\":\"row changed\","
+            + "\"exceptionType\":\"DbUpdateConcurrencyException\",\"failureJunction\":\"Save\","
+            + $"\"failureClass\":{encoded}}}";
+        var client = new HttpClient(new FakeHttpMessageHandler(HttpStatusCode.OK, body))
+        {
+            BaseAddress = new Uri("http://test/"),
+        };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.FailingTrain",
+                new TestInput { Name = "fail" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        JsonSerializer
+            .Deserialize<TrainExceptionData>(ex.Message)!
+            .FailureClass.Should()
+            .Be(FailureClass.Conflict);
+    }
+
     [Test]
     public async Task ExecuteAsync_ErrorResponse_WithTrainExceptionData_ReconstructsStructuredException()
     {
