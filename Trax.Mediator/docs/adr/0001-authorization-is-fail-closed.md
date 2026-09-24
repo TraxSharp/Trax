@@ -44,11 +44,23 @@ would not.
 `[TraxAuthorize(Policy = " ")]` throws rather than quietly gating on nothing, because the
 two are indistinguishable at run time and only one of them is what anybody meant.
 
+**The same rule is checked again when a train is run or queued.** `TrainExecutionService`
+refuses a `[TraxAuthorize]` train when no `ITrainAuthorizationService` is registered, for hosts
+where the startup validator never runs (the Lambda runner, a bare `ServiceProvider`). It has two
+exemptions: the opt-out above, and a trusted execution scope, which marks work already
+authorized at its own gate (a scheduler pipeline, a remote job runner, the dashboard) and which
+an enforcer would skip as well. In a normal hosted app the trusted-scope exemption never comes
+into play, because the startup validator has already refused the host unless the opt-out was
+taken.
+
 ## Exemplars
 
 - `AuthorizationRegistrationValidatorTests` covers both directions: the throw when the
   service is missing, the pass when it is registered or the opt-out is taken, and the
   malformed-attribute cases.
+
+The runtime check and its trusted-scope exemption are exercised by unit tests in the
+memory-leak suite, which are not declared guards for this ADR.
 
 Not covered: nothing checks that the registered `ITrainAuthorizationService` actually
 authorizes anything. A stub that returns success for every train satisfies this ADR
@@ -56,4 +68,6 @@ completely, which is by design, since the service is the consumer's to write.
 
 ## Changelog
 
+- **2026-09-23**: Recorded the runtime fail-closed check in `TrainExecutionService`, and that a
+  trusted execution scope is a second exemption from it besides the opt-out.
 - **2026-09-11**: Recorded.

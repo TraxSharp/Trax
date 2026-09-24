@@ -27,9 +27,7 @@ public class NestedScopeTrackTrain
     [Inject]
     public ITrainBus? TrainBus { get; set; }
 
-    protected override async Task<Either<Exception, NestedScopeTrackOutput>> RunInternal(
-        NestedScopeTrackInput input
-    )
+    protected override async Task<Either<Exception, NestedScopeTrackOutput>> Junctions()
     {
         var childResult = await TrainBus!.RunAsync<ScopeTrackOutput>(new ScopeTrackInput());
         return new NestedScopeTrackOutput(Marker!.Id, childResult.ScopeMarkerId);

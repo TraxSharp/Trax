@@ -372,15 +372,14 @@ public class TupleJunction : Junction<SimpleInput, (string Result, int Count, Da
 // Test trains
 public class SmallChainTrain : Train<SimpleInput, SimpleOutput>
 {
-    protected override async Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input) =>
-        await Activate(input).Chain<ProcessJunction>().Resolve();
+    protected override async Task<Either<Exception, SimpleOutput>> Junctions() =>
+        await Chain<ProcessJunction>().Resolve();
 }
 
 public class LargeChainTrain : Train<SimpleInput, SimpleOutput>
 {
-    protected override async Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input) =>
-        await Activate(input)
-            .Chain<ProcessJunction>()
+    protected override async Task<Either<Exception, SimpleOutput>> Junctions() =>
+        await Chain<ProcessJunction>()
             .Chain<ProcessOutputJunction>()
             .Chain<ProcessOutputJunction>()
             .Chain<ProcessOutputJunction>()
@@ -390,63 +389,61 @@ public class LargeChainTrain : Train<SimpleInput, SimpleOutput>
 
 public class LargeDataTrain : Train<LargeDataModel, SimpleOutput>
 {
-    protected override async Task<Either<Exception, SimpleOutput>> RunInternal(
-        LargeDataModel input
-    ) => await Activate(input).Chain<LargeDataJunction>().Resolve();
+    protected override async Task<Either<Exception, SimpleOutput>> Junctions() =>
+        await Chain<LargeDataJunction>().Resolve();
 }
 
 public class VeryLargeDataTrain : Train<VeryLargeDataModel, SimpleOutput>
 {
-    protected override async Task<Either<Exception, SimpleOutput>> RunInternal(
-        VeryLargeDataModel input
-    )
-    {
-        var largeModel = new LargeDataModel(input.Name, input.Data);
-        return await Activate(input, largeModel).Chain<LargeDataJunction>().Resolve();
-    }
+    protected override Task<Either<Exception, SimpleOutput>> Junctions() =>
+        Chain<BuildLargeDataModel>().Chain<LargeDataJunction>().Resolve();
 }
 
 public class TupleTrain : Train<SimpleInput, (string Result, int Count, DateTime Timestamp)>
 {
-    protected override async Task<
+    protected override Task<
         Either<Exception, (string Result, int Count, DateTime Timestamp)>
-    > RunInternal(SimpleInput input) => await Activate(input).Chain<TupleJunction>().Resolve();
+    > Junctions() => Chain<TupleJunction>().Resolve();
 }
 
-// Testable train that exposes Memory dictionary for testing
+/// <summary>
+/// Reaches the monad a run left behind, so the Memory tests can assert on what a chain
+/// accumulated and on clearing it.
+/// </summary>
+/// <remarks>
+/// The monad is framework state rather than anything a train declares, so it is read by
+/// reflection off the base class rather than by having the train hand it out. That keeps this
+/// train an ordinary chain declaration: the subject here is Monad.Memory, not the train.
+/// </remarks>
 public class TestableTrain : Train<SimpleInput, SimpleOutput>
 {
-    private Monad.Monad<SimpleInput, SimpleOutput>? _monad;
+    protected override Task<Either<Exception, SimpleOutput>> Junctions() =>
+        Chain<ProcessJunction>().Resolve();
 
-    protected override async Task<Either<Exception, SimpleOutput>> RunInternal(SimpleInput input)
-    {
-        _monad = Activate(input);
-        return await _monad.Chain<ProcessJunction>().Resolve();
-    }
+    public int GetMemoryCount() => Memory()?.Count ?? 0;
 
-    public int GetMemoryCount()
-    {
-        if (_monad is null)
-            return 0;
-        var memoryProp = _monad
-            .GetType()
-            .GetProperty(
-                "Memory",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
-            );
-        return memoryProp?.GetValue(_monad) is Dictionary<Type, object> dict ? dict.Count : 0;
-    }
+    public void ClearMemory() => Memory()?.Clear();
 
-    public void ClearMemory()
+    private Dictionary<Type, object>? Memory()
     {
-        if (_monad is null)
-            return;
-        var memoryProp = _monad
-            .GetType()
-            .GetProperty(
-                "Memory",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
-            );
-        (memoryProp?.GetValue(_monad) as Dictionary<Type, object>)?.Clear();
+        const System.Reflection.BindingFlags flags =
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+
+        var monad = typeof(Train<SimpleInput, SimpleOutput>)
+            .GetField("_monad", flags)
+            ?.GetValue(this);
+
+        return monad?.GetType().GetProperty("Memory", flags)?.GetValue(monad)
+            as Dictionary<Type, object>;
     }
+}
+
+/// <summary>
+/// Builds the large payload the memory tests measure. It is a junction because a train declares
+/// which junctions run; building the model is work, and work belongs in a junction.
+/// </summary>
+public class BuildLargeDataModel : Junction<VeryLargeDataModel, LargeDataModel>
+{
+    public override Task<LargeDataModel> Run(VeryLargeDataModel input) =>
+        Task.FromResult(new LargeDataModel(input.Name, input.Data));
 }

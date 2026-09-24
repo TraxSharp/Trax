@@ -7,14 +7,14 @@
     Condition="Exists('$(MSBuildThisFileDirectory)trax-local.props')"
   />
   <ItemGroup>
-    <PackageVersion Include="Trax.Core.Testing" Version="1.7.1" />
-    <PackageVersion Include="Trax.Effect" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Data" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Provider.Json" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.54.0" />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.7.2" />
+    <PackageVersion Include="Trax.Effect" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Data" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Provider.Json" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.54.2" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.5" />
     <PackageVersion Include="FluentAssertions" Version="8.11.0" />

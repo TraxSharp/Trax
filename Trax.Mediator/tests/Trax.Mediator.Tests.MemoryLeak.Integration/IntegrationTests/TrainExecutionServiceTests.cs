@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Junction;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -340,22 +341,35 @@ public class TrainExecutionServiceTests
 
         var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
         var inputJson = JsonSerializer.Serialize(
-            new SlowExecInput { DelayMs = 500 },
+            new SlowExecInput(),
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
         );
+        using var gate = HoldUntilReleased.Arm();
 
         // Act — fire 3 concurrent requests, limit is 2
         var task1 = executionService.RunAsync(nameof(ISlowExecTrain), inputJson);
         var task2 = executionService.RunAsync(nameof(ISlowExecTrain), inputJson);
         var task3 = executionService.RunAsync(nameof(ISlowExecTrain), inputJson);
 
-        // Wait for first two to complete
-        var firstTwo = await Task.WhenAny(Task.WhenAll(task1, task2), Task.Delay(3000));
-        firstTwo.Should().NotBeNull();
+        (await gate.WaitForEntriesAsync(2))
+            .Should()
+            .BeTrue("two runs fit under the limit, so both reach the train and hold a permit");
 
-        // Third should complete after one of the first two finishes
-        var result3 = await task3;
-        result3.MetadataId.Should().BeGreaterThan(0);
+        // negative-wait: nothing signals that the third run is parked on the limiter, so the
+        // test gives it a short window to wrongly reach the train, and requires that it does not.
+        (await gate.WaitForEntriesAsync(1, TimeSpan.FromMilliseconds(250)))
+            .Should()
+            .BeFalse("the third run waits for a permit while the first two hold both");
+        task3.IsCompleted.Should().BeFalse();
+
+        gate.Release();
+
+        // Third completes once one of the first two hands its permit back
+        var results = await Task.WhenAll(task1, task2, task3).WaitAsync(HoldUntilReleased.Timeout);
+        results.Should().OnlyContain(r => r.MetadataId > 0);
+        (await gate.WaitForEntriesAsync(1))
+            .Should()
+            .BeTrue("the third run reached the train after a permit was returned");
     }
 
     [Test]
@@ -379,45 +393,45 @@ public class TrainExecutionServiceTests
 
         var executionService = _serviceProvider.GetRequiredService<ITrainExecutionService>();
         var inputJson = JsonSerializer.Serialize(
-            new SlowExecInput { DelayMs = 2000 },
+            new SlowExecInput(),
             TraxEffectConfiguration.StaticSystemJsonSerializerOptions
         );
+        using var gate = HoldUntilReleased.Arm();
 
-        // Act — first request holds the slot, second gets cancelled
+        // Act — the first request reaches the train, so it holds the only permit
         var task1 = executionService.RunAsync(nameof(ISlowExecTrain), inputJson);
+        (await gate.WaitForEntriesAsync(1))
+            .Should()
+            .BeTrue("the first run has to be holding the permit before the second asks for it");
 
-        // Small delay to ensure task1 acquires the permit
-        await Task.Delay(50);
+        using var cts = new CancellationTokenSource();
+        var task2 = executionService.RunAsync(nameof(ISlowExecTrain), inputJson, cts.Token);
+        task2.IsCompleted.Should().BeFalse("the second run is waiting for the held permit");
 
-        using var cts = new CancellationTokenSource(200);
-        var act = async () =>
-            await executionService.RunAsync(nameof(ISlowExecTrain), inputJson, cts.Token);
+        await cts.CancelAsync();
 
         // Assert
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        var waiting = async () => await task2.WaitAsync(HoldUntilReleased.Timeout);
+        await waiting.Should().ThrowAsync<OperationCanceledException>();
+        gate.Entries.Should().Be(0, "the cancelled run never got a permit, so never ran");
 
-        // Clean up first task
-        await task1;
+        // The first run still holds its permit and finishes normally once released
+        gate.Release();
+        (await task1.WaitAsync(HoldUntilReleased.Timeout)).MetadataId.Should().BeGreaterThan(0);
     }
 
     #endregion
 
     #region Test Trains
 
-    public record SlowExecInput
-    {
-        public int DelayMs { get; init; }
-    }
+    public record SlowExecInput;
 
     public interface ISlowExecTrain : IServiceTrain<SlowExecInput, Unit>;
 
     public class SlowExecTrain : ServiceTrain<SlowExecInput, Unit>, ISlowExecTrain
     {
-        protected override async Task<Either<Exception, Unit>> RunInternal(SlowExecInput input)
-        {
-            await Task.Delay(input.DelayMs);
-            return Unit.Default;
-        }
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Chain<HoldUntilReleased>().Resolve();
     }
 
     public record TypedExecInput
@@ -440,21 +454,78 @@ public class TrainExecutionServiceTests
 
     public class TypedExecTrain : ServiceTrain<TypedExecInput, TypedExecOutput>, ITypedExecTrain
     {
-        protected override Task<Either<Exception, TypedExecOutput>> RunInternal(
-            TypedExecInput input
-        ) =>
-            Task.FromResult<Either<Exception, TypedExecOutput>>(
-                new TypedExecOutput { Value = $"processed:{input.Name}", Count = 42 }
-            );
+        protected override Task<Either<Exception, TypedExecOutput>> Junctions() =>
+            Chain<BuildTypedExecOutput>().Resolve();
     }
 
     public interface IUnitExecTrain : IServiceTrain<UnitExecInput, Unit>;
 
     public class UnitExecTrain : ServiceTrain<UnitExecInput, Unit>, IUnitExecTrain
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(UnitExecInput input) =>
+        protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
     #endregion
+
+    /// <summary>
+    /// Holds each run inside the train, and so inside its concurrency permit, until the test
+    /// releases it. Every run that gets this far counts as an entry, which is how a test knows a
+    /// run holds a permit without guessing how long acquiring one takes.
+    /// </summary>
+    internal sealed class HoldUntilReleased : Junction<SlowExecInput, Unit>
+    {
+        public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
+
+        private static Gate _current = new();
+
+        public static Gate Arm() => _current = new Gate();
+
+        public override async Task<Unit> Run(SlowExecInput input)
+        {
+            var gate = _current;
+            gate.Enter();
+            await gate.Released.WaitAsync(CancellationToken);
+
+            return Unit.Default;
+        }
+
+        internal sealed class Gate : IDisposable
+        {
+            private readonly SemaphoreSlim _entered = new(0);
+            private readonly TaskCompletionSource _released = new(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+
+            public Task Released => _released.Task;
+
+            /// <summary>Entries not yet consumed by <see cref="WaitForEntriesAsync"/>.</summary>
+            public int Entries => _entered.CurrentCount;
+
+            public void Enter() => _entered.Release();
+
+            public void Release() => _released.TrySetResult();
+
+            public async Task<bool> WaitForEntriesAsync(int count, TimeSpan? within = null)
+            {
+                for (var i = 0; i < count; i++)
+                {
+                    if (!await _entered.WaitAsync(within ?? Timeout))
+                        return false;
+                }
+
+                return true;
+            }
+
+            // Released on the way out so a failed assertion cannot leave a run parked.
+            public void Dispose() => Release();
+        }
+    }
+
+    /// <summary>Builds the typed output these execution tests assert on.</summary>
+    internal sealed class BuildTypedExecOutput : Junction<TypedExecInput, TypedExecOutput>
+    {
+        public override Task<TypedExecOutput> Run(TypedExecInput input) =>
+            Task.FromResult(new TypedExecOutput { Value = $"processed:{input.Name}", Count = 42 });
+    }
 }

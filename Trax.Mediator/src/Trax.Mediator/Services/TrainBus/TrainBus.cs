@@ -182,11 +182,16 @@ public class TrainBus(
     /// </summary>
     /// <typeparam name="TOut">The expected output type of the train</typeparam>
     /// <param name="trainInput">The input object for the train</param>
-    /// <param name="metadata">Optional metadata to associate with the train execution</param>
+    /// <param name="metadata">
+    /// A pre-created, <c>Pending</c> metadata record for the train to run as, or null for the train
+    /// to create its own. It is not a parent link: any other state, including a running train's
+    /// metadata, is refused with a TrainException.
+    /// </param>
     /// <returns>A task that resolves to the train's output</returns>
     /// <exception cref="TrainException">
-    /// Thrown when the input is null, no train is found for the input type,
-    /// the Run method cannot be found on the train, or the Run method invocation fails.
+    /// Thrown when the input is null, no train is found for the input type, the metadata passed
+    /// is not <c>Pending</c>, the Run method cannot be found on the train, or the Run method
+    /// invocation fails.
     /// </exception>
     public async Task<TOut> RunAsync<TOut>(object trainInput, Metadata? metadata = null)
     {

@@ -6,6 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Effect.Data.Services.EnqueueContext;
+using Trax.Effect.Data.Services.WorkQueuePromotion;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
@@ -188,6 +190,7 @@ public static class ServiceExtensions
             .AddSingleton<IServiceCollection>(serviceCollection)
             .AddSingleton<ITrainRegistry>(trainRegistry)
             .AddSingleton<ITrainDiscoveryService, TrainDiscoveryService>()
+            .AddHostedService<Services.ChainVerification.TrainChainStartupValidator>()
             .AddSingleton<IConcurrencyLimiter, ConcurrencyLimiter>()
             .AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>()
             // Default null-returning principal provider. Hosts with an HTTP
@@ -197,6 +200,8 @@ public static class ServiceExtensions
             .AddHostedService<AuthorizationRegistrationValidator>()
             .AddScoped<ITrainBus, TrainBus>()
             .AddScoped<IRunExecutor, LocalRunExecutor>()
+            .AddScoped<IEnqueueContextAccessor, EnqueueContextAccessor>()
+            .AddScoped<IWorkQueuePromotion, WorkQueuePromotion>()
             .AddScoped<ITrainExecutionService, TrainExecutionService>()
             .RegisterServiceTrains(trainRegistry.DiscoveredTrains, serviceTrainLifetime);
     }

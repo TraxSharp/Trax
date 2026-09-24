@@ -1,4 +1,5 @@
 using LanguageExt;
+using Trax.Core.Junction;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
 
@@ -15,33 +16,8 @@ public interface IMemoryTestTrain : IServiceTrain<MemoryTestInput, MemoryTestOut
 /// </summary>
 public class MemoryTestTrain : ServiceTrain<MemoryTestInput, MemoryTestOutput>, IMemoryTestTrain
 {
-    protected override async Task<Either<Exception, MemoryTestOutput>> RunInternal(
-        MemoryTestInput input
-    )
-    {
-        try
-        {
-            // Simulate some processing that might cause memory allocation
-            await Task.Delay(input.ProcessingDelayMs);
-
-            // Create a large output object to test JsonDocument serialization
-            var largeData = new string('X', input.DataSizeBytes);
-
-            return new MemoryTestOutput
-            {
-                Id = input.Id,
-                ProcessedAt = DateTime.UtcNow,
-                ProcessedData = largeData,
-                Success = true,
-                Message =
-                    $"Successfully processed train {input.Id} with {input.DataSizeBytes} bytes of data",
-            };
-        }
-        catch (Exception ex)
-        {
-            return ex;
-        }
-    }
+    protected override Task<Either<Exception, MemoryTestOutput>> Junctions() =>
+        Chain<AllocateMemoryTestOutput>().Resolve();
 }
 
 /// <summary>
@@ -51,15 +27,8 @@ public interface IFailingTestTrain : IServiceTrain<FailingTestInput, MemoryTestO
 
 public class FailingTestTrain : ServiceTrain<FailingTestInput, MemoryTestOutput>, IFailingTestTrain
 {
-    protected override async Task<Either<Exception, MemoryTestOutput>> RunInternal(
-        FailingTestInput input
-    )
-    {
-        await Task.Delay(input.ProcessingDelayMs);
-
-        // Always throw an exception to test error handling paths
-        return new InvalidOperationException($"Intentional failure in train {input.Id}");
-    }
+    protected override Task<Either<Exception, MemoryTestOutput>> Junctions() =>
+        Chain<FailAfterDelay>().Resolve();
 }
 
 /// <summary>
@@ -69,42 +38,70 @@ public interface INestedTestTrain : IServiceTrain<NestedTestInput, NestedTestOut
 
 public class NestedTestTrain : ServiceTrain<NestedTestInput, NestedTestOutput>, INestedTestTrain
 {
-    protected override async Task<Either<Exception, NestedTestOutput>> RunInternal(
-        NestedTestInput input
-    )
+    protected override Task<Either<Exception, NestedTestOutput>> Junctions() =>
+        Chain<AllocateNestedTestOutput>().Resolve();
+}
+
+/// <summary>
+/// Allocates the large payload the leak tests measure. The work sits in a junction because a
+/// train declares which junctions run, it does not do the work itself.
+/// </summary>
+internal sealed class AllocateMemoryTestOutput : Junction<MemoryTestInput, MemoryTestOutput>
+{
+    public override async Task<MemoryTestOutput> Run(MemoryTestInput input)
     {
-        try
+        // allowed-delay: the delay is the allocation pattern under test, not a wait for a signal.
+        await Task.Delay(input.ProcessingDelayMs, CancellationToken);
+
+        return new MemoryTestOutput
         {
-            var results = new List<MemoryTestOutput>();
+            Id = input.Id,
+            ProcessedAt = DateTime.UtcNow,
+            ProcessedData = new string('X', input.DataSizeBytes),
+            Success = true,
+            Message =
+                $"Successfully processed train {input.Id} with {input.DataSizeBytes} bytes of data",
+        };
+    }
+}
 
-            // Process each child input sequentially
-            foreach (var childInput in input.ChildInputs)
+/// <summary>Throws after a delay, so the error path allocates the way a real failure would.</summary>
+internal sealed class FailAfterDelay : Junction<FailingTestInput, MemoryTestOutput>
+{
+    public override async Task<MemoryTestOutput> Run(FailingTestInput input)
+    {
+        // allowed-delay: the delay is the allocation pattern under test, not a wait for a signal.
+        await Task.Delay(input.ProcessingDelayMs, CancellationToken);
+
+        throw new InvalidOperationException($"Intentional failure in train {input.Id}");
+    }
+}
+
+/// <summary>Builds one child payload per declared child input.</summary>
+internal sealed class AllocateNestedTestOutput : Junction<NestedTestInput, NestedTestOutput>
+{
+    public override Task<NestedTestOutput> Run(NestedTestInput input)
+    {
+        var results = input
+            .ChildInputs.Select(child => new MemoryTestOutput
             {
-                // Create child train data
-                var childResult = new MemoryTestOutput
-                {
-                    Id = childInput.Id,
-                    ProcessedAt = DateTime.UtcNow,
-                    ProcessedData = new string('Y', childInput.DataSizeBytes),
-                    Success = true,
-                    Message = $"Child train {childInput.Id} processed",
-                };
+                Id = child.Id,
+                ProcessedAt = DateTime.UtcNow,
+                ProcessedData = new string('Y', child.DataSizeBytes),
+                Success = true,
+                Message = $"Child train {child.Id} processed",
+            })
+            .ToList();
 
-                results.Add(childResult);
-            }
-
-            return new NestedTestOutput
+        return Task.FromResult(
+            new NestedTestOutput
             {
                 Id = input.Id,
                 ProcessedAt = DateTime.UtcNow,
                 ChildResults = results,
                 Success = true,
                 Message = $"Processed {results.Count} child trains",
-            };
-        }
-        catch (Exception ex)
-        {
-            return ex;
-        }
+            }
+        );
     }
 }

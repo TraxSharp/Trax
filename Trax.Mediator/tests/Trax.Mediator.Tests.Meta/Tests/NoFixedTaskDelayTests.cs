@@ -37,9 +37,6 @@ public class NoFixedTaskDelayTests
             "tests/Trax.Mediator.Tests.MemoryLeak.Integration/UnitTests/TrustedExecutionScopeTests.cs"
         ] = 3,
         [
-            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/TrainExecutionServiceTests.cs"
-        ] = 3,
-        [
             "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/ParameterEffectMemoryTests.cs"
         ] = 2,
         [

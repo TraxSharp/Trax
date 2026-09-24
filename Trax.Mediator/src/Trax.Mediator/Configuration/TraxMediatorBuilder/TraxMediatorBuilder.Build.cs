@@ -25,6 +25,7 @@ public partial class TraxMediatorBuilder
             Assemblies = [.. _assemblies],
             GlobalMaxConcurrentRun = _globalMaxConcurrentRun,
             AllowMissingAuthorizationService = _allowMissingAuthorizationService,
+            SkipChainVerification = _skipChainVerification,
             MaxInputJsonBytes = _maxInputJsonBytes,
             PerPrincipalMaxConcurrentRun = _perPrincipalMaxConcurrentRun,
         };

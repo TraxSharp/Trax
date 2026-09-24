@@ -200,8 +200,8 @@ public class QueueHookTests
             probe.MarkConstructed("Shadow");
         }
 
-        protected override Task<Either<Exception, string>> RunInternal(ShadowInput input) =>
-            Task.FromResult<Either<Exception, string>>(input.Value);
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Task.FromResult(Extract<ShadowInput, string>().Resolve());
 
         protected override Task OnQueue(Metadata metadata, CancellationToken ct) =>
             _probe.CaptureOnQueueAsync(
@@ -216,8 +216,8 @@ public class QueueHookTests
     {
         public PlainQueueTrain(QueueHookProbe probe) => probe.MarkConstructed("Plain");
 
-        protected override Task<Either<Exception, string>> RunInternal(PlainInput input) =>
-            Task.FromResult<Either<Exception, string>>(input.Value);
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Task.FromResult(Extract<PlainInput, string>().Resolve());
     }
 
     public interface IRejectingQueueTrain : IServiceTrain<RejectInput, string>;
@@ -226,8 +226,8 @@ public class QueueHookTests
     {
         public RejectingQueueTrain(QueueHookProbe probe) => probe.MarkConstructed("Reject");
 
-        protected override Task<Either<Exception, string>> RunInternal(RejectInput input) =>
-            Task.FromResult<Either<Exception, string>>(input.Value);
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Task.FromResult(Extract<RejectInput, string>().Resolve());
 
         protected override Task OnQueue(Metadata metadata, CancellationToken ct) =>
             throw new InvalidOperationException("OnQueue rejected the enqueue");

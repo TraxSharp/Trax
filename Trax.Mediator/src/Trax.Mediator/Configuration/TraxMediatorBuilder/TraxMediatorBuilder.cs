@@ -15,6 +15,7 @@ public partial class TraxMediatorBuilder
     private int? _globalMaxConcurrentRun;
     private readonly Dictionary<string, int> _concurrencyOverrides = new();
     private bool _allowMissingAuthorizationService;
+    private bool _skipChainVerification;
     private int _maxInputJsonBytes = 262_144;
     private int? _perPrincipalMaxConcurrentRun;
 

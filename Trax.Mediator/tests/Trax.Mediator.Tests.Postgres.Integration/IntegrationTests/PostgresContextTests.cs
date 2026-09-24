@@ -56,7 +56,7 @@ public class PostgresContextTests : TestSetup
     {
         // Arrange
         // Act
-        var train = await TrainBus.RunAsync<TestTrain>(new TestTrainInput());
+        var train = await TrainBus.RunAsync<ITestTrain>(new TestTrainInput());
 
         // Assert
         var metadata = train!.Metadata!;
@@ -72,10 +72,8 @@ public class PostgresContextTests : TestSetup
     {
         // Arrange
         // Act
-        var train = await TrainBus.RunAsync<TestTrain>(new TestTrainInput());
-        var trainTwo = await TrainBus.RunAsync<TestTrainWithoutInterface>(
-            new TestTrainWithoutInterfaceInput()
-        );
+        var train = await TrainBus.RunAsync<ITestTrain>(new TestTrainInput());
+        await TrainBus.RunAsync<Unit>(new TestTrainWithoutInterfaceInput());
 
         // Assert
         var metadata = train!.Metadata!;
@@ -140,18 +138,19 @@ public class PostgresContextTests : TestSetup
         logLevel.Should().Be(1);
     }
 
-    internal class TestTrain : ServiceTrain<TestTrainInput, TestTrain>, ITestTrain
+    internal class TestTrain : ServiceTrain<TestTrainInput, ITestTrain>, ITestTrain
     {
-        protected override Task<Either<Exception, TestTrain>> RunInternal(TestTrainInput input) =>
-            Task.FromResult(Activate(input, this).Resolve());
+        // The train is its own output so the test can read the Metadata of the run. Seeding it
+        // under its interface is what makes that expressible as a declaration.
+        protected override Task<Either<Exception, ITestTrain>> Junctions() =>
+            Task.FromResult(AddServices<ITestTrain>(this).Resolve());
     }
 
-    internal class TestTrainWithoutInterface
-        : ServiceTrain<TestTrainWithoutInterfaceInput, TestTrainWithoutInterface>
+    // Deliberately has no dedicated interface: the canonical name falls back to the concrete
+    // type. Nothing asserts on its output, so it declares a chain of no junctions.
+    internal class TestTrainWithoutInterface : ServiceTrain<TestTrainWithoutInterfaceInput, Unit>
     {
-        protected override Task<Either<Exception, TestTrainWithoutInterface>> RunInternal(
-            TestTrainWithoutInterfaceInput input
-        ) => Task.FromResult(Activate(input, this).Resolve());
+        protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
     }
 
     internal record TestTrainWithoutInterfaceInput;
@@ -162,13 +161,10 @@ public class PostgresContextTests : TestSetup
         : ServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)>,
             ITestTrainWithinTrain
     {
-        protected override Task<Either<Exception, (ITestTrain, ITestTrainWithinTrain)>> RunInternal(
-            TestTrainWithinTrainInput input
-        ) =>
-            Activate(input)
-                .AddServices<ITestTrainWithinTrain>(this)
-                .Chain<JunctionToRunTestTrain>()
-                .Resolve();
+        protected override Task<
+            Either<Exception, (ITestTrain, ITestTrainWithinTrain)>
+        > Junctions() =>
+            AddServices<ITestTrainWithinTrain>(this).Chain<JunctionToRunTestTrain>().Resolve();
     }
 
     internal record TestTrainWithinTrainInput;
@@ -180,7 +176,7 @@ public class PostgresContextTests : TestSetup
     {
         public override async Task<ITestTrain> Run(Unit input)
         {
-            var testTrain = await trainBus.RunAsync<TestTrain>(new TestTrainInput());
+            var testTrain = await trainBus.RunAsync<ITestTrain>(new TestTrainInput());
 
             logger.LogCritical("Ran {TrainName}", "TestTrain");
 
@@ -188,7 +184,7 @@ public class PostgresContextTests : TestSetup
         }
     }
 
-    internal interface ITestTrain : IServiceTrain<TestTrainInput, TestTrain> { }
+    internal interface ITestTrain : IServiceTrain<TestTrainInput, ITestTrain> { }
 
     internal interface ITestTrainWithinTrain
         : IServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)> { }

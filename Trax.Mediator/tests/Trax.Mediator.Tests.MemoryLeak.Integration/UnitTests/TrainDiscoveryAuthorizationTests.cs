@@ -94,7 +94,7 @@ public class TrainDiscoveryAuthorizationTests
 
     public class MixedCaseRolesTrainImpl : ServiceTrain<EmptyIn, EmptyOut>, IMixedCaseRolesTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -109,7 +109,7 @@ public class TrainDiscoveryAuthorizationTests
     [TraxAuthorize("Admin")]
     public class ImplementationAuthorizedTrain : ServiceTrain<EmptyIn, EmptyOut>, IPlainTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -120,7 +120,7 @@ public class TrainDiscoveryAuthorizationTests
         : ServiceTrain<EmptyIn, EmptyOut>,
             IInterfaceAuthorizedTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -129,7 +129,7 @@ public class TrainDiscoveryAuthorizationTests
     [TraxAuthorize("BasePolicy")]
     public abstract class AuthorizedBase : ServiceTrain<EmptyIn, EmptyOut>
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -141,7 +141,7 @@ public class TrainDiscoveryAuthorizationTests
     [TraxAuthorize("FromImpl", Roles = "RoleB")]
     public class MultiSurfaceTrainImpl : ServiceTrain<EmptyIn, EmptyOut>, IMultiSurfaceTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -149,7 +149,7 @@ public class TrainDiscoveryAuthorizationTests
 
     public class UnauthTrainImpl : ServiceTrain<EmptyIn, EmptyOut>, IUnauthTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 }

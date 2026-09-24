@@ -42,9 +42,7 @@ public class ScopeTrackTrain : ServiceTrain<ScopeTrackInput, ScopeTrackOutput>, 
     [Inject]
     public DisposalTracker? Tracker { get; set; }
 
-    protected override Task<Either<Exception, ScopeTrackOutput>> RunInternal(
-        ScopeTrackInput input
-    ) =>
+    protected override Task<Either<Exception, ScopeTrackOutput>> Junctions() =>
         Task.FromResult<Either<Exception, ScopeTrackOutput>>(
             new ScopeTrackOutput(Marker!.Id, Tracker!)
         );

@@ -16,10 +16,12 @@ if your work contradicts one, say so rather than silently overriding it.
 | Working on | Read first |
 | --- | --- |
 | `[TraxAuthorize]`, or anything in `TrainAuthorization/` | [0001](./docs/adr/0001-authorization-is-fail-closed.md), the default is fail-closed and the opt-out is a named call |
+| `TrainExecutionService.QueueAsync` | central `docs/0017` (a caller's enqueue goes through the mediator), `docs/0018` (the deferred, staged enqueue) and `docs/0019` (the subject key it stamps) |
+| `TrainChainStartupValidator`, or `SkipChainVerification()` | central `docs/0016`, a chain is a declaration the host reads at startup |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Nine name `mediator`. The one most likely to reach a change here
-is `0007`, the canonical train name being the interface FullName, which
+index lists them by repo. Eighteen name `mediator`. Besides the workspace-wide conventions, the
+ones most likely to reach a change here are `0016` to `0019` (routed above) and `0007`, the canonical train name being the interface FullName, which
 `InterfaceFullNameInvariantTests` in this repo enforces at the point of registration. In a
 workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path does not resolve
 on GitHub, because it crosses a repository boundary.
@@ -44,7 +46,7 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Mediator.Tests.Meta/` holds thirteen convention guards. Eleven are shared with
+`tests/Trax.Mediator.Tests.Meta/` holds fifteen convention guards. Thirteen are shared with
 other repos. Two are this repo's own: `InterfaceFullNameInvariantTests`, which pins the
 canonical-name rule at registration, and `DICompositionSmokeTests`, which fails at the
 registration point rather than at first use downstream when a wiring change drops a

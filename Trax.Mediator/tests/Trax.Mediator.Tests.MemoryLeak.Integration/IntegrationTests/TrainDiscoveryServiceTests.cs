@@ -273,7 +273,7 @@ public class TrainDiscoveryServiceTests
 
     public class PlainTrain : ServiceTrain<PlainInput, Unit>, IPlainTrain
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(PlainInput input) =>
+        protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
@@ -282,7 +282,7 @@ public class TrainDiscoveryServiceTests
     [TraxBroadcast]
     public class SubscriptionTrain : ServiceTrain<SubscriptionInput, Unit>, ISubscriptionTrain
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(SubscriptionInput input) =>
+        protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
@@ -291,7 +291,7 @@ public class TrainDiscoveryServiceTests
     [TraxMutation(Description = "GraphQL only")]
     public class GraphQLOnlyTrain : ServiceTrain<GraphQLOnlyInput, Unit>, IGraphQLOnlyTrain
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(GraphQLOnlyInput input) =>
+        protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
@@ -301,7 +301,7 @@ public class TrainDiscoveryServiceTests
     [TraxBroadcast]
     public class GraphQLAndSubscriptionTrain : ServiceTrain<BothInput, Unit>, IBothTrain
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(BothInput input) =>
+        protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
@@ -320,9 +320,7 @@ public class TrainDiscoveryServiceTests
         : ServiceTrain<TypedOutputInput, DiscoveryOutput>,
             ITypedOutputTrain
     {
-        protected override Task<Either<Exception, DiscoveryOutput>> RunInternal(
-            TypedOutputInput input
-        ) =>
+        protected override Task<Either<Exception, DiscoveryOutput>> Junctions() =>
             Task.FromResult<Either<Exception, DiscoveryOutput>>(
                 new DiscoveryOutput { Result = "ok" }
             );
@@ -336,9 +334,7 @@ public class TrainDiscoveryServiceTests
         : ServiceTrain<GraphQLTypedOutputInput, DiscoveryOutput>,
             IGraphQLTypedOutputTrain
     {
-        protected override Task<Either<Exception, DiscoveryOutput>> RunInternal(
-            GraphQLTypedOutputInput input
-        ) =>
+        protected override Task<Either<Exception, DiscoveryOutput>> Junctions() =>
             Task.FromResult<Either<Exception, DiscoveryOutput>>(
                 new DiscoveryOutput { Result = "graphql" }
             );
@@ -353,9 +349,8 @@ public class TrainDiscoveryServiceTests
         : ServiceTrain<ConcurrencyLimitedInput, Unit>,
             IConcurrencyLimitedTrain
     {
-        protected override Task<Either<Exception, Unit>> RunInternal(
-            ConcurrencyLimitedInput input
-        ) => Task.FromResult<Either<Exception, Unit>>(Unit.Default);
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
     #endregion

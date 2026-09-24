@@ -16,9 +16,9 @@
       },
       "Trax.Core.Testing": {
         "type": "Direct",
-        "requested": "[1.7.1, )",
-        "resolved": "1.7.1",
-        "contentHash": "B/SoMiLcP5VyMcZQGo65EBad+TqexzlelIHrROsrnMx9iMZ/4O5r27CYAGzCfHeiV6ukBIoE9WuOmsLTKJAZbw==",
+        "requested": "[1.7.2, )",
+        "resolved": "1.7.2",
+        "contentHash": "/+KY640Hv0aK4+ITlKhBnrZjWGbLY4qGGCsYyJgndj3yY7AZnqvSV/N2lr5NmYYCw1S+KFTMjSI0RfY6yeCFhg==",
         "dependencies": {
           "Microsoft.CodeAnalysis.CSharp": "4.14.0",
           "NUnit": "4.4.0"

@@ -32,7 +32,7 @@ public class AuthorizationRegistrationValidatorTests
     [TraxAuthorize("Admin")]
     public class TestAuthedTrain : ServiceTrain<EmptyIn, EmptyOut>, ITestAuthedTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -40,7 +40,7 @@ public class AuthorizationRegistrationValidatorTests
 
     public class PlainTrain : ServiceTrain<EmptyIn, EmptyOut>, IPlainTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -182,7 +182,7 @@ public class AuthorizationRegistrationValidatorTests
 
     public class WhitespaceRolesTrain : ServiceTrain<EmptyIn, EmptyOut>, IWhitespaceRolesTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -191,7 +191,7 @@ public class AuthorizationRegistrationValidatorTests
 
     public class EmptyPolicyTrain : ServiceTrain<EmptyIn, EmptyOut>, IEmptyPolicyTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 }

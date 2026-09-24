@@ -109,7 +109,7 @@ The cancellation signal is forwarded to the train and all its stops.
 
 ### Nested trains
 
-A stop can dispatch another train mid-journey. Pass the current `Metadata` to establish a parent-child relationship between the journeys:
+A stop can dispatch another train mid-journey. The nested train records its own run, which is not linked to the outer one: the bus does not set its `ParentId`. Do not pass the current train's `Metadata` to try to link them; the `metadata` argument is for running as a pre-created `Pending` record, and a running train's metadata is refused with a `TrainException`.
 
 ```csharp
 public class SendWelcomeEmailJunction(ITrainBus trainBus) : Junction<User, Unit>

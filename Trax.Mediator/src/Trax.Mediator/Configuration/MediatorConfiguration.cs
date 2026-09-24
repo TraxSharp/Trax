@@ -41,6 +41,19 @@ public class MediatorConfiguration
     public bool AllowMissingAuthorizationService { get; internal set; }
 
     /// <summary>
+    /// When true, the host does not read every registered train's chain at startup.
+    /// </summary>
+    /// <remarks>
+    /// The check is on by default: a chain is a declaration, so whether it can run is decidable
+    /// before any traffic arrives. There are two reasons to turn it off. One is the blind spot
+    /// named in <c>ChainVerification</c>, where a junction declares an interface that the value
+    /// flowing in implements only incidentally. The other is temporary: a codebase being moved
+    /// onto <c>Junctions()</c> whose chains do not pass yet. Set with
+    /// <c>TraxMediatorBuilder.SkipChainVerification()</c>.
+    /// </remarks>
+    public bool SkipChainVerification { get; internal set; }
+
+    /// <summary>
     /// Maximum UTF-8 byte length for caller-supplied train input JSON in
     /// <c>ITrainExecutionService.RunAsync</c> / <c>QueueAsync</c>. Defaults to
     /// 256 KiB. Override via <c>TraxMediatorBuilder.WithMaxInputJsonBytes(int)</c>.

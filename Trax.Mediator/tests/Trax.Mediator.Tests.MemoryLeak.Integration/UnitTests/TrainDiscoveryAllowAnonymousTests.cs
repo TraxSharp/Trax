@@ -81,7 +81,7 @@ public class TrainDiscoveryAllowAnonymousTests
     [TraxAllowAnonymous]
     public class AnonImplTrain : ServiceTrain<EmptyIn, EmptyOut>, IAnonImplTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -90,7 +90,7 @@ public class TrainDiscoveryAllowAnonymousTests
 
     public class AnonInterfaceTrainImpl : ServiceTrain<EmptyIn, EmptyOut>, IAnonInterfaceTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -99,7 +99,7 @@ public class TrainDiscoveryAllowAnonymousTests
     [TraxAllowAnonymous]
     public abstract class AnonBase : ServiceTrain<EmptyIn, EmptyOut>
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -109,7 +109,7 @@ public class TrainDiscoveryAllowAnonymousTests
 
     public class PlainAnonTrainImpl : ServiceTrain<EmptyIn, EmptyOut>, IPlainAnonTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 
@@ -119,7 +119,7 @@ public class TrainDiscoveryAllowAnonymousTests
     [TraxAllowAnonymous]
     public class ConflictTrainImpl : ServiceTrain<EmptyIn, EmptyOut>, IConflictTrain
     {
-        protected override Task<Either<Exception, EmptyOut>> RunInternal(EmptyIn input) =>
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
     }
 }

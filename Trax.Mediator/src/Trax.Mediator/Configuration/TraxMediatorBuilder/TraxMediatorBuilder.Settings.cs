@@ -25,6 +25,25 @@ public partial class TraxMediatorBuilder
     }
 
     /// <summary>
+    /// Stops the host reading every registered train's chain at startup.
+    /// </summary>
+    /// <remarks>
+    /// The check is on by default and refuses to start when a train's chain cannot run: a
+    /// junction whose input never reaches Memory, a chain that ends without the train's return
+    /// type, or a <c>Junctions()</c> that does work instead of declaring a chain. There are two
+    /// reasons to turn it off. One is the blind spot named in <c>ChainVerification</c>: it knows
+    /// the train's declared input type, not the concrete one that flows, so a junction asking for
+    /// an interface only a subtype of the input implements reads as a fault. The other is
+    /// temporary: a codebase being moved onto <c>Junctions()</c> whose chains do not pass yet.
+    /// </remarks>
+    public TraxMediatorBuilder SkipChainVerification()
+    {
+        _skipChainVerification = true;
+
+        return this;
+    }
+
+    /// <summary>
     /// Opts the host out of the startup check that fails when trains carry
     /// <c>[TraxAuthorize]</c> but no <c>ITrainAuthorizationService</c> is registered.
     /// Intended for processes that never serve API submissions (e.g. a standalone

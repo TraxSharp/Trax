@@ -100,6 +100,44 @@ public abstract class TestSetup
         dataContext.Reset();
     }
 
+    /// <summary>
+    /// The ceiling on any wait for a signal a run raises. Owned here rather than inherited
+    /// (Trax.Docs/adr/0014-a-test-owns-every-timeout-it-waits-behind.md).
+    /// </summary>
+    protected static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Waits for <paramref name="signal"/>, which a run raises part-way through, while also
+    /// watching the run itself. A run that faults before raising it surfaces its own exception
+    /// instead of hanging the test, and one that never raises it fails after
+    /// <see cref="SignalTimeout"/>.
+    /// </summary>
+    protected static async Task AwaitSignalAsync(Task signal, Task run, string what)
+    {
+        var first = await Task.WhenAny(signal, run).WaitAsync(SignalTimeout);
+        if (first == signal)
+            return;
+
+        await run;
+        Assert.Fail($"The run finished before {what}.");
+    }
+
+    /// <summary>
+    /// Lets a run the test released finish before the next test starts, without letting its
+    /// outcome replace the assertion that already failed.
+    /// </summary>
+    protected static async Task DrainAsync(Task run)
+    {
+        try
+        {
+            await run.WaitAsync(SignalTimeout);
+        }
+        catch
+        {
+            // The test has already asserted on the outcome it cares about.
+        }
+    }
+
     [TearDown]
     public async Task TestTearDown()
     {

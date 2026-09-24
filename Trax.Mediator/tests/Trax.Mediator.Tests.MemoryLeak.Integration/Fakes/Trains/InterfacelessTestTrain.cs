@@ -1,4 +1,5 @@
 using LanguageExt;
+using Trax.Core.Junction;
 using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Trains;
@@ -28,16 +29,20 @@ public record InterfacelessTestOutput
 /// </summary>
 public class InterfacelessTestTrain : ServiceTrain<InterfacelessTestInput, InterfacelessTestOutput>
 {
-    protected override async Task<Either<Exception, InterfacelessTestOutput>> RunInternal(
-        InterfacelessTestInput input
-    )
-    {
-        await Task.CompletedTask;
+    protected override Task<Either<Exception, InterfacelessTestOutput>> Junctions() =>
+        Chain<BuildInterfacelessOutput>().Resolve();
+}
 
-        return new InterfacelessTestOutput
-        {
-            Id = input.Id,
-            Message = $"Processed {input.Id} without a dedicated interface",
-        };
-    }
+/// <summary>Builds the output for a train that has no dedicated interface.</summary>
+internal sealed class BuildInterfacelessOutput
+    : Junction<InterfacelessTestInput, InterfacelessTestOutput>
+{
+    public override Task<InterfacelessTestOutput> Run(InterfacelessTestInput input) =>
+        Task.FromResult(
+            new InterfacelessTestOutput
+            {
+                Id = input.Id,
+                Message = $"Processed {input.Id} without a dedicated interface",
+            }
+        );
 }
