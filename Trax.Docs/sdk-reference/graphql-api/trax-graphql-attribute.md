@@ -105,6 +105,8 @@ public class RefreshCacheTrain : ServiceTrain<RefreshCacheInput, Unit>, IRefresh
 
 When using `trax-cli` to generate trains from OpenAPI or GraphQL schemas, operations with no input parameters automatically get an empty input record.
 
+Adding or removing the **last** property of an input record therefore changes the field's arity: the `input` argument appears or disappears. That is a breaking schema change for clients, and it does not look like one in the diff, because the record gained or lost a single property like any other.
+
 ## Naming Convention
 
 When `Name` is null (the default), the field name is derived from the train's service interface:

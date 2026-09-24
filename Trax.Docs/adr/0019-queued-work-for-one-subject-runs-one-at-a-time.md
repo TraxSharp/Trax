@@ -38,7 +38,12 @@ dispatchers would need a per-subject queue.
 ## Consequences
 
 The key is an opaque string compared exactly across every train, so two trains returning the same
-key serialize against each other. It is refused when empty or longer than 512 characters, both at
+key serialize against each other. It is computed from the input the caller supplied, and the queue
+priority is a caller-supplied argument, so a caller authorized to queue a keyed train picks which
+subject their entry serializes against and where it sits in that subject's order.
+`[TraxAuthorize]` gates the train, not the record, and keys are one global space rather than one per
+train, so a consumer for whom that matters authorizes the record in `OnQueue` or scopes the key per
+tenant. `authorization.md` and `core/trains-and-junctions.md` say so where a consumer will meet it. It is refused when empty or longer than 512 characters, both at
 enqueue and by `WorkQueue.Create`, so an entry built directly cannot carry a key the index cannot
 claim. The
 guarantee holds only until something writes a terminal state for a run that has not finished,
@@ -83,6 +88,8 @@ overrides `LockSubject()`.
 
 ## Changelog
 
+- **2026-09-24**: Recorded that the key and the priority both come from the caller, and that
+  authorizing the record in `OnQueue` or scoping keys per tenant is what a consumer does about it.
 - **2026-09-24**: Recorded that `WorkQueue.Create` refuses the same keys the enqueue does.
 - **2026-09-23**: Corrected dispatch order (group priority, then priority, then age, after
   dropping future-scheduled entries and disabled groups), recorded that the scheduler's startup
