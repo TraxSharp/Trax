@@ -16,10 +16,13 @@ if your work contradicts one, say so rather than silently overriding it.
 | Working on | Read first |
 | --- | --- |
 | `AddTraxDashboard` or `UseTraxDashboard` | [0001](./docs/adr/0001-the-dashboard-mounts-into-the-host-app.md), these run inside somebody else's application and change its middleware |
+| the queue dialog, the Re-queue button, or anything else that enqueues | central `docs/0017`: enqueue through `IOperationsService` inside the `"dashboard"` trusted scope, never by building a work queue row; per-train `[TraxAuthorize]` does not apply because the dashboard is gated as a whole by its host |
+| the work queue pages (Staged, Subject, Waiting On) or the Failure Class field | central `docs/0018`, `docs/0019` and `docs/0020` |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Nine name `dashboard`, including the canonical train name being
-the interface FullName, which this repo compares against when it looks a train up. In a
+index lists them by repo. Nineteen name `dashboard`: the workspace-wide conventions, `0016`
+to `0020` (the enqueue ones routed above), and the canonical train name being the interface
+FullName, which this repo compares against when it looks a train up. In a
 workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path does not resolve
 on GitHub, because it crosses a repository boundary.
 
@@ -43,8 +46,10 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Dashboard.Tests.Meta/` holds ten convention guards, and **all ten are shared**
-with the other repos. This repo owns no convention guard of its own. The gaps that matter are
+`tests/Trax.Dashboard.Tests.Meta/` holds thirteen convention guards, and **all thirteen are
+shared** with the other repos. This repo owns no convention guard of its own;
+`WorkQueueCreationSitesTests` runs here with an empty allow-list, so no dashboard code may
+build a work queue row (`docs/0017`). The gaps that matter are
 named in the `## Exemplars` section of
 [0001](./docs/adr/0001-the-dashboard-mounts-into-the-host-app.md), in descending order of
 reach. The first is not a test gap at all: the dashboard applies no authorization of its own,

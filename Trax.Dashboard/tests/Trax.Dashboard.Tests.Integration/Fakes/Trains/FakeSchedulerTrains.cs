@@ -15,7 +15,7 @@ public interface IFakeSchedulerTrainA : IServiceTrain<FakeManifestInputA, Unit> 
 
 public class FakeSchedulerTrainA : ServiceTrain<FakeManifestInputA, Unit>, IFakeSchedulerTrainA
 {
-    protected override Task<Either<Exception, Unit>> RunInternal(FakeManifestInputA input) =>
+    protected override Task<Either<Exception, Unit>> Junctions() =>
         Task.FromResult<Either<Exception, Unit>>(Unit.Default);
 }
 
@@ -25,7 +25,7 @@ public interface IFakeSchedulerTrainB : IServiceTrain<FakeManifestInputB, Unit> 
 
 public class FakeSchedulerTrainB : ServiceTrain<FakeManifestInputB, Unit>, IFakeSchedulerTrainB
 {
-    protected override Task<Either<Exception, Unit>> RunInternal(FakeManifestInputB input) =>
+    protected override Task<Either<Exception, Unit>> Junctions() =>
         Task.FromResult<Either<Exception, Unit>>(Unit.Default);
 }
 
@@ -35,7 +35,7 @@ public interface IFakeSchedulerTrainC : IServiceTrain<FakeManifestInputC, Unit> 
 
 public class FakeSchedulerTrainC : ServiceTrain<FakeManifestInputC, Unit>, IFakeSchedulerTrainC
 {
-    protected override Task<Either<Exception, Unit>> RunInternal(FakeManifestInputC input) =>
+    protected override Task<Either<Exception, Unit>> Junctions() =>
         Task.FromResult<Either<Exception, Unit>>(Unit.Default);
 }
 
@@ -45,6 +45,6 @@ public interface IFakeSchedulerTrainD : IServiceTrain<FakeManifestInputD, Unit> 
 
 public class FakeSchedulerTrainD : ServiceTrain<FakeManifestInputD, Unit>, IFakeSchedulerTrainD
 {
-    protected override Task<Either<Exception, Unit>> RunInternal(FakeManifestInputD input) =>
+    protected override Task<Either<Exception, Unit>> Junctions() =>
         Task.FromResult<Either<Exception, Unit>>(Unit.Default);
 }

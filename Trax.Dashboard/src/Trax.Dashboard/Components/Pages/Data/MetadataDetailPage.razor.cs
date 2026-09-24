@@ -4,20 +4,24 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Trax.Dashboard.Utilities;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Metadata;
-using Trax.Effect.Models.WorkQueue;
-using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrustedExecution;
+using Trax.Scheduler.Services.Operations;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
 
 public partial class MetadataDetailPage
 {
+    [Inject]
+    private ITrustedExecutionScope TrustedScope { get; set; } = default!;
+
     [Inject]
     private IDataContextProviderFactory DataContextFactory { get; set; } = default!;
 
@@ -29,6 +33,9 @@ public partial class MetadataDetailPage
 
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
+
+    [Inject]
+    private IOperationsService OperationsService { get; set; } = default!;
 
     [Inject]
     private IServiceProvider ServiceProvider { get; set; } = default!;
@@ -117,7 +124,7 @@ public partial class MetadataDetailPage
                 return;
             }
 
-            // Re-serialize the input using ManifestProperties options for clean JSON
+            // Parse the saved input to check it still fits the train before queueing it again.
             var deserializedInput = JsonSerializer.Deserialize(
                 _metadata.Input,
                 registration.InputType,
@@ -130,33 +137,42 @@ public partial class MetadataDetailPage
                 return;
             }
 
-            var serializedInput = JsonSerializer.Serialize(
+            // In the form the mediator reads, which is not necessarily the one the input was
+            // saved in.
+            var inputJson = JsonSerializer.Serialize(
                 deserializedInput,
                 registration.InputType,
-                TraxJsonSerializationOptions.ManifestProperties
+                TraxEffectConfiguration.StaticSystemJsonSerializerOptions
             );
 
-            var entry = WorkQueue.Create(
-                new CreateWorkQueue
-                {
-                    TrainName = _metadata.Name,
-                    Input = serializedInput,
-                    InputTypeName = registration.InputType.FullName,
-                }
-            );
+            // Through the operations service, which enqueues through the mediator, so the
+            // train's OnQueue hook, subject key and input cap apply to a re-queue as they do to
+            // any other enqueue. Writing the row here skipped them.
+            OperationResult result;
+            // The dashboard is the admin surface, gated as a whole by its host, so it enqueues as
+            // trusted infrastructure rather than as a user a train's [TraxAuthorize] can check: a
+            // Blazor circuit has no request to carry one. OnQueue, the subject key and the input
+            // cap still apply. See docs/0017.
+            using (TrustedScope.BeginTrusted("dashboard"))
+                result = await OperationsService.QueueTrainAsync(
+                    new QueueTrainInput(TrainName: _metadata.Name, InputJson: inputJson),
+                    DisposalToken
+                );
 
-            using var dataContext = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-            await dataContext.Track(entry);
-            await dataContext.SaveChanges(DisposalToken);
+            if (!result.Success || result.Id is not { } entryId)
+            {
+                _rerunError = result.Message;
+                return;
+            }
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
                 "Train Queued",
-                $"{ShortName(_metadata.Name)} has been re-queued (ID {entry.Id}).",
+                $"{ShortName(_metadata.Name)} has been re-queued (ID {entryId}).",
                 duration: 4000
             );
 
-            Navigation.NavigateTo($"trax/data/work-queue/{entry.Id}");
+            Navigation.NavigateTo($"trax/data/work-queue/{entryId}");
         }
         catch (JsonException je)
         {

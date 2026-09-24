@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
 using Radzen;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrustedExecution;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Components.Dialogs;
@@ -12,6 +13,9 @@ namespace Trax.Dashboard.Components.Dialogs;
 public partial class QueueTrainDialog : IDisposable
 {
     private readonly CancellationTokenSource _cts = new();
+
+    [Inject]
+    private ITrustedExecutionScope TrustedScope { get; set; } = default!;
 
     [Inject]
     private IOperationsService OperationsService { get; set; } = default!;
@@ -71,14 +75,20 @@ public partial class QueueTrainDialog : IDisposable
             // IOperationsService, which performs the actual deserialization + validation.
             string? inputJson = _selectedTab == 0 ? BuildInputJsonFromForm() : _jsonInput;
 
-            var result = await OperationsService.QueueTrainAsync(
-                new QueueTrainInput(
-                    TrainName: Registration.ServiceType.FullName!,
-                    InputJson: inputJson,
-                    Priority: _priority
-                ),
-                _cts.Token
-            );
+            OperationResult result;
+            // The dashboard is the admin surface, gated as a whole by its host, so it enqueues as
+            // trusted infrastructure rather than as a user a train's [TraxAuthorize] can check: a
+            // Blazor circuit has no request to carry one. OnQueue, the subject key and the input
+            // cap still apply. See docs/0017.
+            using (TrustedScope.BeginTrusted("dashboard"))
+                result = await OperationsService.QueueTrainAsync(
+                    new QueueTrainInput(
+                        TrainName: Registration.ServiceType.FullName!,
+                        InputJson: inputJson,
+                        Priority: _priority
+                    ),
+                    _cts.Token
+                );
 
             if (!result.Success)
             {

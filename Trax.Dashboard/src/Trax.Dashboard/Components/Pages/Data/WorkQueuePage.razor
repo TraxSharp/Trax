@@ -98,6 +98,34 @@
                               Title="Dispatched At"
                               Width="180px"
                               FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+        <RadzenDataGridColumn TItem="WorkQueue"
+                              Property="SubjectKey"
+                              Title="Subject"
+                              Width="160px">
+            <Template Context="entry">@(entry.SubjectKey ?? "—")</Template>
+        </RadzenDataGridColumn>
+        @* An entry staged by a two-phase enqueue is Queued but not yet dispatchable; it is
+           normally confirmed moments later, once its OnQueue hook returns. Only a queued entry
+           can be staged: a cancelled one keeps a null ConfirmedAt but is simply cancelled. *@
+        <RadzenDataGridColumn TItem="WorkQueue"
+                              Property="ConfirmedAt"
+                              Title="Confirmed"
+                              Width="120px">
+            <Template Context="entry">
+                @if (entry is { ConfirmedAt: null, Status: WorkQueueStatus.Queued })
+                {
+                    <RadzenBadge BadgeStyle="BadgeStyle.Warning" Text="Staged" />
+                }
+                else if (entry.ConfirmedAt is not null)
+                {
+                    <text>Yes</text>
+                }
+                else
+                {
+                    <text>—</text>
+                }
+            </Template>
+        </RadzenDataGridColumn>
     </Columns>
 </TraxDataGrid>
 

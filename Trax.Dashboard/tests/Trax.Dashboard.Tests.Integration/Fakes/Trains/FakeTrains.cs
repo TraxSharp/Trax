@@ -12,7 +12,7 @@ public interface IFakeTrainA : IServiceTrain<FakeInputA, string> { }
 
 public class FakeTrainA : ServiceTrain<FakeInputA, string>, IFakeTrainA
 {
-    protected override Task<Either<Exception, string>> RunInternal(FakeInputA input) =>
+    protected override Task<Either<Exception, string>> Junctions() =>
         Task.FromResult<Either<Exception, string>>("ok");
 }
 
@@ -23,7 +23,7 @@ public interface IFakeTrainB : IServiceTrain<FakeInputB, int> { }
 
 public class FakeTrainB : ServiceTrain<FakeInputB, int>, IFakeTrainB
 {
-    protected override Task<Either<Exception, int>> RunInternal(FakeInputB input) =>
+    protected override Task<Either<Exception, int>> Junctions() =>
         Task.FromResult<Either<Exception, int>>(0);
 }
 
@@ -34,7 +34,7 @@ public interface IFakeTrainC : IServiceTrain<FakeInputC, bool> { }
 
 public class FakeTrainC : ServiceTrain<FakeInputC, bool>, IFakeTrainC
 {
-    protected override Task<Either<Exception, bool>> RunInternal(FakeInputC input) =>
+    protected override Task<Either<Exception, bool>> Junctions() =>
         Task.FromResult<Either<Exception, bool>>(true);
 }
 
@@ -45,9 +45,8 @@ public class FakeGenericTrain
     : ServiceTrain<List<string>, Dictionary<string, int>>,
         IFakeGenericTrain
 {
-    protected override Task<Either<Exception, Dictionary<string, int>>> RunInternal(
-        List<string> input
-    ) => Task.FromResult<Either<Exception, Dictionary<string, int>>>(new Dictionary<string, int>());
+    protected override Task<Either<Exception, Dictionary<string, int>>> Junctions() =>
+        Task.FromResult<Either<Exception, Dictionary<string, int>>>(new Dictionary<string, int>());
 }
 
 // --- Non-train service for negative tests ---

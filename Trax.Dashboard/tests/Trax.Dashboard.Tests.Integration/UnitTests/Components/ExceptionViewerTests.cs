@@ -40,6 +40,17 @@ public class ExceptionViewerTests
     }
 
     [Test]
+    public void Renders_HowTheFailureWasClassified()
+    {
+        var component = _ctx.RenderComponent<ExceptionViewer>(p =>
+            p.Add(x => x.FailureClass, Trax.Core.Exceptions.FailureClass.Conflict)
+        );
+
+        component.Markup.Should().Contain("Failure Class");
+        component.Markup.Should().Contain("Conflict");
+    }
+
+    [Test]
     public void NullFields_RenderAsDash()
     {
         var component = _ctx.RenderComponent<ExceptionViewer>();

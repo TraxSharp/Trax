@@ -13,11 +13,11 @@
   <!-- Trax.* cross-repo packages. CI pins the exact resolved version; a local build
        can override via TraxLocalVersion (set by trax-local.props). -->
   <ItemGroup>
-    <PackageVersion Include="Trax.Api.GraphQL.PersistedOperations" Version="1.43.1" />
-    <PackageVersion Include="Trax.Effect" Version="1.54.0" />
-    <PackageVersion Include="Trax.Effect.Data" Version="1.54.0" />
-    <PackageVersion Include="Trax.Mediator" Version="1.22.0" />
-    <PackageVersion Include="Trax.Scheduler" Version="1.32.1" />
+    <PackageVersion Include="Trax.Api.GraphQL.PersistedOperations" Version="1.43.2" />
+    <PackageVersion Include="Trax.Effect" Version="1.54.2" />
+    <PackageVersion Include="Trax.Effect.Data" Version="1.54.2" />
+    <PackageVersion Include="Trax.Mediator" Version="1.22.1" />
+    <PackageVersion Include="Trax.Scheduler" Version="1.32.2" />
   </ItemGroup>
 
   <!-- Third-party packages, pinned to exact versions. -->

@@ -292,6 +292,8 @@ namespace Trax.Dashboard.Components.Shared
     {
         public ExceptionViewer() { }
         [Microsoft.AspNetCore.Components.Parameter]
+        public Trax.Core.Exceptions.FailureClass FailureClass { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
         public string? FailureException { get; set; }
         [Microsoft.AspNetCore.Components.Parameter]
         public string? FailureJunction { get; set; }
