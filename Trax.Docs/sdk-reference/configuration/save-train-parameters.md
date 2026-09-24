@@ -118,6 +118,8 @@ services.AddTrax(trax => trax
 
 A train whose output crosses `MaxParameterBytes` stores `{"_truncated": true, "_maxBytes": 1048576}` in `Metadata.Output` instead of the full payload. A train matched by `ExcludeOutput` stores nothing for its output, while its input is still serialized.
 
+A parameter `System.Text.Json` cannot represent at all, a reference cycle or an unsupported type, stores `{"_unserializable": true, "_error": "JsonException"}` on the same principle. Only the exception's type is kept: the messages carry unbounded detail, which is the wrong thing to put in the column a ceiling exists to bound. The run itself is unaffected, because an output that cannot be stored is a recording problem rather than a reason to fail work that already succeeded.
+
 ## Remarks
 
 - Requires a data provider to be registered (the serialized parameters are stored in the database via `Metadata`).
