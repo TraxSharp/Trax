@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
@@ -58,6 +59,55 @@ public class MediatorServiceExtensionsTests
                 "neither enqueue service holds per-scope state, so a singleton train consuming "
                     + "one is a supported shape"
             );
+    }
+
+    /// <summary>
+    /// The startup gates run before a hosted service the host registered before calling AddMediator.
+    /// </summary>
+    /// <remarks>
+    /// Hosted services start in registration order. A worker registered first began claiming and
+    /// running work before the chain check had refused the host, and under
+    /// <c>ServicesStartConcurrently</c> it ran alongside it, so the host was disposed out from under
+    /// those runs and their rows were left <c>InProgress</c> holding their subjects.
+    /// </remarks>
+    [Test]
+    public void AddMediator_StartupGates_AreOrderedBeforeAHostedServiceRegisteredFirst()
+    {
+        // Arrange: the host's own worker goes in before Trax is configured at all.
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHostedService<MarkerWorker>();
+
+        // Act
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UseInMemory())
+                .AddMediator(mediator => mediator.ScanAssemblies(typeof(ITrainBus).Assembly))
+        );
+
+        // Assert
+        var hosted = services
+            .Select((descriptor, index) => (descriptor, index))
+            .Where(entry => entry.descriptor.ServiceType == typeof(IHostedService))
+            .ToList();
+
+        var marker = hosted.Single(e => e.descriptor.ImplementationType == typeof(MarkerWorker));
+        var chainCheck = hosted.Single(e =>
+            e.descriptor.ImplementationType?.Name == "TrainChainStartupValidator"
+        );
+
+        chainCheck
+            .index.Should()
+            .BeLessThan(
+                marker.index,
+                "a gate that only sometimes runs before the work it gates is not a gate"
+            );
+    }
+
+    private sealed class MarkerWorker : IHostedService
+    {
+        public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     [Test]

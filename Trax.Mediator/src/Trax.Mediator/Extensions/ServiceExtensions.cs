@@ -141,6 +141,32 @@ public static class ServiceExtensions
     }
 
     /// <summary>
+    /// Registers a hosted service ahead of everything already in the collection, so it starts
+    /// before any hosted service the host registered before calling into Trax.
+    /// </summary>
+    /// <remarks>
+    /// .NET starts hosted services in registration order, and <c>AddMediator</c> runs wherever the
+    /// host happens to call it. A worker registered first therefore began claiming and running work
+    /// before the chain check had refused the host, and with
+    /// <c>HostOptions.ServicesStartConcurrently</c> it ran alongside it: the host was then disposed
+    /// under those runs, leaving their rows <c>InProgress</c> and holding their subjects.
+    /// <para>
+    /// Prepending settles it wherever <c>AddMediator</c> is called, which is why it is done rather
+    /// than reading the collection to find out what is already there. A startup gate that only
+    /// sometimes runs first is not a gate.
+    /// </para>
+    /// </remarks>
+    private static IServiceCollection PrependHostedService<THostedService>(
+        this IServiceCollection services
+    )
+        where THostedService : class, IHostedService
+    {
+        services.Insert(0, ServiceDescriptor.Singleton<IHostedService, THostedService>());
+
+        return services;
+    }
+
+    /// <summary>
     /// Registers pre-scanned train types with the DI container. Used internally by
     /// <see cref="AddServiceTrainBus"/> to avoid a second assembly scan.
     /// </summary>
@@ -186,18 +212,22 @@ public static class ServiceExtensions
     {
         var trainRegistry = new TrainRegistry(assemblies);
 
+        // Prepended, not appended, so they run before any hosted service the host registered before
+        // it called into Trax. Reverse order, because each goes to the front: the chain check ends
+        // up first.
+        serviceCollection.PrependHostedService<AuthorizationRegistrationValidator>();
+        serviceCollection.PrependHostedService<Services.ChainVerification.TrainChainStartupValidator>();
+
         return serviceCollection
             .AddSingleton<IServiceCollection>(serviceCollection)
             .AddSingleton<ITrainRegistry>(trainRegistry)
             .AddSingleton<ITrainDiscoveryService, TrainDiscoveryService>()
-            .AddHostedService<Services.ChainVerification.TrainChainStartupValidator>()
             .AddSingleton<IConcurrencyLimiter, ConcurrencyLimiter>()
             .AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>()
             // Default null-returning principal provider. Hosts with an HTTP
             // pipeline replace this via AddTraxApi with an HttpContext-backed
             // implementation so per-principal concurrency caps activate.
             .AddSingleton<ICurrentPrincipalProvider, NullPrincipalProvider>()
-            .AddHostedService<AuthorizationRegistrationValidator>()
             .AddScoped<ITrainBus, TrainBus>()
             .AddScoped<IRunExecutor, LocalRunExecutor>()
             // Singletons, because a singleton train may inject either one and ValidateScopes is
