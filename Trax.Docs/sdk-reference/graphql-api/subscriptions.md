@@ -198,6 +198,8 @@ Trax authenticates that payload with a HotChocolate `ISocketSessionInterceptor`.
 
 Both are wired automatically, but only when the matching principal resolver is already in the service collection at the time `AddTraxGraphQL()` runs. Register your `AddTrax*Auth` call **before** `AddTraxGraphQL()`, which matches the standard `AddTrax(...).AddTraxGraphQL(...)` ordering.
 
+Get it the wrong way round and the host refuses to start, naming the call to move. It does not start with subscriptions unauthenticated, which is what earlier versions did: no interceptor was wired, so HotChocolate accepted every `connection_init` while HTTP requests kept being gated normally. Supplying your own interceptor through `ConfigureSchema` opts out of both the wiring and the check. See [Registration order](/docs/sdk-reference/graphql-api/add-trax-graphql#registration-order).
+
 The JWT interceptor validates against the same `JwtBearerOptions` as the HTTP handler, including Authority/JWKS schemes (Cognito, Google, any OIDC provider): it fetches signing keys from the scheme's discovery document when the options carry no static key.
 
 Each connection gets its own DI scope. The interceptor itself is a singleton (HotChocolate builds one per schema), so it opens a scope when `connection_init` arrives, resolves your scoped `ITraxPrincipalResolver<T>` inside it, and disposes it once the principal is resolved. A resolver holding a `DbContext` works on subscriptions exactly as it does on HTTP. The scope covers the handshake only, not the lifetime of the socket: the principal is captured onto the connection's `HttpContext.User` and reused for every subsequent operation, so a credential revoked mid-connection is not re-checked.

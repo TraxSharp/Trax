@@ -112,6 +112,13 @@ Unauthenticated API requests against the cookie scheme return `401` (not a redir
 
 Browsers cannot attach custom headers to a WebSocket upgrade, so header-bound schemes (API key, JWT bearer) carry credentials in the `connection_init` payload instead. Cookie-bound schemes (OIDC) need no special handling: the browser attaches cookies to the upgrade request, so the cookie middleware authenticates the upgrade like any HTTP request.
 
+**Register authentication before `AddTraxGraphQL`.** `AddTraxGraphQL` picks the socket interceptor from what the service collection holds at the moment it runs, so a scheme registered after it is invisible and no interceptor is wired. The host refuses to start in that case, with a message naming the call that ran too late; the check runs once the container is complete, so it sees the scheme whichever order you used. Supplying your own interceptor through `ConfigureSchema` opts out of both the wiring and the check.
+
+```csharp
+services.AddTraxApiKeyAuth(...);   // or AddTraxJwtAuth / AddTraxJwtDispatcher
+services.AddTraxGraphQL(...);      // reads what is registered above it
+```
+
 ### API key
 
 ```js
@@ -122,7 +129,7 @@ ws.onopen = () => ws.send(JSON.stringify({
 }));
 ```
 
-`AddTraxApiKeyAuth` auto-registers `TraxApiKeySocketInterceptor` when the Trax GraphQL schema is present. The interceptor resolves the token via the same `ITraxPrincipalResolver<string>` used by the REST handler, attaches the resulting principal to `HttpContext.User` for the socket lifetime, and rejects the connection when the token is missing or invalid.
+`AddTraxGraphQL` wires `TraxApiKeySocketInterceptor` when `AddTraxApiKeyAuth` has already registered its principal resolver. The direction matters: it is `AddTraxGraphQL` that reads the collection, so calling `AddTraxApiKeyAuth` afterwards wires nothing. The interceptor resolves the token via the same `ITraxPrincipalResolver<string>` used by the REST handler, attaches the resulting principal to `HttpContext.User` for the socket lifetime, and rejects the connection when the token is missing or invalid.
 
 ### JWT bearer
 
@@ -134,7 +141,7 @@ ws.onopen = () => ws.send(JSON.stringify({
 }));
 ```
 
-`AddTraxJwtAuth` auto-registers `TraxJwtSocketInterceptor` when the Trax GraphQL schema is present. The interceptor validates the token against the same `JwtBearerOptions` (signature, issuer, audience, lifetime, clock skew) the HTTP handler uses - the WS and HTTP paths cannot diverge. This includes Authority/JWKS schemes (Cognito, Google, any OIDC provider): the interceptor fetches signing keys from the scheme's discovery document when the options carry no static key. It then runs `ITraxPrincipalResolver<JwtTokenInput>` and attaches the resulting principal.
+`AddTraxGraphQL` wires `TraxJwtSocketInterceptor` when `AddTraxJwtAuth` has already registered its principal resolver, the same way round as the API-key case above. The interceptor validates the token against the same `JwtBearerOptions` (signature, issuer, audience, lifetime, clock skew) the HTTP handler uses - the WS and HTTP paths cannot diverge. This includes Authority/JWKS schemes (Cognito, Google, any OIDC provider): the interceptor fetches signing keys from the scheme's discovery document when the options carry no static key. It then runs `ITraxPrincipalResolver<JwtTokenInput>` and attaches the resulting principal.
 
 ### OIDC cookie
 

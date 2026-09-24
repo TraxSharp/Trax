@@ -193,7 +193,9 @@ mutation Upload($input: UploadPersistedOperationInput!) {
 { "input": { "id": "userProfile_v1", "document": "query UserProfile($id: Int!) { user(id: $id) { id name email } }" } }
 ```
 
-The management mutations and queries always bypass the enforcement middleware (their names are intrinsic to the subsystem; persisting them by id would be a chicken-and-egg). They are protected only by whatever ASP.NET auth middleware sits in front of the GraphQL endpoint.
+The management mutations and queries always bypass the enforcement middleware, because persisting them by id would be a chicken-and-egg. The carve-out is decided from the document's structure, not its text: it applies only when every operation in the request selects `operations` at the root and nothing but `persistedOperations` beneath it. A document that mixes the management surface with any other field, including another `operations` namespace such as `deadLetters`, does not qualify and is enforced normally, as is one that does not parse. An alias or a string argument that happens to read `persistedOperations` is neither the field being selected nor part of the document's structure, so it does not qualify either.
+
+The carve-out is not an authorization boundary. Enforcement is a request-shaping control; what protects the management surface is `GateOperations(...)` plus whatever ASP.NET auth middleware sits in front of the GraphQL endpoint.
 
 ### Programmatically
 

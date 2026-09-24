@@ -40,6 +40,8 @@ Cognito issues two token shapes per session:
 
 Many SDKs send access tokens by default. Pick `CognitoTokenUse.IdAndAccess` (default) to accept either, `Access` if your client only ever sends access tokens, or `Id` if you specifically want identity-rich tokens with user attributes.
 
+`token_use` is validated, not merely read. Where the configured value admits access tokens, a token carrying `client_id` but **no** `token_use` is rejected: Cognito always stamps `token_use` on an access token, so its absence means the token is not one, and admitting it on the strength of `client_id` alone would accept a token nothing has vouched for. A token carrying neither claim is unaffected, so a symmetric-key issuer is not caught by this.
+
 ## Usage
 
 ```csharp
