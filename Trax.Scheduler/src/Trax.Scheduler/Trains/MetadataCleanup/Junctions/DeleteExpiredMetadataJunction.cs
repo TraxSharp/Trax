@@ -22,6 +22,10 @@ namespace Trax.Scheduler.Trains.MetadataCleanup.Junctions;
 /// JobRunner) are always eligible regardless of the configured whitelist. The dispatcher alone
 /// persists a metadata row every poll, so leaving these out lets the table grow without bound.
 ///
+/// Trains added with a retention of their own are swept at that cutoff instead of the configured
+/// default. Trains sharing a cutoff are swept together, so the batching below runs once per
+/// distinct retention rather than once in total.
+///
 /// Only metadata in a terminal state (Completed, Failed, or Cancelled) is eligible for deletion.
 /// A batch that fails (for example an unexpected foreign-key reference) is bisected to isolate the
 /// offending row, which is logged and skipped so one bad row can never abort the whole sweep.
@@ -36,56 +40,64 @@ internal class DeleteExpiredMetadataJunction(
     public override async Task<Unit> Run(MetadataCleanupRequest input)
     {
         var cleanupConfig = configuration.MetadataCleanup!;
-        var whitelist = TrainNameExpander.ExpandTrainNames(
-            cleanupConfig.TrainTypeWhitelist,
-            discoveryService
-        );
+        var plan = MetadataRetentionPlan.Build(cleanupConfig, discoveryService, out var conflicts);
 
-        // Internal scheduler trains are the highest-volume metadata writers and are pruned
-        // unconditionally so a consumer can never forget one and let the table grow unbounded.
-        foreach (var adminName in AdminTrains.FullNames)
-            whitelist.Add(adminName);
+        // A conflict is refused at startup by MetadataCleanupConfigurationValidator, so reaching
+        // one here means the validator did not run (it is registered alongside the polling
+        // service). Warn and carry on with the longest retention rather than throwing: a cleanup
+        // train that fails every cycle stops pruning altogether, which is the worse outcome.
+        foreach (var conflict in conflicts)
+            logger.LogWarning(
+                "Conflicting metadata retention, keeping the longer of the two. {Conflict}",
+                conflict.ToString()
+            );
 
-        var cutoffTime = DateTime.UtcNow - cleanupConfig.RetentionPeriod;
+        var now = DateTime.UtcNow;
         var batchSize = cleanupConfig.DeleteBatchSize;
-
-        logger.LogDebug(
-            "Deleting metadata older than {CutoffTime} for train types [{Whitelist}]",
-            cutoffTime,
-            string.Join(", ", whitelist)
-        );
-
         var totals = new CleanupTotals();
 
         // Rows that could not be deleted are excluded from later batches so the sweep makes
-        // progress instead of re-selecting the same poison rows forever.
+        // progress instead of re-selecting the same poison rows forever. Shared across groups,
+        // because a poison row is poison whichever cutoff selected it.
         var skippedIds = new List<long>();
 
-        while (true)
+        foreach (var (retention, names) in MetadataRetentionPlan.GroupByRetention(plan))
         {
-            var query = dataContext
-                .Metadatas.Where(m => whitelist.Contains(m.Name))
-                .Where(m => m.StartTime < cutoffTime)
-                .Where(m =>
-                    m.TrainState == TrainState.Completed
-                    || m.TrainState == TrainState.Failed
-                    || m.TrainState == TrainState.Cancelled
-                )
-                .Where(m => !skippedIds.Contains(m.Id))
-                .Select(m => m.Id);
+            var cutoffTime = now - retention;
 
-            var batchIds = batchSize.HasValue
-                ? await query.Take(batchSize.Value).ToListAsync(CancellationToken)
-                : await query.ToListAsync(CancellationToken);
+            logger.LogDebug(
+                "Deleting metadata older than {CutoffTime} (retention {Retention}) for train types [{Whitelist}]",
+                cutoffTime,
+                retention,
+                string.Join(", ", names)
+            );
 
-            if (batchIds.Count == 0)
-                break;
+            while (true)
+            {
+                var query = dataContext
+                    .Metadatas.Where(m => names.Contains(m.Name))
+                    .Where(m => m.StartTime < cutoffTime)
+                    .Where(m =>
+                        m.TrainState == TrainState.Completed
+                        || m.TrainState == TrainState.Failed
+                        || m.TrainState == TrainState.Cancelled
+                    )
+                    .Where(m => !skippedIds.Contains(m.Id))
+                    .Select(m => m.Id);
 
-            await DeleteBatch(batchIds, totals, skippedIds);
+                var batchIds = batchSize.HasValue
+                    ? await query.Take(batchSize.Value).ToListAsync(CancellationToken)
+                    : await query.ToListAsync(CancellationToken);
 
-            // No batch limit means we processed everything eligible in one pass.
-            if (!batchSize.HasValue || batchIds.Count < batchSize.Value)
-                break;
+                if (batchIds.Count == 0)
+                    break;
+
+                await DeleteBatch(batchIds, totals, skippedIds);
+
+                // No batch limit means we processed everything eligible in one pass.
+                if (!batchSize.HasValue || batchIds.Count < batchSize.Value)
+                    break;
+            }
         }
 
         if (totals.Metadata > 0 || totals.Skipped > 0)

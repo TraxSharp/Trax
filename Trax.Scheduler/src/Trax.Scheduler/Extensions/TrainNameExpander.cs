@@ -17,8 +17,28 @@ internal static class TrainNameExpander
     {
         var expanded = new HashSet<string>(names);
 
+        foreach (var twins in ExpandEach(names, discoveryService).Values)
+            expanded.UnionWith(twins);
+
+        return expanded;
+    }
+
+    /// <summary>
+    /// The same expansion, but keyed by the declared name so a caller can carry per-name settings
+    /// through it. Every declared name maps to a set containing itself plus any twin found.
+    /// </summary>
+    internal static Dictionary<string, HashSet<string>> ExpandEach(
+        IReadOnlyList<string> names,
+        ITrainDiscoveryService? discoveryService
+    )
+    {
+        var result = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+
+        foreach (var name in names)
+            result[name] = [name];
+
         if (discoveryService is null)
-            return expanded;
+            return result;
 
         var registrations = discoveryService.DiscoverTrains();
 
@@ -30,12 +50,12 @@ internal static class TrainNameExpander
                 var implFullName = reg.ImplementationType.FullName;
 
                 if (name == serviceFullName && implFullName is not null)
-                    expanded.Add(implFullName);
+                    result[name].Add(implFullName);
                 else if (name == implFullName && serviceFullName is not null)
-                    expanded.Add(serviceFullName);
+                    result[name].Add(serviceFullName);
             }
         }
 
-        return expanded;
+        return result;
     }
 }

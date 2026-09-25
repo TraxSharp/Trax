@@ -56,7 +56,10 @@ namespace Trax.Scheduler.Configuration
         public int? DeleteBatchSize { get; set; }
         public System.TimeSpan RetentionPeriod { get; set; }
         public void AddTrainType(string trainTypeName) { }
+        public void AddTrainType(string trainTypeName, System.TimeSpan retention) { }
         public void AddTrainType<TTrain>()
+            where TTrain :  class { }
+        public void AddTrainType<TTrain>(System.TimeSpan retention)
             where TTrain :  class { }
     }
     public class RemoteRunOptions

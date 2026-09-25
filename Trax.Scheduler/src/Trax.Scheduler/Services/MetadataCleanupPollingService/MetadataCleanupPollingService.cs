@@ -31,7 +31,7 @@ internal class MetadataCleanupPollingService(
             "MetadataCleanupPollingService starting with interval {Interval}, retention {Retention}, whitelist [{Whitelist}]",
             cleanupConfig.CleanupInterval,
             cleanupConfig.RetentionPeriod,
-            string.Join(", ", cleanupConfig.TrainTypeWhitelist)
+            string.Join(", ", DescribeWhitelist(cleanupConfig))
         );
 
         using var timer = new PeriodicTimer(cleanupConfig.CleanupInterval);
@@ -46,6 +46,19 @@ internal class MetadataCleanupPollingService(
 
         logger.LogInformation("MetadataCleanupPollingService stopping");
     }
+
+    /// <summary>
+    /// Each whitelisted train, annotating the ones that are not on the default retention so the
+    /// startup line says what is actually configured rather than only the default.
+    /// </summary>
+    private static IEnumerable<string> DescribeWhitelist(
+        MetadataCleanupConfiguration cleanupConfig
+    ) =>
+        cleanupConfig.TrainTypeWhitelist.Select(name =>
+            cleanupConfig.TrainTypeRetentions.GetValueOrDefault(name) is { } retention
+                ? $"{name} ({retention})"
+                : name
+        );
 
     private async Task RunCleanup(CancellationToken cancellationToken)
     {

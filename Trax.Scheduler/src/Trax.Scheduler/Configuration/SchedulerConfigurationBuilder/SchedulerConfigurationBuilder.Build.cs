@@ -152,7 +152,13 @@ public partial class SchedulerConfigurationBuilder
             _parentBuilder.ServiceCollection.AddHostedService<JobDispatcherPollingService>();
 
             if (_configuration.MetadataCleanup is not null)
+            {
+                // Before the polling service, which sweeps as soon as it starts: a contradictory
+                // set of per-train retentions should fail the host rather than be resolved
+                // silently in the first sweep.
+                _parentBuilder.ServiceCollection.AddHostedService<MetadataCleanupConfigurationValidator>();
                 _parentBuilder.ServiceCollection.AddHostedService<MetadataCleanupPollingService>();
+            }
 
             if (_configuration.AutoPurgeDeadLetters)
                 _parentBuilder.ServiceCollection.AddHostedService<Services.DeadLetterCleanupPollingService.DeadLetterCleanupPollingService>();
