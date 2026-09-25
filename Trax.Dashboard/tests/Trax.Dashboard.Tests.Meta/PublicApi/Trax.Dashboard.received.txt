@@ -609,6 +609,10 @@ namespace Trax.Dashboard.Utilities
         public double X { get; set; }
         public double Y { get; set; }
     }
+    public static class SubjectSiblingQueries
+    {
+        public static System.Linq.IQueryable<Trax.Effect.Models.WorkQueue.WorkQueue> DispatchedAheadOf(this System.Linq.IQueryable<Trax.Effect.Models.WorkQueue.WorkQueue> source, Trax.Effect.Models.WorkQueue.WorkQueue entry, System.DateTime now) { }
+    }
 }
 namespace Trax.Dashboard
 {
