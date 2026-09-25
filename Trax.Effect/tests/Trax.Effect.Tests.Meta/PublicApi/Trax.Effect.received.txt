@@ -435,6 +435,8 @@ namespace Trax.Effect.Models.JunctionMetadata
         public LanguageExt.EitherStatus State { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("train_external_id")]
         public string TrainExternalId { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("train_metadata_id")]
+        public long TrainMetadataId { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("train_name")]
         public string TrainName { get; }
         public override string ToString() { }

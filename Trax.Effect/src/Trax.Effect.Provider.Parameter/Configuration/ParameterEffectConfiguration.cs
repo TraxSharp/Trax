@@ -36,6 +36,74 @@ public class ParameterEffectConfiguration
     public int? MaxParameterBytes { get; set; }
 
     /// <summary>
+    /// Optional predicate deciding whether a given train's INPUT should be serialized.
+    /// Receives the canonical train name (<c>Metadata.Name</c>) and returns <c>false</c> to skip.
+    /// <c>null</c> means no predicate. Evaluated in addition to <see cref="ExcludeInput(string)"/>.
+    /// </summary>
+    /// <remarks>
+    /// This is also the way to express an opt-<i>in</i>, which the exclusion helpers cannot:
+    /// <c>cfg.ShouldSaveInputs = name =&gt; name.Contains(typeof(IPatchCustomerTrain).FullName!);</c>
+    /// saves that train's input and nothing else. Useful when the inputs worth keeping are a short
+    /// list and the ones not worth keeping are not.
+    /// </remarks>
+    public Func<string, bool>? ShouldSaveInputs { get; set; }
+
+    /// <summary>
+    /// Name fragments whose trains skip INPUT serialization. Matched with
+    /// <c>Metadata.Name.Contains(fragment)</c>, on the same rule as
+    /// <see cref="OutputExclusions"/>.
+    /// </summary>
+    internal HashSet<string> InputExclusions { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Skips INPUT serialization for trains whose canonical name contains <paramref name="trainNameFragment"/>.
+    /// </summary>
+    public ParameterEffectConfiguration ExcludeInput(string trainNameFragment)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(trainNameFragment);
+        InputExclusions.Add(trainNameFragment);
+        return this;
+    }
+
+    /// <summary>
+    /// Skips INPUT serialization for trains whose canonical name contains <paramref name="type"/>'s
+    /// <c>FullName</c>. Pass the type that appears in the train's canonical name (the train interface for
+    /// named routes, or the request/query type for trains dispatched by input type).
+    /// </summary>
+    public ParameterEffectConfiguration ExcludeInput(Type type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        InputExclusions.Add(
+            type.FullName
+                ?? throw new ArgumentException(
+                    $"Type '{type}' has no FullName and cannot be used as an input exclusion.",
+                    nameof(type)
+                )
+        );
+        return this;
+    }
+
+    /// <summary>
+    /// Skips INPUT serialization for trains whose canonical name contains <typeparamref name="TTrain"/>'s
+    /// <c>FullName</c>. See <see cref="ExcludeInput(Type)"/> for which type to pass.
+    /// </summary>
+    public ParameterEffectConfiguration ExcludeInput<TTrain>() => ExcludeInput(typeof(TTrain));
+
+    /// <summary>
+    /// Whether the input of the train with the given canonical name should be serialized,
+    /// considering both the exclusion set and the optional predicate.
+    /// </summary>
+    internal bool ShouldSaveInputFor(string? name)
+    {
+        if (name is not null && InputExclusions.Count > 0)
+            foreach (var fragment in InputExclusions)
+                if (name.Contains(fragment, StringComparison.Ordinal))
+                    return false;
+
+        return ShouldSaveInputs?.Invoke(name ?? string.Empty) ?? true;
+    }
+
+    /// <summary>
     /// Optional predicate deciding whether a given train's OUTPUT should be serialized.
     /// Receives the canonical train name (<c>Metadata.Name</c>) and returns <c>false</c> to skip.
     /// <c>null</c> means no predicate. Evaluated in addition to <see cref="ExcludeOutput(string)"/>.

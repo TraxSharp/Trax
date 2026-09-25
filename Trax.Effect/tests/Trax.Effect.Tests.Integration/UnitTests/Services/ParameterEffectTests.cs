@@ -410,6 +410,223 @@ public class ParameterEffectTests
 
     #endregion
 
+    #region Per-train input opt-out
+
+    [Test]
+    public async Task Track_ShouldSaveInputsFalse_SkipsInput_KeepsOutput()
+    {
+        var config = new ParameterEffectConfiguration { ShouldSaveInputs = _ => false };
+        var effect = NewEffect(config);
+        var meta = NewMetadata(input: new { Drop = 1 }, output: new { Keep = 2 });
+
+        await effect.Track(meta);
+
+        meta.Input.Should().BeNull("input serialization was opted out");
+        meta.Output.Should().Contain("Keep", "outputs are unaffected by the input opt-out");
+    }
+
+    [Test]
+    public async Task Track_ShouldSaveInputs_ReceivesCanonicalName()
+    {
+        string? seen = null;
+        var config = new ParameterEffectConfiguration
+        {
+            ShouldSaveInputs = name =>
+            {
+                seen = name;
+                return true;
+            },
+        };
+        var effect = NewEffect(config);
+        var meta = NewMetadata(input: new { X = 1 }, name: "My.Train.Name");
+
+        await effect.Track(meta);
+
+        seen.Should().Be("My.Train.Name");
+        meta.Input.Should().Contain("X", "returning true still serializes the input");
+    }
+
+    [Test]
+    public async Task Track_ShouldSaveInputs_ExpressesAnOptIn()
+    {
+        // The reason the predicate exists as well as the exclusion helpers: a consumer that wants
+        // ONE train's input kept cannot write that as a list of exclusions.
+        var config = new ParameterEffectConfiguration
+        {
+            ShouldSaveInputs = name => name.Contains(nameof(FakeQuery), StringComparison.Ordinal),
+        };
+        var effect = NewEffect(config);
+
+        var wanted = NewMetadata(input: new { Keep = 1 }, name: typeof(FakeQuery).FullName!);
+        var everythingElse = NewMetadata(input: new { Drop = 1 }, name: "Trax.Some.Other.Train");
+
+        await effect.Track(wanted);
+        await effect.Track(everythingElse);
+
+        wanted.Input.Should().Contain("Keep");
+        everythingElse.Input.Should().BeNull();
+    }
+
+    [Test]
+    public async Task Track_ExcludeInputByType_SkipsMatchingInput_KeepsOutput()
+    {
+        var meta = NewMetadata(
+            input: new { Drop = 1 },
+            output: new { Keep = 2 },
+            name: typeof(FakeQuery).FullName!
+        );
+        var config = new ParameterEffectConfiguration().ExcludeInput<FakeQuery>();
+        var effect = NewEffect(config);
+
+        await effect.Track(meta);
+
+        meta.Input.Should().BeNull();
+        meta.Output.Should().Contain("Keep");
+    }
+
+    [Test]
+    public async Task Track_ExcludeInputByTypeInstance_SkipsMatchingInput()
+    {
+        var meta = NewMetadata(input: new { Drop = 1 }, name: typeof(FakeQuery).FullName!);
+        var config = new ParameterEffectConfiguration().ExcludeInput(typeof(FakeQuery));
+        var effect = NewEffect(config);
+
+        await effect.Track(meta);
+
+        meta.Input.Should().BeNull();
+    }
+
+    [Test]
+    public async Task Track_ExcludeInputByString_SkipsMatchingInput()
+    {
+        var config = new ParameterEffectConfiguration().ExcludeInput("PatchCustomer");
+        var effect = NewEffect(config);
+        var meta = NewMetadata(input: new { Drop = 1 }, name: "Suite.Trains.IPatchCustomerTrain");
+
+        await effect.Track(meta);
+
+        meta.Input.Should().BeNull();
+    }
+
+    [Test]
+    public async Task Track_ExcludeInput_NonMatchingTrain_StillSavesInput()
+    {
+        var config = new ParameterEffectConfiguration().ExcludeInput("SomeOtherTrain");
+        var effect = NewEffect(config);
+        var meta = NewMetadata(input: new { Keep = 1 }, name: "Trax.X.Train");
+
+        await effect.Track(meta);
+
+        meta.Input.Should().Contain("Keep");
+    }
+
+    [Test]
+    public async Task Track_ExcludeInputAndPredicate_EitherRefusingIsEnough()
+    {
+        var excluded = new ParameterEffectConfiguration { ShouldSaveInputs = _ => true };
+        excluded.ExcludeInput("Trax.X.Train");
+
+        var refusedByPredicate = new ParameterEffectConfiguration { ShouldSaveInputs = _ => false };
+
+        var byExclusion = NewMetadata(input: new { A = 1 });
+        var byPredicate = NewMetadata(input: new { A = 1 });
+
+        await NewEffect(excluded).Track(byExclusion);
+        await NewEffect(refusedByPredicate).Track(byPredicate);
+
+        byExclusion.Input.Should().BeNull("the exclusion refuses even though the predicate agrees");
+        byPredicate.Input.Should().BeNull("the predicate refuses even with no exclusions");
+    }
+
+    [Test]
+    public async Task Track_SaveInputsFalse_WinsOverAPermissivePredicate()
+    {
+        var config = new ParameterEffectConfiguration
+        {
+            SaveInputs = false,
+            ShouldSaveInputs = _ => true,
+        };
+        var effect = NewEffect(config);
+        var meta = NewMetadata(input: new { Drop = 1 });
+
+        await effect.Track(meta);
+
+        meta.Input.Should().BeNull("the global switch is still the outer gate");
+    }
+
+    [Test]
+    public async Task Track_InputAndOutputExclusions_DoNotLeakIntoEachOther()
+    {
+        // The regression the asymmetry invites: wiring the input gate to the output's exclusion
+        // set, or vice versa. One train excluded on each side, asserted both ways.
+        var config = new ParameterEffectConfiguration().ExcludeInput("InputlessTrain");
+        config.ExcludeOutput("OutputlessTrain");
+        var effect = NewEffect(config);
+
+        var inputExcluded = NewMetadata(
+            input: new { A = 1 },
+            output: new { B = 2 },
+            name: "Trax.InputlessTrain"
+        );
+        var outputExcluded = NewMetadata(
+            input: new { A = 1 },
+            output: new { B = 2 },
+            name: "Trax.OutputlessTrain"
+        );
+
+        await effect.Track(inputExcluded);
+        await effect.Track(outputExcluded);
+
+        inputExcluded.Input.Should().BeNull();
+        inputExcluded.Output.Should().Contain("B");
+
+        outputExcluded.Input.Should().Contain("A");
+        outputExcluded.Output.Should().BeNull();
+    }
+
+    [Test]
+    public void ExcludeInput_NullOrEmptyString_Throws()
+    {
+        var config = new ParameterEffectConfiguration();
+
+        config.Invoking(c => c.ExcludeInput((string)null!)).Should().Throw<ArgumentException>();
+        config.Invoking(c => c.ExcludeInput("")).Should().Throw<ArgumentException>();
+    }
+
+    [Test]
+    public void ExcludeInput_TypeWithoutFullName_Throws()
+    {
+        var config = new ParameterEffectConfiguration();
+        var noFullName = typeof(List<>).GetGenericArguments()[0];
+        noFullName.FullName.Should().BeNull();
+
+        config.Invoking(c => c.ExcludeInput(noFullName)).Should().Throw<ArgumentException>();
+    }
+
+    [Test]
+    public async Task Track_NullName_WithInputPredicate_PassesEmptyStringAndStillSaves()
+    {
+        string? seen = "unset";
+        var config = new ParameterEffectConfiguration
+        {
+            ShouldSaveInputs = name =>
+            {
+                seen = name;
+                return true;
+            },
+        };
+        var effect = NewEffect(config);
+        var meta = NewMetadata(input: new { X = 1 });
+        meta.Name = null!;
+
+        await effect.Track(meta);
+
+        seen.Should().Be(string.Empty);
+        meta.Input.Should().Contain("X");
+    }
+
+    #endregion
+
     #region Size ceiling (Feature B)
 
     [Test]

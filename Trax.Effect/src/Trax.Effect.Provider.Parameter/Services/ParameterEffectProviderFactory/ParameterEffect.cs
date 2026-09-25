@@ -126,7 +126,7 @@ public class ParameterEffect(
     /// </remarks>
     private void SerializeParameters(Metadata metadata)
     {
-        if (configuration.SaveInputs)
+        if (configuration.SaveInputs && configuration.ShouldSaveInputFor(metadata.Name))
         {
             var inputObject = metadata.GetInputObject();
             if (inputObject is not null)

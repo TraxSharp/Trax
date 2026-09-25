@@ -145,6 +145,31 @@ public class ModelCoverageGapTests
     }
 
     [Test]
+    public void JunctionMetadata_Create_WithUnpersistedMetadata_LeavesTrainMetadataIdZero()
+    {
+        // A train run with no data provider never persists its metadata, so there is no row and
+        // no id. The documented value is 0, and nothing throws. The persisted counterpart, where
+        // the id is real, is JunctionRunIdentityTests.
+        var meta = NewMetadata();
+        meta.Id.Should().Be(0, "nothing has persisted this metadata");
+
+        var jm = JunctionMetadata.Create(
+            new CreateJunctionMetadata
+            {
+                Name = "Jx",
+                ExternalId = Guid.NewGuid().ToString("N"),
+                StartTimeUtc = DateTime.UtcNow,
+                InputType = typeof(int),
+                OutputType = typeof(string),
+                State = LanguageExt.EitherStatus.IsRight,
+            },
+            meta
+        );
+
+        jm.TrainMetadataId.Should().Be(0);
+    }
+
+    [Test]
     public void JunctionMetadata_ToString_ReturnsJson()
     {
         var meta = NewMetadata();

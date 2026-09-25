@@ -23,8 +23,10 @@ public class ModelPersistentPairingTests
         // Host: TraxHostInfo is auto-detected at startup and stamped onto Metadata records.
         //       It is not persisted as a standalone entity.
         "Host",
-        // JunctionMetadata: stored as JSON inside the Metadata 'junctions' column;
-        //       no top-level table or DbSet of its own.
+        // JunctionMetadata: in-memory only. It is built per junction execution, handed to the
+        //       junction effect providers (the junction logger logs it), and dropped. No table,
+        //       no DbSet, and no migration references it; its [Column] attributes are decorative,
+        //       carried for consistency with the models that are persisted.
         "JunctionMetadata",
     };
 
