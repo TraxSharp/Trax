@@ -199,9 +199,10 @@
                     </RadzenStack>
 
                     <RadzenStack Gap="0.25rem">
-                        <RadzenLabel Text="Retention Period" Component="CleanupRetention" />
+                        <RadzenLabel Text="Default Retention Period" Component="CleanupRetention" />
                         <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                             Only terminal metadata (Completed/Failed) older than this is deleted. Pending or InProgress metadata is never cleaned up.
+                            This is the default only: a train given its own retention in code keeps it, and changing this value does not shorten it.
                         </RadzenText>
                         <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="max-width: 400px;">
                             <RadzenNumeric @bind-Value="_cleanupRetentionPeriod.Value" TValue="double" Min="1" Style="width: 60%" Name="CleanupRetention" />
