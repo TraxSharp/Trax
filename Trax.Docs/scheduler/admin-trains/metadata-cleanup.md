@@ -91,13 +91,47 @@ With no arguments, this cleans up metadata older than 30 minutes, checking every
 
 `AddTrainType<T>()` uses `typeof(T).FullName` to match the `Name` column in the metadata table (which stores the interface FullName). You can also pass a raw string for trains that aren't easily referenced by type.
 
+### A retention per train
+
+One period rarely fits every train. A delta-import train that runs every ten seconds wants pruning in minutes; a mutation train whose input is a customer record may need keeping for a month so a rerun can replay it. Pass a `TimeSpan` to `AddTrainType` for the second kind:
+
+```csharp
+.AddMetadataCleanup(cleanup =>
+{
+    cleanup.RetentionPeriod = TimeSpan.FromMinutes(30);           // everything else
+    cleanup.AddTrainType<IDeltaImportAllTrain>();                 // on the default
+    cleanup.AddTrainType<IPatchCustomerTrain>(TimeSpan.FromDays(30));
+})
+```
+
+Trains sharing a cutoff are swept together, so the cleanup runs its batched delete once per distinct retention rather than once in total. `DeleteBatchSize` is the limit per group, which means a cycle can delete up to that many rows for each retention in use. In practice that is one or two groups.
+
+The work queue rows owned by a metadata row follow it, so they inherit whatever cutoff that train has.
+
+> **The runtime override applies to the default only.** The retention is also editable without a restart, through the dashboard's Server Settings page and the `updateSchedulerConfig` mutation. That edit replaces `RetentionPeriod`, so it moves every train that is on the default and leaves a retention passed to `AddTrainType` exactly where it was. A per-train value is usually there because of what the row holds rather than as an operational preference, and an edit to a field labelled "Retention Period" should not quietly shorten it. Shortening one is a code change.
+
+### What cannot take its own retention
+
+The internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) are always swept at `RetentionPeriod`. Passing a retention for one throws at configuration time rather than being ignored, because they are the highest-volume writers in the table and lengthening one is the unbounded growth the unconditional sweep exists to prevent.
+
+### Declaring a train twice
+
+A train declared twice with different retentions is refused, in one of two places depending on how it was written:
+
+- **The same name twice** is caught immediately by `AddTrainType`, which throws.
+- **The interface name and the class name**, which are the same train, are two unrelated strings until the train registry relates them. That is not possible while the builder is still running, so it is caught at startup instead and the host refuses to start.
+
+Declaring the same train twice with the *same* retention is fine, and is not counted twice.
+
+If the startup check is somehow bypassed, the sweep keeps the longer of the two retentions and logs a warning. It does not throw: a cleanup loop that fails every cycle stops pruning altogether, which is worse than the misconfiguration.
+
 ### Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `CleanupInterval` | 1 minute | How often the cleanup service runs |
-| `RetentionPeriod` | 30 minutes | Age threshold for deletion eligibility |
-| `DeleteBatchSize` | 1000 | Max rows deleted per batch. Set to `null` for single-statement deletes |
+| `RetentionPeriod` | 30 minutes | Age threshold for deletion eligibility, for every train not given one of its own. This is the value the runtime override replaces |
+| `DeleteBatchSize` | 1000 | Max rows deleted per batch, per retention group. Set to `null` for single-statement deletes |
 | `TrainTypeWhitelist` | (internal trains always included) | Additional consumer train names whose metadata can be deleted. The internal scheduler trains are pruned unconditionally on top of this list |
 
 ## SDK Reference
