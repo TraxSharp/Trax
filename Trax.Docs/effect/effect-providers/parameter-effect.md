@@ -60,13 +60,14 @@ By default, both inputs and outputs are serialized. You can control this with th
 | `SaveInputs` | `bool` | `true` | Whether to serialize train input parameters to `Metadata.Input` |
 | `SaveOutputs` | `bool` | `true` | Whether to serialize train output parameters to `Metadata.Output` |
 | `MaxParameterBytes` | `int?` | `null` | Hard byte ceiling per serialized parameter. `null` is unbounded. Over-limit payloads abort mid-serialization and store a `{"_truncated": true, ...}` placeholder. |
+| `ShouldSaveInputs` | `Func<string, bool>?` | `null` | Predicate on the canonical train name; return `false` to skip that train's input. |
 | `ShouldSaveOutputs` | `Func<string, bool>?` | `null` | Predicate on the canonical train name; return `false` to skip that train's output. |
 
 The configuration is registered as a singleton and can be modified at runtime via the [Dashboard Effects page](/docs/dashboard#effects-page). Changes take effect on the next train execution scope.
 
 ## Bounding what gets stored
 
-Parameter serialization is global: enabling it serializes every train. When a process runs a fan-out of trains whose outputs are large (multi-MB fetch results, cached blobs), that turns into large writes to `trax.metadata` on every run, and serializing several of them concurrently can exhaust host memory. Two knobs bound this without turning serialization off everywhere.
+Enabling parameter serialization turns it on for every train. When a process runs a fan-out of trains whose outputs are large (multi-MB fetch results, cached blobs), that turns into large writes to `trax.metadata` on every run, and serializing several of them concurrently can exhaust host memory. Three knobs bound this without turning serialization off everywhere.
 
 **Skip output for known-large trains.** `ExcludeOutput` skips output serialization for named trains while keeping their (usually tiny) inputs:
 
@@ -79,6 +80,25 @@ Parameter serialization is global: enabling it serializes every train. When a pr
 ```
 
 Matching is a substring check against the canonical train name (`Metadata.Name`), so pass the type that appears in that name: the train interface for named routes, or the request/query type for trains dispatched by input type.
+
+**Skip input for trains whose input you do not want stored.** `ExcludeInput` is the mirror of `ExcludeOutput`, and the two are independent:
+
+```csharp
+.SaveTrainParameters(configure: cfg =>
+{
+    cfg.ExcludeInput<IDeltaImportAllTrain>();
+    cfg.ExcludeInput("HealthProbe");
+})
+```
+
+Size is rarely the reason here. Inputs are usually small, but they are also where personal data arrives, so the question is normally which ones are worth storing rather than which are too big. When the list worth keeping is the short one, invert it with the predicate:
+
+```csharp
+.SaveTrainParameters(configure: cfg =>
+    cfg.ShouldSaveInputs = name => name.Contains(typeof(IPatchCustomerTrain).FullName!))
+```
+
+That stores the mutation train's input and nothing else. How long it is then kept is a separate question, answered by [per-train metadata retention](/docs/scheduler/admin-trains/metadata-cleanup).
 
 **Cap every parameter.** `MaxParameterBytes` is the automatic safety net for the trains you did not predict:
 
@@ -93,7 +113,7 @@ A parameter that serializes past the ceiling is aborted before it is fully mater
 The parameter effect only cares about `Metadata` objects and ignores other tracked models. When `SaveChanges` runs:
 
 1. It iterates through every tracked `Metadata` instance.
-2. If `SaveInputs` is enabled, it calls `metadata.GetInputObject()`, serializes it to JSON, and assigns it to `metadata.Input`.
+2. If `SaveInputs` is enabled and the train is not excluded (via `ExcludeInput`/`ShouldSaveInputs`), it calls `metadata.GetInputObject()`, serializes it to JSON, and assigns it to `metadata.Input`.
 3. If `SaveOutputs` is enabled and the train is not excluded (via `ExcludeOutput`/`ShouldSaveOutputs`), it calls `metadata.GetOutputObject()`, serializes it to JSON, and assigns it to `metadata.Output`.
 
 When `MaxParameterBytes` is set, both serializations run through a streaming writer that aborts once the ceiling is crossed and substitutes the placeholder, so a runaway payload never gets fully built.

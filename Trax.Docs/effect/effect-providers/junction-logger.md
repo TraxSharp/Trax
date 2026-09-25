@@ -41,6 +41,7 @@ Before each junction runs, the logger creates a `JunctionMetadata` entry with:
 | `Name` | Junction class name |
 | `TrainName` | Parent train name |
 | `TrainExternalId` | Parent train's external GUID |
+| `TrainMetadataId` | Primary key of the `trax.metadata` row for the run this junction is executing in. `0` when no data provider persisted the run |
 | `InputType` / `OutputType` | The junction's generic type arguments |
 | `StartTimeUtc` | When the junction began |
 
@@ -54,6 +55,34 @@ After the junction completes:
 | `OutputJson` | Serialized output (only if `serializeJunctionData: true`) |
 
 The completed `JunctionMetadata` is logged at the configured log level via `ILogger<JunctionLoggerProvider>`.
+
+## Identifying the run from inside a junction
+
+`TrainMetadataId` is the primary key of the run's `trax.metadata` row, so a junction can read its own run back without a scan. Prefer it to `TrainExternalId` for that: `metadata.external_id` has no unique index, so a dispatch retry leaves several rows sharing one external id (the earlier ones `Failed`), and the column is unindexed, so looking a run up by it scans the largest table Trax writes.
+
+The value is the same on every execution path, because each one runs under the metadata row it was dispatched with: a direct run through `ITrainExecutionService.RunAsync`, a queued run picked up by a local worker, and a remote or Lambda run. It is `0` when no data provider is registered, since nothing persisted the run and there is no row to point at.
+
+The usual reason to want it is a liveness check before an irreversible side effect. The reaper and startup recovery can mark a slow run `Failed` without telling it, and a run that keeps going after that can have its work overtaken by the next run for the same subject. Re-reading the row immediately before the side effect lets the junction refuse to act:
+
+```csharp
+public class PatchCustomerJunction(IDataContext db) : EffectJunction<PatchCustomer, Unit>
+{
+    public override async Task<Unit> Run(PatchCustomer input)
+    {
+        var state = await db.Metadatas
+            .Where(m => m.Id == Metadata!.TrainMetadataId)
+            .Select(m => m.TrainState)
+            .FirstOrDefaultAsync();
+
+        if (state != TrainState.InProgress)
+            throw new TrainException("This run was already failed; refusing to send.");
+
+        return await SendAsync(input);
+    }
+}
+```
+
+> **Read `Metadata` inside `Run`, and register the junction scoped or transient.** `EffectJunction.Metadata` is assigned once per execution. A junction registered with `AddSingletonTraxJunction` and reached through `IChain` is one object shared by every concurrent run, so whichever run assigned it last is the one the others read. For logging that is merely confusing. For a check like the one above it is wrong in the worst direction: the junction reads a live run's id, concludes the run is still going, and sends.
 
 ## Requires EffectJunction
 

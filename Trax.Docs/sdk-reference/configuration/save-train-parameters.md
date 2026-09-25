@@ -37,21 +37,37 @@ The generic type parameter `TBuilder` is inferred by the compiler, so callers ju
 | `SaveInputs` | `bool` | `true` | Whether to serialize train input parameters to `Metadata.Input` |
 | `SaveOutputs` | `bool` | `true` | Whether to serialize train output parameters to `Metadata.Output` |
 | `MaxParameterBytes` | `int?` | `null` | Hard byte ceiling per serialized parameter (input and output). `null` is unbounded. A payload that serializes past this many UTF-8 bytes is aborted mid-serialization and stored as `{"_truncated": true, "_maxBytes": N}` instead. Must be positive. |
+| `ShouldSaveInputs` | `Func<string, bool>?` | `null` | Predicate receiving the canonical train name (`Metadata.Name`); return `false` to skip serializing that train's input. Also the way to express an opt-in, which a list of exclusions cannot. |
 | `ShouldSaveOutputs` | `Func<string, bool>?` | `null` | Predicate receiving the canonical train name (`Metadata.Name`); return `false` to skip serializing that train's output. The escape hatch for cases the `ExcludeOutput` helpers can't express. |
 
 The configuration is registered as a singleton and can also be modified at runtime via the dashboard's Effects page.
 
-#### Output opt-out helpers
+#### Per-train opt-out helpers
 
-For the common case (a known set of large fetch trains), use the `ExcludeOutput` helpers instead of a predicate. Each skips output serialization for trains whose canonical name contains the given fragment, and returns the configuration for chaining.
+For the common case (a known set of trains), use the `ExcludeInput` and `ExcludeOutput` helpers instead of a predicate. Each skips serialization for trains whose canonical name contains the given fragment, and returns the configuration for chaining.
 
 | Method | Description |
 |--------|-------------|
+| `ExcludeInput(string fragment)` | Skip input for trains whose `Metadata.Name` contains `fragment`. |
+| `ExcludeInput(Type type)` | Skip input for trains whose name contains `type.FullName`. |
+| `ExcludeInput<TTrain>()` | Same as the `Type` overload, using `typeof(TTrain)`. |
 | `ExcludeOutput(string fragment)` | Skip output for trains whose `Metadata.Name` contains `fragment`. |
 | `ExcludeOutput(Type type)` | Skip output for trains whose name contains `type.FullName`. |
 | `ExcludeOutput<TTrain>()` | Same as the `Type` overload, using `typeof(TTrain)`. |
 
-Matching is a substring check against the canonical name, so pass the type that appears in that name: the train interface for named routes, or the request/query type for trains dispatched by input type (e.g. via the MediatR bridge, where `Metadata.Name` is the assembly-qualified request type). `MaxParameterBytes` is the automatic safety net for the trains you did not predict; the `ExcludeOutput` list is the explicit knob for the ones you did.
+The two sides are independent: excluding a train's input leaves its output alone, and the reverse.
+
+Matching is a substring check against the canonical name, so pass the type that appears in that name: the train interface for named routes, or the request/query type for trains dispatched by input type (e.g. via the MediatR bridge, where `Metadata.Name` is the assembly-qualified request type). `MaxParameterBytes` is the automatic safety net for the trains you did not predict; the exclusion lists are the explicit knob for the ones you did.
+
+#### Saving only some trains' inputs
+
+Exclusions answer "everything except these". When the list worth keeping is the short one, use the predicate instead:
+
+```csharp
+cfg.ShouldSaveInputs = name => name.Contains(typeof(IPatchCustomerTrain).FullName!);
+```
+
+That serializes the mutation train's input and nothing else, which is the usual shape when inputs carry personal data and only the replayable ones are worth storing. Pair it with [per-train metadata retention](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) to decide how long each of them is kept.
 
 ## Returns
 
@@ -116,7 +132,7 @@ services.AddTrax(trax => trax
 );
 ```
 
-A train whose output crosses `MaxParameterBytes` stores `{"_truncated": true, "_maxBytes": 1048576}` in `Metadata.Output` instead of the full payload. A train matched by `ExcludeOutput` stores nothing for its output, while its input is still serialized.
+A train whose output crosses `MaxParameterBytes` stores `{"_truncated": true, "_maxBytes": 1048576}` in `Metadata.Output` instead of the full payload. A train matched by `ExcludeOutput` stores nothing for its output, and its input is still serialized unless `ExcludeInput` or `ShouldSaveInputs` also refuses it.
 
 A parameter `System.Text.Json` cannot represent at all, a reference cycle or an unsupported type, stores `{"_unserializable": true, "_error": "JsonException"}` on the same principle. Only the exception's type is kept: the messages carry unbounded detail, which is the wrong thing to put in the column a ceiling exists to bound. The run itself is unaffected, because an output that cannot be stored is a recording problem rather than a reason to fail work that already succeeded.
 
@@ -125,7 +141,7 @@ A parameter `System.Text.Json` cannot represent at all, a reference cycle or an 
 - Requires a data provider to be registered (the serialized parameters are stored in the database via `Metadata`).
 - The serialized JSON is stored in `Metadata.Input` (set on train start) and `Metadata.Output` (set on completion).
 - Useful for debugging failed trains: inspect the exact input that caused the failure.
-- The `ParameterEffectConfiguration` singleton is accessible at runtime. The dashboard's Effects page provides a UI to toggle `SaveInputs` and `SaveOutputs` without restarting the application.
+- The `ParameterEffectConfiguration` singleton is accessible at runtime. The dashboard's Effects page provides a UI to toggle `SaveInputs` and `SaveOutputs` without restarting the application. The per-train exclusions and predicates are set in code and are not editable there; the global toggles are the outer gate, so turning `SaveInputs` off from the dashboard stops every train's input regardless of what the predicate says.
 - **Lifecycle hooks always receive serialized output.** Even without `SaveTrainParameters()`, `Metadata.Output` is populated in-memory before lifecycle hooks fire, so hooks like `GraphQLSubscriptionHook` can always include output data in subscription events. However, without `SaveTrainParameters()` the output is **not persisted to the database** and exists only in-memory for the duration of the hook execution. Use `SaveTrainParameters()` when you need output stored in the database for the dashboard, queries, or auditing.
 - **`MaxParameterBytes` bounds serialization work, not the result object.** It serializes through a streaming writer and aborts the moment the byte count crosses the ceiling, so an oversized collection or object graph is never fully materialized as a string. It does not shrink the train's return value itself, which is already resident in memory. For a train that genuinely returns tens of MB, prefer `ExcludeOutput` (skip serialization entirely) and reduce what the train returns.
 

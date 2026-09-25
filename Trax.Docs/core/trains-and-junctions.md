@@ -69,7 +69,9 @@ Trax has two junction base classes:
 
 **`Junction<TIn, TOut>`** is the base class. Handles input/output and railway error propagation. No metadata, no lifecycle hooks. Use this for lightweight junctions or when running inside a plain `Train`.
 
-**`EffectJunction<TIn, TOut>`** extends `Junction` with per-junction metadata tracking. When run inside a `ServiceTrain`, it records a `JunctionMetadata` entry with the junction's name, input/output types, start/end times, and railway state. Junction effect providers (like `AddJunctionLogger`) hook into `EffectJunction`'s lifecycle and fire before and after each junction executes.
+**`EffectJunction<TIn, TOut>`** extends `Junction` with per-junction metadata tracking. When run inside a `ServiceTrain`, it records a `JunctionMetadata` entry with the junction's name, input/output types, start/end times, railway state, and the id of the run it is executing in. Junction effect providers (like `AddJunctionLogger`) hook into `EffectJunction`'s lifecycle and fire before and after each junction executes.
+
+The run id (`Metadata.TrainMetadataId`) is the primary key of the run's `trax.metadata` row, which lets a junction read its own run back, for example to check it has not already been failed before performing a side effect. Read it inside `Run`, and see [Identifying the run from inside a junction](/docs/effect/effect-providers/junction-logger#identifying-the-run-from-inside-a-junction) for why the junction's registration lifetime matters when you do.
 
 ```csharp
 // Base junction, no metadata tracking
