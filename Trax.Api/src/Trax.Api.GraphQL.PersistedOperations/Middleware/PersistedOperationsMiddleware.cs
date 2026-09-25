@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using HotChocolate.Language;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
@@ -107,10 +108,15 @@ internal sealed class PersistedOperationsMiddleware
         if (_allowlist.IsAllowed(parsed.OperationName, parsed.DocumentId))
             return Decision.PassThrough;
 
-        if (IsManagementOperation(parsed.Query))
+        // Parsed once, above both carve-outs. Each asks what the document selects, which its text
+        // cannot answer, and neither may be decided by a cheaper check that runs first. A document
+        // that does not parse yields null and is inside neither carve-out, so it is rejected.
+        var document = GraphQLDocumentParser.TryParse(parsed.Query);
+
+        if (ManagementOperationDetector.IsManagementOperation(document))
             return Decision.PassThrough;
 
-        if (_options.AllowIntrospection && IsIntrospection(parsed))
+        if (_options.AllowIntrospection && IsIntrospection(parsed, document))
             return Decision.PassThrough;
 
         if (!_options.RequirePersisted)
@@ -135,23 +141,9 @@ internal sealed class PersistedOperationsMiddleware
             || contentType.StartsWith("application/graphql", StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// The management mutations and queries this package adds to the schema
-    /// always bypass enforcement. They live under <c>operations.persistedOperations</c>
-    /// (matching the convention for every other Trax management feature, e.g.
-    /// <c>operations.deadLetters</c>). Persisting them by id would create a
-    /// chicken-and-egg problem; they are already protected by whatever
-    /// ASP.NET auth middleware sits in front of the GraphQL endpoint.
-    /// Detection: the document must select the <c>persistedOperations</c>
-    /// namespace, which is unique to this management surface.
-    /// </summary>
-    private static bool IsManagementOperation(string? document) =>
-        !string.IsNullOrEmpty(document)
-        && document.Contains("persistedOperations", StringComparison.Ordinal);
-
-    private static bool IsIntrospection(GraphQLRequestShape req) =>
+    private static bool IsIntrospection(GraphQLRequestShape req, DocumentNode? document) =>
         IntrospectionDetector.LooksLikeIntrospectionByName(req.OperationName)
-        || (req.Query is not null && IntrospectionDetector.IsPureIntrospection(req.Query));
+        || IntrospectionDetector.IsPureIntrospection(document);
 
     /// <summary>
     /// Parses a GraphQL HTTP body. Returns a list of one entry for a

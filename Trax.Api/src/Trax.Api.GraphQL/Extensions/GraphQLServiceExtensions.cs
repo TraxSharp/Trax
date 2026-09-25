@@ -381,14 +381,19 @@ public static class GraphQLServiceExtensions
             services.AddHostedService<TypeExtensionExposureValidator>();
         }
 
-        // If a broadcaster receiver is registered (via UseBroadcaster()),
-        // wire up the GraphQL handlers so remote lifecycle events and data-change
-        // signals are forwarded to HotChocolate subscriptions.
-        if (services.Any(sd => sd.ServiceType == typeof(ITrainEventReceiver)))
-        {
-            services.AddTransient<ITrainEventHandler, GraphQLTrainEventHandler>();
-            services.AddTransient<ITrainEventHandler, GraphQLDataChangeHandler>();
-        }
+        // Registered unconditionally, so remote lifecycle events and data-change signals reach
+        // HotChocolate subscriptions whether UseBroadcaster() was called before AddTraxGraphQL or
+        // after it. This used to be gated on ITrainEventReceiver already being in the collection,
+        // which made the answer depend on where the caller happened to be in their own startup:
+        // calling UseBroadcaster() afterwards dropped both handlers silently.
+        //
+        // Registering them with no broadcaster present costs nothing and cannot fail. The only
+        // thing that resolves ITrainEventHandler is TrainEventReceiverService, which exists only
+        // when a receiver does, so without one these are never constructed. Their sole required
+        // dependency, ITopicEventSender, comes from the AddInMemorySubscriptions() call above and
+        // is therefore always present when this line runs.
+        services.AddTransient<ITrainEventHandler, GraphQLTrainEventHandler>();
+        services.AddTransient<ITrainEventHandler, GraphQLDataChangeHandler>();
 
         return services;
     }

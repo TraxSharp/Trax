@@ -260,6 +260,57 @@ public class CognitoJwtBuilderExtensionsTests
             .BeTrue();
     }
 
+    /// <summary>
+    /// A <c>client_id</c> claim is what makes a token the access shape, and Cognito always stamps
+    /// <c>token_use</c> on one. Its absence therefore means the token is not something Cognito
+    /// issued in that shape, so accepting it on the strength of <c>client_id</c> alone is the one
+    /// thing this validator must not do.
+    /// </summary>
+    [Test]
+    public void LifetimeValidator_AccessShapeWithNoTokenUseClaim_Rejects(
+        [Values(CognitoTokenUse.Access, CognitoTokenUse.IdAndAccess)] CognitoTokenUse configured
+    )
+    {
+        var validator = GetLifetimeValidator(configured);
+        var token = MakeJwt(extraClaims: new[] { new Claim(CognitoDefaults.ClientId, ClientId) });
+
+        validator(
+                DateTime.UtcNow.AddMinutes(-1),
+                DateTime.UtcNow.AddMinutes(5),
+                token,
+                MakeParams()
+            )
+            .Should()
+            .BeFalse(
+                "a token carrying client_id and no token_use is structurally not a Cognito access "
+                    + "token, so it fails closed"
+            );
+    }
+
+    /// <summary>
+    /// The scoping that keeps the check above from reaching further than it should. A token with
+    /// neither claim is not the access shape — the internal HS256 issuer mints exactly that — so
+    /// requiring <c>token_use</c> of it would break a path that has nothing to do with Cognito.
+    /// </summary>
+    [Test]
+    public void LifetimeValidator_NeitherClientIdNorTokenUse_DoesNotReject()
+    {
+        var validator = GetLifetimeValidator(CognitoTokenUse.Access);
+        var token = MakeJwt();
+
+        validator(
+                DateTime.UtcNow.AddMinutes(-1),
+                DateTime.UtcNow.AddMinutes(5),
+                token,
+                MakeParams()
+            )
+            .Should()
+            .BeTrue(
+                "a token bearing neither claim is not being presented as a Cognito access token, "
+                    + "and the internal HS256 issuer carries neither"
+            );
+    }
+
     [Test]
     public void LifetimeValidator_ExpiresInPast_Rejects()
     {

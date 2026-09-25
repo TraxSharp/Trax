@@ -24,22 +24,18 @@ internal static class IntrospectionDetector
     /// Full check against a parsed document. Returns true when every
     /// operation in the document selects only introspection fields.
     /// </summary>
-    public static bool IsPureIntrospection(string document)
-    {
-        if (string.IsNullOrEmpty(document))
-            return false;
+    public static bool IsPureIntrospection(string document) =>
+        IsPureIntrospection(GraphQLDocumentParser.TryParse(document));
 
-        DocumentNode parsed;
-        try
-        {
-            parsed = Utf8GraphQLParser.Parse(document);
-        }
-        catch
-        {
-            // Malformed documents are not introspection. Let the rejection
-            // path handle them.
+    /// <summary>
+    /// Full check against an already-parsed document. Returns true when every operation selects
+    /// only introspection fields. A null document — which is what a document that did not parse
+    /// becomes — is not introspection, so the rejection path handles it.
+    /// </summary>
+    public static bool IsPureIntrospection(DocumentNode? parsed)
+    {
+        if (parsed is null)
             return false;
-        }
 
         var operations = parsed.Definitions.OfType<OperationDefinitionNode>().ToList();
         if (operations.Count == 0)

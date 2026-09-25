@@ -70,6 +70,10 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         var services = builder.Services;
 
         services.AddSingleton(options);
+
+        // Which boundary is in front of this endpoint is invisible in a running system: the schema
+        // is the same either way. Say it once at startup so it can be checked where it is claimed.
+        services.AddHostedService<PersistedOperations.Startup.PersistedOperationsEnforcementReporter>();
         services.TryAddSingleton(TimeProvider.System);
 
         // Cache: in-memory wrapper if enabled, else no-op.

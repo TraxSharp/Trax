@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -46,16 +47,19 @@ public class PersistedOperationsMiddlewareTests
 
         if (query is not null || id is not null || operationName is not null)
         {
-            var body = "{";
-            var fields = new List<string>();
+            // Serialized rather than concatenated. Escaping only quotes left a multi-line query as
+            // invalid JSON, so the body failed to parse, the middleware saw no inline query and
+            // passed the request through — which made every multi-line case here pass without
+            // reaching the decision it meant to test.
+            var payload = new Dictionary<string, string>();
             if (query is not null)
-                fields.Add($"\"query\":\"{query.Replace("\"", "\\\"")}\"");
+                payload["query"] = query;
             if (id is not null)
-                fields.Add($"\"id\":\"{id}\"");
+                payload["id"] = id;
             if (operationName is not null)
-                fields.Add($"\"operationName\":\"{operationName}\"");
-            body += string.Join(",", fields);
-            body += "}";
+                payload["operationName"] = operationName;
+
+            var body = JsonSerializer.Serialize(payload);
 
             context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(body));
             context.Request.ContentLength = context.Request.Body.Length;
@@ -162,6 +166,88 @@ public class PersistedOperationsMiddlewareTests
         await mw.InvokeAsync(ctx);
 
         calls.NextCalls.Should().Be(1);
+    }
+
+    // ── The management carve-out admits only the management surface ───────
+    //
+    // The carve-out exists because persisting the upload mutation by id is a
+    // chicken-and-egg. It must not become a way to run anything else with
+    // enforcement on: the carve-out sits above the RequirePersisted check, so
+    // no option can narrow it after the fact.
+
+    [Test]
+    public async Task InlineQuery_NamingTheManagementFieldInAnArgument_IsRejected()
+    {
+        var (mw, calls) = Build(b => b.RequirePersisted(true));
+        var ctx = BuildContext(query: """query { user(name: "persistedOperations") { id } }""");
+
+        await mw.InvokeAsync(ctx);
+
+        calls
+            .NextCalls.Should()
+            .Be(
+                0,
+                "the document does not select the management surface; the name merely appears "
+                    + "inside a string argument"
+            );
+    }
+
+    [Test]
+    public async Task InlineQuery_AliasingAFieldToTheManagementName_IsRejected()
+    {
+        var (mw, calls) = Build(b => b.RequirePersisted(true));
+        var ctx = BuildContext(query: "query { persistedOperations: __typename user { id } }");
+
+        await mw.InvokeAsync(ctx);
+
+        calls
+            .NextCalls.Should()
+            .Be(0, "an alias is the caller's choice of response key, not the field being selected");
+    }
+
+    [Test]
+    public async Task InlineQuery_MixingManagementWithAnotherNamespace_IsRejected()
+    {
+        var (mw, calls) = Build(b => b.RequirePersisted(true));
+        var ctx = BuildContext(
+            query: """
+            mutation {
+              operations {
+                persistedOperations {
+                  uploadPersistedOperation(input: { id: "x", document: "{ x }" }) { success }
+                }
+                deadLetters { totalCount }
+              }
+            }
+            """
+        );
+
+        await mw.InvokeAsync(ctx);
+
+        calls
+            .NextCalls.Should()
+            .Be(
+                0,
+                "mixing the carve-out with a second management namespace is how the carve-out "
+                    + "would be used to reach something else"
+            );
+    }
+
+    [Test]
+    public async Task InlineQuery_MalformedDocumentNamingTheManagementField_IsRejected()
+    {
+        var (mw, calls) = Build(b => b.RequirePersisted(true));
+        var ctx = BuildContext(query: "query { operations { persistedOperations {");
+
+        await mw.InvokeAsync(ctx);
+
+        calls
+            .NextCalls.Should()
+            .Be(
+                0,
+                "a document that does not parse cannot be shown to select only the management "
+                    + "surface, so it takes the rejection path"
+            );
     }
 
     [Test]
