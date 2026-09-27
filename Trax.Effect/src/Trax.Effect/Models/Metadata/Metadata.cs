@@ -403,6 +403,13 @@ public class Metadata : IModel, IDisposable
     /// 4. StackTrace - The stack trace of the exception
     ///
     /// This information is valuable for diagnosing and analyzing train failures.
+    ///
+    /// <para>The failure class is read from attached data, or from the message of a
+    /// <see cref="TrainException"/>, which is the type a recorded failure is rebuilt as. Any other
+    /// exception's message is its own text, so a class in it is not recorded. A value outside
+    /// <see cref="Trax.Core.Exceptions.FailureClass"/> is recorded as
+    /// <see cref="Trax.Core.Exceptions.FailureClass.Unclassified"/>, as the remote wire already
+    /// does.</para>
     /// </remarks>
     public Unit AddException(Exception trainException)
     {
@@ -414,11 +421,12 @@ public class Metadata : IModel, IDisposable
             FailureJunction = data.Junction;
             StackTrace = data.StackTrace ?? trainException.StackTrace;
             if (data.FailureClass is { } local)
-                FailureClass = local;
+                FailureClass = Defined(local);
             return Unit.Default;
         }
 
-        // Priority 2: JSON-serialized TrainExceptionData in the message (remote execution / legacy)
+        // Priority 2: JSON-serialized TrainExceptionData in the message (remote execution / legacy).
+        // The class is taken only from a TrainException, the type a recorded failure is rebuilt as.
         try
         {
             var deserialized = JsonSerializer.Deserialize<TrainExceptionData>(
@@ -428,8 +436,8 @@ public class Metadata : IModel, IDisposable
             {
                 FailureException = deserialized.Type;
                 FailureReason = deserialized.Message;
-                if (deserialized.FailureClass is { } remote)
-                    FailureClass = remote;
+                if (trainException is TrainException && deserialized.FailureClass is { } remote)
+                    FailureClass = Defined(remote);
                 FailureJunction = deserialized.Junction;
                 StackTrace = deserialized.StackTrace ?? trainException.StackTrace;
                 return Unit.Default;
@@ -444,6 +452,14 @@ public class Metadata : IModel, IDisposable
         StackTrace = trainException.StackTrace;
         return Unit.Default;
     }
+
+    /// <summary>
+    /// Maps a failure class outside the enum to <see cref="Trax.Core.Exceptions.FailureClass.Unclassified"/>,
+    /// matching <c>RemoteRunJson.TolerantFailureClassConverter</c>. An undefined value cannot be
+    /// stored by the Postgres enum column, and on SQLite it breaks every later read of the row.
+    /// </summary>
+    private static FailureClass Defined(FailureClass failureClass) =>
+        Enum.IsDefined(failureClass) ? failureClass : FailureClass.Unclassified;
 
     public void Dispose()
     {

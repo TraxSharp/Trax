@@ -107,6 +107,64 @@ public class ModelCoverageGapTests
         meta.StackTrace.Should().NotBeNullOrEmpty();
     }
 
+    [Test]
+    public void Metadata_AddException_TrainExceptionMessageWithUndefinedClass_RecordsUnclassified()
+    {
+        var meta = NewMetadata();
+
+        meta.AddException(new TrainException(RecordJson(42)));
+
+        meta.FailureClass.Should().Be(FailureClass.Unclassified);
+        meta.FailureJunction.Should().Be("J");
+    }
+
+    [Test]
+    public void Metadata_AddException_TrainExceptionMessageWithDefinedClass_KeepsIt()
+    {
+        var meta = NewMetadata();
+
+        meta.AddException(new TrainException(RecordJson((int)FailureClass.Permanent)));
+
+        meta.FailureClass.Should().Be(FailureClass.Permanent);
+    }
+
+    [Test]
+    public void Metadata_AddException_OtherExceptionMessageWithClass_LeavesItUnclassified()
+    {
+        var meta = NewMetadata();
+
+        meta.AddException(new InvalidOperationException(RecordJson((int)FailureClass.Permanent)));
+
+        meta.FailureClass.Should().Be(FailureClass.Unclassified);
+    }
+
+    [Test]
+    public void Metadata_AddException_AttachedDataWithUndefinedClass_RecordsUnclassified()
+    {
+        var meta = NewMetadata();
+        var ex = new InvalidOperationException("boom");
+        ex.Data["TrainExceptionData"] = new TrainExceptionData
+        {
+            TrainName = "a",
+            TrainExternalId = "b",
+            Type = "InvalidOperationException",
+            Junction = "J",
+            Message = "boom",
+            FailureClass = (FailureClass)42,
+        };
+
+        meta.AddException(ex);
+
+        meta.FailureClass.Should().Be(FailureClass.Unclassified);
+        meta.FailureJunction.Should().Be("J");
+    }
+
+    private static string RecordJson(int failureClass) =>
+        "{\"trainName\":\"a\",\"trainExternalId\":\"b\",\"type\":\"X\",\"junction\":\"J\","
+        + "\"message\":\"m\",\"failureClass\":"
+        + failureClass
+        + "}";
+
     private static Metadata NewMetadata() =>
         Metadata.Create(
             new CreateMetadata

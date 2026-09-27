@@ -38,6 +38,8 @@ public class FailureClassificationTests : TestSetup
             .AddScopedTraxRoute<IOutsideJunctionTrain, OutsideJunctionTrain>()
             .AddScopedTraxRoute<ICarriedClassTrain, CarriedClassTrain>()
             .AddScopedTraxRoute<IRemoteUnclassifiedTrain, RemoteUnclassifiedTrain>()
+            .AddScopedTraxRoute<IUndefinedClassInMessageTrain, UndefinedClassInMessageTrain>()
+            .AddScopedTraxRoute<IClassInPlainMessageTrain, ClassInPlainMessageTrain>()
             .BuildServiceProvider();
 
     [SetUp]
@@ -229,6 +231,43 @@ public class FailureClassificationTests : TestSetup
     }
 
     [Test]
+    public async Task A_class_outside_the_enum_carried_through_a_junction_records_unclassified()
+    {
+        var train = (UndefinedClassInMessageTrain)
+            Scope.ServiceProvider.GetRequiredService<IUndefinedClassInMessageTrain>();
+
+        var act = async () => await train.Run(Unit.Default);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        train
+            .SeenClass.Should()
+            .Be(
+                FailureClass.Unclassified,
+                "a carried value outside FailureClass is recorded as Unclassified, matching "
+                    + "RemoteRunJson.TolerantFailureClassConverter"
+            );
+        Enum.IsDefined(train.SeenClass!.Value).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task A_class_in_the_message_of_an_exception_that_is_not_a_TrainException_is_not_recorded()
+    {
+        var train = (ClassInPlainMessageTrain)
+            Scope.ServiceProvider.GetRequiredService<IClassInPlainMessageTrain>();
+
+        var act = async () => await train.Run(Unit.Default);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        train
+            .SeenClass.Should()
+            .Be(
+                FailureClass.Unclassified,
+                "only a TrainException is rebuilt from a recorded failure, so only its message is "
+                    + "read as a record; any other exception's message is its own text"
+            );
+    }
+
+    [Test]
     public async Task A_failed_run_fires_OnFailed_once()
     {
         var train = Resolve();
@@ -416,6 +455,64 @@ public class FailureClassificationTests : TestSetup
 
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Chain<RemoteUnclassifiedJunction>().Resolve();
+
+        protected override Task OnFailed(
+            Metadata metadata,
+            Exception exception,
+            CancellationToken ct
+        )
+        {
+            SeenClass = metadata.FailureClass;
+            return Task.CompletedTask;
+        }
+    }
+
+    private static string RecordJson(int failureClass) =>
+        "{\"trainName\":\"a\",\"trainExternalId\":\"b\",\"type\":\"X\",\"junction\":\"J\","
+        + "\"message\":\"m\",\"failureClass\":"
+        + failureClass
+        + "}";
+
+    public class UndefinedClassInMessageJunction : Junction<Unit, Unit>
+    {
+        public override Task<Unit> Run(Unit input) =>
+            throw new InvalidOperationException(RecordJson(42));
+    }
+
+    public interface IUndefinedClassInMessageTrain : IServiceTrain<Unit, Unit>;
+
+    public class UndefinedClassInMessageTrain
+        : ServiceTrain<Unit, Unit>,
+            IUndefinedClassInMessageTrain
+    {
+        public FailureClass? SeenClass { get; private set; }
+
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Chain<UndefinedClassInMessageJunction>().Resolve();
+
+        protected override Task OnFailed(
+            Metadata metadata,
+            Exception exception,
+            CancellationToken ct
+        )
+        {
+            SeenClass = metadata.FailureClass;
+            return Task.CompletedTask;
+        }
+    }
+
+    public interface IClassInPlainMessageTrain : IServiceTrain<Unit, Unit>;
+
+    /// <summary>
+    /// Raises outside any junction, so no junction attaches data and the recorded class comes
+    /// from <see cref="Metadata.AddException"/> alone.
+    /// </summary>
+    public class ClassInPlainMessageTrain : ServiceTrain<Unit, Unit>, IClassInPlainMessageTrain
+    {
+        public FailureClass? SeenClass { get; private set; }
+
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            throw new InvalidOperationException(RecordJson((int)FailureClass.Permanent));
 
         protected override Task OnFailed(
             Metadata metadata,
