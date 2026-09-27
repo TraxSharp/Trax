@@ -1,0 +1,28 @@
+namespace Trax.Effect.Provider.Json.Extensions
+{
+    public static class ServiceExtensions
+    {
+        public static TBuilder AddJson<TBuilder>(this TBuilder configurationBuilder)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+    }
+}
+namespace Trax.Effect.Provider.Json.Services.JsonEffect
+{
+    public interface IJsonEffectProvider : System.IDisposable, Trax.Effect.Services.EffectProvider.IEffectProvider { }
+    public class JsonEffectProvider : System.IDisposable, Trax.Effect.Provider.Json.Services.JsonEffect.IJsonEffectProvider, Trax.Effect.Services.EffectProvider.IEffectProvider
+    {
+        public JsonEffectProvider(Microsoft.Extensions.Logging.ILogger<Trax.Effect.Provider.Json.Services.JsonEffect.JsonEffectProvider> logger, Trax.Effect.Configuration.TraxEffectConfiguration.ITraxEffectConfiguration configuration) { }
+        public void Dispose() { }
+        public System.Threading.Tasks.Task SaveChanges(System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task Track(Trax.Effect.Models.IModel model) { }
+        public System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model) { }
+    }
+}
+namespace Trax.Effect.Provider.Json.Services.JsonEffectFactory
+{
+    public class JsonEffectProviderFactory : Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
+    {
+        public JsonEffectProviderFactory(System.IServiceProvider serviceProvider) { }
+        public Trax.Effect.Services.EffectProvider.IEffectProvider Create() { }
+    }
+}

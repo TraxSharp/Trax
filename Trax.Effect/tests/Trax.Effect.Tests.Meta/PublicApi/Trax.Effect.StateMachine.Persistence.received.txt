@@ -1,0 +1,427 @@
+namespace Trax.Effect.StateMachine.Persistence
+{
+    public abstract class AdvanceOutcome : System.IEquatable<Trax.Effect.StateMachine.Persistence.AdvanceOutcome>
+    {
+        public sealed class Advanced : Trax.Effect.StateMachine.Persistence.AdvanceOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.AdvanceOutcome.Advanced>
+        {
+            public Advanced(Trax.Effect.StateMachine.Snapshot Snapshot) { }
+            public Trax.Effect.StateMachine.Snapshot Snapshot { get; init; }
+        }
+        public sealed class Conflict : Trax.Effect.StateMachine.Persistence.AdvanceOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.AdvanceOutcome.Conflict>
+        {
+            public Conflict() { }
+        }
+        public sealed class LoadError : Trax.Effect.StateMachine.Persistence.AdvanceOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.AdvanceOutcome.LoadError>
+        {
+            public LoadError(string Code, string Message) { }
+            public string Code { get; init; }
+            public string Message { get; init; }
+        }
+        public sealed class NotFound : Trax.Effect.StateMachine.Persistence.AdvanceOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.AdvanceOutcome.NotFound>
+        {
+            public NotFound() { }
+        }
+        public sealed class Rejected : Trax.Effect.StateMachine.Persistence.AdvanceOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.AdvanceOutcome.Rejected>
+        {
+            public Rejected(string Reason, string? Detail) { }
+            public string? Detail { get; init; }
+            public string Reason { get; init; }
+        }
+    }
+    public abstract class AutosaveResult : System.IEquatable<Trax.Effect.StateMachine.Persistence.AutosaveResult>
+    {
+        public sealed class Conflict : Trax.Effect.StateMachine.Persistence.AutosaveResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.AutosaveResult.Conflict>
+        {
+            public Conflict() { }
+        }
+        public sealed class Rejected : Trax.Effect.StateMachine.Persistence.AutosaveResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.AutosaveResult.Rejected>
+        {
+            public Rejected(string Code, string Message) { }
+            public string Code { get; init; }
+            public string Message { get; init; }
+        }
+        public sealed class Saved : Trax.Effect.StateMachine.Persistence.AutosaveResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.AutosaveResult.Saved>
+        {
+            public Saved(Trax.Effect.StateMachine.Snapshot Snapshot) { }
+            public Trax.Effect.StateMachine.Snapshot Snapshot { get; init; }
+        }
+    }
+    public abstract class ClaimResult : System.IEquatable<Trax.Effect.StateMachine.Persistence.ClaimResult>
+    {
+        public sealed class Lost : Trax.Effect.StateMachine.Persistence.ClaimResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.ClaimResult.Lost>
+        {
+            public Lost() { }
+        }
+        public sealed class Won : Trax.Effect.StateMachine.Persistence.ClaimResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.ClaimResult.Won>
+        {
+            public Won(System.Guid OwnerToken) { }
+            public System.Guid OwnerToken { get; init; }
+        }
+    }
+    public sealed class EfEffectClaimStore : Trax.Effect.StateMachine.Persistence.IEffectClaimStore
+    {
+        public EfEffectClaimStore(Trax.Effect.StateMachine.Persistence.SnapshotDbContext db) { }
+        public System.Threading.Tasks.Task<bool> Complete(string effectKey, System.Guid ownerToken, string receipt, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<string?> GetReceipt(string effectKey, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<int> ReclaimStale(System.DateTimeOffset cutoff, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task Release(string effectKey, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<bool> ReleaseOwned(string effectKey, System.Guid ownerToken, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.ClaimResult> TryClaim(string effectKey, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public sealed class EfSnapshotStore : Trax.Effect.StateMachine.Persistence.ISnapshotStore
+    {
+        public EfSnapshotStore(Trax.Effect.StateMachine.Persistence.SnapshotDbContext db) { }
+        public System.Threading.Tasks.Task Delete(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.StoredSnapshot?> Get(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<bool> Update(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Guid expectedToken, string? requestId = null, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<bool> Upsert(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    [System.ComponentModel.DataAnnotations.Schema.Table("effect_claim")]
+    public class EffectClaim
+    {
+        public EffectClaim() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
+        public System.DateTimeOffset CreatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("effect_key")]
+        public string EffectKey { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("lease_expires_at")]
+        public System.DateTimeOffset LeaseExpiresAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("owner_token")]
+        public System.Guid OwnerToken { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("receipt")]
+        public string? Receipt { get; set; }
+        public static void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
+    }
+    public sealed class EffectClaimSweeper
+    {
+        public EffectClaimSweeper(Trax.Effect.StateMachine.Persistence.IEffectClaimStore claims) { }
+        public System.Threading.Tasks.Task<int> Sweep(System.DateTimeOffset cutoff, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public abstract class EffectOutcome : System.IEquatable<Trax.Effect.StateMachine.Persistence.EffectOutcome>
+    {
+        public sealed class AlreadyRan : Trax.Effect.StateMachine.Persistence.EffectOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.EffectOutcome.AlreadyRan>
+        {
+            public AlreadyRan(string Receipt) { }
+            public string Receipt { get; init; }
+        }
+        public sealed class InProgress : Trax.Effect.StateMachine.Persistence.EffectOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.EffectOutcome.InProgress>
+        {
+            public InProgress() { }
+        }
+        public sealed class Ran : Trax.Effect.StateMachine.Persistence.EffectOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.EffectOutcome.Ran>
+        {
+            public Ran(string Receipt) { }
+            public string Receipt { get; init; }
+        }
+    }
+    public interface IEffectClaimStore
+    {
+        System.Threading.Tasks.Task<bool> Complete(string effectKey, System.Guid ownerToken, string receipt, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<string?> GetReceipt(string effectKey, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<int> ReclaimStale(System.DateTimeOffset cutoff, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task Release(string effectKey, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<bool> ReleaseOwned(string effectKey, System.Guid ownerToken, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.ClaimResult> TryClaim(string effectKey, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken = default);
+    }
+    public interface IMachine
+    {
+        string? Corpus { get; }
+        bool HasEffect { get; }
+        string Name { get; }
+        string? SchemaHash { get; }
+        Trax.Effect.StateMachine.Persistence.ISnapshotEffectRunner? CreateEffectRunner(Trax.Effect.StateMachine.Persistence.ISnapshotDraftService service, Trax.Effect.StateMachine.Persistence.IdempotentEffect idempotent, System.IServiceProvider services);
+        Trax.Effect.StateMachine.Persistence.ISnapshotDraftService CreateService(Trax.Effect.StateMachine.Persistence.ISnapshotStore store, Trax.Effect.StateMachine.Persistence.IEffectClaimStore? claims, System.TimeSpan? draftTtl = default);
+        string ExportIr();
+        System.Collections.Generic.IReadOnlyList<string> SelfCheck();
+    }
+    public interface ISnapshotDraftService
+    {
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Advance(string userKey, System.Guid id, string trigger, System.Text.Json.Nodes.JsonNode? input = null, string? requestId = null, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AutosaveResult> Autosave(string userKey, System.Guid id, string snapshotJson, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.LoadResult> Load(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default);
+        string Serialize(Trax.Effect.StateMachine.Snapshot snapshot);
+    }
+    public interface ISnapshotEffect
+    {
+        System.Threading.Tasks.Task<string> Run(Trax.Effect.StateMachine.Snapshot snapshot, System.Threading.CancellationToken cancellationToken = default);
+    }
+    public interface ISnapshotEffectRunner
+    {
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Run(string userKey, System.Guid id, string requestId, System.Threading.CancellationToken cancellationToken = default);
+    }
+    public interface ISnapshotMachineRegistry
+    {
+        Trax.Effect.StateMachine.Persistence.ISnapshotEffectRunner? EffectRunner(string machine);
+        string? SchemaHash(string machine);
+        Trax.Effect.StateMachine.Persistence.ISnapshotDraftService? Service(string machine);
+    }
+    public interface ISnapshotPrincipal
+    {
+        string? CurrentUserKey { get; }
+    }
+    public interface ISnapshotStore
+    {
+        System.Threading.Tasks.Task Delete(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.StoredSnapshot?> Get(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<bool> Update(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Guid expectedToken, string? requestId = null, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<bool> Upsert(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Threading.CancellationToken cancellationToken = default);
+    }
+    public sealed class IdempotentEffect
+    {
+        public IdempotentEffect(Trax.Effect.StateMachine.Persistence.IEffectClaimStore claims) { }
+        public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.EffectOutcome> RunOnce(string effectKey, System.Func<System.Threading.Tasks.Task<string>> effect, System.TimeSpan? lease = default, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public abstract class LoadResult : System.IEquatable<Trax.Effect.StateMachine.Persistence.LoadResult>
+    {
+        public sealed class Invalid : Trax.Effect.StateMachine.Persistence.LoadResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.LoadResult.Invalid>
+        {
+            public Invalid(string Code, string Message) { }
+            public string Code { get; init; }
+            public string Message { get; init; }
+        }
+        public sealed class Loaded : Trax.Effect.StateMachine.Persistence.LoadResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.LoadResult.Loaded>
+        {
+            public Loaded(Trax.Effect.StateMachine.Snapshot Snapshot) { }
+            public Trax.Effect.StateMachine.Snapshot Snapshot { get; init; }
+        }
+        public sealed class NotFound : Trax.Effect.StateMachine.Persistence.LoadResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.LoadResult.NotFound>
+        {
+            public NotFound() { }
+        }
+    }
+    public abstract class Machine<TState, TTrigger> : Trax.Effect.StateMachine.Persistence.IMachine
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        protected Machine() { }
+        public virtual string? Corpus { get; }
+        public bool HasEffect { get; }
+        public string Name { get; }
+        public string? SchemaHash { get; }
+        protected abstract void Configure(Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> machine);
+        public Trax.Effect.StateMachine.Persistence.ISnapshotEffectRunner? CreateEffectRunner(Trax.Effect.StateMachine.Persistence.ISnapshotDraftService service, Trax.Effect.StateMachine.Persistence.IdempotentEffect idempotent, System.IServiceProvider services) { }
+        public Trax.Effect.StateMachine.Persistence.ISnapshotDraftService CreateService(Trax.Effect.StateMachine.Persistence.ISnapshotStore store, Trax.Effect.StateMachine.Persistence.IEffectClaimStore? claims, System.TimeSpan? draftTtl = default) { }
+        public string ExportIr() { }
+        public System.Collections.Generic.IReadOnlyList<string> SelfCheck() { }
+    }
+    public sealed class SnapshotDbContext : Microsoft.EntityFrameworkCore.DbContext
+    {
+        public SnapshotDbContext(Microsoft.EntityFrameworkCore.DbContextOptions<Trax.Effect.StateMachine.Persistence.SnapshotDbContext> options) { }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.StateMachine.Persistence.EffectClaim> EffectClaims { get; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.StateMachine.Persistence.SnapshotRecord> SnapshotDrafts { get; }
+        protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
+    }
+    public sealed class SnapshotDraftService<TState, TTrigger> : Trax.Effect.StateMachine.Persistence.ISnapshotDraftService
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        public SnapshotDraftService(Trax.Effect.StateMachine.SnapshotMachine<TState, TTrigger> machine, Trax.Effect.StateMachine.Persistence.ISnapshotStore store, System.Collections.Generic.IReadOnlyCollection<TState>? committedStates = null, Trax.Effect.StateMachine.Persistence.IEffectClaimStore? effectClaims = null, System.Func<string, System.Guid, System.Collections.Generic.IEnumerable<string>>? effectKeysOnReset = null, System.TimeSpan? draftTtl = default) { }
+        public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Advance(string userKey, System.Guid id, string trigger, System.Text.Json.Nodes.JsonNode? input = null, string? requestId = null, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AutosaveResult> Autosave(string userKey, System.Guid id, string snapshotJson, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.LoadResult> Load(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }
+        public string Serialize(Trax.Effect.StateMachine.Snapshot snapshot) { }
+    }
+    public sealed class SnapshotEffectRunner<TState, TTrigger> : Trax.Effect.StateMachine.Persistence.ISnapshotEffectRunner
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        public SnapshotEffectRunner(Trax.Effect.StateMachine.Persistence.SnapshotDraftService<TState, TTrigger> drafts, Trax.Effect.StateMachine.Persistence.ISnapshotEffect effect, Trax.Effect.StateMachine.Persistence.IdempotentEffect idempotent, TState fromState, TTrigger trigger, TState toState, System.Func<string, System.Guid, string> effectKey, string receiptKey = "receipt", System.TimeSpan? lease = default) { }
+        public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Run(string userKey, System.Guid id, string requestId, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public static class SnapshotLimits
+    {
+        public const int MaxSnapshotBytes = 65536;
+        public static readonly System.TimeSpan DefaultEffectLease;
+    }
+    public sealed class SnapshotMachineRegistry : Trax.Effect.StateMachine.Persistence.ISnapshotMachineRegistry
+    {
+        public SnapshotMachineRegistry(System.Collections.Generic.IEnumerable<Trax.Effect.StateMachine.Persistence.IMachine> machines, Trax.Effect.StateMachine.Persistence.ISnapshotStore store, Trax.Effect.StateMachine.Persistence.IEffectClaimStore claims, Trax.Effect.StateMachine.Persistence.IdempotentEffect idempotent, System.IServiceProvider services, Trax.Effect.StateMachine.Persistence.StateMachineOptions? options = null) { }
+        public Trax.Effect.StateMachine.Persistence.ISnapshotEffectRunner? EffectRunner(string machine) { }
+        public string? SchemaHash(string machine) { }
+        public Trax.Effect.StateMachine.Persistence.ISnapshotDraftService? Service(string machine) { }
+    }
+    public sealed class SnapshotProblem : System.IEquatable<Trax.Effect.StateMachine.Persistence.SnapshotProblem>
+    {
+        public SnapshotProblem() { }
+        public required string Code { get; init; }
+        public required string Message { get; init; }
+    }
+    [System.ComponentModel.DataAnnotations.Schema.Table("snapshot_draft")]
+    public class SnapshotRecord
+    {
+        public SnapshotRecord() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("concurrency_token")]
+        public System.Guid ConcurrencyToken { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("context", TypeName="jsonb")]
+        public string Context { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public System.Guid Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("last_request_id")]
+        public string? LastRequestId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("machine")]
+        public string Machine { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("state")]
+        public string State { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("updated_at")]
+        public System.DateTimeOffset UpdatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("user_key")]
+        public string UserKey { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("version")]
+        public int Version { get; set; }
+        public static void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
+    }
+    public static class SnapshotSelfCheck
+    {
+        public static System.Collections.Generic.IReadOnlyList<string> Run(System.Collections.Generic.IEnumerable<Trax.Effect.StateMachine.Persistence.IMachine> machines) { }
+    }
+    public static class StateMachineHealthCheckExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IHealthChecksBuilder AddTraxStateMachineSelfCheck(this Microsoft.Extensions.DependencyInjection.IHealthChecksBuilder builder, string name = "state-machines") { }
+    }
+    public sealed class StateMachineOptions
+    {
+        public StateMachineOptions() { }
+        public System.TimeSpan? DraftTtl { get; set; }
+    }
+    public sealed class StateMachineSelfCheckHealthCheck : Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck
+    {
+        public StateMachineSelfCheckHealthCheck(System.Collections.Generic.IEnumerable<Trax.Effect.StateMachine.Persistence.IMachine> machines) { }
+        public System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult> CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext context, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public static class StateMachinesBuilderExtensions
+    {
+        public static Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects AddStateMachines(this Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects builder, params System.Reflection.Assembly[] assemblies) { }
+        public static Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects AddStateMachines(this Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects builder, System.Action<Trax.Effect.StateMachine.Persistence.StateMachineOptions>? configure, params System.Reflection.Assembly[] assemblies) { }
+    }
+    public sealed class StoredSnapshot : System.IEquatable<Trax.Effect.StateMachine.Persistence.StoredSnapshot>
+    {
+        public StoredSnapshot(string Json, System.Guid Token, string? LastRequestId, System.DateTimeOffset UpdatedAt) { }
+        public string Json { get; init; }
+        public string? LastRequestId { get; init; }
+        public System.Guid Token { get; init; }
+        public System.DateTimeOffset UpdatedAt { get; init; }
+    }
+}
+namespace Trax.Effect.StateMachine.Persistence.Mutations
+{
+    [Trax.Effect.Attributes.TraxAuthorize]
+    [Trax.Effect.Attributes.TraxMutation(new Trax.Effect.Attributes.GraphQLOperation[] {
+            Trax.Effect.Attributes.GraphQLOperation.Run}, Description="Advance: re-drive a stored draft by one trigger, server-side (authoritative path)" +
+        ".", Namespace="stateMachine")]
+    public class AdvanceSnapshot : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>, Trax.Effect.StateMachine.Persistence.Mutations.IAdvanceSnapshot
+    {
+        public AdvanceSnapshot() { }
+        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>> Junctions() { }
+    }
+    public class AdvanceSnapshotInput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput>
+    {
+        public AdvanceSnapshotInput() { }
+        public string? ClientResult { get; init; }
+        public required System.Guid Id { get; init; }
+        public string? Input { get; init; }
+        public required string Machine { get; init; }
+        public string? RequestId { get; init; }
+        public string? SchemaHash { get; init; }
+        public required string Trigger { get; init; }
+    }
+    public class AdvanceSnapshotJunction : Trax.Core.Junction.Junction<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>
+    {
+        public AdvanceSnapshotJunction(Trax.Effect.StateMachine.Persistence.ISnapshotMachineRegistry registry, Trax.Effect.StateMachine.Persistence.ISnapshotPrincipal principal) { }
+        public override System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput> Run(Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput input) { }
+    }
+    public class AdvanceSnapshotOutput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>
+    {
+        public AdvanceSnapshotOutput() { }
+        public Trax.Effect.StateMachine.Persistence.SnapshotProblem? Problem { get; init; }
+        public string? Snapshot { get; init; }
+    }
+    public interface IAdvanceSnapshot : System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput> { }
+    public interface ILoadSnapshot : System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput> { }
+    public interface ISaveSnapshot : System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput> { }
+    public interface ISendSnapshot : System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput> { }
+    [Trax.Effect.Attributes.TraxAuthorize]
+    [Trax.Effect.Attributes.TraxMutation(new Trax.Effect.Attributes.GraphQLOperation[] {
+            Trax.Effect.Attributes.GraphQLOperation.Run}, Description="Load: resume the caller\'s stored draft.", Namespace="stateMachine")]
+    public class LoadSnapshot : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>, Trax.Effect.StateMachine.Persistence.Mutations.ILoadSnapshot
+    {
+        public LoadSnapshot() { }
+        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>> Junctions() { }
+    }
+    public class LoadSnapshotInput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput>
+    {
+        public LoadSnapshotInput() { }
+        public required System.Guid Id { get; init; }
+        public required string Machine { get; init; }
+        public string? SchemaHash { get; init; }
+    }
+    public class LoadSnapshotJunction : Trax.Core.Junction.Junction<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>
+    {
+        public LoadSnapshotJunction(Trax.Effect.StateMachine.Persistence.ISnapshotMachineRegistry registry, Trax.Effect.StateMachine.Persistence.ISnapshotPrincipal principal) { }
+        public override System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput> Run(Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput input) { }
+    }
+    public class LoadSnapshotOutput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>
+    {
+        public LoadSnapshotOutput() { }
+        public Trax.Effect.StateMachine.Persistence.SnapshotProblem? Problem { get; init; }
+        public string? Snapshot { get; init; }
+    }
+    [Trax.Effect.Attributes.TraxAuthorize]
+    [Trax.Effect.Attributes.TraxMutation(new Trax.Effect.Attributes.GraphQLOperation[] {
+            Trax.Effect.Attributes.GraphQLOperation.Run}, Description="Autosave: validate a client snapshot and persist it (soft path).", Namespace="stateMachine")]
+    public class SaveSnapshot : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>, Trax.Effect.StateMachine.Persistence.Mutations.ISaveSnapshot
+    {
+        public SaveSnapshot() { }
+        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>> Junctions() { }
+    }
+    public class SaveSnapshotInput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput>
+    {
+        public SaveSnapshotInput() { }
+        public required System.Guid Id { get; init; }
+        public required string Machine { get; init; }
+        public string? SchemaHash { get; init; }
+        public required string Snapshot { get; init; }
+    }
+    public class SaveSnapshotJunction : Trax.Core.Junction.Junction<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>
+    {
+        public SaveSnapshotJunction(Trax.Effect.StateMachine.Persistence.ISnapshotMachineRegistry registry, Trax.Effect.StateMachine.Persistence.ISnapshotPrincipal principal) { }
+        public override System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput> Run(Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput input) { }
+    }
+    public class SaveSnapshotOutput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>
+    {
+        public SaveSnapshotOutput() { }
+        public Trax.Effect.StateMachine.Persistence.SnapshotProblem? Problem { get; init; }
+        public string? Snapshot { get; init; }
+    }
+    [Trax.Effect.Attributes.TraxAuthorize]
+    [Trax.Effect.Attributes.TraxMutation(new Trax.Effect.Attributes.GraphQLOperation[] {
+            Trax.Effect.Attributes.GraphQLOperation.Run}, Description="Send: run a machine\'s one irreversible effect exactly once (state-gated + idempot" +
+        "ent).", Namespace="stateMachine")]
+    public class SendSnapshot : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>, Trax.Effect.StateMachine.Persistence.Mutations.ISendSnapshot
+    {
+        public SendSnapshot() { }
+        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>> Junctions() { }
+    }
+    public class SendSnapshotInput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput>
+    {
+        public SendSnapshotInput() { }
+        public required System.Guid Id { get; init; }
+        public required string Machine { get; init; }
+        public string? RequestId { get; init; }
+        public string? SchemaHash { get; init; }
+    }
+    public class SendSnapshotJunction : Trax.Core.Junction.Junction<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>
+    {
+        public SendSnapshotJunction(Trax.Effect.StateMachine.Persistence.ISnapshotMachineRegistry registry, Trax.Effect.StateMachine.Persistence.ISnapshotPrincipal principal) { }
+        public override System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput> Run(Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput input) { }
+    }
+    public class SendSnapshotOutput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>
+    {
+        public SendSnapshotOutput() { }
+        public Trax.Effect.StateMachine.Persistence.SnapshotProblem? Problem { get; init; }
+        public string? Snapshot { get; init; }
+    }
+    public static class StateMachineMutations
+    {
+        public static System.Reflection.Assembly Assembly { get; }
+    }
+}

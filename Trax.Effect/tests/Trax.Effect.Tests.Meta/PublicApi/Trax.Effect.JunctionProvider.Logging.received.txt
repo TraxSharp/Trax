@@ -1,0 +1,27 @@
+namespace Trax.Effect.JunctionProvider.Logging.Extensions
+{
+    public static class ServiceExtensions
+    {
+        public static TBuilder AddJunctionLogger<TBuilder>(this TBuilder configurationBuilder, bool serializeJunctionData = false)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+    }
+}
+namespace Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerFactory
+{
+    public class JunctionLoggerFactory : Trax.Effect.Services.JunctionEffectProviderFactory.IJunctionEffectProviderFactory
+    {
+        public JunctionLoggerFactory(System.IServiceProvider serviceProvider) { }
+        public Trax.Effect.Services.JunctionEffectProvider.IJunctionEffectProvider Create() { }
+    }
+}
+namespace Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider
+{
+    public interface IJunctionLoggerProvider : System.IDisposable, Trax.Effect.Services.JunctionEffectProvider.IJunctionEffectProvider { }
+    public class JunctionLoggerProvider : System.IDisposable, Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider.IJunctionLoggerProvider, Trax.Effect.Services.JunctionEffectProvider.IJunctionEffectProvider
+    {
+        public JunctionLoggerProvider(Trax.Effect.Configuration.TraxEffectConfiguration.ITraxEffectConfiguration configuration, Microsoft.Extensions.Logging.ILogger<Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider.JunctionLoggerProvider> logger) { }
+        public System.Threading.Tasks.Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
+        public void Dispose() { }
+    }
+}

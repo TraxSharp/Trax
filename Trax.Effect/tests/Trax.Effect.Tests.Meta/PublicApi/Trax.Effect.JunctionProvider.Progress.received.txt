@@ -1,0 +1,46 @@
+namespace Trax.Effect.JunctionProvider.Progress.Extensions
+{
+    public static class ServiceExtensions
+    {
+        public static TBuilder AddJunctionProgress<TBuilder>(this TBuilder configurationBuilder)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+    }
+}
+namespace Trax.Effect.JunctionProvider.Progress.Services.CancellationCheckFactory
+{
+    public class CancellationCheckFactory : Trax.Effect.Services.JunctionEffectProviderFactory.IJunctionEffectProviderFactory
+    {
+        public CancellationCheckFactory(System.IServiceProvider serviceProvider) { }
+        public Trax.Effect.Services.JunctionEffectProvider.IJunctionEffectProvider Create() { }
+    }
+}
+namespace Trax.Effect.JunctionProvider.Progress.Services.CancellationCheckProvider
+{
+    public class CancellationCheckProvider : System.IDisposable, Trax.Effect.JunctionProvider.Progress.Services.CancellationCheckProvider.ICancellationCheckProvider, Trax.Effect.Services.JunctionEffectProvider.IJunctionEffectProvider
+    {
+        public CancellationCheckProvider(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory) { }
+        public System.Threading.Tasks.Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
+        public void Dispose() { }
+    }
+    public interface ICancellationCheckProvider : System.IDisposable, Trax.Effect.Services.JunctionEffectProvider.IJunctionEffectProvider { }
+}
+namespace Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressFactory
+{
+    public class JunctionProgressFactory : Trax.Effect.Services.JunctionEffectProviderFactory.IJunctionEffectProviderFactory
+    {
+        public JunctionProgressFactory(System.IServiceProvider serviceProvider) { }
+        public Trax.Effect.Services.JunctionEffectProvider.IJunctionEffectProvider Create() { }
+    }
+}
+namespace Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressProvider
+{
+    public interface IJunctionProgressProvider : System.IDisposable, Trax.Effect.Services.JunctionEffectProvider.IJunctionEffectProvider { }
+    public class JunctionProgressProvider : System.IDisposable, Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressProvider.IJunctionProgressProvider, Trax.Effect.Services.JunctionEffectProvider.IJunctionEffectProvider
+    {
+        public JunctionProgressProvider() { }
+        public System.Threading.Tasks.Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
+        public void Dispose() { }
+    }
+}

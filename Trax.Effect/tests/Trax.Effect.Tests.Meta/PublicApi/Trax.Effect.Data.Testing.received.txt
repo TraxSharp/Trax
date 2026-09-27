@@ -1,0 +1,42 @@
+namespace Trax.Effect.Data.Testing
+{
+    public static class DataLayerGuards
+    {
+        public static Trax.Core.Testing.GuardResult CompanionInterfaces(Trax.Core.Testing.ArchitectureGuardOptions options, string baseTypeName = "DomainDataContext") { }
+        public static Trax.Core.Testing.GuardResult DomainContextsDeriveBase(Trax.Core.Testing.ArchitectureGuardOptions options, string baseTypeName = "DomainDataContext", System.Collections.Generic.IReadOnlySet<string>? knownExceptions = null) { }
+        public static Trax.Core.Testing.GuardResult NoPendingModelChanges(System.Collections.Generic.IReadOnlyList<System.Type> migrationContextTypes) { }
+        public static Trax.Core.Testing.GuardResult OneSchemaPerContext(System.Collections.Generic.IReadOnlyList<System.Type> contextTypes) { }
+        public static Trax.Core.Testing.GuardResult OwnerScopeCompleteness(Microsoft.EntityFrameworkCore.Metadata.IReadOnlyModel model, Trax.Effect.Data.Testing.OwnerScopeCensusOptions options) { }
+    }
+    [NUnit.Framework.TestFixture]
+    public abstract class DomainDataLayerGuardFixture
+    {
+        protected DomainDataLayerGuardFixture() { }
+        protected virtual string BaseTypeName { get; }
+        protected virtual System.Collections.Generic.IReadOnlyList<System.Type> DomainContexts { get; }
+        protected virtual System.Collections.Generic.IReadOnlyList<System.Type> MigrationContexts { get; }
+        protected abstract Trax.Core.Testing.ArchitectureGuardOptions Options { get; }
+        protected virtual Trax.Effect.Data.Testing.OwnerScopeCensusOptions? OwnerScope { get; }
+        protected virtual System.Collections.Generic.IReadOnlyList<Microsoft.EntityFrameworkCore.Metadata.IReadOnlyModel> OwnerScopedModels { get; }
+        [NUnit.Framework.Test]
+        public void Domain_contexts_derive_the_shared_base() { }
+        [NUnit.Framework.Test]
+        public void Domain_contexts_have_companion_interfaces() { }
+        [NUnit.Framework.Test]
+        public void Each_domain_context_owns_a_distinct_schema() { }
+        [NUnit.Framework.Test]
+        public void Each_migration_context_matches_its_snapshot() { }
+        [NUnit.Framework.Test]
+        public void Every_per_user_entity_is_scoped_to_its_owner() { }
+    }
+    public sealed class OwnerScopeCensusOptions : System.IEquatable<Trax.Effect.Data.Testing.OwnerScopeCensusOptions>
+    {
+        public OwnerScopeCensusOptions() { }
+        public System.Collections.Generic.IReadOnlyDictionary<System.Type, string> Exemptions { get; init; }
+        public System.Collections.Generic.IReadOnlyDictionary<System.Type, string> Gated { get; init; }
+        public System.Collections.Generic.IReadOnlyDictionary<System.Type, string> NavigationScoped { get; init; }
+        public System.Collections.Generic.IReadOnlySet<string> OwnerIdProperties { get; init; }
+        public required System.Type OwnerType { get; init; }
+        public required System.Type PrincipalAccessorType { get; init; }
+    }
+}

@@ -1,0 +1,70 @@
+namespace Trax.Effect.Broadcaster.SignalR.Configuration
+{
+    public sealed class SignalRSinkConfiguration
+    {
+        public System.Collections.Generic.IReadOnlySet<string> EventTypeFilter { get; }
+        public System.Func<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage, object> Projection { get; }
+        public System.Collections.Generic.IReadOnlySet<string> TrainNameFilter { get; }
+        public bool Matches(Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage message) { }
+    }
+}
+namespace Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions
+{
+    public class SignalRSinkOptions
+    {
+        public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions OnlyForEvents(params string[] eventTypes) { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions OnlyForTrains(params System.Type[] trainInterfaceTypes) { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions OnlyForTrains<T1>()
+            where T1 :  class { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions OnlyForTrains<T1, T2>()
+            where T1 :  class
+            where T2 :  class { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions OnlyForTrains<T1, T2, T3>()
+            where T1 :  class
+            where T2 :  class
+            where T3 :  class { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions WithProjection<TClient>(System.Func<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage, TClient> projection)
+            where TClient :  notnull { }
+    }
+}
+namespace Trax.Effect.Broadcaster.SignalR.Extensions
+{
+    public static class SignalRBroadcasterExtensions
+    {
+        public static Trax.Effect.Configuration.BroadcasterBuilder.BroadcasterBuilder UseSignalRHub(this Trax.Effect.Configuration.BroadcasterBuilder.BroadcasterBuilder builder, System.Action<Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions>? configure = null) { }
+    }
+    public static class SignalRHubEndpointExtensions
+    {
+        public static Microsoft.AspNetCore.Builder.HubEndpointConventionBuilder MapTraxTrainEventHub(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string path = "/hubs/trax-events") { }
+    }
+}
+namespace Trax.Effect.Broadcaster.SignalR.Models
+{
+    public class TraxClientEvent : System.IEquatable<Trax.Effect.Broadcaster.SignalR.Models.TraxClientEvent>
+    {
+        public TraxClientEvent(long MetadataId, string ExternalId, string TrainName, string EventType, System.DateTime Timestamp, string? FailureReason) { }
+        [System.Text.Json.Serialization.JsonPropertyName("eventType")]
+        public string EventType { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("externalId")]
+        public string ExternalId { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("failureReason")]
+        public string? FailureReason { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("metadataId")]
+        public long MetadataId { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("timestamp")]
+        public System.DateTime Timestamp { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("trainName")]
+        public string TrainName { get; init; }
+    }
+}
+namespace Trax.Effect.Broadcaster.SignalR.Services
+{
+    public interface ITraxTrainEventClient
+    {
+        System.Threading.Tasks.Task TrainEvent(object payload);
+    }
+    public sealed class TraxTrainEventHub : Microsoft.AspNetCore.SignalR.Hub<Trax.Effect.Broadcaster.SignalR.Services.ITraxTrainEventClient>
+    {
+        public TraxTrainEventHub() { }
+    }
+}

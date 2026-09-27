@@ -1,0 +1,48 @@
+namespace Trax.Effect.Provider.Parameter.Configuration
+{
+    public class ParameterEffectConfiguration
+    {
+        public ParameterEffectConfiguration() { }
+        public int? MaxParameterBytes { get; set; }
+        public bool SaveInputs { get; set; }
+        public bool SaveOutputs { get; set; }
+        public System.Func<string, bool>? ShouldSaveInputs { get; set; }
+        public System.Func<string, bool>? ShouldSaveOutputs { get; set; }
+        public Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration ExcludeInput(System.Type type) { }
+        public Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration ExcludeInput(string trainNameFragment) { }
+        public Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration ExcludeInput<TTrain>() { }
+        public Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration ExcludeOutput(System.Type type) { }
+        public Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration ExcludeOutput(string trainNameFragment) { }
+        public Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration ExcludeOutput<TTrain>() { }
+    }
+}
+namespace Trax.Effect.Provider.Parameter.Extensions
+{
+    public static class ServiceExtensions
+    {
+        public static TBuilder SaveTrainParameters<TBuilder>(this TBuilder builder, System.Text.Json.JsonSerializerOptions? jsonSerializerOptions = null, System.Action<Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration>? configure = null)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+    }
+}
+namespace Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory
+{
+    public interface IParameterEffectProviderFactory : Trax.Effect.Services.EffectProviderFactory.IConfigurableEffectProviderFactory<Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration>, Trax.Effect.Services.EffectProviderFactory.IConfigurableProviderFactory, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
+    {
+        System.Collections.Generic.List<Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory.ParameterEffect> Providers { get; }
+    }
+    public class ParameterEffect : System.IDisposable, Trax.Effect.Services.EffectProvider.IEffectProvider
+    {
+        public ParameterEffect(System.Text.Json.JsonSerializerOptions options, Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration configuration) { }
+        public void Dispose() { }
+        public System.Threading.Tasks.Task SaveChanges(System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task Track(Trax.Effect.Models.IModel model) { }
+        public System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model) { }
+    }
+    public class ParameterEffectProviderFactory : Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory.IParameterEffectProviderFactory, Trax.Effect.Services.EffectProviderFactory.IConfigurableEffectProviderFactory<Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration>, Trax.Effect.Services.EffectProviderFactory.IConfigurableProviderFactory, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
+    {
+        public ParameterEffectProviderFactory(Trax.Effect.Configuration.TraxEffectConfiguration.ITraxEffectConfiguration configuration, Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration effectConfiguration) { }
+        public Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration Configuration { get; }
+        public System.Collections.Generic.List<Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory.ParameterEffect> Providers { get; }
+        public Trax.Effect.Services.EffectProvider.IEffectProvider Create() { }
+    }
+}

@@ -1,0 +1,29 @@
+namespace Trax.Effect.Broadcaster.RabbitMQ.Extensions
+{
+    public static class RabbitMqBroadcasterExtensions
+    {
+        public static Trax.Effect.Configuration.BroadcasterBuilder.BroadcasterBuilder UseRabbitMq(this Trax.Effect.Configuration.BroadcasterBuilder.BroadcasterBuilder builder, string connectionString, System.Action<Trax.Effect.Broadcaster.RabbitMQ.RabbitMqBroadcasterOptions>? configure = null) { }
+    }
+}
+namespace Trax.Effect.Broadcaster.RabbitMQ
+{
+    public class RabbitMqBroadcasterOptions
+    {
+        public RabbitMqBroadcasterOptions() { }
+        public required string ConnectionString { get; set; }
+        public string ExchangeName { get; set; }
+    }
+    public class RabbitMqTrainEventBroadcaster : System.IAsyncDisposable, Trax.Effect.Services.TrainEventBroadcaster.ITrainEventBroadcaster
+    {
+        public RabbitMqTrainEventBroadcaster(Trax.Effect.Broadcaster.RabbitMQ.RabbitMqBroadcasterOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Broadcaster.RabbitMQ.RabbitMqTrainEventBroadcaster>? logger = null) { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
+        public System.Threading.Tasks.Task PublishAsync(Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage message, System.Threading.CancellationToken ct) { }
+    }
+    public class RabbitMqTrainEventReceiver : System.IAsyncDisposable, Trax.Effect.Services.TrainEventBroadcaster.ITrainEventReceiver
+    {
+        public RabbitMqTrainEventReceiver(Trax.Effect.Broadcaster.RabbitMQ.RabbitMqBroadcasterOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Broadcaster.RabbitMQ.RabbitMqTrainEventReceiver>? logger = null) { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
+        public System.Threading.Tasks.Task StartAsync(System.Func<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage, System.Threading.CancellationToken, System.Threading.Tasks.Task> handler, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken ct) { }
+    }
+}
