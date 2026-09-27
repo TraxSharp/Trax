@@ -123,24 +123,36 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
     /// A failure that reached this junction from somewhere that classified it, such as a remote
     /// worker or a nested train, keeps that answer. The data attached here replaces whatever the
     /// exception carried before, so without this the class would be dropped on the way through.
+    ///
+    /// <para>Only a <see cref="TrainException"/> carries a class in its message, because that is
+    /// the type Trax rebuilds a recorded failure as. Any other exception's message is its own
+    /// text, and is never read as a record. A value outside <see cref="FailureClass"/> is carried
+    /// as <see cref="FailureClass.Unclassified"/>, as the remote wire already does.</para>
     /// </remarks>
     private static FailureClass? CarriedFailureClass(Exception e)
     {
         if (e.Data["TrainExceptionData"] is TrainExceptionData attached)
-            return attached.FailureClass;
+            return Defined(attached.FailureClass);
 
-        if (!e.Message.StartsWith('{'))
+        if (e is not TrainException || !e.Message.StartsWith('{'))
             return null;
 
         try
         {
-            return System
-                .Text.Json.JsonSerializer.Deserialize<TrainExceptionData>(e.Message)
-                ?.FailureClass;
+            return Defined(
+                System
+                    .Text.Json.JsonSerializer.Deserialize<TrainExceptionData>(e.Message)
+                    ?.FailureClass
+            );
         }
         catch (System.Text.Json.JsonException)
         {
             return null;
         }
     }
+
+    private static FailureClass? Defined(FailureClass? failureClass) =>
+        failureClass is { } value && !Enum.IsDefined(value)
+            ? FailureClass.Unclassified
+            : failureClass;
 }

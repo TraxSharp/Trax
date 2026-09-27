@@ -67,6 +67,50 @@ public class JunctionFailureClassTests : TestSetup
             .BeNull("a message that merely starts with a brace is not a record");
     }
 
+    [Test]
+    public async Task AClassInTheMessage_IsCarriedOnlyByATrainException()
+    {
+        var data = await DataAfterFailing(
+            new InvalidOperationException(RecordJson(((int)FailureClass.Permanent).ToString()))
+        );
+
+        data.FailureClass.Should()
+            .BeNull("only a TrainException carries a failure class in its message");
+    }
+
+    [Test]
+    public async Task AnUndefinedClassInTheMessage_IsCarriedAsUnclassified()
+    {
+        var data = await DataAfterFailing(new TrainException(RecordJson("42")));
+
+        data.FailureClass.Should().Be(FailureClass.Unclassified);
+    }
+
+    [Test]
+    public async Task AnUndefinedClassAlreadyAttached_IsCarriedAsUnclassified()
+    {
+        var nested = new InvalidOperationException("inner");
+        nested.Data["TrainExceptionData"] = new TrainExceptionData
+        {
+            TrainName = "Inner",
+            TrainExternalId = "",
+            Type = nameof(InvalidOperationException),
+            Junction = "InnerJunction",
+            Message = "inner",
+            FailureClass = (FailureClass)42,
+        };
+
+        var data = await DataAfterFailing(nested);
+
+        data.FailureClass.Should().Be(FailureClass.Unclassified);
+    }
+
+    private static string RecordJson(string failureClass) =>
+        "{\"trainName\":\"a\",\"trainExternalId\":\"b\",\"type\":\"X\","
+        + "\"junction\":\"J\",\"message\":\"m\",\"failureClass\":"
+        + failureClass
+        + "}";
+
     private static async Task<TrainExceptionData> DataAfterFailing(Exception failure)
     {
         var result = await new Throwing(failure).RailwayJunction(1, UnitTrain.Create());
