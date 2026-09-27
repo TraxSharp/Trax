@@ -910,6 +910,7 @@ namespace Trax.Effect.Services.ChangeSignal
         Manifest = 2,
         ManifestGroup = 3,
         SchedulerConfig = 4,
+        Execution = 5,
     }
     public sealed class ChangeSignalCoalescer : Microsoft.Extensions.Hosting.BackgroundService
     {

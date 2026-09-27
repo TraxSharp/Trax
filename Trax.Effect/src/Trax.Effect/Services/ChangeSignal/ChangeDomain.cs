@@ -21,4 +21,13 @@ public enum ChangeDomain
 
     /// <summary>Scheduler configuration.</summary>
     SchedulerConfig,
+
+    /// <summary>
+    /// Train runs (metadata rows), for example runs an operator cancelled.
+    /// </summary>
+    /// <remarks>
+    /// Appended, not inserted: the domain crosses processes by name, and a receiver on a version
+    /// without this member drops the signal as an unknown name rather than misreading it.
+    /// </remarks>
+    Execution,
 }

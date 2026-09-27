@@ -68,6 +68,44 @@ public class BroadcastChangeSinkTests
     }
 
     [Test]
+    public async Task FlushAsync_CarriesTheExecutionDomainByName()
+    {
+        await _sink.FlushAsync(new[] { ChangeDomain.Execution }, CancellationToken.None);
+
+        await _broadcaster
+            .Received(1)
+            .PublishAsync(
+                Arg.Is<TrainLifecycleEventMessage>(m => m.ChangeDomain == "Execution"),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    /// <summary>
+    /// The domain crosses processes by name, and a receiver on an older version drops a name it
+    /// cannot parse. The integer values are pinned too, so a new member is appended rather than
+    /// inserted: something that stored or compared the number would otherwise read the wrong
+    /// domain after an upgrade.
+    /// </summary>
+    [Test]
+    public void ChangeDomain_MembersAreAppendOnly()
+    {
+        Enum.GetValues<ChangeDomain>()
+            .ToDictionary(d => d.ToString(), d => (int)d)
+            .Should()
+            .Equal(
+                new Dictionary<string, int>
+                {
+                    ["WorkQueue"] = 0,
+                    ["DeadLetter"] = 1,
+                    ["Manifest"] = 2,
+                    ["ManifestGroup"] = 3,
+                    ["SchedulerConfig"] = 4,
+                    ["Execution"] = 5,
+                }
+            );
+    }
+
+    [Test]
     public async Task FlushAsync_EmptyDomains_PublishesNothing()
     {
         await _sink.FlushAsync(Array.Empty<ChangeDomain>(), CancellationToken.None);
