@@ -1131,6 +1131,7 @@ namespace Trax.Effect.Services.ServiceTrain
         public string TrainName { get; }
         protected TOut TrainOutput { get; }
         public void Dispose() { }
+        public System.IDisposable EnterQueueHooks(Trax.Effect.Models.Metadata.Metadata metadata) { }
         protected override sealed Trax.Core.Monad.Monad<TIn, TOut> NewMonad() { }
         protected virtual System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         protected virtual System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }

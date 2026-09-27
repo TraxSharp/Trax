@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text.Json.Serialization;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
@@ -82,15 +83,89 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// </summary>
     /// <remarks>
     /// Throws <see cref="ChainDeclarationException"/> while the chain is being read, because
-    /// <c>Junctions()</c> is then run to record its declaration and no input exists. Returns
-    /// <c>default</c> whenever the train has no metadata carrying an input, which includes
-    /// <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>: they are called on an instance
-    /// that has not run, so read the input from their <c>metadata</c> argument instead.
+    /// <c>Junctions()</c> is then run to record its declaration and no input exists.
+    ///
+    /// Also returns the input inside <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>,
+    /// which run on an instance that has not run, when the enqueue path hands it over through
+    /// <see cref="EnterQueueHooks"/>. A Trax.Mediator that predates that method does not, and
+    /// <c>TrainInput</c> then returns <c>default</c> there; the hook's <c>metadata</c> argument
+    /// carries the input on every version. Anywhere else a train with no metadata carrying an
+    /// input returns <c>default</c>.
     /// </remarks>
     protected TIn TrainInput =>
         IsDeclaringChain ? throw new ChainDeclarationException(TrainName, nameof(TrainInput))
-        : Metadata is not null && Metadata.GetInputObject() is TIn typed ? typed
+        : Metadata is not null ? (Metadata.GetInputObject() is TIn typed ? typed : default!)
+        : QueueHookFrame.Find(_queueHookFrame.Value, this) is { } frame ? frame.Input
         : default!;
+
+    // Static so that it costs nothing on a train that is never enqueued, and an AsyncLocal because
+    // one scoped instance can run the hooks of two concurrent enqueues on a shared scope. Each
+    // frame names the instance it belongs to, so another instance of the same train type on the
+    // same flow does not see it.
+    private static readonly AsyncLocal<QueueHookFrame?> _queueHookFrame = new();
+
+    /// <summary>
+    /// Makes the input carried by <paramref name="metadata"/> what <c>TrainInput</c> returns on
+    /// this instance, for the current async flow, until the returned scope is disposed. The
+    /// enqueue path calls it around <see cref="QueueSubjectKey"/> and <see cref="OnQueue"/>, which
+    /// run on an instance that has not run and has no <see cref="Metadata"/> of its own.
+    /// </summary>
+    /// <remarks>
+    /// It sets neither <see cref="Metadata"/> nor anything a later run reads: a run initializes its
+    /// own metadata, and a scoped instance resolved again in the same scope must not inherit an
+    /// enqueue's. Disposing the scope restores what <c>TrainInput</c> returned before. Consumers do
+    /// not call it.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// The train already has metadata, because it has run or is running. It reads its own input.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="metadata"/> carries no input of type <typeparamref name="TIn"/>.
+    /// </exception>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public IDisposable EnterQueueHooks(Metadata metadata)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+
+        if (Metadata is not null)
+            throw new InvalidOperationException(
+                $"{TrainName} already has metadata, so it has run or is running and reads its own "
+                    + "input. The queue hooks run on an instance that has not run."
+            );
+
+        if (metadata.GetInputObject() is not TIn input)
+            throw new ArgumentException(
+                $"The metadata handed to {TrainName} carries no input of type "
+                    + $"{typeof(TIn).Name}, the train's input type.",
+                nameof(metadata)
+            );
+
+        var outer = _queueHookFrame.Value;
+        _queueHookFrame.Value = new QueueHookFrame(this, input, outer);
+
+        return new QueueHookScope(outer);
+    }
+
+    private sealed record QueueHookFrame(
+        ServiceTrain<TIn, TOut> Train,
+        TIn Input,
+        QueueHookFrame? Outer
+    )
+    {
+        public static QueueHookFrame? Find(QueueHookFrame? frame, ServiceTrain<TIn, TOut> train)
+        {
+            for (; frame is not null; frame = frame.Outer)
+                if (ReferenceEquals(frame.Train, train))
+                    return frame;
+
+            return null;
+        }
+    }
+
+    private sealed class QueueHookScope(QueueHookFrame? outer) : IDisposable
+    {
+        public void Dispose() => _queueHookFrame.Value = outer;
+    }
 
     /// <summary>
     /// Gets the typed output produced by this train. Set after a successful run, so it is
@@ -156,7 +231,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// </summary>
     /// <remarks>
     /// Called at enqueue time with a metadata carrying the input, so the key can vary per mutation
-    /// rather than being fixed per train. Read it with <c>metadata.GetInput&lt;T&gt;()</c>.
+    /// rather than being fixed per train. Read it with <c>metadata.GetInput&lt;T&gt;()</c>, or with
+    /// <c>TrainInput</c> when the enqueue path supplies it through <see cref="EnterQueueHooks"/>.
     ///
     /// Throwing aborts the enqueue. That is deliberate: a key that cannot be computed must not
     /// silently become null, because that would drop the serialization guarantee at exactly the
@@ -207,11 +283,12 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// so any effect you perform here will be performed again by the chain when the job runs.
     /// Make it idempotent.
     ///
-    /// The train is not initialized at enqueue time, so <see cref="Metadata"/> and
-    /// <c>TrainInput</c> are unavailable. Read everything from the passed <paramref name="metadata"/>:
-    /// the input via <c>metadata.GetInput&lt;T&gt;()</c>, and <c>metadata.ExternalId</c> to
-    /// correlate with the eventual run (the run executes under the same ExternalId). <c>Id</c>,
-    /// <c>ManifestId</c>, and <c>ScheduledTime</c> are unset because no run exists yet.
+    /// The train is not initialized at enqueue time, so <see cref="Metadata"/> is null. The input is
+    /// on the passed <paramref name="metadata"/> (<c>metadata.GetInput&lt;T&gt;()</c>), and
+    /// <c>TrainInput</c> returns it too when the enqueue path supplies it through
+    /// <see cref="EnterQueueHooks"/>. Use <c>metadata.ExternalId</c> to correlate with the eventual
+    /// run (the run executes under the same ExternalId). <c>Id</c>, <c>ManifestId</c>, and
+    /// <c>ScheduledTime</c> are unset because no run exists yet.
     /// </remarks>
     protected virtual Task OnQueue(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
 

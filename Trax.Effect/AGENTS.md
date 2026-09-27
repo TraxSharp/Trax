@@ -26,20 +26,21 @@ if your work contradicts one, say so rather than silently overriding it.
 | `work_queue.confirmed_at`, `subject_key`, or `IWorkQueuePromotion` | central `docs/0018` (a deferred enqueue is staged, and a stranded one is cancelled) and `docs/0019` (one subject's queued work runs one at a time) |
 | `IEnqueueContextAccessor` | central `docs/0018`, the context flows with the async call and is null for a deferring train |
 | `DataLayerGuards.OwnerScopeCompleteness`, or a consumer's per-user row filters | [0008](./docs/adr/0008-per-user-data-is-filtered-by-its-owner.md), a filter counts only if it reads the principal, and a per-user entity is a bare `[TraxAuthorize]` |
+| `TrainInput` in `QueueSubjectKey` or `OnQueue`, or `ServiceTrain.EnterQueueHooks` | central `docs/0021`, the enqueue hands the hooks their input for a scope and never sets `Metadata` |
 | `Metadata.FailureClass`, the `failure_class` column, or `IFailureClassifier` | central `docs/0020`, and [0006](./docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md) for how the enum is stored |
 | `ServiceTrain.Run`, `SaveOutcome`, or anything on a train's terminal write | [0005](./docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), the outcome is written on a token the caller cannot cancel |
 | overriding `ServiceTrain.Run` or `NewMonad`, or their modifiers | [0009](./docs/adr/0009-a-service-train-does-its-work-in-junctions.md), `Run` and `NewMonad` are sealed so `Junctions()` is the only way a service train does work |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Nineteen name `effect`: executable guards, exact version pinning, the
+index lists them by repo. Twenty name `effect`: executable guards, exact version pinning, the
 dependency direction, the three test conventions (FluentAssertions, no `[Ignore]`, no fixed
 delays), the canonical train name being the interface FullName, the documentation lints,
 feature-package tables shipping in the core provider migration set, the public API baseline,
 test frameworks staying out of shipped libraries, exemplars declared by attribute, Trax owning
 its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced package,
 a chain being a declaration (`0016`), a deferred enqueue being staged (`0018`), one subject's
-queued work running one at a time (`0019`), and failures being classified where they happen
-(`0020`). In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path
+queued work running one at a time (`0019`), failures being classified where they happen
+(`0020`), and a queue hook reading its input through `TrainInput` (`0021`). In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path
 does not resolve on GitHub, because it crosses a repository boundary.
 
 ## When your change makes a decision

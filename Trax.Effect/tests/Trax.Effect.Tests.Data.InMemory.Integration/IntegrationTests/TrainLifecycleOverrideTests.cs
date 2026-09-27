@@ -499,6 +499,29 @@ public class TrainLifecycleOverrideTests : TestSetup
     }
 
     [Test]
+    public async Task Run_WhileAnEnqueueHasHandedTheInstanceItsInput_ReadsItsOwnInput()
+    {
+        // A scoped train resolved again in the same scope is the instance the enqueue path handed
+        // its input to. The run must initialize its own metadata and read its own input.
+        var train = (TypedAccessTrain)Scope.ServiceProvider.GetRequiredService<ITypedAccessTrain>();
+        var queued = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(ITypedAccessTrain).FullName!,
+                ExternalId = "ext-queue-2",
+                Input = "queued",
+            }
+        );
+
+        using (train.EnterQueueHooks(queued))
+            await train.Run("run");
+
+        train.CapturedStartedInput.Should().Be("run");
+        train.CapturedInput.Should().Be("run");
+        train.Metadata!.ExternalId.Should().NotBe("ext-queue-2");
+    }
+
+    [Test]
     public async Task OnQueue_ThrowingOverride_PropagatesException()
     {
         var train = (QueueRecordingTrain)
