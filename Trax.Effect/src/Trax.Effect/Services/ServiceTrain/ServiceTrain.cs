@@ -218,10 +218,18 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// <summary>
     /// Overrides the base Train Run method to add database tracking and logging capabilities.
     /// </summary>
+    /// <remarks>
+    /// Sealed, as are the other overloads: a service train does its work in <c>Junctions()</c>,
+    /// and <c>Run</c> owns the metadata row, the lifecycle hooks and the outcome write around it.
+    /// Trax.Effect's docs/adr/0009 records why.
+    /// </remarks>
     /// <param name="input">The input data for the train</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests</param>
     /// <returns>The result of the train execution</returns>
-    public override async Task<TOut> Run(TIn input, CancellationToken cancellationToken = default)
+    public sealed override async Task<TOut> Run(
+        TIn input,
+        CancellationToken cancellationToken = default
+    )
     {
         CancellationToken = cancellationToken;
 
@@ -434,7 +442,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         return EffectRunner.SaveChanges(CancellationToken.None);
     }
 
-    public virtual async Task<TOut> Run(TIn input, Metadata metadata)
+    public async Task<TOut> Run(TIn input, Metadata metadata)
     {
         await this.InitializeServiceTrain(metadata);
         return await Run(input, CancellationToken);
@@ -443,11 +451,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// <summary>
     /// Executes the train with the given input, pre-created metadata, and cancellation support.
     /// </summary>
-    public virtual async Task<TOut> Run(
-        TIn input,
-        Metadata metadata,
-        CancellationToken cancellationToken
-    )
+    public async Task<TOut> Run(TIn input, Metadata metadata, CancellationToken cancellationToken)
     {
         CancellationToken = cancellationToken;
         await this.InitializeServiceTrain(metadata);
@@ -456,9 +460,10 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
     /// <summary>
     /// Supplies the container alongside the train, so junctions named by the chain resolve
-    /// through dependency injection rather than needing a parameterless constructor.
+    /// through dependency injection rather than needing a parameterless constructor. Sealed with
+    /// <c>Run</c>: the monad is what the chain runs on, so a service train does not replace it.
     /// </summary>
-    protected override Monad<TIn, TOut> NewMonad() =>
+    protected sealed override Monad<TIn, TOut> NewMonad() =>
         new(this, ServiceProvider!, CancellationToken);
 
     public void Dispose()

@@ -43,7 +43,7 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | `auth` | [0004](./0004-trax-owns-the-authorization-vocabulary.md), [0008](./0008-per-user-data-is-filtered-by-its-owner.md) |
 | `data-model` | [0002](./0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md), [0003](./0003-a-model-and-its-persistent-mapping-are-a-pair.md), [0005](./0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), [0006](./0006-a-closed-vocabulary-is-a-postgres-enum.md), [0008](./0008-per-user-data-is-filtered-by-its-owner.md) |
 | `migrations` | [0001](./0001-schema-changes-are-hand-written-sql.md), [0002](./0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md), [0006](./0006-a-closed-vocabulary-is-a-postgres-enum.md) |
-| `platform` | [0004](./0004-trax-owns-the-authorization-vocabulary.md), [0005](./0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md) |
+| `platform` | [0004](./0004-trax-owns-the-authorization-vocabulary.md), [0005](./0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), [0009](./0009-a-service-train-does-its-work-in-junctions.md) |
 | `providers` | [0001](./0001-schema-changes-are-hand-written-sql.md), [0006](./0006-a-closed-vocabulary-is-a-postgres-enum.md) |
 
 ## All of them
@@ -57,3 +57,4 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0005](./0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md) | A train's outcome is recorded on a token the caller cannot cancel | platform, data-model |
 | [0006](./0006-a-closed-vocabulary-is-a-postgres-enum.md) | A closed vocabulary Trax persists is a Postgres enum | data-model, migrations, providers |
 | [0008](./0008-per-user-data-is-filtered-by-its-owner.md) | Per-user data is scoped by a row filter that reads the principal, and exposed as a bare [TraxAuthorize] | auth, data-model |
+| [0009](./0009-a-service-train-does-its-work-in-junctions.md) | A service train does its work in Junctions(), and neither its Run nor its NewMonad can be overridden | platform |

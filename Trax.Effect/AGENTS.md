@@ -28,6 +28,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | `DataLayerGuards.OwnerScopeCompleteness`, or a consumer's per-user row filters | [0008](./docs/adr/0008-per-user-data-is-filtered-by-its-owner.md), a filter counts only if it reads the principal, and a per-user entity is a bare `[TraxAuthorize]` |
 | `Metadata.FailureClass`, the `failure_class` column, or `IFailureClassifier` | central `docs/0020`, and [0006](./docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md) for how the enum is stored |
 | `ServiceTrain.Run`, `SaveOutcome`, or anything on a train's terminal write | [0005](./docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), the outcome is written on a token the caller cannot cancel |
+| overriding `ServiceTrain.Run` or `NewMonad`, or their modifiers | [0009](./docs/adr/0009-a-service-train-does-its-work-in-junctions.md), `Run` and `NewMonad` are sealed so `Junctions()` is the only way a service train does work |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
 index lists them by repo. Nineteen name `effect`: executable guards, exact version pinning, the
