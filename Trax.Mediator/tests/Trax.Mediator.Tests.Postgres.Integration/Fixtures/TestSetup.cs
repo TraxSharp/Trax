@@ -33,9 +33,9 @@ public abstract class TestSetup
             .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
             .Build();
-        var connectionString = configuration.GetRequiredSection("Configuration")[
-            "DatabaseConnectionString"
-        ]!;
+        var connectionString = TestPostgres.WithPort(
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+        );
 
         var arrayLoggingProvider = new ArrayLoggingProvider();
 

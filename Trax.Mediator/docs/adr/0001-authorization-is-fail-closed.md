@@ -49,7 +49,9 @@ refuses a `[TraxAuthorize]` train when no `ITrainAuthorizationService` is regist
 where the startup validator never runs (the Lambda runner, a bare `ServiceProvider`). It has two
 exemptions: the opt-out above, and a trusted execution scope, which marks work already
 authorized at its own gate (a scheduler pipeline, a remote job runner, the dashboard) and which
-an enforcer would skip as well. In a normal hosted app the trusted-scope exemption never comes
+an enforcer would skip as well. A surface that submits work without going through `QueueAsync` or `RunAsync` gets the same
+check from `ITrainExecutionService.PrepareAsync`, whose result (`PreparedTrain`) has no public
+constructor, rather than keeping a copy of the rule. In a normal hosted app the trusted-scope exemption never comes
 into play, because the startup validator has already refused the host unless the opt-out was
 taken.
 
@@ -68,6 +70,8 @@ completely, which is by design, since the service is the consumer's to write.
 
 ## Changelog
 
+- **2026-09-27**: Recorded that `PrepareAsync` exposes this check to surfaces that submit work
+  themselves, so they share it instead of copying it.
 - **2026-09-23**: Recorded the runtime fail-closed check in `TrainExecutionService`, and that a
   trusted execution scope is a second exemption from it besides the opt-out.
 - **2026-09-11**: Recorded.

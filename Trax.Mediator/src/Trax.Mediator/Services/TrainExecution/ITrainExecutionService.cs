@@ -54,6 +54,34 @@ public interface ITrainExecutionService
         string inputJson,
         CancellationToken ct = default
     );
+
+    /// <summary>
+    /// Resolves a train by name, authorizes the current caller for it, and reads the caller's
+    /// input into the train's input type: the steps <see cref="QueueAsync"/> and
+    /// <see cref="RunAsync"/> take before doing anything else, for a surface that submits the work
+    /// some other way. Authorization runs before the input is read, so a caller who may not use the
+    /// train learns nothing about its input from a parse error. Nothing is written.
+    /// </summary>
+    /// <param name="trainName">The fully qualified service type name of the train, or its friendly name when that is unique.</param>
+    /// <param name="inputJson">JSON input, read exactly as <see cref="QueueAsync"/> reads it: null or blank as an empty object, property names in any case, a repeated property refused, and the <c>MaxInputJsonBytes</c> cap applied.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The train and its input. Only this method can produce one.</returns>
+    /// <exception cref="Exceptions.TrainNotFoundException">No registered train has that name.</exception>
+    /// <exception cref="Exceptions.AmbiguousTrainNameException">The name matches more than one registered train.</exception>
+    /// <exception cref="UnauthorizedAccessException">The train's <c>[TraxAuthorize]</c> requirements refuse the caller.</exception>
+    /// <exception cref="Exceptions.TrainInputValidationException">The input is larger than <c>MaxInputJsonBytes</c>.</exception>
+    /// <exception cref="System.Text.Json.JsonException">The input is not valid JSON for the train's input type, names a property twice, is the JSON literal <c>null</c>, or is missing and the input type needs values.</exception>
+    /// <exception cref="InvalidOperationException">The train declares <c>[TraxAuthorize]</c> and no <c>ITrainAuthorizationService</c> is registered, outside a trusted scope.</exception>
+    /// <exception cref="NotSupportedException">This implementation predates the method. It refuses rather than skip authorization.</exception>
+    Task<PreparedTrain> PrepareAsync(
+        string trainName,
+        string? inputJson,
+        CancellationToken ct = default
+    ) =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement PrepareAsync. Resolve ITrainExecutionService "
+                + "from dependency injection to get the mediator's implementation."
+        );
 }
 
 public record QueueTrainResult(long WorkQueueId, string ExternalId);
