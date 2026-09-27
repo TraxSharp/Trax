@@ -169,6 +169,10 @@ public class ModelCoverageGapTests
         jm.TrainMetadataId.Should().Be(0);
     }
 
+    /// <summary>
+    /// Also run filtered on its own: nothing in this class configures the static serializer
+    /// options, so alone it shows whether ToString works before any builder has run.
+    /// </summary>
     [Test]
     public void JunctionMetadata_ToString_ReturnsJson()
     {
