@@ -116,20 +116,22 @@ public static class ServiceExtensions
         if (!configurationBuilder.MigrationsDisabled)
             DatabaseMigrator.Migrate(connectionString).Wait();
 
-        // Create a data source with enum mappings and register for disposal on shutdown
-        var dataSource = ModelBuilderExtensions.BuildDataSource(
-            connectionString,
-            configureDataSource
+        // The data source is built by the container, once per service provider, so the provider
+        // that owns its connection pool disposes it. A pre-built instance registered with
+        // AddSingleton(instance) is never disposed by the container, and a shared one would be
+        // closed under every other provider built from the same collection when the first of
+        // them is disposed. Everything below resolves it from the provider rather than capturing it.
+        configurationBuilder.ServiceCollection.AddSingleton(_ =>
+            ModelBuilderExtensions.BuildDataSource(connectionString, configureDataSource)
         );
-        configurationBuilder.ServiceCollection.AddSingleton(dataSource);
 
         // Register the DbContextFactory
         configurationBuilder.ServiceCollection.AddDbContextFactory<PostgresContext>(
-            (_, options) =>
+            (sp, options) =>
             {
                 options
                     .UseNpgsql(
-                        dataSource,
+                        sp.GetRequiredService<NpgsqlDataSource>(),
                         o =>
                         {
                             o.MapEnum<TrainState>("train_state", "trax");
@@ -164,9 +166,11 @@ public static class ServiceExtensions
 
         // Configure any feature's own DbContext (e.g. the state-machine SnapshotDbContext) against this same
         // Postgres data source, so a subsystem like AddStateMachines(...) needs no host AddDbContext call.
-        configurationBuilder.ServiceCollection.AddSingleton<ITraxFeatureDbConfigurator>(
-            new DelegateFeatureDbConfigurator(options => options.UseNpgsql(dataSource))
-        );
+        configurationBuilder.ServiceCollection.AddSingleton<ITraxFeatureDbConfigurator>(sp =>
+        {
+            var dataSource = sp.GetRequiredService<NpgsqlDataSource>();
+            return new DelegateFeatureDbConfigurator(options => options.UseNpgsql(dataSource));
+        });
 
         configurationBuilder.HasDatabaseProvider = true;
         configurationBuilder.HasDataProvider = true;
