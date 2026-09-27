@@ -29,7 +29,10 @@ public interface ITrustedExecutionScope
 
     /// <summary>
     /// Opens a trusted scope. Dispose the returned handle to close it.
-    /// Scopes nest; inner scope wins for <see cref="CurrentReason"/>.
+    /// Scopes nest; inner scope wins for <see cref="CurrentReason"/>. Disposing a scope
+    /// while an inner one is still open closes it without ending the inner one, and when the
+    /// inner one is disposed the flow returns to the nearest scope that is still open, or to
+    /// untrusted. A disposed scope never becomes current again.
     /// </summary>
     /// <param name="reason">
     /// Short identifier for the bypass (e.g. <c>"scheduler.local-worker"</c>).

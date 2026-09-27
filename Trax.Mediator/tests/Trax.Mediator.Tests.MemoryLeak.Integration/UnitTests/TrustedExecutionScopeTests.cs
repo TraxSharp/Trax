@@ -124,4 +124,56 @@ public class TrustedExecutionScopeTests
 
         scope.IsTrusted.Should().BeFalse();
     }
+
+    [Test]
+    public void OuterDisposedBeforeInner_EndsUntrustedWhenInnerIsDisposed()
+    {
+        var scope = new TrustedExecutionScope();
+        var outer = scope.BeginTrusted("outer");
+        var inner = scope.BeginTrusted("inner");
+
+        outer.Dispose();
+
+        scope.IsTrusted.Should().BeTrue("the inner scope is still open");
+        scope.CurrentReason.Should().Be("inner");
+
+        inner.Dispose();
+
+        scope.IsTrusted.Should().BeFalse("both scopes are disposed");
+        scope.CurrentReason.Should().BeNull();
+    }
+
+    [Test]
+    public void MiddleDisposedFirst_IsSkippedWhenTheInnerPops()
+    {
+        var scope = new TrustedExecutionScope();
+        var outer = scope.BeginTrusted("outer");
+        var middle = scope.BeginTrusted("middle");
+        var inner = scope.BeginTrusted("inner");
+
+        middle.Dispose();
+        scope.CurrentReason.Should().Be("inner");
+
+        inner.Dispose();
+        scope.CurrentReason.Should().Be("outer");
+
+        outer.Dispose();
+        scope.IsTrusted.Should().BeFalse();
+    }
+
+    [Test]
+    public void ScopeOpenedAfterAnOutOfOrderDispose_StillUnwindsToUntrusted()
+    {
+        var scope = new TrustedExecutionScope();
+        var a = scope.BeginTrusted("a");
+        var b = scope.BeginTrusted("b");
+        a.Dispose();
+        var c = scope.BeginTrusted("c");
+
+        b.Dispose();
+        scope.CurrentReason.Should().Be("c");
+
+        c.Dispose();
+        scope.IsTrusted.Should().BeFalse();
+    }
 }

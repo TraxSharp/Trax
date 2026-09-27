@@ -18,22 +18,35 @@ public sealed class TrustedExecutionScope : ITrustedExecutionScope
         return new ScopeHandle(frame);
     }
 
-    private sealed record Frame(string Reason, Frame? Previous);
+    /// <summary>
+    /// One open scope. A class, not a record: frames are compared by identity, and two scopes
+    /// opened with the same reason from the same parent are still different scopes.
+    /// </summary>
+    private sealed class Frame(string reason, Frame? previous)
+    {
+        public string Reason { get; } = reason;
+        public Frame? Previous { get; } = previous;
+        public bool Disposed { get; set; }
+    }
 
     private sealed class ScopeHandle(Frame frame) : IDisposable
     {
-        private bool _disposed;
-
         public void Dispose()
         {
-            if (_disposed)
+            if (frame.Disposed)
                 return;
-            _disposed = true;
+            frame.Disposed = true;
 
-            // Only pop if this frame is still the current one. Guards against
-            // out-of-order disposal across overlapping scopes.
-            if (Current.Value == frame)
-                Current.Value = frame.Previous;
+            // A scope disposed while an inner one is still open only marks itself; the inner
+            // one skips it when it pops. Popping straight to Previous would hand trust back to
+            // a scope that was already disposed.
+            if (!ReferenceEquals(Current.Value, frame))
+                return;
+
+            var next = frame.Previous;
+            while (next is { Disposed: true })
+                next = next.Previous;
+            Current.Value = next;
         }
     }
 }
