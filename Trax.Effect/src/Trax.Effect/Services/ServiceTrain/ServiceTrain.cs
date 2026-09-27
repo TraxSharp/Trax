@@ -210,16 +210,19 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         Task.CompletedTask;
 
     /// <summary>
-    /// Called after a failed run (non-cancellation exception), after failure state is persisted
-    /// and global hooks have fired. Override to add per-train failure handling (e.g., alerting).
+    /// Called after a failed run, after failure state is persisted and global hooks have fired.
+    /// Override to add per-train failure handling (e.g., alerting).
     /// Exceptions are caught and logged — they will not mask the original failure.
+    /// An <see cref="OperationCanceledException"/> nothing asked for, such as an
+    /// <c>HttpClient</c> timeout, is a failure and lands here, not in <see cref="OnCancelled"/>.
     /// </summary>
     protected virtual Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct) =>
         Task.CompletedTask;
 
     /// <summary>
-    /// Called after cancellation (OperationCanceledException), after cancellation state is persisted
-    /// and global hooks have fired. Override to add per-train cancellation handling.
+    /// Called after a cancellation this run was asked for, after cancellation state is persisted
+    /// and global hooks have fired: the train's own token was cancelled, or the persisted cancel
+    /// flag was set. Override to add per-train cancellation handling.
     /// Exceptions are caught and logged.
     /// </summary>
     protected virtual Task OnCancelled(Metadata metadata, CancellationToken ct) =>
@@ -391,7 +394,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                 );
             }
 
-            if (exception is OperationCanceledException)
+            // The same test FinishServiceTrain used to choose Cancelled over Failed, so the hooks
+            // that fire always match the state that was recorded.
+            if (this.IsRequestedCancellation(exception))
             {
                 // Registered lifecycle hooks do not take the caller's token, for the reason
                 // SaveOutcome does not: reporting the outcome is not part of the work the caller

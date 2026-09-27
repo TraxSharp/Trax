@@ -131,12 +131,17 @@ public class FailureClassificationTests : TestSetup
         var train = (ClassifiedCancellingTrain)
             Scope.ServiceProvider.GetRequiredService<IClassifiedCancellingTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        // A cancellation is recorded as one only when something asked for it; an
+        // OperationCanceledException nothing asked for is a transient failure.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await train.Run(Unit.Default, cts.Token);
         await act.Should().ThrowAsync<Exception>();
 
         Classifier
             .Seen.Should()
-            .BeNull("cancellation is not a failure, so there is nothing to classify");
+            .BeNull("a requested cancellation is not a failure, so there is nothing to classify");
     }
 
     [Test]

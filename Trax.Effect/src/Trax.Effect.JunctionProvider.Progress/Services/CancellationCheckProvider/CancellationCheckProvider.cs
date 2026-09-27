@@ -25,7 +25,13 @@ public class CancellationCheckProvider(IDataContextProviderFactory dataContextFa
             .FirstOrDefaultAsync(cancellationToken);
 
         if (cancelRequested)
+        {
+            // Mirrored onto the run so its outcome is recorded as a requested cancellation. The
+            // train's own token was not cancelled, and an OperationCanceledException nothing
+            // asked for is recorded as a failure.
+            serviceTrain.Metadata.CancellationRequested = true;
             throw new OperationCanceledException("Train cancellation requested via dashboard.");
+        }
     }
 
     public Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(

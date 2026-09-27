@@ -156,7 +156,12 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (CancellingRecordingTrain)
             Scope.ServiceProvider.GetRequiredService<ICancellingRecordingTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        // A cancellation is recorded as one only when something asked for it; an
+        // OperationCanceledException nothing asked for is a transient failure.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await train.Run(Unit.Default, cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         train.CancelledCalled.Should().BeTrue();
@@ -181,7 +186,12 @@ public class TrainLifecycleOverrideTests : TestSetup
         var train = (ThrowingOnCancelledHookTrain)
             Scope.ServiceProvider.GetRequiredService<IThrowingOnCancelledHookTrain>();
 
-        var act = async () => await train.Run(Unit.Default);
+        // A cancellation is recorded as one only when something asked for it; an
+        // OperationCanceledException nothing asked for is a transient failure.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await train.Run(Unit.Default, cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -326,6 +336,8 @@ public class TrainLifecycleOverrideTests : TestSetup
                 Input = null,
             }
         );
+
+        await cts.CancelAsync();
 
         var act = async () => await train.Run(Unit.Default, metadata, cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();

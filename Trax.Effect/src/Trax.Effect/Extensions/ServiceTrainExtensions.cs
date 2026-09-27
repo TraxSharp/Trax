@@ -112,7 +112,7 @@ internal static class ServiceTrainExtensions
 
         var resultState =
             result.IsRight ? TrainState.Completed
-            : failureReason is OperationCanceledException ? TrainState.Cancelled
+            : serviceTrain.IsRequestedCancellation(failureReason!) ? TrainState.Cancelled
             : TrainState.Failed;
         serviceTrain.Logger?.LogTrace(
             "Setting ({TrainName}) to ({ResultState}).",
@@ -128,7 +128,8 @@ internal static class ServiceTrainExtensions
         {
             // Classify before recording, so the class lands on the metadata with the rest of the
             // failure and travels with the exception data if this run is reported somewhere else.
-            // Only real failures are classified — a cancellation is not one.
+            // Only real failures are classified. A cancellation something asked for is not one; a
+            // cancellation nothing asked for, such as an HttpClient timeout, is.
             var classified =
                 resultState == TrainState.Failed ? Classify(serviceTrain, failureReason) : null;
 
@@ -151,6 +152,30 @@ internal static class ServiceTrainExtensions
     }
 
     /// <summary>
+    /// Whether a failure is a cancellation this run was asked for, which records
+    /// <see cref="TrainState.Cancelled"/> rather than <see cref="TrainState.Failed"/>.
+    /// </summary>
+    /// <remarks>
+    /// A run is asked to stop in two ways: its own token is cancelled (the caller, a host
+    /// shutting down, the scheduler cancelling a run on this host), or the persisted cancel flag
+    /// is set (the dashboard, or the scheduler's job timeout for a run on another host), which
+    /// <c>CancellationCheckProvider</c> turns into a cancellation at the next junction boundary
+    /// and mirrors onto <see cref="Metadata.CancellationRequested"/>. Any other
+    /// <see cref="OperationCanceledException"/>, an <c>HttpClient</c> timeout being the common
+    /// one, arrives as the same exception type but nobody asked for it, so it is a failure: a
+    /// manifest retries only a failed run. See Trax.Docs/adr/0020.
+    /// </remarks>
+    internal static bool IsRequestedCancellation<TIn, TOut>(
+        this ServiceTrain<TIn, TOut> serviceTrain,
+        Exception failure
+    ) =>
+        failure is OperationCanceledException
+        && (
+            serviceTrain.CancellationToken.IsCancellationRequested
+            || serviceTrain.Metadata?.CancellationRequested == true
+        );
+
+    /// <summary>
     /// Asks the registered <see cref="IFailureClassifier"/> what kind of failure this was, and
     /// writes the answer onto the exception's structured data when it has some, so the class
     /// travels with the failure if it is reported somewhere else.
@@ -171,21 +196,47 @@ internal static class ServiceTrainExtensions
         if (IsRebuiltFailure(failureReason))
             return null;
 
+        FailureClass? answer;
+
         try
         {
             var classifier = serviceTrain.ServiceProvider?.GetService<IFailureClassifier>();
+            answer = classifier?.Classify(failureReason);
+        }
+        catch (Exception ex)
+        {
+            serviceTrain.Logger?.LogWarning(
+                ex,
+                "Failure classifier threw for train ({TrainName}); recording the failure as unclassified.",
+                serviceTrain.TrainName
+            );
 
-            if (classifier?.Classify(failureReason) is not { } failureClass)
-                return null;
+            answer = null;
+        }
 
-            // A classifier is consumer code, so it can return any value the enum's underlying type
-            // holds. An undefined one reaches the provider as an enum it cannot map: the write
-            // throws inside SaveOutcome, the row is left InProgress holding its subject, and the
-            // stale reaper records Failed an hour later. Normalised here the same way
-            // RemoteRunJson.TolerantFailureClassConverter normalises a class off the remote wire.
-            if (!Enum.IsDefined(failureClass))
-                failureClass = FailureClass.Unclassified;
+        // A classifier is consumer code, so it can return any value the enum's underlying type
+        // holds. An undefined one reaches the provider as an enum it cannot map: the write
+        // throws inside SaveOutcome, the row is left InProgress holding its subject, and the
+        // stale reaper records Failed an hour later. Normalised here the same way
+        // RemoteRunJson.TolerantFailureClassConverter normalises a class off the remote wire.
+        if (answer is { } value && !Enum.IsDefined(value))
+            answer = FailureClass.Unclassified;
 
+        // A cancellation that reaches here was not asked for (FinishServiceTrain records a
+        // requested one as Cancelled and never classifies it), so something gave up on its own:
+        // an HttpClient timeout, or a downstream token. That is transient unless the consumer's
+        // classifier says otherwise.
+        if (
+            answer is null or FailureClass.Unclassified
+            && failureReason is OperationCanceledException
+        )
+            answer = FailureClass.Transient;
+
+        if (answer is not { } failureClass)
+            return null;
+
+        try
+        {
             if (failureReason.Data["TrainExceptionData"] is TrainExceptionData data)
             {
                 data.FailureClass ??= failureClass;
@@ -206,19 +257,19 @@ internal static class ServiceTrainExtensions
                     FailureClass = failureClass,
                 };
             }
-
-            return failureClass;
         }
         catch (Exception ex)
         {
+            // Exception.Data refuses writes on a few framework exception types. The class is
+            // still recorded on the run; it just cannot ride on the exception.
             serviceTrain.Logger?.LogWarning(
                 ex,
-                "Failure classifier threw for train ({TrainName}); recording the failure as unclassified.",
+                "Could not attach the failure class to the exception for train ({TrainName}).",
                 serviceTrain.TrainName
             );
-
-            return null;
         }
+
+        return failureClass;
     }
 
     private static bool IsRebuiltFailure(Exception failure)

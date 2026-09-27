@@ -63,6 +63,9 @@ public enum TrainState
     /// This state indicates that the train was intentionally stopped before completion,
     /// either via the dashboard cancel button or a system cancellation signal.
     /// Cancelled trains are not retried and do not create dead letters.
+    /// An <see cref="OperationCanceledException"/> that nothing asked for, such as an
+    /// <c>HttpClient</c> timeout, is not a cancellation: the run is <see cref="Failed"/>,
+    /// classified <c>Transient</c> unless a classifier says otherwise.
     /// </remarks>
     Cancelled = 4,
 }

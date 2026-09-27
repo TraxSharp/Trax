@@ -30,7 +30,12 @@ public class ServiceTrainCoverageTests : TestSetup
         var train = (CancellingJunctionTrain)
             Scope.ServiceProvider.GetRequiredService<ICancellingJunctionTrain>();
 
-        var act = async () => await train.Run("input");
+        // A cancellation is recorded as one only when something asked for it; an
+        // OperationCanceledException nothing asked for is a transient failure.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await train.Run("input", cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         train.OnCancelledCalled.Should().BeTrue();
@@ -44,7 +49,12 @@ public class ServiceTrainCoverageTests : TestSetup
         // Left+cancellation branch.
         var train = Scope.ServiceProvider.GetRequiredService<IThrowingHookCancelJunctionTrain>();
 
-        var act = async () => await train.Run("x");
+        // A cancellation is recorded as one only when something asked for it; an
+        // OperationCanceledException nothing asked for is a transient failure.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await train.Run("x", cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
