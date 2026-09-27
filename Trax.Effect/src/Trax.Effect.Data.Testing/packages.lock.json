@@ -27,11 +27,11 @@
       },
       "Trax.Core.Testing": {
         "type": "Direct",
-        "requested": "[1.7.2, )",
-        "resolved": "1.7.2",
-        "contentHash": "/+KY640Hv0aK4+ITlKhBnrZjWGbLY4qGGCsYyJgndj3yY7AZnqvSV/N2lr5NmYYCw1S+KFTMjSI0RfY6yeCFhg==",
+        "requested": "[1.7.3, )",
+        "resolved": "1.7.3",
+        "contentHash": "ju8k9iJhceaT56Axhl2IE6Aatczv/E65hUMJRzQGThqqI08xvwzlfdXLIcN/4ON8FG81oW0Oz7oaNHYmnFtANQ==",
         "dependencies": {
-          "Microsoft.CodeAnalysis.CSharp": "4.14.0",
+          "Microsoft.CodeAnalysis.CSharp": "5.9.0",
           "NUnit": "4.4.0"
         }
       },
@@ -140,7 +140,7 @@
         "dependencies": {
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.12, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )",
-          "Trax.Core": "[1.7.2, )"
+          "Trax.Core": "[1.7.3, )"
         }
       },
       "trax.effect.data": {
@@ -239,9 +239,9 @@
       },
       "Trax.Core": {
         "type": "CentralTransitive",
-        "requested": "[1.7.2, )",
-        "resolved": "1.7.2",
-        "contentHash": "ViEkycLMeec2Q9F3tNesJvSrhbWtidtec+yiapLd9PctCnjwCWSaK3rwUdEJtzXaIk212RXS19uNcXAxO9+QNw==",
+        "requested": "[1.7.3, )",
+        "resolved": "1.7.3",
+        "contentHash": "If+wjMDtAs/ynL+RzeRnclbv813Y2+OgNeg5nFo7mYO+d+RYHRGZ5K01E0hz/Ss96WjcZmB0tSbl+ViuG0RDjA==",
         "dependencies": {
           "LanguageExt.Core": "4.4.9",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.3",
