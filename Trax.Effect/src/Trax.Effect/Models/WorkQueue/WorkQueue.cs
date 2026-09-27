@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
@@ -22,10 +24,12 @@ public class WorkQueue : IModel
     public const int MaxPriority = 31;
 
     /// <summary>
-    /// The longest <see cref="SubjectKey"/> an entry accepts. Well inside the Postgres btree entry
-    /// limit even when every character takes three bytes, the most a UTF-16 unit encodes to. A key
-    /// too long for the index inserts fine while queued and then fails the claim on every
-    /// dispatch cycle, so it is refused when the entry is created.
+    /// The longest <see cref="SubjectKey"/> an entry accepts, in Unicode characters (runes), not
+    /// UTF-16 units: a character outside the Basic Multilingual Plane counts once, although it
+    /// takes two units. A character is at most four bytes in UTF-8, so the longest key is 2048
+    /// bytes, inside the 2704-byte Postgres btree entry limit. A key too long for the index inserts
+    /// fine while queued and then fails the claim on every dispatch cycle, so it is refused when
+    /// the entry is created.
     /// </summary>
     public const int MaxSubjectKeyLength = 512;
 
@@ -191,26 +195,13 @@ public class WorkQueue : IModel
     /// Creates a new WorkQueue entry with Queued status.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// <see cref="CreateWorkQueue.SubjectKey"/> is empty, or longer than
-    /// <see cref="MaxSubjectKeyLength"/>.
+    /// <see cref="CreateWorkQueue.SubjectKey"/> is empty or whitespace, contains an unpaired surrogate, or is longer than
+    /// <see cref="MaxSubjectKeyLength"/> characters.
     /// </exception>
     public static WorkQueue Create(CreateWorkQueue dto)
     {
-        // Empty is refused rather than treated as a subject: every entry carrying it would be
-        // serialized against every other, and it is almost always an unset identity.
-        if (dto.SubjectKey is { Length: 0 })
-            throw new ArgumentException(
-                "A subject key cannot be empty. Leave it null when the entry should not be "
-                    + "serialized.",
-                nameof(dto)
-            );
-
-        if (dto.SubjectKey is { Length: > MaxSubjectKeyLength })
-            throw new ArgumentException(
-                $"A subject key of {dto.SubjectKey.Length} characters is over the limit of "
-                    + $"{MaxSubjectKeyLength}. Use a record identity, or a hash of a longer one.",
-                nameof(dto)
-            );
+        if (dto.SubjectKey is { } key)
+            RefuseUnusableSubjectKey(key, nameof(dto));
 
         return new WorkQueue
         {
@@ -227,6 +218,47 @@ public class WorkQueue : IModel
             ConfirmedAt = dto.DeferPromotion ? null : DateTime.UtcNow,
             SubjectKey = dto.SubjectKey,
         };
+    }
+
+    // Empty or whitespace-only is refused rather than treated as a subject: every entry carrying
+    // it would be serialized against every other, and it is almost always an unset identity.
+    // Surrounding whitespace on a real key is kept, because the key is compared exactly.
+    private static void RefuseUnusableSubjectKey(string key, string paramName)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException(
+                "A subject key cannot be empty or whitespace. Leave it null when the entry should "
+                    + "not be serialized.",
+                paramName
+            );
+
+        // Counting UTF-16 units would refuse a key of 300 emoji, which is 300 characters to
+        // whoever wrote it. An unpaired surrogate is refused rather than counted: the database
+        // encodes the key as UTF-8, which has no encoding for half a character, so the insert
+        // would fail later and far from the caller.
+        var characters = 0;
+        for (var position = 0; position < key.Length; characters++)
+        {
+            if (
+                Rune.DecodeFromUtf16(key.AsSpan(position), out _, out var consumed)
+                != OperationStatus.Done
+            )
+                throw new ArgumentException(
+                    $"A subject key cannot contain an unpaired surrogate at position {position}. "
+                        + "It is half of a character, which cannot be stored; the key was likely "
+                        + "cut in the middle of one.",
+                    paramName
+                );
+
+            position += consumed;
+        }
+
+        if (characters > MaxSubjectKeyLength)
+            throw new ArgumentException(
+                $"A subject key of {characters} characters is over the limit of "
+                    + $"{MaxSubjectKeyLength}. Use a record identity, or a hash of a longer one.",
+                paramName
+            );
     }
 
     public override string ToString() =>
