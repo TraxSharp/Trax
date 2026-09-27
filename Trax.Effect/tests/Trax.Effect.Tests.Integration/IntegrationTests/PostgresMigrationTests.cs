@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Trax.Effect.Data.Postgres.Utils;
+using Trax.Effect.Tests.Integration.Fixtures;
 
 namespace Trax.Effect.Tests.Integration.IntegrationTests;
 
@@ -32,7 +33,9 @@ public class PostgresMigrationTests
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
 
-        return configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!;
+        return TestPostgres.WithPort(
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+        );
     }
 
     [Test]

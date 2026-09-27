@@ -12,6 +12,7 @@ using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.Services.EffectRegistry;
+using Trax.Effect.Tests.Integration.Fixtures;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Configuration;
 
@@ -288,7 +289,7 @@ public class SaneDefaultsTests
         services.AddLogging();
 
         var connectionString =
-            "Host=localhost;Port=5432;Database=trax_data_tests;Username=trax;Password=trax123";
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_data_tests;Username=trax;Password=trax123";
         Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects? captured = null;
 
         services.AddTrax(trax =>
@@ -323,7 +324,7 @@ public class SaneDefaultsTests
         services.AddLogging();
 
         var connectionString =
-            "Host=localhost;Port=5432;Database=trax_data_tests;Username=trax;Password=trax123";
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax_data_tests;Username=trax;Password=trax123";
         Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects? captured = null;
 
         services.AddTrax(trax =>

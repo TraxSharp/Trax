@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 using PostgresMigrator = Trax.Effect.Data.Postgres.Utils.DatabaseMigrator;
 using SqliteMigrator = Trax.Effect.Data.Sqlite.Utils.DatabaseMigrator;
 
@@ -21,8 +22,8 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 [Property("adr", "docs/adr/0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md")]
 public class MigrationSchemaTests
 {
-    private const string Maintenance =
-        "Host=localhost;Port=5432;Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
+    private static readonly string Maintenance =
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
 
     private static Snapshot Sample() =>
         new()
@@ -42,7 +43,7 @@ public class MigrationSchemaTests
     {
         const string db = "trax_statemachine_migration_it";
         var conn =
-            $"Host=localhost;Port=5432;Username=trax;Password=trax123;Database={db};Include Error Detail=true";
+            $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={db};Include Error Detail=true";
 
         await CreatePostgresDatabase(db);
         try

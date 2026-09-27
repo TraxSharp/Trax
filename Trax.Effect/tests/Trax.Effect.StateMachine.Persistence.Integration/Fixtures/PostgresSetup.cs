@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 
 // This SetUpFixture lives in the ROOT test namespace on purpose: a SetUpFixture only wraps its own
 // namespace and descendants, never its parent. Placed in a child namespace (e.g. `.Fixtures`) that holds
@@ -19,12 +20,12 @@ public class PostgresSetup
     // Connect to the always-present `postgres` maintenance database to create/drop the throwaway one. The
     // local docker-compose and the CI Postgres service disagree on which app databases exist, but every
     // Postgres has `postgres`.
-    private const string Maintenance =
-        "Host=localhost;Port=5432;Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
+    private static readonly string Maintenance =
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
     private const string Database = "trax_statemachine_it";
 
     public static string ConnectionString { get; } =
-        $"Host=localhost;Port=5432;Username=trax;Password=trax123;Database={Database};Include Error Detail=true;Maximum Pool Size=40";
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={Database};Include Error Detail=true;Maximum Pool Size=40";
 
     [OneTimeSetUp]
     public async Task Up()
