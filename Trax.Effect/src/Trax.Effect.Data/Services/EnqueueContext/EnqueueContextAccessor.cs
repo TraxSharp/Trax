@@ -28,6 +28,15 @@ public class EnqueueContextAccessor : IEnqueueContextAccessor
         return new Scope(outer);
     }
 
+    /// <inheritdoc />
+    public IDisposable Suppress()
+    {
+        var outer = _current.Value;
+        _current.Value = null;
+
+        return new Scope(outer);
+    }
+
     private sealed class Scope(IDataContext? outer) : IDisposable
     {
         public void Dispose() => _current.Value = outer;

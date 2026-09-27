@@ -46,4 +46,16 @@ public interface IEnqueueContextAccessor
     /// framework's enqueue path; consumers read <see cref="Current"/>.
     /// </summary>
     IDisposable Enter(IDataContext context);
+
+    /// <summary>
+    /// Makes <see cref="Current"/> null for the current async flow until the returned scope is
+    /// disposed, which restores whatever was current before. The enqueue path calls it around the
+    /// <c>OnQueue</c> hook of a train that defers promotion: that hook has no enqueue transaction to
+    /// join, even when the enqueue that runs it was started from inside another train's hook.
+    /// </summary>
+    /// <remarks>
+    /// Like <see cref="Enter"/>, it affects only the async flow that calls it and the work that flow
+    /// goes on to start. A concurrent enqueue on the same scope keeps its own context.
+    /// </remarks>
+    IDisposable Suppress();
 }

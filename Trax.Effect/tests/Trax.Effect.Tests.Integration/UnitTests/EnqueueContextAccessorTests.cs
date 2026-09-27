@@ -153,4 +153,159 @@ public class EnqueueContextAccessorTests
         act.Should().NotThrow();
         accessor.Current.Should().BeNull();
     }
+
+    [Test]
+    public void Suppressing_hides_the_context_and_disposing_restores_it()
+    {
+        var accessor = new EnqueueContextAccessor();
+        var context = AContext();
+
+        using (accessor.Enter(context))
+        {
+            using (accessor.Suppress())
+                accessor
+                    .Current.Should()
+                    .BeNull(
+                        "a deferring train's hook runs after its entry is committed, so it has no "
+                            + "enqueue transaction to join even when it was started from inside one"
+                    );
+
+            accessor.Current.Should().BeSameAs(context);
+        }
+
+        accessor.Current.Should().BeNull();
+    }
+
+    [Test]
+    public void Suppressing_outside_an_enqueue_leaves_the_context_null()
+    {
+        var accessor = new EnqueueContextAccessor();
+
+        using (accessor.Suppress())
+            accessor.Current.Should().BeNull();
+
+        accessor.Current.Should().BeNull();
+    }
+
+    [Test]
+    public void An_enqueue_inside_a_suppressed_scope_sees_its_own_context_and_hands_back_null()
+    {
+        var accessor = new EnqueueContextAccessor();
+        var outer = AContext();
+        var inner = AContext();
+
+        using (accessor.Enter(outer))
+        {
+            using (accessor.Suppress())
+            {
+                using (accessor.Enter(inner))
+                    accessor.Current.Should().BeSameAs(inner);
+
+                accessor.Current.Should().BeNull();
+
+                using (accessor.Suppress())
+                    accessor.Current.Should().BeNull();
+
+                accessor.Current.Should().BeNull();
+            }
+
+            accessor.Current.Should().BeSameAs(outer);
+        }
+    }
+
+    [Test]
+    public void Disposing_a_suppression_twice_is_harmless()
+    {
+        var accessor = new EnqueueContextAccessor();
+        var context = AContext();
+
+        using (accessor.Enter(context))
+        {
+            var suppression = accessor.Suppress();
+            suppression.Dispose();
+            var act = () => suppression.Dispose();
+
+            act.Should().NotThrow();
+            accessor.Current.Should().BeSameAs(context);
+        }
+    }
+
+    [Test]
+    public async Task A_suppression_flows_into_awaited_work_and_not_back_to_the_caller()
+    {
+        var accessor = new EnqueueContextAccessor();
+        var context = AContext();
+
+        async Task<IDataContext?> SuppressedHook()
+        {
+            using (accessor.Suppress())
+            {
+                await Task.Yield();
+                return await Task.Run(() => accessor.Current);
+            }
+        }
+
+        async Task<IDataContext?> SuppressWithoutDisposing()
+        {
+            accessor.Suppress();
+            await Task.Yield();
+            return accessor.Current;
+        }
+
+        using (accessor.Enter(context))
+        {
+            (await SuppressedHook())
+                .Should()
+                .BeNull("the suppression holds across awaits and into work the hook starts");
+
+            (await SuppressWithoutDisposing()).Should().BeNull();
+
+            accessor
+                .Current.Should()
+                .BeSameAs(
+                    context,
+                    "a value set inside an async method flows down into its awaits, never back up "
+                        + "to the caller"
+                );
+        }
+    }
+
+    [Test]
+    public async Task A_suppression_on_one_flow_does_not_hide_the_context_from_another()
+    {
+        var accessor = new EnqueueContextAccessor();
+        var context = AContext();
+        var suppressed = new TaskCompletionSource();
+        var observed = new TaskCompletionSource();
+
+        using (accessor.Enter(context))
+        {
+            var suppressing = Task.Run(async () =>
+            {
+                using (accessor.Suppress())
+                {
+                    suppressed.SetResult();
+                    await observed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                    return accessor.Current;
+                }
+            });
+
+            var reading = Task.Run(async () =>
+            {
+                await suppressed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                var seen = accessor.Current;
+                observed.SetResult();
+                return seen;
+            });
+
+            (await suppressing).Should().BeNull();
+            (await reading)
+                .Should()
+                .BeSameAs(
+                    context,
+                    "a concurrent enqueue on the same scope keeps its own context while another "
+                        + "flow runs a deferring hook"
+                );
+        }
+    }
 }

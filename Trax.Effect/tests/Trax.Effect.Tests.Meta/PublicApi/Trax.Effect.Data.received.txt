@@ -242,11 +242,13 @@ namespace Trax.Effect.Data.Services.EnqueueContext
         public EnqueueContextAccessor() { }
         public Trax.Effect.Data.Services.DataContext.IDataContext? Current { get; }
         public System.IDisposable Enter(Trax.Effect.Data.Services.DataContext.IDataContext context) { }
+        public System.IDisposable Suppress() { }
     }
     public interface IEnqueueContextAccessor
     {
         Trax.Effect.Data.Services.DataContext.IDataContext? Current { get; }
         System.IDisposable Enter(Trax.Effect.Data.Services.DataContext.IDataContext context);
+        System.IDisposable Suppress();
     }
 }
 namespace Trax.Effect.Data.Services.FeatureDbConfigurator
