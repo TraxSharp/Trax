@@ -10,9 +10,6 @@ public partial class Monad<TInput, TReturn>
     {
         Type[] typeArray = [typeof(T1)];
 
-        if (service is null)
-            throw new Exception($"({service}) cannot be null");
-
         return AddServices([service], typeArray);
     }
 
@@ -20,13 +17,7 @@ public partial class Monad<TInput, TReturn>
     {
         Type[] typeArray = [typeof(T1), typeof(T2)];
 
-        if (service1 is null)
-            throw new Exception($"({service1}) cannot be null");
-
-        if (service2 is null)
-            throw new Exception($"({service2}) cannot be null");
-
-        object[] services = [service1, service2];
+        object?[] services = [service1, service2];
 
         return AddServices(services, typeArray);
     }
@@ -34,16 +25,8 @@ public partial class Monad<TInput, TReturn>
     public Monad<TInput, TReturn> AddServices<T1, T2, T3>(T1 service1, T2 service2, T3 service3)
     {
         Type[] typeArray = [typeof(T1), typeof(T2), typeof(T3)];
-        if (service1 is null)
-            throw new Exception($"({service1}) cannot be null");
 
-        if (service2 is null)
-            throw new Exception($"({service2}) cannot be null");
-
-        if (service3 is null)
-            throw new Exception($"({service3}) cannot be null");
-
-        object[] services = [service1, service2, service3];
+        object?[] services = [service1, service2, service3];
 
         return AddServices(services, typeArray);
     }
@@ -56,19 +39,8 @@ public partial class Monad<TInput, TReturn>
     )
     {
         Type[] typeArray = [typeof(T1), typeof(T2), typeof(T3), typeof(T4)];
-        if (service1 is null)
-            throw new Exception($"({service1}) cannot be null");
 
-        if (service2 is null)
-            throw new Exception($"({service2}) cannot be null");
-
-        if (service3 is null)
-            throw new Exception($"({service3}) cannot be null");
-
-        if (service4 is null)
-            throw new Exception($"({service4}) cannot be null");
-
-        object[] services = [service1, service2, service3, service4];
+        object?[] services = [service1, service2, service3, service4];
 
         return AddServices(services, typeArray);
     }
@@ -82,22 +54,8 @@ public partial class Monad<TInput, TReturn>
     )
     {
         Type[] typeArray = [typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5)];
-        if (service1 is null)
-            throw new Exception($"({service1}) cannot be null");
 
-        if (service2 is null)
-            throw new Exception($"({service2}) cannot be null");
-
-        if (service3 is null)
-            throw new Exception($"({service3}) cannot be null");
-
-        if (service4 is null)
-            throw new Exception($"({service4}) cannot be null");
-
-        if (service5 is null)
-            throw new Exception($"({service5}) cannot be null");
-
-        object[] services = [service1, service2, service3, service4, service5];
+        object?[] services = [service1, service2, service3, service4, service5];
 
         return AddServices(services, typeArray);
     }
@@ -112,25 +70,8 @@ public partial class Monad<TInput, TReturn>
     )
     {
         Type[] typeArray = [typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6)];
-        if (service1 is null)
-            throw new Exception($"({service1}) cannot be null");
 
-        if (service2 is null)
-            throw new Exception($"({service2}) cannot be null");
-
-        if (service3 is null)
-            throw new Exception($"({service3}) cannot be null");
-
-        if (service4 is null)
-            throw new Exception($"({service4}) cannot be null");
-
-        if (service5 is null)
-            throw new Exception($"({service5}) cannot be null");
-
-        if (service6 is null)
-            throw new Exception($"({service6}) cannot be null");
-
-        object[] services = [service1, service2, service3, service4, service5, service6];
+        object?[] services = [service1, service2, service3, service4, service5, service6];
 
         return AddServices(services, typeArray);
     }
@@ -155,28 +96,8 @@ public partial class Monad<TInput, TReturn>
             typeof(T6),
             typeof(T7),
         ];
-        if (service1 is null)
-            throw new Exception($"({service1}) cannot be null");
 
-        if (service2 is null)
-            throw new Exception($"({service2}) cannot be null");
-
-        if (service3 is null)
-            throw new Exception($"({service3}) cannot be null");
-
-        if (service4 is null)
-            throw new Exception($"({service4}) cannot be null");
-
-        if (service5 is null)
-            throw new Exception($"({service5}) cannot be null");
-
-        if (service6 is null)
-            throw new Exception($"({service6}) cannot be null");
-
-        if (service7 is null)
-            throw new Exception($"({service7}) cannot be null");
-
-        object[] services = [service1, service2, service3, service4, service5, service6, service7];
+        object?[] services = [service1, service2, service3, service4, service5, service6, service7];
 
         return AddServices(services, typeArray);
     }
@@ -184,14 +105,24 @@ public partial class Monad<TInput, TReturn>
     /// <summary>
     /// Internal method that adds services to the chain's memory.
     /// </summary>
-    internal Monad<TInput, TReturn> AddServices(object[] services, Type[] typeArray)
+    /// <remarks>
+    /// A null service is refused while a chain is recorded and throws when it runs. Either way
+    /// the argument has to exist when <c>Junctions()</c> runs: a field assigned later, in a
+    /// lifecycle hook say, is still null when the chain is read at startup.
+    /// </remarks>
+    internal Monad<TInput, TReturn> AddServices(object?[] services, Type[] typeArray)
     {
         if (Recorder is not null)
         {
             // Each service lands in Memory under the interface it was passed as, so that is the
             // type the rest of the chain can find.
-            foreach (var serviceType in typeArray)
+            for (var i = 0; i < typeArray.Length; i++)
             {
+                var serviceType = typeArray[i];
+
+                if (services[i] is null)
+                    Recorder.Refuse(NullServiceMessage(serviceType, whileRecording: true));
+
                 // A value is stored under an interface it implements; the runtime refuses a
                 // class on every run.
                 if (!serviceType.IsInterface)
@@ -206,7 +137,11 @@ public partial class Monad<TInput, TReturn>
             return this;
         }
 
-        foreach (var service in services)
+        for (var i = 0; i < typeArray.Length; i++)
+            if (services[i] is null)
+                throw new Exception(NullServiceMessage(typeArray[i], whileRecording: false));
+
+        foreach (var service in services.OfType<object>())
         {
             var serviceType = service.GetType();
 
@@ -246,4 +181,11 @@ public partial class Monad<TInput, TReturn>
 
         return this;
     }
+
+    private static string NullServiceMessage(Type serviceType, bool whileRecording) =>
+        whileRecording
+            ? $"AddServices<{serviceType.Name}> received null while the chain was being recorded. "
+                + "A service cannot be null, and the argument must be available when Junctions() "
+                + "runs; assigning it later, in OnStarted say, is not supported."
+            : $"AddServices<{serviceType.Name}> received null. A service cannot be null.";
 }

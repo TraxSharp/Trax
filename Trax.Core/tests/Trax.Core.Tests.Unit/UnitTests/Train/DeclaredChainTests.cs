@@ -192,6 +192,28 @@ public class DeclaredChainTests : TestSetup
             .Contain("names a class");
 
     [Test]
+    public void DeclaredChain_AddServicesOfNull_IsRefusedAndSaysTheServiceWasNotYetAvailable()
+    {
+        var read = () => new ServiceAssignedLaterTrain().DeclaredChain();
+
+        read.Should().NotThrow("a null service is a fault in the chain, not an unreadable chain");
+
+        var refusal = read().Refusals.Should().ContainSingle().Which;
+        refusal.Should().Contain("AddServices<ICounter> received null");
+        refusal.Should().Contain("while the chain was being recorded");
+        refusal.Should().Contain("when Junctions() runs");
+    }
+
+    [Test]
+    public void DeclaredChain_AddServicesOfNull_StillRecordsTheDeclaredType()
+    {
+        var chain = new ServiceAssignedLaterTrain().DeclaredChain();
+
+        chain.Steps[0].Should().Be(new ChainStep(ChainStepKind.Seed, null, null, typeof(ICounter)));
+        chain.Steps.Select(s => s.Kind).Should().EndWith(ChainStepKind.Resolve);
+    }
+
+    [Test]
     public void DeclaredChain_AChainBuiltOnAFreshMonad_IsRecordedNotRun()
     {
         CountingJunction.Runs = 0;
@@ -387,6 +409,15 @@ public class DeclaredChainTests : TestSetup
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<StringLength, string, int>().Chain<IntToBool, int, bool>().Resolve();
+    }
+
+    private class ServiceAssignedLaterTrain : Train<string, bool>
+    {
+        // Assigned after the chain is declared, as a lifecycle hook would.
+        private readonly ICounter? _counter = null;
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            AddServices(_counter).Chain<StringLength>().Chain<IntToBool>().Resolve();
     }
 
     private class SeedingTrain : Train<string, bool>

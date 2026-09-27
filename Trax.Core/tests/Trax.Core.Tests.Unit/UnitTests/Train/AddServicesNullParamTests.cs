@@ -17,6 +17,16 @@ public class AddServicesNullParamTests : TestSetup
     }
 
     [Test]
+    public void AddServices_T1_NullService_NamesTheServiceType()
+    {
+        var monad = new TestTrain().Activate(0);
+
+        Action act = () => monad.AddServices<ITestService1>(null!);
+
+        act.Should().Throw<Exception>().WithMessage("AddServices<ITestService1> received null*");
+    }
+
+    [Test]
     public void AddServices_T2_NullSecond_Throws()
     {
         var monad = new TestTrain().Activate(0);
