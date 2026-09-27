@@ -102,6 +102,46 @@ public class GenerateCommandTests
     }
 
     [Test]
+    public void Handle_SchemaWithAnInvalidName_ReportsTheNameAndReturns1()
+    {
+        var schema = new FileInfo(
+            Path.Combine(
+                TestContext.CurrentContext.TestDirectory,
+                "Fixtures",
+                "InvalidSchemas",
+                "invalid-tag.json"
+            )
+        );
+        var output = new DirectoryInfo(Path.Combine(_tempDir, "out"));
+
+        var exitCode = 0;
+        var stderr = CaptureStderr(() =>
+            exitCode = GenerateCommand.Handle(schema, output, "Proj", null, false)
+        );
+
+        exitCode.Should().Be(1);
+        stderr.Should().Contain("group of operation 'ListPlayers'");
+        stderr.Should().NotContain(" at Trax.Cli", "the refusal is a message, not a stack trace");
+        output.Exists.Should().BeFalse();
+    }
+
+    [Test]
+    public void Invoke_WhenHandleFails_ReturnsExitCode1()
+    {
+        var command = GenerateCommand.Create();
+        var schemaPath = Path.Combine(_tempDir, "no-such-file.graphql");
+
+        var exitCode = 0;
+        CaptureStderr(() =>
+            exitCode = command
+                .Parse(new[] { "--schema", schemaPath, "--output", _tempDir + "/o", "--name", "P" })
+                .Invoke()
+        );
+
+        exitCode.Should().Be(1, "Program returns this value as the process exit code");
+    }
+
+    [Test]
     public void Handle_HappyPathGraphQL_ParsesAndGenerates()
     {
         if (!IsTraxHubTemplateInstalled())

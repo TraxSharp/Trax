@@ -1,6 +1,7 @@
 using System.Reflection;
 using Scriban;
 using Scriban.Runtime;
+using Trax.Cli.Generator;
 
 namespace Trax.Cli.Machines;
 
@@ -47,6 +48,18 @@ internal static class MachineScaffolder
             );
 
         var pascal = Pascal(Kebab(name));
+        // The name becomes type names and the machine id literal, the namespace a declaration.
+        if (!SchemaNames.IsIdentifier(pascal))
+            throw new InvalidOperationException(
+                $"The machine name '{name}' does not make a C# identifier: use letters, digits, "
+                    + "'-', '_' or spaces, starting with a letter, e.g. 'write-to-congress'."
+            );
+        if (!SchemaNames.IsDottedIdentifier(@namespace))
+            throw new InvalidOperationException(
+                $"The namespace '{@namespace}' is not a C# namespace: use identifiers matching "
+                    + $"{SchemaNames.Pattern} joined by dots."
+            );
+
         Directory.CreateDirectory(outputDir);
         var path = Path.Combine(outputDir, $"{pascal}Machine.cs");
         if (File.Exists(path) && !force)

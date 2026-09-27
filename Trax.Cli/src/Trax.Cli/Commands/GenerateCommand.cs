@@ -56,13 +56,15 @@ public static class GenerateCommand
             var type = parseResult.GetValue(typeOption);
             var force = parseResult.GetValue(forceOption);
 
-            Handle(schema, output, name, type, force);
+            return Handle(schema, output, name, type, force);
         });
 
         return command;
     }
 
-    internal static void Handle(
+    // Returns the exit code as well as setting Environment.ExitCode: Program returns InvokeAsync's
+    // result, which wins over Environment.ExitCode, so an action that only set it exited 0.
+    internal static int Handle(
         FileInfo schema,
         DirectoryInfo output,
         string name,
@@ -75,15 +77,13 @@ public static class GenerateCommand
             Console.Error.WriteLine(
                 "The 'dotnet' CLI is not available. Please install the .NET SDK."
             );
-            Environment.ExitCode = 1;
-            return;
+            return Fail();
         }
 
         if (!schema.Exists)
         {
             Console.Error.WriteLine($"Schema file not found: {schema.FullName}");
-            Environment.ExitCode = 1;
-            return;
+            return Fail();
         }
 
         if (output.Exists && !force)
@@ -91,8 +91,7 @@ public static class GenerateCommand
             Console.Error.WriteLine(
                 $"Output directory already exists: {output.FullName}. Use --force to overwrite."
             );
-            Environment.ExitCode = 1;
-            return;
+            return Fail();
         }
 
         var schemaType = SchemaDetector.Detect(schema.FullName, type);
@@ -104,16 +103,24 @@ public static class GenerateCommand
             _ => throw new InvalidOperationException($"Unsupported schema type: {schemaType}"),
         };
 
-        var apiSchema = parser.Parse(schema.FullName);
+        try
+        {
+            var apiSchema = parser.Parse(schema.FullName);
 
-        Console.WriteLine(
-            $"Parsed {apiSchema.Operations.Count} operations, "
-                + $"{apiSchema.Types.Count} types, "
-                + $"{apiSchema.Enums.Count} enums from {schemaType} schema."
-        );
+            Console.WriteLine(
+                $"Parsed {apiSchema.Operations.Count} operations, "
+                    + $"{apiSchema.Types.Count} types, "
+                    + $"{apiSchema.Enums.Count} enums from {schemaType} schema."
+            );
 
-        var generator = new TraxProjectGenerator();
-        generator.Generate(apiSchema, output.FullName, name, force);
+            var generator = new TraxProjectGenerator();
+            generator.Generate(apiSchema, output.FullName, name, force);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return Fail();
+        }
 
         Console.WriteLine($"Generated Trax project at: {output.FullName}");
         Console.WriteLine($"  {name}.Hub/     — Hub project (API + Scheduler + Dashboard)");
@@ -124,5 +131,12 @@ public static class GenerateCommand
         Console.WriteLine("  dotnet restore");
         Console.WriteLine("  # Fill in junction implementations (search for TODO)");
         Console.WriteLine("  dotnet run");
+        return 0;
+    }
+
+    private static int Fail()
+    {
+        Environment.ExitCode = 1;
+        return 1;
     }
 }

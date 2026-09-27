@@ -1,0 +1,23 @@
+type Query {
+  "Reads a player. \\\"); } } namespace Extra { public static class Emitted { } } //"
+  getPlayer(
+    "An id.\n} public static class EmittedFromArgument { } //"
+    id: ID!
+  ): Player
+}
+
+type Player {
+  "Has a quote \" a backslash \\ and markup </summary><c>&"
+  name: String!
+  color: Color
+}
+
+"""
+The palette.
+} public static class EmittedFromEnum { } //
+"""
+enum Color {
+  RED
+  GREEN
+  class
+}

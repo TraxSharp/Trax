@@ -119,6 +119,27 @@ public class MachineScaffolderTests
         write.Should().Throw<InvalidOperationException>().WithMessage("*name is required*");
     }
 
+    [TestCase("check\"out")]
+    [TestCase("check.out")]
+    [TestCase("1checkout")]
+    public void Write_rejects_a_name_that_does_not_make_an_identifier(string name)
+    {
+        var write = () => MachineScaffolder.Write(name, _dir, "MyApp", false, false);
+
+        write.Should().Throw<InvalidOperationException>().WithMessage("*machine name*");
+        Directory.EnumerateFiles(_dir).Should().BeEmpty();
+    }
+
+    [TestCase("My App")]
+    [TestCase("MyApp;")]
+    [TestCase("MyApp.")]
+    public void Write_rejects_a_namespace_that_is_not_a_dotted_identifier(string @namespace)
+    {
+        var write = () => MachineScaffolder.Write("checkout", _dir, @namespace, false, false);
+
+        write.Should().Throw<InvalidOperationException>().WithMessage("*namespace*");
+    }
+
     [Test]
     public void The_scaffold_compiles_against_the_real_engine_without_an_effect()
     {

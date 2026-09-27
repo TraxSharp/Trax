@@ -12,7 +12,7 @@ using {{ Namespace }}.Junctions;
 namespace {{ Namespace }};
 
 /// <summary>
-/// {{ Description }}
+/// {{ DocDescription }}
 /// </summary>
 [{{ Attribute }}({{ if GraphQLNamespace }}Namespace = GraphQLNamespaces.{{ GraphQLNamespace }}, {{ end }}Description = "{{ Description }}")]
 // Exposed anonymously so the scaffold runs out of the box. Swap for

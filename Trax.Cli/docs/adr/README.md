@@ -37,10 +37,11 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | Area | ADRs |
 | --- | --- |
 | `platform` | [0001](./0001-the-machine-toolchain-is-half-in-process.md) |
-| `tooling` | [0001](./0001-the-machine-toolchain-is-half-in-process.md) |
+| `tooling` | [0001](./0001-the-machine-toolchain-is-half-in-process.md), [0002](./0002-generated-code-refuses-a-schema-name-it-cannot-emit.md) |
 
 ## All of them
 
 | # | Decision | Areas |
 | --- | --- | --- |
 | [0001](./0001-the-machine-toolchain-is-half-in-process.md) | The machine toolchain runs C# in process and TypeScript by shelling to node | tooling, platform |
+| [0002](./0002-generated-code-refuses-a-schema-name-it-cannot-emit.md) | Generated code refuses a schema name it cannot emit, rather than rewriting it | tooling |

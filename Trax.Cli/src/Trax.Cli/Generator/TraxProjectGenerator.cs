@@ -9,6 +9,9 @@ public class TraxProjectGenerator
 
     public void Generate(ApiSchema schema, string outputDir, string projectName, bool force)
     {
+        // Before the output directory is touched, so a refused schema deletes nothing.
+        SchemaNames.Validate(schema, projectName);
+
         if (Directory.Exists(outputDir))
         {
             if (!force)
@@ -39,6 +42,8 @@ public class TraxProjectGenerator
 
     internal void GenerateTrainsLibrary(ApiSchema schema, string trainsDir, string projectName)
     {
+        SchemaNames.Validate(schema, projectName);
+
         var trainsProjectName = $"{projectName}.Trains";
         Directory.CreateDirectory(trainsDir);
 

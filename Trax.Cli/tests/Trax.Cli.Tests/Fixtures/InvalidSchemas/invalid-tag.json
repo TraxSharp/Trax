@@ -1,0 +1,13 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "InvalidTag", "version": "v1" },
+  "paths": {
+    "/players": {
+      "get": {
+        "tags": ["../../outside"],
+        "operationId": "listPlayers",
+        "responses": { "204": { "description": "No content" } }
+      }
+    }
+  }
+}

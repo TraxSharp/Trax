@@ -46,6 +46,7 @@ public class CodeRenderer
         var isUnit = IsUnitOutput(operation.OutputType);
         var ns = $"{projectName}.Trains.{operation.Group}.{operation.Name}";
         var attribute = operation.Kind == OperationKind.Query ? "TraxQuery" : "TraxMutation";
+        var description = operation.Description ?? $"{operation.Name} operation";
         var outputName = isUnit ? "Unit" : QualifyIfCollides(operation.OutputType.Name, operation);
         return Render(
             "TrainImplementation",
@@ -58,9 +59,8 @@ public class CodeRenderer
                 OutputIsUnit = isUnit,
                 InputIsUnit = false,
                 Attribute = attribute,
-                Description = SanitizeDescription(
-                    operation.Description ?? $"{operation.Name} operation"
-                ),
+                DocDescription = GeneratedText.DocComment(description),
+                Description = GeneratedText.StringLiteralContent(description),
                 ModelsUsing = _modelsNamespace,
                 GraphQLNamespace = operation.Group,
                 TrainsNamespace = $"{projectName}.Trains",
@@ -115,8 +115,12 @@ public class CodeRenderer
                 OutputTypeName = outputName,
                 OutputIsUnit = isUnit,
                 InputIsUnit = false,
-                HttpMethod = operation.HttpMethod,
-                HttpPath = operation.HttpPath,
+                HttpMethod = operation.HttpMethod is null
+                    ? null
+                    : GeneratedText.Comment(operation.HttpMethod),
+                HttpPath = operation.HttpPath is null
+                    ? null
+                    : GeneratedText.Comment(operation.HttpPath),
                 ModelsUsing = _modelsNamespace,
             }
         );
@@ -146,8 +150,10 @@ public class CodeRenderer
             {
                 Namespace = $"{projectName}.Trains.Models",
                 EnumName = apiEnum.Name,
-                Values = apiEnum.Values,
-                Description = apiEnum.Description,
+                Values = apiEnum.Values.Select(NamingConventions.SanitizeIdentifier).ToList(),
+                Description = apiEnum.Description is null
+                    ? null
+                    : GeneratedText.DocComment(apiEnum.Description),
             }
         );
     }
@@ -222,15 +228,12 @@ public class CodeRenderer
             ["IsRequired"] = field.IsRequired,
             ["IsNullable"] = field.IsNullable,
             ["Description"] =
-                field.Description != null ? SanitizeDescription(field.Description) : null,
+                field.Description != null ? GeneratedText.DocComment(field.Description) : null,
             ["RequiredKeyword"] = field.IsRequired ? "required " : "",
             ["NullableMarker"] = field.IsNullable && !field.TypeName.EndsWith('?') ? "?" : "",
         };
         return obj;
     }
-
-    private static string SanitizeDescription(string description) =>
-        description.ReplaceLineEndings(" ").Replace("\"", "\\\"");
 
     /// <summary>
     /// Qualifies a type name with the full models namespace if it collides with
