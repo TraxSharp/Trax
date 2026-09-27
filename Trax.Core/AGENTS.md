@@ -19,6 +19,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | --- | --- |
 | the analyzer, or a new diagnostic | [0001](./docs/adr/0001-chain-composition-errors-are-compile-time.md), deprecated: it checks no chain that can be written today |
 | `Train.Junctions()`, `DeclaredChain()`, the chain recorder or `ChainVerification` | central `docs/0016`, a chain is a declaration, and the replay has to mirror how the runtime stores and finds values |
+| `Train.NewMonad()` or `ChainRecordedException`, or narrowing anything that shipped public | [0002](./docs/adr/0002-a-shipped-seam-stays-public-and-hidden.md), both stay public and hidden because the published Trax.Effect overrides `NewMonad()` |
 | `FailureClass`, or how a junction carries a failure's class in `TrainExceptionData` | central `docs/0020`, a failure is classified where it happens and the answer is carried |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose

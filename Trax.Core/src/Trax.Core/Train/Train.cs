@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text.Json.Serialization;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
@@ -91,6 +92,14 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// the train itself, such as a <c>ServiceTrain</c> supplying the container that resolves
     /// junctions.
     /// </summary>
+    /// <remarks>
+    /// The seam <c>ServiceTrain</c> uses, not a consumer extension point:
+    /// <see cref="Monad{TInput, TReturn}"/> has no public constructor, so an override outside Trax
+    /// can only return a monad a base implementation built. It stays <c>protected</c> because the published Trax.Effect overrides it as
+    /// <c>protected override</c>, and narrowing it would make every <c>ServiceTrain</c> fail to
+    /// load against a newer Trax.Core (docs/adr/0002).
+    /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     protected virtual Monad<TInput, TReturn> NewMonad() => new(this, CancellationToken);
 
     /// <summary>

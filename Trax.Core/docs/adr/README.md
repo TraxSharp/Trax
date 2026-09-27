@@ -37,10 +37,12 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 
 | Area | ADRs |
 | --- | --- |
-| `platform` | [0001](./0001-chain-composition-errors-are-compile-time.md) |
+| `platform` | [0001](./0001-chain-composition-errors-are-compile-time.md), [0002](./0002-a-shipped-seam-stays-public-and-hidden.md) |
+| `packaging` | [0002](./0002-a-shipped-seam-stays-public-and-hidden.md) |
 
 ## All of them
 
 | # | Decision | Areas |
 | --- | --- | --- |
 | [0001](./0001-chain-composition-errors-are-compile-time.md) | A mis-composed chain does not compile | platform |
+| [0002](./0002-a-shipped-seam-stays-public-and-hidden.md) | A shipped seam stays public, and is hidden rather than narrowed | platform, packaging |
