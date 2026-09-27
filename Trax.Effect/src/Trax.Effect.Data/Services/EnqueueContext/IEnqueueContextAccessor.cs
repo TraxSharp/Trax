@@ -16,9 +16,11 @@ namespace Trax.Effect.Data.Services.EnqueueContext;
 /// deferral exists for hooks that write elsewhere.
 /// </para>
 /// <para>
-/// The value flows with the async call. Concurrent enqueues on one scope each see their own, and
-/// an enqueue started from inside a hook sees its own context, in its own transaction, until it
-/// returns.
+/// The value flows with the async call, so concurrent enqueues on one scope each see their own.
+/// An enqueue started from inside a hook joins the enqueue it runs inside: Trax.Mediator writes
+/// its entry on the outer enqueue's context and transaction, so it commits or rolls back with the
+/// outer one (Trax.Mediator docs/adr/0003). Only where there is no open outer transaction to join,
+/// such as inside a deferring train's hook, does it commit on a context of its own.
 /// </para>
 /// <para>
 /// Writes tracked on <see cref="Current"/> are saved and committed by the enqueue, so a hook that
