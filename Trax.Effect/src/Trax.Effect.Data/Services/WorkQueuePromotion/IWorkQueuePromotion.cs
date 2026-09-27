@@ -22,7 +22,9 @@ public interface IWorkQueuePromotion
 
     /// <summary>
     /// Cancels every queued entry left unconfirmed for longer than <paramref name="olderThan"/>
-    /// and returns how many were cancelled.
+    /// and returns how many were cancelled. Also deletes the unconfirmed entries an earlier
+    /// call cancelled, once they are older than <paramref name="olderThan"/> plus a 30-day
+    /// retention.
     /// </summary>
     /// <remarks>
     /// The safe default, because a stranded entry is ambiguous. The process may have died after
@@ -30,6 +32,15 @@ public interface IWorkQueuePromotion
     /// Nothing recorded tells these apart, and only the first is a mutation that was accepted.
     /// Cancelling keeps the entry visible, so the side-effect a hook may have left can be found
     /// and reconciled.
+    ///
+    /// <para>Visible for the retention, not forever. A cancelled staged entry never ran, so it has
+    /// no metadata for metadata cleanup to remove it with, and without the delete it would stay in
+    /// the table for good. The delete lives here, despite the name, so the scheduler's existing
+    /// sweep does it with no change on its side. It runs before this call cancels anything, so an
+    /// entry is never cancelled and deleted by the same call. The retention counts from
+    /// <c>created_at</c>, because nothing records when an entry was cancelled; a sweep that has
+    /// not run for longer than the retention deletes what it cancelled on its next call. The
+    /// returned count does not include deleted entries.</para>
     /// </remarks>
     Task<int> CancelStaleAsync(TimeSpan olderThan, CancellationToken cancellationToken);
 

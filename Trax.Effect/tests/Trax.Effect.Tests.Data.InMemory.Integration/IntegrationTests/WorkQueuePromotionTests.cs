@@ -114,6 +114,99 @@ public class WorkQueuePromotionTests : TestSetup
             .BeNull("an operator cancelled it, and confirming it would revive it");
     }
 
+    [Test]
+    public async Task The_stale_sweep_deletes_what_an_earlier_pass_cancelled_once_past_the_retention()
+    {
+        // Retention is 30 days from creation. Rows are aged rather than a clock advanced: the
+        // sweep reads DateTime.UtcNow, and created_at is what it measures from.
+        var run = Guid.NewGuid().ToString("N");
+        await StageMany($"Staged.Expired.{run}", 50, age: TimeSpan.FromDays(31));
+        await StageMany($"Staged.Fresh.{run}", 50, age: TimeSpan.FromHours(1));
+        await StageMany(
+            $"Staged.OperatorCancelled.{run}",
+            1,
+            age: TimeSpan.FromDays(31),
+            status: WorkQueueStatus.Cancelled,
+            confirmed: true
+        );
+
+        var firstPass = await Promotion.CancelStaleAsync(
+            TimeSpan.FromMinutes(10),
+            CancellationToken.None
+        );
+
+        firstPass.Should().BeGreaterThanOrEqualTo(100);
+        (await CountByStatus($"Staged.Expired.{run}"))
+            .Should()
+            .Equal(
+                new Dictionary<WorkQueueStatus, int> { [WorkQueueStatus.Cancelled] = 50 },
+                "an entry is deleted only on a pass after the one that cancelled it, so a sweep "
+                    + "that ran late does not cancel and delete in one step"
+            );
+
+        await Promotion.CancelStaleAsync(TimeSpan.FromMinutes(10), CancellationToken.None);
+
+        (await CountByStatus($"Staged.Expired.{run}"))
+            .Should()
+            .BeEmpty("a cancelled staged entry past the retention is deleted by the next sweep");
+        (await CountByStatus($"Staged.Fresh.{run}"))
+            .Should()
+            .Equal(
+                new Dictionary<WorkQueueStatus, int> { [WorkQueueStatus.Cancelled] = 50 },
+                "a cancelled staged entry inside the retention is the record of an enqueue that "
+                    + "vanished, kept so its side-effect can be reconciled"
+            );
+        (await CountByStatus($"Staged.OperatorCancelled.{run}"))
+            .Should()
+            .Equal(
+                new Dictionary<WorkQueueStatus, int> { [WorkQueueStatus.Cancelled] = 1 },
+                "a confirmed entry an operator cancelled was never staged, and is left alone"
+            );
+    }
+
+    private async Task StageMany(
+        string trainName,
+        int count,
+        TimeSpan age,
+        WorkQueueStatus status = WorkQueueStatus.Queued,
+        bool confirmed = false
+    )
+    {
+        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+
+        for (var i = 0; i < count; i++)
+        {
+            var entry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = trainName,
+                    InputTypeName = "Staged.Input",
+                    DeferPromotion = true,
+                }
+            );
+            entry.CreatedAt = DateTime.UtcNow - age;
+            entry.Status = status;
+            if (confirmed)
+                entry.ConfirmedAt = entry.CreatedAt;
+            await context.Track(entry);
+        }
+
+        await context.SaveChanges(CancellationToken.None);
+    }
+
+    private async Task<Dictionary<WorkQueueStatus, int>> CountByStatus(string trainName)
+    {
+        using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+
+        var statuses = await context
+            .WorkQueues.AsNoTracking()
+            .Where(w => w.TrainName == trainName)
+            .Select(w => w.Status)
+            .ToListAsync();
+
+        return statuses.GroupBy(s => s).ToDictionary(g => g.Key, g => g.Count());
+    }
+
     private async Task<long> Stage(
         TimeSpan? age = null,
         WorkQueueStatus status = WorkQueueStatus.Queued,

@@ -25,10 +25,30 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
         return promoted > 0;
     }
 
+    /// <summary>
+    /// How long a staged entry the sweep cancelled is kept, counted from when it was created.
+    /// </summary>
+    /// <remarks>
+    /// The same as the scheduler's default dead-letter retention, the other record Trax keeps
+    /// for an operator to act on. A cancelled staged entry is the only record of which enqueue
+    /// vanished; the sweep logs a count, not the entries. Rows accrue only when a host dies
+    /// mid-enqueue, so keeping them this long costs next to nothing. See
+    /// docs/adr/0007-cancelled-staged-entries-are-deleted-after-a-retention.md.
+    /// </remarks>
+    internal static readonly TimeSpan CancelledStagedEntryRetention = TimeSpan.FromDays(30);
+
     /// <inheritdoc />
     public async Task<int> CancelStaleAsync(TimeSpan olderThan, CancellationToken cancellationToken)
     {
         using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Deleted before this pass cancels anything, so an entry is only ever deleted by a pass
+        // after the one that cancelled it, however late the sweep runs.
+        await DeleteAsync(
+            context,
+            CancelledPastRetention(olderThan + CancelledStagedEntryRetention),
+            cancellationToken
+        );
 
         return await UpdateAsync(context, Stale(olderThan), confirm: false, cancellationToken);
     }
@@ -50,6 +70,43 @@ public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IW
 
         return w =>
             w.ConfirmedAt == null && w.Status == WorkQueueStatus.Queued && w.CreatedAt < cutoff;
+    }
+
+    /// <summary>
+    /// Staged entries that were cancelled before they were confirmed and are older than
+    /// <paramref name="olderThan"/>. That is what the sweep cancels, and also an entry an
+    /// operator cancelled while its hook ran; either way it never ran and has no metadata.
+    /// </summary>
+    private static Expression<Func<WorkQueue, bool>> CancelledPastRetention(TimeSpan olderThan)
+    {
+        var cutoff = DateTime.UtcNow - olderThan;
+
+        return w =>
+            w.ConfirmedAt == null
+            && w.Status == WorkQueueStatus.Cancelled
+            && w.MetadataId == null
+            && w.CreatedAt < cutoff;
+    }
+
+    /// <summary>
+    /// Deletes the matching entries in one statement where the provider can, and through change
+    /// tracking where it cannot, for the reason <see cref="UpdateAsync"/> gives.
+    /// </summary>
+    private static async Task<int> DeleteAsync(
+        IDataContext context,
+        Expression<Func<WorkQueue, bool>> match,
+        CancellationToken cancellationToken
+    )
+    {
+        if (context is DbContext db && db.Database.IsRelational())
+            return await context.WorkQueues.Where(match).ExecuteDeleteAsync(cancellationToken);
+
+        var entries = await context.WorkQueues.Where(match).ToListAsync(cancellationToken);
+
+        context.WorkQueues.RemoveRange(entries);
+        await context.SaveChanges(cancellationToken);
+
+        return entries.Count;
     }
 
     /// <summary>
