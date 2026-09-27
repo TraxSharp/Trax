@@ -248,6 +248,14 @@ public class TrainExecutionService(
                     + "null when the entry should not be serialized."
             );
 
+        // A key of only whitespace is refused for the same reason: it is just as surely an unset
+        // identity, and every train returning one would serialize against every other.
+        if (string.IsNullOrWhiteSpace(key))
+            throw new InvalidOperationException(
+                $"{registration.ServiceTypeName}.QueueSubjectKey returned a key that is only "
+                    + "whitespace. Return null when the entry should not be serialized."
+            );
+
         // The key is indexed. One too long for the index inserts fine while queued and then
         // fails the claim on every cycle, so it is refused here, where the caller sees it.
         if (key.Length > MaxSubjectKeyLength)

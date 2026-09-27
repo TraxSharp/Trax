@@ -130,6 +130,29 @@ public class SubjectKeyTests : TestSetup
         );
     }
 
+    [TestCase("   ")]
+    [TestCase("\t\r\n")]
+    [TestCase("\u00A0\u2003")]
+    public async Task A_whitespace_only_key_aborts_the_enqueue(string key)
+    {
+        ConfigurableKeyTrain.Key = key;
+
+        var act = async () =>
+            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "*only whitespace*",
+            "a blank key is as unset as an empty one, and would serialize every train returning "
+                + "it against every other (Trax.Docs/adr/0019-queued-work-for-one-subject-runs-one-at-a-time.md)"
+        );
+
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("SubjectKeyTests")))
+            .Should()
+            .Be(0, "a refused key writes no entry");
+    }
+
     [Test]
     public async Task A_key_longer_than_the_limit_aborts_the_enqueue()
     {
