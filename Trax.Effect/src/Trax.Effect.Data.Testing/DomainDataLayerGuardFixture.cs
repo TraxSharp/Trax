@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore.Metadata;
 using NUnit.Framework;
 using Trax.Core.Testing;
 
@@ -42,6 +43,21 @@ public abstract class DomainDataLayerGuardFixture
     /// </summary>
     protected virtual IReadOnlyList<Type> MigrationContexts => [];
 
+    /// <summary>
+    /// The models to run the owner-scope census over, one per context holding per-user data.
+    /// Defaults to empty (the check passes vacuously); override together with
+    /// <see cref="OwnerScope"/> to enable it. Build each from a context instance: an owner-scoped
+    /// context usually takes its principal accessor through the constructor, and building the
+    /// model needs no database connection.
+    /// </summary>
+    protected virtual IReadOnlyList<IReadOnlyModel> OwnerScopedModels => [];
+
+    /// <summary>
+    /// The owner type, principal accessor, and declarations for the owner-scope census. Required
+    /// when <see cref="OwnerScopedModels"/> is not empty.
+    /// </summary>
+    protected virtual OwnerScopeCensusOptions? OwnerScope => null;
+
     /// <summary>The shared base type name the source guards look for. Defaults to <c>DomainDataContext</c>.</summary>
     protected virtual string BaseTypeName => "DomainDataContext";
 
@@ -71,5 +87,26 @@ public abstract class DomainDataLayerGuardFixture
     {
         var result = DataLayerGuards.NoPendingModelChanges(MigrationContexts);
         Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
+    }
+
+    [Test]
+    public void Every_per_user_entity_is_scoped_to_its_owner()
+    {
+        var models = OwnerScopedModels;
+        if (models.Count == 0)
+            return;
+
+        var options =
+            OwnerScope
+            ?? throw new InvalidOperationException(
+                $"{GetType().Name} overrides OwnerScopedModels but not OwnerScope. The census "
+                    + "needs the owner type and the principal accessor."
+            );
+
+        foreach (var model in models)
+        {
+            var result = DataLayerGuards.OwnerScopeCompleteness(model, options);
+            Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
+        }
     }
 }

@@ -25,6 +25,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | authorization types a consumer writes | [0004](./docs/adr/0004-trax-owns-the-authorization-vocabulary.md), Trax owns the authorization vocabulary: `[TraxAuthorize]` and `[TraxAllowAnonymous]` declare it on every surface, and the server's own attribute is refused at startup |
 | `work_queue.confirmed_at`, `subject_key`, or `IWorkQueuePromotion` | central `docs/0018` (a deferred enqueue is staged, and a stranded one is cancelled) and `docs/0019` (one subject's queued work runs one at a time) |
 | `IEnqueueContextAccessor` | central `docs/0018`, the context flows with the async call and is null for a deferring train |
+| `DataLayerGuards.OwnerScopeCompleteness`, or a consumer's per-user row filters | [0008](./docs/adr/0008-per-user-data-is-filtered-by-its-owner.md), a filter counts only if it reads the principal, and a per-user entity is a bare `[TraxAuthorize]` |
 | `Metadata.FailureClass`, the `failure_class` column, or `IFailureClassifier` | central `docs/0020`, and [0006](./docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md) for how the enum is stored |
 | `ServiceTrain.Run`, `SaveOutcome`, or anything on a train's terminal write | [0005](./docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), the outcome is written on a token the caller cannot cancel |
 
@@ -79,9 +80,11 @@ model-versus-DDL drift guard and needs a live Postgres. `docker compose up -d` p
 This repo also **ships** guards rather than only running them, and those live outside the
 census root. `src/Trax.Effect.Data.Testing/DataLayerGuards.cs` is the data-layer guard
 engine: domain contexts derive the shared base, each one has a companion interface, each
-owns a distinct schema, and a migration-based context has no pending model changes.
+owns a distinct schema, a migration-based context has no pending model changes, and every
+entity holding per-user data is filtered through the principal and exposed only as a bare
+`[TraxAuthorize]` (the owner-scope census, [0008](./docs/adr/0008-per-user-data-is-filtered-by-its-owner.md)).
 `DomainDataLayerGuardFixture.cs` next to it is the turnkey fixture a consumer subclasses to
-run all four without writing a test body. `tests/Trax.Effect.Data.Testing.Tests/` is their
+run all five without writing a test body. `tests/Trax.Effect.Data.Testing.Tests/` is their
 own suite, and `DomainDataLayerGuardFixtureSelfTest` there subclasses the fixture the way a
 consumer would. Changing either file changes what every consuming repo enforces, so treat
 them as published API, not as test helpers.

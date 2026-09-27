@@ -1,7 +1,11 @@
+using System.Linq.Expressions;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Trax.Core.Testing;
 using Trax.Core.Testing.Infrastructure;
+using Trax.Effect.Attributes;
 
 namespace Trax.Effect.Data.Testing;
 
@@ -167,6 +171,305 @@ public static class DataLayerGuards
             + string.Join("\n  ", offenders);
 
         return new GuardResult(offenders, migrationContextTypes.Count, message);
+    }
+
+    /// <summary>
+    /// Every entity holding per-user data is scoped to its owner by a row filter that reads the
+    /// principal, and, if it is exposed as a <c>[TraxQueryModel]</c>, carries a bare
+    /// <c>[TraxAuthorize]</c>. Trax's own authorization checks see the attribute and nothing else,
+    /// so an entity that is correctly gated but has no row filter passes them and still serves
+    /// every user's rows to any authenticated caller. This is the check that sees the filter.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An entity is per-user when the model gives it an owner key (a foreign key to
+    /// <see cref="OwnerScopeCensusOptions.OwnerType"/>, a property named in
+    /// <see cref="OwnerScopeCensusOptions.OwnerIdProperties"/>, or it is the owner type itself), or
+    /// when it carries a filter that reads the principal. Only a filter whose expression references
+    /// <see cref="OwnerScopeCensusOptions.PrincipalAccessorType"/> counts: a soft-delete or
+    /// visibility filter mentions no user, and treating it as ownership would pull a shared entity
+    /// into the census and then fail it for being role-gated, which is right for a row that belongs
+    /// to no one. EF declares filters on a hierarchy's root, so a derived type is judged by its
+    /// root's filters. Owned types share their owner's table and filter and are skipped.
+    /// </para>
+    /// <para>
+    /// Exposed per-user entities must be a bare <c>[TraxAuthorize]</c>.
+    /// <c>[TraxAllowAnonymous]</c> hands one user's rows to anonymous callers, and a role or policy
+    /// gate can lock owners out of their own rows: the filter is the access control.
+    /// </para>
+    /// <para>
+    /// The model is the consumer's to build, because an owner-scoped context usually takes the
+    /// principal accessor through its constructor. Building it needs no database connection.
+    /// </para>
+    /// </remarks>
+    public static GuardResult OwnerScopeCompleteness(
+        IReadOnlyModel model,
+        OwnerScopeCensusOptions options
+    )
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(options.OwnerType);
+        ArgumentNullException.ThrowIfNull(options.PrincipalAccessorType);
+
+        var offenders = new List<string>();
+        var perUser = new HashSet<Type>();
+        var navigationOnly = new HashSet<Type>();
+        var exposedAndGatedByRoleOrPolicy = new HashSet<Type>();
+        var inspected = 0;
+
+        var entities = model
+            .GetEntityTypes()
+            .Where(e => !e.IsOwned())
+            .OrderBy(e => e.DisplayName(), StringComparer.Ordinal)
+            .ToList();
+
+        // A second mapping over a per-user table (a view or table mapping of the same name) reads
+        // the same rows, so it is per-user whatever its own keys say. Without this, an unfiltered
+        // alias of a filtered table would be invisible to the census.
+        var perUserStorage = entities
+            .Where(e =>
+                HasDirectOwnerKey(e, options)
+                || HasOwnerScopeFilter(e, options.PrincipalAccessorType)
+            )
+            .SelectMany(e => StorageOf(e).Select(storage => (storage, e)))
+            .GroupBy(x => x.storage, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.e).ToList(), StringComparer.Ordinal);
+
+        foreach (var entity in entities)
+        {
+            var clr = entity.ClrType;
+            var name = entity.DisplayName();
+            var sharedWith = StorageOf(entity)
+                .SelectMany(storage =>
+                    perUserStorage.TryGetValue(storage, out var owners)
+                        ? owners
+                            .Where(o => o.GetRootType() != entity.GetRootType())
+                            .Select(o => $"{o.DisplayName()} ({storage})")
+                        : []
+                )
+                .ToList();
+            var hasOwnerKey = HasDirectOwnerKey(entity, options) || sharedWith.Count > 0;
+            var hasOwnerFilter = HasOwnerScopeFilter(entity, options.PrincipalAccessorType);
+
+            if (!hasOwnerKey && !hasOwnerFilter)
+                continue;
+
+            perUser.Add(clr);
+            if (!hasOwnerKey)
+                navigationOnly.Add(clr);
+
+            if (options.Exemptions.ContainsKey(clr))
+                continue;
+
+            inspected++;
+
+            if (hasOwnerKey && !hasOwnerFilter)
+                offenders.Add(
+                    $"{name}: holds per-user data ("
+                        + (
+                            sharedWith.Count > 0
+                                ? "it reads the same storage as " + string.Join(", ", sharedWith)
+                                : $"an owner key to {options.OwnerType.Name}"
+                        )
+                        + $") but has no HasQueryFilter that reads "
+                        + $"{options.PrincipalAccessorType.Name}. Every caller who passes its "
+                        + "authorization can read every owner's rows. Add the owner-scope filter, "
+                        + "or exempt it with a reason."
+                );
+
+            if (clr.GetCustomAttribute<TraxQueryModelAttribute>(inherit: true) is null)
+                continue;
+
+            var posture = TraxAuthorization.Read(clr);
+            var gates = posture
+                .Authorize.Select(a =>
+                    !string.IsNullOrWhiteSpace(a.Roles) ? $"Roles = \"{a.Roles}\""
+                    : !string.IsNullOrWhiteSpace(a.Policy) ? $"Policy = \"{a.Policy}\""
+                    : null
+                )
+                .OfType<string>()
+                .ToArray();
+
+            if (posture.AllowAnonymous)
+                offenders.Add(
+                    $"{name}: per-user [TraxQueryModel] marked [TraxAllowAnonymous], which "
+                        + "exposes owners' rows to anonymous callers. Use a bare [TraxAuthorize]."
+                );
+            else if (!posture.HasAuthorize)
+                offenders.Add(
+                    $"{name}: per-user [TraxQueryModel] without [TraxAuthorize]. Add a bare "
+                        + "[TraxAuthorize]; the row filter does the per-owner narrowing."
+                );
+            else if (gates.Length > 0 && options.Gated.ContainsKey(clr))
+                exposedAndGatedByRoleOrPolicy.Add(clr);
+            else if (gates.Length > 0)
+                offenders.Add(
+                    $"{name}: per-user [TraxQueryModel] gated by [TraxAuthorize("
+                        + string.Join("), [TraxAuthorize(", gates)
+                        + ")], which locks owners without it out of their own rows. Use a bare "
+                        + "[TraxAuthorize]; the row filter is the access control. If the gate is "
+                        + "deliberate, list it in Gated with a reason; the filter is still required."
+                );
+        }
+
+        foreach (var (type, reason) in options.NavigationScoped.OrderBy(n => n.Key.FullName))
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+                offenders.Add(
+                    $"{type.Name}: declared navigation-scoped with no reason. Say which "
+                        + "navigation reaches its owner."
+                );
+
+            if (!navigationOnly.Contains(type) && !perUser.Contains(type))
+                offenders.Add(
+                    $"{type.Name}: declared navigation-scoped ({reason}) but has no row filter "
+                        + $"that reads {options.PrincipalAccessorType.Name}, or is not in the "
+                        + "model. With no owner key either, nothing else marks it as per-user: "
+                        + "every authenticated caller now reads every owner's rows."
+                );
+            else if (!navigationOnly.Contains(type))
+                offenders.Add(
+                    $"{type.Name}: declared navigation-scoped but has an owner key of its own, so "
+                        + "the direct check already covers it. Remove the declaration."
+                );
+        }
+
+        foreach (var type in navigationOnly.OrderBy(t => t.FullName))
+        {
+            if (
+                !options.NavigationScoped.ContainsKey(type) && !options.Exemptions.ContainsKey(type)
+            )
+                offenders.Add(
+                    $"{type.Name}: has a row filter that reads "
+                        + $"{options.PrincipalAccessorType.Name} but no owner key, and is not "
+                        + "declared navigation-scoped. Declare it with the navigation it reaches "
+                        + "its owner through, or deleting its filter later would silently "
+                        + "un-scope it."
+                );
+        }
+
+        foreach (var (type, reason) in options.Exemptions.OrderBy(e => e.Key.FullName))
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+                offenders.Add(
+                    $"{type.Name}: exempted with no reason. Say why it is safe unfiltered."
+                );
+
+            if (!perUser.Contains(type))
+                offenders.Add(
+                    $"{type.Name}: exempted ({reason}) but the census does not see it as "
+                        + "per-user, so the exemption covers nothing today and would silently "
+                        + "cover whatever it becomes. Remove it."
+                );
+        }
+
+        foreach (var (type, reason) in options.Gated.OrderBy(g => g.Key.FullName))
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+                offenders.Add(
+                    $"{type.Name}: gated with no reason. Say who the role or policy is for."
+                );
+
+            if (options.Exemptions.ContainsKey(type))
+                offenders.Add(
+                    $"{type.Name}: both gated and exempted. An exemption skips the filter check, "
+                        + "so the pair would let the gate stand in for the filter. A gate adds to "
+                        + "the filter; remove the exemption."
+                );
+            else if (
+                !exposedAndGatedByRoleOrPolicy.Contains(type)
+                && !IsAnonymousOrUndeclaredExposure(type)
+            )
+                offenders.Add(
+                    $"{type.Name}: gated ({reason}) but it is not a per-user [TraxQueryModel] "
+                        + "whose [TraxAuthorize] names a role or policy, so the entry allows "
+                        + "nothing today and would silently allow whatever it becomes. Remove it."
+                );
+            else if (!exposedAndGatedByRoleOrPolicy.Contains(type))
+                offenders.Add(
+                    $"{type.Name}: gated ({reason}), but a gate is added to [TraxAuthorize], never "
+                        + "used in place of it. The posture reported for it still has to be fixed."
+                );
+
+            bool IsAnonymousOrUndeclaredExposure(Type t)
+            {
+                if (!perUser.Contains(t) || options.Exemptions.ContainsKey(t))
+                    return false;
+                if (t.GetCustomAttribute<TraxQueryModelAttribute>(inherit: true) is null)
+                    return false;
+                var posture = TraxAuthorization.Read(t);
+                return posture.AllowAnonymous || !posture.HasAuthorize;
+            }
+        }
+
+        var message =
+            "Every entity holding per-user data must be scoped to its owner by a HasQueryFilter "
+            + $"that reads {options.PrincipalAccessorType.Name}, and a per-user [TraxQueryModel] "
+            + "must be a bare [TraxAuthorize]. Trax's authorization sees the attribute, not the "
+            + "filter, so a missing filter passes every other check. Offenders:\n  "
+            + string.Join("\n  ", offenders);
+
+        return new GuardResult(offenders, inspected, message);
+    }
+
+    /// <summary>
+    /// The tables and views an entity reads, schema-qualified. Two entity types naming the same one
+    /// read the same rows.
+    /// </summary>
+    private static IEnumerable<string> StorageOf(IReadOnlyEntityType entity)
+    {
+        if (entity.GetTableName() is { } table)
+            yield return $"{entity.GetSchema()}.{table}";
+        if (entity.GetViewName() is { } view)
+            yield return $"{entity.GetViewSchema() ?? entity.GetSchema()}.{view}";
+    }
+
+    private static bool HasDirectOwnerKey(
+        IReadOnlyEntityType entity,
+        OwnerScopeCensusOptions options
+    ) =>
+        options.OwnerType.IsAssignableFrom(entity.ClrType)
+        || entity
+            .GetForeignKeys()
+            .Any(fk => options.OwnerType.IsAssignableFrom(fk.PrincipalEntityType.ClrType))
+        || entity.GetProperties().Any(p => options.OwnerIdProperties.Contains(p.Name));
+
+    private static bool HasOwnerScopeFilter(IReadOnlyEntityType entity, Type accessorType) =>
+        entity
+            .GetRootType()
+            .GetDeclaredQueryFilters()
+            .Any(f => f.Expression is not null && References(f.Expression, accessorType));
+
+    private static bool References(Expression expression, Type accessorType)
+    {
+        var finder = new TypeReferenceFinder(accessorType);
+        finder.Visit(expression);
+        return finder.Found;
+    }
+
+    /// <summary>
+    /// Finds any node typed as the accessor. The accessor is usually captured as a member of the
+    /// context, so it surfaces as a node's type rather than as a parameter, and matching on the
+    /// type keeps working when the member is renamed or the predicate rearranged.
+    /// </summary>
+    private sealed class TypeReferenceFinder(Type accessorType) : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        public override Expression? Visit(Expression? node)
+        {
+            if (Found || node is null)
+                return node;
+
+            if (accessorType.IsAssignableFrom(node.Type))
+            {
+                Found = true;
+                return node;
+            }
+
+            return base.Visit(node);
+        }
     }
 
     private static string? SchemaOf(Type contextType)

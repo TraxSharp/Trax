@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Trax.Core.Testing;
 
 namespace Trax.Effect.Data.Testing.Tests;
@@ -27,6 +29,31 @@ public sealed class DomainDataLayerGuardFixtureSelfTest : DomainDataLayerGuardFi
     // AlphaContext maps no entities, so it has nothing outstanding against its snapshot; this drives
     // the inherited migration-snapshot guard down a real (non-vacuous) path.
     protected override IReadOnlyList<Type> MigrationContexts => [typeof(AlphaContext)];
+
+    // A context whose per-user entities are all filtered through the principal, so the inherited
+    // owner-scope census runs down a real path and passes.
+    protected override IReadOnlyList<IReadOnlyModel> OwnerScopedModels
+    {
+        get
+        {
+            var options = new DbContextOptionsBuilder<ScopedContext>()
+                .UseNpgsql("Host=localhost;Database=offline_model_only")
+                .Options;
+            using var context = new ScopedContext(options, new NoPrincipal());
+            return [context.Model];
+        }
+    }
+
+    protected override OwnerScopeCensusOptions OwnerScope =>
+        new()
+        {
+            OwnerType = typeof(Account),
+            PrincipalAccessorType = typeof(IOwnerPrincipal),
+            NavigationScoped = new Dictionary<Type, string>
+            {
+                [typeof(Answer)] = "an answer belongs to the poll that holds the account id",
+            },
+        };
 
     [OneTimeSetUp]
     public void CreateConformingRepo() =>
