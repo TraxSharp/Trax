@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Mediator.Services.TrainExecution;
 
 namespace Trax.Mediator.Services.TrainDiscovery;
 
@@ -81,6 +82,8 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     GraphQLOperations = graphql.Operations,
                     GraphQLNamespace = graphql.Namespace,
                     MaxConcurrentRun = concurrencyLimit,
+                    HasQueueSubjectKey =
+                        QueueMemberOverrides.QueueSubjectKey(implementationType) is not null,
                 }
             );
         }
@@ -129,6 +132,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     GraphQLOperations = graphql.Operations,
                     GraphQLNamespace = graphql.Namespace,
                     MaxConcurrentRun = concurrencyLimit,
+                    HasQueueSubjectKey = QueueMemberOverrides.QueueSubjectKey(implType) is not null,
                 };
             })
             .ToList()

@@ -98,4 +98,15 @@ public class TrainRegistration
     /// Builder-level overrides via <c>ConcurrentRunLimit&lt;T&gt;()</c> take precedence over this value.
     /// </summary>
     public int? MaxConcurrentRun { get; init; }
+
+    /// <summary>
+    /// Whether the implementation overrides <c>ServiceTrain.QueueSubjectKey</c>, directly or through
+    /// a base class. Only such a train can stamp a subject key on its queue entry, so only its
+    /// queued work can be serialized against other work for the same subject. Computed at discovery
+    /// with the same check the enqueue uses to decide whether to ask the train for a key.
+    /// </summary>
+    /// <remarks>
+    /// True does not mean every entry has a key: the override may return null for a given input.
+    /// </remarks>
+    public bool HasQueueSubjectKey { get; init; }
 }

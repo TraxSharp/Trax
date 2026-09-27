@@ -39,26 +39,11 @@ public class TrainExecutionService(
 ) : ITrainExecutionService
 {
     /// <summary>
-    /// Per-train-type cache of the concrete train's overridden <c>OnQueue</c> method, or null when
-    /// the train does not override it. Trains that do not override it (the common case) skip
-    /// resolution entirely, so the enqueue path stays as light as it was before the hook existed.
-    /// The reflection runs once per type.
-    /// </summary>
-    private static readonly ConcurrentDictionary<Type, MethodInfo?> OnQueueOverrideCache = new();
-
-    /// <summary>
     /// Per-train-type cache of the concrete train's <c>DeferQueuePromotion</c> property. Only read
     /// for trains that actually override <c>OnQueue</c> — deferring promotion without a hook would
     /// stage an entry with nothing to wait for.
     /// </summary>
     private static readonly ConcurrentDictionary<Type, PropertyInfo?> DeferPromotionCache = new();
-
-    /// <summary>
-    /// Per-train-type cache of the concrete train's overridden <c>QueueSubjectKey</c> method, or
-    /// null when the train does not override it. Trains that do not override it are never resolved
-    /// for it, so the common enqueue path is unchanged.
-    /// </summary>
-    private static readonly ConcurrentDictionary<Type, MethodInfo?> SubjectKeyOverrideCache = new();
 
     public async Task<QueueTrainResult> QueueAsync(
         string trainName,
@@ -221,24 +206,9 @@ public class TrainExecutionService(
         string externalId
     )
     {
-        var subjectKey = SubjectKeyOverrideCache.GetOrAdd(
-            registration.ImplementationType,
-            static type =>
-            {
-                var method = type.GetMethod(
-                    "QueueSubjectKey",
-                    BindingFlags.Instance | BindingFlags.NonPublic,
-                    [typeof(Metadata)]
-                );
-
-                var declaringType = method?.DeclaringType;
-                if (declaringType is { IsGenericType: true })
-                    declaringType = declaringType.GetGenericTypeDefinition();
-
-                // Only a concrete override counts — the base returns null for every train.
-                return declaringType != typeof(ServiceTrain<,>) ? method : null;
-            }
-        );
+        // Trains that do not override it are never resolved for it, so the common enqueue path
+        // is unchanged. Discovery reports the same answer as TrainRegistration.HasQueueSubjectKey.
+        var subjectKey = QueueMemberOverrides.QueueSubjectKey(registration.ImplementationType);
 
         if (subjectKey is null)
             return null;
@@ -583,27 +553,12 @@ public class TrainExecutionService(
 
     /// <summary>
     /// Returns the train's overridden <c>OnQueue</c> method, or null when the train does not
-    /// override the no-op <c>ServiceTrain&lt;,&gt;.OnQueue</c>. Cached per type; the reflection
-    /// runs once.
+    /// override the no-op <c>ServiceTrain&lt;,&gt;.OnQueue</c>. Trains that do not override it (the
+    /// common case) skip resolution entirely, so the enqueue path stays as light as it was before
+    /// the hook existed.
     /// </summary>
     private static MethodInfo? ResolveOnQueueOverride(Type implementationType) =>
-        OnQueueOverrideCache.GetOrAdd(
-            implementationType,
-            static type =>
-            {
-                var method = type.GetMethod(
-                    "OnQueue",
-                    BindingFlags.Instance | BindingFlags.NonPublic,
-                    [typeof(Metadata), typeof(CancellationToken)]
-                );
-
-                var declaringType = method?.DeclaringType;
-                if (declaringType is { IsGenericType: true })
-                    declaringType = declaringType.GetGenericTypeDefinition();
-
-                return declaringType != typeof(ServiceTrain<,>) ? method : null;
-            }
-        );
+        QueueMemberOverrides.OnQueue(implementationType);
 
     private async Task AuthorizeAsync(TrainRegistration registration, CancellationToken ct)
     {

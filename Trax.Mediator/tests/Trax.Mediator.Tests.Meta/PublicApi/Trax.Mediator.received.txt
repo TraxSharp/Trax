@@ -149,6 +149,7 @@ namespace Trax.Mediator.Services.TrainDiscovery
         public required Trax.Effect.Attributes.GraphQLOperation GraphQLOperations { get; init; }
         public bool HasAllowAnonymousAttribute { get; init; }
         public bool HasAuthorizeAttribute { get; init; }
+        public bool HasQueueSubjectKey { get; init; }
         public required System.Type ImplementationType { get; init; }
         public required string ImplementationTypeName { get; init; }
         public required System.Type InputType { get; init; }
