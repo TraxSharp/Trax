@@ -3,6 +3,7 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ChangeSignal;
+using Trax.Scheduler.Extensions;
 
 namespace Trax.Scheduler.Services.CancellationRegistry;
 
@@ -22,6 +23,7 @@ internal static class ExecutionCancellation
     /// host runs it; a Pending run sees it when it starts. The update repeats the state test, so
     /// a run that finished between the read and the write is not flagged. Only the runs that
     /// were cancellable when read go to the registry, so a finished run's token is never touched.
+    /// On a provider without set updates (InMemory) the same rows are loaded and saved instead.
     /// When any run is flagged, <see cref="ChangeDomain.Execution"/> is signalled, so a runs view
     /// refetches without waiting for the cancellation to take effect.
     /// </remarks>
@@ -42,12 +44,21 @@ internal static class ExecutionCancellation
         if (ids.Count == 0)
             return 0;
 
-        var flagged = await context
-            .Metadatas.Where(m =>
-                ids.Contains(m.Id)
-                && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
+        var stillCancellable = context.Metadatas.Where(m =>
+            ids.Contains(m.Id)
+            && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
+        );
+
+        var flagged = context.SupportsSetUpdates()
+            ? await stillCancellable.ExecuteUpdateAsync(
+                s => s.SetProperty(m => m.CancellationRequested, true),
+                ct
             )
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.CancellationRequested, true), ct);
+            : await context.UpdateEachAsync(
+                stillCancellable,
+                m => m.CancellationRequested = true,
+                ct
+            );
 
         if (registry is not null)
             foreach (var id in ids)

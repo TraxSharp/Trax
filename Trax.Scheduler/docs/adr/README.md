@@ -40,8 +40,8 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | Area | ADRs |
 | --- | --- |
 | `platform` | [0001](./0001-remote-execution-is-a-json-wire-contract.md), [0004](./0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md) |
-| `providers` | [0002](./0002-a-database-provider-is-interchangeable.md) |
-| `scheduling` | [0001](./0001-remote-execution-is-a-json-wire-contract.md), [0002](./0002-a-database-provider-is-interchangeable.md), [0003](./0003-a-runtime-retention-override-replaces-only-the-default.md), [0004](./0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md), [0005](./0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md) |
+| `providers` | [0002](./0002-a-database-provider-is-interchangeable.md), [0007](./0007-the-operations-surface-runs-on-inmemory.md) |
+| `scheduling` | [0001](./0001-remote-execution-is-a-json-wire-contract.md), [0002](./0002-a-database-provider-is-interchangeable.md), [0003](./0003-a-runtime-retention-override-replaces-only-the-default.md), [0004](./0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md), [0005](./0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md), [0007](./0007-the-operations-surface-runs-on-inmemory.md) |
 
 ## All of them
 
@@ -52,3 +52,4 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0003](./0003-a-runtime-retention-override-replaces-only-the-default.md) | A runtime retention override replaces only the default, never a per-train retention | scheduling |
 | [0004](./0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md) | An enqueue refusal is a result; an infrastructure failure is thrown | scheduling, platform |
 | [0005](./0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md) | A scheduled run's bookkeeping lives in the junction that ran it | scheduling |
+| [0007](./0007-the-operations-surface-runs-on-inmemory.md) | The operations surface runs on the InMemory provider | scheduling, providers |

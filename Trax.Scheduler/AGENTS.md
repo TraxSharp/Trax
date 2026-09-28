@@ -20,6 +20,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | `OperationsService`, or anywhere that builds a work queue row | central `docs/0017`, a caller's enqueue goes through the mediator; only the allow-listed system and admin paths build their own |
 | a dashboard or API action, or `OperationsService.RunTrainAsync` | central `docs/0022`, the dashboard and the GraphQL API call one operations-service method per action; neither surface carries its own copy of the logic |
 | what `OperationsService.QueueTrainAsync` returns when the enqueue fails | [0004](./docs/adr/0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md), a refusal is a failed result; a database or network failure is logged and thrown, never returned with its message |
+| an `ExecuteUpdate` or `ExecuteDelete` in `OperationsService`, `ExecutionCancellation` or a `TraxScheduler` operation | [0007](./docs/adr/0007-the-operations-surface-runs-on-inmemory.md), check `SupportsSetUpdates()` and fall back to per-row on InMemory |
 | the dispatch claim, `LoadQueuedJobsJunction`, or the subject lock | central `docs/0019`, one subject's queued work runs one at a time |
 | `ResolveStaleStagedEntriesJunction`, `StaleStagedEntryTimeout` or `PromoteStaleStagedEntries` | central `docs/0018`, a stranded staged entry is cancelled by default |
 | a train's `Junctions()`, including the ManifestManager, JobDispatcher and JobRunner chains | central `docs/0016`, a chain is a declaration read at host startup, so it may not read the input |

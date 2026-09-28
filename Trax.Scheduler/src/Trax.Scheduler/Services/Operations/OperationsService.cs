@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
@@ -22,6 +23,7 @@ using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Services.TrustedExecution;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.JobSubmitter;
 
@@ -693,9 +695,15 @@ public class OperationsService : IOperationsService
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
         // One statement with the status test in it, so an entry the dispatcher claims meanwhile
         // keeps its Dispatched status instead of being overwritten.
-        var cancelled = await db
-            .WorkQueues.Where(q => distinct.Contains(q.Id) && q.Status == WorkQueueStatus.Queued)
-            .ExecuteUpdateAsync(s => s.SetProperty(q => q.Status, WorkQueueStatus.Cancelled), ct);
+        var queued = db.WorkQueues.Where(q =>
+            distinct.Contains(q.Id) && q.Status == WorkQueueStatus.Queued
+        );
+        var cancelled = db.SupportsSetUpdates()
+            ? await queued.ExecuteUpdateAsync(
+                s => s.SetProperty(q => q.Status, WorkQueueStatus.Cancelled),
+                ct
+            )
+            : await db.UpdateEachAsync(queued, q => q.Status = WorkQueueStatus.Cancelled, ct);
 
         if (cancelled > 0)
             _changeSignal?.Notify(ChangeDomain.WorkQueue);
@@ -720,9 +728,10 @@ public class OperationsService : IOperationsService
         var distinct = ids.Distinct().ToList();
 
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
-        var changed = await db
-            .Manifests.Where(m => distinct.Contains(m.Id) && m.IsEnabled != enabled)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.IsEnabled, enabled), ct);
+        var differing = db.Manifests.Where(m => distinct.Contains(m.Id) && m.IsEnabled != enabled);
+        var changed = db.SupportsSetUpdates()
+            ? await differing.ExecuteUpdateAsync(s => s.SetProperty(m => m.IsEnabled, enabled), ct)
+            : await db.UpdateEachAsync(differing, m => m.IsEnabled = enabled, ct);
 
         if (changed > 0)
             _changeSignal?.Notify(ChangeDomain.Manifest);
@@ -748,6 +757,7 @@ public class OperationsService : IOperationsService
 
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
         var changed = await SetGroupsEnabledAsync(
+            db,
             db.ManifestGroups.Where(g => distinct.Contains(g.Id)),
             enabled,
             ct
@@ -767,7 +777,7 @@ public class OperationsService : IOperationsService
     )
     {
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
-        var changed = await SetGroupsEnabledAsync(db.ManifestGroups, enabled, ct);
+        var changed = await SetGroupsEnabledAsync(db, db.ManifestGroups, enabled, ct);
 
         return new OperationResult(
             true,
@@ -777,16 +787,26 @@ public class OperationsService : IOperationsService
     }
 
     private async Task<int> SetGroupsEnabledAsync(
+        IDataContext db,
         IQueryable<Trax.Effect.Models.ManifestGroup.ManifestGroup> groups,
         bool enabled,
         CancellationToken ct
     )
     {
         var now = DateTime.UtcNow;
-        var changed = await groups
-            .Where(g => g.IsEnabled != enabled)
-            .ExecuteUpdateAsync(
+        var differing = groups.Where(g => g.IsEnabled != enabled);
+        var changed = db.SupportsSetUpdates()
+            ? await differing.ExecuteUpdateAsync(
                 s => s.SetProperty(g => g.IsEnabled, enabled).SetProperty(g => g.UpdatedAt, now),
+                ct
+            )
+            : await db.UpdateEachAsync(
+                differing,
+                g =>
+                {
+                    g.IsEnabled = enabled;
+                    g.UpdatedAt = now;
+                },
                 ct
             );
 
