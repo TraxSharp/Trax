@@ -333,6 +333,71 @@ public class LocalWorkerServiceTests : TestSetup
         await train.Received(1).Run(Arg.Any<RunJobRequest>(), Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task Worker_StoppingMidBatch_ReleasesTheJobsItHadNotStarted()
+    {
+        // Arrange - three jobs claimed in one batch; the first blocks until released.
+        var jobIds = new List<long>();
+        for (var i = 0; i < 3; i++)
+        {
+            var metadata = await CreateMetadataForTestTrain();
+            var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+            await DataContext.Track(job);
+            await DataContext.SaveChanges(CancellationToken.None);
+            jobIds.Add(job.Id);
+            DataContext.Reset();
+        }
+
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var train = Substitute.For<IJobRunnerTrain>();
+        train
+            .Run(Arg.Any<RunJobRequest>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                started.TrySetResult();
+                await release.Task;
+                return Unit.Default;
+            });
+
+        var options = new LocalWorkerOptions
+        {
+            WorkerCount = 1,
+            BatchSize = 3,
+            PollingInterval = TimeSpan.FromMilliseconds(100),
+            VisibilityTimeout = TimeSpan.FromMinutes(30),
+            ShutdownTimeout = TimeSpan.FromSeconds(30),
+        };
+
+        var workerService = new LocalWorkerService(
+            new JobRunnerOverride(Scope.ServiceProvider, train),
+            options,
+            new CancellationRegistry(),
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>(),
+            Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
+        );
+
+        await workerService.StartAsync(CancellationToken.None);
+        await started.Task.WaitAsync(WorkerCompletionTimeout);
+
+        // Act - the host stops while the first job runs, then that job finishes.
+        var stopping = workerService.StopAsync(CancellationToken.None);
+        release.SetResult();
+        await stopping.WaitAsync(WorkerCompletionTimeout);
+
+        // Assert - only the started job ran; the other two are back in the queue, claimable now
+        // rather than after the visibility timeout.
+        await train.Received(1).Run(Arg.Any<RunJobRequest>(), Arg.Any<CancellationToken>());
+        DataContext.Reset();
+        var remaining = await DataContext
+            .BackgroundJobs.Where(j => jobIds.Contains(j.Id))
+            .ToListAsync();
+        remaining.Should().HaveCount(2, "the started job is deleted and the other two are kept");
+        remaining
+            .Should()
+            .OnlyContain(j => j.FetchedAt == null, "an unstarted job is released, not held");
+    }
+
     /// <summary>
     /// Resolves <see cref="IJobRunnerTrain"/> to a fixed instance in every scope the worker
     /// creates, and everything else from the fixture's container.

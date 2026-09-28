@@ -12,6 +12,13 @@ using Trax.Scheduler.Trains.JobRunner;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
+/// <summary>
+/// The JobRunner loads, validates and runs a scheduled train, then records its success.
+///
+/// <para>Enforces <c>docs/adr/0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md</c>: a cancellation
+/// that lands after the scheduled train completed does not lose the manifest update.</para>
+/// </summary>
+[Property("adr", "docs/adr/0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md")]
 [TestFixture]
 public class JobRunnerTrainTests : TestSetup
 {
@@ -108,9 +115,83 @@ public class JobRunnerTrainTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        // Act - Should succeed (UpdateManifestSuccessJunction gracefully handles null manifest)
+        // Act - Should succeed (RunScheduledTrainJunction skips the manifest update when there is none)
         var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
         await act.Should().NotThrowAsync();
+    }
+
+    #endregion
+
+    #region Run - Shutdown Tests
+
+    [Test]
+    public async Task Run_CancelledAfterTheScheduledTrainCompletes_StillRecordsTheManifestSuccess()
+    {
+        // Arrange - a scheduled train that cancels its JobRunner's token as it finishes, the way
+        // a shutdown landing between the train completing and the JobRunner's bookkeeping would.
+        var key = Guid.NewGuid().ToString("N");
+        var input = new CancelsItsRunnerInput { Key = key };
+        var group = await CreateAndSaveManifestGroup(
+            DataContext,
+            name: $"group-{Guid.NewGuid():N}"
+        );
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(CancelsItsRunnerTrain),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.Once,
+                MaxRetries = 3,
+                Properties = input,
+            }
+        );
+        manifest.ManifestGroupId = group.Id;
+        await DataContext.Track(manifest);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(CancelsItsRunnerTrain).FullName!,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = input,
+                ManifestId = manifest.Id,
+            }
+        );
+        await DataContext.Track(metadata);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        using var runner = new CancellationTokenSource();
+        CancelsItsRunnerTrain.Runners[key] = runner;
+
+        // Act
+        try
+        {
+            await JobRunner.Run(new RunJobRequest(metadata.Id, input), runner.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Whether the JobRunner run itself ends cancelled is not what this test is about.
+        }
+        finally
+        {
+            CancelsItsRunnerTrain.Runners.TryRemove(key, out _);
+        }
+
+        // Assert - the scheduled work completed, so the manifest records it: a lost update
+        // leaves LastSuccessfulRun stale and a Once manifest enabled to run again.
+        runner.IsCancellationRequested.Should().BeTrue("the scheduled train cancelled it");
+        DataContext.Reset();
+        var updated = await DataContext.Manifests.SingleAsync(x => x.Id == manifest.Id);
+        updated
+            .LastSuccessfulRun.Should()
+            .NotBeNull(
+                "the scheduled train completed before the cancellation, so its bookkeeping must "
+                    + "not be skipped. See docs/adr/0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md"
+            );
+        updated.IsEnabled.Should().BeFalse("a Once manifest is disabled once it has succeeded");
     }
 
     #endregion

@@ -130,8 +130,19 @@ internal class LocalWorkerService(
         }
 
         // Phase 2 + 3: Execute and clean up each job sequentially
-        foreach (var job in claimedJobs)
+        for (var i = 0; i < claimedJobs.Count; i++)
         {
+            // Once shutdown begins, a job not yet started is released rather than started: each
+            // would otherwise get a fresh ShutdownTimeout, so a batch could outlast the host's
+            // shutdown window, and a job cut off by the host is only re-claimed after
+            // VisibilityTimeout.
+            if (stoppingToken.IsCancellationRequested)
+            {
+                await ReleaseUnstartedAsync(workerId, claimedJobs.Skip(i).ToList());
+                break;
+            }
+
+            var job = claimedJobs[i];
             await ExecuteAndCleanupAsync(
                 workerId,
                 job.Id,
@@ -143,6 +154,44 @@ internal class LocalWorkerService(
         }
 
         return claimedJobs.Count;
+    }
+
+    /// <summary>
+    /// Clears <c>fetched_at</c> on claimed jobs that were never started, so any worker can claim
+    /// them at once instead of after <see cref="LocalWorkerOptions.VisibilityTimeout"/>. Runs on an
+    /// uncancellable token: it is called only after the stopping token has fired.
+    /// </summary>
+    private async Task ReleaseUnstartedAsync(int workerId, List<ClaimedJob> unstarted)
+    {
+        var ids = unstarted.Select(j => j.Id).ToList();
+
+        try
+        {
+            using var releaseScope = serviceProvider.CreateScope();
+            var releaseContext = releaseScope.ServiceProvider.GetRequiredService<IDataContext>();
+
+            await releaseContext
+                .BackgroundJobs.Where(j => ids.Contains(j.Id))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(j => j.FetchedAt, (DateTime?)null),
+                    CancellationToken.None
+                );
+
+            logger.LogInformation(
+                "Worker {WorkerId} released {Count} claimed job(s) it had not started, because the host is stopping",
+                workerId,
+                ids.Count
+            );
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Worker {WorkerId} failed to release {Count} unstarted job(s); they will be reclaimed after visibility timeout",
+                workerId,
+                ids.Count
+            );
+        }
     }
 
     private async Task ExecuteAndCleanupAsync(

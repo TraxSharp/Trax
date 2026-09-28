@@ -11,8 +11,8 @@ namespace Trax.Scheduler.Trains.JobRunner;
 /// This train:
 /// 1. Loads the metadata and manifest from the database
 /// 2. Validates the train state is Pending
-/// 3. Executes the scheduled train via TrainBus
-/// 4. Updates the manifest's LastSuccessfulRun timestamp
+/// 3. Executes the scheduled train via TrainBus, then records the success on its manifest
+///    (LastSuccessfulRun, NextScheduledRun, Once auto-disable) on an uncancellable token
 /// </remarks>
 public class JobRunnerTrain : ServiceTrain<RunJobRequest, Unit>, IJobRunnerTrain
 {
@@ -20,7 +20,5 @@ public class JobRunnerTrain : ServiceTrain<RunJobRequest, Unit>, IJobRunnerTrain
         Chain<LoadMetadataJunction>()
             .Chain<ValidateMetadataStateJunction>()
             .Chain<RunScheduledTrainJunction>()
-            .Chain<UpdateManifestSuccessJunction>()
-            .Chain<SaveDatabaseChangesJunction>()
             .Resolve();
 }

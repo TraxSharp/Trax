@@ -23,6 +23,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | the dispatch claim, `LoadQueuedJobsJunction`, or the subject lock | central `docs/0019`, one subject's queued work runs one at a time |
 | `ResolveStaleStagedEntriesJunction`, `StaleStagedEntryTimeout` or `PromoteStaleStagedEntries` | central `docs/0018`, a stranded staged entry is cancelled by default |
 | a train's `Junctions()`, including the ManifestManager, JobDispatcher and JobRunner chains | central `docs/0016`, a chain is a declaration read at host startup, so it may not read the input |
+| the JobRunner chain, or anything done after a scheduled train returns | [0005](./docs/adr/0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md), the manifest update stays in the junction that ran the train, on an uncancellable token |
 | `RemoteRunResponse.FailureClass`, or how either executor reads it | central `docs/0020`, the worker's class is carried, and [0001](./docs/adr/0001-remote-execution-is-a-json-wire-contract.md) for its encoding on the wire |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
