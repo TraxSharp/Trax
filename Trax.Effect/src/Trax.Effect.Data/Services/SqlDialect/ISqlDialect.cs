@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 namespace Trax.Effect.Data.Services.SqlDialect;
 
 /// <summary>
@@ -65,6 +67,23 @@ public interface ISqlDialect
     /// implementations outside this repo.
     /// </remarks>
     string? EstimateRowCount() => null;
+
+    /// <summary>
+    /// Whether a failed save was refused because a primary key or unique index already holds the
+    /// value it wrote: Postgres <c>23505</c>, Sqlite <c>SQLITE_CONSTRAINT</c> with the
+    /// <c>PRIMARYKEY</c> or <c>UNIQUE</c> extended code. Every other failure, another constraint
+    /// violation included, is false.
+    /// </summary>
+    /// <remarks>
+    /// This is how a caller reads "someone else got there first" from an insert without writing
+    /// provider SQL, and without mistaking an unrelated database error for that answer: catch
+    /// <see cref="DbUpdateException"/> only <c>when</c> this is true, and let anything else throw.
+    ///
+    /// Defaults to <c>false</c>, which keeps this from breaking implementations outside this repo
+    /// and fails the safe way: a conflict such a provider does not recognise throws instead of
+    /// being read as one.
+    /// </remarks>
+    bool IsUniqueViolation(DbUpdateException exception) => false;
 
     /// <summary>
     /// Returns SQL that loads queued work queue entries with group-fair batching

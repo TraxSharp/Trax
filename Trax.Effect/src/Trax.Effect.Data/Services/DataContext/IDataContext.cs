@@ -110,6 +110,18 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     /// </summary>
     DbSet<Effect.Models.PersistedOperationHistory.PersistedOperationHistory> PersistedOperationHistories { get; }
 
+    /// <summary>
+    /// Nonces Trax.Scheduler's runners accepted on signed requests, shared by every instance of a
+    /// runner on this database so a request is accepted once between them.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="DataContext{TDbContext}"/> declares this set. The default here keeps an
+    /// implementation written before the member existed compiling and loading: it reads the set
+    /// from the implementation as a <see cref="DbContext"/>, the same assumption <c>Raw</c> makes.
+    /// </remarks>
+    DbSet<Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces =>
+        ((DbContext)this).Set<Effect.Models.RunnerNonce.RunnerNonce>();
+
     #endregion
 
     /// <summary>

@@ -109,6 +109,11 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     /// </summary>
     public DbSet<Effect.Models.PersistedOperationHistory.PersistedOperationHistory> PersistedOperationHistories { get; set; }
 
+    /// <summary>
+    /// Gets or sets the DbSet for the nonces Trax.Scheduler's runners accepted on signed requests.
+    /// </summary>
+    public DbSet<Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces { get; set; }
+
     #endregion
 
     /// <summary>
@@ -131,13 +136,14 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
 
         modelBuilder.ApplyEntityOnModelCreating();
 
-        // Persisted-operation entities use a string composite primary key,
+        // Persisted-operation and runner-nonce entities use string primary keys,
         // so they do not implement IModel and are not discovered by
         // ApplyEntityOnModelCreating. Map them explicitly.
         Models.PersistedOperation.PersistentPersistedOperation.OnModelCreating(modelBuilder);
         Models.PersistedOperationHistory.PersistentPersistedOperationHistory.OnModelCreating(
             modelBuilder
         );
+        Models.RunnerNonce.PersistentRunnerNonce.OnModelCreating(modelBuilder);
     }
 
     /// <summary>

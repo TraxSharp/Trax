@@ -1,3 +1,5 @@
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 
@@ -25,6 +27,20 @@ internal class SqliteSqlDialect : ISqlDialect
     /// Multi-server coordination is not supported with SQLite.
     /// </summary>
     public FormattableString TryAcquireLeaderLock(string lockName) => $"""SELECT 1 AS "Value" """;
+
+    /// <summary>
+    /// <c>SQLITE_CONSTRAINT</c> with the <c>PRIMARYKEY</c> or <c>UNIQUE</c> extended code. The
+    /// primary code alone is not enough: a <c>CHECK</c>, <c>NOT NULL</c> or foreign key failure
+    /// shares it.
+    /// </summary>
+    public bool IsUniqueViolation(DbUpdateException exception) =>
+        exception.InnerException
+            is SqliteException
+            {
+                SqliteErrorCode: SQLitePCL.raw.SQLITE_CONSTRAINT,
+                SqliteExtendedErrorCode: SQLitePCL.raw.SQLITE_CONSTRAINT_PRIMARYKEY
+                    or SQLitePCL.raw.SQLITE_CONSTRAINT_UNIQUE,
+            };
 
     public string ClaimWorkQueueEntry() =>
         $$"""

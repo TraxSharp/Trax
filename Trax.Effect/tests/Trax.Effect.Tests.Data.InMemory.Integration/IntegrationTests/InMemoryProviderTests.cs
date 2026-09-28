@@ -459,6 +459,31 @@ public class InMemoryProviderTests : TestSetup
 
     #endregion
 
+    #region Entity Type Tests - RunnerNonce
+
+    [Test]
+    public async Task RunnerNonce_RoundTrip_PersistsAllColumns()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var context = (IDataContext)factory.Create();
+        var expiresAt = DateTimeOffset.FromUnixTimeSeconds(1_900_000_000);
+
+        context.RunnerNonces.Add(
+            new Effect.Models.RunnerNonce.RunnerNonce
+            {
+                Nonce = "in-memory-nonce",
+                ExpiresAt = expiresAt,
+            }
+        );
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        var found = await context.RunnerNonces.SingleAsync(n => n.Nonce == "in-memory-nonce");
+        found.ExpiresAt.Should().Be(expiresAt);
+    }
+
+    #endregion
+
     #region SchedulerConfig - additional
 
     [Test]

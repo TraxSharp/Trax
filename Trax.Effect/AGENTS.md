@@ -21,7 +21,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | an enum stored in a column, or a new value for one | [0006](./docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md), a Postgres enum mapped in three places, and a new value ships before its writer |
 | anything that creates a table | [0002](./docs/adr/0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md), which half of the split you are in |
 | a new data model | [0003](./docs/adr/0003-a-model-and-its-persistent-mapping-are-a-pair.md), and [0001](./docs/adr/0001-schema-changes-are-hand-written-sql.md) for the migration it needs |
-| a table for a feature package | `Trax.Docs/adr/0009`, the DDL ships in the core provider set or it never runs |
+| a table for a feature package | `Trax.Docs/adr/0009`, the DDL ships in the core provider set or it never runs, and `Trax.Docs/adr/0036`, it ships with its model, mapping and `DbSet` on `IDataContext`, and the feature reaches it through them rather than SQL of its own |
 | authorization types a consumer writes | [0004](./docs/adr/0004-trax-owns-the-authorization-vocabulary.md), Trax owns the authorization vocabulary: `[TraxAuthorize]` and `[TraxAllowAnonymous]` declare it on every surface, and the server's own attribute is refused at startup |
 | `work_queue.confirmed_at`, `subject_key`, or `IWorkQueuePromotion` | central `docs/0018` (a deferred enqueue is staged, and a stranded one is cancelled), `docs/0019` (one subject's queued work runs one at a time), and [0007](./docs/adr/0007-cancelled-staged-entries-are-deleted-after-a-retention.md) (the sweep that cancels a stranded entry deletes it 30 days on) |
 | `IEnqueueContextAccessor` | central `docs/0018`, the context flows with the async call and is null for a deferring train |
@@ -33,7 +33,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | overriding `ServiceTrain.Run` or `NewMonad`, or their modifiers | [0009](./docs/adr/0009-a-service-train-does-its-work-in-junctions.md), `Run` and `NewMonad` are sealed so `Junctions()` is the only way a service train does work |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Twenty name `effect`: executable guards, exact version pinning, the
+index lists them by repo. Twenty-one name `effect`: executable guards, exact version pinning, the
 dependency direction, the three test conventions (FluentAssertions, no `[Ignore]`, no fixed
 delays), the canonical train name being the interface FullName, the documentation lints,
 feature-package tables shipping in the core provider migration set, the public API baseline,
@@ -41,7 +41,8 @@ test frameworks staying out of shipped libraries, exemplars declared by attribut
 its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced package,
 a chain being a declaration (`0016`), a deferred enqueue being staged (`0018`), one subject's
 queued work running one at a time (`0019`), failures being classified where they happen
-(`0020`), and a queue hook reading its input through `TrainInput` (`0021`). In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path
+(`0020`), a queue hook reading its input through `TrainInput` (`0021`), and a feature table shipping with its
+model on `IDataContext` (`0036`). In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path
 does not resolve on GitHub, because it crosses a repository boundary.
 
 ## When your change makes a decision
@@ -78,7 +79,9 @@ unclassified until you choose, and the build says so. Opting out is a normal ans
 that reads as a deferral is not.
 
 `tests/Trax.Effect.StateMachine.Persistence.Integration/MigrationSchemaTests.cs` is the
-model-versus-DDL drift guard and needs a live Postgres. `docker compose up -d` provides one.
+model-versus-DDL drift guard for the state-machine tables, and `EveryTableIsModelledTests` (Postgres)
+with `SqliteEveryTableIsModelledTests` is the one for the data context: every migrated table is
+mapped, and every mapped column exists (`0036`). The Postgres ones need a live Postgres. `docker compose up -d` provides one.
 
 This repo also **ships** guards rather than only running them, and those live outside the
 census root. `src/Trax.Effect.Data.Testing/DataLayerGuards.cs` is the data-layer guard

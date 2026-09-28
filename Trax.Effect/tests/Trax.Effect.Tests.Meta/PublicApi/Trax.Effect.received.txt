@@ -794,6 +794,17 @@ namespace Trax.Effect.Models.PersistedOperationHistory
         public string? TenantKey { get; set; }
     }
 }
+namespace Trax.Effect.Models.RunnerNonce
+{
+    public class RunnerNonce
+    {
+        public RunnerNonce() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("expires_at")]
+        public System.DateTimeOffset ExpiresAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("nonce")]
+        public string Nonce { get; set; }
+    }
+}
 namespace Trax.Effect.Models.SchedulerConfig
 {
     public class SchedulerConfig : Trax.Effect.Models.IModel

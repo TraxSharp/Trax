@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Trax.Effect.Data.Services.SqlDialect;
 
 namespace Trax.Effect.Data.Postgres.Services.SqlDialect;
@@ -10,6 +12,11 @@ internal class PostgresSqlDialect : ISqlDialect
 {
     public FormattableString TryAcquireLeaderLock(string lockName) =>
         $"""SELECT pg_try_advisory_xact_lock(hashtext('{lockName}')) AS "Value" """;
+
+    /// <summary>SQLSTATE <c>23505</c>, <c>unique_violation</c>, which a primary key raises too.</summary>
+    public bool IsUniqueViolation(DbUpdateException exception) =>
+        exception.InnerException
+            is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
     /// <summary>
     /// Reads <c>pg_class.reltuples</c> for a table in the <c>trax</c> schema.

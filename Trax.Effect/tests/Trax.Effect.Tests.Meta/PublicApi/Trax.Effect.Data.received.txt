@@ -103,6 +103,13 @@ namespace Trax.Effect.Data.Models.PersistedOperationHistory
         public static void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
     }
 }
+namespace Trax.Effect.Data.Models.RunnerNonce
+{
+    public class PersistentRunnerNonce : Trax.Effect.Models.RunnerNonce.RunnerNonce
+    {
+        public PersistentRunnerNonce() { }
+    }
+}
 namespace Trax.Effect.Data.Models.SchedulerConfig
 {
     public class PersistentSchedulerConfig : Trax.Effect.Models.SchedulerConfig.SchedulerConfig
@@ -129,6 +136,7 @@ namespace Trax.Effect.Data.Services.DataContext
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Metadata.Metadata> Metadatas { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.PersistedOperationHistory.PersistedOperationHistory> PersistedOperationHistories { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.PersistedOperation.PersistedOperation> PersistedOperations { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SchedulerConfig.SchedulerConfig> SchedulerConfigs { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.WorkQueue.WorkQueue> WorkQueues { get; set; }
         public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction() { }
@@ -154,6 +162,7 @@ namespace Trax.Effect.Data.Services.DataContext
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Metadata.Metadata> Metadatas { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.PersistedOperationHistory.PersistedOperationHistory> PersistedOperationHistories { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.PersistedOperation.PersistedOperation> PersistedOperations { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SchedulerConfig.SchedulerConfig> SchedulerConfigs { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.WorkQueue.WorkQueue> WorkQueues { get; }
         System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction();
@@ -277,6 +286,7 @@ namespace Trax.Effect.Data.Services.SqlDialect
         string ClaimWorkQueueEntry();
         string DequeueBackgroundJobs();
         string? EstimateRowCount();
+        bool IsUniqueViolation(Microsoft.EntityFrameworkCore.DbUpdateException exception);
         string LoadGroupFairQueuedJobs();
         string LockSubject();
         System.FormattableString TryAcquireLeaderLock(string lockName);

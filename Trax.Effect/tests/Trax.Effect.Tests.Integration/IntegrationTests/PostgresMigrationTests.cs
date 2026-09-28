@@ -24,6 +24,8 @@ public class PostgresMigrationTests
         "ix_work_queue_metadata_id",
         "ix_dead_letter_retry_metadata_id",
         "ix_metadata_manifest_failed",
+        // 047: the runner prunes expired nonces by this, on every sweep.
+        "ix_runner_nonce_expires_at",
     ];
 
     private static string GetConnectionString()
