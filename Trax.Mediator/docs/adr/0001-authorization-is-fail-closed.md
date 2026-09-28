@@ -46,7 +46,9 @@ two are indistinguishable at run time and only one of them is what anybody meant
 
 **The same rule is checked again when a train is run or queued.** `TrainExecutionService`
 refuses a `[TraxAuthorize]` train when no `ITrainAuthorizationService` is registered, for hosts
-where the startup validator never runs (the Lambda runner, a bare `ServiceProvider`). It has two
+where the startup validator never runs (the Lambda runner, a bare `ServiceProvider`), and throws
+`TrainAuthorizationNotConfiguredException` (an `InvalidOperationException`) so a caller can tell the
+misconfigured host from a refused input without reading the message. It has two
 exemptions: the opt-out above, and a trusted execution scope, which marks work already
 authorized at its own gate (a scheduler pipeline, a remote job runner, the dashboard) and which
 an enforcer would skip as well. A surface that submits work without going through `QueueAsync` or `RunAsync` gets the same
@@ -70,6 +72,8 @@ completely, which is by design, since the service is the consumer's to write.
 
 ## Changelog
 
+- **2026-09-27**: The runtime check throws `TrainAuthorizationNotConfiguredException`, so a surface
+  reporting enqueue refusals can report this one as a server fault.
 - **2026-09-27**: Recorded that `PrepareAsync` exposes this check to surfaces that submit work
   themselves, so they share it instead of copying it.
 - **2026-09-23**: Recorded the runtime fail-closed check in `TrainExecutionService`, and that a

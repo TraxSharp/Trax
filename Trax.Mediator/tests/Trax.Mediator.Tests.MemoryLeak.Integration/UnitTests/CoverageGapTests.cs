@@ -293,6 +293,35 @@ public class CoverageGapTests
             .WithMessage("*declares [TraxAuthorize] but no ITrainAuthorizationService*");
     }
 
+    [Test]
+    public async Task QueueAsync_AuthorizedTrain_NoAuthService_ThrowsTheNotConfiguredType()
+    {
+        // A host misconfiguration, not a refusal of the caller's input: a caller such as the
+        // scheduler's OperationsService has to be able to tell the two apart without reading
+        // the message. The type derives from InvalidOperationException so existing catches hold.
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UseInMemory())
+                .AddMediator(mediator => mediator.ScanAssemblies(typeof(CoverageGapTests).Assembly))
+        );
+        using var provider = services.BuildServiceProvider();
+        var execution = provider.GetRequiredService<ITrainExecutionService>();
+
+        var inputJson = JsonSerializer.Serialize(
+            new AuthGapInput { Value = "x" },
+            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+        );
+
+        var act = async () =>
+            await execution.QueueAsync(typeof(IAuthorizedGapTrain).FullName!, inputJson);
+
+        var thrown = await act.Should()
+            .ThrowExactlyAsync<Trax.Mediator.Exceptions.TrainAuthorizationNotConfiguredException>();
+        thrown.Which.Should().BeAssignableTo<InvalidOperationException>();
+        thrown.Which.TrainName.Should().Be(typeof(IAuthorizedGapTrain).FullName);
+    }
+
     #endregion
 
     #region TrainDiscoveryService — GraphQL attributes

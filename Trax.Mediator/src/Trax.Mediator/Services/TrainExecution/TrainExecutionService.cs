@@ -731,7 +731,8 @@ public class TrainExecutionService(
             && !mediatorConfiguration.AllowMissingAuthorizationService
         )
         {
-            throw new InvalidOperationException(
+            throw new TrainAuthorizationNotConfiguredException(
+                registration.ServiceType.FullName ?? registration.ServiceTypeName,
                 $"Train '{registration.ServiceTypeName}' declares [TraxAuthorize] but no "
                     + "ITrainAuthorizationService is registered. Call AddTraxApi() (or register "
                     + "a custom ITrainAuthorizationService) before building the host. If this "

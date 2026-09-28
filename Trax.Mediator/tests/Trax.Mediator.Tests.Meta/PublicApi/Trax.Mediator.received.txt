@@ -45,6 +45,11 @@ namespace Trax.Mediator.Exceptions
         public string TrainName { get; }
         public long WorkQueueId { get; }
     }
+    public class TrainAuthorizationNotConfiguredException : System.InvalidOperationException
+    {
+        public TrainAuthorizationNotConfiguredException(string trainName, string message) { }
+        public string TrainName { get; }
+    }
     public class TrainInputValidationException : System.InvalidOperationException
     {
         public TrainInputValidationException(string trainName, int observedBytes, int maxBytes) { }
