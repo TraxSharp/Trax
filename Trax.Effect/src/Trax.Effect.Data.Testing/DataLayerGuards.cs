@@ -414,6 +414,228 @@ public static class DataLayerGuards
     }
 
     /// <summary>
+    /// Query code does not switch an owner-scope filter off on a per-user set. The census
+    /// (<see cref="OwnerScopeCompleteness"/>) reads the model, so a filter that is present there
+    /// but disabled at a call site is invisible to it; this scans the source under
+    /// <see cref="ArchitectureGuardOptions.SourceScanRoots"/> for the call sites.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two calls are found. <c>IgnoreQueryFilters()</c> with no arguments switches every filter
+    /// off. An EF10 named-filter disable, <c>IgnoreQueryFilters(["Name"])</c>, is reported only
+    /// when it names an owner-scope filter on a per-user entity (a named filter whose expression
+    /// reads <see cref="OwnerScopeCensusOptions.PrincipalAccessorType"/>), or when its names are
+    /// not string literals the scan can read.
+    /// </para>
+    /// <para>
+    /// The set a call applies to is read from the text of its statement: a <c>DbSet</c> or
+    /// <c>IQueryable</c> property declared under the scan roots, or <c>Set&lt;T&gt;()</c>. A call
+    /// on a per-user set is reported, a call on a set of shared rows is not, and a call whose set
+    /// the scan cannot name (a query passed in, a helper over <c>IQueryable&lt;T&gt;</c>) is
+    /// reported, because it may be a per-user one. A file that switches the filter off on purpose
+    /// goes in <see cref="OwnerScopeCensusOptions.FilterBypassAllowlist"/> with the reason.
+    /// </para>
+    /// <para>
+    /// This is text, not a compiler: it does not follow a query built in one statement and
+    /// filtered in another, and it cannot tell a <c>Notes</c> set on one context from one on
+    /// another. It narrows where a leak can come from; cross-user behavioural tests, one caller
+    /// trying to read another's rows, are what prove there is none.
+    /// </para>
+    /// </remarks>
+    public static GuardResult OwnerScopeFilterBypasses(
+        ArchitectureGuardOptions scan,
+        IReadOnlyList<IReadOnlyModel> models,
+        OwnerScopeCensusOptions options
+    )
+    {
+        ArgumentNullException.ThrowIfNull(scan);
+        ArgumentNullException.ThrowIfNull(models);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(options.PrincipalAccessorType);
+
+        // Entities whose root carries an owner-scope filter: the ones a bypass exposes. Keyed by
+        // simple name, because that is all the source text gives.
+        var scopedEntities = models
+            .SelectMany(m => m.GetEntityTypes())
+            .Where(e => !e.IsOwned() && HasOwnerScopeFilter(e, options.PrincipalAccessorType))
+            .ToList();
+        var perUserTypeNames = scopedEntities
+            .Select(e => e.ClrType.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        var ownerFilterNames = scopedEntities
+            .SelectMany(e => e.GetRootType().GetDeclaredQueryFilters())
+            .Where(f =>
+                !f.IsAnonymous
+                && f.Expression is not null
+                && References(f.Expression, options.PrincipalAccessorType)
+            )
+            .Select(f => f.Key!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var root = scan.RepoRootOverride ?? RepoRoot.Path;
+        var files = SourceFiles
+            .CSharpUnder(root, [.. scan.SourceScanRoots])
+            .Select(file => (Path: Rel(root, file), Text: File.ReadAllText(file)))
+            .Select(f => (f.Path, f.Text, Stripped: SourceText.StripCommentsAndStrings(f.Text)))
+            .ToList();
+
+        // Set name -> element type names, from every DbSet/IQueryable property under the roots.
+        var sets = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var file in files)
+        foreach (Match declaration in SetDeclaration.Matches(file.Stripped))
+        {
+            var name = declaration.Groups["name"].Value;
+            if (!sets.TryGetValue(name, out var types))
+                sets[name] = types = new HashSet<string>(StringComparer.Ordinal);
+            types.Add(declaration.Groups["type"].Value);
+        }
+
+        var offenders = new List<string>();
+        var bypassingFiles = new HashSet<string>(StringComparer.Ordinal);
+        var inspected = 0;
+
+        foreach (var file in files)
+        foreach (Match call in IgnoreQueryFiltersCall.Matches(file.Stripped))
+        {
+            inspected++;
+            var line = LineOf(file.Stripped, call.Index);
+            var close = MatchingParen(file.Stripped, call.Index + call.Length - 1);
+            var arguments = file.Text[(call.Index + call.Length)..close].Trim();
+
+            string? disables = null;
+            if (arguments.Length > 0)
+            {
+                var names = LiteralNames(arguments);
+                if (names is null)
+                    disables = "filters named by an expression the scan cannot read";
+                else if (names.FirstOrDefault(ownerFilterNames.Contains) is { } owner)
+                    disables = $"the owner-scope filter \"{owner}\"";
+                else
+                    continue;
+            }
+
+            var statement = StatementBefore(file.Stripped, call.Index);
+            var perUser = new SortedSet<string>(StringComparer.Ordinal);
+            var shared = false;
+            foreach (Match reference in SetReference.Matches(statement))
+            {
+                var typed = reference.Groups["type"];
+                var element = typed.Success ? [typed.Value] : ElementTypes(reference.Value);
+                foreach (var type in element)
+                    if (perUserTypeNames.Contains(type))
+                        perUser.Add(type);
+                    else
+                        shared = true;
+            }
+
+            IEnumerable<string> ElementTypes(string name) =>
+                sets.TryGetValue(name, out var types) ? types : [];
+
+            if (perUser.Count == 0 && shared)
+                continue;
+
+            bypassingFiles.Add(file.Path);
+            if (options.FilterBypassAllowlist.ContainsKey(file.Path))
+                continue;
+
+            var what = disables ?? "every query filter, the owner scope included";
+            offenders.Add(
+                perUser.Count > 0
+                    ? $"{file.Path}:{line}: IgnoreQueryFilters switches off {what} on "
+                        + $"{string.Join(", ", perUser)}, which holds per-user data. Every caller "
+                        + "reaching this query reads every owner's rows."
+                    : $"{file.Path}:{line}: IgnoreQueryFilters switches off {what}, and the scan "
+                        + "cannot tell which set it applies to, so it may be a per-user one."
+            );
+        }
+
+        foreach (var (path, reason) in options.FilterBypassAllowlist.OrderBy(a => a.Key))
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+                offenders.Add(
+                    $"{path}: allowlisted to switch an owner-scope filter off with no reason. Say "
+                        + "why reading every owner's rows is right there."
+                );
+            else if (!bypassingFiles.Contains(path))
+                offenders.Add(
+                    $"{path}: allowlisted ({reason}) but switches no owner-scope filter off, so "
+                        + "the entry covers nothing today and would silently cover whatever the "
+                        + "file does next. Remove it."
+                );
+        }
+
+        var message =
+            "Query code must not switch an owner-scope filter off on a per-user set: the census "
+            + "sees the filter in the model and cannot see it disabled at a call site. Keep the "
+            + "filter, or allowlist the file in FilterBypassAllowlist with the reason "
+            + "(docs/adr/0008-per-user-data-is-filtered-by-its-owner.md). Offenders:\n  "
+            + string.Join("\n  ", offenders);
+
+        return new GuardResult(offenders, inspected, message);
+    }
+
+    private static readonly Regex IgnoreQueryFiltersCall = new(
+        @"\.\s*IgnoreQueryFilters\s*\(",
+        RegexOptions.Compiled
+    );
+
+    private static readonly Regex SetDeclaration = new(
+        @"\b(?:DbSet|IQueryable)\s*<\s*(?:[\w.]+\.)?(?<type>\w+)\s*>\s+(?<name>\w+)\s*(?:\{|=>|=|;)",
+        RegexOptions.Compiled
+    );
+
+    // Set<Note>() names its type; any other identifier might be a set property, and is looked up.
+    private static readonly Regex SetReference = new(
+        @"\bSet\s*<\s*(?:[\w.]+\.)?(?<type>\w+)\s*>|\b\w+\b",
+        RegexOptions.Compiled
+    );
+
+    private static readonly Regex StringLiteral = new(
+        @"""((?:[^""\\]|\\.)*)""",
+        RegexOptions.Compiled
+    );
+
+    private static readonly Regex LiteralCollection = new(
+        @"^(?:new\s*(?:string)?\s*\[\s*\]\s*\{|\[)?\s*(?:""(?:[^""\\]|\\.)*""\s*,?\s*)*(?:\}|\])?$",
+        RegexOptions.Compiled
+    );
+
+    /// <summary>
+    /// The filter names in a named-filter disable, or <c>null</c> when they are not all string
+    /// literals in a collection expression or array initializer.
+    /// </summary>
+    private static IReadOnlyList<string>? LiteralNames(string arguments) =>
+        LiteralCollection.IsMatch(arguments)
+            ? StringLiteral.Matches(arguments).Select(m => m.Groups[1].Value).ToList()
+            : null;
+
+    /// <summary>
+    /// The text of the statement a call belongs to, up to the call: back to the previous
+    /// <c>;</c>, <c>{</c> or <c>}</c>. A block-bodied lambda earlier in the chain cuts it short,
+    /// which can only leave the set unnamed, and an unnamed set is reported.
+    /// </summary>
+    private static string StatementBefore(string stripped, int index)
+    {
+        var start = stripped.LastIndexOfAny([';', '{', '}'], Math.Max(0, index - 1));
+        return stripped[(start + 1)..index];
+    }
+
+    private static int MatchingParen(string stripped, int open)
+    {
+        var depth = 0;
+        for (var i = open; i < stripped.Length; i++)
+        {
+            if (stripped[i] == '(')
+                depth++;
+            else if (stripped[i] == ')' && --depth == 0)
+                return i;
+        }
+        return stripped.Length;
+    }
+
+    private static int LineOf(string text, int index) => 1 + text.AsSpan(0, index).Count('\n');
+
+    /// <summary>
     /// The tables and views an entity reads, schema-qualified. Two entity types naming the same one
     /// read the same rows.
     /// </summary>

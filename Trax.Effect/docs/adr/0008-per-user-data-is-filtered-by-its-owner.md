@@ -64,6 +64,13 @@ EF declares a filter on a hierarchy's root, so a derived type is judged by its r
 Owned types share their owner's filter and are skipped. A many-to-many join entity with a foreign
 key to the owner is reported like any other entity, and can be filtered through `UsingEntity`.
 
+A filter present in the model can still be switched off where the entity is queried. The fixture
+therefore also scans the consumer's source for `IgnoreQueryFilters()`, and for an EF10 named-filter
+disable naming an owner-scope filter, on a per-user set. It is on whenever the census is, because a
+scan that has to be switched on protects no one who did not know to; a call on a set the scan cannot
+name is reported rather than assumed safe, and a file that switches the owner scope off on purpose
+is allowlisted with a reason, checked in both directions like the other declarations.
+
 ## Exemplars
 
 - `OwnerScopeCompletenessTests` covers each way an entity is recognised as per-user, the filter
@@ -71,18 +78,28 @@ key to the owner is reported like any other entity, and can be filtered through 
   refused GraphQL posture, the exemption rules, the gated allowance (it never excuses the filter
   or an anonymous or undeclared posture, and stale entries fail), and a view mapping over a
   per-user table.
-- `DomainDataLayerGuardFixtureSelfTest` runs the census through the turnkey fixture the way a
-  consumer would.
+- `OwnerScopeFilterBypassTests` covers the source scan: `IgnoreQueryFilters()` on a per-user set
+  (through a `DbSet` property, `Set<T>()`, or a derived type) fails, as does a named disable of the
+  owner-scope filter, one whose names cannot be read, and a call on a set the scan cannot name; a
+  call on shared rows, a named disable of another filter, and an allowlisted file pass, and a
+  blank or stale allowlist entry fails.
+- `DomainDataLayerGuardFixtureSelfTest` runs the census and the scan through the turnkey fixture the
+  way a consumer would.
 
 Not covered: the guard proves a principal-reading filter exists, not that it is correct. A filter
 that reads the principal and compares the wrong column passes, and so does one with a bypass branch
 (`principal.IsAdmin || e.OwnerId == principal.Id`): paired with an admin gate, that entity serves
 every owner's rows to admins, by the filter's own design rather than the gate's. The census reads
-the model, not the code that queries it, so `IgnoreQueryFilters()` in a consumer's resolver or
-train, and an entity mapped with `ToSqlQuery` or to a function, are invisible to it. Trax's own
-query paths do not call `IgnoreQueryFilters()`. Cross-user behavioural tests, one caller trying to
-read another's rows, are what catch all of this, and they are the consumer's to write.
+the model; the source scan reads text, so it sees `IgnoreQueryFilters` at a call site but does not
+follow a query built in one statement and filtered in another, and it cannot tell two contexts'
+sets of the same name apart. An entity mapped with `ToSqlQuery` or to a function over per-user
+tables, and a per-user entity reached through a navigation from an exposed type, are invisible to
+both. Trax's own query paths do not call `IgnoreQueryFilters()`. Cross-user behavioural tests, one
+caller trying to read another's rows, are what catch all of this, and they are the consumer's to
+write.
 
 ## Changelog
 
+- **2026-09-27**: The fixture also scans query code for `IgnoreQueryFilters` and named-filter
+  disables on per-user sets, with a reasoned allowlist.
 - **2026-09-27**: Recorded.

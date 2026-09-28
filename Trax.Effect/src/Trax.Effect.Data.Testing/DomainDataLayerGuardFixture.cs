@@ -58,6 +58,15 @@ public abstract class DomainDataLayerGuardFixture
     /// </summary>
     protected virtual OwnerScopeCensusOptions? OwnerScope => null;
 
+    /// <summary>
+    /// Whether the owner-scope census also scans the source under <see cref="Options"/>' scan roots
+    /// for query code that switches an owner-scope filter off
+    /// (<see cref="DataLayerGuards.OwnerScopeFilterBypasses"/>). On whenever
+    /// <see cref="OwnerScopedModels"/> is set; turn it off only if the scan roots do not hold the
+    /// code that queries those models.
+    /// </summary>
+    protected virtual bool ScanForOwnerScopeFilterBypasses => true;
+
     /// <summary>The shared base type name the source guards look for. Defaults to <c>DomainDataContext</c>.</summary>
     protected virtual string BaseTypeName => "DomainDataContext";
 
@@ -108,5 +117,23 @@ public abstract class DomainDataLayerGuardFixture
             var result = DataLayerGuards.OwnerScopeCompleteness(model, options);
             Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
         }
+    }
+
+    [Test]
+    public void Query_code_does_not_switch_an_owner_scope_filter_off()
+    {
+        var models = OwnerScopedModels;
+        if (models.Count == 0 || !ScanForOwnerScopeFilterBypasses)
+            return;
+
+        var options =
+            OwnerScope
+            ?? throw new InvalidOperationException(
+                $"{GetType().Name} overrides OwnerScopedModels but not OwnerScope. The census "
+                    + "needs the owner type and the principal accessor."
+            );
+
+        var result = DataLayerGuards.OwnerScopeFilterBypasses(Options, models, options);
+        Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
     }
 }

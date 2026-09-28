@@ -59,7 +59,14 @@ public sealed class DomainDataLayerGuardFixtureSelfTest : DomainDataLayerGuardFi
     public void CreateConformingRepo() =>
         _repo = new TempRepo()
             .Write("src/Catalog/CatalogDbContext.cs", DerivedContext)
-            .Write("src/Catalog/ICatalogDbContext.cs", "public interface ICatalogDbContext { }");
+            .Write("src/Catalog/ICatalogDbContext.cs", "public interface ICatalogDbContext { }")
+            // Query code switching a filter off on shared rows, so the inherited filter-bypass
+            // scan runs down a real path and passes.
+            .Write(
+                "src/Catalog/ArticleArchive.cs",
+                "public class ArticleArchive { public DbSet<Article> Articles { get; set; } = null!;\n"
+                    + "  public IQueryable<Article> Deleted() => Articles.IgnoreQueryFilters(); }"
+            );
 
     [OneTimeTearDown]
     public void Cleanup() => _repo.Dispose();

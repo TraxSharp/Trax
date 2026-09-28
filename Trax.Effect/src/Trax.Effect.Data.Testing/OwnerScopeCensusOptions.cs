@@ -57,4 +57,14 @@ public sealed record OwnerScopeCensusOptions
     /// when it is stale: the entity is not per-user, is not exposed, or carries no role or policy.
     /// </summary>
     public IReadOnlyDictionary<Type, string> Gated { get; init; } = new Dictionary<Type, string>();
+
+    /// <summary>
+    /// Source files allowed to switch an owner-scope filter off in query code, keyed by path
+    /// relative to the repo root (forward slashes), each with the reason. Read by
+    /// <see cref="DataLayerGuards.OwnerScopeFilterBypasses"/>. An entry is itself reported when its
+    /// reason is blank, and when the file no longer switches one off, so a stale entry cannot
+    /// quietly cover whatever the file does next.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> FilterBypassAllowlist { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
 }
