@@ -4,6 +4,7 @@ using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Effect.Data.Services.EnqueueContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.WorkQueue;
@@ -116,6 +117,25 @@ public class NestedEnqueueTests : TestSetup
             .NotBeNull(
                 "the outer commit is what makes it visible, so there is no staged state for the "
                     + "stale-entry sweep to find"
+            );
+    }
+
+    [Test]
+    public async Task A_nested_deferring_train_sees_no_enqueue_context()
+    {
+        ContextRecordingDeferringLeafTrain.Reset();
+
+        await Execution.QueueAsync(
+            typeof(IOuterTrain).FullName!,
+            Json(new OuterInput { Leaf = typeof(IContextRecordingDeferringLeafTrain).FullName! })
+        );
+
+        ContextRecordingDeferringLeafTrain.HookRan.Should().BeTrue();
+        ContextRecordingDeferringLeafTrain
+            .SawContext.Should()
+            .BeFalse(
+                "a deferring train's hook is documented to see no enqueue context, whoever "
+                    + "enqueued it, so it cannot write into a transaction it did not open"
             );
     }
 
@@ -342,6 +362,39 @@ public class NestedEnqueueTests : TestSetup
 
         protected override Task OnQueue(Metadata metadata, CancellationToken ct) =>
             Task.CompletedTask;
+
+        protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
+    }
+
+    public record ContextRecordingDeferringLeafInput
+    {
+        public string Label { get; init; } = "default";
+    }
+
+    public interface IContextRecordingDeferringLeafTrain
+        : IServiceTrain<ContextRecordingDeferringLeafInput, Unit>;
+
+    public class ContextRecordingDeferringLeafTrain(IEnqueueContextAccessor enqueueContext)
+        : ServiceTrain<ContextRecordingDeferringLeafInput, Unit>,
+            IContextRecordingDeferringLeafTrain
+    {
+        public static bool HookRan { get; private set; }
+        public static bool SawContext { get; private set; }
+
+        public static void Reset()
+        {
+            HookRan = false;
+            SawContext = false;
+        }
+
+        protected override bool DeferQueuePromotion => true;
+
+        protected override Task OnQueue(Metadata metadata, CancellationToken ct)
+        {
+            HookRan = true;
+            SawContext = enqueueContext.Current is not null;
+            return Task.CompletedTask;
+        }
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
     }

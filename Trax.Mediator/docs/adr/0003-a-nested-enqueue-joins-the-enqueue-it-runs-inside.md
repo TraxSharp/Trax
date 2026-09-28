@@ -38,8 +38,8 @@ enqueue instead, and joins only one that writes through the same data context fa
 the outer transaction until that commits, so there is no window between hook and confirm for
 staging to protect, and a staged row inside someone else's transaction would only be confirmed by
 the same commit anyway. It is written confirmed, and its hook runs as a deferring hook would:
-it is meant to see no enqueue context. Clearing the outer context around it needs an API
-Trax.Effect does not have yet, so until then that hook still sees the outer context.
+it sees no enqueue context. The mediator clears the outer context around it with
+`IEnqueueContextAccessor.Suppress()` (Trax.Effect 1.56.0).
 
 **A nested enqueue that fails fails the outer enqueue, even when the hook catches it.** The failed
 attempt may have tracked or flushed writes on the shared context, and committing those would be a
@@ -62,8 +62,8 @@ join atomic.
 ## Exemplars
 
 - `NestedEnqueueTests` (Postgres suite) pins the rollback, the commit, a nested deferring train,
-  a swallowed nested failure, concurrent nested enqueues, an unawaited one, and a deferring hook
-  having nothing to join.
+  a swallowed nested failure, concurrent nested enqueues, an unawaited one, a deferring hook
+  having nothing to join, and a nested deferring train's hook seeing no enqueue context.
 - `HookConnectionPoolTests` (Postgres suite) pins that two hooks which enqueue and then wait do
   not exhaust a pool of two connections.
 - [OnQueue: enqueue-time hook](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) is the
@@ -75,3 +75,4 @@ context factory and does not join, and nothing checks the consumer did not mean 
 ## Changelog
 
 - **2026-09-27**: Recorded.
+- **2026-09-27**: A nested deferring train's hook no longer sees the outer context.

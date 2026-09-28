@@ -241,27 +241,17 @@ public class TrainExecutionService(
 
             if (ResolveOnQueueOverride(registration.ImplementationType) is not null)
             {
-                if (declaresDeferral)
-                {
-                    // A deferring train's hook is documented to see no enqueue context, whoever
-                    // enqueued it. Clearing the one the outer hook entered needs an API
-                    // Trax.Effect does not have yet, so today it still sees the outer context.
-                    await InvokeQueueHookAsync(registration, train, input, entry.ExternalId, ct);
-                }
-                else
-                {
-                    var enqueueContext =
-                        serviceProvider.GetRequiredService<IEnqueueContextAccessor>();
+                var enqueueContext = serviceProvider.GetRequiredService<IEnqueueContextAccessor>();
 
-                    using (enqueueContext.Enter(outer.Context))
-                        await InvokeQueueHookAsync(
-                            registration,
-                            train,
-                            input,
-                            entry.ExternalId,
-                            ct
-                        );
-                }
+                // A deferring train's hook is documented to see no enqueue context, whoever
+                // enqueued it, so the one the outer hook entered is cleared for it. Its writes go
+                // through a context of its own, which is what deferral exists for.
+                using (
+                    declaresDeferral
+                        ? enqueueContext.Suppress()
+                        : enqueueContext.Enter(outer.Context)
+                )
+                    await InvokeQueueHookAsync(registration, train, input, entry.ExternalId, ct);
             }
 
             await outer.WithContextAsync(context => context.SaveChanges(ct));
@@ -456,7 +446,13 @@ public class TrainExecutionService(
 
         try
         {
-            await InvokeQueueHookAsync(registration, train, input, entry.ExternalId, ct);
+            // No enqueue context: the entry is already committed, so there is no transaction for
+            // the hook to join. Cleared rather than left alone because an enqueue started from
+            // inside another train's hook would otherwise see that train's context.
+            var enqueueContext = serviceProvider.GetRequiredService<IEnqueueContextAccessor>();
+
+            using (enqueueContext.Suppress())
+                await InvokeQueueHookAsync(registration, train, input, entry.ExternalId, ct);
         }
         catch (Exception hookFailure)
         {
