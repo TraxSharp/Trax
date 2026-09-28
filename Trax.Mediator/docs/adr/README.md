@@ -37,10 +37,11 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | Area | ADRs |
 | --- | --- |
 | `auth` | [0001](./0001-authorization-is-fail-closed.md) |
-| `platform` | [0001](./0001-authorization-is-fail-closed.md) |
+| `platform` | [0001](./0001-authorization-is-fail-closed.md), [0002](./0002-an-enqueue-resolves-its-train-in-a-scope-of-its-own.md) |
 
 ## All of them
 
 | # | Decision | Areas |
 | --- | --- | --- |
 | [0001](./0001-authorization-is-fail-closed.md) | A gated train with no authorization service refuses to start | auth, platform |
+| [0002](./0002-an-enqueue-resolves-its-train-in-a-scope-of-its-own.md) | An enqueue resolves its train in a scope of its own | platform |

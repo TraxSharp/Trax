@@ -63,7 +63,14 @@ public class TrainExecutionService(
             TraxJsonSerializationOptions.ManifestProperties
         );
 
-        var deferPromotion = ResolveDeferPromotion(registration);
+        // The train is resolved at most once per enqueue, in a scope of its own that is disposed
+        // when the enqueue returns. The caller's scope can live as long as a Blazor circuit, so
+        // resolving from it kept every train and its scoped dependencies alive for the life of
+        // the tab, and a scoped DbContext a hook left a failed write in failed every later
+        // enqueue of the train from that tab.
+        await using var train = new EnqueueTrain(serviceProvider, registration);
+
+        var deferPromotion = ResolveDeferPromotion(registration, train);
 
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -77,10 +84,10 @@ public class TrainExecutionService(
             }
         );
 
-        entry.SubjectKey = ResolveSubjectKey(registration, input, entry.ExternalId);
+        entry.SubjectKey = ResolveSubjectKey(registration, train, input, entry.ExternalId);
 
         if (deferPromotion)
-            return await QueueWithDeferredPromotionAsync(registration, input, entry, ct);
+            return await QueueWithDeferredPromotionAsync(registration, train, input, entry, ct);
 
         using var dataContext = await dataContextFactory.CreateDbContextAsync(ct);
 
@@ -111,7 +118,7 @@ public class TrainExecutionService(
                 var enqueueContext = serviceProvider.GetRequiredService<IEnqueueContextAccessor>();
 
                 using (enqueueContext.Enter(dataContext))
-                    await InvokeQueueHookAsync(registration, input, entry.ExternalId, ct);
+                    await InvokeQueueHookAsync(registration, train, input, entry.ExternalId, ct);
             }
 
             await dataContext.SaveChanges(ct);
@@ -202,6 +209,7 @@ public class TrainExecutionService(
     /// </remarks>
     private string? ResolveSubjectKey(
         TrainRegistration registration,
+        EnqueueTrain train,
         object input,
         string externalId
     )
@@ -212,8 +220,6 @@ public class TrainExecutionService(
 
         if (subjectKey is null)
             return null;
-
-        var train = serviceProvider.GetRequiredService(registration.ServiceType);
 
         var keyMetadata = Metadata.Create(
             new CreateMetadata
@@ -228,7 +234,7 @@ public class TrainExecutionService(
 
         try
         {
-            key = (string?)subjectKey.Invoke(train, [keyMetadata]);
+            key = (string?)subjectKey.Invoke(train.Instance, [keyMetadata]);
         }
         catch (TargetInvocationException ex)
         {
@@ -304,6 +310,7 @@ public class TrainExecutionService(
     /// </remarks>
     private async Task<QueueTrainResult> QueueWithDeferredPromotionAsync(
         TrainRegistration registration,
+        EnqueueTrain train,
         object input,
         WorkQueue entry,
         CancellationToken ct
@@ -317,7 +324,7 @@ public class TrainExecutionService(
 
         try
         {
-            await InvokeQueueHookAsync(registration, input, entry.ExternalId, ct);
+            await InvokeQueueHookAsync(registration, train, input, entry.ExternalId, ct);
         }
         catch (Exception hookFailure)
         {
@@ -420,7 +427,7 @@ public class TrainExecutionService(
     /// Whether this train holds its queue entry unconfirmed until <c>OnQueue</c> has committed.
     /// False for every train that does not override the hook, so the common path is untouched.
     /// </summary>
-    private bool ResolveDeferPromotion(TrainRegistration registration)
+    private static bool ResolveDeferPromotion(TrainRegistration registration, EnqueueTrain train)
     {
         if (ResolveOnQueueOverride(registration.ImplementationType) is null)
             return false;
@@ -437,11 +444,9 @@ public class TrainExecutionService(
         if (property is null)
             return false;
 
-        var train = serviceProvider.GetRequiredService(registration.ServiceType);
-
         try
         {
-            return property.GetValue(train) is true;
+            return property.GetValue(train.Instance) is true;
         }
         catch (TargetInvocationException ex)
         {
@@ -513,8 +518,8 @@ public class TrainExecutionService(
     }
 
     /// <summary>
-    /// Invokes the train's <c>OnQueue</c> hook if the concrete train overrides it. Resolves the
-    /// train through its service interface (so <c>[Inject]</c> properties and <c>CanonicalName</c>
+    /// Invokes the train's <c>OnQueue</c> hook if the concrete train overrides it. Uses the
+    /// enqueue's train, resolved through its service interface (so <c>[Inject]</c> properties and <c>CanonicalName</c>
     /// are populated exactly as a normal run would), then calls the hook with a non-persisted
     /// metadata carrying the input, canonical name, and the work queue entry's ExternalId.
     /// Exceptions are intentionally not caught: a failed <c>OnQueue</c> aborts the enqueue.
@@ -525,8 +530,9 @@ public class TrainExecutionService(
     /// selection in train discovery (it picks the first non-generic interface), so every train
     /// could register under the marker instead of its own interface.
     /// </remarks>
-    private async Task InvokeQueueHookAsync(
+    private static async Task InvokeQueueHookAsync(
         TrainRegistration registration,
+        EnqueueTrain train,
         object input,
         string externalId,
         CancellationToken ct
@@ -535,8 +541,6 @@ public class TrainExecutionService(
         var onQueue = ResolveOnQueueOverride(registration.ImplementationType);
         if (onQueue is null)
             return;
-
-        var train = serviceProvider.GetRequiredService(registration.ServiceType);
 
         var hookMetadata = Metadata.Create(
             new CreateMetadata
@@ -549,7 +553,7 @@ public class TrainExecutionService(
 
         try
         {
-            await (Task)onQueue.Invoke(train, [hookMetadata, ct])!;
+            await (Task)onQueue.Invoke(train.Instance, [hookMetadata, ct])!;
         }
         catch (TargetInvocationException ex)
         {
@@ -729,4 +733,42 @@ public class TrainExecutionService(
         JsonSerializerOptions Given,
         JsonSerializerOptions Missing
     );
+
+    /// <summary>
+    /// The train one enqueue reads its subject key, its deferral flag and its hook from: resolved
+    /// through its service interface on first use, in a scope created for this enqueue, and
+    /// disposed with that scope when the enqueue returns. A train that overrides neither member
+    /// is never resolved and no scope is created.
+    /// </summary>
+    /// <remarks>
+    /// Resolving from the caller's scope instead, as this once did, parked a transient train graph
+    /// (its <c>EffectRunner</c> and data context included) in that scope three times per enqueue,
+    /// and let the scoped services a hook takes carry state from one enqueue into the next.
+    /// See mediator/0002.
+    /// </remarks>
+    private sealed class EnqueueTrain(
+        IServiceProvider callerServices,
+        TrainRegistration registration
+    ) : IAsyncDisposable
+    {
+        private AsyncServiceScope? _scope;
+        private object? _instance;
+
+        public object Instance
+        {
+            get
+            {
+                if (_instance is not null)
+                    return _instance;
+
+                _scope = callerServices.CreateAsyncScope();
+                _instance = _scope.Value.ServiceProvider.GetRequiredService(
+                    registration.ServiceType
+                );
+                return _instance;
+            }
+        }
+
+        public ValueTask DisposeAsync() => _scope?.DisposeAsync() ?? ValueTask.CompletedTask;
+    }
 }
