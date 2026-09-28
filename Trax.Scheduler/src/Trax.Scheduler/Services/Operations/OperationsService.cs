@@ -668,11 +668,10 @@ public class OperationsService : IOperationsService
             db,
             db.Metadatas.Where(m => distinct.Contains(m.Id)),
             _services?.GetService<ICancellationRegistry>(),
+            _changeSignal,
             ct
         );
 
-        // No change signal: ChangeDomain has no domain for runs, and a run's state change is
-        // published by the train's own events when the cancellation takes effect.
         return new OperationResult(
             true,
             Count: flagged,

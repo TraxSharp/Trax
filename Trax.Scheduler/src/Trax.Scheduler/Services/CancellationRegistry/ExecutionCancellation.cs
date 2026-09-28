@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
+using Trax.Effect.Services.ChangeSignal;
 
 namespace Trax.Scheduler.Services.CancellationRegistry;
 
@@ -21,12 +22,15 @@ internal static class ExecutionCancellation
     /// host runs it; a Pending run sees it when it starts. The update repeats the state test, so
     /// a run that finished between the read and the write is not flagged. Only the runs that
     /// were cancellable when read go to the registry, so a finished run's token is never touched.
+    /// When any run is flagged, <see cref="ChangeDomain.Execution"/> is signalled, so a runs view
+    /// refetches without waiting for the cancellation to take effect.
     /// </remarks>
     /// <returns>The number of runs flagged.</returns>
     internal static async Task<int> RequestAsync(
         IDataContext context,
         IQueryable<Metadata> candidates,
         ICancellationRegistry? registry,
+        ITraxChangeSignal? changeSignal,
         CancellationToken ct
     )
     {
@@ -48,6 +52,9 @@ internal static class ExecutionCancellation
         if (registry is not null)
             foreach (var id in ids)
                 registry.TryCancel(id);
+
+        if (flagged > 0)
+            changeSignal?.Notify(ChangeDomain.Execution);
 
         return flagged;
     }

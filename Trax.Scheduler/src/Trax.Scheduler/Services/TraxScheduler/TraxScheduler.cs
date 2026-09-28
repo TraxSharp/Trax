@@ -500,6 +500,7 @@ public class TraxScheduler(
             context,
             context.Metadatas.Where(m => m.ManifestId == manifest.Id),
             cancellationRegistry,
+            changeSignal,
             ct
         );
 
@@ -524,6 +525,7 @@ public class TraxScheduler(
                 m.Manifest != null && m.Manifest.ManifestGroupId == groupId
             ),
             cancellationRegistry,
+            changeSignal,
             ct
         );
 

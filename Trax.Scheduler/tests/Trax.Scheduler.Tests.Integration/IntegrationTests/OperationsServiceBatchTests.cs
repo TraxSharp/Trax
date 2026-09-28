@@ -171,6 +171,30 @@ public class OperationsServiceBatchTests : TestSetup
         }
     }
 
+    [Test]
+    public async Task Cancel_signals_the_execution_domain_when_it_flags_a_run()
+    {
+        var running = await SeedRun(TrainState.InProgress);
+
+        await _operations.CancelExecutionsAsync([running.Id], CancellationToken.None);
+
+        _signal.Domains.Should().Equal(ChangeDomain.Execution);
+    }
+
+    [Test]
+    public async Task Cancel_that_flags_nothing_does_not_signal()
+    {
+        var completed = await SeedRun(TrainState.Completed);
+
+        var result = await _operations.CancelExecutionsAsync(
+            [completed.Id],
+            CancellationToken.None
+        );
+
+        result.Count.Should().Be(0);
+        _signal.Domains.Should().BeEmpty();
+    }
+
     #endregion
 
     #region CancelWorkQueueEntriesAsync

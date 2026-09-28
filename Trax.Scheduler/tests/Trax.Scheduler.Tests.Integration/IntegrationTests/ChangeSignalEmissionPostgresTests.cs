@@ -2,8 +2,11 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Scheduler.Tests.Integration.Fakes;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
@@ -148,5 +151,97 @@ public class ChangeSignalEmissionPostgresTests
 
         count.Should().BeGreaterThan(0);
         recording.Domains.Should().ContainSingle().Which.Should().Be(ChangeDomain.WorkQueue);
+    }
+
+    [Test]
+    public async Task CancelManifest_WithARunInProgress_EmitsExecution()
+    {
+        var recording = new RecordingChangeSignal();
+        await using var fx = await CreateAsync(
+            recording,
+            s =>
+                s.Schedule<ISchedulerTestTrain>(
+                    "pg-cancel",
+                    new SchedulerTestInput(),
+                    Every.Minutes(5)
+                )
+        );
+        await fx.MaterializePendingManifestsAsync();
+        await SeedRunAsync(fx, "pg-cancel", TrainState.InProgress);
+        recording.Clear();
+
+        var flagged = await fx.Scheduler.CancelAsync("pg-cancel");
+
+        flagged.Should().Be(1);
+        recording.Domains.Should().Equal(ChangeDomain.Execution);
+    }
+
+    [Test]
+    public async Task CancelGroup_WithARunPending_EmitsExecution()
+    {
+        var recording = new RecordingChangeSignal();
+        await using var fx = await CreateAsync(
+            recording,
+            s =>
+                s.Schedule<ISchedulerTestTrain>(
+                    "pg-cancel-grp",
+                    new SchedulerTestInput(),
+                    Every.Minutes(5)
+                )
+        );
+        await fx.MaterializePendingManifestsAsync();
+        var manifest = await SeedRunAsync(fx, "pg-cancel-grp", TrainState.Pending);
+        recording.Clear();
+
+        var flagged = await fx.Scheduler.CancelGroupAsync(manifest.ManifestGroupId);
+
+        flagged.Should().Be(1);
+        recording.Domains.Should().Equal(ChangeDomain.Execution);
+    }
+
+    [Test]
+    public async Task CancelManifest_WithNothingRunning_EmitsNothing()
+    {
+        var recording = new RecordingChangeSignal();
+        await using var fx = await CreateAsync(
+            recording,
+            s =>
+                s.Schedule<ISchedulerTestTrain>(
+                    "pg-cancel-idle",
+                    new SchedulerTestInput(),
+                    Every.Minutes(5)
+                )
+        );
+        await fx.MaterializePendingManifestsAsync();
+        await SeedRunAsync(fx, "pg-cancel-idle", TrainState.Completed);
+        recording.Clear();
+
+        var flagged = await fx.Scheduler.CancelAsync("pg-cancel-idle");
+
+        flagged.Should().Be(0);
+        recording.Domains.Should().BeEmpty();
+    }
+
+    private static async Task<Trax.Effect.Models.Manifest.Manifest> SeedRunAsync(
+        SchedulerE2EFixture fx,
+        string externalId,
+        TrainState state
+    )
+    {
+        var manifest = await fx.DataContext.Manifests.FirstAsync(m => m.ExternalId == externalId);
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(ISchedulerTestTrain).FullName!,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = new SchedulerTestInput(),
+                ManifestId = manifest.Id,
+            }
+        );
+        metadata.TrainState = state;
+        await fx.DataContext.Track(metadata);
+        await fx.DataContext.SaveChanges(default);
+        fx.DataContext.Reset();
+        return manifest;
     }
 }
