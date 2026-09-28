@@ -412,5 +412,127 @@ public class ExemplarGuardTests
             .ContainSingle();
     }
 
+    private static readonly AdrSpec SecondSpec = new(
+        "0002",
+        "guards-name-their-decision",
+        "Guards name their decision",
+        ["testing"],
+        ["effect"]
+    );
+
+    /// <summary>A corpus of two ADRs that both name <c>MigrationsIntegrityTests</c>.</summary>
+    private static TempAdrRepo WithTwoAdrsNamingTheGuard(string guardSource)
+    {
+        var repo = TempAdrRepo.Valid();
+        repo.Adr(
+            Sample.DefaultSpec.FileName,
+            Sample.Adr(exemplars: "- `MigrationsIntegrityTests` pins the numbering.")
+        );
+        repo.Adr(
+            SecondSpec.FileName,
+            Sample.Adr(SecondSpec, exemplars: "- `MigrationsIntegrityTests` pins it too.")
+        );
+        repo.Write(GuardPath, guardSource);
+        return repo;
+    }
+
+    private static string GuardCitingBoth(string attributes) =>
+        $$"""
+            namespace Some.Tests.Meta;
+
+            /// <summary>Enforces docs/adr/{{Sample.DefaultSpec.FileName}} and docs/adr/{{SecondSpec.FileName}}.</summary>
+            {{attributes}}
+            [TestFixture]
+            public class MigrationsIntegrityTests
+            {
+                [Test]
+                public void Migrations_are_numbered()
+                {
+                    Assert.Pass(
+                        "see docs/adr/{{Sample.DefaultSpec.FileName}} and docs/adr/{{SecondSpec.FileName}}"
+                    );
+                }
+            }
+            """;
+
+    /// <summary>
+    /// A test class can hold up two decisions. The scan kept only the last attribute above a
+    /// class, so the first decision's claim failed as "does not claim this ADR back" although
+    /// the class carried it, and a class that already claimed two ADRs silently lost one.
+    /// </summary>
+    [Test]
+    public void NamedGuardsResolve_WhenAClassClaimsTwoAdrsInTwoAttributes_BothResolve()
+    {
+        using var repo = WithTwoAdrsNamingTheGuard(
+            GuardCitingBoth(
+                $"""
+                [Property("adr", "docs/adr/{Sample.DefaultSpec.FileName}")]
+                [Property("adr", "docs/adr/{SecondSpec.FileName}")]
+                """
+            )
+        );
+
+        var result = ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options());
+
+        result.Offenders.Should().BeEmpty();
+        result.Inspected.Should().Be(2);
+    }
+
+    [Test]
+    public void NamedGuardsResolve_WhenAClassClaimsTwoAdrsInOneAttributeList_BothResolve()
+    {
+        using var repo = WithTwoAdrsNamingTheGuard(
+            GuardCitingBoth(
+                $"""
+                [Property("adr", "docs/adr/{Sample.DefaultSpec.FileName}"), Property("adr", "docs/adr/{SecondSpec.FileName}")]
+                """
+            )
+        );
+
+        ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options()).Offenders.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Resolution pairs a claim with the class that carries the attribute. Cite-back looked the
+    /// claim up by bare name instead, first file wins, so with two classes of one name it could
+    /// read the wrong one: here the unattributed class cites the decision and the attributed one
+    /// does not, and cite-back must still fail.
+    /// </summary>
+    [Test]
+    public void NamedGuardsCiteBack_ReadsTheClassCarryingTheAttribute_NotAnotherOfTheSameName()
+    {
+        using var repo = TempAdrRepo.Valid();
+        repo.Adr(
+            Sample.DefaultSpec.FileName,
+            Sample.Adr(exemplars: "- `MigrationsIntegrityTests` pins the numbering.")
+        );
+        repo.Write(
+            "tests/A.Tests.Meta/Tests/MigrationsIntegrityTests.cs",
+            GuardCiting(Sample.DefaultSpec.FileName)
+                .Replace($"[Property(\"adr\", \"docs/adr/{Sample.DefaultSpec.FileName}\")]\n", "")
+        );
+        repo.Write(
+            "tests/B.Tests.Meta/Tests/MigrationsIntegrityTests.cs",
+            $$"""
+            namespace B.Tests.Meta;
+
+            [Property("adr", "docs/adr/{{Sample.DefaultSpec.FileName}}")]
+            [TestFixture]
+            public class MigrationsIntegrityTests
+            {
+                [Test]
+                public void Migrations_are_numbered() => Assert.Pass();
+            }
+            """
+        );
+
+        ExemplarGuards
+            .NamedGuardsCiteBack(Load(repo), repo.Options())
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("B.Tests.Meta");
+    }
+
     #endregion
 }

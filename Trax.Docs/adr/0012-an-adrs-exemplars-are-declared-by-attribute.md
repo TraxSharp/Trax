@@ -10,7 +10,8 @@ status: accepted
 A test an ADR names as an exemplar carries `[Property("adr", "<path>/NNNN-slug.md")]`. The
 guard resolves a claim by reading that attribute rather than by matching a backticked class
 name against every class under `tests/`. The marker is NUnit's own property attribute, which
-every test project in the workspace already has.
+every test project in the workspace already has. A class that holds up more than one decision
+carries one attribute per ADR, stacked or in one attribute list.
 
 ## Status
 
@@ -88,6 +89,8 @@ because the guard reads one checkout. `**Enforced elsewhere:**` remains the form
 named class does not exist, it exists but claims no ADR back, or more than one class claims the
 same ADR. `NamedGuardsCiteBack` still requires the ADR in a failure message, and skips the
 attribute line when looking, so tagging a class cannot satisfy the half a reader actually sees.
+It reads the class that claims the ADR back, the one resolution found, not another class of the
+same name.
 
 Not covered: nothing checks that a tagged class enforces the decision it names. Resolution
 proves a class answers to the ADR, not that its assertions have anything to do with it, and
@@ -95,6 +98,9 @@ the two miscredited classes named under Consequences were both unambiguous and w
 
 ## Changelog
 
+- **2026-09-28**: A class may claim several ADRs. The scan kept only the last attribute above a
+  class, so a second claim silently cancelled the first; and cite-back now reads the claiming
+  class rather than the first class of that name.
 - **2026-09-14**: Corrected a Consequence that described the rejected package home rather than
   the accepted one, and reconciled the declaration count with what was tagged.
 - **2026-09-14**: Implemented. 90 declarations tagged, the resolver reads the attribute, and

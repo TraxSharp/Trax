@@ -49,10 +49,19 @@ public static class ExemplarGuards
     /// declaration names the ADR back, so there is nothing to guess.
     /// </para>
     /// </summary>
+    /// <para>
+    /// A class may carry several, one per decision it holds up, either as separate attributes or
+    /// in one list (<c>[Property("adr", "a"), Property("adr", "b")]</c>). Only an attribute line
+    /// is read for them, so a string that merely mentions one is not a declaration.
+    /// </para>
     private static readonly Regex GuardProperty = new(
-        @"\[\s*Property\(\s*""adr""\s*,\s*""(?<adr>[^""]+)""\s*\)\s*\]",
+        @"\bProperty\(\s*""adr""\s*,\s*""(?<adr>[^""]+)""\s*\)",
         RegexOptions.Compiled
     );
+
+    /// <summary>Whether a line of code is an attribute naming an ADR.</summary>
+    private static bool IsAdrAttribute(string line) =>
+        line.TrimStart().StartsWith('[') && GuardProperty.IsMatch(line);
 
     /// <summary>How many lines an attribute may span before the scan stops joining them.</summary>
     private const int MaxAttributeLines = 20;
@@ -212,7 +221,7 @@ public static class ExemplarGuards
     /// </summary>
     public static GuardResult NamedGuardsCiteBack(IReadOnlyList<Adr> adrs, GuardOptions options)
     {
-        var classes = DeclaredClasses(options);
+        var (classes, declared) = Scan(options);
         var offenders = new List<string>();
         var inspected = 0;
 
@@ -224,8 +233,24 @@ public static class ExemplarGuards
 
             foreach (var claim in Claims(section))
             {
-                if (!classes.TryGetValue(claim, out var sourcePath))
-                    continue; // resolution owns this failure
+                // The class that claims this ADR back, the same one resolution checks. Looking the
+                // claim up by bare name instead read whichever same-named class the scan met first,
+                // so the class doing the work could be left uncited while another answered for it.
+                var answering = declared
+                    .Where(d =>
+                        d.Name == claim && d.Adr.EndsWith(adr.FileName, StringComparison.Ordinal)
+                    )
+                    .ToList();
+                // With no class claiming it back, resolution reports the missing attribute and this
+                // still reads the class by that name, so a missing failure message is reported too.
+                // Two claiming classes is resolution's failure alone.
+                string sourcePath;
+                if (answering.Count == 1)
+                    sourcePath = answering[0].File;
+                else if (answering.Count == 0 && classes.TryGetValue(claim, out var named))
+                    sourcePath = named;
+                else
+                    continue;
 
                 inspected++;
                 var problem = CitationProblem(File.ReadAllText(sourcePath), adr.FileName);
@@ -274,7 +299,7 @@ public static class ExemplarGuards
             // The attribute names the ADR too, and it is Code. Letting it answer here would
             // mean tagging a class also satisfied the message requirement, which is the half
             // the person who trips the guard actually reads.
-            if (GuardProperty.IsMatch(line))
+            if (IsAdrAttribute(line))
                 continue;
 
             switch (CSharp.Classify(line))
@@ -349,10 +374,6 @@ public static class ExemplarGuards
         return Regex.Replace(after, @"\s+", " ").Trim();
     }
 
-    /// <summary>Class name to the file declaring it, for every .cs file under the test roots.</summary>
-    private static Dictionary<string, string> DeclaredClasses(GuardOptions options) =>
-        Scan(options).Classes;
-
     /// <summary>Every class an ADR could claim, and every class that claims an ADR back.</summary>
     private static (
         Dictionary<string, string> Classes,
@@ -388,7 +409,7 @@ public static class ExemplarGuards
                 // commented-out attribute from counting. An attribute left open at the end of a
                 // line, as csharpier leaves a long one with an argument per line, is joined with
                 // the lines that close it and read as one.
-                string? pending = null;
+                var pending = new List<string>();
                 string? open = null;
                 var openLines = 0;
                 foreach (var rawLine in raw.Replace("\r\n", "\n").Split('\n'))
@@ -420,26 +441,29 @@ public static class ExemplarGuards
                         continue;
                     }
 
-                    var property = GuardProperty.Match(line);
-                    if (property.Success)
+                    if (IsAdrAttribute(line))
                     {
-                        pending = property.Groups["adr"].Value;
+                        // Every ADR the attributes above a class name belongs to that class. Keeping
+                        // only the last let a second attribute silently cancel the first.
+                        pending.AddRange(
+                            GuardProperty.Matches(line).Select(m => m.Groups["adr"].Value)
+                        );
                         continue;
                     }
 
                     var declaration = ClassDeclaration.Match(line);
                     if (declaration.Success)
                     {
-                        if (pending is not null)
-                            declared.Add((declaration.Groups["name"].Value, pending, file));
-                        pending = null;
+                        foreach (var adr in pending)
+                            declared.Add((declaration.Groups["name"].Value, adr, file));
+                        pending.Clear();
                         continue;
                     }
 
                     // Anything else between the attribute and a class ends the pairing, so a
                     // class declaration quoted in a fixture string cannot inherit it.
                     if (!line.TrimStart().StartsWith('[') && line.Trim().Length > 0)
-                        pending = null;
+                        pending.Clear();
                 }
             }
         }
