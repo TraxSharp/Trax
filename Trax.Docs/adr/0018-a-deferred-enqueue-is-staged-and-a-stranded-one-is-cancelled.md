@@ -34,9 +34,12 @@ hooks checked and whose hooks are idempotent.
 **Rejecting nested enqueues.** The ambient enqueue context was a scoped field that refused to
 nest, so two enqueues sharing a scope, such as a Blazor circuit, threw. It flows with the async
 call instead: each enqueue sees its own context, and one started from inside a hook gets its own
-transaction and hands the outer context back. That makes a nested enqueue independent, not part
-of the outer one: it commits on its own context and connection before the outer `SaveChanges`, so
-it survives if the outer hook later throws or the outer commit rolls back.
+transaction and hands the outer context back. This ADR originally recorded that as making a nested
+enqueue independent of the outer one, surviving the outer rollback. That part is reversed by
+`mediator/0003` (`Trax.Mediator/docs/adr/0003-a-nested-enqueue-joins-the-enqueue-it-runs-inside.md`):
+a nested enqueue now joins the outer enqueue's transaction, and a deferring train enqueued that
+way is written confirmed rather than staged. A deferring hook still has no transaction to join, so
+what it enqueues commits on its own.
 
 ## Consequences
 
@@ -79,6 +82,11 @@ would dispatch a staged entry whose hook has not returned, or never will.
 The sweep runs in the ManifestManager. A deployment where the ManifestManager is disabled
 everywhere (`ManifestManagerEnabled = false`) never resolves a stranded entry.
 
+A cancelled entry is visible for a retention, not forever: the same sweep deletes the
+unconfirmed entries it cancelled on an earlier pass once they are 30 days old, because a staged
+entry that never ran has no metadata for metadata cleanup to remove it with. That trade, and why
+the delete lives in a method called `CancelStaleAsync`, is effect/0007.
+
 ## Exemplars
 
 **Enforced elsewhere:** `DeferredPromotionTests` in Trax.Mediator (staging, removal on a throw,
@@ -98,6 +106,10 @@ this decision.
 
 ## Changelog
 
+- **2026-09-27**: A nested enqueue joins the outer enqueue's transaction instead of surviving its
+  rollback; recorded in `mediator/0003`, which this defers to on nesting.
+- **2026-09-27**: A cancelled staged entry is kept for 30 days, then deleted by the sweep that
+  cancelled it (effect/0007).
 - **2026-09-24**: The enqueue of an entry cancelled under its hook throws
   `QueuedWorkCancelledException`, so a caller can tell it from the other refusals.
 - **2026-09-24**: Recorded that migration 041 backfills only rows that can still be dispatched,

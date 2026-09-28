@@ -80,7 +80,7 @@ The dispatcher never authenticates a token itself. It only chooses which validat
 
 ## Subscriptions
 
-The dispatcher also covers GraphQL subscriptions over WebSockets. When a dispatcher is registered, `AddTraxGraphQL` wires `TraxJwtDispatcherSocketInterceptor` in place of the single-scheme JWT socket interceptor. It reads the token from the `connection_init` payload, routes by the token's `iss` claim through the same mapping, and validates against the matched scheme (signature, issuer, audience, lifetime, JWKS). Unmapped issuers are rejected unless `FallbackToScheme` is set. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#authentication).
+The dispatcher also covers GraphQL subscriptions over WebSockets. When a dispatcher is registered, the subscription interceptor hands JWT connections to `TraxJwtDispatcherSocketInterceptor` instead of the single-scheme JWT strategy, alongside API-key auth if that is registered too. It reads the token from the `connection_init` payload, routes by the token's `iss` claim through the same mapping, and authenticates it with the matched scheme's own handler, as HTTP does: signature, issuer, audience, lifetime, JWKS with refresh on an unknown key id, and the scheme's `JwtBearerEvents`. The connection is closed when the token expires. Unmapped issuers are rejected unless `FallbackToScheme` is set. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#authentication).
 
 ## Caveats
 

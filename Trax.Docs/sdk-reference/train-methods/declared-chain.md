@@ -18,7 +18,7 @@ public ChainRecorder DeclaredChain()
 public bool IsDeclaringChain { get; }
 ```
 
-`DeclaredChain()` runs `Junctions()` against a monad that records each chain call's type arguments instead of executing it, and returns the recording. Nothing is resolved from the container and no junction runs, including on a monad the train creates itself through `NewMonad()` while declaring.
+`DeclaredChain()` runs `Junctions()` against a monad that records each chain call's type arguments instead of executing it, and returns the recording. Nothing is resolved from the container and no junction runs, including on a monad created through `NewMonad()` while declaring. `NewMonad()` is the seam `ServiceTrain` uses to supply its container, not an extension point: it is `protected` because the published Trax.Effect overrides it, and hidden from completion.
 
 `IsDeclaringChain` is true while the chain is being read. Per-execution accessors check it: `ServiceTrain.TrainInput` and `TrainOutput` throw `ChainDeclarationException` while it is true.
 
@@ -39,7 +39,7 @@ public sealed class ChainRecorder
 | Member | Description |
 |--------|-------------|
 | `Steps` | The declared steps, in order |
-| `Refusals` | Things the declaration did that no step can express, each phrased for whoever has to fix it: awaiting before returning, returning a result instead of ending in `Resolve()`, ending in `Resolve(value)`, `IChain` or `AddServices` of a class, `Chain` or `ShortCircuit` of a type that is not a junction |
+| `Refusals` | Things the declaration did that no step can express, each phrased for whoever has to fix it: awaiting before returning, returning a result instead of ending in `Resolve()`, ending in `Resolve(value)`, `IChain` or `AddServices` of a class, `AddServices` of null, `Chain` or `ShortCircuit` of a type that is not a junction |
 
 ## ChainStep and ChainStepKind
 
@@ -94,7 +94,7 @@ Replays the recording over the types Memory would hold and returns every step th
 | Type | Namespace | When |
 |------|-----------|------|
 | `ChainDeclarationException` | `Trax.Core.Exceptions` | A train read `TrainInput` or `TrainOutput` while its chain was being declared. The message names the train and the member |
-| `ChainRecordedException` | `Trax.Core.Exceptions` | The sentinel `Resolve()` returns as `Left` while a chain is being read. The reader discards it; it should never be observed outside chain reading |
+| `ChainRecordedException` | `Trax.Core.Exceptions` | The sentinel `Resolve()` returns as `Left` while a chain is being read. The reader discards it; it should never be observed outside chain reading. It is public only because it shipped public, and is hidden from completion: do not catch, match on or throw it |
 
 ## Example
 

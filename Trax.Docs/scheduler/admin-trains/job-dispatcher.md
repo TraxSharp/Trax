@@ -78,7 +78,7 @@ If the entry has already been claimed by another server (locked in another trans
 
 For each successfully claimed entry, the dispatcher:
 
-1. **Deserializes the input**: uses `InputTypeName` to resolve the CLR type, then deserializes `Input` from JSON. Type resolution searches all loaded assemblies. The `TrainName` stored in the work queue entry is the canonical interface name (e.g. `MyApp.Trains.IProcessOrderTrain`), set during scheduling or queue submission.
+1. **Deserializes the input**: looks `InputTypeName` up among the input types of the registered trains, then deserializes `Input` from JSON into that type. The name is only compared, never loaded, so it must be the full name of a registered train's input (an assembly-qualified name also matches when its assembly is the one the input lives in). A name that matches no registered train's input fails the claim: the transaction rolls back, the entry stays `Queued`, and the error is logged. `LocalWorkerService` resolves a background job's input type the same way, and fails a job whose type matches none. The `TrainName` stored in the work queue entry is the canonical interface name (e.g. `MyApp.Trains.IProcessOrderTrain`), set during scheduling or queue submission.
 
 2. **Creates a Metadata record**: a new `Metadata` row with `TrainState = Pending`, linked to the manifest (if present). Saved immediately so it gets a database-generated ID.
 

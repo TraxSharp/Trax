@@ -108,6 +108,10 @@ That stores the mutation train's input and nothing else. How long it is then kep
 
 A parameter that serializes past the ceiling is aborted before it is fully materialized (the serializer streams through a byte-counting writer and stops the moment the count is exceeded), and a small placeholder is stored instead. This bounds serialization work for collection and object graphs; it does not shrink the train's return value, which is already resident in memory. For a train that genuinely returns tens of MB, prefer `ExcludeOutput` and reduce what the train returns.
 
+## Masking sensitive fields
+
+A member marked `[TraxSensitive]` is written as `{"_redacted": true}` in the stored input and output, while the train runs with the real value. Marking is opt-in: nothing is masked because of its name. See [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters#masking-sensitive-fields) for nested objects, collections, records and renamed members.
+
 ## How It Works
 
 The parameter effect only cares about `Metadata` objects and ignores other tracked models. When `SaveChanges` runs:

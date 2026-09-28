@@ -101,7 +101,7 @@ Task<Manifest> ScheduleOnceAsync<TTrain, TInput, TOutput>(
 
 ## CancelAsync
 
-Cancels all currently running executions of a scheduled job. Sets `CancellationRequested = true` on all InProgress metadata for the manifest and attempts same-server instant cancellation via the `ICancellationRegistry`. Cancelled trains transition to `TrainState.Cancelled` and are **not retried**.
+Cancels all pending and running executions of a scheduled job. Sets `CancellationRequested = true` on all Pending and InProgress metadata for the manifest and attempts same-server instant cancellation via the `ICancellationRegistry`. Cancelled trains transition to `TrainState.Cancelled` and are **not retried**.
 
 ```csharp
 Task<int> CancelAsync(string externalId, CancellationToken ct = default)
@@ -118,7 +118,7 @@ Task<int> CancelAsync(string externalId, CancellationToken ct = default)
 
 ## CancelGroupAsync
 
-Cancels all currently running executions for all manifests in a manifest group.
+Cancels all pending and running executions for all manifests in a manifest group, by the same rule as `CancelAsync`.
 
 ```csharp
 Task<int> CancelGroupAsync(long groupId, CancellationToken ct = default)
@@ -196,5 +196,7 @@ public class SchedulerController(ITraxScheduler scheduler) : ControllerBase
 - `TriggerAsync` creates a new execution independent of the regular schedule. The job's normal schedule continues unaffected. The work queue entry inherits the manifest's stored priority (no `DependentPriorityBoost` is applied for manual triggers). The `delay` overload sets `ScheduledAt` on the work queue entry; the JobDispatcher skips entries with a future `ScheduledAt`.
 - `ScheduleOnceAsync` creates a manifest with `ScheduleType.Once`. The manifest auto-disables (`IsEnabled = false`) after its first successful execution. If no `externalId` is provided, one is generated as `once-{guid}`. Uses upsert semantics, so it is safe to call with the same `externalId` without creating duplicates.
 - `CancelAsync` uses dual-layer cancellation: a database flag (`CancellationRequested = true`) for cross-server support, plus `ICancellationRegistry.TryCancel()` for same-server instant cancellation. Cancelled trains are **not retried** and **do not create dead letters**.
-- `CancelGroupAsync` applies the same dual-layer cancellation to all in-progress executions across all manifests in the group.
+- `CancelGroupAsync` applies the same dual-layer cancellation to all pending and in-progress executions across all manifests in the group.
+- When either method flags at least one run it raises the `Execution` change signal (`ChangeDomain.Execution`), so an `onDataChanged` subscriber refetches its runs view at once rather than when the cancellation takes effect.
+- A Pending run sees the flag when it starts, at its first junction boundary. Both methods follow the rule [IOperationsService.CancelExecutionsAsync](/docs/sdk-reference/scheduler-api/i-operations-service#batch-actions) applies to a list of runs; before this they took InProgress runs only.
 - All methods (except `CancelGroupAsync` and `ScheduleOnceAsync`) require the manifest to already exist. Use [ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) to create manifests first.

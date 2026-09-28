@@ -59,12 +59,16 @@ builder.Services.AddTraxGraphQL(graphql => graphql
 | `ConfigureSchema(Action<IRequestExecutorBuilder>)` | Applies arbitrary configuration to the underlying HotChocolate `IRequestExecutorBuilder`. Use this for settings that Trax doesn't expose directly (custom conventions, error handling, etc.). Callbacks run after all standard Trax configuration. |
 | `MaxExecutionDepth(int)` | Overrides the default max query depth (default: 15). Queries deeper than this are rejected at validation. Introspection fields are excluded from the count. |
 | `ConfigureCost(Action<CostOptions>)` | Adjusts HotChocolate cost-analyzer options on top of Trax defaults (`MaxFieldCost = 1000`, `DefaultResolverCost = 10`). |
-| `AllowIntrospection(Predicate<HttpContext>)` | Supplies a per-request predicate that decides whether introspection is allowed. Default: allowed in Development, denied elsewhere. |
-| `MaxOperationsPerRequest(int)` | Overrides the default top-level operation cap (default: 50). Aliased fields and batched operations both count. Rejects with code `TRAX_TOO_MANY_OPERATIONS`. |
-| `ExposeOperationQueries()` | Adds the `operations` namespace under `RootQuery`, exposing `health`, `trains`, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution`, and the nested `operations.deadLetters` read queries. **Off by default**, since these endpoints reveal the topology and execution history of the deployment: `operations.hosts` reports internal hostnames and per-instance execution counts, `operations.config` the scheduler's settings. Exposing them without a gate fails at startup unless you answer with `GateOperations()`, `RequireAuthorization()` or `AllowAnonymousOperations()`. |
-| `ExposeOperationMutations()` | Adds the `operations` namespace under `RootMutation`, exposing `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`, and the nested `operations.deadLetters` requeue/acknowledge mutations. **Off by default**, since these mutations call the scheduler directly and an unauthenticated caller could disrupt scheduled work. Because of that, exposing them without a gate fails at startup unless you answer with `GateOperations()`, `RequireAuthorization()` or `AllowAnonymousOperations()`. |
-| `RequireAuthorization(string? policy = null)` | Gates GraphQL HTTP execution behind an authorization policy. The Banana Cake Pop tool page (HTML GET) and schema introspection are governed independently and stay reachable. Pass no argument to use the combined Trax auth policy that every `AddTrax*Auth` extension contributes a scheme to; pass an explicit policy name (e.g. `ApiKeyDefaults.PolicyName`) to require something more specific. Failed checks return a GraphQL error with code `TRAX_AUTHORIZATION` rather than HTTP 401. Subscription auth is governed by the WebSocket interceptor. |
-| `GateOperations(policy, roles)` | Puts `@authorize` on the `operations` field of both root types, gating the namespace while the rest of the endpoint stays open. This is the answer for a host with public pre-login surfaces, which cannot use `RequireAuthorization()` without taking those surfaces down too. Policy and roles combine exactly as repeated `[TraxAuthorize]` attributes do: policies AND, roles union and OR. Calling it with the namespace not exposed fails at startup, because there is no field to put the gate on. |
+| `AllowIntrospection(Predicate<HttpContext>)` | Supplies a per-request predicate that decides whether the schema may be read. Default: allowed in Development, denied elsewhere. Once set, the predicate decides in every environment. It is called with the request's `HttpContext` for every operation on every transport (on a socket, the upgrade request). A denied operation that selects `__schema` or `__type` fails validation with `HC0046`. The schema download and the GraphQL IDE on the `UseTraxGraphQL` endpoint follow the same answer and return 404 when denied. An operation executed in-process, with no HTTP request, is answered by the environment alone. |
+| `AllowGetRequests()` | Serves GraphQL queries over HTTP GET. **Off by default**: the endpoint executes only POSTed operations, because a cross-site link carries the user's `SameSite=Lax` cookie and a GET-executable query would run as them. With the opt-in, a GET must still carry the `GraphQL-preflight: 1` header and may run only queries (a mutation over GET is refused). The setting is on the `trax` schema, so it applies however the endpoint is mapped. The IDE page and the SDL download are not affected. |
+| `AllowSocketOrigins(params string[] origins)` | Browser origins, besides the endpoint's own host, from which a WebSocket upgrade is accepted. Each value is a scheme, host and optional port (`https://app.example.com`). Replaces the default, which is the origins of the CORS default policy; with no arguments only the endpoint's own host is allowed. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#allowed-origins). |
+| `MaxOperationsPerRequest(int)` | Overrides the default top-level operation cap (default: 50). Aliased fields and batched operations both count, and so do selections reached through fragment spreads and inline fragments; selections sharing a response name merge at execution and count once. Rejects with code `TRAX_TOO_MANY_OPERATIONS`. |
+| `MaxOperationsPerConnection(int)` | Overrides how many operations one WebSocket connection runs at once (default: 100). An operation started past it gets a GraphQL error with code `TRAX_SOCKET_OPERATION_LIMIT` and takes no place; the connection stays open, and a place frees when one of its operations completes. A non-positive value throws `ArgumentOutOfRangeException`. |
+| `ExposeOperationQueries()` | Adds the `operations` namespace under `RootQuery`, exposing `health`, `trains`, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution`, and the nested `operations.deadLetters` read queries. **Off by default**, since these endpoints reveal the topology and execution history of the deployment: `operations.hosts` reports internal hostnames and per-instance execution counts, `operations.config` the scheduler's settings. Exposing them without a gate fails at startup unless you answer with `GateOperations(policy, roles)`, `RequireAuthorization()` or `AllowAnonymousOperations()`. |
+| `ExposeOperationMutations()` | Adds the `operations` namespace under `RootMutation`, exposing `triggerManifest`, `disableManifest`, `enableManifest`, `cancelManifest`, `triggerGroup`, `cancelGroup`, `triggerManifestDelayed`, and the nested `operations.deadLetters` requeue/acknowledge mutations. **Off by default**, since these mutations call the scheduler directly and an unauthenticated caller could disrupt scheduled work. Because of that, exposing them without a gate fails at startup unless you answer with `GateOperations(policy, roles)`, `RequireAuthorization()` or `AllowAnonymousOperations()`. |
+| `RequireAuthorization(string? policy = null)` | Gates every GraphQL operation behind an authorization policy, over HTTP and over a subscription socket alike; an unauthenticated caller never satisfies it. The GraphQL IDE (HTML GET) and the schema download are not gated by it; they follow `AllowIntrospection`. Pass no argument to use the combined Trax auth policy that every `AddTrax*Auth` extension contributes a scheme to; pass an explicit policy name (e.g. `ApiKeyDefaults.PolicyName`) to require something more specific. Failed checks return a GraphQL error with code `TRAX_AUTHORIZATION` rather than HTTP 401. A socket is checked at `connection_init` and again for every operation it carries. |
+| `GateOperations(policy, roles)` | Puts `@authorize` on the `operations` field of both root types, gating the namespace while the rest of the endpoint stays open. This is the answer for a host with public pre-login surfaces, which cannot use `RequireAuthorization()` without taking those surfaces down too. Policy and roles combine exactly as repeated `[TraxAuthorize]` attributes do: policies AND, roles union and OR. A policy or roles is required: a call with neither (or only blank strings) fails at startup, because "any signed-in user" on a host with public sign-up is everyone, and the namespace reads execution inputs, outputs and logs and requeues, cancels and reconfigures work. Calling it with the namespace not exposed also fails at startup, because there is no field to put the gate on. |
+| `GateOperationsToAuthenticatedUsers()` | Gates the `operations` namespace to any authenticated caller, with no policy or role. It is the explicit spelling of what a parameterless `GateOperations()` used to do. Use it only when every principal that can authenticate is an operator, such as a host whose only identities are service accounts. |
 | `AllowAnonymousOperations()` | Acknowledges that the `operations` namespace is reachable with no gate at all. Exposing the namespace without one otherwise fails at startup, since an unauthenticated control plane is almost always a mistake. Call this only when the surface is protected another way (a private network, a sidecar, ASP.NET endpoint authorization) or is intentionally public. Setting it together with `RequireAuthorization()` or `GateOperations()` is a contradiction and also fails at startup. |
 
 All builder methods return the builder for fluent chaining.
@@ -87,7 +91,11 @@ public static WebApplication UseTraxGraphQL(
 
 **Returns**: `WebApplication` for continued chaining.
 
+The schema download (`GET ?sdl`, `/schema`, `/schema.graphql`) and the GraphQL IDE on this endpoint follow the same per-request decision as introspection (see `AllowIntrospection` above): served in Development, 404 elsewhere unless your predicate allows the request. An allowed download is sent `Cache-Control: private`. A host that maps the schema itself with `MapGraphQL(path, "trax")` skips that per-request check; without a predicate, outside Development, the schema's server options switch both off anyway.
+
 `AddTraxGraphQL` registers an `IStartupFilter` that prepends `app.UseWebSockets()` to the pipeline, so the WebSocket transport required for [GraphQL subscriptions](/docs/sdk-reference/graphql-api/subscriptions) is always in place before endpoint execution. You do not need to call `app.UseWebSockets()` yourself, and the ordering of `UseTraxGraphQL()` relative to other endpoint middleware (such as `UseTraxDashboard()`) does not affect the upgrade.
+
+The Trax schema accepts a WebSocket upgrade only from origins the host serves, whether `UseTraxGraphQL()` maps it or the host maps it with `MapGraphQL(path, "trax")`: no `Origin` header, the endpoint's own host, or an origin allowed by `AllowSocketOrigins(...)` (default: the CORS default policy). Others get `403`. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#allowed-origins).
 
 ## What It Registers
 
@@ -105,7 +113,7 @@ public static WebApplication UseTraxGraphQL(
 
 > | Answer | What it does |
 > | --- | --- |
-> | `GateOperations(policy, roles)` | Gates the `operations` namespace alone. The rest of the endpoint stays open, so public trains and query models keep working. |
+> | `GateOperations(policy, roles)` | Gates the `operations` namespace alone. The rest of the endpoint stays open, so public trains and query models keep working. A policy or roles is required; `GateOperationsToAuthenticatedUsers()` is the explicit form for "any signed-in caller". |
 > | `RequireAuthorization(policy)` | Gates the whole endpoint, `operations` included. |
 > | `AllowAnonymousOperations()` | Acknowledges a deliberately public control plane. |
 >
@@ -119,9 +127,9 @@ Exposing the operations surface changes two behaviours automatically:
 If you call `AddTraxGraphQL` with no `[TraxQuery]` trains, no `[TraxQueryModel]` entities, and `ExposeOperationQueries()` not set, the call throws `InvalidOperationException` because the resulting `RootQuery` would have no fields and HotChocolate would refuse to build the schema.
 - **Subscription type**: `LifecycleSubscriptions`, providing real-time [lifecycle events](/docs/sdk-reference/graphql-api/subscriptions) via WebSocket (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`)
 - **In-memory subscription transport**: HotChocolate's built-in pub/sub for delivering events to WebSocket clients
-- **Error filter**: `TraxErrorFilter`, which curates exception messages for train-related errors. Exposed types: `TrainException` passes through (`TRAX_TRAIN_ERROR`); `TrainAuthorizationException` always returns the generic `"Not authorized."` (`TRAX_AUTHORIZATION`); `TrainNotFoundException` returns `"The requested train was not found."` (`TRAX_TRAIN_NOT_FOUND`); `AmbiguousTrainNameException` surfaces candidate FullNames (`TRAX_AMBIGUOUS_TRAIN`); `TrainInputValidationException` returns `"The train input failed validation."` (`TRAX_INVALID_INPUT`). All other exception types (including `InvalidOperationException`) retain HotChocolate's default masked message.
-- **Hardening defaults**: max execution depth of 15, cost-analyzer budget `MaxFieldCost = 1000`, introspection allowed in Development only, and a 50-operation per-request cap. Override each via the builder methods above.
-- **Subscription auth interceptor**: Trax wires a socket interceptor so WebSocket subscriptions authenticate from the `connection_init` payload. `AddTraxApiKeyAuth` gets `TraxApiKeySocketInterceptor` (`authToken`/`apiKey`); `AddTraxJwtAuth` gets `TraxJwtSocketInterceptor` (`authToken`/`bearer`, including Authority/JWKS schemes); `AddTraxJwtDispatcher` gets `TraxJwtDispatcherSocketInterceptor`, which routes multiple JWT schemes by the token's issuer. Each is wired only when its matching auth is registered before `AddTraxGraphQL`. Supply your own via `ConfigureSchema(b => b.AddSocketSessionInterceptor<T>())` to override them. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#authentication).
+- **Error filter**: `TraxErrorFilter`, which curates exception messages for train-related errors. Exposed types: a `TrainException` message a train author wrote passes through (`TRAX_TRAIN_ERROR`), and so does the carried message of a `TrainException` a remote worker or nested train reported; a `TrainException` carrying any other exception type (the `TrainExceptionData` JSON a remote worker's failure comes home as), or wrapping a remote endpoint's reply, returns `"The train failed."` (`TRAX_TRAIN_ERROR`) and the detail stays in the metadata row; `TrainAuthorizationException` always returns the generic `"Not authorized."` (`TRAX_AUTHORIZATION`); `TrainNotFoundException` returns `"The requested train was not found."` (`TRAX_TRAIN_NOT_FOUND`); `AmbiguousTrainNameException` surfaces candidate FullNames (`TRAX_AMBIGUOUS_TRAIN`); `TrainInputValidationException` returns `"The train input failed validation."` (`TRAX_INVALID_INPUT`). All other exception types (including `InvalidOperationException`) retain HotChocolate's default masked message.
+- **Hardening defaults**: max execution depth of 15, cost-analyzer budget `MaxFieldCost = 1000`, introspection allowed in Development only (decided per request, see `AllowIntrospection`), and a 50-operation per-request cap. Override each via the builder methods above.
+- **Subscription auth interceptor**: Trax registers `TraxCompositeSocketInterceptor` so WebSocket subscriptions authenticate from the `connection_init` payload. It serves API-key auth (`authToken`/`apiKey`), JWT auth (`authToken`/`bearer`, including Authority/JWKS schemes) and the JWT dispatcher, together or alone, and accepts every connection when none is registered. Supply your own via `ConfigureSchema(b => b.AddSocketSessionInterceptor<T>())` to replace it. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#authentication).
 - **Lifecycle hook**: `GraphQLSubscriptionHook`, automatically registered to publish train state transitions to the subscription transport
 
 ## Prerequisites
@@ -171,7 +179,7 @@ app.UseTraxGraphQL(configure: endpoint => endpoint
     .RequireAuthorization("AdminPolicy"));
 ```
 
-Execution-only authorization (BCP and introspection stay open, queries and mutations require a key):
+Execution-only authorization (the IDE shell stays loadable where `AllowIntrospection` allows it, queries and mutations require a key):
 
 ```csharp
 builder.Services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
@@ -181,21 +189,20 @@ The two are independent. Use the builder method when you want developers to load
 
 ## Registration order
 
-`AddTraxGraphQL()` needs `AddTrax()` to have run first, and it chooses which subscription
-interceptor to wire from the authentication schemes registered by the time it runs. Register
-authentication before it:
+`AddTraxGraphQL()` needs `AddTrax()` to have run first:
 
 ```csharp
 builder.Services.AddTrax(trax => trax.AddEffects(...).AddMediator(...));
-builder.Services.AddTraxJwtAuth(...);        // or AddTraxApiKeyAuth / AddTraxJwtDispatcher
+builder.Services.AddTraxJwtAuth(...);        // either side of AddTraxGraphQL
 builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<AppDbContext>());
 ```
 
-Get it wrong and the host refuses to start, naming the call to move. It does not start with
-subscriptions unauthenticated, which is what earlier versions did: no interceptor was wired, so
-HotChocolate accepted every `connection_init` while HTTP requests kept being gated normally.
+Authentication may come before or after it. The subscription interceptor reads the registered
+schemes once the container is complete, so earlier versions' failure, where an auth call after
+`AddTraxGraphQL()` left subscriptions accepting every `connection_init` while HTTP stayed gated,
+cannot happen.
 
-Everything else is order-independent. `@authorize` is attached to the schema, so query and
+Everything else is order-independent too. `@authorize` is attached to the schema, so query and
 mutation gating works whichever way round the host is composed, and services the GraphQL
 components depend on are resolved on first use rather than when `AddTraxGraphQL()` runs.
 

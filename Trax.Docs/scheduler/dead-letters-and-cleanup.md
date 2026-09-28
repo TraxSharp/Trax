@@ -127,13 +127,26 @@ var result = await scheduler.AcknowledgeAllDeadLettersAsync("Mass acknowledge");
 
 Resolving a dead letter (either action) resets the manifest's failure counter. The ManifestManager only counts failures that occurred **after** the most recent resolution when comparing against `MaxRetries`. This means a retried manifest starts fresh, it won't be immediately re-dead-lettered based on the same failures that triggered the original dead letter.
 
+### One Queued Entry per Manifest
+
+A manifest can have only one queued work queue entry at a time (a unique index enforces it), so a requeue never creates a second one:
+
+- **A single requeue** whose manifest already has a queued entry fails with a message naming that entry, and the dead letter stays `AwaitingIntervention`.
+- **A batch or "all" requeue** skips each dead letter whose manifest already has a queued entry, leaving it `AwaitingIntervention`. Dead letters that share a manifest are folded into one entry and all marked `Retried`, since a requeue runs the manifest's own properties and each would queue the same work. Each resolution note names the entry; the newest dead letter carries the entry's `DeadLetterId`.
+
+`count` is the number of dead letters resolved, and `message` says how many were folded and how many were skipped, for example `"3 dead letter(s) requeued; 1 folded into another dead letter's entry for the same manifest; 2 skipped because their manifest already has a queued entry."` A skipped dead letter can be requeued once the queued entry has been dispatched.
+
+### Acknowledging in Bulk
+
+On a relational provider, **Acknowledge All** and **Acknowledge Selected** resolve their dead letters with a single `UPDATE`, so acknowledging a backlog of tens of thousands takes a fraction of a second. The InMemory provider has no set-based update, so there each row is loaded and saved.
+
 ### RetryMetadataId Linking
 
 When a dead letter is requeued, the new WorkQueue entry carries a `DeadLetterId` reference. When the JobDispatcher creates a Metadata record for that entry, it automatically links the `RetryMetadataId` back on the dead letter. This creates a traceable chain from the original failure through the dead letter to the retry execution.
 
 ### Concurrency Safety
 
-All dead letter operations filter by `status = 'awaiting_intervention'` at query time. If two users resolve the same dead letter simultaneously, the second operation sees no matching record and returns a "not found or already resolved" result. No duplicate work queue entries are created.
+All dead letter operations filter by `status = 'awaiting_intervention'` at query time. If two users resolve the same dead letter simultaneously, the second operation sees no matching record and returns a "not found or already resolved" result. No duplicate work queue entries are created. The check for a manifest's existing queued entry and the insert are separate statements, so a concurrent requeue or the ManifestManager can queue that manifest in between. The unique index refuses the second entry; a batch or "all" requeue then rereads and retries, skipping that manifest, and a single requeue reports it as already queued. Two operators pressing **Requeue All** at once both succeed and leave one queued entry per manifest.
 
 ## Retry Delay & Backoff
 
@@ -227,7 +240,7 @@ A metadata row is deleted when **all** of these conditions are true:
 
 Any work queue entries and log entries associated with deleted metadata are also removed.
 
-Cancelled trains are treated as terminal, they are eligible for cleanup but are **not retried** and **do not create dead letters**. Cancellation is an explicit operator action, not a transient failure.
+Cancelled trains are treated as terminal, they are eligible for cleanup but are **not retried** and **do not create dead letters**. Cancellation is an explicit operator action, not a transient failure. A run that stopped because something inside it gave up, such as an `HttpClient` timeout, was not cancelled: it is recorded `Failed` and classified `Transient`, so it counts toward `MaxRetries` like any other failure.
 
 ## Dead Letter Auto-Purge
 

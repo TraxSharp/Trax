@@ -93,6 +93,14 @@ The resolver is resolved per request, so scoped dependencies work as expected. H
 
 `Build()` is internal. The extension method calls it and throws `InvalidOperationException` if no keys were registered.
 
+### Demo keys start only in Development
+
+A cleartext key containing `ApiKeyBuilder.DemoKeyMarker` (`do-not-use-in-production`, compared
+ignoring case) marks a published demo key, the kind the Trax templates and samples ship. When
+one is registered through `Add`, the host refuses to start in any environment other than
+Development, with a message naming the marker and the environment (never the key). Keys added
+with `AddHashed`, and keys a resolver returns, are not inspected.
+
 ## Return Semantics
 
 | Header state | Result |

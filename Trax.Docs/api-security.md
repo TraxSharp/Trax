@@ -112,7 +112,7 @@ Unauthenticated API requests against the cookie scheme return `401` (not a redir
 
 Browsers cannot attach custom headers to a WebSocket upgrade, so header-bound schemes (API key, JWT bearer) carry credentials in the `connection_init` payload instead. Cookie-bound schemes (OIDC) need no special handling: the browser attaches cookies to the upgrade request, so the cookie middleware authenticates the upgrade like any HTTP request.
 
-**Register authentication before `AddTraxGraphQL`.** `AddTraxGraphQL` picks the socket interceptor from what the service collection holds at the moment it runs, so a scheme registered after it is invisible and no interceptor is wired. The host refuses to start in that case, with a message naming the call that ran too late; the check runs once the container is complete, so it sees the scheme whichever order you used. Supplying your own interceptor through `ConfigureSchema` opts out of both the wiring and the check.
+`AddTraxGraphQL` registers one socket interceptor, `TraxCompositeSocketInterceptor`, for every host. It reads which schemes are registered from the finished container on the first connection, so authentication may be registered before or after `AddTraxGraphQL`, and it hands each connection to the API-key or JWT strategy by the credential the payload carries. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#authentication) for the routing rules. Supplying your own interceptor through `ConfigureSchema` replaces it.
 
 ```csharp
 services.AddTraxApiKeyAuth(...);   // or AddTraxJwtAuth / AddTraxJwtDispatcher
@@ -129,7 +129,7 @@ ws.onopen = () => ws.send(JSON.stringify({
 }));
 ```
 
-`AddTraxGraphQL` wires `TraxApiKeySocketInterceptor` when `AddTraxApiKeyAuth` has already registered its principal resolver. The direction matters: it is `AddTraxGraphQL` that reads the collection, so calling `AddTraxApiKeyAuth` afterwards wires nothing. The interceptor resolves the token via the same `ITraxPrincipalResolver<string>` used by the REST handler, attaches the resulting principal to `HttpContext.User` for the socket lifetime, and rejects the connection when the token is missing or invalid.
+When `AddTraxApiKeyAuth` is registered, API-key connections go to `TraxApiKeySocketInterceptor`. It resolves the token via the same `ITraxPrincipalResolver<string>` used by the REST handler, attaches the resulting principal to `HttpContext.User` for the socket lifetime, and rejects the connection when the token is missing or invalid.
 
 ### JWT bearer
 
@@ -141,15 +141,27 @@ ws.onopen = () => ws.send(JSON.stringify({
 }));
 ```
 
-`AddTraxGraphQL` wires `TraxJwtSocketInterceptor` when `AddTraxJwtAuth` has already registered its principal resolver, the same way round as the API-key case above. The interceptor validates the token against the same `JwtBearerOptions` (signature, issuer, audience, lifetime, clock skew) the HTTP handler uses - the WS and HTTP paths cannot diverge. This includes Authority/JWKS schemes (Cognito, Google, any OIDC provider): the interceptor fetches signing keys from the scheme's discovery document when the options carry no static key. It then runs `ITraxPrincipalResolver<JwtTokenInput>` and attaches the resulting principal.
+When `AddTraxJwtAuth` is registered, JWT connections go to `TraxJwtSocketInterceptor`. It validates the token against the same `JwtBearerOptions` (signature, issuer, audience, lifetime, clock skew) the HTTP handler uses - the WS and HTTP paths cannot diverge. This includes Authority/JWKS schemes (Cognito, Google, any OIDC provider): the interceptor fetches signing keys from the scheme's discovery document when the options carry no static key. It then runs `ITraxPrincipalResolver<JwtTokenInput>` and attaches the resulting principal.
 
 ### OIDC cookie
 
 No extra code required. The browser attaches the session cookie (`trax.oidc`) to the WebSocket upgrade request; ASP.NET Core's cookie middleware reads and validates it on the upgrade, and `HttpContext.User` is populated for the socket lifetime. This is the one genuinely symmetric path across HTTP and WS.
 
+### Allowed origins
+
+A WebSocket upgrade that carries an `Origin` header is accepted only from origins the host serves: the endpoint's own host, or an allowed origin. Anything else is answered with `403` before the handshake. An upgrade with no `Origin` header, which is what non-browser clients send, is accepted. The allowed origins default to those of your CORS default policy (`AddCors(o => o.AddDefaultPolicy(...))`, including `AllowAnyOrigin()`); set them explicitly with `AllowSocketOrigins(...)` on the GraphQL builder, which replaces the CORS default:
+
+```csharp
+services.AddTraxGraphQL(graphql => graphql
+    .AddDbContext<AppDbContext>()
+    .AllowSocketOrigins("https://app.example.com", "https://admin.example.com"));
+```
+
+The endpoint's own host is compared without its scheme, so an https page served through a TLS-terminating proxy is recognised. The check applies wherever the Trax schema serves a socket, whether `UseTraxGraphQL()` maps it or you map it yourself with `MapGraphQL(path, "trax")`, and it does not apply to another HotChocolate schema on the same host. A host whose browser clients are on another origin and whose CORS policy is a named one, not the default, needs `AllowSocketOrigins(...)`.
+
 ### Multiple JWT issuers
 
-`AddTraxJwtDispatcher` routes subscription tokens by their `iss` claim, the same way it routes HTTP requests. When a dispatcher is registered, Trax wires `TraxJwtDispatcherSocketInterceptor` in place of the single-scheme JWT interceptor, so each connection validates against the scheme its issuer maps to. Unmapped issuers are rejected.
+`AddTraxJwtDispatcher` routes subscription tokens by their `iss` claim, the same way it routes HTTP requests. When a dispatcher is registered, JWT connections go to `TraxJwtDispatcherSocketInterceptor` instead of the single-scheme JWT strategy, so each connection validates against the scheme its issuer maps to. Unmapped issuers are rejected.
 
 ### Custom interceptor
 
@@ -161,11 +173,11 @@ services.AddTraxGraphQL(graphql => graphql
     .ConfigureSchema(b => b.AddSocketSessionInterceptor<MySocketInterceptor>()));
 ```
 
-This overrides the stock interceptors and is independent of auth-registration order. Derive from `DefaultSocketSessionInterceptor` and read the credential from the `connection_init` payload in `OnConnectAsync`.
+This replaces Trax's interceptor and is independent of auth-registration order. Derive from `DefaultSocketSessionInterceptor` and read the credential from the `connection_init` payload in `OnConnectAsync`.
 
 ## Per-Train Authorization
 
-`TraxPrincipalExtensions.ToClaimsPrincipal` populates both `trax:principal-id` and `ClaimTypes.Name`, so the existing `[TraxAuthorize]` machinery from [Authorization](/docs/authorization) works unchanged. Policies and roles behave exactly as ASP.NET Core documents them. Role comparison is case-insensitive.
+`TraxPrincipalExtensions.ToClaimsPrincipal` populates both `trax:principal-id` (the resolver's id qualified by the scheme, `{scheme}:{id}`, so two issuers' subjects never collide; see [Qualified Principal Ids](/docs/migration-guides/qualified-principal-ids)) and `ClaimTypes.Name`, so the existing `[TraxAuthorize]` machinery from [Authorization](/docs/authorization) works unchanged. Policies and roles behave exactly as ASP.NET Core documents them. Role comparison is case-insensitive.
 
 ### Error Messages are Generic
 
@@ -193,6 +205,7 @@ No `IHttpContextAccessor` plumbing. Every Trax auth scheme registers a scoped `T
 services.AddTraxGraphQL(graphql => graphql
     .MaxExecutionDepth(8)                   // default: 15
     .MaxOperationsPerRequest(25)            // default: 50
+    .MaxOperationsPerConnection(20)         // default: 100
     .AllowIntrospection(ctx => IsInternalIp(ctx))   // default: Development only
     .ConfigureCost(opts => opts.MaxFieldCost = 2000)); // default: 1000
 ```
@@ -202,19 +215,33 @@ services.AddTraxGraphQL(graphql => graphql
 | `MaxExecutionDepth` | 15 | Rejects nested queries deeper than this (introspection fields excluded). |
 | `MaxFieldCost` | 1000 | HotChocolate cost-analyzer ceiling. Prevents expensive field combinations. |
 | `DefaultResolverCost` | 10 | Base cost applied to each resolver in the cost analyzer. |
-| Introspection | On in Development, off elsewhere | Prevents anonymous schema enumeration in production. |
-| `MaxOperationsPerRequest` | 50 | Caps aliased + batched top-level selections per request. Rejects with `TRAX_TOO_MANY_OPERATIONS`. |
-| `operations` namespace | Off (queries and mutations) | The predefined `operations.*` queries (manifests, executions, dead letters, health, hosts, config) and mutations (trigger, cancel, requeue) are not exposed unless the consumer opts in via `ExposeOperationQueries()` / `ExposeOperationMutations()`. The mutation surface drives `ITraxScheduler` directly, so leaving it open lets any caller disrupt scheduled work, and the read surface discloses internal hostnames and per-instance execution counts. Exposing either without a gate fails at startup: answer with `GateOperations(policy, roles)` to gate the namespace alone, `RequireAuthorization()` to gate the whole endpoint, or `AllowAnonymousOperations()` to acknowledge a deliberately public control plane. The gate is the only check on manifest triggers and dead-letter requeues; `queueTrain` and `requeueExecution` also apply the train's `[TraxAuthorize]` requirements (see [The Operations Surface](/docs/authorization#the-operations-surface)). |
+| Introspection | On in Development, off elsewhere | Prevents anonymous schema enumeration in production. Decided per request on every transport (HTTP POST, GET, multipart, WebSocket). A predicate passed to `AllowIntrospection` replaces the default in every environment, Development included, and receives the request's `HttpContext`, so it can check the caller. The schema download (`?sdl`, `/schema`, `/schema.graphql`) and the GraphQL IDE follow the same answer and return 404 when it is no; an allowed download is sent `Cache-Control: private`. |
+| `MaxOperationsPerRequest` | 50 | Caps aliased + batched top-level selections per request, counting selections inside fragment spreads and inline fragments as if written in place (selections sharing a response name count once). Rejects with `TRAX_TOO_MANY_OPERATIONS`. |
+| `MaxOperationsPerConnection` | 100 | Caps the operations one WebSocket connection runs at once. An operation started past it gets `TRAX_SOCKET_OPERATION_LIMIT` and takes no place; the connection stays open, and a place frees when one of its operations completes. It is per connection, so it does not bound how many connections a client opens. |
+| `operations` namespace | Off (queries and mutations) | The predefined `operations.*` queries (manifests, executions, dead letters, health, hosts, config) and mutations (trigger, cancel, requeue) are not exposed unless the consumer opts in via `ExposeOperationQueries()` / `ExposeOperationMutations()`. The mutation surface drives `ITraxScheduler` directly, so leaving it open lets any caller disrupt scheduled work, and the read surface discloses internal hostnames and per-instance execution counts. Exposing either without a gate fails at startup: answer with `GateOperations(policy, roles)` to gate the namespace alone, `RequireAuthorization()` to gate the whole endpoint, or `AllowAnonymousOperations()` to acknowledge a deliberately public control plane. The gate is the only check on manifest triggers and dead-letter requeues; `queueTrain` and `requeueExecution` also apply the train's `[TraxAuthorize]` requirements (see [The Operations Surface](/docs/authorization#the-operations-surface)). Train inputs (an execution's `input`, a manifest's `properties`, a work queue entry's `input`) and effect settings, any of which can hold credentials, answer to the same gate and are served one row at a time by the detail reads, never by a list (see [Train inputs and the operations gate](/docs/sdk-reference/graphql-api/queries#train-inputs-and-the-operations-gate)). |
+| HTTP GET | Off | GraphQL runs over POST only. A cross-site top-level navigation carries a `SameSite=Lax` cookie, so a GET-executable query could run a `[TraxQuery]` train as the signed-in user. `AllowGetRequests()` opts in; an opted-in GET still needs the `GraphQL-preflight` header and runs queries only. See [Serving GraphQL over GET](#serving-graphql-over-get). |
+
+### Serving GraphQL over GET
+
+GraphQL over HTTP GET is off. A browser attaches a `SameSite=Lax` cookie to a cross-site top-level navigation, so with GET on, a link on another site could run a `[TraxQuery]` train as the signed-in user. The response is not readable cross-site, but the train still runs.
+
+A host with a client that needs GET, such as a CDN caching persisted queries by id, opts in:
+
+```csharp
+services.AddTraxGraphQL(graphql => graphql.AllowGetRequests());
+```
+
+Two guards stay on. A GET must carry the `GraphQL-preflight: 1` header, which a navigation cannot add, and only queries run over GET; a mutation is refused. The setting belongs to the `trax` schema, so it holds for `UseTraxGraphQL()` and for a directly mapped `MapGraphQL(path, "trax")` alike. The IDE page and the SDL download are separate HotChocolate options and are unaffected.
 
 ### Gating GraphQL Execution Without Locking the IDE
 
-Endpoint-level `RequireAuthorization` blanket-gates the route, including the GET that serves the Banana Cake Pop tool page. Developers can't even load the IDE to paste a key. The builder method splits these concerns:
+Endpoint-level `RequireAuthorization` blanket-gates the route, including the GET that serves the GraphQL IDE. Developers can't even load the IDE to paste a key. The builder method splits these concerns:
 
 ```csharp
 services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
 ```
 
-This installs a HotChocolate `IHttpRequestInterceptor` that runs only when the request is an actual GraphQL operation. The BCP HTML shell, schema introspection (when allowed by `AllowIntrospection`), and CORS preflights are not affected. POST queries and mutations are checked against the policy and rejected with a GraphQL error:
+This installs a HotChocolate `IHttpRequestInterceptor` that runs only when the request is an actual GraphQL operation. The IDE's HTML shell, the schema download and CORS preflights are not affected by it; the IDE and the schema download follow `AllowIntrospection` instead, so outside Development they are served only when your predicate allows the request. POST queries and mutations are checked against the policy and rejected with a GraphQL error:
 
 ```json
 { "errors": [{ "message": "Not authorized.", "extensions": { "code": "TRAX_AUTHORIZATION" } }] }
@@ -228,7 +255,7 @@ The default policy is the combined `TraxAuthClaimTypes.TraxAuthPolicy`, which ev
 services.AddTraxGraphQL(graphql => graphql.RequireAuthorization(ApiKeyDefaults.PolicyName));
 ```
 
-Subscription auth is a separate path: the `connection_init` payload is checked by `TraxApiKeySocketInterceptor` (wired automatically by `AddTraxApiKeyAuth`). `RequireAuthorization` only governs HTTP execution. If the policy isn't actually registered at startup, the host fails fast with a message naming the policy and pointing to `AddTraxApiKeyAuth`.
+Subscription auth is a separate path: the `connection_init` payload is checked by `TraxCompositeSocketInterceptor`, which `AddTraxGraphQL` registers. `RequireAuthorization` only governs HTTP execution. If the policy isn't actually registered at startup, the host fails fast with a message naming the policy and pointing to `AddTraxApiKeyAuth`.
 
 ### Per-Principal Concurrency
 
@@ -247,6 +274,10 @@ The cap bucket key is the `trax:principal-id` claim. Anonymous callers (no authe
 ### Input Size Cap
 
 `WithMaxInputJsonBytes(int)` on `TraxMediatorBuilder` caps the UTF-8 byte length of caller-supplied train input JSON. Default is 256 KiB. Oversize inputs are rejected with `TrainInputValidationException` (code `TRAX_INVALID_INPUT`) after authorization runs but before deserialization, so attacker-controlled JSON never reaches the deserializer.
+
+### OnQueue Time Limit
+
+`WithMaxQueueHookDuration(TimeSpan)` on `TraxMediatorBuilder` bounds how long a train's `OnQueue` hook may hold its enqueue's pooled connection and open transaction. Default is 30 seconds. Past it the enqueue fails with `QueueHookTimeoutException` and releases the connection, so hooks that wait on something slow cannot drain the pool for every other enqueue. See [OnQueue](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook).
 
 ## Audit Pipeline
 
@@ -270,8 +301,8 @@ services.AddTraxGraphQL(graphql =>
 | `ChannelCapacity` | 10,000 | Bounded channel size. Drops increment `trax.audit.dropped`. |
 | `BatchSize` | 50 | Max entries per sink invocation. |
 | `FlushInterval` | 500ms | Max wait before flushing a partial batch. |
-| `MaxDocumentLength` | 65,536 | Documents longer than this get a `...[truncated]` marker. |
-| `SkipIntrospection` | true | Drop `IntrospectionQuery` from the log. |
+| `MaxDocumentLength` | 65,536 | Documents longer than this are cut, marked `...[truncated]`, and followed by `[selected fields: ...]`, every `Type.field` the operation selects. Padding ahead of the fields that matter cannot push them out of the record. |
+| `SkipIntrospection` | true | Drop introspection operations (every top-level selection is `__schema`, `__type` or `__typename`) from the log. |
 | `SkipSubscriptions` | true | Subscriptions don't fit the request/response model. |
 | `DefaultPrincipalId` | `<anonymous>` | Used when the request has no Trax principal. |
 | `MaxRetries` | 3 | Sink retry attempts before dropping a batch. |
@@ -291,7 +322,7 @@ Trax does none of these for you:
 - **Key storage:** read API keys, JWT secrets, and DB credentials from a secret manager. Never commit them.
 - **Rotation:** rotate keys on a schedule and on any suspected exposure. Invalidate in the resolver.
 - **Rate limiting:** use ASP.NET Core's rate-limit middleware keyed on `trax:principal-id`.
-- **Introspection:** disable in production to prevent unauthenticated schema enumeration.
+- **Introspection:** off outside Development by default. If you open it with `AllowIntrospection`, make the predicate check the caller rather than returning `true`.
 - **Audit dashboards:** alert on non-zero `trax.audit.dropped`. A dropped entry is an invisible operation.
 - **Redaction:** implement `ITraxAuditRedactor` for every payload that could contain tokens, PII, or secrets.
 

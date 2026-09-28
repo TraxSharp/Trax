@@ -28,6 +28,7 @@ A simple marker attribute with no properties, just opt-in/opt-out.
 ```csharp
 [TraxQuery(Description = "Looks up a player profile")]
 [TraxBroadcast]
+[TraxAuthorize]
 public class LookupPlayerTrain : ServiceTrain<LookupPlayerInput, LookupPlayerOutput>, ILookupPlayerTrain
 {
     protected override Task<Either<Exception, LookupPlayerOutput>> Junctions() =>
@@ -35,7 +36,11 @@ public class LookupPlayerTrain : ServiceTrain<LookupPlayerInput, LookupPlayerOut
 }
 ```
 
-When `LookupPlayerTrain` completes, subscribers to `onTrainCompleted` will receive a `TrainLifecycleEvent` with the train name, state, and timestamp.
+When `LookupPlayerTrain` completes, subscribers to `onTrainCompleted` that its posture admits receive a `TrainLifecycleEvent` with the train name, state, and timestamp.
+
+## Posture
+
+A broadcast train streams its runs to subscribers, so it states who may receive them, the same way a train exposed as a query or mutation does. On an open endpoint it must carry `[TraxAuthorize]` (optionally with policies or roles) or `[TraxAllowAnonymous]`, or the host does not start. Each event then reaches only the subscribers that posture admits. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#who-receives-what).
 
 ## Combined with TraxQuery / TraxMutation
 

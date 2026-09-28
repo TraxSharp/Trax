@@ -412,7 +412,7 @@ saved only when [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save
 is on. So is one whose input was too large to save in full and was stored as the truncation
 placeholder (`{"_truncated": true, ...}`). Enqueue refusals (a throwing `OnQueue`, an unusable
 subject key, a deferred entry cancelled before confirmation) come back as `success: false` with
-`"The enqueue was refused: ..."`, as does any other failure of the enqueue, as for `queueTrain`. An enqueue reads a missing input as `{}`, so re-queueing it would re-run the train with
+`"The enqueue was refused: ..."`, and an infrastructure failure is a masked GraphQL error, as for `queueTrain`. An enqueue reads a missing input as `{}`, so re-queueing it would re-run the train with
 defaults rather than with what it ran with. This check runs before authorization, so it answers
 the same for every caller; a missing execution id also returns `success: false`.
 
@@ -498,25 +498,25 @@ Every field defaults to `null` and means "no change". To clear `maxActiveJobs` (
 |-------|------|-------------|
 | `manifestManagerEnabled` | `Boolean` | |
 | `jobDispatcherEnabled` | `Boolean` | |
-| `manifestManagerPollingInterval` | `TimeSpan` | |
-| `jobDispatcherPollingInterval` | `TimeSpan` | |
-| `maxActiveJobs` | `Int` | |
+| `manifestManagerPollingInterval` | `TimeSpan` | 1 second to 30 days |
+| `jobDispatcherPollingInterval` | `TimeSpan` | 1 second to 30 days |
+| `maxActiveJobs` | `Int` | At least 1 |
 | `clearMaxActiveJobs` | `Boolean` | When `true`, sets `maxActiveJobs` to null |
-| `defaultMaxRetries` | `Int` | |
-| `defaultRetryDelay` | `TimeSpan` | |
-| `retryBackoffMultiplier` | `Float` | |
-| `maxRetryDelay` | `TimeSpan` | |
-| `defaultJobTimeout` | `TimeSpan` | |
-| `stalePendingTimeout` | `TimeSpan` | |
+| `defaultMaxRetries` | `Int` | Zero or more |
+| `defaultRetryDelay` | `TimeSpan` | Zero to ten years |
+| `retryBackoffMultiplier` | `Float` | At least 1 |
+| `maxRetryDelay` | `TimeSpan` | Zero to ten years |
+| `defaultJobTimeout` | `TimeSpan` | 1 second to ten years |
+| `stalePendingTimeout` | `TimeSpan` | 1 second to ten years |
 | `recoverStuckJobsOnStartup` | `Boolean` | |
-| `deadLetterRetentionPeriod` | `TimeSpan` | |
+| `deadLetterRetentionPeriod` | `TimeSpan` | Zero to ten years |
 | `autoPurgeDeadLetters` | `Boolean` | |
-| `localWorkerCount` | `Int` | Ignored when `UseLocalWorkers()` is not configured |
+| `localWorkerCount` | `Int` | 1 to 256. Ignored when `UseLocalWorkers()` is not configured |
 | `clearLocalWorkerCount` | `Boolean` | Resets `localWorkerCount` to `Environment.ProcessorCount` |
-| `metadataCleanupInterval` | `TimeSpan` | Ignored when metadata cleanup is not configured |
-| `metadataCleanupRetention` | `TimeSpan` | Ignored when metadata cleanup is not configured |
+| `metadataCleanupInterval` | `TimeSpan` | 1 second to 30 days. Ignored when metadata cleanup is not configured |
+| `metadataCleanupRetention` | `TimeSpan` | 1 second to ten years. Ignored when metadata cleanup is not configured |
 
-**Returns**: `OperationResponse`. `count` is the number of fields actually changed (zero if every supplied value already matched).
+**Returns**: `OperationResponse`. `count` is the number of fields actually changed (zero if every supplied value already matched). A value outside its range makes `success` `false`, with a `message` naming each offending field, and nothing in the patch is applied or persisted. The ranges are what the scheduler can run with: an interval becomes a timer that rejects values under a millisecond or over about 49 days, and polling the database more often than once a second is load rather than responsiveness. At startup, a persisted value outside its range (from a row written before these checks, or edited by hand) is skipped with a warning, and the configured value stays in effect.
 
 ---
 
@@ -550,12 +550,12 @@ mutation {
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `maxActiveJobs` | `Int` | `null` | New per-group concurrency limit. `null` means "no change". To clear the limit, use `clearMaxActiveJobs` instead |
+| `maxActiveJobs` | `Int` | `null` | New per-group concurrency limit, at least 1. `null` means "no change". To clear the limit, use `clearMaxActiveJobs` instead |
 | `clearMaxActiveJobs` | `Boolean` | `false` | When `true`, sets `maxActiveJobs` to `null` (removes the per-group limit). Takes precedence if both this and `maxActiveJobs` are set |
-| `priority` | `Int` | `null` | New priority. `null` = no change |
+| `priority` | `Int` | `null` | New priority, 0 to 31. `null` = no change |
 | `isEnabled` | `Boolean` | `null` | Whether the group is active. `null` = no change |
 
-**Returns**: `OperationResponse`. On success, `count` is the number of fields actually changed (zero if every supplied value already matched the persisted row). On failure (group not found), `success` is `false` and `message` explains.
+**Returns**: `OperationResponse`. On success, `count` is the number of fields actually changed (zero if every supplied value already matched the persisted row). On failure (the group is not found, or a value is out of range), `success` is `false`, `message` explains, and no field is written.
 
 ---
 
@@ -571,7 +571,9 @@ Upgrading from a version where this mutation wrote the row itself: it now author
 
 The entry is created through [`ITrainExecutionService.QueueAsync`](/docs/sdk-reference/mediator-api/train-execution#queueasync), so the train's `[TraxAuthorize]` requirements apply on top of the operations gate. Authorization runs before `inputJson` is read: a caller who may not run the train gets a GraphQL error with code `TRAX_AUTHORIZATION` and message `"Not authorized."`, not `success: false`, even when the input is malformed, and nothing is inserted. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
 
-Only two kinds of exception propagate out of the mutation: authorization (an `UnauthorizedAccessException`, which `TrainAuthorizationException` is), surfacing as the `TRAX_AUTHORIZATION` error above, and cancellation of the request. Every other exception from the enqueue becomes `success: false`: invalid JSON as `"Invalid InputJson: "` followed by the parser's message, an oversized input as the size-cap message, and anything else as `"The enqueue was refused: "` followed by the exception's message. That last group covers the train's `OnQueue` hook throwing, `QueueSubjectKey` throwing or returning an empty key or one longer than 512 characters, and a deferred entry being cancelled before it was confirmed (in which case the hook's side-effect may already have landed). It also covers failures that are not refusals of the input: an infrastructure error such as the database being unreachable, and the mediator's `InvalidOperationException` for a `[TraxAuthorize]` train on a host with no `ITrainAuthorizationService` registered, both arrive as `success: false` with the same prefix. Read the message rather than the prefix to tell them apart.
+Three kinds of exception propagate out of the mutation rather than becoming `success: false`. Authorization (an `UnauthorizedAccessException`, which `TrainAuthorizationException` is) surfaces as the `TRAX_AUTHORIZATION` error above. Cancellation of the request ends it. An infrastructure failure, meaning a database, EF Core, network, I/O or timeout exception anywhere in the exception's chain (a `DbException` such as `NpgsqlException`, `DbUpdateException`, `TimeoutException`, `SocketException`, `HttpRequestException` or `IOException`), is logged on the server and arrives as a GraphQL error with HotChocolate's masked `"Unexpected Execution Error"` message, so nothing about the server reaches the caller. That includes a data-layer exception caused by the train's own `OnQueue` hook; a hook that means to refuse throws its own exception.
+
+Every other exception from the enqueue is a refusal and becomes `success: false`: invalid JSON as `"Invalid InputJson: "` followed by the parser's message, an oversized input as the generic `"The train input failed validation."` (neither the cap nor the input's size is echoed), and anything else as `"The enqueue was refused: "` followed by the exception's message. That last group covers the train's `OnQueue` hook throwing, `QueueSubjectKey` throwing or returning an empty key, one that is only whitespace, or one longer than 512 Unicode characters, and a deferred entry being cancelled before it was confirmed (in which case the hook's side-effect may already have landed). The mediator's `InvalidOperationException` for a `[TraxAuthorize]` train on a host with no `ITrainAuthorizationService` registered also arrives this way, although it is a host misconfiguration rather than a refusal of the input. `Trax.Scheduler/docs/adr/0004` records the split.
 
 ```graphql
 mutation {

@@ -49,6 +49,7 @@ public class TrainRegistration
     public required IReadOnlyList<string> RequiredRoles { get; init; }
     public bool HasAuthorizeAttribute { get; init; }
     public bool HasAllowAnonymousAttribute { get; init; }
+    public bool HasQueueSubjectKey { get; init; }
 
     public required bool IsQuery { get; init; }
     public required bool IsMutation { get; init; }
@@ -77,6 +78,7 @@ public class TrainRegistration
 | `RequiredRoles` | `IReadOnlyList<string>` | Role names from `[TraxAuthorize(Roles = "...")]` attributes. Empty if no roles required. |
 | `HasAuthorizeAttribute` | `bool` | Whether the train carries any `[TraxAuthorize]` (including the bare form). |
 | `HasAllowAnonymousAttribute` | `bool` | Whether the train carries `[TraxAllowAnonymous]`. On a GraphQL-exposed train this is the explicit "intentionally public" marker that satisfies the exposure check; it carries no runtime gate of its own. Mutually exclusive with `HasAuthorizeAttribute` on an exposed train. |
+| `HasQueueSubjectKey` | `bool` | Whether the implementation overrides [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing), directly or through a base class. Only such a train can stamp a subject key on its queue entries, so only its queued work can be serialized against other work for the same subject. The enqueue uses the same check to decide whether to ask the train for a key. True does not mean every entry has one: the override may return null for a given input. |
 | `IsQuery` | `bool` | Whether the train has a `[TraxQuery]` attribute and will be exposed as a typed GraphQL query. |
 | `IsMutation` | `bool` | Whether the train has a `[TraxMutation]` attribute and will be exposed as typed GraphQL mutation(s). |
 | `IsBroadcastEnabled` | `bool` | Whether the train has a `[TraxBroadcast]` attribute and will broadcast lifecycle events to subscribers. |
@@ -95,6 +97,7 @@ public class TrainRegistration
 6. Reads `[TraxAuthorize]` attributes from the implementation type and extracts policy and role requirements into `RequiredPolicies` and `RequiredRoles`, and sets `HasAuthorizeAttribute`. Reads `[TraxAllowAnonymous]` (across the base chain and interfaces) into `HasAllowAnonymousAttribute`. Discovery is permissive; the mutual-exclusion and exposure-posture checks run at host startup.
 6b. Reads `[TraxQuery]` and `[TraxMutation]` attributes from the implementation type and populates `IsQuery`, `IsMutation`, `GraphQLName`, `GraphQLDescription`, `GraphQLDeprecationReason`, and `GraphQLOperations`.
 6c. Reads the `[TraxBroadcast]` attribute and populates `IsBroadcastEnabled`.
+6d. Checks whether the implementation type overrides `QueueSubjectKey` and sets `HasQueueSubjectKey`.
 7. Caches the result. The list is computed once and reused for the lifetime of the service.
 
 ## Example

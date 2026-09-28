@@ -21,7 +21,7 @@ builder.Services.AddTrax(trax => trax
     .AddMediator(typeof(Program).Assembly)
 );
 
-builder.AddTraxDashboard();  // Requires AddTrax() first; throws InvalidOperationException otherwise
+builder.AddTraxDashboard(o => o.RequireRoles("Admin"));  // Requires AddTrax() first, and a posture
 
 var app = builder.Build();
 app.UseTraxDashboard();
@@ -30,5 +30,5 @@ app.UseTraxDashboard();
 | Page | Description |
 |------|-------------|
 | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | Registers dashboard services (Blazor, Radzen, train discovery) |
-| [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | Maps the dashboard Blazor components at a route prefix |
-| [DashboardOptions](/docs/sdk-reference/dashboard-api/dashboard-options) | Configuration options for route prefix, title, and environment |
+| [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | Maps the dashboard Blazor components, gated by the authorization posture |
+| [DashboardOptions](/docs/sdk-reference/dashboard-api/dashboard-options) | Configuration options for the authorization posture, route prefix, title, and environment |

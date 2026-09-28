@@ -16,8 +16,8 @@ Tunables for the audit pipeline, passed through `AddAudit<TSink>(opts => ...)`.
 | `ChannelCapacity` | `10_000` | Max queued entries. Overflow drops the new entry and increments the `trax.audit.dropped` meter. |
 | `BatchSize` | `50` | Max entries handed to the sink in one call. |
 | `FlushInterval` | `500ms` | Max time to wait before flushing a partial batch. |
-| `MaxDocumentLength` | `65_536` | Documents longer than this are truncated with a `...[truncated]` marker. |
-| `SkipIntrospection` | `true` | Drop requests whose operation name is `IntrospectionQuery`. |
+| `MaxDocumentLength` | `65_536` | Documents longer than this are cut to this length and marked `...[truncated]`, then followed by `[selected fields: ...]`, every `Type.field` the operation selects. The list names each schema coordinate once, so its size is bounded by the schema rather than by the request. |
+| `SkipIntrospection` | `true` | Drop introspection operations: the executed operation's top-level selections are all `__schema`, `__type` or `__typename`. |
 | `SkipSubscriptions` | `true` | Drop subscription operations. They don't fit a request/response audit model. |
 | `DefaultPrincipalId` | `"<anonymous>"` | Used when the request has no `trax:principal-id` claim. |
 | `MaxRetries` | `3` | Attempts a failing sink gets before the batch is dropped. |

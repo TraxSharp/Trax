@@ -57,8 +57,8 @@ All methods have default implementations that return `Task.CompletedTask`. Overr
 |--------|---------------|
 | `OnStarted` | After the train's metadata is persisted and before the train's junctions execute |
 | `OnCompleted` | After a successful run, after output is persisted |
-| `OnFailed` | After a failed run (exception that is not `OperationCanceledException`), after failure is persisted |
-| `OnCancelled` | After cancellation (`OperationCanceledException`), after cancellation is persisted |
+| `OnFailed` | After a failed run, after failure is persisted. Includes an `OperationCanceledException` nothing asked for, such as an `HttpClient` timeout |
+| `OnCancelled` | After a requested cancellation (the run's token was cancelled or its cancel flag was set), after cancellation is persisted |
 
 ### Accessing Train Input and Output
 

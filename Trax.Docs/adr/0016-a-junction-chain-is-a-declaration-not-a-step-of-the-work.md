@@ -84,6 +84,15 @@ the value. Shapes the runtime refuses on every run are refused when the chain is
 `AddServices` of a class, `Chain` or `ShortCircuit` of a type that is not a junction, and a short
 circuit whose output cannot be the train's return type.
 
+**A service passed to `AddServices` has to exist when `Junctions()` runs.** A null argument is
+refused when the chain is read, with a reason that says so, rather than reported as a chain that
+could not be read. A field assigned later, in a lifecycle hook such as `OnStarted`, is null at
+startup and may be set by the time a run declares its chain. Supporting that would mean recording
+the declared type and letting the host start, which the replay could do, since it records seeds by
+type. It was rejected because the declaration would then depend on instance state that some other
+code sets, the kind of ambient dependence this ADR otherwise has to leave unchecked, and a train
+that forgot the assignment would pass the check and fail every run.
+
 **A train the check cannot build is skipped with a warning, not refused.** The check builds every
 train to read its chain. A train that cannot be constructed at startup, because its constructor
 needs something only a request provides, or a registered train that does not derive from
@@ -153,7 +162,8 @@ return value nor its output, seeds and tuples are available, a tuple element dec
 class is satisfied whatever subtype it holds, a tuple element is not taken from the container,
 `Extract` ignores the container, `IChain` needs its junction, and a short circuit whose output
 cannot be the result is refused. `DeclaredChainTests` also pins that `IChain` and `AddServices` of
-a class are refused, that a monad created through `NewMonad()` while declaring records instead of
+a class are refused, that `AddServices` of null is refused with a reason naming the
+service, that a monad created through `NewMonad()` while declaring records instead of
 running, and that naming a type which is not a junction is refused rather than thrown.
 
 Not covered: nothing detects a chain that branches on ambient state or on instance state other
@@ -166,6 +176,8 @@ release, or that Trax.Cli ships its template before Trax.Core ships a removal.
 
 ## Changelog
 
+- **2026-09-27**: Recorded that `AddServices` of null is refused, and that a service assigned
+  after `Junctions()` runs is not supported.
 - **2026-09-23**: Distinguished a train the check cannot build (skipped with a warning) from one
   whose `Junctions()` throws (refused), recorded that the refusal happens only where the hosted
   check runs, and recorded that closing `RunInternal` and `Activate` ships as a minor that breaks

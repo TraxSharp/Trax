@@ -27,8 +27,7 @@ Consider this train:
 ```csharp
 Chain<LoadMetadataJunction>()                // TIn=RunJobRequest -> TOut=Metadata
     .Chain<ValidateMetadataStateJunction>()  // TIn=Metadata -> TOut=Unit
-    .Chain<RunScheduledTrainJunction>()
-    .Chain<UpdateManifestSuccessJunction>();
+    .Chain<RunScheduledTrainJunction>();
 ```
 
 If someone removes `LoadMetadataJunction`, `ValidateMetadataStateJunction` expects `Metadata` in Memory but nothing produces it. Today this is a runtime error. The train fails when it tries to find `Metadata` in the dictionary. You won't discover this until the code actually runs.

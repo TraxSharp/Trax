@@ -86,7 +86,7 @@ The signing key must have `KeyId` set; the same value lands in the JWT header `k
 | `Scopes` | no | Joined into a space-delimited `scope` claim; omitted when empty. |
 | `Groups` | no | Each entry becomes a repeated `cognito:groups` claim. |
 | `AuthTime` | no | Original authentication time; defaults to the issuer clock. |
-| `AdditionalClaims` | no | String-valued claims appended verbatim (use for `custom:*` attributes). |
+| `AdditionalClaims` | no | String-valued claims appended verbatim (use for `custom:*` attributes). A reserved name throws; see below. |
 
 ### `CognitoIdTokenRequest`
 
@@ -102,7 +102,15 @@ The signing key must have `KeyId` set; the same value lands in the JWT header `k
 | `Groups` | no | Repeated `cognito:groups`. |
 | `Identities` | no | Federated identities; see below. |
 | `AuthTime` | no | Original authentication time. |
-| `AdditionalClaims` | no | String-valued extras. |
+| `AdditionalClaims` | no | String-valued extras. A reserved name throws; see below. |
+
+### Reserved claim names
+
+`AdditionalClaims` refuses any name the issuer sets itself, and any name `CognitoJwtPrincipalResolver` reads an identity, a display name or roles from. Minting throws `ArgumentException` naming the claim, rather than writing a second copy that a validator or the resolver might read instead of the real one:
+
+`sub`, `iss`, `aud`, `exp`, `nbf`, `iat`, `jti`, `auth_time`, `token_use`, `client_id`, `scope`, `username`, `cognito:username`, `cognito:groups`, `identities`, `email`, `email_verified`, `given_name`, `family_name`, `name`, `preferred_username`, `role`, `roles`, the `ClaimTypes.Role`, `ClaimTypes.Name` and `ClaimTypes.NameIdentifier` URIs, `trax:principal-id` and `trax:principal-type`.
+
+Set those through the request's own properties (`Groups` for roles, `Username`, `Email`, and so on). A host that forwards user-editable attributes into `AdditionalClaims` therefore cannot be made to mint a token carrying an extra group or a different subject.
 
 ### `FederatedIdentity`
 
@@ -124,7 +132,7 @@ Real Cognito refresh tokens are opaque blobs. The `IRefreshTokenStore` contract 
 |---|---|
 | `IssueAsync(sub, clientId, lifetime, ct)` | Start a new rotation chain. |
 | `ValidateAsync(token, ct)` | Returns claims if active; null if expired, revoked, consumed, or unknown. |
-| `RotateAsync(oldToken, ct)` | Atomically consume one token and issue a successor in the same chain. Returns null when the supplied token is invalid. Rotation does not extend session length, the new token inherits the original expiry. |
+| `RotateAsync(oldToken, ct)` | Atomically consume one token and issue a successor in the same chain. Returns null when the supplied token is invalid. Rotation does not extend session length, the new token inherits the original expiry. Presenting a token that was already rotated revokes the whole chain (reuse detection). |
 | `RevokeAsync(token, ct)` | Revokes the entire rotation chain the token belongs to. |
 | `RevokeAllAsync(sub, clientId, ct)` | Global sign-out: revoke every chain for the user. |
 
@@ -143,7 +151,9 @@ if (next is null)
 }
 ```
 
-Concurrent rotations of the same token are race-safe: exactly one caller wins, every other concurrent attempt gets null.
+Presenting a refresh token that rotation already consumed is treated as reuse: `RotateAsync` returns null **and revokes the whole chain**, so the token the earlier rotation issued stops working too. The store cannot tell the legitimate client from someone replaying a stolen copy, so it ends the session for both and the user signs in again. An `IRefreshTokenStore` you write for production must do the same.
+
+Concurrent rotations of the same token are race-safe: exactly one caller wins and every other concurrent attempt gets null. Because the losers presented a spent token, they count as reuse, and the winner's new token is revoked as well. A client should serialize its refreshes rather than race them.
 
 ## `TestJwksServer.CreateCognitoIssuer()`
 

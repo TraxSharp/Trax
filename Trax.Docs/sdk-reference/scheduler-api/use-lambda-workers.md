@@ -46,6 +46,7 @@ Defined in `Trax.Scheduler.Lambda.Extensions.LambdaSchedulerExtensions`.
 | `FunctionName` | `string` | _(required)_ | The Lambda function name, ARN, or partial ARN to invoke |
 | `ConfigureLambdaClient` | `Action<AmazonLambdaConfig>?` | `null` | Optional callback to configure the `AmazonLambdaConfig` (set region, endpoint override for LocalStack, etc.) |
 | `Retry` | `LambdaRetryOptions` | _(see below)_ | Retry options for transient AWS failures (429, 502, 503, 504) |
+| `SigningKey` | `byte[]?` | `null` | The key shared with the function's `ConfigureRunner`, at least 32 bytes. When set, each envelope carries a `Signature` over its `PayloadJson`. See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) |
 
 ### LambdaRetryOptions
 

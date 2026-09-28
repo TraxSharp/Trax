@@ -158,3 +158,13 @@ Run `036_fk_and_manifest_eval_indexes.sql` (Postgres) or `004_fk_and_manifest_ev
 | `ix_metadata_manifest_failed` | `metadata` | Per-manifest `FailedCount` in the dispatch loop (partial: `failed` only) |
 
 PostgreSQL does not auto-index the referencing side of a foreign key, so without the first three, `DeleteExpiredMetadataJunction`'s cleanup DELETE had to scan those tables to satisfy the `ON DELETE RESTRICT` checks, becoming O(table) on a large database. The fourth bounds the per-manifest failed-count subquery in `LoadManifestsJunction` to failed rows instead of the manifest's entire terminal history.
+
+## Queued Subject Index Migration (046)
+
+`046_work_queue_subject_queued_index.sql` (Postgres) or `011_work_queue_subject_queued_index.sql` (SQLite) adds one partial index. It is `CREATE INDEX IF NOT EXISTS` and safe to re-run.
+
+| Index | Table | Covers |
+|-------|-------|--------|
+| `ix_work_queue_subject_queued` | `work_queue` | The "queued behind" lookup on a work queue entry's detail, in the API and the dashboard (partial: `queued` with a non-null `subject_key`) |
+
+The two subject indexes from migration 042 cover dispatched rows, so before this the lookup read every queued row and filtered on the key. With 500,000 queued entries that took about 137 ms per detail view; through this index it takes about 1 ms. Entries without a subject key, which is most manifest work, are left out of the index, so it stays small.

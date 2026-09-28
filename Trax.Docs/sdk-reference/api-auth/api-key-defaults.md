@@ -14,5 +14,5 @@ Constants used by the Trax API-key scheme.
 | Constant | Value | Usage |
 |---|---|---|
 | `SchemeName` | `TraxApiKey` | `AuthenticationScheme` name. Pass to `.RequireAuthorization(scheme: ApiKeyDefaults.SchemeName)` when composing with other schemes. |
-| `PolicyName` | `ApiKeyPolicy` | Registered authorization policy that requires authenticated user + the API-key scheme. |
+| `PolicyName` | `ApiKeyPolicy` | Registered authorization policy satisfied only by a caller the API-key scheme authenticated, wherever it is evaluated (endpoint gate, `GateOperations`, `[TraxAuthorize(Policy = ...)]`, sockets). |
 | `HeaderName` | `X-Api-Key` | Default request header. Override via [`ApiKeyAuthenticationOptions.HeaderName`](/docs/sdk-reference/api-auth/api-key-authentication-options). |

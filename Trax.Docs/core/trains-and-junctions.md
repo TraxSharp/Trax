@@ -236,6 +236,13 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 internal, so a train cannot build its chain imperatively. Upgrading a train that used them is
 covered in [Removal of RunInternal and Activate](/docs/migration-guides/runinternal-and-activate).
 
+A `ServiceTrain` cannot override `Run` either. `Run(input, ct)` is a sealed override, and the
+`Run(input, metadata)` overloads are not virtual. `NewMonad()`, which builds the monad the chain runs on, is sealed too. `Run` owns what wraps the chain: the metadata
+row, the lifecycle hooks and the outcome write. An override that did its own work, or skipped
+`base.Run`, would run untracked while every surface still reported the train. Put the work in
+junctions, and anything around it in the [lifecycle hooks](#train-lifecycle-hooks). A plain
+`Train<TIn, TOut>` from Trax.Core still has a virtual `Run` and `NewMonad()`.
+
 That is what makes a chain readable before it runs. A chain assembled in code has no single
 shape, so the host could not check it at startup, and a chain that varies by input would mean the
 shape verified is not necessarily the shape that runs. To keep the guarantee, the declaration has
@@ -289,6 +296,9 @@ start when:
 - an `IChain` step names a class rather than an interface, or names a junction interface that
   neither Memory nor the container holds
 - `AddServices<T>` names a class rather than an interface
+- `AddServices` receives null. The service has to exist when `Junctions()` runs, so a field
+  assigned after the train is built, in a lifecycle hook such as `OnStarted`, is null when the
+  check reads the chain; assigning a service later is not supported
 - `Chain<T>` or `ShortCircuit<T>` names a type that is not a junction
 - a `ShortCircuit` junction's output cannot be the train's return type (its value is returned as
   the result by a cast, which would fail on every run)
@@ -414,10 +424,10 @@ public class ProcessMatchResultTrain
 `OnQueue` differs from the other four hooks in three ways:
 
 - **Exceptions propagate.** A throw is not swallowed: it aborts the enqueue and leaves no work queue row behind. Use it only for work that must succeed for the mutation to be accepted.
-- **The train is not initialized.** `this.Metadata` and `TrainInput` are unavailable. Read everything from the passed `metadata`: the input via `metadata.GetInput<T>()`, and `metadata.ExternalId` to correlate with the eventual run, which executes under the same ExternalId. `Id`, `ManifestId`, and `ScheduledTime` are unset because no run exists yet.
+- **The train is not initialized.** `this.Metadata` is null. The input is on the passed `metadata` (`metadata.GetInput<T>()`), and `TrainInput` returns it as well: from Trax.Mediator 1.23.0 the enqueue hands it over through `ServiceTrain.EnterQueueHooks` around both `QueueSubjectKey` and `OnQueue`, on every enqueue path (top level, deferred, and nested in another train's hook). An older Trax.Mediator leaves `TrainInput` returning `default` in both, silently, so `metadata.GetInput<T>()` is the form that works on every version. Use `metadata.ExternalId` to correlate with the eventual run, which executes under the same ExternalId. `Id`, `ManifestId`, and `ScheduledTime` are unset because no run exists yet.
 - **It must be idempotent.** The deferred run re-executes the full `Junctions()` chain, so any effect the chain also performs will happen again. Write `OnQueue` so running it plus the chain is safe.
 
-Property dependencies marked `[Inject]` (like `GameDbFactory` above) are populated before `OnQueue` is called, the same as during a normal run. Trains that do not override `OnQueue` skip resolution entirely, so the enqueue path is unaffected.
+Property dependencies marked `[Inject]` (like `GameDbFactory` above) are populated before `OnQueue` is called, the same as during a normal run. The enqueue resolves the train once, in a DI scope it creates for itself and disposes before it returns, and calls `QueueSubjectKey`, `DeferQueuePromotion` and `OnQueue` on that one instance. So the scoped services a train takes belong to that enqueue, not to the caller's scope: a hook cannot write into the caller's request `DbContext` and have the caller save it, and a write a failed hook left on a scoped context does not reach the next enqueue. Trains that override neither `OnQueue` nor `QueueSubjectKey` are never resolved, so the enqueue path is unaffected.
 
 #### Making the side-effect durable
 
@@ -434,9 +444,18 @@ protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
 
 `Current` is non-null only while `OnQueue` is running for a train that does not defer promotion, and the hook must not call `SaveChanges` or commit on it: the enqueue owns the lifetime. This only covers entities in Trax's own model. The context is entered only for trains that override `OnQueue`.
 
-`Current` flows with the async call, not with the service instance or its scope: every accessor instance on the same async flow sees it, including a singleton train's or one resolved from another scope. See [IEnqueueContextAccessor](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor). Two enqueues running at once on one scope each see their own context, and an enqueue started from inside an `OnQueue` hook gets its own context and transaction for as long as it runs, then hands the outer one back. Nesting an enqueue inside a hook does not corrupt the outer one, but it is not part of it either: the inner enqueue commits on its own context and connection before the outer enqueue's `SaveChanges`, so if the outer hook later throws or the outer commit fails, the inner entry survives the rollback and will run.
+`Current` flows with the async call, not with the service instance or its scope: every accessor instance on the same async flow sees it, including a singleton train's or one resolved from another scope. See [IEnqueueContextAccessor](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor). Two enqueues running at once on one scope each see their own context.
 
-The enqueue holds its data context, and with it a pooled database connection with an open transaction, for the whole time the hook runs. A slow hook (one calling a remote API, say) therefore keeps a connection and a transaction open on Trax's database for that long. A deferring train (below) does not: its entry is committed on a context that is released before the hook runs, so for a slow hook that writes nothing through `IEnqueueContextAccessor.Current`, `DeferQueuePromotion` also keeps the connection free.
+An enqueue started from inside an `OnQueue` hook **joins the enqueue it runs inside**: its entry is written in the outer enqueue's context and transaction, so it commits with the outer entry or not at all. If the outer hook later throws or the outer commit fails, the nested entry is rolled back with it and never runs. The nested enqueue returns its entry's id as usual, because it flushes the entry inside the open transaction, and it needs no second pooled connection. A few rules follow from sharing one transaction:
+
+- **A nested failure fails the outer enqueue**, even if the hook catches it, because the failed attempt may have left writes on the shared context. The outer enqueue throws an `InvalidOperationException` with the nested failure as its inner exception.
+- **Await the enqueues a hook starts.** One still running when the hook returns fails the outer enqueue. Several can run at once (`Task.WhenAll`); their writes on the shared context are serialized.
+- **A deferring train enqueued from a hook is not staged.** Its entry is written confirmed, since nothing can see it before the outer commit anyway.
+- **A deferring hook has nothing to join.** Its own entry is already committed when it runs, so an enqueue it starts commits on its own. The same holds on a provider without transactions. On the in-memory provider the join happens, but it has no real transaction to roll back.
+
+`Trax.Mediator/docs/adr/0003` records the reasoning.
+
+The enqueue holds its data context, and with it a pooled database connection with an open transaction, for the whole time the hook runs. A slow hook (one calling a remote API, say) therefore keeps a connection and a transaction open on Trax's database for that long. A deferring train (below) does not: its entry is committed on a context that is released before the hook runs, so for a slow hook that writes nothing through `IEnqueueContextAccessor.Current`, `DeferQueuePromotion` also keeps the connection free. From Trax.Mediator 1.23.0 that time is limited: a hook that runs longer than `MaxQueueHookDuration` (30 seconds by default, set with `AddMediator(m => m.WithMaxQueueHookDuration(TimeSpan))`) fails its enqueue with `QueueHookTimeoutException`, which rolls back everything written on the enqueue's context and frees the connection. The hook's token is cancelled at the limit; honour it, because a hook that ignores it keeps running with no enqueue behind it, and anything it enqueues after that is refused. A hook that has to wait longer belongs on a deferring train, whose hook holds no connection and is not limited.
 
 **Writing through your own `DbContext`.** EF can only share a transaction between contexts that share a connection, so a separately-registered context (the common case, and the one in the example above) commits independently and cannot be rolled back with the entry. For that, defer promotion:
 
@@ -446,7 +465,7 @@ protected override bool DeferQueuePromotion => true;
 
 The entry is then committed **unconfirmed** and is not dispatchable. The hook runs. A second commit stamps `confirmed_at` and the entry becomes claimable. This does not make the two writes atomic (nothing can, across two databases), but it makes a failure *findable*: a crash leaves an unconfirmed entry instead of an invisible side-effect.
 
-`IEnqueueContextAccessor.Current` is null inside a deferring train's hook. The entry is already committed by then, so there is no enqueue transaction to join, and deferral exists for hooks that write elsewhere.
+`IEnqueueContextAccessor.Current` is null inside a deferring train's hook. The entry is already committed by then, so there is no enqueue transaction to join, and deferral exists for hooks that write elsewhere. That holds when the deferring train is enqueued from inside another train's hook too, from Trax.Mediator 1.23.0; an older Trax.Mediator shows that hook the outer enqueue's context.
 
 Once the hook has returned, the mutation counts as accepted and its side-effect may have landed, so the promotion runs even if the caller has cancelled. If the entry was cancelled while the hook ran (by an operator, or by the stale sweep below), there is nothing to promote: `QueueAsync` throws `QueuedWorkCancelledException` (an `InvalidOperationException` carrying the entry's `WorkQueueId`) saying the work will not run and the hook's side-effect may already have been applied, rather than reporting success. If the sweep promoted it instead, because the host opted into promotion, the entry will run and the enqueue succeeds. A hook that *throws* still aborts the enqueue outright: the staged entry is removed, again regardless of cancellation, but only while it is still staged, so a promoted or dispatched entry is never deleted. A failure to remove it does not replace the hook's exception.
 
@@ -490,9 +509,12 @@ Four things worth knowing:
 - **Registering one is optional.** With none, every failure records `Unclassified`, which means "decide as you did before this existed". Nothing in Trax acts on a classification yet (retry is still purely count-based), so adding a classifier changes what is recorded, not what happens.
 - **Returning null is fine** and means the same as not recognising the failure.
 - **Throwing is not fatal.** The classifier's exception is logged and the failure records as `Unclassified`. A classifier must never be able to mask the failure it was asked about.
-- **Cancellation is not a failure** and is not classified. That includes an `HttpClient` timeout: it surfaces as `TaskCanceledException`, the run records as `Cancelled`, and the classifier never sees it. A timeout your code turns into its own exception type is a failure like any other and can be classified `Transient`.
+- **A requested cancellation is not a failure** and is not classified. A run is asked to stop when its own token is cancelled or its persisted cancel flag is set (the dashboard's cancel button, the scheduler's job timeout); it records as `Cancelled` and the classifier never sees it.
+- **A cancellation nothing asked for is a failure.** An `HttpClient` timeout surfaces as `TaskCanceledException` without the run's token being cancelled, so the run records as `Failed` and the classifier is asked about it. If the classifier has no answer (null or `Unclassified`), Trax records `Transient`. Because a manifest retries only a `Failed` run, such a timeout is retried.
 
 A class the failure already carries wins over the local classifier. That is the case for a failure from a remote worker, and for one a calling-side junction preserved when it enriched the exception. A failure rebuilt from a serialized record (a remote failure) is never passed to the local classifier at all: its original type is gone, so a catch-all classifier would stamp a class on something the worker deliberately left alone. The classifier's answer applies to everything else, including a failure raised outside any junction, whose class is attached to the exception so a remote worker reports it too.
+
+A class is carried in an exception's **message** only on a `TrainException`, which is the type Trax rebuilds a serialized failure as. Any other exception's message is its own text and is never read for a class, even when it is JSON; the classifier decides for it as usual. A carried value outside the vocabulary is carried as `Unclassified`.
 
 Failures the scheduler records itself, such as a dispatch failure or a run failed by the stale-run reaper, record `Unclassified`: no train saw an exception to classify.
 
@@ -513,17 +535,17 @@ protected override string? QueueSubjectKey(Metadata metadata) =>
     $"customer-{metadata.GetInput<PatchCustomerInput>()!.CustomerId}";
 ```
 
-The key is an opaque string. Trax compares it and nothing else, so its shape is yours to choose. A record identity is the usual pick. It is read at enqueue time from a metadata carrying the input, so it varies per mutation rather than being fixed per train.
+The key is an opaque string. Trax compares it and nothing else, so its shape is yours to choose. A record identity is the usual pick. It is read at enqueue time from a metadata carrying the input, so it varies per mutation rather than being fixed per train. `TrainInput` works here from Trax.Mediator 1.23.0; the example reads the input from `metadata`, which works on every version, as [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) explains.
 
 **Keys are compared exactly, case-sensitively, across all trains.** They are not namespaced by train: two trains returning `"42"` serialize against each other. Prefix the key with something the train owns (`customer-`, above) unless serializing across trains is what you want.
 
-Returning null, which is the default, means no serialization. Every train that does not override this is unaffected. An empty string is refused, because it is almost always an unset identity and would serialize every train returning it against every other. The key is limited to 512 characters; use a record identity, or a hash of a longer one. Both refusals throw `InvalidOperationException` at enqueue, where the caller sees them.
+Returning null, which is the default, means no serialization. Every train that does not override this is unaffected. An empty string, or one that is only whitespace, is refused, because it is almost always an unset identity and would serialize every train returning it against every other. A key containing an unpaired surrogate is refused too, because it is not valid text. The key is limited to 512 Unicode characters, so an emoji counts once although it takes two UTF-16 units; use a record identity, or a hash of a longer one. `WorkQueue.Create` applies these rules, and the enqueue reports its refusal as an `InvalidOperationException` naming the train, where the caller sees it. Before Trax.Mediator 1.23.0 the enqueue counted UTF-16 units, so a key of more than 256 characters outside the Basic Multilingual Plane was refused.
 
 **Throwing aborts the enqueue.** A key that cannot be computed must not quietly become null: that would drop the guarantee at exactly the moment the caller was relying on it.
 
 Three limits worth knowing:
 
-- **Only queued work is serialized.** Entries created through the mediator's queue path carry a key, including the dashboard's queue dialog and re-queue button. Work queued from a manifest is not about a record and has no subject, and neither does a dormant dependent a parent train activates (`IDormantDependentContext.ActivateAsync`): its input is chosen at runtime by the parent's code, and its entry skips `QueueSubjectKey` and `OnQueue`. A synchronous run (`RunAsync`, `ITrainBus`) never consults the key, so it can overlap a queued run for the same subject.
+- **Only queued work is serialized.** Entries created through the mediator's queue path carry a key, including the dashboard's queue dialog and re-queue button. Work queued from a manifest is not about a record and has no subject, and neither does a dormant dependent a parent train activates (`IDormantDependentContext.ActivateAsync`): its input is chosen at runtime by the parent's code, and its entry skips `QueueSubjectKey` and `OnQueue`. A synchronous run (`RunAsync`, `ITrainBus`) never consults the key, so it can overlap a queued run for the same subject. Neither does the dashboard's **Run** dialog, which submits straight to the job submitter without a work queue entry; it warns that it bypasses serialization and points at **Queue**.
 - **Ordering within a subject is dispatch order**, priority first and then age, so a higher-priority entry for the same subject still goes first. (Dispatch order leads with the manifest group's priority, but an entry queued through the mediator has no manifest, so that does not separate entries for one subject.) An entry whose `scheduledAt` has not arrived is not a candidate at all, so a younger entry that is due runs before an older one scheduled later. That holds with a single dispatcher. With `MaxConcurrentDispatch` above 1, or several hosts dispatching, only mutual exclusion is guaranteed, not order.
 - **The guarantee is bounded by the stale-run reapers and the scheduler's startup recovery.** See below.
 - **The key and the priority both come from the caller.** `QueueSubjectKey` computes the key from the input the caller supplied, and the queue priority is a caller-supplied argument, so a caller authorized to queue a keyed train chooses which subject its entry serializes against and where it sits in that subject's order. Keys are a single global space rather than one per train, so two trains returning the same string serialize against each other. Authorize the record in `OnQueue`, or scope the key per tenant (`$"{tenantId}:order:{orderId}"`), so a caller cannot name a subject that is not theirs.

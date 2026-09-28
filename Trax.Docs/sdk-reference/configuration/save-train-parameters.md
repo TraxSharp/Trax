@@ -69,6 +69,40 @@ cfg.ShouldSaveInputs = name => name.Contains(typeof(IPatchCustomerTrain).FullNam
 
 That serializes the mutation train's input and nothing else, which is the usual shape when inputs carry personal data and only the replayable ones are worth storing. Pair it with [per-train metadata retention](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) to decide how long each of them is kept.
 
+#### Masking sensitive fields
+
+Excluding a train drops its whole input or output. To keep the record but hide one field, mark the member with `[TraxSensitive]` (namespace `Trax.Effect.Attributes`):
+
+```csharp
+public record ChargeCustomerInput(
+    string CustomerId,
+    [TraxSensitive] string CardNumber,
+    Address BillingAddress
+);
+
+public class Address
+{
+    public string City { get; set; } = "";
+
+    [TraxSensitive]
+    public string Street { get; set; } = "";
+}
+```
+
+The stored input then reads `{"customerId": "c-1", "cardNumber": {"_redacted": true}, "billingAddress": {"city": "Leeds", "street": {"_redacted": true}}}`. The train runs with the real values; only the stored copy is masked.
+
+| Case | What happens |
+|------|--------------|
+| A marked member on a nested object, or on each element of a collection | Masked where it sits; the rest of the object is kept |
+| A marked member whose value is an object or a collection | The whole value is replaced; nothing under it is written |
+| A positional record parameter | Mark the parameter, with or without `property:` |
+| `[JsonPropertyName]` on the member | Masked under its JSON name |
+| A mark on a base property or an interface member | Applies to the override or implementation |
+| A dictionary's keys or values | Not masked: there is no member to mark |
+| A member named `Password` with no mark | Not masked. Nothing is masked by name |
+
+The same masking applies to the junction output recorded by `AddJunctionLogger(serializeJunctionData: true)`, and to the output handed to lifecycle hooks when `SaveTrainParameters` is off, so a broadcast or subscription never carries the value either. It does **not** apply to the copy a train is run from: a queued entry's input and a manifest's properties keep the real value, because the train needs it. A masked input cannot be deserialized back into the input type; `TraxRedaction.ContainsRedaction(json)` says whether a stored input or output holds a mask. Why it is opt-in and masked where it is written is recorded in `effect/0010`.
+
 ## Returns
 
 `TBuilder`, the same builder type that was passed in, for continued fluent chaining.

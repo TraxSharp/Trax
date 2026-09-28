@@ -155,21 +155,23 @@ public override async Task<string> Run(string input)
 Cancellation is treated differently from regular exceptions:
 
 - **Regular exceptions** are enriched with `TrainExceptionData` (junction name, train name, original stack trace, etc.) via `Exception.Data` and returned as `Left` in the Railway pattern. The original exception type and message are preserved - callers outside Trax see the exception exactly as the junction threw it
-- **`OperationCanceledException`** propagates cleanly without wrapping. It is not a junction failure, it is an explicit abort signal
+- **`OperationCanceledException` while the train's token is cancelled** propagates cleanly without wrapping. It is not a junction failure, it is an explicit abort signal
+- **`OperationCanceledException` while the train's token is not cancelled**, such as an `HttpClient` timeout, is treated as a regular exception: enriched and returned as `Left`
 
-This means cancellation always throws (even with `RunEither`), which matches the .NET convention that cancellation is exceptional flow, not a business error.
+This means a requested cancellation always throws (even with `RunEither`), which matches the .NET convention that cancellation is exceptional flow, not a business error.
 
 ### TrainState.Cancelled
 
-When an `OperationCanceledException` ends the run, `FinishServiceTrain` sets the train state to `Cancelled` instead of `Failed`:
+When an `OperationCanceledException` that the run was asked for ends it, `FinishServiceTrain` sets the train state to `Cancelled` instead of `Failed`. A run is asked to stop when its own token is cancelled, or when its persisted cancel flag is set (the dashboard's cancel button, or the scheduler's job timeout for a run on another host), which `CancellationCheckProvider` turns into a cancellation at the next junction boundary:
 
 ```
-OperationCanceledException → TrainState.Cancelled
-All other exceptions       → TrainState.Failed
-No exception               → TrainState.Completed
+OperationCanceledException, requested     → TrainState.Cancelled
+OperationCanceledException, not requested → TrainState.Failed, FailureClass Transient
+All other exceptions                      → TrainState.Failed
+No exception                              → TrainState.Completed
 ```
 
-Cancelled trains are **not retried** and **do not create dead letters**. Cancellation is a deliberate operator action, not a transient failure. The dashboard shows cancelled trains with a warning (orange) badge to distinguish them from failures.
+Cancelled trains are **not retried** and **do not create dead letters**. Cancellation is a deliberate operator action, not a transient failure. An `OperationCanceledException` nothing asked for is the opposite case: most often an `HttpClient` timeout, it means a dependency was slow, so the run is recorded as a failure, classified `Transient` unless your `IFailureClassifier` answers otherwise, and a manifest retries it. `OnFailed` fires for it, not `OnCancelled`. The dashboard shows cancelled trains with a warning (orange) badge to distinguish them from failures.
 
 ## TrainBus Dispatch
 
@@ -243,6 +245,10 @@ Host signals shutdown (stoppingToken fires)
 ```
 
 This gives trains performing critical operations (database transactions, external API calls) time to complete cleanly rather than being aborted mid-operation.
+
+Once a train finishes, whether inside the grace period or after being cancelled, the worker deletes its `background_job` row without the stopping token. That token has already fired by then, and the delete is bookkeeping for finished work, so it is not cancellable. If it were, every job that finished during shutdown would leave its row behind for another worker to re-claim after `VisibilityTimeout`, only to refuse it as no longer `Pending`.
+
+With a `BatchSize` above 1, a job the worker claimed but had not started when shutdown began is not started at all: its `fetched_at` is cleared so another worker can claim it straight away, rather than every remaining job getting its own grace period.
 
 Configure the grace period:
 

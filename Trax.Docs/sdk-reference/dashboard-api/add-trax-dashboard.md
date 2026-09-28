@@ -54,6 +54,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddTraxDashboard(options =>
 {
     options.Title = "My App Dashboard";
+    options.RequirePolicy("TraxAdmin"); // required: who may use the dashboard
 });
 
 var app = builder.Build();
@@ -68,6 +69,7 @@ app.UseTraxDashboard();  // the dashboard is served at /trax
 - `IDashboardSettingsService` (scoped): dashboard configuration access
 - Radzen components (via `AddRadzenComponents()`)
 - Blazor Interactive Server components (via `AddRazorComponents().AddInteractiveServerComponents()`)
+- A post-configure step on `LoggerFilterOptions`, with its own change token, that applies the log levels saved on the Server Settings page. Both overloads register it, so a saved level applies over every configuration source and survives a reload of the host's configuration. Neither overload changes the host's `IConfiguration`.
 
 ## Prerequisites
 

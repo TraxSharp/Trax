@@ -15,7 +15,7 @@ Constants used by the Trax OpenID Connect scheme.
 |---|---|---|
 | `SchemeName` | `TraxOidc` | Challenge scheme. A challenge against this scheme redirects the browser to the identity provider. |
 | `CookieSchemeName` | `TraxOidc.Cookie` | Session cookie scheme. Subsequent requests authenticate against this. |
-| `PolicyName` | `OidcPolicy` | Authorization policy bound to the cookie scheme. |
+| `PolicyName` | `OidcPolicy` | Authorization policy bound to the cookie scheme, satisfied only by a caller the OIDC session authenticated. |
 | `CallbackPath` | `/signin-oidc` | Default callback path mounted by the OIDC handler. |
 | `SignedOutCallbackPath` | `/signout-callback-oidc` | Default sign-out callback path. |
 | `PrincipalType` | `oidc` | Value written to the `trax:principal-type` claim when the default resolver builds a `TraxPrincipal`. |

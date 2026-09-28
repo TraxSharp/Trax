@@ -337,6 +337,8 @@ await scheduler.ScheduleAsync<IMyTrain, MyInput, Unit>(
 
 Timed-out jobs are cancelled using the same dual-layer mechanism as manual cancellation: `CancellationRequested = true` in the database (cross-server) plus `ICancellationRegistry.TryCancel()` for same-server instant cancel. The job transitions to `TrainState.Cancelled`, it is **not retried** and does **not create a dead letter**. This is distinct from dead-lettering, which handles jobs that have failed repeatedly.
 
+A scheduler job timeout is a cancellation the scheduler asked for. A timeout inside your train is not: when an `HttpClient` gives up on a slow upstream it throws `TaskCanceledException`, and the run is recorded `Failed`, classified `Transient` (unless your `IFailureClassifier` says otherwise). That failure counts toward the manifest's `MaxRetries`, so the manifest runs it again and dead-letters it once the retries are used up.
+
 *See also: [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens)*
 
 ## Configuration Options

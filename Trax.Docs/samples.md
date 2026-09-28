@@ -225,7 +225,7 @@ No scheduled jobs - all work is triggered by GraphQL mutations. The API dispatch
 
 The split:
 - **API:** `AddScheduler()` + `UseRemoteWorkers()` + `UseRemoteRun()` + `AddTraxGraphQL()` + `AddTraxDashboard()`
-- **Runner:** `AddTraxJobRunner()` + `UseTraxRunEndpoint()` + `UseBroadcaster()` - no scheduler, no polling, no dashboard
+- **Runner:** a `TraxLambdaFunction` run locally with `RunLocalAsync()`, which maps `/trax/execute` and `/trax/run`, plus `UseBroadcaster()` - no scheduler, no polling, no dashboard. The Runner needs an [authorization posture](/docs/scheduler/remote-execution#authorization-posture): a `SigningKey` in `ConfigureRunner` matching the API's `SigningKey` on `UseRemoteWorkers()` and `UseRemoteRun()`
 
 Query trains (e.g. `LookupModerationResult`) run synchronously on the API process. Queued trains (e.g. `ReviewContent`, `SendViolationNotice`) are POSTed to the Runner via `HttpJobSubmitter`. No `background_job` table is involved - jobs go directly over HTTP.
 
@@ -309,6 +309,17 @@ All samples require PostgreSQL. From the `Trax.Samples/` directory:
 docker compose up -d
 ```
 
+The compose file publishes Postgres and RabbitMQ on `127.0.0.1` only, because their passwords
+(`trax123`) are written in the file. Set `TRAX_PG_PORT` to move Postgres to another host port
+when something else holds 5432. If you copy the file to a server, keep the `127.0.0.1:` prefix
+and replace the passwords.
+
+The samples' demo API keys and JWT signing keys are published in this repository, so each
+sample registers them only in Development. `dotnet run` starts in Development through the
+project's `Properties/launchSettings.json`; started any other way, a sample accepts none of
+them. Every demo API key contains `do-not-use-in-production`, which Trax.Api refuses to start
+with outside Development.
+
 ### DataPipeline (Standalone)
 
 ```bash
@@ -386,7 +397,7 @@ npm install && npm run dev
 
 GraphQL IDE at `http://localhost:5210/trax/graphql`. React client at `http://localhost:5173`.
 
-Authentication uses `X-Api-Key` header with three users: `alice-key`, `bob-key`, `charlie-key`.
+Authentication uses `X-Api-Key` header with three users: `alice-key-do-not-use-in-production`, `bob-key-do-not-use-in-production`, `charlie-key-do-not-use-in-production`.
 The React client provides a user switcher dropdown - open multiple browser tabs to simulate different users chatting in real time.
 
 **Quick walkthrough (ChatService):**
@@ -430,7 +441,11 @@ npm install && npm run dev
 
 GraphQL IDE at `http://localhost:5220/trax/graphql`. React client at `http://localhost:5173`.
 
-No authentication required - this is a developer tool.
+No authentication - this is a local developer tool, and it builds and runs code on your
+machine. The hub starts only in Development (which `dotnet run` sets through its
+`launchSettings.json`), listens on localhost, and answers only requests addressed to
+`localhost`. `runTests` takes a project name from `discoverTestProjects` and refuses any other,
+so it runs only the test projects already under the configured root.
 
 **Quick walkthrough (TestRunner):**
 
@@ -442,7 +457,7 @@ No authentication required - this is a developer tool.
 subscription { onTrainCompleted { externalId trainName output } }
 
 # 3. Queue a test run - returns immediately with an externalId
-mutation { dispatch { runTests(input: { projectName: "Trax.Core.Tests.Unit", projectPath: "/home/user/Repos/Trax/Trax.Core/tests/Trax.Core.Tests.Unit/Trax.Core.Tests.Unit.csproj" }) { externalId workQueueId } } }
+mutation { dispatch { runTests(input: { projectName: "Trax.Core.Tests.Unit" }) { externalId workQueueId } } }
 
 # The subscription tab receives the result when the train completes,
 # with test results in the output field (Total, Passed, Failed, FailedTests, etc.)

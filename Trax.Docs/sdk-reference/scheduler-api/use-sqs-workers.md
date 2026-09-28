@@ -46,6 +46,7 @@ Defined in `Trax.Scheduler.Sqs.Extensions.SqsSchedulerExtensions`.
 | `QueueUrl` | `string` | _(required)_ | The SQS queue URL (e.g., `https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs`) |
 | `ConfigureSqsClient` | `Action<AmazonSQSConfig>?` | `null` | Optional callback to configure the SQS client (set region, endpoint override for LocalStack, etc.) |
 | `MessageGroupId` | `string?` | `null` | For FIFO queues: a fixed message group ID. When null, each message gets a unique group ID (no ordering). Ignored for standard queues. |
+| `SigningKey` | `byte[]?` | `null` | The key shared with the consumer's `AddTraxJobRunner(runner => runner.SigningKey = ...)`, at least 32 bytes. When set, each message carries a `Trax-Signature` message attribute over its body. See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) |
 
 ## SubmitterRouting
 
@@ -161,16 +162,20 @@ public class Function
             .AddEffects(effects => effects.UsePostgres(connectionString))
             .AddMediator(typeof(MyTrain).Assembly)
         );
-        services.AddTraxJobRunner();
+        var signingKey = Convert.FromBase64String(
+            Environment.GetEnvironmentVariable("TRAX_RUNNER_SIGNING_KEY")!
+        );
+        services.AddTraxJobRunner(runner => runner.SigningKey = signingKey);
         return services.BuildServiceProvider();
     }
 }
 ```
 
 The handler:
-1. Deserializes each SQS record as a `RemoteJobRequest`
-2. Delegates to `ITraxRequestHandler.ExecuteJobAsync` in a scoped DI container
-3. Re-throws exceptions so SQS retry and dead-letter queue policies apply
+1. Refuses the batch when the runner options have no posture (a `SigningKey`, or `AllowUnsignedRequests()` for a queue only the scheduler can write to), and refuses a message whose `Trax-Signature` attribute does not verify. The message's age and repeats are not checked, because SQS redelivers by design; the job's `Pending` metadata row stops a second run
+2. Deserializes each SQS record as a `RemoteJobRequest`, refusing a body that repeats a property (a `JsonException`, rethrown like any other failure)
+3. Delegates to `ITraxRequestHandler.ExecuteJobAsync` in a scoped DI container
+4. Re-throws exceptions so SQS retry and dead-letter queue policies apply
 
 ## Registered Services
 

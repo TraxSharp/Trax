@@ -89,7 +89,7 @@ No connection string parameter needed, local workers use the same `IDataContext`
 | `PollingInterval` | 1 second | How often idle workers poll for new jobs |
 | `VisibilityTimeout` | 30 minutes | How long a claimed job stays invisible before crash recovery reclaims it |
 | `ShutdownTimeout` | 30 seconds | Grace period for in-flight jobs during application shutdown. When the host signals shutdown, in-flight trains receive the cancellation token after this delay. giving them time to finish cleanly. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens#background-services-and-shutdown). |
-| `BatchSize` | 1 | Number of jobs each worker claims per poll. Higher values reduce database round-trips when there is a backlog. Claimed jobs are processed sequentially within the worker task. If a worker crashes mid-batch, uncompleted jobs wait for `VisibilityTimeout` before being reclaimed. |
+| `BatchSize` | 1 | Number of jobs each worker claims per poll. Higher values reduce database round-trips when there is a backlog. Claimed jobs are processed sequentially within the worker task. If the host starts shutting down mid-batch, the jobs not yet started are released (their `fetched_at` is cleared) so any worker can claim them at once. If a worker crashes mid-batch, uncompleted jobs wait for `VisibilityTimeout` before being reclaimed. |
 
 ### Worker Lifecycle
 
@@ -119,7 +119,7 @@ The worker resolves `IJobRunnerTrain` from a new DI scope and calls `Run(new Run
 
 **Phase 3. Cleanup** (always runs, success or failure)
 
-The worker deletes the `background_job` row. This matches the previous Hangfire behavior where jobs were auto-deleted on completion. Trax.Core's Metadata and DeadLetter tables handle the audit trail, the background_job table is purely a transient queue.
+The worker deletes the `background_job` row. The delete does not take the host's stopping token, so a job that finishes inside the `ShutdownTimeout` grace period is still removed rather than left for re-claim. This matches the previous Hangfire behavior where jobs were auto-deleted on completion. Trax.Core's Metadata and DeadLetter tables handle the audit trail, the background_job table is purely a transient queue.
 
 ### Crash Recovery
 
@@ -192,12 +192,16 @@ Trax supports two remote execution models:
 // Scheduler side:
 .AddScheduler(scheduler => scheduler
     .UseRemoteWorkers(
-        remote => remote.BaseUrl = "https://my-workers.example.com/trax/execute",
+        remote =>
+        {
+            remote.BaseUrl = "https://my-workers.example.com/trax/execute";
+            remote.SigningKey = runnerKey;
+        },
         routing => routing.ForTrain<IMyTrain>())
 )
 
-// Remote side:
-builder.Services.AddTraxJobRunner();
+// Remote side: the same key (see Authorization Posture in Remote Execution)
+builder.Services.AddTraxJobRunner(runner => runner.SigningKey = runnerKey);
 app.UseTraxJobRunner("/trax/execute");
 ```
 

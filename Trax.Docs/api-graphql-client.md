@@ -136,7 +136,7 @@ The default extractor walks the same path before deserializing, so consumers sta
 
 | Provider | When to use |
 |---|---|
-| `IntrospectingSchemaProvider` (default) | The live endpoint is reachable at boot. Cheapest setup, weakest guarantee (drift between intro and check). |
+| `IntrospectingSchemaProvider` (default) | The live endpoint is reachable at boot and lets this client introspect. Cheapest setup, weakest guarantee (drift between intro and check). A Trax server allows introspection only in Development unless its host passes `AllowIntrospection` a predicate that admits this client, so against a production Trax server pick one of the other two. |
 | `FileSchemaProvider` | CI, air-gapped builds, or you want startup validation against a checked-in SDL snapshot. Use a periodic introspection job to keep the snapshot fresh and alert on drift separately. |
 | `AssemblySchemaProvider` | In-ecosystem only. Builds the server's `ISchema` in-process from its DLL. Strongest query-string guarantee with zero network and zero file drift. Ships in `Trax.Api.GraphQL.Client.Trax`. |
 

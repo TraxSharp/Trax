@@ -126,7 +126,7 @@ services.AddTrax(trax => trax
 );
 ```
 
-Log levels can also be changed at runtime via the Dashboard's Server Settings page. The optional `blacklist` parameter filters out noisy namespaces:
+Log levels can also be changed at runtime via the Dashboard's Server Settings page. A saved level is applied to the host's logger filters over every configuration source, and lasts until the process restarts; if the host sets a category's filter itself after the dashboard, the page reports that the saved level is not in force. The optional `blacklist` parameter filters out noisy namespaces:
 
 ```csharp
 .AddDataContextLogging(

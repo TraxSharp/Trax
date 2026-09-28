@@ -110,7 +110,7 @@ In this example, `IHeavyComputeTrain` is dispatched to the remote HTTP endpoint,
 - No connection string parameter is needed. Local workers use the same `IDataContext` registered by `UsePostgres()`.
 - No additional NuGet packages required. This is included in `Trax.Scheduler`.
 - Jobs are queued to the `trax.background_job` table and dequeued atomically using PostgreSQL's `FOR UPDATE SKIP LOCKED`.
-- Workers delete job rows after execution (both success and failure). Trax.Core's Metadata and DeadLetter tables handle the audit trail.
+- Workers delete job rows after execution (both success and failure), including a job that finishes during shutdown: the delete does not take the host's stopping token. Trax.Core's Metadata and DeadLetter tables handle the audit trail.
 - If a worker crashes mid-execution, the job's `fetched_at` timestamp becomes stale and the job is reclaimed after `VisibilityTimeout`.
 - When `UseRemoteWorkers()` or `UseSqsWorkers()` is also configured, local workers still run. Only the trains explicitly routed via `ForTrain<T>()` or `[TraxRemote]` are dispatched remotely.
 

@@ -97,6 +97,9 @@ The scheduler dispatches jobs via HTTP POST to a remote endpoint. The remote pro
 **Scheduler side:**
 
 ```csharp
+// 32 or more random bytes, shared with the runner (see Authorization Posture below)
+var runnerKey = Convert.FromBase64String(configuration["Trax:RunnerSigningKey"]!);
+
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
@@ -108,12 +111,15 @@ services.AddTrax(trax => trax
             {
                 remote.BaseUrl = "https://my-workers.example.com/trax/execute";
                 remote.Timeout = TimeSpan.FromSeconds(60);
+                remote.SigningKey = runnerKey;
             },
             routing => routing.ForTrain<IMyTrain>())
         // Optional: also offload run* mutations to the remote endpoint
         .UseRemoteRun(remote =>
-            remote.BaseUrl = "https://my-workers.example.com/trax/run"
-        )
+        {
+            remote.BaseUrl = "https://my-workers.example.com/trax/run";
+            remote.SigningKey = runnerKey;
+        })
         .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
@@ -131,7 +137,9 @@ builder.Services.AddTrax(trax => trax
     )
     .AddMediator(typeof(MyTrain).Assembly)
 );
-builder.Services.AddTraxJobRunner();
+builder.Services.AddTraxJobRunner(runner =>
+    runner.SigningKey = Convert.FromBase64String(builder.Configuration["Trax:RunnerSigningKey"]!)
+);
 
 var app = builder.Build();
 app.UseTraxJobRunner("/trax/execute");  // queue path
@@ -188,12 +196,18 @@ services.AddTrax(trax => trax
     .AddMediator(assemblies)
     .AddScheduler(scheduler => scheduler
         .UseSqsWorkers(
-            sqs => sqs.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs",
+            sqs =>
+            {
+                sqs.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs";
+                sqs.SigningKey = runnerKey;
+            },
             routing => routing.ForTrain<IMyTrain>())
         // Optional: keep UseRemoteRun for synchronous mutations
         .UseRemoteRun(remote =>
-            remote.BaseUrl = "https://my-runner.example.com/trax/run"
-        )
+        {
+            remote.BaseUrl = "https://my-runner.example.com/trax/run";
+            remote.SigningKey = runnerKey;
+        })
         .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
@@ -215,6 +229,8 @@ public class Function
     }
 }
 ```
+
+`BuildServiceProvider` registers `AddTrax(...)` and `AddTraxJobRunner(runner => runner.SigningKey = ...)` with the same key as `sqs.SigningKey`. The handler checks each message's signature attribute; it does not check the message's age or refuse a repeat, because SQS redelivers by design and the job's `Pending` metadata row is what stops a second run.
 
 ```
 ┌──── Scheduler Process ────┐         ┌──── SQS ────┐       ┌── Lambda ──────────────┐
@@ -257,12 +273,20 @@ services.AddTrax(trax => trax
     .AddMediator(assemblies)
     .AddScheduler(scheduler => scheduler
         .UseLambdaWorkers(
-            lambda => lambda.FunctionName = "content-shield-runner",
+            lambda =>
+            {
+                lambda.FunctionName = "content-shield-runner";
+                lambda.SigningKey = runnerKey;
+            },
             routing => routing
                 .ForTrain<IReviewContentTrain>()
                 .ForTrain<ISendViolationNoticeTrain>())
         // Optional: also offload run* mutations to Lambda
-        .UseLambdaRun(lambda => lambda.FunctionName = "content-shield-runner")
+        .UseLambdaRun(lambda =>
+        {
+            lambda.FunctionName = "content-shield-runner";
+            lambda.SigningKey = runnerKey;
+        })
     )
 );
 ```
@@ -290,6 +314,9 @@ public class Function : TraxLambdaFunction
                 .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnString)))
             .AddMediator(typeof(MyTrain).Assembly));
     }
+
+    protected override void ConfigureRunner(TraxJobRunnerOptions runner, IConfiguration configuration) =>
+        runner.SigningKey = Convert.FromBase64String(configuration["Trax:RunnerSigningKey"]!);
 }
 ```
 
@@ -422,53 +449,68 @@ You can also mix models. For example, run local workers for fast trains and remo
 
 Trains not routed via `ForTrain<T>()` or `[TraxRemote]` execute locally.
 
-## Authentication
+## Authorization Posture
 
-Trax does not bake in any authentication mechanism. Both the scheduler and remote sides use standard ASP.NET patterns:
+A runner runs what it is sent as trusted infrastructure: the scheduler already authorized the work, so the runner skips per-train `[TraxAuthorize]` checks. Every runner entry point (`UseTraxJobRunner`, `UseTraxRunEndpoint`, `SqsJobRunnerHandler`, `TraxLambdaFunction`) therefore refuses to start until `AddTraxJobRunner(runner => ...)` says who may send it work. The startup error names the choices.
 
-**Scheduler side**: configure the `HttpClient` used by `HttpJobSubmitter`:
+| Posture | Applies to | What the runner does |
+|---------|-----------|----------------------|
+| `runner.SigningKey = key` | every entry point | Verifies a `Trax-Signature` over the exact request body before reading it. The recommended posture. |
+| `runner.AuthorizationPolicy = "name"` | `UseTraxJobRunner`, `UseTraxRunEndpoint` | Applies the named ASP.NET policy. The policy must admit only the scheduler: a policy that admits end users lets them run any registered train, gated or not. |
+| `runner.AllowUnsignedRequests()` | every entry point | Accepts every request, and logs a warning naming the entry point at startup. For a runner only the scheduler can reach, such as a Lambda function behind IAM. |
+
+**Signed requests.** Generate 32 or more random bytes (`openssl rand -base64 32`), store them as a secret, and give the same key to both sides: `SigningKey` on `UseRemoteWorkers`, `UseRemoteRun`, `UseLambdaWorkers`, `UseLambdaRun` or `UseSqsWorkers`, and on `AddTraxJobRunner` (or `ConfigureRunner` in a `TraxLambdaFunction`).
 
 ```csharp
-.UseRemoteWorkers(
-    remote =>
-    {
-        remote.BaseUrl = "https://my-workers.example.com/trax/execute";
+// Scheduler
+.UseRemoteWorkers(remote =>
+{
+    remote.BaseUrl = "https://my-workers.example.com/trax/execute";
+    remote.SigningKey = runnerKey;
+})
 
-        // Bearer token
-        remote.ConfigureHttpClient = client =>
-            client.DefaultRequestHeaders.Add("Authorization", "Bearer my-token");
-
-        // Or API key
-        remote.ConfigureHttpClient = client =>
-            client.DefaultRequestHeaders.Add("X-Api-Key", "my-key");
-
-        // Or any custom header your endpoint expects
-        remote.ConfigureHttpClient = client =>
-            client.DefaultRequestHeaders.Add("X-Custom-Header", "value");
-    },
-    routing => routing.ForTrain<IMyTrain>())
+// Runner
+builder.Services.AddTraxJobRunner(runner => runner.SigningKey = runnerKey);
+app.UseTraxJobRunner("/trax/execute");
+app.UseTraxRunEndpoint("/trax/run");
 ```
 
-**Remote side**: use ASP.NET middleware:
+The signature is an HMAC-SHA256 over the request's purpose (`execute` or `run`), a timestamp, a random nonce and the body, carried in the `Trax-Signature` HTTP header, the `LambdaEnvelope`'s `Signature`, or an SQS message attribute of the same name. A request signed for one endpoint does not verify on the other.
+
+| Transport | Checked |
+|-----------|---------|
+| HTTP (`/trax/execute`, `/trax/run`, and `RunLocalAsync`) | signature, timestamp within `MaxClockSkew` (default 5 minutes), nonce not seen before |
+| Lambda `Run` (synchronous) | signature, timestamp, nonce |
+| Lambda `Execute` (asynchronous) and SQS | signature only: both redeliver the same message, and the job's `Pending` metadata row stops a second run |
+
+A refused HTTP request gets `401` and never reaches the train. A refused Lambda invocation or SQS message throws, so Lambda's retry and dead-letter settings apply. The scheduler signs each retry afresh, so a retry is never refused as a replay.
+
+**Where nonces are kept.** A signing runner records each accepted nonce in the Trax database, in the `runner_nonce` table the standard migrations create, so every instance of a runner that shares the database accepts a request once between them. The table's primary key decides: a nonce already recorded, and not yet expired, is a repeat. Any other database failure while recording one is an error, never read as a repeat. Expired rows are taken over or removed as it goes. A runner that runs as a single instance can keep them in memory instead with `runner.UseInMemoryNonceStore()`, and a host can register its own `INonceStore` singleton to share them some other way. A signing runner whose host has no relational data provider (`UsePostgres` or `UseSqlite`) must pick one of those two, or it refuses to start.
+
+**Policy-based authorization.** Name the policy in the runner options rather than chaining `.RequireAuthorization()` onto the endpoint, so the runner can check it at startup. The scheduler side adds the credentials the policy expects through `ConfigureHttpClient`:
 
 ```csharp
-var app = builder.Build();
+// Scheduler
+.UseRemoteWorkers(remote =>
+{
+    remote.BaseUrl = "https://my-workers.example.com/trax/execute";
+    remote.ConfigureHttpClient = client =>
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {schedulerToken}");
+})
 
-// Your choice of auth middleware:
+// Runner
+builder.Services.AddAuthorization(o =>
+    o.AddPolicy("trax-scheduler", p => p.RequireClaim("scope", "trax:dispatch")));
+builder.Services.AddTraxJobRunner(runner => runner.AuthorizationPolicy = "trax-scheduler");
+
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.UseTraxJobRunner("/trax/execute");
-app.Run();
 ```
 
-Or restrict the endpoint directly:
+A signing key and a policy can be combined; the runner then requires both.
 
-```csharp
-app.UseTraxJobRunner("/trax/execute").RequireAuthorization();
-```
-
-This keeps Trax focused on scheduling and execution while letting you use whatever auth strategy your infrastructure requires: API keys, JWT tokens, mTLS, IAM roles, or nothing at all.
+**Only registered trains run.** A queued job names its input type, and the runner accepts only a name that is the input type of one of its registered trains. The job's metadata row must belong to the train registered for that input; otherwise the runner refuses it and the row stays `Pending`. Registered does not include the scheduler's own trains (the ManifestManager, the JobDispatcher, the JobRunner and the two cleanup trains): the scheduler starts those itself, so `/trax/run` and a Lambda `Run` refuse a name that is one of them, and a queued job whose input belongs to one is refused with its row left `Pending`. A host train that shares one of their short names still runs by that name.
 
 ## Host Tracking
 
@@ -600,13 +642,14 @@ When a train fails on a remote worker, Trax preserves the full exception context
 | Field | Description |
 |-------|-------------|
 | `IsError` | Whether the execution failed |
-| `ErrorMessage` | The error message |
+| `ErrorMessage` | The message of a `TrainException`. Any other exception is reported with a fixed message; the detail stays in the runner's log |
 | `ExceptionType` | The .NET exception type name (e.g., `"InvalidOperationException"`) |
 | `FailureJunction` | The train junction where the failure occurred (extracted from `TrainExceptionData`) |
-| `StackTrace` | The remote stack trace |
+| `StackTrace` | Always null. No stack trace leaves the runner; the runner's metadata row and log hold it |
 | `FailureClass` | `/trax/run` only (`RemoteRunResponse`). The [failure class](/docs/core/trains-and-junctions#classifying-failures) the worker's classifier assigned, or null when the worker sent none |
+| `PublicMessage` | `/trax/run` only (`RemoteRunResponse`). The message a client of the calling side may see: the message of a plain `TrainException`, which a train author wrote for the caller, and null for every other failure |
 
-On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. `Metadata.AddException()` populates `FailureException`, `FailureJunction`, `FailureReason`, `StackTrace`, and (for `/trax/run`) `FailureClass` from the reconstructed exception. The class is carried rather than recomputed, because the original exception type is gone by the time the response arrives; a null `FailureClass` records as `Unclassified`, and the calling side's own classifier is never asked about a failure rebuilt from the response. The job-runner HTTP endpoint and the Lambda runner's local HTTP route write `RemoteRunResponse` with Trax's own JSON options (enums as integers) whatever the host's JSON configuration. A Lambda function's own invocation response is serialized by the function's Lambda serializer, which Trax does not control. Both `HttpRunExecutor` and `LambdaRunExecutor` therefore read `FailureClass` as either an integer or a name, and a class they do not know (an unknown number or name from a newer worker) reads as `Unclassified` while the worker's error is kept. `/trax/execute` needs no such field: the worker writes to the same metadata row, so its classification is already recorded. Locally-executed trains attach this data via `Exception.Data["TrainExceptionData"]`; remote trains carry it as JSON in the exception message instead.
+On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. `HttpJobSubmitter` counts a job as submitted only when the body is a `RemoteJobResponse` for the job it sent; any other `200` fails the dispatch. On the run path it is a `RemoteRunException`, which carries the runner's `PublicMessage`; a transport failure (a non-success status, a Lambda function error, an empty reply) is a `RemoteRunException` with no public message. A surface that shows errors to clients reads `PublicMessage` and, when it is null, says only that the train failed. `Trax.Docs/adr/0028` records why. `Metadata.AddException()` populates `FailureException`, `FailureJunction`, `FailureReason` and (for `/trax/run`) `FailureClass` from the reconstructed exception. The class is carried rather than recomputed, because the original exception type is gone by the time the response arrives; a null `FailureClass` records as `Unclassified`, and the calling side's own classifier is never asked about a failure rebuilt from the response. The job-runner HTTP endpoint and the Lambda runner's local HTTP route write `RemoteRunResponse` with Trax's own JSON options (enums as integers) whatever the host's JSON configuration. A Lambda function's own invocation response is serialized by the function's Lambda serializer, which Trax does not control. Both `HttpRunExecutor` and `LambdaRunExecutor` therefore read `FailureClass` as either an integer or a name, and a class they do not know (an unknown number or name from a newer worker) reads as `Unclassified` while the worker's error is kept. `/trax/execute` needs no such field: the worker writes to the same metadata row, so its classification is already recorded. Locally-executed trains attach this data via `Exception.Data["TrainExceptionData"]`; remote trains carry it as JSON in the exception message instead. On the worker, the error fields come from the attached data, or, for a `TrainException` rebuilt from an earlier boundary, from the JSON in its message. Any other exception is sent with a fixed message and no `FailureClass`; its detail stays in the runner's log. A class outside the `FailureClass` values is sent as `Unclassified`.
 
 ```
 Runner Process                         API Process
@@ -615,7 +658,7 @@ Train fails with exception
     │
     ▼
 TraxRequestHandler catches exception
-Extracts: Type, Junction, Message, Stack
+Extracts: Type, Junction, Message
     │
     ▼
 RemoteRunResponse / RemoteJobResponse
@@ -635,6 +678,8 @@ RemoteRunResponse / RemoteJobResponse
 
 If the HTTP call itself fails (network error, infrastructure 5xx before reaching the endpoint), the error body is read and included in the exception message for debugging, you'll see the HTTP status code and the response body rather than a generic "500 Internal Server Error".
 
+That detail is for the metadata row and the logs, not for GraphQL clients. When a remote run's failure reaches the GraphQL error filter, only a `TrainException`'s own message passes through: a worker that threw `TrainException("Order 42 is already closed")` shows the client that sentence, while a worker that failed with any other exception type, or an endpoint that answered with a non-success status, shows `"The train failed."` with code `TRAX_TRAIN_ERROR`.
+
 ### Debugging Remote Failures
 
 When a remote job fails, check these in order:
@@ -646,7 +691,7 @@ When a remote job fails, check these in order:
 ## Limitations
 
 - **Cancellation is process-local.** The `ICancellationRegistry` is in-memory. Dashboard "Cancel" only cancels trains running on the same process as the dashboard. Remote trains cannot be cancelled via the dashboard in v1.
-- **Type resolution requires shared assemblies.** The remote process must reference the same NuGet packages and assemblies that define your train types. Types are resolved by fully-qualified name from loaded assemblies.
+- **Type resolution requires shared assemblies.** The remote process must reference the same NuGet packages and assemblies that define your train types, and register them with `AddMediator`. A queued job's input type is matched by fully-qualified name against the registered trains' input types, and a remote run's output is read into the output type the caller expects. When that type is an interface or abstract, the output is read into the implementation the runner names, but only if that implementation is already loaded in the scheduler's process and implements the expected type; the scheduler never loads a type by the name the runner sends, and refuses the run otherwise. So the scheduler must reference the assembly that defines the concrete output too.
 
 ## See Also
 

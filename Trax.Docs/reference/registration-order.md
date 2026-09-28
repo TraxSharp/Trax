@@ -16,7 +16,7 @@ naming the call to move. Nothing about registration is allowed to fail silently.
 | Requirement | What happens if you get it wrong |
 |---|---|
 | `AddTrax()` before `AddTraxGraphQL()` / `AddTraxDashboard()` | Throws immediately, naming the missing call. |
-| An auth scheme (`AddTraxJwtAuth`, `AddTraxApiKeyAuth`, `AddTraxJwtDispatcher`) before `AddTraxGraphQL()` | The host refuses to start. `AddTraxGraphQL()` picks the subscription interceptor from the schemes registered by the time it runs, so a scheme added afterwards would leave subscriptions unauthenticated. |
+| An authorization posture in `AddTraxDashboard()` options before `UseTraxDashboard()` | `UseTraxDashboard()` throws, naming `RequirePolicy`, `RequireRoles` and `AllowAnonymousDashboard`. |
 | Trains registered before `AddTraxGraphQL()` | Trains registered afterwards are not in the schema. |
 
 ```csharp
@@ -34,6 +34,9 @@ Everything else, and deliberately so:
 - Services the GraphQL components depend on are resolved on first use, not when
   `AddTraxGraphQL()` runs, so `AddAuthentication()` and `AddAuthorization()` may come after it.
 - Repeated `AddTraxJwtAuth(...)` calls accumulate into one registry regardless of order.
+- Auth schemes (`AddTraxJwtAuth`, `AddTraxApiKeyAuth`, `AddTraxJwtDispatcher`) may come before or
+  after `AddTraxGraphQL()`. The subscription interceptor reads them from the finished container
+  on the first connection.
 
 ## Contributing to Trax
 

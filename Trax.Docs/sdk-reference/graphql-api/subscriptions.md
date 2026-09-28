@@ -19,6 +19,17 @@ Subscriptions are powered by HotChocolate's built-in subscription infrastructure
 
 Data-change signals (`onDataChanged`) are unrelated to `[TraxBroadcast]` and fire for the scheduler/admin domains regardless.
 
+## Who receives what
+
+Each subscription carries the authorization of the data it streams, decided for each subscriber when it subscribes:
+
+- **Operations view.** When the operations surface is exposed, a subscriber that satisfies the operations authorization receives every train, with the same detail `operations.executions` shows. That is the `GateOperations(...)` gate, or no further check when the host chose `AllowAnonymousOperations()` or gated the whole endpoint with `RequireAuthorization(...)`.
+- **Broadcast view.** Any other subscriber receives only `[TraxBroadcast]` trains whose own posture admits them: `[TraxAllowAnonymous]` admits everyone, and `[TraxAuthorize]` an authenticated caller meeting its policies and roles. For these subscribers `failureReason` is shown only when the train failed with a `TrainException` (whose message is written for clients); otherwise it reads `Unexpected Execution Error`. `hostName` and `hostEnvironment` are withheld.
+- A subscriber who could receive nothing is refused with `TRAX_AUTHORIZATION` when it subscribes.
+- `onDataChanged` needs the operations authorization when the operations surface is exposed, and an authenticated caller when it is not.
+
+On an open endpoint a `[TraxBroadcast]` train must declare `[TraxAuthorize]` or `[TraxAllowAnonymous]`, or the host does not start. The `output` field carries the train's output as JSON, objects and arrays included.
+
 ## Lifecycle Subscription Fields
 
 The lifecycle subscriptions return a `TrainLifecycleEvent` payload.
@@ -42,6 +53,9 @@ type TrainLifecycleEvent {
   timestamp: DateTime!
   failureJunction: String
   failureReason: String
+  hostName: String
+  hostEnvironment: String
+  output: Any
 }
 ```
 
@@ -53,7 +67,9 @@ type TrainLifecycleEvent {
 | `trainState` | The current state of the train (`InProgress`, `Completed`, `Failed`, `Cancelled`) |
 | `timestamp` | When the event occurred (end time if available, otherwise current UTC time) |
 | `failureJunction` | The junction that failed (only present on failed trains) |
-| `failureReason` | The failure message (only present on failed trains) |
+| `failureReason` | The failure message (only present on failed trains; masked outside the operations view unless the train raised a `TrainException`) |
+| `hostName` / `hostEnvironment` | The host that ran the train (operations view only) |
+| `output` | The train's output as JSON |
 
 ## Examples
 
@@ -118,6 +134,7 @@ enum ChangeDomain {
   MANIFEST
   MANIFEST_GROUP
   SCHEDULER_CONFIG
+  EXECUTION
 }
 ```
 
@@ -128,6 +145,7 @@ enum ChangeDomain {
 | `MANIFEST` | A manifest is edited, enabled, or disabled (not on routine schedule recompute) |
 | `MANIFEST_GROUP` | A manifest group's configuration changes |
 | `SCHEDULER_CONFIG` | The scheduler configuration changes |
+| `EXECUTION` | Cancellation is requested for one or more runs, so a runs view should refetch. The value exists from Trax.Effect 1.56.0 and is emitted by a Trax.Scheduler that signals it; a receiver on an older version drops it |
 
 ```graphql
 subscription {
@@ -172,6 +190,18 @@ For programmatic clients, use any GraphQL client that supports the `graphql-ws` 
 
 `AddTraxGraphQL()` wires the WebSocket upgrade middleware at the front of the pipeline (via an `IStartupFilter`), so the handshake upgrades no matter where you place `UseTraxGraphQL()` relative to other endpoint middleware such as `UseTraxDashboard()`. You do not need to call `app.UseWebSockets()` yourself.
 
+### Allowed origins
+
+A WebSocket upgrade that carries an `Origin` header is accepted only from origins the host serves: the endpoint's own host, or an allowed origin. Anything else is answered with `403` before the handshake. An upgrade with no `Origin` header, which is what non-browser clients send, is accepted. The allowed origins default to those of your CORS default policy (`AddCors(o => o.AddDefaultPolicy(...))`, including `AllowAnyOrigin()`); set them explicitly with `AllowSocketOrigins(...)` on the GraphQL builder, which replaces the CORS default:
+
+```csharp
+services.AddTraxGraphQL(graphql => graphql
+    .AddDbContext<AppDbContext>()
+    .AllowSocketOrigins("https://app.example.com", "https://admin.example.com"));
+```
+
+The endpoint's own host is compared without its scheme, so an https page served through a TLS-terminating proxy is recognised. The check applies wherever the Trax schema serves a socket, whether `UseTraxGraphQL()` maps it or you map it yourself with `MapGraphQL(path, "trax")`, and it does not apply to another HotChocolate schema on the same host. A host whose browser clients are on another origin and whose CORS policy is a named one, not the default, needs `AllowSocketOrigins(...)`.
+
 ### Reconnection
 
 The server does not persist per-subscriber state, and there is no replay: events emitted while a client's socket is down are not redelivered. A resilient client should therefore do two things, both of which the Trax dashboard does:
@@ -187,30 +217,47 @@ Browsers cannot attach an `Authorization` header to a WebSocket upgrade, so the 
 { "type": "connection_init", "payload": { "authToken": "..." } }
 ```
 
-Trax authenticates that payload with a HotChocolate `ISocketSessionInterceptor`. Which interceptor is wired depends on the auth you registered.
+Trax authenticates that payload with one HotChocolate `ISocketSessionInterceptor`, `TraxCompositeSocketInterceptor`, which `AddTraxGraphQL()` registers for every host. It hands each connection to the strategy for the credential it carries.
 
-### Stock interceptors
+### Which strategy handles a connection
 
-| Auth registered | Interceptor | Payload keys |
+| Auth registered | Strategy | Payload keys |
 |---|---|---|
 | `AddTraxApiKeyAuth` | `TraxApiKeySocketInterceptor` | `authToken` or `apiKey` |
-| `AddTraxJwtAuth` | `TraxJwtSocketInterceptor` | `authToken` or `bearer` |
+| `AddTraxJwtAuth` (default or named schemes) | each registered scheme in turn; the first that validates the token resolves the principal | `authToken` or `bearer` |
+| `AddTraxJwtDispatcher` | `TraxJwtDispatcherSocketInterceptor`, in place of the single-scheme JWT one | `authToken` or `bearer` |
+| none of these | none: every connection is accepted | |
 
-Both are wired automatically, but only when the matching principal resolver is already in the service collection at the time `AddTraxGraphQL()` runs. Register your `AddTrax*Auth` call **before** `AddTraxGraphQL()`, which matches the standard `AddTrax(...).AddTraxGraphQL(...)` ordering.
+With one scheme registered, every connection goes to it. With API-key and JWT auth both registered, the payload decides:
 
-Get it the wrong way round and the host refuses to start, naming the call to move. It does not start with subscriptions unauthenticated, which is what earlier versions did: no interceptor was wired, so HotChocolate accepted every `connection_init` while HTTP requests kept being gated normally. Supplying your own interceptor through `ConfigureSchema` opts out of both the wiring and the check. See [Registration order](/docs/sdk-reference/graphql-api/add-trax-graphql#registration-order).
+- An `authToken` whose header parses as a JWT is validated as a JWT. Any other `authToken` is looked up as an API key.
+- Without an `authToken`, `apiKey` is looked up as an API key and `bearer` is validated as a JWT.
+- A payload with none of the three is rejected.
 
-The JWT interceptor validates against the same `JwtBearerOptions` as the HTTP handler, including Authority/JWKS schemes (Cognito, Google, any OIDC provider): it fetches signing keys from the scheme's discovery document when the options carry no static key.
+A credential is checked by one strategy only. A JWT that fails validation is rejected, not retried as an API key.
 
-Each connection gets its own DI scope. The interceptor itself is a singleton (HotChocolate builds one per schema), so it opens a scope when `connection_init` arrives, resolves your scoped `ITraxPrincipalResolver<T>` inside it, and disposes it once the principal is resolved. A resolver holding a `DbContext` works on subscriptions exactly as it does on HTTP. The scope covers the handshake only, not the lifetime of the socket: the principal is captured onto the connection's `HttpContext.User` and reused for every subsequent operation, so a credential revoked mid-connection is not re-checked.
+The schemes are read from the finished container on the first connection, so it does not matter whether your `AddTrax*Auth` call comes before or after `AddTraxGraphQL()`.
+
+A JWT in `connection_init` is authenticated by the scheme's own `JwtBearerHandler`, exactly as an HTTP request carrying it as `Authorization: Bearer` would be. The handler runs against a request built from the upgrade request (its path, query, headers and addresses), so everything that applies over HTTP applies on the socket:
+
+- signature, issuer, audience, lifetime and clock skew, from the scheme's `JwtBearerOptions`;
+- Authority/JWKS schemes (Cognito, Google, any OIDC provider), including the refresh of the JWKS when a token is signed with a key id the cached document does not have, so a rotated key is picked up;
+- your `JwtBearerEvents`, set through `CustomizeBearerOptions`: `OnMessageReceived`, `OnTokenValidated` (a revocation or tenant check that calls `context.Fail(...)` refuses the socket), `OnAuthenticationFailed`;
+- the claim mapping the handler applies (`sub` arrives as `ClaimTypes.NameIdentifier` unless `MapInboundClaims` is off), and any `IClaimsTransformation`.
+
+A refused connection is told only `Invalid JWT.`; the handler's reason is logged, not sent, as HTTP returns only a 401.
+
+**A connection is closed when its token expires.** A socket outlives the moment its token was checked, so at the token's `exp` the server closes it with close code 1008 (policy violation) and the message `The access token has expired.`. An HTTP request with that token would be refused from then on. The client reconnects with a fresh token, which `connection_init` carries on every reconnect. Revoking a user or a key does not close a socket that is already open; the token's lifetime bounds how long it stays open, so keep access tokens short-lived.
+
+Each connection gets its own DI scope. The interceptor itself is a singleton (HotChocolate builds one per schema), so it opens a scope when `connection_init` arrives, runs the handler and your scoped `ITraxPrincipalResolver<T>` inside it, and disposes it once the principal is resolved. A resolver holding a `DbContext` works on subscriptions exactly as it does on HTTP. The principal is captured onto the connection's `HttpContext.User` and reused for every subsequent operation until the connection closes.
 
 Cookie auth (`Trax.Api.Auth.Oidc`) needs no interceptor. The browser sends cookies on the upgrade request and the cookie scheme authenticates it like any HTTP request.
 
-HotChocolate runs a single interceptor per schema. When both the API-key and JWT interceptors are wired, the last one registered wins (JWT), so a connection presenting an API-key token while both are active is rejected. Use one credential type on subscriptions, or supply a custom interceptor (below).
+That holds only when no token scheme is registered. Once `AddTraxApiKeyAuth`, `AddTraxJwtAuth` or `AddTraxJwtDispatcher` is registered, every connection needs a credential in `connection_init`, and an upgrade that is already authenticated by a session cookie is rejected without one. A browser app on a host with both cookie and token auth sends its token in the payload.
 
 ### Multiple JWT issuers
 
-[`AddTraxJwtDispatcher`](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher) routes subscription tokens by their `iss` claim across every mapped scheme, the same way it routes HTTP requests. When a dispatcher is registered, Trax wires `TraxJwtDispatcherSocketInterceptor` in place of the single-scheme JWT interceptor. Each scheme validates fully (signature, issuer, audience, lifetime, JWKS), so an unmapped or forged issuer is rejected.
+[`AddTraxJwtDispatcher`](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher) routes subscription tokens by their `iss` claim across every mapped scheme, the same way it routes HTTP requests. When a dispatcher is registered, JWT connections go to `TraxJwtDispatcherSocketInterceptor` instead of the single-scheme JWT strategy. The matched scheme's handler then authenticates the token in full, events and JWKS refresh included, so an unmapped or forged issuer is rejected.
 
 ```csharp
 services.AddTraxJwtAuth("cognito", jwt => jwt.UseAuthority(cognitoAuthority, "mobile-client"));
@@ -222,7 +269,7 @@ services.AddTraxJwtDispatcher(d => d
 
 ### Custom interceptor
 
-To replace the stock interceptors (for example, to authenticate against a scheme Trax does not model), supply your own through `ConfigureSchema`:
+To replace Trax's interceptor (for example, to authenticate against a scheme Trax does not model), supply your own through `ConfigureSchema`:
 
 ```csharp
 services.AddTraxGraphQL(graphql => graphql
@@ -230,21 +277,17 @@ services.AddTraxGraphQL(graphql => graphql
     .ConfigureSchema(b => b.AddSocketSessionInterceptor<MySocketInterceptor>()));
 ```
 
-This registration overrides the stock interceptors and is independent of when auth was registered in the service collection. The interceptor's own dependencies resolve per connection, so it only needs them in DI by app start. Derive from `DefaultSocketSessionInterceptor`, read the credential from the `connection_init` payload in `OnConnectAsync`, and return `ConnectionStatus.Reject(...)` to refuse the connection or attach the principal to `session.Connection.HttpContext.User` and call `base.OnConnectAsync(...)` to accept.
+This registration replaces `TraxCompositeSocketInterceptor` and is independent of when auth was registered in the service collection. The interceptor's own dependencies resolve per connection, so it only needs them in DI by app start. Derive from `DefaultSocketSessionInterceptor`, read the credential from the `connection_init` payload in `OnConnectAsync`, and return `ConnectionStatus.Reject(...)` to refuse the connection or attach the principal to `session.Connection.HttpContext.User` and call `base.OnConnectAsync(...)` to accept.
 
-### Register authentication before AddTraxGraphQL
+### The endpoint policy
 
-The interceptor that reads the credential is chosen from what is registered when
-`AddTraxGraphQL()` runs, so the auth call has to come first:
+When the GraphQL builder calls `RequireAuthorization(policy)`, the policy applies to the socket as it does to HTTP: the connection's principal must satisfy it at `connection_init`, and every query, mutation and subscription the socket carries is checked again before it runs. A connection with no authenticated principal is refused.
 
-```csharp
-builder.Services.AddTraxJwtAuth(...);   // must precede AddTraxGraphQL
-builder.Services.AddTraxGraphQL(...);
-```
+### Registration order
 
-The other order fails at startup with a message naming the call to move. Before that check
-existed it started fine and accepted every connection anonymously, because HotChocolate falls
-back to an interceptor that accepts everything and HTTP gating is unaffected.
+Subscription auth does not depend on it. Earlier versions chose the interceptor from what was registered when `AddTraxGraphQL()` ran, so an auth call placed after it left subscriptions accepting every connection while HTTP stayed gated, and a later version refused to start instead. The composite reads the registered schemes once the container is complete, so either order authenticates.
+
+If a token scheme is registered and HotChocolate's own accept-everything interceptor is the active one, the host refuses to start. Only registering `DefaultSocketSessionInterceptor` yourself produces that.
 
 ## Architecture
 

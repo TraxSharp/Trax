@@ -32,7 +32,7 @@ Each `T1` through `T7` should be an **interface type**. The service is stored in
 
 Each `service` / `s1..s7` is a service instance that implements the corresponding type parameter interface.
 
-All services are **required** (non-null). Passing `null` throws an `Exception`.
+All services are **required** (non-null), and each has to exist when `Junctions()` runs. Passing `null` throws an `Exception` naming the service's type. While the startup check reads the chain, a `null` is recorded as a refusal instead, and the host will not start: a service field assigned later, in `OnStarted` for example, is not supported.
 
 ## Returns
 
@@ -60,7 +60,7 @@ public class ProcessOrderTrain(
 
 1. For each service, finds the interface from the type parameter list that the service's concrete type implements.
 2. Stores the service in Memory under that interface type.
-3. If a service is `null`, throws an `Exception`.
+3. If a service is `null`, throws an `Exception` (`AddServices<IMyService> received null`). While a chain is being read, records a refusal instead.
 4. If a service's concrete type is not a class, sets the train exception.
 5. If a service doesn't implement any of the specified interfaces, sets the train exception.
 

@@ -13,8 +13,7 @@ The JobRunner is what actually runs your train. It executes on job submitter wor
 ## Chain
 
 ```
-LoadMetadataJunction → ValidateMetadataStateJunction → RunScheduledTrainJunction →
-                                             UpdateManifestSuccessJunction → SaveDatabaseChangesJunction
+LoadMetadataJunction → ValidateMetadataStateJunction → RunScheduledTrainJunction
 ```
 
 ## Input
@@ -29,7 +28,7 @@ The `MetadataId` points to the `Metadata` row created by the [JobDispatcher](/do
 
 ### LoadMetadataJunction
 
-Loads the `Metadata` record by ID, eagerly including its `Manifest` navigation (needed later by `UpdateManifestSuccessJunction`). If the input includes a non-null `Input` object, it wraps it in a `ResolvedTrainInput` for type-safe routing through Trax.Core's memory system.
+Loads the `Metadata` record by ID, eagerly including its `Manifest` navigation (needed later by `RunScheduledTrainJunction` to record the success). If the input includes a non-null `Input` object, it wraps it in a `ResolvedTrainInput` for type-safe routing through Trax.Core's memory system.
 
 ### ValidateMetadataStateJunction
 
@@ -39,15 +38,9 @@ Checks that the loaded metadata is in `TrainState.Pending`. If it's already `InP
 
 Resolves the target train via `ITrainBus` using the deserialized input and invokes it. The train name stored in the metadata record is the canonical interface name (set via `CanonicalName` during DI registration), which `ITrainBus` uses for resolution. This is where your train's `Junctions()` declaration gets run. The train runs as the `Pending` metadata record the dispatcher created (the request's `MetadataId`), passed to `ITrainBus.RunAsync`, so its execution is recorded on that row. The JobRunner's own run is a separate record, and the two are not linked by `ParentId`.
 
-### UpdateManifestSuccessJunction
+Once the train has returned, the same junction records the success on the manifest: it sets `Manifest.LastSuccessfulRun` to `DateTime.UtcNow`, computes `NextScheduledRun`, and disables a `ScheduleType.Once` manifest. `LastSuccessfulRun` is what drives [dependent train](/docs/scheduler/dependent-trains) evaluation: downstream manifests won't fire until this value advances past their own `LastSuccessfulRun`. If there's no manifest (e.g., an ad-hoc execution), this step is a no-op.
 
-If the train completed successfully and the metadata has an associated manifest, updates `Manifest.LastSuccessfulRun` to `DateTime.UtcNow`. This timestamp is what drives [dependent train](/docs/scheduler/dependent-trains) evaluation, downstream manifests won't fire until this value advances past their own `LastSuccessfulRun`.
-
-If there's no manifest (e.g., an ad-hoc execution), this junction is a no-op.
-
-### SaveDatabaseChangesJunction
-
-Persists all pending database changes, primarily the `LastSuccessfulRun` update. This is a separate junction rather than being folded into `UpdateManifestSuccessJunction` so that the save happens as its own observable junction in the chain, with its own timing in junction metadata.
+The update and its save run on an uncancellable token, inside this junction rather than as junctions of their own. A train checks its token before every junction, so a host shutdown that lands after your train completed would otherwise skip the update, leaving `LastSuccessfulRun` stale and a `Once` manifest enabled to run again. `Trax.Scheduler/docs/adr/0005` records why this is not split into separate junctions.
 
 ## Concurrency Model: Upstream Guarantee + State Guard
 
@@ -65,7 +58,7 @@ This is an **optimistic** guard, it reads the state without acquiring a lock. In
 
 ### No Wrapping Transaction
 
-The train does not wrap its junctions in an explicit transaction. `LoadMetadataJunction` loads the Metadata and its Manifest as **tracked EF Core entities** (not `AsNoTracking`), so `UpdateManifestSuccessJunction` can mutate `Manifest.LastSuccessfulRun` in memory and `SaveDatabaseChangesJunction` persists the change at the end. If the train fails before `SaveDatabaseChangesJunction`, `LastSuccessfulRun` is not updated, which is the correct behavior, since a failed execution should not advance the dependent train chain.
+The train does not wrap its junctions in an explicit transaction. `LoadMetadataJunction` loads the Metadata and its Manifest as **tracked EF Core entities** (not `AsNoTracking`), so `RunScheduledTrainJunction` can mutate `Manifest.LastSuccessfulRun` in memory and save it once the train has returned. If the train fails, `LastSuccessfulRun` is not updated, which is the correct behavior, since a failed execution should not advance the dependent train chain.
 
 See [Multi-Server Concurrency](/docs/scheduler/concurrency) for the full cross-service concurrency model.
 

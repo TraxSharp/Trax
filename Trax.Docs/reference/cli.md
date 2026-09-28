@@ -7,14 +7,15 @@ nav_order: 5
 
 # Trax CLI
 
-The Trax CLI generates Trax API projects from existing API schemas. Point it at a GraphQL SDL file or an OpenAPI spec and it scaffolds an API project (via `dotnet new trax-api`) alongside a shared trains library with trains, junctions, input/output records, and wiring, following the same structure as the DistributedWorkers sample.
+The Trax CLI generates Trax projects from existing API schemas. Point it at a GraphQL SDL file or an OpenAPI spec and it scaffolds a hub project (via `dotnet new trax-hub`: the GraphQL API, the scheduler and the dashboard in one process) alongside a shared trains library with trains, junctions, input/output records, and wiring, following the same structure as the DistributedWorkers sample.
 
 ## Prerequisites
 
-- The `trax-api` template must be installed:
+- The `trax-hub` template must be installed. It ships in the `Trax.Samples.Templates` package
+  (see [Project Templates](/docs/reference/templates)):
 
 ```bash
-dotnet new install Trax.Samples
+dotnet new install Trax.Samples.Templates
 ```
 
 ## Installation
@@ -39,7 +40,12 @@ trax generate --schema <path> --output <dir> --name <project-name> [--type graph
 | `--output` | Yes | Output directory for the generated project |
 | `--name` | Yes | Project name (used for namespace and `.csproj`) |
 | `--type` | No | Force schema type: `graphql` or `openapi`. Auto-detected from file extension if omitted. |
-| `--force` | No | Overwrite the output directory if it already exists |
+| `--force` | No | Replace the output directory if it already exists, once generation has succeeded |
+
+`generate` builds the project in a hidden directory beside `--output` and moves it into place only
+when every step has succeeded, so a failed run (most often a missing `trax-hub` template) leaves an
+existing directory exactly as it was. `--force` is refused for the current directory, any of its
+parents, and a directory holding a git repository (`.git`); generate into a new directory instead.
 
 ### Examples
 
@@ -57,6 +63,47 @@ trax generate --schema ./spec.yaml --output ./MyProject --name MyProject --type 
 trax generate --schema ./schema.graphql --output ./MyProject --name MyProject --force
 ```
 
+### Names and descriptions
+
+Every name in the schema becomes C#: types, properties, enums and their values, operations,
+the group each operation is filed under (its first OpenAPI tag, or the noun of a GraphQL field)
+and the `--name` project name. Names become identifiers, namespaces and file paths, so after
+the PascalCase conversion below each one must match `[A-Za-z_][A-Za-z0-9_]*`; `--name` may be
+several of those joined by dots. A schema with any name that does not is refused before
+anything is written (and before `--force` deletes anything), and the command exits 1 with every
+offending name listed. Rename them in the schema and run it again.
+
+The conversion already handles separators: `first-name`, `first_name` and `first.name` all
+become `FirstName`. What it refuses is a name that is still not an identifier afterwards, such
+as `2fa`, `application/json` as an enum value, a non-ASCII letter, or OData's `@odata.type`.
+It also refuses two names in one type or one enum that the conversion turns into the same one,
+such as `first-name` and `firstName` on one schema, or `in-progress` and `inProgress` in one
+enum: the generated record would declare the member twice. Neither is renamed or dropped.
+An OpenAPI operation's parameters and body properties share one input record, so the same rule
+covers them: a path parameter `update_value` and a query parameter `updateValue` are refused. A
+path parameter the body repeats under the same name (`id` in the path and in the body) is one
+value and appears once.
+
+The same goes for separate definitions that end up with one name. Two OpenAPI component schemas
+whose last dotted segment is the same (`Billing.Dto` and `Shipping.Dto` both become `Dto`), a
+type and an enum of one name, two operations (`user_count` and `userCount`), or two groups are
+refused, and the message names each definition involved. Names that differ only in case
+(`PlayerStats` and `Playerstats`) are refused too, because each becomes a file or folder and
+those are the same path on macOS and Windows. Without the refusal one definition would silently
+take the other's fields or overwrite its files.
+
+Names the generator makes up itself are numbered instead of refused, since the schema never
+chose them: an inline object or enum is named after its property, and a second `status` enum
+with different values becomes `Status2` rather than reusing the first. An inline name never
+takes the name of a component schema.
+
+Descriptions and OpenAPI paths are copied as text, never refused. Each one is collapsed onto a
+single line, and escaped for where it lands: XML markup is escaped in `///` comments, and
+backslashes and quotes are escaped in the `Description = "..."` string of the train attribute.
+
+`trax machine new` holds its arguments to the same rule: the machine name must make a
+PascalCase identifier and `--namespace` must be a dotted one.
+
 ## Schema-to-Train Mapping
 
 ### GraphQL
@@ -73,21 +120,23 @@ Path parameters, query parameters, and request body fields are merged into a sin
 
 ## Generated Project Structure
 
-The CLI produces two projects: an API project (from the `trax-api` template) and a shared trains library (generated from the schema). This follows the same pattern as the DistributedWorkers sample.
+The CLI produces two projects: a hub project (from the `trax-hub` template) and a shared trains library (generated from the schema). This follows the same pattern as the DistributedWorkers sample.
 
 Given a schema with a `createPlayer` mutation and `getPlayer` query:
 
 ```
 MyProject/
-├── MyProject.Api/                    # From dotnet new trax-api
-│   ├── MyProject.Api.csproj          # + ProjectReference to trains library
+├── MyProject.Hub/                    # From dotnet new trax-hub
+│   ├── MyProject.Hub.csproj          # + ProjectReference to trains library
 │   ├── Program.cs                    # Patched: AddMediator scans trains assembly
 │   ├── appsettings.json
+│   ├── Auth/, Data/                  # Template demo key and application DbContext
 │   └── Trains/                       # Template sample trains (HelloWorld, Lookup)
 │       └── ...
 ├── MyProject.Trains/                 # Generated from schema
 │   ├── MyProject.Trains.csproj       # Class library (not web SDK)
 │   ├── ManifestNames.cs              # Centralized manifest external IDs
+│   ├── GraphQLNamespaces.cs          # One constant per operation group
 │   ├── Models/
 │   │   └── Player.cs
 │   └── Trains/
@@ -108,7 +157,7 @@ MyProject/
 
 ### What gets generated
 
-- **API project**: a fully wired Trax API from the `trax-api` template, with its `Program.cs` patched to scan the trains library assembly and a `ProjectReference` to the trains library.
+- **Hub project**: the `trax-hub` template (GraphQL API, scheduler and dashboard in one process), with its `Program.cs` patched to scan the trains library assembly and a `ProjectReference` to the trains library.
 - **Trains library**: a class library containing all the domain code:
   - **ManifestNames.cs**: centralized `const string` identifiers for each operation (kebab-case), matching the pattern used in the DistributedWorkers sample.
   - **Trains** are grouped into folders by noun (e.g., `createPlayer` and `getPlayer` both go under `Players/`).
@@ -160,15 +209,28 @@ This structure separates infrastructure from domain logic. The trains library ca
 | `$ref` | Named C# record |
 | `enum` (string) | C# `enum` |
 
+### Model names and framework types
+
+A model may share its name with a .NET type: a schema with `Task`, `File` or `Exception` types
+generates code that compiles. The trains, interfaces and junctions refer to framework types and
+to the models by their fully qualified `global::` names, not through a `using` directive for the
+models namespace, so neither can shadow the other.
+
+Five names are the exception, because the mappings above write them for the framework type:
+`Guid`, `DateTime`, `DateOnly`, `Uri`, and `Unit` (what an operation returning nothing produces).
+A schema type or enum with one of those names is refused with the other names the generator cannot
+emit; rename it in the schema.
+
 ## After Generating
 
-1. `cd` into the API project directory (`MyProject/MyProject.Api`)
+1. `cd` into the hub project directory (`MyProject/MyProject.Hub`)
 2. Run `dotnet restore`
 3. Search for `TODO` in the junction files under `MyProject.Trains/` and implement your business logic
-4. Start PostgreSQL (`docker compose up -d` or similar)
-5. Update the connection string in `appsettings.json` if needed
-6. Run `dotnet run` to start the API
-7. Open `http://localhost:5002/trax/graphql` in a browser for the GraphQL playground
+4. Run `dotnet run`. The hub uses the in-memory data provider, so no database is needed; switch
+   it to Postgres or SQLite as described in [Project Templates](/docs/reference/templates#running)
+   when you need data to outlive the process
+5. Open `http://localhost:5000/trax/graphql` for the GraphQL IDE, and `http://localhost:5000/trax`
+   for the dashboard (Development only)
 
 ## State machines (`trax machine`)
 
@@ -216,6 +278,11 @@ output root, because a consumer typically splits them across trees (the IR and c
 directory, the twin next to the frontend). Pass at least one `--*-out`; the run is atomic (a failed step
 leaves every output root untouched) and idempotent.
 
+The machine's id (what its `Id(...)` sets) names every artifact, so it must be kebab-case: lowercase
+letters and digits in words joined by single hyphens, starting with a letter (`checkout`,
+`write-to-congress`), the form `trax machine new` produces. `generate` and `check` refuse any other id
+before writing anything.
+
 | Option | Required | Description |
 |--------|----------|-------------|
 | `--assembly` | Yes | Compiled assembly (`.dll`) containing the machine. |
@@ -239,7 +306,8 @@ path as `generate`, the two cannot disagree. Wire it into CI to fail a build who
 
 Reserved for scaffolding a forward migration by diffing the context schema. Migrations are not yet carried in
 the IR (a stored snapshot whose version does not match is rejected and the client starts fresh), so the command
-currently prints that notice; it exists so the surface is complete.
+prints that notice to stderr and exits 1, which fails a CI step that runs it rather than reporting a migration
+that never happened.
 
 ## SDK Reference
 

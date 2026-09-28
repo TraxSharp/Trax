@@ -68,11 +68,22 @@ var app = builder.Build();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UsePersistedOperationsEnforcement();   // after auth, before GraphQL
 app.UseTraxGraphQL();
 ```
 
-The middleware reads the request body once with buffering enabled so HotChocolate's downstream parser can re-read it.
+Enforcement runs inside HotChocolate's execution pipeline, after the document is parsed and before it is validated, so it needs no ASP.NET middleware and covers every transport the same way: a JSON POST, a GET, a multipart POST, a WebSocket `subscribe`, and a request your own code builds in-process. `UsePersistedOperationsEnforcement()` still compiles for existing hosts and adds nothing.
+
+Host code that builds a request itself and should run an inline document can say so with HotChocolate's own override:
+
+```csharp
+var result = await executor.ExecuteAsync(
+    OperationRequestBuilder.New()
+        .SetDocument("{ hello }")
+        .AllowNonPersistedOperation()
+        .Build());
+```
+
+No Trax transport sets it, so a remote caller cannot.
 
 ### With cache (single node)
 
@@ -135,10 +146,13 @@ opts.AllowOperations("playground_smoke_test", "DevExplore")
 Predicate form for patterns:
 
 ```csharp
-opts.AllowOperationsMatching(id => id.StartsWith("dev_"))
+if (builder.Environment.IsDevelopment())
+    opts.AllowOperationsMatching(id => id.StartsWith("dev_"));
 ```
 
-Introspection requests (`IntrospectionQuery`, or any query whose top-level selection set is purely `__schema` / `__type`) bypass enforcement automatically. Disable with `DisableIntrospection()` for tight prod.
+> **The allowlist is a convenience for trusted networks, not a security control.** It matches the `operationName` the caller puts in the request body (or, for an unnamed request, the `documentId` or `id`), and it never looks at the document. `AllowOperations("playground_smoke_test")` admits any inline document with an operation of that name, whatever the operation selects, and the `dev_` predicate above admits any caller who starts a name with `dev_`. Use it for smoke tests and developer tools on a network you already trust. To admit a fixed document from a client you do not control, persist the document and have the client send its id: that is the control. Per-type `[TraxAuthorize]` still applies to allowlisted requests, as it does to every request, because enforcement shapes which documents run and is not the authorization boundary.
+
+Introspection requests bypass enforcement automatically. A request is introspection when its document parses and every top-level selection is `__schema`, `__type` or `__typename`. Disable with `DisableIntrospection()` for tight prod.
 
 ## Managing operations
 
@@ -146,9 +160,9 @@ There are three surfaces, all backed by the same `IPersistedOperationStore` and 
 
 ### From the dashboard
 
-When `UsePersistedOperations(...)` is wired into the API host, the Trax dashboard exposes a **Persisted Operations** entry under **Data**. The page lists every row in `trax.persisted_operation`, supports filtering, and offers Upload / Edit / Deactivate / Restore actions. The editor renders parse, schema-validation, and shape-diff errors inline so the operator never has to read a stack trace.
+When `UsePersistedOperations(...)` is wired into the API host, the Trax dashboard exposes a **Persisted Operations** entry under **Data**. The page lists `trax.persisted_operation` a page at a time, filters by tenant, status and id prefix, and offers Upload / Edit / Deactivate / Restore actions against the row's own tenant. It calls the same resolvers as the `operations.persistedOperations` fields, so an upload or deactivation the API refuses is refused with the same message. The editor renders parse, schema-validation, and shape-diff errors inline so the operator never has to read a stack trace.
 
-If `UsePersistedOperations(...)` was not called, the sidebar entry is hidden and direct navigation to `/trax/data/persisted-operations` renders a "not enabled on this server" panel. The dashboard probes the runtime via `IServiceProvider.GetService<IPersistedOperationsCapability>()`.
+If `UsePersistedOperations(...)` was not called, the sidebar entry is hidden and direct navigation to `/trax/data/persisted-operations`, or to an operation's detail page under it, renders a "not enabled on this server" panel. The dashboard probes the runtime via `IServiceProvider.GetService<IPersistedOperationsCapability>()`.
 
 ### Via GraphQL mutations
 
@@ -193,7 +207,7 @@ mutation Upload($input: UploadPersistedOperationInput!) {
 { "input": { "id": "userProfile_v1", "document": "query UserProfile($id: Int!) { user(id: $id) { id name email } }" } }
 ```
 
-The management mutations and queries always bypass the enforcement middleware, because persisting them by id would be a chicken-and-egg. The carve-out is decided from the document's structure, not its text: it applies only when every operation in the request selects `operations` at the root and nothing but `persistedOperations` beneath it. A document that mixes the management surface with any other field, including another `operations` namespace such as `deadLetters`, does not qualify and is enforced normally, as is one that does not parse. An alias or a string argument that happens to read `persistedOperations` is neither the field being selected nor part of the document's structure, so it does not qualify either.
+The management mutations and queries always bypass enforcement, because persisting them by id would be a chicken-and-egg. The carve-out is decided from the document's structure, not its text: it applies only when every operation in the request selects `operations` at the root and nothing but `persistedOperations` beneath it. A document that mixes the management surface with any other field, including another `operations` namespace such as `deadLetters`, does not qualify and is enforced normally, as is one that does not parse. An alias or a string argument that happens to read `persistedOperations` is neither the field being selected nor part of the document's structure, so it does not qualify either.
 
 The carve-out is not an authorization boundary. Enforcement is a request-shaping control; what protects the management surface is `GateOperations(...)` plus whatever ASP.NET auth middleware sits in front of the GraphQL endpoint.
 
@@ -227,7 +241,7 @@ Every upsert runs the candidate document through HotChocolate's standard validat
 
 All three inherit `PersistedOperationException`. The GraphQL mutations and the dashboard editor project them into structured error payloads with the codes documented above.
 
-Hosts using `AddPersistedOperationStore(...)` (admin tooling without a HotChocolate schema in process) get a no-op validator instead. The shape-diff guardrail still runs.
+Hosts using `AddPersistedOperationStore(...)` (admin tooling without a HotChocolate schema in process) get a no-op validator instead. The shape-diff guardrail still runs. `AddPersistedOperationStore` is complete on its own: the store resolves from a container with nothing else from this package, and with no request executor there is no HotChocolate cache to empty after a write.
 
 ### Coexistence with `@authorize`
 

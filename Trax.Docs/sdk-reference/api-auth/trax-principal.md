@@ -27,7 +27,7 @@ public sealed record TraxPrincipal(
 
 | Field | Claim produced | Notes |
 |---|---|---|
-| `Id` | `trax:principal-id` | Stable identifier. JWT `sub`, account name, Cognito UUID, etc. |
+| `Id` | `trax:principal-id` | Stable identifier within its scheme: JWT `sub`, account name, Cognito UUID, etc. The claim carries it qualified by the scheme, `{scheme}:{Id}`. |
 | `DisplayName` | `ClaimTypes.Name` | Human-readable. `HttpContext.User.Identity.Name` returns this. |
 | `Roles` | `ClaimTypes.Role` (one per entry) | Consumed by `[TraxAuthorize(Roles = "...")]` and `user.IsInRole(...)`. |
 | `Claims` | verbatim (key = type, value = value) | Custom claim bag. Optional. |
@@ -41,6 +41,25 @@ var claimsPrincipal = principal.ToClaimsPrincipal("TraxApiKey");
 // ... request flows through middleware ...
 if (claimsPrincipal.TryGetTraxPrincipal(out var roundtripped))
 {
-    // Same Id, DisplayName, Roles, Claims, PrincipalType
+    // roundtripped.Id is "TraxApiKey:alice"; DisplayName, Roles, Claims, PrincipalType unchanged
 }
 ```
+
+`ToClaimsPrincipal(scheme)` qualifies the id by the scheme, so a principal read back from the
+claims (`TryGetTraxPrincipal`, the injected `TraxPrincipal`, `TraxCaller.Principal`) carries
+`{scheme}:{id}`. Project a resolver's output once: projecting a read-back principal again
+qualifies it twice.
+
+## TraxPrincipalId
+
+```csharp
+public static class TraxPrincipalId
+{
+    public const char Separator = ':';
+    public static string Qualify(string scheme, string id);
+}
+```
+
+`Qualify` returns the id a principal authenticated by `scheme` carries, for seeding or migrating
+rows keyed on it. It throws `ArgumentException` for an empty scheme, a scheme containing `:`, or
+an empty id. See [Qualified Principal Ids](/docs/migration-guides/qualified-principal-ids).

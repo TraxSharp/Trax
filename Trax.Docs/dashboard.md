@@ -51,7 +51,7 @@ If you see a 404, your csproj is missing the property. Set it and rebuild.
 
 ### Configuration
 
-Two lines in `Program.cs`:
+Two lines in `Program.cs`, and a decision about who may use it:
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -62,14 +62,19 @@ builder.Services.AddTrax(trax => trax
     )
     .AddMediator(typeof(Program).Assembly)
 );
-builder.Services.AddTraxDashboard();
+builder.Services.AddTraxDashboard(o => o.RequireRoles("Admin"));
 
 var app = builder.Build();
 
-app.UseTraxDashboard("/trax");
+app.UseTraxDashboard();
 
 app.Run();
 ```
+
+`UseTraxDashboard()` refuses to start until the options name a policy (`RequirePolicy`),
+roles (`RequireRoles`), or call `AllowAnonymousDashboard()`, because the dashboard can queue,
+run and cancel trains and change scheduler settings. See
+[UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) for what each does.
 
 `AddTraxDashboard()` requires `AddTrax()` to be called first. If it is missing, `AddTraxDashboard()` throws `InvalidOperationException` with a clear message directing you to add `AddTrax()`.
 
@@ -113,7 +118,7 @@ Clicking the visibility icon on a dead letter row opens a detail page with:
 - **Dead Letter Details**: Status badge, dead-lettered timestamp, retry count, reason, resolution info
 - **Manifest Details**: Linked manifest name, schedule, max retries, timeout, properties JSON
 - **Most Recent Failure**: The latest failed execution's failure junction, exception, reason, stack trace, and input
-- **Failed Execution History**: A full grid of all failed metadata runs for the manifest, each linking to the metadata detail page
+- **Failed Execution History**: A grid of the failed metadata runs for the manifest, read from the database a page at a time, each linking to the metadata detail page
 
 Two action buttons appear when the dead letter is in `AwaitingIntervention` status:
 
@@ -143,9 +148,12 @@ A **Cancel** button appears for InProgress trains. Clicking it sets `cancel_requ
 The dashboard supports running any registered train with **custom inputs**, a capability that differentiates Trax from Hangfire, which can only requeue jobs with their original inputs.
 
 - **From the Trains page**: Click the **Queue** button next to any train to open a dialog with a form builder (auto-generated from the input type's properties) or a raw JSON editor.
+- **From the Trains page**: Click the **Run** button beside **Queue** to open the same form builder and JSON editor, and run the train now instead of queueing it.
 - **From the Metadata Detail page**: Click the **Re-queue** button to re-run a train with its original input.
 
-Both go through `ITrainExecutionService.QueueAsync`, the same path as the GraphQL `queueTrain` mutation, so the train's `OnQueue` hook fires, its subject key is stamped and the input size cap applies. They enqueue inside a trusted scope (`"dashboard"`), so per-train `[TraxAuthorize]` requirements do **not** apply: the dashboard is the admin surface, gated as a whole by its host, and anyone who can reach it can queue any train. The scope also covers the train's `OnQueue` hook and `QueueSubjectKey`, and anything they run or enqueue through `ITrainExecutionService` (including work started with `Task.Run`), so those skip their own `[TraxAuthorize]` requirements too. Protect the dashboard route accordingly. The **Run** dialog submits directly to the job submitter. Dead-letter **Re-queue** and manifest triggers re-run what a manifest fixed and are likewise governed by access to the dashboard itself. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
+Both go through `ITrainExecutionService.QueueAsync`, the same path as the GraphQL `queueTrain` mutation, so the train's `OnQueue` hook fires, its subject key is stamped and the input size cap applies. They enqueue inside a trusted scope (`"dashboard"`), so per-train `[TraxAuthorize]` requirements do **not** apply: the dashboard is the admin surface, gated as a whole by its host, and anyone who can reach it can queue any train. The scope also covers the train's `OnQueue` hook and `QueueSubjectKey`, and anything they run or enqueue through `ITrainExecutionService` (including work started with `Task.Run`), so those skip their own `[TraxAuthorize]` requirements too. Protect the dashboard route accordingly. **Run** is different: it writes the run's metadata row and submits the input directly to the job submitter, then opens the run's detail page. No work queue entry is written, so the run skips dispatch priority, group `MaxActiveJobs` and [subject serialization](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing), and `OnQueue` does not fire. Use **Queue** when a run must wait its turn. Dead-letter **Re-queue** and manifest triggers re-run what a manifest fixed and are likewise governed by access to the dashboard itself. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
+
+The **Run** button opens the **Run** dialog (`RunTrainDialog`), which a host can also open itself through Radzen's `DialogService`, passing the `TrainRegistration` as `Registration`. It submits the input directly to the job submitter instead of queueing it, so no work queue entry is written and `OnQueue`, the input size cap and `QueueSubjectKey` do not apply. That makes it a documented bypass of [subject serialization](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing): a run started from it can execute concurrently with queued or in-flight work for the same subject. The dialog shows a warning saying so and pointing at **Queue**, which waits for the subject to be free. The dashboard cannot tell whether a train overrides `QueueSubjectKey`, so the warning appears for every train. `Trax.Docs/adr/0019` records why Run bypasses serialization rather than waiting or refusing.
 
 #### Real-Time Metrics on Home Page
 
@@ -174,13 +182,13 @@ The **Effects** page (`/trax/settings/effects`) shows all registered effect and 
 - **Enable/disable** toggleable effects at runtime (changes apply to the next train execution scope)
 - **Configure** effects that expose runtime settings. Click the gear icon to open a dynamic form dialog
 
-Configurable effects (those whose factory implements `IConfigurableEffectProviderFactory<TConfiguration>`) show a settings button in the grid. Clicking it opens a form auto-generated from the configuration type's properties. For example, the [Parameter Effect](/docs/effect/effect-providers/parameter-effect) exposes `SaveInputs` and `SaveOutputs` toggles.
+Configurable effects (those whose factory implements `IConfigurableEffectProviderFactory<TConfiguration>`) show a settings button in the grid. Clicking it opens a form auto-generated from the configuration type's properties. For example, the [Parameter Effect](/docs/effect/effect-providers/parameter-effect) exposes `SaveInputs` and `SaveOutputs` toggles. The form edits the effect's live, process-wide configuration all or nothing: Save converts every field before applying any, so a field that does not convert leaves the configuration unchanged, and closing the dialog without saving writes nothing.
 
 The Effects page was previously a section within Server Settings and has been moved to its own dedicated page under **Settings > Effects** in the sidebar.
 
 ### Manifest Groups
 
-Every manifest belongs to a **ManifestGroup**, a first-class entity with per-group dispatch controls. The **Manifest Groups** page shows one row per group with its settings and aggregate stats: manifest count, total executions, completed, failed, and last run time.
+Every manifest belongs to a **ManifestGroup**, a first-class entity with per-group dispatch controls. The **Manifest Groups** page shows one row per group with its settings and aggregate stats: manifest count, total executions, completed, failed, in progress, and last run time, counted the same way as the API's `stats` query for manifest groups.
 
 Clicking a group opens a detail page with two sections:
 
@@ -191,7 +199,7 @@ Per-group `MaxActiveJobs` prevents starvation: when a high-priority group hits i
 
 ### Persisted Operations (optional)
 
-When the host wires [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) into the Trax GraphQL builder, the dashboard exposes a **Persisted Operations** entry under **Data**. The page lists every row in `trax.persisted_operation` and supports Upload, Edit, Deactivate, and Restore. The editor renders parse, schema-validation, and shape-diff errors inline. The sidebar entry is hidden when `UsePersistedOperations` was not called; direct navigation renders a "not enabled on this server" panel.
+When the host wires [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) into the Trax GraphQL builder, the dashboard exposes a **Persisted Operations** entry under **Data**. The page lists the rows in `trax.persisted_operation` a page at a time, filtered by tenant (all, the default, or a named one), status and id prefix, and supports Upload, Edit, Deactivate, and Restore. A row is addressed by its tenant and its id, so two rows may share an id: each opens its own detail page (`/trax/data/persisted-operations/{id}?tenant={key}`, no `tenant` for the default) and changes only itself. The pages read and write through the same resolvers as the GraphQL `operations.persistedOperations` fields, so they filter, page and refuse input exactly as the API does. The editor renders parse, schema-validation, and shape-diff errors inline. The sidebar entry is hidden when `UsePersistedOperations` was not called; direct navigation to the list or to an operation's detail page renders a "not enabled on this server" panel.
 
 ## How Discovery Works
 
@@ -207,6 +215,7 @@ If you register trains with `AddMediator` (which calls `AddScopedTraxRoute` unde
 builder.Services.AddTraxDashboard(options =>
 {
     options.Title = "My App";  // Header text (default: "Trax")
+    options.RequirePolicy("TraxAdmin");
 });
 ```
 
@@ -221,7 +230,9 @@ app.UseTraxDashboard();  // served at /trax
 
 ## Layout
 
-The dashboard uses [Radzen Blazor](https://blazor.radzen.com/) v6 components with a sidebar navigation layout. A theme toggle in the header switches between light and dark mode, with the preference persisted in `localStorage`.
+The dashboard uses [Radzen Blazor](https://blazor.radzen.com/) v11 components with a sidebar navigation layout. A theme toggle in the header switches between light and dark mode, with the preference persisted in `localStorage`.
+
+When a page's refresh fails, the header shows **Last refresh failed** (the error as its tooltip) until a refresh succeeds; the rows on screen are then from the last refresh that worked. A grid that loads its rows page by page from the server clears them and shows the error when a load fails, rather than keeping the previous filter's or page's rows. A custom `IDashboardSettingsService` receives failures through `NotifyPollFailed` and exposes the latest as `LastPollError`; both have default implementations.
 
 ### User Settings
 
@@ -230,7 +241,7 @@ The **User Settings** page (`/trax/settings/user`) lets each user customize thei
 | Setting | Default | Description |
 |---------|---------|-------------|
 | **Polling Interval** | 5 seconds | How often dashboard pages re-query for fresh data. Range: 1–300 seconds. |
-| **Hide Administration Trains** | `true` | Exclude scheduler internals (ManifestManager, JobRunner, MetadataCleanup) from statistics and charts. |
+| **Hide Administration Trains** | `true` | Exclude scheduler internals (ManifestManager, JobDispatcher, JobRunner, MetadataCleanup, DeadLetterCleanup) from statistics, charts, the Trains page and the Metadata and Manifests lists. A train is hidden only when its name is one of theirs exactly, as the API's `hideAdminTrains` filter matches, so a train of your own whose name merely ends the same way stays visible. |
 | **Dashboard Components** | All visible | Toggle visibility of individual home page sections (summary cards, charts, real-time metrics, throughput chart, throughput sparkline). |
 
 ## Integration with Existing Blazor Apps
@@ -248,10 +259,16 @@ If your application is a minimal API or MVC app that doesn't use Blazor, the das
 ```csharp
 var app = builder.Build();
 
-app.UseTraxDashboard("/trax");  // After Build(), before Run()
+app.UseTraxDashboard();  // After Build(), before Run()
 
 app.Run();
 ```
+
+### "UseTraxDashboard() needs to know who may use the dashboard"
+
+No authorization posture was chosen. Add one to the `AddTraxDashboard` options:
+`RequirePolicy("<name>")`, `RequireRoles("<role>")`, or `AllowAnonymousDashboard()` when a
+fallback policy or an ingress rule in front of `/trax` is the gate.
 
 ### "No trains listed"
 

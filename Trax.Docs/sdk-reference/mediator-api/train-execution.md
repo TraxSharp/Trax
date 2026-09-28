@@ -14,6 +14,8 @@ It supports two execution paths:
 - **Queue**: creates a WorkQueue entry for asynchronous dispatch by the scheduler.
 - **Run**: executes the train synchronously via `ITrainBus` on the current machine.
 
+A third method, `PrepareAsync`, does only the steps both paths start with (lookup, authorization, input reading), for a surface that submits the work some other way.
+
 Registered automatically by `AddMediator()` as a scoped service.
 
 ## ITrainExecutionService
@@ -32,6 +34,12 @@ public interface ITrainExecutionService
     Task<RunTrainResult> RunAsync(
         string trainName,
         string inputJson,
+        CancellationToken ct = default
+    );
+
+    Task<PreparedTrain> PrepareAsync(
+        string trainName,
+        string? inputJson,
         CancellationToken ct = default
     );
 }
@@ -72,31 +80,36 @@ Task<QueueTrainResult> QueueAsync(
 - `TrainNotFoundException` (an `InvalidOperationException`) if no train is registered with the given name. Use `ITrainDiscoveryService.DiscoverTrains()` to list available trains.
 - `AmbiguousTrainNameException` if the name matches more than one train's friendly name.
 - `TrainInputValidationException` if `inputJson` exceeds the configured size cap (`WithMaxInputJsonBytes`, 256 KiB by default).
-- `JsonException` if `inputJson` does not deserialize to the train's input type. That includes a null or blank `inputJson` for an input type that needs values: a constructor parameter with no default (a positional record such as `record RenamePlayer(string Id, string NewName)`) or a `required` member. It fails here, at enqueue, rather than queueing a run whose input is full of nulls. `Unit`, an input with only settable properties, and parameters with defaults are built from `{}` as before, and an explicit `"{}"` is read like any other input.
+- `JsonException` if `inputJson` does not deserialize to the train's input type, or names a property twice (`{"amount":1,"Amount":999}`). That includes a null or blank `inputJson` for an input type that needs values: a constructor parameter with no default (a positional record such as `record RenamePlayer(string Id, string NewName)`) or a `required` member. It fails here, at enqueue, rather than queueing a run whose input is full of nulls. `Unit`, an input with only settable properties, and parameters with defaults are built from `{}` as before, and an explicit `"{}"` is read like any other input.
 - `JsonException` if `inputJson` is the JSON literal `null`, which is well-formed but is not an input, or is blank and the input type needs values, as for `QueueAsync`.
 - `TrainAuthorizationException` if the train has `[TraxAuthorize]` requirements the caller does not meet. Authorization runs before the input is read, and applies to every caller-built enqueue, including the operations surface (`queueTrain`, `requeueExecution`). The dashboard's queue dialog and re-queue button also route through this method, but inside a trusted execution scope, so per-train requirements are skipped there; the dashboard is gated by its host. `Trax.Docs/adr/0017` records why.
-- `InvalidOperationException` if the train declares `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered, unless the call runs inside a trusted execution scope. In a hosted app this rarely fires, because `AuthorizationRegistrationValidator` already refuses to start such a host; the runtime check covers hosts where hosted services do not run, such as the Lambda runner. The check fails closed; a host that serves no API submissions opts out with `AddMediator(m => m.AllowMissingAuthorizationService())`, after which the missing service is a no-op.
+- `TrainAuthorizationNotConfiguredException` (an `InvalidOperationException`, carrying `TrainName`) if the train declares `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered, unless the call runs inside a trusted execution scope. It is a host misconfiguration rather than a refusal of the caller's input, and the type lets a caller report it that way without reading the message. In a hosted app this rarely fires, because `AuthorizationRegistrationValidator` already refuses to start such a host; the runtime check covers hosts where hosted services do not run, such as the Lambda runner. The check fails closed; a host that serves no API submissions opts out with `AddMediator(m => m.AllowMissingAuthorizationService())`, after which the missing service is a no-op.
 - Any exception thrown by the train's `QueueSubjectKey` override. A key that cannot be computed aborts the enqueue rather than becoming null.
-- `InvalidOperationException` if `QueueSubjectKey` returns an empty string or a key longer than 512 characters. Return null for an entry that should not be serialized.
+- `InvalidOperationException` if `QueueSubjectKey` returns an empty string, a key that is only whitespace, a key containing an unpaired surrogate, or a key longer than 512 Unicode characters (an emoji counts once, although it is two UTF-16 units; from Trax.Mediator 1.23.0, which leaves these rules to `WorkQueue.Create` and wraps its `ArgumentException` as the inner exception). Return null for an entry that should not be serialized.
 - Any exception thrown by the train's [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) hook, if the train overrides it. A throw aborts the enqueue and leaves no entry behind: on the default path the hook runs before the entry is committed, and for a train that defers promotion the already-staged entry is removed (only if it is still staged, never once promoted or dispatched), whether or not the caller has cancelled. A failure to remove it does not replace the hook's exception; the stale staged entry sweep resolves an entry left behind.
+- `QueueHookTimeoutException` (an `InvalidOperationException`, carrying `TrainName` and `Limit`) from Trax.Mediator 1.23.0, when a train that does not defer promotion runs its `OnQueue` hook longer than `MaxQueueHookDuration` (30 seconds by default; `AddMediator(m => m.WithMaxQueueHookDuration(TimeSpan))` changes it, and `Timeout.InfiniteTimeSpan` removes it). The hook's token is cancelled at the limit and the enqueue stops waiting whether or not the hook stops: it rolls back, so no entry is written and nothing the hook wrote on `IEnqueueContextAccessor.Current` is kept, even a write the hook had already saved, and the connection goes back to the pool. A hook that ignores its token keeps running, but an enqueue it starts after that is refused rather than committed on its own. `Trax.Mediator/docs/adr/0004` records the reasoning.
 - `QueuedWorkCancelledException` (an `InvalidOperationException`, carrying `WorkQueueId` and `TrainName`) for a train that defers promotion, when its staged entry was cancelled while the hook ran (by an operator, or by the stale staged entry sweep because the hook outlived `StaleStagedEntryTimeout`). If the sweep promoted it instead (`PromoteStaleStagedEntries()`), the entry will run and `QueueAsync` succeeds. When it throws, the work will not run, but the hook's side-effect may already have been applied, and the message says so.
 
 ### What it does
 
 1. Looks up the train by `trainName` via `ITrainDiscoveryService`.
 2. Authorizes the caller against the train's requirements, failing closed as described under **Throws**.
-3. Deserializes `inputJson` to the train's `InputType`, reading null or blank as `{}`, so `OnQueue` and `QueueSubjectKey` always receive a real input.
+3. Deserializes `inputJson` to the train's `InputType`, reading null or blank as `{}`, so `OnQueue` and `QueueSubjectKey` always receive a real input. Property names are matched whatever their case, so `{"Amount":5}` and `{"amount":5}` are the same input, and a property given twice, in the same or another casing, is refused with `JsonException` (`Trax.Docs/adr/0023`).
 4. Re-serializes the input using manifest serialization options (normalizes the JSON).
 5. Creates a `WorkQueue` entry with the train name, serialized input, input type name, priority, and `scheduledAt` converted to UTC.
-6. Stamps the entry's subject key from the train's [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) override, if it has one. An exception from `QueueSubjectKey`, or an empty or over-long key, aborts the enqueue, so no entry is written.
+6. Stamps the entry's subject key from the train's [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) override, if it has one. An exception from `QueueSubjectKey`, or an empty, whitespace-only or over-long key, aborts the enqueue, so no entry is written.
 7. Tracks the entry, then (if the train overrides [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook)) enters the enqueue context and invokes the hook with the entry's `ExternalId` and the input, then saves and commits, all in one transaction. A throw rolls the whole thing back, so nothing the hook tracked on `IEnqueueContextAccessor.Current` survives either. Trains that do not override the hook are never resolved here, enter no context, and open no transaction: their enqueue is a single write.
 8. Returns the entry's ID and external ID.
+
+The train that steps 6 and 7 call is resolved once, on first use, in a DI scope the enqueue creates and disposes before it returns, never from the caller's scope. A caller that holds its scope for a long time, such as a Blazor circuit, therefore keeps no train alive between enqueues, and the scoped services a hook takes are fresh for each enqueue.
 
 Tracking the entry before the hook runs does not insert it (`Track` is change tracking only), so the hook still runs before the row exists, as its contract states.
 
 When the train sets [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable), the shape changes to three steps instead: the entry is committed **unconfirmed** and undispatchable, the hook runs outside that transaction, and a second commit promotes it. A throwing hook removes the staged entry if it is still staged, so the observable contract is the same. Once the hook has returned the mutation counts as accepted, so the promotion runs even if the caller cancels. If the entry was cancelled while the hook ran, the promotion finds nothing to confirm and `QueueAsync` throws `QueuedWorkCancelledException` instead of reporting success; if something else already confirmed it (the sweep, with promotion opted in), it will run and `QueueAsync` succeeds. `IEnqueueContextAccessor.Current` is null inside such a hook, because the entry is already committed and there is no transaction to join. A crash between the two commits leaves the entry unconfirmed, and the scheduler's [stale staged entry sweep](/docs/scheduler/admin-trains/manifest-manager#resolvestalestagedentriesjunction) cancels it (or promotes it, if the host opted in) once it is older than `StaleStagedEntryTimeout`. The sweep runs in the ManifestManager, so it does not run while the ManifestManager is disabled (`SchedulerConfiguration.ManifestManagerEnabled = false`, also the dashboard's Server Settings switch); some host sharing the database must run it.
 
-Providers without transaction support (the in-memory provider) degrade to a single `SaveChanges` with no explicit transaction.
+An enqueue started from inside another train's `OnQueue` hook, while that enqueue's transaction is open, takes a different path: it tracks its entry on the outer enqueue's context, runs its own hook, and flushes the entry inside the outer transaction, so it commits or rolls back with the outer entry and uses no connection of its own. A deferring train on this path is written confirmed rather than staged. If the nested enqueue fails, the outer one fails too, even when the hook catches the exception; if the hook returns while a nested enqueue it started is still running, the outer enqueue throws `InvalidOperationException`. See [OnQueue](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook).
+
+On the in-memory provider, beginning the transaction succeeds but returns one whose commit and rollback do nothing: the provider ignores EF's `TransactionIgnoredWarning`. The queue row and anything the hook tracked on `IEnqueueContextAccessor.Current` still land together in one `SaveChanges`, and because a transaction object exists, an enqueue nested in a hook finds one to join as it would on a relational provider. A provider whose `BeginTransaction` throws `InvalidOperationException` or `NotSupportedException` gets no transaction at all, with the same single `SaveChanges`.
 
 ## RunAsync
 
@@ -129,17 +142,43 @@ Task<RunTrainResult> RunAsync(
 - `JsonException` if `inputJson` is the JSON literal `null`, which is well-formed but is not an input.
 - `TrainException` if the train itself fails during execution (propagated from `ITrainBus`).
 - `TrainAuthorizationException` if the train has `[TraxAuthorize]` requirements the caller does not meet.
-- `InvalidOperationException` if the train declares `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered, unless the call runs inside a trusted execution scope or the host called `AllowMissingAuthorizationService()`. The same fail-closed rule, and the same trusted-scope exemption, as `QueueAsync`.
+- `TrainAuthorizationNotConfiguredException` (an `InvalidOperationException`) if the train declares `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered, unless the call runs inside a trusted execution scope or the host called `AllowMissingAuthorizationService()`. The same fail-closed rule, and the same trusted-scope exemption, as `QueueAsync`.
 
 ### What it does
 
 1. Looks up the train by `trainName` via `ITrainDiscoveryService`.
 2. Authorizes the caller against the train's requirements, failing closed as described under **Throws**.
-3. Deserializes `inputJson` to the train's `InputType`, reading blank as `QueueAsync` does.
+3. Deserializes `inputJson` to the train's `InputType`, reading blank, casing and repeated properties as `QueueAsync` does.
 4. Creates a `Metadata` record with a generated external ID.
 5. Persists the metadata via the data context.
 6. Calls the typed `ITrainBus.RunAsync<TOut>(input, ct, metadata)` via reflection, using the train's `OutputType` from its registration.
 7. Returns the metadata ID and the train's output (or `null` for `Unit` trains).
+
+## PrepareAsync
+
+Resolves a train by name, authorizes the current caller for it, and reads the caller's input into the train's input type. These are steps 1 to 3 of `QueueAsync` and `RunAsync`, which call the same code, so a surface that submits work itself (the scheduler's run operation, say) accepts and refuses exactly what a queue or a run does. Nothing is written.
+
+```csharp
+Task<PreparedTrain> PrepareAsync(
+    string trainName,
+    string? inputJson,
+    CancellationToken ct = default
+)
+
+public sealed class PreparedTrain
+{
+    public TrainRegistration Registration { get; }
+    public object Input { get; }   // an instance of Registration.InputType, never null
+}
+```
+
+Authorization runs before the input is read, so a caller who may not use the train learns nothing about its input from a parse error. The input is read as `QueueAsync` reads it: null or blank as `{}`, property names in any case, a repeated property refused, and the `MaxInputJsonBytes` cap applied.
+
+`PreparedTrain` has no public constructor: the only way to get one is from `PrepareAsync`, so code holding one knows the authorization check ran. An implementation of `ITrainExecutionService` written before this method existed inherits a default that throws `NotSupportedException` rather than skipping the check.
+
+### Throws
+
+The same as `RunAsync`: `TrainNotFoundException`, `AmbiguousTrainNameException`, `UnauthorizedAccessException`, `TrainInputValidationException`, `JsonException`, and `InvalidOperationException` for a `[TraxAuthorize]` train on a host with no `ITrainAuthorizationService` outside a trusted scope.
 
 ## Examples
 

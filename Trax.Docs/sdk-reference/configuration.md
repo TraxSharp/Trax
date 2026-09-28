@@ -193,3 +193,4 @@ These properties can be set directly on the `TraxEffectBuilder`:
 | Service | Description |
 |--------|-------------|
 | [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier) | Classifies a failed run's exception into a `FailureClass`; registered in the container, not through the builder |
+| [ISqlDialect](/docs/sdk-reference/configuration/i-sql-dialect) | The provider-specific SQL, including a table's estimated row count; registered by `UsePostgres` and `UseSqlite` |

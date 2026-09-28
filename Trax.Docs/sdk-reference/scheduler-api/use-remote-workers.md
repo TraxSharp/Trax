@@ -38,6 +38,7 @@ public SchedulerConfigurationBuilder UseRemoteWorkers(
 | `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` (add auth headers, custom timeouts, or any other HTTP configuration) |
 | `Timeout` | `TimeSpan` | 30 seconds | HTTP request timeout for each job dispatch |
 | `Retry` | `HttpRetryOptions` | _(see below)_ | Retry options for transient HTTP failures (429, 502, 503) |
+| `SigningKey` | `byte[]?` | `null` | The key shared with the runner's `AddTraxJobRunner(runner => runner.SigningKey = ...)`, at least 32 bytes. When set, each request (and each retry) carries a `Trax-Signature` the runner verifies. See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) |
 
 ### HttpRetryOptions
 
@@ -79,19 +80,25 @@ services.AddTrax(trax => trax
 
 In this example, `IHeavyComputeTrain` and `IAiInferenceTrain` are dispatched to the remote endpoint. `IMyTrain` executes locally via the default `PostgresJobSubmitter`.
 
-### With Authentication
+### With a Signing Key
 
-Trax doesn't bake in any auth. Use `ConfigureHttpClient` to add whatever headers your endpoint expects:
+The runner refuses requests that do not meet its posture. Share a signing key with it:
 
 ```csharp
 .UseRemoteWorkers(
     remote =>
     {
         remote.BaseUrl = "https://my-workers.example.com/trax/execute";
-        remote.ConfigureHttpClient = client =>
-            client.DefaultRequestHeaders.Add("Authorization", "Bearer my-token");
+        remote.SigningKey = Convert.FromBase64String(configuration["Trax:RunnerSigningKey"]!);
     },
     routing => routing.ForTrain<IHeavyComputeTrain>())
+```
+
+For a runner that uses an authorization policy instead, add the credentials it expects with `ConfigureHttpClient`:
+
+```csharp
+remote.ConfigureHttpClient = client =>
+    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {schedulerToken}");
 ```
 
 ### With Custom Timeout
@@ -185,7 +192,8 @@ When the JobDispatcher processes a work queue entry, it checks the `JobSubmitter
 
 1. Serializes a `RemoteJobRequest` containing the metadata ID and optional input
 2. POSTs the JSON payload to `BaseUrl`
-3. Returns a synthetic job ID (`"http-{guid}"`)
+3. Reads the runner's `RemoteJobResponse` for that metadata ID. A non-success status, an `IsError` response, or a success status whose body is not a `RemoteJobResponse` naming the same metadata ID (a proxy's page, an empty body, a misrouted `BaseUrl`) fails the dispatch with a `TrainException`
+4. Returns a synthetic job ID (`"http-{guid}"`)
 
 The remote endpoint is responsible for running `JobRunnerTrain`, which loads the metadata from the shared Postgres database, validates the job state, executes the train, and updates the manifest.
 

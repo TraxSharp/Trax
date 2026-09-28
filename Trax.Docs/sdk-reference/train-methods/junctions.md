@@ -77,6 +77,7 @@ The same `Junctions()` is also read, without running anything, by the startup ch
 - returns a result directly (`Task.FromResult(value)`) instead of ending in `Resolve()`
 - ends in `Resolve(value)`
 - uses `IChain<T>` or `AddServices<T>` with a class instead of an interface
+- passes `AddServices` a null service, such as a field assigned later in `OnStarted`
 - short-circuits with a junction whose output cannot be the train's return type
 
 A train with no junctions ends in `Task.FromResult(Resolve())`. The full list of faults, and the Memory rules the check replays, are in [Trains & Junctions](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic).

@@ -54,6 +54,13 @@ public static class ExemplarGuards
         RegexOptions.Compiled
     );
 
+    /// <summary>How many lines an attribute may span before the scan stops joining them.</summary>
+    private const int MaxAttributeLines = 20;
+
+    /// <summary>Whether every <c>[</c> in an attribute's text so far has been closed.</summary>
+    private static bool Closed(string attribute) =>
+        attribute.Count(c => c == '[') <= attribute.Count(c => c == ']');
+
     public static GuardResult SectionPresent(IReadOnlyList<Adr> adrs)
     {
         var offenders = new List<string>();
@@ -378,12 +385,40 @@ public static class ExemplarGuards
 
                 // Line-based, because the attribute's value is a string literal: it does not
                 // survive the blanking pass the class scan uses. Classify is what keeps a
-                // commented-out attribute from counting.
+                // commented-out attribute from counting. An attribute left open at the end of a
+                // line, as csharpier leaves a long one with an argument per line, is joined with
+                // the lines that close it and read as one.
                 string? pending = null;
-                foreach (var line in raw.Replace("\r\n", "\n").Split('\n'))
+                string? open = null;
+                var openLines = 0;
+                foreach (var rawLine in raw.Replace("\r\n", "\n").Split('\n'))
                 {
-                    if (CSharp.Classify(line) != CSharp.LineKind.Code)
+                    if (CSharp.Classify(rawLine) != CSharp.LineKind.Code)
                         continue;
+
+                    var line = rawLine;
+                    if (open is not null)
+                    {
+                        open += " " + line.Trim();
+                        openLines++;
+                        if (!Closed(open))
+                        {
+                            // An attribute that never closes is malformed; stop joining rather
+                            // than swallow the rest of the file.
+                            if (openLines >= MaxAttributeLines)
+                                open = null;
+                            continue;
+                        }
+
+                        line = open;
+                        open = null;
+                    }
+                    else if (line.TrimStart().StartsWith('[') && !Closed(line))
+                    {
+                        open = line.Trim();
+                        openLines = 1;
+                        continue;
+                    }
 
                     var property = GuardProperty.Match(line);
                     if (property.Success)

@@ -48,7 +48,7 @@ Resolves work queue entries that a crash left unconfirmed. A train with [`DeferQ
 
 | Setting | Outcome |
 |---|---|
-| Default | **Cancelled**, via `IWorkQueuePromotion.CancelStaleAsync`. Nothing recorded tells a hook that succeeded from one that never ran or one that rejected the mutation, so the entry is kept visible rather than run |
+| Default | **Cancelled**, via `IWorkQueuePromotion.CancelStaleAsync`. Nothing recorded tells a hook that succeeded from one that never ran or one that rejected the mutation, so the entry is kept visible rather than run. The same call deletes the entries it cancelled on an earlier pass once they are 30 days old ([retention](/docs/sdk-reference/scheduler-api/i-work-queue-promotion#retention-of-cancelled-staged-entries)) |
 | `PromoteStaleStagedEntries()` | **Promoted**, via `IWorkQueuePromotion.PromoteStaleAsync`, and dispatched like any other entry. The run re-executes the whole chain, so this assumes idempotent hooks and a chain that re-checks what the hook checked |
 
 `IWorkQueuePromotion.PromoteAsync`, which an enqueue calls once its hook returns, only confirms an entry that is still `Queued`, so an entry this junction has already cancelled stays cancelled. The promotion methods work on every data provider, the InMemory provider included. Like the rest of the train, this runs only on the server holding the leader lock, and not at all while the ManifestManager is disabled (`ManifestManagerEnabled = false`). A deployment that turns the ManifestManager off everywhere leaves stranded staged entries unresolved.

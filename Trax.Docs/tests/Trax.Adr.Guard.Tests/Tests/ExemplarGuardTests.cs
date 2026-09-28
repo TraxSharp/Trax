@@ -242,6 +242,92 @@ public class ExemplarGuardTests
         result.Offenders[0].Should().Contain("does not claim this ADR back");
     }
 
+    /// <summary>
+    /// csharpier wraps a long attribute onto several lines, one argument per line. The guard
+    /// read the attribute a line at a time, so a real back-citation in that shape failed as
+    /// "does not claim this ADR back" and an ADR slug had to be shortened to fit on one line.
+    /// </summary>
+    [Test]
+    public void NamedGuardsResolve_WhenTheAttributeIsWrappedAcrossLines_Passes()
+    {
+        using var repo = WithGuard(
+            $$"""
+            namespace Some.Tests.Meta;
+
+            [Property(
+                "adr",
+                "docs/adr/{{Sample.DefaultSpec.FileName}}"
+            )]
+            [TestFixture]
+            public class MigrationsIntegrityTests
+            {
+                [Test]
+                public void Migrations_are_numbered() => Assert.Pass();
+            }
+            """
+        );
+
+        ExemplarGuards.NamedGuardsResolve(Load(repo), repo.Options()).Offenders.Should().BeEmpty();
+    }
+
+    [Test]
+    public void NamedGuardsResolve_WhenAWrappedAttributeIsCommentedOut_Fails()
+    {
+        using var repo = WithGuard(
+            $$"""
+            namespace Some.Tests.Meta;
+
+            // [Property(
+            //     "adr",
+            //     "docs/adr/{{Sample.DefaultSpec.FileName}}"
+            // )]
+            [TestFixture]
+            public class MigrationsIntegrityTests
+            {
+                [Test]
+                public void Migrations_are_numbered() => Assert.Pass();
+            }
+            """
+        );
+
+        ExemplarGuards
+            .NamedGuardsResolve(Load(repo), repo.Options())
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("does not claim this ADR back");
+    }
+
+    [Test]
+    public void NamedGuardsResolve_WhenAWrappedAttributeIsSeparatedFromTheClass_Fails()
+    {
+        using var repo = WithGuard(
+            $$"""
+            namespace Some.Tests.Meta;
+
+            [Property(
+                "adr",
+                "docs/adr/{{Sample.DefaultSpec.FileName}}"
+            )]
+            internal static class Unrelated { }
+
+            [TestFixture]
+            public class MigrationsIntegrityTests
+            {
+                [Test]
+                public void Migrations_are_numbered() => Assert.Pass();
+            }
+            """
+        );
+
+        ExemplarGuards
+            .NamedGuardsResolve(Load(repo), repo.Options())
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("does not claim this ADR back");
+    }
+
     [Test]
     public void NamedGuardsResolve_WhenTwoClassesClaimTheSameAdr_Fails()
     {

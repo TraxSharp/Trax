@@ -14,6 +14,11 @@ Registers the minimal services needed to run `JobRunnerTrain` without the full s
 
 ```csharp
 public static IServiceCollection AddTraxJobRunner(
+    this IServiceCollection services,
+    Action<TraxJobRunnerOptions> configure
+)
+
+public static IServiceCollection AddTraxJobRunner(
     this IServiceCollection services
 )
 ```
@@ -36,7 +41,23 @@ public static RouteHandlerBuilder UseTraxRunEndpoint(
 
 ### AddTraxJobRunner
 
-No parameters. Registers the execution pipeline services only.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `configure` | `Action<TraxJobRunnerOptions>` | Sets the runner's authorization posture. Every runner entry point refuses to start without one |
+
+The overload without `configure` registers the execution pipeline with no posture. It suits a host that needs `ITraxScheduler` without mapping a runner endpoint; mapping one afterwards fails at startup.
+
+### TraxJobRunnerOptions
+
+| Property / method | Type | Default | Description |
+|-------------------|------|---------|-------------|
+| `SigningKey` | `byte[]?` | `null` | The key shared with the scheduler's `SigningKey`, at least 32 bytes. When set, every request must carry a valid `Trax-Signature` |
+| `AuthorizationPolicy` | `string?` | `null` | An ASP.NET authorization policy applied to `UseTraxJobRunner` and `UseTraxRunEndpoint`. Must admit only the scheduler. Not applicable to SQS or Lambda |
+| `MaxClockSkew` | `TimeSpan` | 5 minutes | How far a signed request's timestamp may be from the runner's clock, and how long a nonce is remembered |
+| `AllowUnsignedRequests()` | method | | Accepts requests with no signature. Each entry point logs a warning when it starts |
+| `UseInMemoryNonceStore()` | method | | Keeps accepted nonces in this process instead of the database. Only for a runner that runs as one instance: each instance keeps its own |
+
+See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) for how the three combine and what each transport checks.
 
 ### UseTraxJobRunner
 
@@ -63,7 +84,9 @@ builder.Services.AddTrax(trax => trax
     )
     .AddMediator(typeof(MyTrain).Assembly)
 );
-builder.Services.AddTraxJobRunner();
+builder.Services.AddTraxJobRunner(runner =>
+    runner.SigningKey = Convert.FromBase64String(builder.Configuration["Trax:RunnerSigningKey"]!)
+);
 
 var app = builder.Build();
 app.UseTraxJobRunner("/trax/execute");
@@ -81,7 +104,9 @@ builder.Services.AddTrax(trax => trax
     )
     .AddMediator(typeof(MyTrain).Assembly)
 );
-builder.Services.AddTraxJobRunner();
+builder.Services.AddTraxJobRunner(runner =>
+    runner.SigningKey = Convert.FromBase64String(builder.Configuration["Trax:RunnerSigningKey"]!)
+);
 
 var app = builder.Build();
 app.UseTraxJobRunner("/trax/execute");  // queue path
@@ -89,11 +114,11 @@ app.UseTraxRunEndpoint("/trax/run");    // synchronous run path
 app.Run();
 ```
 
-> **Note:** `UseTraxRunEndpoint()` does not require `AddTraxJobRunner()`. It uses `ITrainExecutionService` which is registered by `AddMediator()`. Only add `AddTraxJobRunner()` if you also need the queue execution path.
+Both endpoints need `AddTraxJobRunner(runner => ...)`: they resolve `ITraxRequestHandler` from it, and read the posture from its options while mapping.
 
-### With ASP.NET Authentication
+### With an Authorization Policy
 
-Trax doesn't bake in any auth. The endpoint mapped by `UseTraxJobRunner()` is a standard ASP.NET minimal API endpoint. Secure it however you normally would:
+Name the policy in the runner options. The runner applies it to both endpoints and checks at startup that a posture exists, which it cannot do for a `.RequireAuthorization()` chained on afterwards. The policy must admit only the scheduler, because the runner runs what it is sent without per-train authorization:
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -104,14 +129,15 @@ builder.Services.AddTrax(trax => trax
     )
     .AddMediator(typeof(MyTrain).Assembly)
 );
-builder.Services.AddTraxJobRunner();
 builder.Services.AddAuthentication(/* your scheme */);
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(o =>
+    o.AddPolicy("trax-scheduler", p => p.RequireClaim("scope", "trax:dispatch")));
+builder.Services.AddTraxJobRunner(runner => runner.AuthorizationPolicy = "trax-scheduler");
 
 var app = builder.Build();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseTraxJobRunner("/trax/execute").RequireAuthorization();
+app.UseTraxJobRunner("/trax/execute");
 app.Run();
 ```
 
@@ -136,6 +162,9 @@ public class Function : TraxLambdaFunction
             .AddEffects(effects => effects.UsePostgres(connString))
             .AddMediator(typeof(MyTrain).Assembly));
     }
+
+    protected override void ConfigureRunner(TraxJobRunnerOptions runner, IConfiguration configuration) =>
+        runner.SigningKey = Convert.FromBase64String(configuration["Trax:RunnerSigningKey"]!);
 }
 ```
 
@@ -155,35 +184,41 @@ Registers the minimum set of services to run `JobRunnerTrain`:
 | `IDormantDependentContext` → `DormantDependentContext` | Scoped | Dependent train context |
 | `IJobRunnerTrain` → `JobRunnerTrain` | Scoped | The train execution pipeline |
 | `ITraxRequestHandler` → `TraxRequestHandler` | Scoped | Hosting-agnostic request handler for execute/run paths |
+| `TraxJobRunnerOptions` | Singleton | The posture passed to `configure` |
+| `INonceStore` | Singleton | Where a signing runner records accepted nonces: the `runner_nonce` table through `IDataContext.RunnerNonces`, shared by every instance on the database, or memory after `UseInMemoryNonceStore()`. Registered with `TryAdd`, so a host's own store replaces it. With a `SigningKey` and neither a relational data provider nor `UseInMemoryNonceStore()`, resolving it fails at startup |
+| `RunnerRequestVerifier` | Singleton | Checks the posture at startup and each request's signature and freshness |
 
 **Not registered:** ManifestManager, JobDispatcher, polling services, startup service, `LocalWorkerService`. This process only runs trains; it doesn't schedule or dispatch them.
 
 ### UseTraxJobRunner
 
-Maps a `POST` endpoint at the specified route that:
+Throws while mapping when the runner options have no posture. Otherwise maps a `POST` endpoint at the specified route that:
 
-1. Reads a `RemoteJobRequest` from the request body
-2. Deserializes the input (if present) using the fully-qualified type name
-3. Creates a new DI scope and resolves `IJobRunnerTrain`
-4. Calls `Run(new RunJobRequest(metadataId, input))`
+1. Returns `415` for a body that is not JSON, and `401` for one whose signature the posture refuses (with a `SigningKey`: missing, invalid, stale or replayed)
+2. Reads a `RemoteJobRequest` from the request body. A body that repeats a property (in any case), does not parse, or is `null` gets `400 Bad Request`. The host's global JSON options are not used for this
+3. Deserializes the input (if present) into the registered train input type whose fully-qualified name the request gives. A name no registered train takes is refused
+4. Calls `IJobRunnerTrain.Run(new RunJobRequest(metadataId, input))`, which refuses a metadata row that is not `Pending` or belongs to a different train than the input's
 5. Returns `200 OK` with a `RemoteJobResponse` containing the metadata ID on success
-6. On error: logs the exception, then returns `200 OK` with `RemoteJobResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `StackTrace`)
+6. On error: logs the exception, then returns `200 OK` with `RemoteJobResponse.IsError = true`, the `ExceptionType`, and the message of a `TrainException` (any other exception gets a fixed message). No stack trace is returned
+
+With an `AuthorizationPolicy`, the endpoint requires it.
 
 ### UseTraxRunEndpoint
 
-Maps a `POST` endpoint at the specified route that handles synchronous run requests from [`UseRemoteRun()`](/docs/sdk-reference/scheduler-api/use-remote-run):
+Enforces the same posture as `UseTraxJobRunner`, and throws while mapping without one. Maps a `POST` endpoint at the specified route that handles synchronous run requests from [`UseRemoteRun()`](/docs/sdk-reference/scheduler-api/use-remote-run):
 
-1. Reads a `RemoteRunRequest` from the request body (contains train name and input JSON)
-2. Resolves `ITrainExecutionService` and calls `RunAsync(trainName, inputJson)`
-3. Serializes the train output as JSON
-4. Returns `200 OK` with a `RemoteRunResponse` containing the metadata ID, output JSON, and output type
-5. On error: returns `200 OK` with `RemoteRunResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `FailureJunction`, `StackTrace`, `FailureClass`). `FailureClass` is the classification this process's `IFailureClassifier` assigned, or null when none is registered or it did not recognise the failure. The response is written with Trax's own JSON options (enums as integers), not the host's, so a host configured to write enums as strings does not change the wire. The reading side also accepts names, and reads a class it does not know as `Unclassified`. Uses in-band errors to distinguish from infrastructure failures
+1. Reads a `RemoteRunRequest` from the request body (contains train name and input JSON), after the same `415` and `401` checks, and with the same `400` refusals
+2. Refuses a train name that is one of the scheduler's own trains (ManifestManager, JobDispatcher, JobRunner, MetadataCleanup, DeadLetterCleanup), by full name, or by short name unless a host train shares it
+3. Resolves `ITrainExecutionService` and calls `RunAsync(trainName, inputJson)`
+4. Serializes the train output as JSON
+5. Returns `200 OK` with a `RemoteRunResponse` containing the metadata ID, output JSON, and output type
+6. On error: returns `200 OK` with `RemoteRunResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `FailureJunction`, `FailureClass`). `StackTrace` is always null, and `ErrorMessage` is fixed text unless the failure is a `TrainException`. `FailureClass` is the classification this process's `IFailureClassifier` assigned, or null when none is registered or it did not recognise the failure. `PublicMessage` is the message of a plain `TrainException` and null for anything else, including a type derived from `TrainException`. The response is written with Trax's own JSON options (enums as integers), not the host's, so a host configured to write enums as strings does not change the wire. The reading side also accepts names, and reads a class it does not know as `Unclassified`. Uses in-band errors to distinguish from infrastructure failures
 
 ## Shared Requirements
 
 The remote process must:
 
-- **Reference the same train assemblies** passed to `AddMediator()`. Train types are resolved by fully-qualified name.
+- **Reference the same train assemblies** passed to `AddMediator()`. Input types are matched by fully-qualified name against the registered trains' input types.
 - **Connect to the same Postgres database.** Metadata, manifests, and state are shared across all processes.
 - **Register the effect system.** `AddTrax()` with `UsePostgres()` is required.
 

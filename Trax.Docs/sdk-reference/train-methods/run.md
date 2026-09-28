@@ -20,6 +20,19 @@ These are called by **consumers** of the train, not inside `Junctions()`.
 public virtual async Task<TReturn> Run(TInput input, CancellationToken cancellationToken = default)
 ```
 
+On a `ServiceTrain` it is a sealed override, and the two overloads that take a pre-created
+`Metadata` are not virtual:
+
+```csharp
+public sealed override Task<TOut> Run(TIn input, CancellationToken cancellationToken = default)
+public Task<TOut> Run(TIn input, Metadata metadata)
+public Task<TOut> Run(TIn input, Metadata metadata, CancellationToken cancellationToken)
+```
+
+A service train does its work in `Junctions()`, and `Run` owns the metadata row, the lifecycle
+hooks and the outcome write around it, so none of them can be overridden. A plain
+`Train<TInput, TReturn>` keeps a virtual `Run`.
+
 ### RunEither (returns Either)
 
 ```csharp
@@ -83,7 +96,7 @@ public async Task<IActionResult> ProcessOrder(
 ## Behavior
 
 1. If a `CancellationToken` is provided, stores it on the `Train.CancellationToken` property.
-2. Initializes `Memory` with `Unit.Default`.
+2. Seeds `Memory` with the input.
 3. Calls the train's `Junctions()` declaration.
 4. **`Run`**: Unwraps the `Either` result. If `Left`, rethrows the exception. If `Right`, returns the value.
 5. **`RunEither`**: Returns the `Either` directly without unwrapping.
@@ -95,3 +108,4 @@ During junction execution, the train's `CancellationToken` is automatically prop
 - `RunEither` is useful when you want functional-style error handling without try/catch. It pairs naturally with LanguageExt's `Match`, `Map`, `Bind`, etc.
 - In most applications, trains are executed through `ITrainBus.RunAsync` (which calls `Run` internally) rather than calling `Run` directly. See [TrainBus](/docs/sdk-reference/mediator-api/train-bus).
 - The `cancellationToken` parameter stores the token before calling the train's route definition. All junctions in the chain then receive the token automatically. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) for details on how cancellation propagates through the pipeline.
+- `Run` is `virtual` on plain `Train<TInput, TReturn>`, for code that uses Trax.Core without Trax.Effect. An override that does not call `base.Run` never reaches `Junctions()`, so the chain that `DeclaredChain()` reads, and any check built on it, is not the chain that runs. Call `base.Run` from an override, or put the work in a junction. A `ServiceTrain` cannot override `Run` at all: its overloads are sealed. `Trax.Core/docs/adr/0003` records why.

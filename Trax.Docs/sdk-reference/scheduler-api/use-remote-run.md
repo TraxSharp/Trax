@@ -36,6 +36,7 @@ public SchedulerConfigurationBuilder UseRemoteRun(
 | `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` (add auth headers, custom timeouts, or any other HTTP configuration) |
 | `Timeout` | `TimeSpan` | 5 minutes | HTTP request timeout. Longer default than `UseRemoteWorkers` (30s) because run requests block until the train completes |
 | `Retry` | `HttpRetryOptions` | _(see below)_ | Retry options for transient HTTP failures (429, 502, 503). Same configuration as [`RemoteWorkerOptions.Retry`](/docs/sdk-reference/scheduler-api/use-remote-workers#httpretryoptions) |
+| `SigningKey` | `byte[]?` | `null` | The key shared with the runner's `AddTraxJobRunner(runner => runner.SigningKey = ...)`, at least 32 bytes. When set, each request (and each retry) carries a `Trax-Signature` the runner verifies. See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) |
 
 ## Examples
 
@@ -59,16 +60,17 @@ services.AddTrax(trax => trax
 );
 ```
 
-### With Authentication
+### With a Signing Key
 
 ```csharp
 .UseRemoteRun(remote =>
 {
     remote.BaseUrl = "https://my-runner.example.com/trax/run";
-    remote.ConfigureHttpClient = client =>
-        client.DefaultRequestHeaders.Add("Authorization", "Bearer my-token");
+    remote.SigningKey = Convert.FromBase64String(configuration["Trax:RunnerSigningKey"]!);
 })
 ```
+
+A run request must reach the runner within its `MaxClockSkew` (five minutes by default) and is accepted once. For a runner that uses an authorization policy instead, add its credentials with `ConfigureHttpClient`.
 
 ### With Custom Timeout
 
@@ -82,7 +84,7 @@ services.AddTrax(trax => trax
 
 ## Remote Side Setup
 
-The remote process must map the run endpoint with `UseTraxRunEndpoint()`:
+The remote process registers `AddTraxJobRunner` with a posture and maps the run endpoint with `UseTraxRunEndpoint()`:
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -93,17 +95,18 @@ builder.Services.AddTrax(trax => trax
     )
     .AddMediator(typeof(MyTrain).Assembly)
 );
+builder.Services.AddTraxJobRunner(runner =>
+    runner.SigningKey = Convert.FromBase64String(builder.Configuration["Trax:RunnerSigningKey"]!)
+);
 
 var app = builder.Build();
 app.UseTraxRunEndpoint("/trax/run");
 app.Run();
 ```
 
-If the remote also handles queued jobs, add both endpoints:
+If the remote also handles queued jobs, map both endpoints:
 
 ```csharp
-builder.Services.AddTraxJobRunner();
-
 var app = builder.Build();
 app.UseTraxJobRunner("/trax/execute");  // queue path
 app.UseTraxRunEndpoint("/trax/run");    // synchronous run path
@@ -129,7 +132,7 @@ When a GraphQL `run*` mutation is called, the `HttpRunExecutor`:
 2. POSTs the JSON payload to `BaseUrl`
 3. Blocks until the remote endpoint returns a `RemoteRunResponse`
 4. On success: deserializes the train output from the response and returns it to GraphQL
-5. On error: throws a `TrainException` with the remote error message
+5. On error: throws a `RemoteRunException` (a `TrainException`) with the remote error details. Its `PublicMessage` is the runner's message for a client, and null for a transport failure or any failure other than a train author's `TrainException`
 
 The remote endpoint (`UseTraxRunEndpoint`) calls `ITrainExecutionService.RunAsync()` locally, which creates metadata, runs the train, and returns the output. Since both processes share the same Postgres database, the metadata is visible to the dashboard.
 

@@ -141,7 +141,7 @@ The attribute supports two properties:
 
 The attribute works on classes, interfaces, and base classes. Trax unions the attributes it finds across the implementation type's interface chain and base chain, so `[TraxAuthorize("Admin")]` on an `IMyTrain` interface is honored even when the implementing class carries no attribute. Decorator-wrapped trains inherit their authorization requirements through the same mechanism.
 
-Role comparison is case-insensitive. `[TraxAuthorize(Roles = "admin")]` matches a principal carrying `ClaimTypes.Role = "Admin"` and vice-versa - both sides are normalized to upper-invariant.
+Role comparison is case-insensitive today: `[TraxAuthorize(Roles = "admin")]` matches a principal carrying `ClaimTypes.Role = "Admin"` and vice-versa, because `TrainAuthorizationService` upper-cases both sides. That is changing so train roles match exactly and case-sensitively, the way `@authorize` on a query model does (`Trax.Docs/adr/0026`). From Trax.Mediator 1.23.0 discovery keeps the roles as declared; a following Trax.Api release compares them ordinally. Declare roles in the casing your identity provider issues them.
 
 ## How Policies and Roles Combine
 
@@ -218,14 +218,14 @@ Trax handles this automatically. When any registered `[TraxQueryModel]` entity c
 2. Otherwise, walks every registered authentication scheme and attempts `AuthenticateAsync` against each. The first successful scheme wins; the resulting principal is assigned to `HttpContext.User` for the duration of the request.
 3. If no scheme matches the request's credentials, the principal stays anonymous - gated queries will then reject with `TRAX_AUTHORIZATION`.
 
-The interceptor runs only for GraphQL HTTP execution requests, so the Banana Cake Pop tool page and WebSocket subscription upgrades are not affected. Subscriptions authenticate separately via the per-scheme socket interceptors (`TraxApiKeySocketInterceptor`, `TraxJwtSocketInterceptor`).
+The interceptor runs only for GraphQL HTTP execution requests, so the Banana Cake Pop tool page and WebSocket subscription upgrades are not affected. Subscriptions authenticate separately, through `TraxCompositeSocketInterceptor` and the per-scheme strategies it delegates to (`TraxApiKeySocketInterceptor`, `TraxJwtSocketInterceptor`, `TraxJwtDispatcherSocketInterceptor`).
 
 No consumer configuration is required.
 
 ### Limitations
 
 - **Field-level gating inside an entity is not supported.** `[TraxAuthorize]` on a property is ignored. If `User.email` must be admin-only but `User.displayName` must be public, use a custom train rather than `[TraxQueryModel]`, or split the entity into two types via `ExposeAs`.
-- **Row-level filtering is not supported.** `[TraxAuthorize]` answers "can this user read *this type*", not "which rows of this type." For per-row scoping (tenancy, ownership, subscription tier), use EF Core global query filters that read the current `ClaimsPrincipal` from a scoped service.
+- **Row-level filtering is not supported.** `[TraxAuthorize]` answers "can this user read *this type*", not "which rows of this type." For per-row scoping (tenancy, ownership, subscription tier), use EF Core global query filters that read the current `ClaimsPrincipal` from a scoped service. Key ownership on the `trax:principal-id` claim as it is, `{scheme}:{id}`: the scheme is part of the id, so one issuer's `sub` cannot match another's. See [Qualified Principal Ids](/docs/migration-guides/qualified-principal-ids). Nothing in Trax's authorization sees those filters, so an entity with a correct `[TraxAuthorize]` and a missing filter serves every user's rows to any authenticated caller. The [owner-scope census](/docs/reference/architecture-guards#the-owner-scope-census) in `Trax.Effect.Data.Testing` is the check that does see them.
 
 ## Anonymous Access via [TraxAllowAnonymous]
 
@@ -321,7 +321,7 @@ Trax evaluates these policies at runtime using ASP.NET Core's `IAuthorizationSer
 
 ## How It Works
 
-1. `ITrainDiscoveryService` reads `[TraxAuthorize]` and `[TraxAllowAnonymous]` attributes across the implementation, its base chain, and every implemented interface. Roles are normalized to upper-invariant; policies are deduplicated. The requirements (and a `HasAllowAnonymousAttribute` flag) are stored on each `TrainRegistration`.
+1. `ITrainDiscoveryService` reads `[TraxAuthorize]` and `[TraxAllowAnonymous]` attributes across the implementation, its base chain, and every implemented interface. Roles are kept as declared (before Trax.Mediator 1.23.0 they were upper-cased); roles and policies are deduplicated. The requirements (and a `HasAllowAnonymousAttribute` flag) are stored on each `TrainRegistration`.
 2. `AddTraxGraphQL` enforces the [Required Exposure Posture](#required-exposure-posture) for every exposed train, and `TraxGraphQLBuilder.Build()` does the same for every `[TraxQueryModel]` entity. Both share one rule: a surface with neither marker (on an open endpoint), both markers, or `[TraxAllowAnonymous]` under `RequireAuthorization()` fails startup with a message naming the offending types.
 3. At host start, `AuthorizationRegistrationValidator` runs as a hosted service. It throws if any train carries `[TraxAuthorize]` but no `ITrainAuthorizationService` is registered (this can be opted out of per below), and it throws on malformed attribute shapes (empty policy strings, whitespace-only roles) so typos are caught before traffic arrives.
 4. When `ITrainExecutionService.QueueAsync()` or `RunAsync()` runs, it invokes the registered `ITrainAuthorizationService` before reading the input JSON. Every caller-built enqueue goes through `QueueAsync`, including the operations surface and the dashboard (which enqueues inside a trusted scope); see [The Operations Surface](#the-operations-surface).
@@ -333,7 +333,7 @@ Trax evaluates these policies at runtime using ASP.NET Core's `IAuthorizationSer
 
 ### Fail-Closed Behavior
 
-When an `HttpContext` is absent and no trusted execution scope is active, the service denies. This protects against accidental invocation from background services, tests, or custom middleware that bypasses the normal request pipeline. Scheduler and remote-worker paths explicitly mark themselves as trusted via `ITrustedExecutionScope.BeginTrusted(...)` so pre-authorized queued work still runs.
+When an `HttpContext` is absent and no trusted execution scope is active, the service denies. This protects against accidental invocation from background services, tests, or custom middleware that bypasses the normal request pipeline. Scheduler and remote-worker paths explicitly mark themselves as trusted via `ITrustedExecutionScope.BeginTrusted(...)` so pre-authorized queued work still runs. A trusted scope lasts exactly as long as its handle: scopes nest, and disposing one while an inner scope is still open closes it without ending the inner one. When the inner one is disposed, the flow returns to the nearest scope still open, or to untrusted, never to a scope already disposed.
 
 ### Opting Out for Scheduler-Only Hosts
 
@@ -396,6 +396,8 @@ Later execution paths are trusted:
 
 This means you can safely decorate a train with `[TraxAuthorize("Admin")]` and still schedule it via `AddScheduler()`, run it from a remote worker, or both. The authorization gate is the API boundary.
 
+Because a remote worker trusts what it is sent, the worker's own endpoints are where that trust is guarded. Every runner entry point refuses to start without an [authorization posture](/docs/scheduler/remote-execution#authorization-posture): a signing key shared with the scheduler, an authorization policy that admits only the scheduler, or an explicit, logged `AllowUnsignedRequests()`. Inside a remote run, `TraxCaller.IsTrusted` is true, so anything keyed on it (row-level filters included) treats the request as the scheduler's.
+
 ## The Operations Surface
 
 The admin and operations surface (the GraphQL `operations` namespace and the dashboard) enqueues work in two ways, and they are authorized differently. `Trax.Docs/adr/0017` records the decision.
@@ -405,7 +407,7 @@ The admin and operations surface (the GraphQL `operations` namespace and the das
 | `queueTrain`, `requeueExecution` | The caller | The train's own `[TraxAuthorize]` requirements, through `ITrainExecutionService.QueueAsync`, **plus** the operations gate |
 | The dashboard's queue dialog and **Re-queue** button | The dashboard user | The dashboard host's own gate. They go through `QueueAsync` inside a trusted scope (`"dashboard"`), so per-train `[TraxAuthorize]` does not apply; `OnQueue`, the subject key and the input cap do |
 | `triggerManifest`, `triggerManifestDelayed`, `triggerGroup`, re-queueing dead letters | A manifest | The operations gate only (`GateOperations`, `RequireAuthorization`, or `AllowAnonymousOperations`), not per-train requirements |
-| The dashboard's **Run** dialog | The dashboard user | The dashboard host's own gate. It submits directly to the job submitter |
+| The dashboard's **Run** dialog | The dashboard user | The dashboard host's own gate. It submits directly to the job submitter, so `OnQueue`, the input cap and `QueueSubjectKey` do not apply, and the run is not serialized against other work for its subject (`Trax.Docs/adr/0019`) |
 | The ManifestManager, and dormant dependents a parent train activates | The system (a dormant dependent's input is chosen at runtime by the parent train's code) | Nothing further: the work runs inside a scheduled or already-authorized train. These entries skip `QueueSubjectKey` and `OnQueue` |
 
 A caller-built enqueue is authorized **before** its input JSON is read, so a caller who may not run the train gets `TRAX_AUTHORIZATION` even when the input is malformed, and learns nothing about the input the train expects.

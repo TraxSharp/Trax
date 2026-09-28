@@ -41,13 +41,19 @@ A table that must work on both needs a file in both.
 
 ## Adding a table
 
-1. Add the model and its persistent mapping, per [Project Layout](/docs/reference/project-layout).
+1. Add the model and its persistent mapping, per [Project Layout](/docs/reference/project-layout),
+   and its `DbSet` on both `DataContext` and `IDataContext`. A model keyed by something other than
+   a `long` id does not implement `IModel`, so `DataContext.OnModelCreating` maps it by name, as it
+   does `PersistentPersistedOperation` and `PersistentRunnerNonce`. A new member on `IDataContext`
+   needs a default, or package validation refuses it as a break.
 2. Add `NNN_<name>.sql` to **both** provider `Migrations/` folders. The DDL column names must
    match the EF `[Column(...)]` names exactly, because the stores query by those names and
    nothing reconciles the two.
 3. Write a test that builds the table from the shipped migration and round-trips through the
-   real store. That is the model-versus-DDL drift guard, and `EnsureCreated` cannot provide
-   it.
+   real store. `EnsureCreated` cannot provide it. For the data context's own tables,
+   `EveryTableIsModelledTests` and its Sqlite twin already check that every migrated table is
+   mapped and every mapped column exists; a table the context should not map goes in their
+   exceptions list with its reason.
 
 ## Provider dialects
 
@@ -69,6 +75,15 @@ A higher-level feature package does not carry its own migrations. Its DDL ships 
 core provider sets above, because the runner scans only the provider assembly: a
 `.sql` embedded anywhere else is never discovered and never runs. This does not invert the
 dependency, since the SQL is text and the provider references nothing from the feature.
+
+The table's model ships with it. A feature package reaches its table through `IDataContext` and
+the model, with LINQ, `ExecuteUpdate` and `ExecuteDelete`, not with SQL of its own or a
+`DbContext` of its own. Persisted operations in Trax.Api and the runner nonce store in
+Trax.Scheduler both work this way. When the providers differ in a way the feature must handle,
+such as how a key conflict is reported, the difference goes in `ISqlDialect` in Trax.Effect:
+`IsUniqueViolation` is how the nonce store tells a repeated nonce from any other failed save.
+State-machine persistence predates this and still maps its two tables on its own
+`SnapshotDbContext`.
 
 ## Integration test databases
 
