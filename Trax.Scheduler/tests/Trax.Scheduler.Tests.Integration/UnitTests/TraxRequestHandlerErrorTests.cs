@@ -64,4 +64,92 @@ public class TraxRequestHandlerErrorTests
         resp.ErrorMessage.Should().Be("{not really json");
         resp.ExceptionType.Should().Be(nameof(Exception));
     }
+
+    [Test]
+    public void BuildErrorResponse_RecordShapedMessageOnAnotherExceptionType_IsItsOwnText()
+    {
+        var message = JsonSerializer.Serialize(
+            new TrainExceptionData
+            {
+                TrainName = "Trax.X.MyTrain",
+                TrainExternalId = "ext",
+                Type = "ApplicationException",
+                Junction = "MyJunction",
+                Message = "the inner reason",
+                FailureClass = (FailureClass)3,
+            }
+        );
+        var ex = new InvalidOperationException(message);
+
+        var resp = TraxRequestHandler.BuildErrorResponse(ex);
+
+        resp.FailureClass.Should()
+            .BeNull("only a TrainException's message is read as a failure record");
+        resp.ExceptionType.Should().Be(nameof(InvalidOperationException));
+        resp.ErrorMessage.Should().Be(message);
+        resp.FailureJunction.Should().BeNull();
+    }
+
+    [Test]
+    public void BuildErrorResponse_TrainExceptionMessage_StillCarriesItsClass()
+    {
+        var ex = new TrainException(
+            JsonSerializer.Serialize(
+                new TrainExceptionData
+                {
+                    TrainName = "Trax.X.MyTrain",
+                    TrainExternalId = "ext",
+                    Type = "HttpRequestException",
+                    Junction = "CallJunction",
+                    Message = "timed out",
+                    FailureClass = FailureClass.Transient,
+                }
+            )
+        );
+
+        var resp = TraxRequestHandler.BuildErrorResponse(ex);
+
+        resp.FailureClass.Should().Be(FailureClass.Transient);
+    }
+
+    [Test]
+    public void BuildErrorResponse_UndefinedClassInAMessage_IsCarriedAsUnclassified()
+    {
+        var ex = new TrainException(
+            JsonSerializer.Serialize(
+                new TrainExceptionData
+                {
+                    TrainName = "Trax.X.MyTrain",
+                    TrainExternalId = "ext",
+                    Type = "Exception",
+                    Junction = "J",
+                    Message = "m",
+                    FailureClass = (FailureClass)99,
+                }
+            )
+        );
+
+        var resp = TraxRequestHandler.BuildErrorResponse(ex);
+
+        resp.FailureClass.Should().Be(FailureClass.Unclassified);
+    }
+
+    [Test]
+    public void BuildErrorResponse_UndefinedClassInAttachedData_IsCarriedAsUnclassified()
+    {
+        var ex = new InvalidOperationException("boom");
+        ex.Data["TrainExceptionData"] = new TrainExceptionData
+        {
+            TrainName = "Trax.X.MyTrain",
+            TrainExternalId = "ext",
+            Type = nameof(InvalidOperationException),
+            Junction = "J",
+            Message = "boom",
+            FailureClass = (FailureClass)99,
+        };
+
+        var resp = TraxRequestHandler.BuildErrorResponse(ex);
+
+        resp.FailureClass.Should().Be(FailureClass.Unclassified);
+    }
 }

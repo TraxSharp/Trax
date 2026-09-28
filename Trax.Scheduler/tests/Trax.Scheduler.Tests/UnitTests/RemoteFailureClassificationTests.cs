@@ -84,8 +84,9 @@ public class RemoteFailureClassificationTests
             }
         );
 
+        // A failure that crossed a boundary is rebuilt as a TrainException (ToTrainException).
         TraxRequestHandler
-            .BuildErrorResponse(new Exception(json))
+            .BuildErrorResponse(new TrainException(json))
             .FailureClass.Should()
             .Be(FailureClass.Transient);
     }

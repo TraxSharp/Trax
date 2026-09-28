@@ -89,9 +89,17 @@ internal class TraxRequestHandler(
 
     /// <summary>
     /// Builds a <see cref="RemoteRunResponse"/> with structured error fields from an exception.
-    /// If the exception message is a serialized <see cref="TrainExceptionData"/>, extracts the
-    /// structured fields (type, junction, message). Otherwise falls back to the raw exception details.
+    /// Uses the <see cref="TrainExceptionData"/> attached to the exception when there is one; else,
+    /// for a <see cref="TrainException"/> whose message is a serialized
+    /// <see cref="TrainExceptionData"/>, the fields in that message. Otherwise falls back to the raw
+    /// exception details.
     /// </summary>
+    /// <remarks>
+    /// Only a <see cref="TrainException"/> is rebuilt from a recorded failure, so only its message
+    /// is read as one; any other exception's message is its own text. A failure class outside
+    /// <see cref="FailureClass"/> is carried as <see cref="FailureClass.Unclassified"/>, as
+    /// <see cref="RunExecutor.RemoteRunJson"/> reads one on the wire.
+    /// </remarks>
     internal static RemoteRunResponse BuildErrorResponse(Exception ex)
     {
         // Priority 1: structured data on the exception object. A train rethrows the original
@@ -107,31 +115,35 @@ internal class TraxRequestHandler(
                 ExceptionType: attached.Type,
                 FailureJunction: attached.Junction,
                 StackTrace: attached.StackTrace ?? ex.StackTrace,
-                FailureClass: attached.FailureClass
+                FailureClass: Defined(attached.FailureClass)
             );
         }
 
-        // Priority 2: JSON-serialized data in the message (already crossed a boundary).
-        try
+        // Priority 2: JSON-serialized data in a TrainException's message (already crossed a
+        // boundary). No other exception type is rebuilt from a recorded failure.
+        if (ex is TrainException && ex.Message.StartsWith('{'))
         {
-            var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
-
-            if (data is not null)
+            try
             {
-                return new RemoteRunResponse(
-                    MetadataId: 0,
-                    IsError: true,
-                    ErrorMessage: data.Message,
-                    ExceptionType: data.Type,
-                    FailureJunction: data.Junction,
-                    StackTrace: ex.StackTrace,
-                    FailureClass: data.FailureClass
-                );
+                var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
+
+                if (data is not null)
+                {
+                    return new RemoteRunResponse(
+                        MetadataId: 0,
+                        IsError: true,
+                        ErrorMessage: data.Message,
+                        ExceptionType: data.Type,
+                        FailureJunction: data.Junction,
+                        StackTrace: ex.StackTrace,
+                        FailureClass: Defined(data.FailureClass)
+                    );
+                }
             }
-        }
-        catch
-        {
-            // Not a TrainExceptionData JSON — fall through to plain extraction
+            catch (JsonException)
+            {
+                // Not a TrainExceptionData JSON: fall through to plain extraction.
+            }
         }
 
         return new RemoteRunResponse(
@@ -142,4 +154,9 @@ internal class TraxRequestHandler(
             StackTrace: ex.StackTrace
         );
     }
+
+    private static FailureClass? Defined(FailureClass? failureClass) =>
+        failureClass is { } value && !Enum.IsDefined(value)
+            ? FailureClass.Unclassified
+            : failureClass;
 }
