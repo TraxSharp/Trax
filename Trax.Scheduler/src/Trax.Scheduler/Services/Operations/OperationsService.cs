@@ -483,6 +483,175 @@ public class OperationsService : IOperationsService
     /// </summary>
     public const int MaxBatchSize = 1000;
 
+    /// <summary>
+    /// The largest page a paged read returns. Larger requests are clamped to it, so one call
+    /// never materialises a whole table.
+    /// </summary>
+    public const int MaxPageSize = 500;
+
+    /// <inheritdoc />
+    /// <remarks>Served index-only by <c>ix_metadata_manifest_state</c>.</remarks>
+    public async Task<ManifestExecutionStats> GetManifestExecutionStatsAsync(
+        long manifestId,
+        CancellationToken ct
+    )
+    {
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var scoped = db.Metadatas.AsNoTracking().Where(m => m.ManifestId == manifestId);
+
+        var byState = await scoped
+            .GroupBy(m => m.TrainState)
+            .Select(g => new { State = g.Key, Count = (long)g.Count() })
+            .ToListAsync(ct);
+
+        long CountOf(TrainState state) => byState.FirstOrDefault(x => x.State == state)?.Count ?? 0;
+
+        var lastRun = await scoped.MaxAsync(m => (DateTime?)m.StartTime, ct);
+        var lastSuccessfulRun = await scoped
+            .Where(m => m.TrainState == TrainState.Completed && m.EndTime != null)
+            .MaxAsync(m => (DateTime?)m.EndTime, ct);
+
+        return new ManifestExecutionStats(
+            manifestId,
+            Total: byState.Sum(x => x.Count),
+            Completed: CountOf(TrainState.Completed),
+            Failed: CountOf(TrainState.Failed),
+            InProgress: CountOf(TrainState.InProgress),
+            Pending: CountOf(TrainState.Pending),
+            Cancelled: CountOf(TrainState.Cancelled),
+            LastRun: lastRun,
+            LastSuccessfulRun: lastSuccessfulRun
+        );
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The metadata side is served by <c>ix_metadata_manifest_state</c>, the manifest side by
+    /// <c>ix_manifest_manifest_group_id</c>.
+    /// </remarks>
+    public async Task<
+        IReadOnlyList<ManifestGroupExecutionStats>
+    > GetManifestGroupExecutionStatsAsync(IReadOnlyCollection<long> groupIds, CancellationToken ct)
+    {
+        var ids = groupIds.Distinct().ToArray();
+        if (ids.Length == 0)
+            return Array.Empty<ManifestGroupExecutionStats>();
+
+        if (ids.Length > MaxBatchSize)
+            throw new ArgumentOutOfRangeException(
+                nameof(groupIds),
+                ids.Length,
+                $"At most {MaxBatchSize} group ids can be given at once."
+            );
+
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+
+        var manifestCounts = await db
+            .Manifests.AsNoTracking()
+            .Where(m => ids.Contains(m.ManifestGroupId))
+            .GroupBy(m => m.ManifestGroupId)
+            .Select(g => new { GroupId = g.Key, Count = (long)g.Count() })
+            .ToListAsync(ct);
+
+        // Join runs to the group's manifests, then aggregate per (group, state). The manifest
+        // side is filtered to the requested groups first, so each manifest_id seek stays cheap.
+        var execAgg = await db
+            .Metadatas.AsNoTracking()
+            .Where(m => m.ManifestId != null)
+            .Join(
+                db.Manifests.AsNoTracking().Where(mf => ids.Contains(mf.ManifestGroupId)),
+                m => m.ManifestId,
+                mf => (long?)mf.Id,
+                (m, mf) =>
+                    new
+                    {
+                        mf.ManifestGroupId,
+                        m.TrainState,
+                        m.StartTime,
+                    }
+            )
+            .GroupBy(x => new { x.ManifestGroupId, x.TrainState })
+            .Select(g => new
+            {
+                g.Key.ManifestGroupId,
+                g.Key.TrainState,
+                Count = (long)g.Count(),
+                LastRun = g.Max(x => (DateTime?)x.StartTime),
+            })
+            .ToListAsync(ct);
+
+        return ids.Select(id =>
+            {
+                var manifestCount = manifestCounts.FirstOrDefault(x => x.GroupId == id)?.Count ?? 0;
+                var rows = execAgg.Where(x => x.ManifestGroupId == id).ToList();
+                long StateCount(TrainState state) =>
+                    rows.Where(x => x.TrainState == state).Sum(x => x.Count);
+                return new ManifestGroupExecutionStats(
+                    id,
+                    ManifestCount: manifestCount,
+                    TotalExecutions: rows.Sum(x => x.Count),
+                    Completed: StateCount(TrainState.Completed),
+                    Failed: StateCount(TrainState.Failed),
+                    InProgress: StateCount(TrainState.InProgress),
+                    LastRun: rows.Count == 0 ? null : rows.Max(x => x.LastRun)
+                );
+            })
+            .ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<LogPage> GetLogsAsync(LogQuery query, CancellationToken ct)
+    {
+        var take = Math.Clamp(query.Take, 1, MaxPageSize);
+        var skip = query.AfterId.HasValue ? 0 : Math.Max(query.Skip, 0);
+
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+
+        var filtered = FilterLogs(db.Logs.AsNoTracking(), query).OrderByDescending(l => l.Id);
+        IQueryable<Trax.Effect.Models.Log.Log> page = query.AfterId is { } afterId
+            ? filtered.Where(l => l.Id < afterId)
+            : filtered.Skip(skip);
+
+        var items = await page.Take(take)
+            .Select(l => new LogRecord(
+                l.Id,
+                l.MetadataId,
+                l.EventId,
+                l.Level,
+                l.Category,
+                l.Message,
+                l.Exception,
+                l.StackTrace
+            ))
+            .ToListAsync(ct);
+
+        return new LogPage(items, skip, take, items.Count > 0 ? items[^1].Id : null);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountLogsAsync(LogQuery query, CancellationToken ct)
+    {
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        return await FilterLogs(db.Logs.AsNoTracking(), query).CountAsync(ct);
+    }
+
+    private static IQueryable<Trax.Effect.Models.Log.Log> FilterLogs(
+        IQueryable<Trax.Effect.Models.Log.Log> logs,
+        LogQuery query
+    )
+    {
+        if (query.MetadataId is { } metadataId)
+            logs = logs.Where(l => l.MetadataId == metadataId);
+
+        if (query.MinimumLevel is { } minimumLevel)
+            logs = logs.Where(l => l.Level >= minimumLevel);
+
+        if (!string.IsNullOrWhiteSpace(query.Category))
+            logs = logs.Where(l => l.Category == query.Category);
+
+        return logs;
+    }
+
     /// <inheritdoc />
     public async Task<OperationResult> CancelExecutionsAsync(
         IReadOnlyCollection<long> ids,

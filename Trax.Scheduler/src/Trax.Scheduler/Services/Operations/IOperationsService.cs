@@ -162,6 +162,44 @@ public interface IOperationsService
     Task<OperationResult> SetAllManifestGroupsEnabledAsync(bool enabled, CancellationToken ct) =>
         throw NotImplementedBy(nameof(SetAllManifestGroupsEnabledAsync));
 
+    /// <summary>
+    /// Run counts by state for one manifest, with its most recent run and most recent successful
+    /// run. A manifest with no runs, or an id with no manifest, gets zeros and nulls.
+    /// </summary>
+    Task<ManifestExecutionStats> GetManifestExecutionStatsAsync(
+        long manifestId,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetManifestExecutionStatsAsync));
+
+    /// <summary>
+    /// Manifest and run counts for each of the given groups, one row per distinct id in the
+    /// order given, zeros for a group with no manifests or runs. Batched so a list page fetches
+    /// the stats of its visible groups in one call.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// More than <c>OperationsService.MaxBatchSize</c> distinct ids.
+    /// </exception>
+    Task<IReadOnlyList<ManifestGroupExecutionStats>> GetManifestGroupExecutionStatsAsync(
+        IReadOnlyCollection<long> groupIds,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetManifestGroupExecutionStatsAsync));
+
+    /// <summary>
+    /// A page of log entries, newest first, filtered by run, minimum level and exact category.
+    /// Pages by keyset when <see cref="LogQuery.AfterId"/> is set, otherwise by offset. The page
+    /// size is clamped to 1 through <c>OperationsService.MaxPageSize</c>.
+    /// </summary>
+    Task<LogPage> GetLogsAsync(LogQuery query, CancellationToken ct) =>
+        throw NotImplementedBy(nameof(GetLogsAsync));
+
+    /// <summary>
+    /// The exact number of log entries matching the query's filter; its paging fields and cursor
+    /// are ignored. An exact count of an unfiltered log table is a full scan, so a caller that
+    /// only needs a size for a pager on a large table may prefer an estimate.
+    /// </summary>
+    Task<int> CountLogsAsync(LogQuery query, CancellationToken ct) =>
+        throw NotImplementedBy(nameof(CountLogsAsync));
+
     private NotSupportedException NotImplementedBy(string member) =>
         new(
             $"{GetType().Name} does not implement {member}. It was added to IOperationsService "
