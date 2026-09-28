@@ -1,7 +1,6 @@
 using FluentAssertions;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Configuration.TraxBuilder;
@@ -55,13 +54,7 @@ public class MaxActiveJobsTests
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
     {
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .Build();
-        var connectionString = configuration.GetRequiredSection("Configuration")[
-            "DatabaseConnectionString"
-        ]!;
+        var connectionString = TestPostgres.ConnectionString;
 
         var arrayLoggingProvider = new ArrayLoggingProvider();
 
@@ -714,13 +707,7 @@ public class MaxActiveJobsTests
     public async Task Run_WithNullMaxActiveJobs_DispatchesAll()
     {
         // Arrange - Create a separate ServiceProvider with MaxActiveJobs = null
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .Build();
-        var connectionString = configuration.GetRequiredSection("Configuration")[
-            "DatabaseConnectionString"
-        ]!;
+        var connectionString = TestPostgres.ConnectionString;
 
         var arrayLoggingProvider = new ArrayLoggingProvider();
 
@@ -857,13 +844,7 @@ public class MaxActiveJobsTests
     public async Task Run_ExcludedTrain_NotCountedTowardMaxActiveJobs()
     {
         // Arrange — Create a separate ServiceProvider with ExcludeFromMaxActiveJobs
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .Build();
-        var connectionString = configuration.GetRequiredSection("Configuration")[
-            "DatabaseConnectionString"
-        ]!;
+        var connectionString = TestPostgres.ConnectionString;
 
         var arrayLoggingProvider = new ArrayLoggingProvider();
 

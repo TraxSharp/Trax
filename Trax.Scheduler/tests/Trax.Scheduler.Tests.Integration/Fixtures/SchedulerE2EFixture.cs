@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -70,13 +69,7 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
         Action<IServiceCollection>? configureServices = null
     )
     {
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false)
-            .Build();
-        var connectionString = configuration.GetRequiredSection("Configuration")[
-            "DatabaseConnectionString"
-        ]!;
+        var connectionString = TestPostgres.ConnectionString;
 
         // Each E2E test stands up its own ServiceProvider with its own Npgsql connection pool.
         // Pin the pool to a single connection that immediately returns to the pool — without

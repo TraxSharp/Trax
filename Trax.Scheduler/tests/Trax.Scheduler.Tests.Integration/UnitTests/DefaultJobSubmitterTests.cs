@@ -11,6 +11,7 @@ using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.SchedulerStartupService;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 using Trax.Scheduler.Trains.JobRunner;
 using Trax.Scheduler.Trains.ManifestManager;
 
@@ -24,7 +25,7 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 public class DefaultJobSubmitterTests
 {
     private static readonly string ConnectionString =
-        "Host=localhost;Port=5432;Database=trax_scheduler_default_submitter;Username=trax;Password=trax123";
+        $"Host=localhost;Port={TestPostgres.Port};Database=trax_scheduler_default_submitter;Username=trax;Password=trax123";
 
     /// <summary>
     /// Inspects the service collection to find which implementation type was registered

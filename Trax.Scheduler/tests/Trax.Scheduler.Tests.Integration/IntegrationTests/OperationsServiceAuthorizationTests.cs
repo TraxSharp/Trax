@@ -1,7 +1,6 @@
 using FluentAssertions;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Attributes;
@@ -38,13 +37,7 @@ public class OperationsServiceAuthorizationTests
     [OneTimeSetUp]
     public void RunBeforeAnyTests()
     {
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false)
-            .Build();
-        var connectionString = configuration.GetRequiredSection("Configuration")[
-            "DatabaseConnectionString"
-        ]!;
+        var connectionString = TestPostgres.ConnectionString;
 
         _serviceProvider = new ServiceCollection()
             .AddLogging(x => x.SetMinimumLevel(LogLevel.Warning))

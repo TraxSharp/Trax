@@ -8,6 +8,7 @@ using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
 
@@ -354,7 +355,7 @@ public class SchedulerConfigurationBuilderSettingsTests
         services.AddTrax(trax =>
             trax.AddEffects(effects =>
                     effects.UsePostgres(
-                        "Host=localhost;Port=5432;Database=trax_scheduler_builder_settings;Username=trax;Password=trax123"
+                        $"Host=localhost;Port={TestPostgres.Port};Database=trax_scheduler_builder_settings;Username=trax;Password=trax123"
                     )
                 )
                 .AddMediator(typeof(AssemblyMarker).Assembly)

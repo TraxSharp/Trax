@@ -1,12 +1,12 @@
 using FluentAssertions;
 using LanguageExt;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.JobRunner;
 using Trax.Scheduler.Trains.ManifestManager;
@@ -27,11 +27,7 @@ public class SchedulerChainVerificationTests
 {
     private static ServiceProvider BuildProvider()
     {
-        var connectionString = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false)
-            .Build()
-            .GetRequiredSection("Configuration")["DatabaseConnectionString"]!;
+        var connectionString = TestPostgres.ConnectionString;
 
         var services = new ServiceCollection();
         services.AddLogging();

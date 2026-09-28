@@ -7,6 +7,7 @@ using Trax.Mediator.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
 
@@ -18,7 +19,7 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 public class SchedulerBuilderValidationTests
 {
     private static readonly string ConnectionString =
-        "Host=localhost;Port=5432;Database=trax_scheduler_builder_validation;Username=trax;Password=trax123";
+        $"Host=localhost;Port={TestPostgres.Port};Database=trax_scheduler_builder_validation;Username=trax;Password=trax123";
 
     #region AddScheduler requires a data provider
 

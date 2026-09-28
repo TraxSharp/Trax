@@ -14,6 +14,7 @@ using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Services.Scheduling;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
+using Trax.Scheduler.Tests.Integration.Fixtures;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
 
@@ -27,7 +28,7 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 public class SchedulerBuilderBuildCoverageTests
 {
     private static readonly string PostgresConnection =
-        "Host=localhost;Port=5432;Database=trax_scheduler_builder_validation;Username=trax;Password=trax123";
+        $"Host=localhost;Port={TestPostgres.Port};Database=trax_scheduler_builder_validation;Username=trax;Password=trax123";
 
     #region ValidateNoCyclicGroupDependencies
 
