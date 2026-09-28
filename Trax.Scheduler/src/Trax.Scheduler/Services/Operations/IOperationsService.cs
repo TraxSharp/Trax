@@ -17,16 +17,19 @@ public interface IOperationsService
     /// <c>OperationResult(false, ...)</c> with a populated <c>Message</c> for a missing
     /// <c>TrainName</c>, an unknown train, or invalid or oversized <c>InputJson</c>.
     /// <para>
-    /// Any other exception from the enqueue, apart from the two below, is also returned as a
-    /// failed result, with the message <c>"The enqueue was refused: {exception message}"</c>.
-    /// That covers the refusals it is meant for (the <c>OnQueue</c> hook threw, the subject key
-    /// was unusable, a deferred entry was cancelled before it was confirmed), but it is not
-    /// limited to them: an infrastructure failure such as the database being unreachable, and
-    /// the mediator's <see cref="InvalidOperationException"/> when a train declares
-    /// authorization and no enforcer is registered, come back the same way, so a failed result
-    /// does not by itself mean the train rejected the input.
+    /// A refusal of the enqueue is also returned as a failed result, with the message
+    /// <c>"The enqueue was refused: {exception message}"</c>: the <c>OnQueue</c> hook or
+    /// <c>QueueSubjectKey</c> threw, the subject key was unusable, or a deferred entry was
+    /// cancelled before it was confirmed. The mediator's <see cref="InvalidOperationException"/>
+    /// for a train that declares authorization on a host with no enforcer arrives the same way.
     /// </para>
     /// </returns>
+    /// <exception cref="System.Data.Common.DbException">
+    /// The enqueue failed on infrastructure rather than being refused. Not only this type: a
+    /// database, EF Core, network, I/O or timeout exception anywhere in the exception's chain
+    /// counts (scheduler/0004). It is logged and rethrown as it was thrown, so its message never
+    /// becomes a result's <c>Message</c>.
+    /// </exception>
     /// <exception cref="UnauthorizedAccessException">
     /// The caller may not run the train (a <c>TrainAuthorizationException</c> when the API's
     /// authorization is registered). It propagates rather than becoming a failed result.

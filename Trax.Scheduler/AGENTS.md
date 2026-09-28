@@ -18,6 +18,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | the remote run request or response | [0001](./docs/adr/0001-remote-execution-is-a-json-wire-contract.md), the shape is a deployed contract with no version field |
 | SQL, or anything provider-shaped | [0002](./docs/adr/0002-a-database-provider-is-interchangeable.md), the difference belongs behind `ISqlDialect` |
 | `OperationsService`, or anywhere that builds a work queue row | central `docs/0017`, a caller's enqueue goes through the mediator; only the allow-listed system and admin paths build their own |
+| what `OperationsService.QueueTrainAsync` returns when the enqueue fails | [0004](./docs/adr/0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md), a refusal is a failed result; a database or network failure is logged and thrown, never returned with its message |
 | the dispatch claim, `LoadQueuedJobsJunction`, or the subject lock | central `docs/0019`, one subject's queued work runs one at a time |
 | `ResolveStaleStagedEntriesJunction`, `StaleStagedEntryTimeout` or `PromoteStaleStagedEntries` | central `docs/0018`, a stranded staged entry is cancelled by default |
 | a train's `Junctions()`, including the ManifestManager, JobDispatcher and JobRunner chains | central `docs/0016`, a chain is a declaration read at host startup, so it may not read the input |

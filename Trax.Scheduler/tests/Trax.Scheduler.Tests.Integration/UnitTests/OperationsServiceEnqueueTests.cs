@@ -1,9 +1,16 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Npgsql;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
 using Trax.Effect.Attributes;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Mediator.Configuration;
+using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Configuration;
@@ -21,12 +28,21 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 /// requirements, its <c>OnQueue</c> hook and its subject key. These tests pin the delegation,
 /// because a hand-built row would be a second way to enqueue that quietly bypasses all three.
 /// </para>
+///
+/// <para>Enforces <c>docs/adr/0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md</c>: a refusal
+/// comes back as a failed result, and an infrastructure failure is logged and thrown, never
+/// returned with its message.</para>
 /// </summary>
+[Property(
+    "adr",
+    "docs/adr/0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md"
+)]
 [TestFixture]
 public class OperationsServiceEnqueueTests
 {
     private ITrainDiscoveryService _discovery = null!;
     private ITrainExecutionService _execution = null!;
+    private CapturingLogger _logger = null!;
     private OperationsService _service = null!;
 
     public record ProbeInput
@@ -75,13 +91,26 @@ public class OperationsServiceEnqueueTests
             )
             .Returns(new QueueTrainResult(42, "ext-42"));
 
+        _logger = new CapturingLogger();
         _service = new OperationsService(
             discovery,
             Substitute.For<IDataContextProviderFactory>(),
             new SchedulerConfiguration(),
-            _execution
+            _execution,
+            logger: _logger
         );
     }
+
+    private void EnqueueThrows(Exception ex) =>
+        _execution
+            .QueueAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<DateTime?>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns<Task<QueueTrainResult>>(_ => throw ex);
 
     private Task<OperationResult> Queue(QueueTrainInput input) =>
         _service.QueueTrainAsync(input, CancellationToken.None);
@@ -228,5 +257,137 @@ public class OperationsServiceEnqueueTests
                 Arg.Any<DateTime?>(),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Test]
+    public async Task A_database_outage_is_thrown_rather_than_reported_as_a_refusal()
+    {
+        // The real mediator, over a data context that cannot reach its server: the enqueue
+        // fails where it opens the connection, after every check on the input has passed.
+        var data = Substitute.For<IDataContextProviderFactory>();
+        data.CreateDbContextAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new NpgsqlException("Failed to connect to 10.0.0.5:5432"));
+
+        var mediator = new TrainExecutionService(
+            _discovery,
+            runExecutor: null!,
+            concurrencyLimiter: null!,
+            data,
+            new MediatorConfiguration(),
+            new ServiceCollection().BuildServiceProvider()
+        );
+        var service = new OperationsService(
+            _discovery,
+            data,
+            new SchedulerConfiguration(),
+            mediator,
+            logger: _logger
+        );
+
+        OperationResult? result = null;
+        var act = async () =>
+            result = await service.QueueTrainAsync(
+                new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"),
+                CancellationToken.None
+            );
+
+        await act.Should()
+            .ThrowAsync<NpgsqlException>(
+                "an unreachable database is the server failing, not the train refusing the input, "
+                    + "and a thrown exception is masked by the GraphQL error filter (see docs/adr/0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md)"
+            );
+        result.Should().BeNull("no result may carry the exception's message to the caller");
+        _logger
+            .Errors.Should()
+            .ContainSingle("the failure is logged where an operator can see it")
+            .Which.Should()
+            .BeOfType<NpgsqlException>();
+    }
+
+    [Test]
+    public async Task A_data_layer_failure_wrapped_by_ef_is_thrown_rather_than_reported()
+    {
+        EnqueueThrows(
+            new DbUpdateException(
+                "An error occurred while saving the entity changes.",
+                new NpgsqlException("Failed to connect to 10.0.0.5:5432")
+            )
+        );
+
+        var act = async () =>
+            await Queue(new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"));
+
+        await act.Should()
+            .ThrowAsync<DbUpdateException>(
+                "a failure anywhere in the data layer is not a refusal (see docs/adr/0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md)"
+            );
+    }
+
+    [Test]
+    public async Task A_timeout_inside_the_on_queue_hook_is_thrown_rather_than_reported()
+    {
+        EnqueueThrows(
+            new InvalidOperationException(
+                "Hook failed.",
+                new TimeoutException("Timed out talking to 10.0.0.5")
+            )
+        );
+
+        var act = async () =>
+            await Queue(new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"));
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>(
+                "the exception chain is what decides, not the outermost type (see docs/adr/0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md)"
+            );
+    }
+
+    [Test]
+    public async Task A_hook_refusal_is_still_reported_as_a_refusal()
+    {
+        EnqueueThrows(new InvalidOperationException("Customer 1 is on hold."));
+
+        var result = await Queue(
+            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+        );
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("The enqueue was refused: Customer 1 is on hold.");
+        _logger.Errors.Should().BeEmpty("a refusal is an answer, not a server fault");
+    }
+
+    [Test]
+    public async Task A_cancelled_deferred_entry_is_still_reported_as_a_refusal()
+    {
+        EnqueueThrows(new QueuedWorkCancelledException(7, typeof(IProbeTrain).FullName!));
+
+        var result = await Queue(
+            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+        );
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().StartWith("The enqueue was refused: Work queue entry 7");
+    }
+
+    private sealed class CapturingLogger : ILogger<OperationsService>
+    {
+        public List<Exception> Errors { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
+        {
+            if (logLevel >= LogLevel.Error && exception is not null)
+                Errors.Add(exception);
+        }
     }
 }

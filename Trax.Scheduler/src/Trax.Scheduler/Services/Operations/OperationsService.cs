@@ -1,6 +1,9 @@
+using System.Data.Common;
 using System.Diagnostics;
+using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -25,6 +28,7 @@ public class OperationsService : IOperationsService
     private readonly LocalWorkerOptions? _localWorkerOptions;
     private readonly ITraxChangeSignal? _changeSignal;
     private readonly ITrainExecutionService _trainExecution;
+    private readonly ILogger<OperationsService>? _logger;
 
     public OperationsService(
         ITrainDiscoveryService discoveryService,
@@ -37,9 +41,12 @@ public class OperationsService : IOperationsService
         // LocalWorkerOptions is only registered when UseLocalWorkers() is called; treat as optional.
         LocalWorkerOptions? localWorkerOptions = null,
         // Optional so direct construction in tests stays simple; always resolved via DI in a host.
-        ITraxChangeSignal? changeSignal = null
+        ITraxChangeSignal? changeSignal = null,
+        // Optional for the same reason; a host always has logging.
+        ILogger<OperationsService>? logger = null
     )
     {
+        _logger = logger;
         _discoveryService = discoveryService;
         _dataContextFactory = dataContextFactory;
         _schedulerConfiguration = schedulerConfiguration;
@@ -47,6 +54,29 @@ public class OperationsService : IOperationsService
         _changeSignal = changeSignal;
         _trainExecution = trainExecution;
     }
+
+    /// <summary>
+    /// The constructor as it shipped before the logger parameter, kept so that an assembly built
+    /// against it still binds. It takes no defaults, so a call that leaves the optional
+    /// parameters out resolves to the constructor above rather than being ambiguous.
+    /// </summary>
+    public OperationsService(
+        ITrainDiscoveryService discoveryService,
+        IDataContextProviderFactory dataContextFactory,
+        SchedulerConfiguration schedulerConfiguration,
+        ITrainExecutionService trainExecution,
+        LocalWorkerOptions? localWorkerOptions,
+        ITraxChangeSignal? changeSignal
+    )
+        : this(
+            discoveryService,
+            dataContextFactory,
+            schedulerConfiguration,
+            trainExecution,
+            localWorkerOptions,
+            changeSignal,
+            logger: null
+        ) { }
 
     /// <inheritdoc />
     public async Task<OperationResult> QueueTrainAsync(QueueTrainInput input, CancellationToken ct)
@@ -98,14 +128,30 @@ public class OperationsService : IOperationsService
             return new OperationResult(false, Message: ex.Message);
         }
         catch (Exception ex)
+            when (ex is not UnauthorizedAccessException and not OperationCanceledException
+                && IsInfrastructureFailure(ex)
+            )
+        {
+            // The server failed, not the train: the database or the network the enqueue depends
+            // on. Not a refusal, so it is not reported as one, and its message (a connection
+            // string's host and port, a constraint name) is not handed to the caller. It is
+            // logged here and rethrown, the way every other operation lets a data failure
+            // through; the GraphQL error filter masks it. See scheduler/0004.
+            _logger?.LogError(
+                ex,
+                "Queueing {TrainName} failed on infrastructure, not on a refusal",
+                registration.ServiceType.FullName
+            );
+            throw;
+        }
+        catch (Exception ex)
             when (ex is not UnauthorizedAccessException and not OperationCanceledException)
         {
-            // Meant for the enqueue refusing: the train's OnQueue hook threw, its subject key
-            // could not be used, or a deferred entry was cancelled before it was confirmed. The
-            // filter does not tell those apart from anything else, though, so an infrastructure
-            // failure (the database unreachable) or the mediator's missing-enforcer
-            // InvalidOperationException is reported the same way. Only authorization and
-            // cancellation stay exceptions.
+            // A refusal: the train's OnQueue hook or QueueSubjectKey threw, the subject key could
+            // not be used, or a deferred entry was cancelled before it was confirmed. The message
+            // is the train author's or the mediator's, written for the caller. The mediator's
+            // missing-enforcer InvalidOperationException also lands here, because nothing tells
+            // it apart from a subject key refusal but its text.
             return new OperationResult(false, Message: $"The enqueue was refused: {ex.Message}");
         }
 
@@ -117,6 +163,37 @@ public class OperationsService : IOperationsService
             Count: 1,
             Message: $"Work queue entry {queued.WorkQueueId} created."
         );
+    }
+
+    /// <summary>
+    /// Whether an exception from the enqueue is the infrastructure failing rather than the
+    /// enqueue being refused: a database, EF Core, network, I/O or timeout failure anywhere in
+    /// its chain. The chain is walked because a hook that wraps what it caught, and EF Core
+    /// wrapping the provider, both leave the cause below the outermost type. See scheduler/0004.
+    /// </summary>
+    internal static bool IsInfrastructureFailure(Exception ex)
+    {
+        for (Exception? current = ex; current is not null; current = current.InnerException)
+        {
+            if (
+                current
+                is DbException
+                    or DbUpdateException
+                    or TimeoutException
+                    or SocketException
+                    or HttpRequestException
+                    or IOException
+            )
+                return true;
+
+            if (
+                current is AggregateException aggregate
+                && aggregate.InnerExceptions.Any(IsInfrastructureFailure)
+            )
+                return true;
+        }
+
+        return false;
     }
 
     /// <inheritdoc />

@@ -39,9 +39,9 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 
 | Area | ADRs |
 | --- | --- |
-| `platform` | [0001](./0001-remote-execution-is-a-json-wire-contract.md) |
+| `platform` | [0001](./0001-remote-execution-is-a-json-wire-contract.md), [0004](./0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md) |
 | `providers` | [0002](./0002-a-database-provider-is-interchangeable.md) |
-| `scheduling` | [0001](./0001-remote-execution-is-a-json-wire-contract.md), [0002](./0002-a-database-provider-is-interchangeable.md), [0003](./0003-a-runtime-retention-override-replaces-only-the-default.md) |
+| `scheduling` | [0001](./0001-remote-execution-is-a-json-wire-contract.md), [0002](./0002-a-database-provider-is-interchangeable.md), [0003](./0003-a-runtime-retention-override-replaces-only-the-default.md), [0004](./0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md) |
 
 ## All of them
 
@@ -50,3 +50,4 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0001](./0001-remote-execution-is-a-json-wire-contract.md) | Remote execution crosses the process boundary as JSON, not as a compiled type | scheduling, platform |
 | [0002](./0002-a-database-provider-is-interchangeable.md) | Swapping the database provider changes no scheduler registration | scheduling, providers |
 | [0003](./0003-a-runtime-retention-override-replaces-only-the-default.md) | A runtime retention override replaces only the default, never a per-train retention | scheduling |
+| [0004](./0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md) | An enqueue refusal is a result; an infrastructure failure is thrown | scheduling, platform |
