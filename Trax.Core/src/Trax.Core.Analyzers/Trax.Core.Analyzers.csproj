@@ -14,7 +14,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <!-- An analyzer loads into the consumer's compiler, so it must be built against a Roslyn
+         no newer than the one the oldest supported SDK ships (global.json). Built against a newer
+         one, the compiler refuses to load it and warns CS9057 in every project that references it.
+         The tests keep the central version; only this build is held back. -->
+    <PackageReference
+      Include="Microsoft.CodeAnalysis.CSharp"
+      VersionOverride="4.14.0"
+      PrivateAssets="all"
+    />
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
   </ItemGroup>
 

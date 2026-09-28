@@ -55,7 +55,7 @@ jobs:
       - name: Restore (locked)
         run: dotnet restore --locked-mode
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build --configuration Release --no-restore -warnaserror
       - name: Test
         run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
       - name: Upload coverage to Codecov
