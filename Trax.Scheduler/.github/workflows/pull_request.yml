@@ -96,7 +96,7 @@ jobs:
           persist-credentials: false
 
       - name: Check ADRs
-        uses: TraxSharp/Trax.Docs/.github/actions/adr-guard@ca1261920d0efd76ce695f2e61576b15c0aded17
+        uses: TraxSharp/Trax.Docs/.github/actions/adr-guard@29871fd23a1b73151fd51d4f301b50841903e6bb
         with:
           known-areas: scheduling,providers,platform,testing
           census-root: tests/Trax.Scheduler.Tests.Meta
