@@ -127,6 +127,44 @@ public class OperationsServiceAuthorizationTests
         (await context.WorkQueues.CountAsync()).Should().Be(0);
     }
 
+    [Test]
+    public async Task A_caller_who_may_not_run_the_train_cannot_run_it_either()
+    {
+        var act = async () =>
+            await Operations.RunTrainAsync(
+                new RunTrainInput(typeof(IGuardedTrain).FullName!, "{\"value\":\"x\"}"),
+                CancellationToken.None
+            );
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+
+        var context = _scope.ServiceProvider.GetRequiredService<IDataContext>();
+        (await context.Metadatas.CountAsync(m => m.Name == typeof(IGuardedTrain).FullName))
+            .Should()
+            .Be(0, "a refused run writes no metadata row");
+    }
+
+    [Test]
+    public async Task A_run_resolved_from_the_host_runs_the_train_on_its_submitter()
+    {
+        var result = await Operations.RunTrainAsync(
+            new RunTrainInput(typeof(IOpenTrain).FullName!, "{\"value\":\"x\"}"),
+            CancellationToken.None
+        );
+
+        result.Success.Should().BeTrue(result.Message);
+
+        var context = _scope.ServiceProvider.GetRequiredService<IDataContext>();
+        var run = await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == result.Id);
+        run.Name.Should().Be(typeof(IOpenTrain).FullName);
+        run.TrainState.Should()
+            .Be(
+                Trax.Effect.Enums.TrainState.Completed,
+                "the in-memory submitter runs the job inline, so the run has finished"
+            );
+        (await context.WorkQueues.CountAsync()).Should().Be(0, "a run bypasses the work queue");
+    }
+
     public class DenyingAuthorization : ITrainAuthorizationService
     {
         public Task AuthorizeAsync(

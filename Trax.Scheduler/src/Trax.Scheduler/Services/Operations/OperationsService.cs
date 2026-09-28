@@ -3,19 +3,26 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.SchedulerConfig;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Utils;
+using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
+using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
+using Trax.Mediator.Services.TrustedExecution;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Scheduler.Services.Operations;
 
@@ -29,7 +36,40 @@ public class OperationsService : IOperationsService
     private readonly ITraxChangeSignal? _changeSignal;
     private readonly ITrainExecutionService _trainExecution;
     private readonly ILogger<OperationsService>? _logger;
+    private readonly IServiceProvider? _services;
 
+    /// <summary>
+    /// The constructor dependency injection uses. The service provider is the scope's own, and
+    /// <see cref="RunTrainAsync"/> resolves from it what only a run needs: the job submitter the
+    /// train is routed to, and the authorization services the mediator would consult.
+    /// </summary>
+    public OperationsService(
+        ITrainDiscoveryService discoveryService,
+        IDataContextProviderFactory dataContextFactory,
+        SchedulerConfiguration schedulerConfiguration,
+        ITrainExecutionService trainExecution,
+        IServiceProvider services,
+        LocalWorkerOptions? localWorkerOptions = null,
+        ITraxChangeSignal? changeSignal = null,
+        ILogger<OperationsService>? logger = null
+    )
+        : this(
+            discoveryService,
+            dataContextFactory,
+            schedulerConfiguration,
+            trainExecution,
+            localWorkerOptions,
+            changeSignal,
+            logger
+        )
+    {
+        _services = services;
+    }
+
+    /// <summary>
+    /// Kept so code constructing the service directly still compiles. A service built this way
+    /// has no service provider, so <see cref="RunTrainAsync"/> refuses to run.
+    /// </summary>
     public OperationsService(
         ITrainDiscoveryService discoveryService,
         IDataContextProviderFactory dataContextFactory,
@@ -163,6 +203,276 @@ public class OperationsService : IOperationsService
             Count: 1,
             Message: $"Work queue entry {queued.WorkQueueId} created."
         );
+    }
+
+    /// <inheritdoc />
+    public async Task<OperationResult> RunTrainAsync(RunTrainInput input, CancellationToken ct)
+    {
+        var services =
+            _services
+            ?? throw new InvalidOperationException(
+                "This OperationsService was constructed without an IServiceProvider, so it cannot "
+                    + "resolve a job submitter. Resolve IOperationsService from dependency injection, "
+                    + "or use the constructor that takes one."
+            );
+
+        if (string.IsNullOrWhiteSpace(input.TrainName))
+            return new OperationResult(false, Message: "TrainName is required.");
+
+        // The same lookup, and the same answer for a miss, as QueueTrainAsync.
+        var registration = _discoveryService
+            .DiscoverTrains()
+            .FirstOrDefault(r => r.ServiceType.FullName == input.TrainName);
+
+        if (registration is null)
+            return new OperationResult(
+                false,
+                Message: $"Unknown train: {input.TrainName}. Use operations.getTrains to list registered trains."
+            );
+
+        var trainName = registration.ServiceType.FullName!;
+
+        // Authorize before the input is read, as the mediator does for a queue, so a caller who
+        // may not run the train learns nothing about its input from a parse error. An
+        // UnauthorizedAccessException, and the missing-enforcer InvalidOperationException, are
+        // not caught: neither is an answer about this run.
+        await AuthorizeRunAsync(services, registration, ct);
+
+        object runInput;
+
+        try
+        {
+            runInput = ReadRunInput(services, registration, input.InputJson);
+        }
+        catch (JsonException ex)
+        {
+            return new OperationResult(false, Message: $"Invalid InputJson: {ex.Message}");
+        }
+        catch (TrainInputValidationException ex)
+        {
+            // Generic by design: the cap and the observed size are on the exception's properties,
+            // not in its message, so the caller cannot map the cap. Trax.Api's error filter makes
+            // the same promise for the typed exception.
+            return new OperationResult(false, Message: ex.Message);
+        }
+
+        // The row the run reports on. Input stays null here, as the job dispatcher leaves it:
+        // the run's own effects record the input when the train starts.
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = trainName,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+
+        using (var db = await _dataContextFactory.CreateDbContextAsync(ct))
+        {
+            await db.Track(metadata);
+            await db.SaveChanges(ct);
+        }
+
+        try
+        {
+            await ResolveSubmitter(services, trainName).EnqueueAsync(metadata.Id, runInput, ct);
+        }
+        catch (Exception ex)
+        {
+            // No job exists to move the row out of Pending, so fail it now with the submitter's
+            // exception, as the job dispatcher does when a dispatch fails, rather than leave it
+            // for the stale-pending reaper to fail later for the wrong reason. The failure is the
+            // server's, not a refusal, so it is thrown (scheduler/0004).
+            _logger?.LogError(
+                ex,
+                "Submitting a run of {TrainName} (metadata {MetadataId}) failed",
+                trainName,
+                metadata.Id
+            );
+            await FailUnsubmittedRunAsync(metadata.Id, ex);
+            throw;
+        }
+
+        return new OperationResult(
+            true,
+            Id: metadata.Id,
+            Count: 1,
+            Message: $"Run {metadata.Id} of {trainName} submitted."
+        );
+    }
+
+    /// <summary>
+    /// The mediator's authorization rule for an enqueue, applied to a run: an enforcer, when one
+    /// is registered, decides (and honours a trusted scope itself); otherwise a trusted scope
+    /// passes, and a <c>[TraxAuthorize]</c> train fails closed unless the host opted out
+    /// (mediator/0001). A copy, because the published mediator keeps its check private.
+    /// </summary>
+    private static async Task AuthorizeRunAsync(
+        IServiceProvider services,
+        TrainRegistration registration,
+        CancellationToken ct
+    )
+    {
+        var authorization = services.GetService<ITrainAuthorizationService>();
+
+        if (authorization is not null)
+        {
+            await authorization.AuthorizeAsync(registration, ct);
+            return;
+        }
+
+        if (services.GetService<ITrustedExecutionScope>() is { IsTrusted: true })
+            return;
+
+        var allowMissing =
+            services.GetService<MediatorConfiguration>()?.AllowMissingAuthorizationService ?? false;
+
+        if (registration.HasAuthorizeAttribute && !allowMissing)
+            throw new InvalidOperationException(
+                $"Train '{registration.ServiceTypeName}' declares [TraxAuthorize] but no "
+                    + "ITrainAuthorizationService is registered. Call AddTraxApi() (or register "
+                    + "a custom ITrainAuthorizationService) before building the host. If this "
+                    + "process intentionally runs no authorized submissions, opt out with "
+                    + "AddMediator(m => m.AllowMissingAuthorizationService())."
+            );
+    }
+
+    /// <summary>
+    /// Reads a run's input the way the mediator reads a queued one: the input size cap, property
+    /// names matched whatever their case and a property given twice refused (docs/0023), a blank
+    /// input standing for an empty object that the input type must be buildable from, and a JSON
+    /// <c>null</c> refused. A copy, for the same reason as <see cref="AuthorizeRunAsync"/>;
+    /// keeping it identical is what makes a run and a queue of the same JSON agree.
+    /// </summary>
+    private static object ReadRunInput(
+        IServiceProvider services,
+        TrainRegistration registration,
+        string? inputJson
+    )
+    {
+        var missing = string.IsNullOrWhiteSpace(inputJson);
+        var json = missing ? "{}" : inputJson!;
+
+        var maxBytes =
+            services.GetService<MediatorConfiguration>()?.MaxInputJsonBytes
+            ?? new MediatorConfiguration().MaxInputJsonBytes;
+        var byteCount = System.Text.Encoding.UTF8.GetByteCount(json);
+        if (byteCount > maxBytes)
+            throw new TrainInputValidationException(
+                registration.ServiceTypeName,
+                byteCount,
+                maxBytes
+            );
+
+        var options = RunInputOptions();
+        object? read;
+
+        if (missing)
+        {
+            try
+            {
+                read = JsonSerializer.Deserialize(json, registration.InputType, options.Missing);
+            }
+            catch (JsonException refused)
+            {
+                throw new JsonException(
+                    $"No input was given, and {registration.InputTypeName} cannot be built "
+                        + $"without one: {refused.Message}",
+                    refused
+                );
+            }
+        }
+        else
+        {
+            read = JsonSerializer.Deserialize(json, registration.InputType, options.Given);
+        }
+
+        return read
+            ?? throw new JsonException(
+                $"InputJson deserialized to null. Expected an instance of {registration.InputTypeName}."
+            );
+    }
+
+    private static CallerInputOptions? _runInputOptions;
+
+    /// <summary>
+    /// The system options with property names matched whatever their case and a property given
+    /// twice, in any casing, refused (docs/0023); the missing-input reading also respects
+    /// required constructor parameters. Rebuilt only if the system options object itself is
+    /// replaced, as the mediator's copy is.
+    /// </summary>
+    private static CallerInputOptions RunInputOptions()
+    {
+        var source = TraxEffectConfiguration.StaticSystemJsonSerializerOptions;
+        var cached = _runInputOptions;
+
+        if (cached is not null && ReferenceEquals(cached.Source, source))
+            return cached;
+
+        var given = new JsonSerializerOptions(source)
+        {
+            PropertyNameCaseInsensitive = true,
+            AllowDuplicateProperties = false,
+        };
+        var missing = new JsonSerializerOptions(given)
+        {
+            RespectRequiredConstructorParameters = true,
+        };
+
+        var built = new CallerInputOptions(source, given, missing);
+        _runInputOptions = built;
+        return built;
+    }
+
+    private sealed record CallerInputOptions(
+        JsonSerializerOptions Source,
+        JsonSerializerOptions Given,
+        JsonSerializerOptions Missing
+    );
+
+    /// <summary>
+    /// The submitter the job dispatcher would use for this train: its builder or
+    /// <c>[TraxRemote]</c> route when it has one, otherwise the default <see cref="IJobSubmitter"/>.
+    /// </summary>
+    private static IJobSubmitter ResolveSubmitter(IServiceProvider services, string trainName)
+    {
+        var routed = services
+            .GetService<JobSubmitterRoutingConfiguration>()
+            ?.GetSubmitterType(trainName);
+
+        return routed is not null
+            ? (IJobSubmitter)services.GetRequiredService(routed)
+            : services.GetRequiredService<IJobSubmitter>();
+    }
+
+    /// <summary>
+    /// Fails a run whose job was never submitted. Bookkeeping for a run that already failed, so
+    /// it is written on <see cref="CancellationToken.None"/>: a cancelled caller is one of the
+    /// ways to get here. A failure to write it is logged and dropped, so the caller still sees
+    /// why the submit failed; the stale-pending reaper fails the row later.
+    /// </summary>
+    private async Task FailUnsubmittedRunAsync(long metadataId, Exception submitFailure)
+    {
+        try
+        {
+            using var db = await _dataContextFactory.CreateDbContextAsync(CancellationToken.None);
+            var metadata = await db.Metadatas.FirstOrDefaultAsync(m => m.Id == metadataId);
+            if (metadata is null || metadata.TrainState != TrainState.Pending)
+                return;
+
+            metadata.TrainState = TrainState.Failed;
+            metadata.EndTime = DateTime.UtcNow;
+            metadata.AddException(submitFailure);
+            await db.SaveChanges(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(
+                ex,
+                "Could not mark unsubmitted run {MetadataId} failed; the stale-pending reaper will",
+                metadataId
+            );
+        }
     }
 
     /// <summary>

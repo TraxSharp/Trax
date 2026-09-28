@@ -40,6 +40,53 @@ public interface IOperationsService
     Task<OperationResult> QueueTrainAsync(QueueTrainInput input, CancellationToken ct);
 
     /// <summary>
+    /// Runs a train now: creates its <c>Pending</c> metadata row and hands it, with its input,
+    /// to the job submitter the train is routed to (the same routing the job dispatcher uses).
+    /// Nothing is written to the work queue, so the run skips dispatch ordering, group limits
+    /// and the subject lock of <c>docs/0019</c>: it is a deliberate bypass, for an operator who
+    /// wants the train to start at once.
+    /// </summary>
+    /// <remarks>
+    /// The train's <c>[TraxAuthorize]</c> requirements are checked the way the mediator checks
+    /// them for <see cref="QueueTrainAsync"/>, before the input is read, and the input is read
+    /// the way the mediator reads a caller's input (<c>docs/0023</c>): the system serializer
+    /// options with property names matched whatever their case and a property given twice
+    /// refused, the input size cap, and a blank input standing for an empty object. A run has no
+    /// <c>OnQueue</c> hook and no subject key, so nothing a train does can refuse it.
+    /// </remarks>
+    /// <returns>
+    /// <c>OperationResult(true, Id: metadataId, Count: 1, ...)</c> once the job is submitted; the
+    /// id is the run's metadata id, not a work queue id. <c>OperationResult(false, ...)</c> with
+    /// a populated <c>Message</c> for a missing <c>TrainName</c>, an unknown train, or invalid or
+    /// oversized <c>InputJson</c>; no metadata row is written for any of these.
+    /// </returns>
+    /// <exception cref="UnauthorizedAccessException">
+    /// The caller may not run the train. It propagates rather than becoming a failed result, and
+    /// no metadata row is written.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The train declares <c>[TraxAuthorize]</c>, no <c>ITrainAuthorizationService</c> is
+    /// registered, the call is not in a trusted scope and the host did not opt out with
+    /// <c>AllowMissingAuthorizationService()</c>. A host misconfiguration, so it is thrown rather
+    /// than reported as a refusal.
+    /// </exception>
+    /// <exception cref="Exception">
+    /// The job submitter failed. The run's metadata row is marked <c>Failed</c> with that
+    /// exception, as the job dispatcher does for a failed dispatch, and the exception is logged
+    /// and rethrown: the train was accepted and the server could not start it, which is not a
+    /// refusal (scheduler/0004). A database failure writing the row propagates the same way.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="ct"/> was cancelled. It is passed to the submitter, and a run it cancels
+    /// before submission is marked <c>Failed</c>.
+    /// </exception>
+    Task<OperationResult> RunTrainAsync(RunTrainInput input, CancellationToken ct) =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement RunTrainAsync. It was added to "
+                + "IOperationsService after this implementation was written."
+        );
+
+    /// <summary>
     /// Transitions a queued work queue entry to <c>Cancelled</c>. Only entries currently
     /// in the <c>Queued</c> state are eligible. Entries that are already dispatched or
     /// already cancelled return a failure result without modifying the row.

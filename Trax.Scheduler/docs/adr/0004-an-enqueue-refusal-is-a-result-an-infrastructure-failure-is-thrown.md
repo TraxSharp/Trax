@@ -45,6 +45,16 @@ violation included. A hook that means to refuse throws its own exception. Lettin
 constraint violation through as a refusal would put table and constraint names in the
 caller's message.
 
+## A run follows the same rule
+
+`OperationsService.RunTrainAsync` (central 0022) applies it to a run. An unknown train and
+invalid or oversized input are failed results, with the same messages `QueueTrainAsync` gives.
+Nothing a train does can refuse a run, because a run has no `OnQueue` hook and no subject key,
+so every other failure is thrown: a job submitter that fails (after the run's metadata row is
+marked `Failed`, as the job dispatcher does), a database failure writing the row, and the
+missing-enforcer `InvalidOperationException`, which a queue still reports as a refusal (see
+Consequences).
+
 ## Considered options
 
 **Return a generic failed result instead of throwing** (`"The enqueue failed."`). This keeps
@@ -74,6 +84,8 @@ already does for every other resolver.
 
 ## Exemplars
 
+- `OperationsServiceRunTests` pins the same split for a run: failed results for bad input and
+  an unknown train, and a thrown, logged submit failure that leaves the run `Failed`.
 - `OperationsServiceEnqueueTests` runs the real mediator over a data context that throws
   `NpgsqlException("Failed to connect to 10.0.0.5:5432")` and asserts it is thrown and logged,
   not returned. It also covers an EF-wrapped failure, a timeout wrapped by a hook, and a hook
@@ -88,4 +100,6 @@ contract, and Trax.Api's error filter tests pin it.
 
 ## Changelog
 
+- **2026-09-27**: Extended to `RunTrainAsync`, where a submit failure and the missing-enforcer
+  exception are thrown.
 - **2026-09-27**: Recorded.

@@ -428,6 +428,7 @@ namespace Trax.Scheduler.Services.Operations
         Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig();
         Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics();
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RunTrainAsync(Trax.Scheduler.Services.Operations.RunTrainInput input, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestGroupAsync(long id, Trax.Scheduler.Services.Operations.UpdateManifestGroupInput input, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateSchedulerConfigAsync(Trax.Scheduler.Services.Operations.UpdateSchedulerConfigInput input, System.Threading.CancellationToken ct);
     }
@@ -454,6 +455,7 @@ namespace Trax.Scheduler.Services.Operations
     {
         public OperationsService(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Scheduler.Configuration.SchedulerConfiguration schedulerConfiguration, Trax.Mediator.Services.TrainExecution.ITrainExecutionService trainExecution, Trax.Scheduler.Configuration.LocalWorkerOptions? localWorkerOptions, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal) { }
         public OperationsService(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Scheduler.Configuration.SchedulerConfiguration schedulerConfiguration, Trax.Mediator.Services.TrainExecution.ITrainExecutionService trainExecution, Trax.Scheduler.Configuration.LocalWorkerOptions? localWorkerOptions = null, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal = null, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.Operations.OperationsService>? logger = null) { }
+        public OperationsService(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Scheduler.Configuration.SchedulerConfiguration schedulerConfiguration, Trax.Mediator.Services.TrainExecution.ITrainExecutionService trainExecution, System.IServiceProvider services, Trax.Scheduler.Configuration.LocalWorkerOptions? localWorkerOptions = null, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal = null, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.Operations.OperationsService>? logger = null) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> CancelWorkQueueEntryAsync(long id, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DashboardMetrics> GetDashboardMetricsAsync(Trax.Scheduler.Services.Operations.MetricsRange range, bool hideAdminTrains, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(System.Threading.CancellationToken ct) { }
@@ -461,6 +463,7 @@ namespace Trax.Scheduler.Services.Operations
         public Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig() { }
         public Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics() { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RunTrainAsync(Trax.Scheduler.Services.Operations.RunTrainInput input, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestGroupAsync(long id, Trax.Scheduler.Services.Operations.UpdateManifestGroupInput input, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateSchedulerConfigAsync(Trax.Scheduler.Services.Operations.UpdateSchedulerConfigInput input, System.Threading.CancellationToken ct) { }
     }
@@ -470,6 +473,12 @@ namespace Trax.Scheduler.Services.Operations
         public string? InputJson { get; init; }
         public int Priority { get; init; }
         public System.DateTime? ScheduledAt { get; init; }
+        public string TrainName { get; init; }
+    }
+    public class RunTrainInput : System.IEquatable<Trax.Scheduler.Services.Operations.RunTrainInput>
+    {
+        public RunTrainInput(string TrainName, string? InputJson = null) { }
+        public string? InputJson { get; init; }
         public string TrainName { get; init; }
     }
     public class SchedulerConfigBootstrapHostedService : Microsoft.Extensions.Hosting.IHostedService
