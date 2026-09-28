@@ -16,6 +16,13 @@ namespace Trax.Core.Train;
 /// This class provides the core functionality for execution, including
 /// Railway-oriented programming support via the Monad helper.
 /// </summary>
+/// <remarks>
+/// A supported base for code that uses Trax.Core on its own. <see cref="Run"/> stays virtual, and
+/// a subclass that overrides it without calling <c>base.Run</c> runs something other than its
+/// declared chain, so <see cref="DeclaredChain"/>, and any check built on it, no longer describes
+/// what runs. A <c>ServiceTrain</c> cannot do this: its <c>Run</c> is sealed. See
+/// docs/adr/0003.
+/// </remarks>
 /// <typeparam name="TInput">The type of input the train accepts</typeparam>
 /// <typeparam name="TReturn">The type of result the train produces</typeparam>
 public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
@@ -43,6 +50,11 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// <param name="cancellationToken">Token to monitor for cancellation requests</param>
     /// <returns>The result produced by the train</returns>
     /// <exception cref="Exception">Thrown if any junction in the train fails</exception>
+    /// <remarks>
+    /// Virtual because the published Trax.Effect overrides it in <c>ServiceTrain</c>. An override
+    /// here that does not call <c>base.Run</c> skips <see cref="Junctions"/>, so the chain check
+    /// reads a chain that never runs (docs/adr/0003).
+    /// </remarks>
     public virtual async Task<TReturn> Run(
         TInput input,
         CancellationToken cancellationToken = default
