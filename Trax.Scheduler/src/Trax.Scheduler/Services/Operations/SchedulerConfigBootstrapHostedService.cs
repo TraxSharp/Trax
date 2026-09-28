@@ -13,7 +13,8 @@ namespace Trax.Scheduler.Services.Operations;
 /// settings survive restarts.
 /// </summary>
 /// <remarks>
-/// Failures are logged but never crash startup. If the table doesn't exist (e.g. an
+/// A persisted value outside <see cref="SchedulerConfigLimits"/> is skipped and logged, and the
+/// rest of the row still applies. Failures are logged but never crash startup. If the table doesn't exist (e.g. an
 /// older deployment skipped the migration), or no row is present, the in-memory
 /// builder defaults remain in effect.
 /// </remarks>
@@ -58,28 +59,96 @@ public class SchedulerConfigBootstrapHostedService : IHostedService
 
             cfg.ManifestManagerEnabled = row.ManifestManagerEnabled;
             cfg.JobDispatcherEnabled = row.JobDispatcherEnabled;
-            cfg.ManifestManagerPollingInterval = row.ManifestManagerPollingInterval;
-            cfg.JobDispatcherPollingInterval = row.JobDispatcherPollingInterval;
-            cfg.MaxActiveJobs = row.MaxActiveJobs;
-            cfg.DefaultMaxRetries = row.DefaultMaxRetries;
-            cfg.DefaultRetryDelay = row.DefaultRetryDelay;
-            cfg.RetryBackoffMultiplier = row.RetryBackoffMultiplier;
-            cfg.MaxRetryDelay = row.MaxRetryDelay;
-            cfg.DefaultJobTimeout = row.DefaultJobTimeout;
-            cfg.StalePendingTimeout = row.StalePendingTimeout;
+            Apply(
+                row.ManifestManagerPollingInterval,
+                SchedulerConfigLimits.TimerInterval,
+                nameof(row.ManifestManagerPollingInterval),
+                v => cfg.ManifestManagerPollingInterval = v
+            );
+            Apply(
+                row.JobDispatcherPollingInterval,
+                SchedulerConfigLimits.TimerInterval,
+                nameof(row.JobDispatcherPollingInterval),
+                v => cfg.JobDispatcherPollingInterval = v
+            );
+            if (row.MaxActiveJobs is not { } maxActiveJobs)
+                cfg.MaxActiveJobs = null;
+            else
+                Apply(
+                    maxActiveJobs,
+                    SchedulerConfigLimits.AtLeastOne,
+                    nameof(row.MaxActiveJobs),
+                    v => cfg.MaxActiveJobs = v
+                );
+            Apply(
+                row.DefaultMaxRetries,
+                SchedulerConfigLimits.NotNegative,
+                nameof(row.DefaultMaxRetries),
+                v => cfg.DefaultMaxRetries = v
+            );
+            Apply(
+                row.DefaultRetryDelay,
+                SchedulerConfigLimits.NonNegativeDuration,
+                nameof(row.DefaultRetryDelay),
+                v => cfg.DefaultRetryDelay = v
+            );
+            Apply(
+                row.RetryBackoffMultiplier,
+                SchedulerConfigLimits.BackoffMultiplier,
+                nameof(row.RetryBackoffMultiplier),
+                v => cfg.RetryBackoffMultiplier = v
+            );
+            Apply(
+                row.MaxRetryDelay,
+                SchedulerConfigLimits.NonNegativeDuration,
+                nameof(row.MaxRetryDelay),
+                v => cfg.MaxRetryDelay = v
+            );
+            Apply(
+                row.DefaultJobTimeout,
+                SchedulerConfigLimits.PositiveDuration,
+                nameof(row.DefaultJobTimeout),
+                v => cfg.DefaultJobTimeout = v
+            );
+            Apply(
+                row.StalePendingTimeout,
+                SchedulerConfigLimits.PositiveDuration,
+                nameof(row.StalePendingTimeout),
+                v => cfg.StalePendingTimeout = v
+            );
             cfg.RecoverStuckJobsOnStartup = row.RecoverStuckJobsOnStartup;
-            cfg.DeadLetterRetentionPeriod = row.DeadLetterRetentionPeriod;
+            Apply(
+                row.DeadLetterRetentionPeriod,
+                SchedulerConfigLimits.NonNegativeDuration,
+                nameof(row.DeadLetterRetentionPeriod),
+                v => cfg.DeadLetterRetentionPeriod = v
+            );
             cfg.AutoPurgeDeadLetters = row.AutoPurgeDeadLetters;
 
             if (workerOpts is not null && row.LocalWorkerCount is { } wc)
-                workerOpts.WorkerCount = wc;
+                Apply(
+                    wc,
+                    SchedulerConfigLimits.WorkerCount,
+                    nameof(row.LocalWorkerCount),
+                    v => workerOpts.WorkerCount = v
+                );
 
-            if (cfg.MetadataCleanup is not null)
+            if (cfg.MetadataCleanup is { } cleanup)
             {
                 if (row.MetadataCleanupInterval is { } interval)
-                    cfg.MetadataCleanup.CleanupInterval = interval;
+                    Apply(
+                        interval,
+                        SchedulerConfigLimits.TimerInterval,
+                        nameof(row.MetadataCleanupInterval),
+                        v => cleanup.CleanupInterval = v
+                    );
                 if (row.MetadataCleanupRetention is { } retention)
-                    cfg.MetadataCleanup.RetentionPeriod = retention;
+                    Apply(
+                        retention,
+                        SchedulerConfigLimits.PositiveDuration,
+                        nameof(row.MetadataCleanupRetention),
+                        v => cleanup.RetentionPeriod = v
+                    );
             }
 
             _logger.LogInformation(
@@ -94,6 +163,30 @@ public class SchedulerConfigBootstrapHostedService : IHostedService
                 "Failed to apply persisted scheduler config; using builder defaults."
             );
         }
+    }
+
+    /// <summary>
+    /// Applies one persisted value, or skips it with a warning when it is outside the range the
+    /// scheduler can run with (<see cref="SchedulerConfigLimits"/>). A row written before the
+    /// operations service validated, or edited by hand, must not stop the host: a sub-millisecond
+    /// polling interval, for one, makes the poller's timer throw and faults the host at boot. The
+    /// builder's value stays in effect for a skipped field.
+    /// </summary>
+    private void Apply<T>(T value, Func<T?, string, string?> check, string name, Action<T> apply)
+        where T : struct
+    {
+        if (check(value, name) is { } problem)
+        {
+            _logger.LogWarning(
+                "Skipped the persisted scheduler setting {Setting} ({Value}): {Problem} The configured value stays in effect.",
+                name,
+                value,
+                problem
+            );
+            return;
+        }
+
+        apply(value);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

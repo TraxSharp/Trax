@@ -162,6 +162,13 @@ public class OperationsService : IOperationsService
         if (group is null)
             return new OperationResult(false, Message: $"Manifest group {id} not found.");
 
+        if (ValidateManifestGroupPatch(input) is { } refusal)
+            return new OperationResult(
+                false,
+                Id: id,
+                Message: $"Manifest group {id} not updated: {refusal}"
+            );
+
         var changed = 0;
 
         if (input.ClearMaxActiveJobs)
@@ -679,6 +686,13 @@ public class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
+        if (ValidateSchedulerConfigPatch(input) is { } refusal)
+            return new OperationResult(
+                false,
+                Id: SchedulerConfig.SingletonId,
+                Message: $"Scheduler config not updated: {refusal}"
+            );
+
         var cfg = _schedulerConfiguration;
         var changed = 0;
 
@@ -823,6 +837,103 @@ public class OperationsService : IOperationsService
                 ? "Scheduler config: no changes."
                 : $"Scheduler config: {changed} field(s) updated."
         );
+    }
+
+    /// <summary>
+    /// The ranges a group patch must stay in, checked before any field is written so a refused
+    /// patch changes nothing. The same ranges the dashboard's form enforces, held here so every
+    /// caller of the service gets them: priority is a work queue priority, and a limit of zero
+    /// would stop the group dispatching at all (<see cref="UpdateManifestGroupInput.ClearMaxActiveJobs"/>
+    /// removes the limit instead).
+    /// </summary>
+    internal static string? ValidateManifestGroupPatch(UpdateManifestGroupInput input)
+    {
+        var problems = new List<string>();
+
+        if (
+            input.Priority is { } priority
+            && priority is < WorkQueue.MinPriority or > WorkQueue.MaxPriority
+        )
+            problems.Add(
+                $"Priority must be between {WorkQueue.MinPriority} and {WorkQueue.MaxPriority}."
+            );
+
+        if (!input.ClearMaxActiveJobs && input.MaxActiveJobs is < 1)
+            problems.Add("MaxActiveJobs must be at least 1; clear it to remove the limit.");
+
+        return problems.Count == 0 ? null : string.Join(" ", problems);
+    }
+
+    /// <summary>
+    /// The ranges a scheduler config patch must stay in (<see cref="SchedulerConfigLimits"/>),
+    /// checked before any field is applied so a refused patch changes neither the live settings
+    /// nor the persisted row.
+    /// </summary>
+    internal static string? ValidateSchedulerConfigPatch(UpdateSchedulerConfigInput input)
+    {
+        var problems = new[]
+        {
+            SchedulerConfigLimits.TimerInterval(
+                input.ManifestManagerPollingInterval,
+                nameof(input.ManifestManagerPollingInterval)
+            ),
+            SchedulerConfigLimits.TimerInterval(
+                input.JobDispatcherPollingInterval,
+                nameof(input.JobDispatcherPollingInterval)
+            ),
+            input.ClearMaxActiveJobs
+                ? null
+                : SchedulerConfigLimits.AtLeastOne(
+                    input.MaxActiveJobs,
+                    nameof(input.MaxActiveJobs)
+                ),
+            SchedulerConfigLimits.NotNegative(
+                input.DefaultMaxRetries,
+                nameof(input.DefaultMaxRetries)
+            ),
+            SchedulerConfigLimits.NonNegativeDuration(
+                input.DefaultRetryDelay,
+                nameof(input.DefaultRetryDelay)
+            ),
+            SchedulerConfigLimits.BackoffMultiplier(
+                input.RetryBackoffMultiplier,
+                nameof(input.RetryBackoffMultiplier)
+            ),
+            SchedulerConfigLimits.NonNegativeDuration(
+                input.MaxRetryDelay,
+                nameof(input.MaxRetryDelay)
+            ),
+            SchedulerConfigLimits.PositiveDuration(
+                input.DefaultJobTimeout,
+                nameof(input.DefaultJobTimeout)
+            ),
+            SchedulerConfigLimits.PositiveDuration(
+                input.StalePendingTimeout,
+                nameof(input.StalePendingTimeout)
+            ),
+            SchedulerConfigLimits.NonNegativeDuration(
+                input.DeadLetterRetentionPeriod,
+                nameof(input.DeadLetterRetentionPeriod)
+            ),
+            input.ClearLocalWorkerCount
+                ? null
+                : SchedulerConfigLimits.WorkerCount(
+                    input.LocalWorkerCount,
+                    nameof(input.LocalWorkerCount)
+                ),
+            SchedulerConfigLimits.TimerInterval(
+                input.MetadataCleanupInterval,
+                nameof(input.MetadataCleanupInterval)
+            ),
+            SchedulerConfigLimits.PositiveDuration(
+                input.MetadataCleanupRetention,
+                nameof(input.MetadataCleanupRetention)
+            ),
+        }
+            .OfType<string>()
+            .ToList();
+
+        return problems.Count == 0 ? null : string.Join(" ", problems);
     }
 
     private async Task PersistAsync(CancellationToken ct)

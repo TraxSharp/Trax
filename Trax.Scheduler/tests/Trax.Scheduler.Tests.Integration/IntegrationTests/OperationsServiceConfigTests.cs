@@ -392,4 +392,221 @@ public class OperationsServiceConfigTests : TestSetup
         await hosted.StopAsync(CancellationToken.None);
         // Pure no-op; just exercise the path for coverage.
     }
+
+    private static IEnumerable<TestCaseData> OutOfRangeConfigPatches()
+    {
+        TestCaseData Case(UpdateSchedulerConfigInput input, string field) =>
+            new TestCaseData(input, field).SetName(
+                $"UpdateSchedulerConfig_{field}_OutOfRange_Refused"
+            );
+
+        yield return Case(
+            new(ManifestManagerPollingInterval: TimeSpan.Zero),
+            "ManifestManagerPollingInterval"
+        );
+        yield return Case(
+            new(JobDispatcherPollingInterval: TimeSpan.FromSeconds(-1)),
+            "JobDispatcherPollingInterval"
+        );
+        yield return Case(new(MaxActiveJobs: 0), "MaxActiveJobs");
+        yield return Case(new(DefaultMaxRetries: -1), "DefaultMaxRetries");
+        yield return Case(new(DefaultRetryDelay: TimeSpan.FromSeconds(-1)), "DefaultRetryDelay");
+        yield return Case(new(RetryBackoffMultiplier: 0.5), "RetryBackoffMultiplier");
+        yield return Case(new(MaxRetryDelay: TimeSpan.FromSeconds(-1)), "MaxRetryDelay");
+        yield return Case(new(DefaultJobTimeout: TimeSpan.Zero), "DefaultJobTimeout");
+        yield return Case(new(StalePendingTimeout: TimeSpan.Zero), "StalePendingTimeout");
+        yield return Case(
+            new(DeadLetterRetentionPeriod: TimeSpan.FromDays(-1)),
+            "DeadLetterRetentionPeriod"
+        );
+        yield return Case(new(LocalWorkerCount: 0), "LocalWorkerCount");
+        yield return Case(new(MetadataCleanupInterval: TimeSpan.Zero), "MetadataCleanupInterval");
+        yield return Case(new(MetadataCleanupRetention: TimeSpan.Zero), "MetadataCleanupRetention");
+    }
+
+    [TestCaseSource(nameof(OutOfRangeConfigPatches))]
+    public async Task UpdateSchedulerConfig_OutOfRange_IsAFailedResultAndChangesNothing(
+        UpdateSchedulerConfigInput input,
+        string field
+    )
+    {
+        // A valid field alongside the invalid one: a refused patch applies neither.
+        var result = await _operations.UpdateSchedulerConfigAsync(
+            input with
+            {
+                DefaultMaxRetries = input.DefaultMaxRetries ?? 9,
+            },
+            CancellationToken.None
+        );
+
+        result.Success.Should().BeFalse("the service validates, not only the dashboard's form");
+        result.Message.Should().Contain(field);
+        _cfg.DefaultMaxRetries.Should().Be(3, "nothing in a refused patch is applied");
+        _cfg.MaxActiveJobs.Should().Be(10);
+        DataContext.Reset();
+        DataContext.SchedulerConfigs.Should().BeEmpty("a refused patch is not persisted");
+    }
+
+    [Test]
+    public async Task UpdateSchedulerConfig_NotANumberMultiplier_Refused()
+    {
+        var result = await _operations.UpdateSchedulerConfigAsync(
+            new UpdateSchedulerConfigInput(RetryBackoffMultiplier: double.NaN),
+            CancellationToken.None
+        );
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("RetryBackoffMultiplier");
+    }
+
+    [Test]
+    public async Task UpdateSchedulerConfig_BoundaryValues_Accepted()
+    {
+        var result = await _operations.UpdateSchedulerConfigAsync(
+            new UpdateSchedulerConfigInput(
+                MaxActiveJobs: 1,
+                DefaultMaxRetries: 0,
+                DefaultRetryDelay: TimeSpan.Zero,
+                RetryBackoffMultiplier: 1.0,
+                DeadLetterRetentionPeriod: TimeSpan.Zero
+            ),
+            CancellationToken.None
+        );
+
+        result.Success.Should().BeTrue(result.Message);
+    }
+
+    private static IEnumerable<TestCaseData> UnusableDurationPatches()
+    {
+        TestCaseData Case(UpdateSchedulerConfigInput input, string field, string why) =>
+            new TestCaseData(input, field).SetName($"UpdateSchedulerConfig_{field}_{why}_Refused");
+
+        // PeriodicTimer throws below 1 ms, which would fault the poller on the next boot.
+        yield return Case(
+            new(ManifestManagerPollingInterval: TimeSpan.FromTicks(5_000)),
+            "ManifestManagerPollingInterval",
+            "SubMillisecond"
+        );
+        yield return Case(
+            new(JobDispatcherPollingInterval: TimeSpan.FromMilliseconds(999)),
+            "JobDispatcherPollingInterval",
+            "UnderOneSecond"
+        );
+        yield return Case(
+            new(MetadataCleanupInterval: TimeSpan.FromTicks(1)),
+            "MetadataCleanupInterval",
+            "SubMillisecond"
+        );
+        // PeriodicTimer also throws above about 49.7 days.
+        yield return Case(
+            new(ManifestManagerPollingInterval: TimeSpan.FromDays(60)),
+            "ManifestManagerPollingInterval",
+            "PastTheTimerLimit"
+        );
+        yield return Case(
+            new(StalePendingTimeout: TimeSpan.FromDays(100_000)),
+            "StalePendingTimeout",
+            "Unbounded"
+        );
+        yield return Case(
+            new(DeadLetterRetentionPeriod: TimeSpan.MaxValue),
+            "DeadLetterRetentionPeriod",
+            "Unbounded"
+        );
+        yield return Case(new(LocalWorkerCount: 1_000_000), "LocalWorkerCount", "Unbounded");
+    }
+
+    [TestCaseSource(nameof(UnusableDurationPatches))]
+    public async Task UpdateSchedulerConfig_ValueTheSchedulerCannotRunWith_IsRefused(
+        UpdateSchedulerConfigInput input,
+        string field
+    )
+    {
+        var result = await _operations.UpdateSchedulerConfigAsync(input, CancellationToken.None);
+
+        result.Success.Should().BeFalse("a value the pollers cannot run with is never stored");
+        result.Message.Should().Contain(field);
+        DataContext.Reset();
+        DataContext.SchedulerConfigs.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task BootstrapHostedService_UnusablePersistedValues_AreSkippedAndLogged()
+    {
+        // A row written before the service validated, or by hand: values the scheduler cannot
+        // run with sit beside ones it can.
+        var row = new Trax.Effect.Models.SchedulerConfig.SchedulerConfig
+        {
+            ManifestManagerPollingInterval = TimeSpan.FromTicks(5_000),
+            JobDispatcherPollingInterval = TimeSpan.FromSeconds(3),
+            MaxActiveJobs = 0,
+            DefaultMaxRetries = 6,
+            StalePendingTimeout = TimeSpan.FromDays(100_000),
+            LocalWorkerCount = 1_000_000,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        DataContext.SchedulerConfigs.Add(row);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        var logger = new WarningCapturingLogger();
+        var hosted = new SchedulerConfigBootstrapHostedService(Scope.ServiceProvider, logger);
+
+        await hosted.StartAsync(CancellationToken.None);
+
+        _cfg.ManifestManagerPollingInterval.Should()
+            .Be(TimeSpan.FromSeconds(5), "an unusable persisted interval is not applied");
+        _cfg.MaxActiveJobs.Should().Be(10);
+        _cfg.StalePendingTimeout.Should().Be(TimeSpan.FromMinutes(20));
+        _cfg.JobDispatcherPollingInterval.Should()
+            .Be(TimeSpan.FromSeconds(3), "the usable values in the same row still apply");
+        _cfg.DefaultMaxRetries.Should().Be(6);
+
+        var startPoller = () =>
+        {
+            using var timer = new PeriodicTimer(_cfg.ManifestManagerPollingInterval);
+        };
+        startPoller
+            .Should()
+            .NotThrow("the ManifestManager poller builds its timer from this value at boot");
+
+        logger
+            .Warnings.Should()
+            .Contain(w => w.Contains("ManifestManagerPollingInterval"))
+            .And.Contain(w => w.Contains("MaxActiveJobs"))
+            .And.Contain(w => w.Contains("StalePendingTimeout"));
+    }
+
+    [Test]
+    public void A_sub_millisecond_interval_is_what_faults_the_poller()
+    {
+        // The premise of the two tests above: PeriodicTimer refuses this outright.
+        var act = () => new PeriodicTimer(TimeSpan.FromTicks(5_000));
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    private sealed class WarningCapturingLogger
+        : Microsoft.Extensions.Logging.ILogger<SchedulerConfigBootstrapHostedService>
+    {
+        public List<string> Warnings { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel,
+            Microsoft.Extensions.Logging.EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
+        {
+            if (logLevel == Microsoft.Extensions.Logging.LogLevel.Warning)
+                lock (Warnings)
+                    Warnings.Add(formatter(state, exception));
+        }
+    }
 }

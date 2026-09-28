@@ -51,7 +51,9 @@ public interface IOperationsService
     /// </summary>
     /// <returns>
     /// <c>OperationResult(true, Id: groupId, Count: N, ...)</c> where <c>N</c> is the number
-    /// of fields written; <c>OperationResult(false, ...)</c> if the group does not exist.
+    /// of fields written; <c>OperationResult(false, ...)</c> if the group does not exist, or if
+    /// <c>Priority</c> is outside 0 to 31 or <c>MaxActiveJobs</c> is below 1, in which case no
+    /// field of the patch is written.
     /// </returns>
     Task<OperationResult> UpdateManifestGroupAsync(
         long id,
@@ -123,7 +125,13 @@ public interface IOperationsService
     /// </summary>
     /// <returns>
     /// <c>OperationResult(true, Count: N, ...)</c> where <c>N</c> is the number of
-    /// fields actually changed.
+    /// fields actually changed. <c>OperationResult(false, ...)</c>, naming each offending field,
+    /// when a value is outside the range the scheduler can run with: a polling or cleanup interval
+    /// outside 1 second to 30 days; a job timeout, stale-pending timeout or metadata retention
+    /// under 1 second; a negative retry count, retry delay or dead-letter retention; any duration
+    /// over ten years; a <c>MaxActiveJobs</c> below 1; a <c>LocalWorkerCount</c> outside 1 to
+    /// 256; or a backoff multiplier below 1 or
+    /// not finite. A refused patch applies nothing.
     /// </returns>
     Task<OperationResult> UpdateSchedulerConfigAsync(
         UpdateSchedulerConfigInput input,

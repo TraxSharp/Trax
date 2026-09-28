@@ -216,6 +216,70 @@ public class OperationsServiceManifestGroupTests : TestSetup
         result.Message.Should().Contain("not found");
     }
 
+    [TestCase(null, -1, "Priority", TestName = "UpdateManifestGroupAsync_NegativePriority_Refused")]
+    [TestCase(null, 32, "Priority", TestName = "UpdateManifestGroupAsync_PriorityAbove31_Refused")]
+    [TestCase(
+        0,
+        null,
+        "MaxActiveJobs",
+        TestName = "UpdateManifestGroupAsync_ZeroMaxActiveJobs_Refused"
+    )]
+    [TestCase(
+        -3,
+        null,
+        "MaxActiveJobs",
+        TestName = "UpdateManifestGroupAsync_NegativeMaxActiveJobs_Refused"
+    )]
+    public async Task UpdateManifestGroupAsync_OutOfRange_IsAFailedResultAndChangesNothing(
+        int? maxActiveJobs,
+        int? priority,
+        string field
+    )
+    {
+        var group = await CreateAndSaveManifestGroup(
+            DataContext,
+            "g",
+            maxActiveJobs: 2,
+            priority: 3,
+            isEnabled: true
+        );
+
+        var result = await _operations.UpdateManifestGroupAsync(
+            group.Id,
+            new UpdateManifestGroupInput(
+                MaxActiveJobs: maxActiveJobs,
+                Priority: priority,
+                IsEnabled: false
+            ),
+            CancellationToken.None
+        );
+
+        result.Success.Should().BeFalse("the service validates, not only the dashboard's form");
+        result.Message.Should().Contain(field);
+        DataContext.Reset();
+        var fresh = DataContext.ManifestGroups.Single();
+        fresh.MaxActiveJobs.Should().Be(2);
+        fresh.Priority.Should().Be(3);
+        fresh
+            .IsEnabled.Should()
+            .BeTrue("a refused patch writes none of its fields, including the valid ones");
+    }
+
+    [Test]
+    public async Task UpdateManifestGroupAsync_BoundaryValues_Accepted()
+    {
+        var group = await CreateAndSaveManifestGroup(DataContext, "g", priority: 3);
+
+        var result = await _operations.UpdateManifestGroupAsync(
+            group.Id,
+            new UpdateManifestGroupInput(MaxActiveJobs: 1, Priority: 31),
+            CancellationToken.None
+        );
+
+        result.Success.Should().BeTrue(result.Message);
+        result.Count.Should().Be(2);
+    }
+
     #endregion
 
     #region GetManifestGroupDependencyGraphAsync
