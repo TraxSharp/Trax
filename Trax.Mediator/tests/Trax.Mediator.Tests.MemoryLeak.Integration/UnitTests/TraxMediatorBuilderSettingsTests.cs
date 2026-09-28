@@ -75,6 +75,55 @@ public class TraxMediatorBuilderSettingsTests
     }
 
     [Test]
+    public void MaxQueueHookDuration_DefaultsToThirtySeconds()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects)
+                .AddMediator(m => m.ScanAssemblies(typeof(AssemblyMarker).Assembly))
+        );
+
+        using var provider = services.BuildServiceProvider();
+        var config = provider.GetRequiredService<MediatorConfiguration>();
+
+        config.MaxQueueHookDuration.Should().Be(TimeSpan.FromSeconds(30));
+    }
+
+    [Test]
+    public void WithMaxQueueHookDuration_AppliesToConfiguration()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects)
+                .AddMediator(m =>
+                    m.ScanAssemblies(typeof(AssemblyMarker).Assembly)
+                        .WithMaxQueueHookDuration(TimeSpan.FromSeconds(5))
+                )
+        );
+
+        using var provider = services.BuildServiceProvider();
+        var config = provider.GetRequiredService<MediatorConfiguration>();
+
+        config.MaxQueueHookDuration.Should().Be(TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public void WithMaxQueueHookDuration_AcceptsInfiniteAndRefusesZeroOrNegative()
+    {
+        var builder = new TraxMediatorBuilder(null!);
+
+        Action infinite = () => builder.WithMaxQueueHookDuration(Timeout.InfiniteTimeSpan);
+        Action zero = () => builder.WithMaxQueueHookDuration(TimeSpan.Zero);
+        Action negative = () => builder.WithMaxQueueHookDuration(TimeSpan.FromSeconds(-1));
+
+        infinite.Should().NotThrow();
+        zero.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*positive*");
+        negative.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*positive*");
+    }
+
+    [Test]
     public void PerPrincipalMaxConcurrentRun_PositiveValue_AppliesToConfiguration()
     {
         var services = new ServiceCollection();

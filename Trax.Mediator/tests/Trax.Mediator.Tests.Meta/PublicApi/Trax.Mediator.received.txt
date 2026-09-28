@@ -2,11 +2,13 @@ namespace Trax.Mediator.Configuration
 {
     public class MediatorConfiguration
     {
+        public static readonly System.TimeSpan DefaultMaxQueueHookDuration;
         public MediatorConfiguration() { }
         public bool AllowMissingAuthorizationService { get; }
         public System.Reflection.Assembly[] Assemblies { get; }
         public int? GlobalMaxConcurrentRun { get; }
         public int MaxInputJsonBytes { get; }
+        public System.TimeSpan MaxQueueHookDuration { get; }
         public int? PerPrincipalMaxConcurrentRun { get; }
         public bool SkipChainVerification { get; }
         public Microsoft.Extensions.DependencyInjection.ServiceLifetime TrainLifetime { get; }
@@ -29,6 +31,7 @@ namespace Trax.Mediator.Configuration
         public Trax.Mediator.Configuration.TraxMediatorBuilder SkipChainVerification() { }
         public Trax.Mediator.Configuration.TraxMediatorBuilder TrainLifetime(Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) { }
         public Trax.Mediator.Configuration.TraxMediatorBuilder WithMaxInputJsonBytes(int bytes) { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder WithMaxQueueHookDuration(System.TimeSpan limit) { }
     }
 }
 namespace Trax.Mediator.Exceptions
@@ -38,6 +41,12 @@ namespace Trax.Mediator.Exceptions
         public AmbiguousTrainNameException(string requestedName, System.Collections.Generic.IReadOnlyList<string> candidateFullNames) { }
         public System.Collections.Generic.IReadOnlyList<string> CandidateFullNames { get; }
         public string RequestedName { get; }
+    }
+    public class QueueHookTimeoutException : System.InvalidOperationException
+    {
+        public QueueHookTimeoutException(string trainName, System.TimeSpan limit) { }
+        public System.TimeSpan Limit { get; }
+        public string TrainName { get; }
     }
     public class QueuedWorkCancelledException : System.InvalidOperationException
     {

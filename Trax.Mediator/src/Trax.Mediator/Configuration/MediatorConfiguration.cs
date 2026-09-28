@@ -76,4 +76,22 @@ public class MediatorConfiguration
     /// has no effect.
     /// </summary>
     public int? PerPrincipalMaxConcurrentRun { get; internal set; }
+
+    /// <summary>
+    /// How long an <c>OnQueue</c> hook may run while its enqueue holds a connection and an open
+    /// transaction. Past it the enqueue fails with
+    /// <see cref="Exceptions.QueueHookTimeoutException"/>, rolls back what the hook wrote, and
+    /// releases the connection. Defaults to 30 seconds; <see cref="Timeout.InfiniteTimeSpan"/>
+    /// removes the limit. Set via <c>TraxMediatorBuilder.WithMaxQueueHookDuration(TimeSpan)</c>.
+    /// </summary>
+    /// <remarks>
+    /// The hook's token is cancelled at the limit, but a hook that ignores it keeps running after
+    /// its enqueue has failed, without the enqueue's context or transaction. An enqueue it starts
+    /// after that is refused. A deferring train's hook holds no connection while it runs and is
+    /// not limited; the stale-staged sweep bounds it instead. See mediator/0004.
+    /// </remarks>
+    public TimeSpan MaxQueueHookDuration { get; internal set; } = DefaultMaxQueueHookDuration;
+
+    /// <summary>The default <see cref="MaxQueueHookDuration"/>: 30 seconds.</summary>
+    public static readonly TimeSpan DefaultMaxQueueHookDuration = TimeSpan.FromSeconds(30);
 }

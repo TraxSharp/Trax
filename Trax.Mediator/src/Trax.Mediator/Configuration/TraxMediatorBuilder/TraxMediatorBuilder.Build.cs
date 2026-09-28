@@ -28,6 +28,7 @@ public partial class TraxMediatorBuilder
             SkipChainVerification = _skipChainVerification,
             MaxInputJsonBytes = _maxInputJsonBytes,
             PerPrincipalMaxConcurrentRun = _perPrincipalMaxConcurrentRun,
+            MaxQueueHookDuration = _maxQueueHookDuration,
         };
 
         foreach (var (trainName, limit) in _concurrencyOverrides)

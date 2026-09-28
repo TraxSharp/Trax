@@ -16,7 +16,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | Working on | Read first |
 | --- | --- |
 | `[TraxAuthorize]`, or anything in `TrainAuthorization/` | [0001](./docs/adr/0001-authorization-is-fail-closed.md), the default is fail-closed and the opt-out is a named call |
-| `TrainExecutionService.QueueAsync` | central `docs/0017` (a caller's enqueue goes through the mediator), `docs/0018` (the deferred, staged enqueue) and `docs/0019` (the subject key it stamps) |
+| `TrainExecutionService.QueueAsync` | central `docs/0017` (a caller's enqueue goes through the mediator), `docs/0018` (the deferred, staged enqueue) and `docs/0019` (the subject key it stamps); [0004](./docs/adr/0004-an-onqueue-hook-runs-under-a-time-limit.md) for the hook's time limit |
 | `TrainChainStartupValidator`, or `SkipChainVerification()` | central `docs/0016`, a chain is a declaration the host reads at startup |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose

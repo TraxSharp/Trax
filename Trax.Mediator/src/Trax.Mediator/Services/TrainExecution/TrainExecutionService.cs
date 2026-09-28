@@ -171,11 +171,12 @@ public class TrainExecutionService(
                 {
                     try
                     {
-                        await InvokeQueueHookAsync(
+                        await InvokeQueueHookWithinLimitAsync(
                             registration,
                             train,
                             input,
                             entry.ExternalId,
+                            joinable,
                             ct
                         );
                     }
@@ -696,6 +697,77 @@ public class TrainExecutionService(
     }
 
     /// <summary>
+    /// Runs the hook of an enqueue that holds a connection and an open transaction, for at most
+    /// <see cref="MediatorConfiguration.MaxQueueHookDuration"/>. Past it the hook's token is
+    /// cancelled and the enqueue stops waiting, whether or not the hook stops, and throws
+    /// <see cref="QueueHookTimeoutException"/>, so the caller rolls back and releases the
+    /// connection (mediator/0004).
+    /// </summary>
+    /// <remarks>
+    /// A hook still running after that has lost its enqueue: an enqueue it starts is refused
+    /// rather than committing on its own, because the caller was told this one failed. Whatever it
+    /// later throws is logged, since nobody is left to observe it.
+    /// </remarks>
+    private async Task InvokeQueueHookWithinLimitAsync(
+        TrainRegistration registration,
+        EnqueueTrain train,
+        object input,
+        string externalId,
+        JoinableEnqueue? joinable,
+        CancellationToken ct
+    )
+    {
+        var limit = mediatorConfiguration.MaxQueueHookDuration;
+
+        if (limit == Timeout.InfiniteTimeSpan)
+        {
+            await InvokeQueueHookAsync(registration, train, input, externalId, ct);
+            return;
+        }
+
+        using var limited = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limited.CancelAfter(limit);
+
+        var hook = InvokeQueueHookAsync(registration, train, input, externalId, limited.Token);
+
+        try
+        {
+            await hook.WaitAsync(limited.Token);
+        }
+        catch (OperationCanceledException)
+            when (limited.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            joinable?.Abandon();
+
+            var trainName = registration.ServiceType.FullName ?? registration.ServiceTypeName;
+            var logger = serviceProvider.GetService<ILogger<TrainExecutionService>>();
+
+            logger?.LogWarning(
+                "{Train}.OnQueue ran past MaxQueueHookDuration ({Limit}); its enqueue was "
+                    + "rolled back.",
+                trainName,
+                limit
+            );
+
+            if (!hook.IsCompleted)
+                _ = hook.ContinueWith(
+                    abandoned =>
+                        logger?.LogWarning(
+                            abandoned.Exception,
+                            "{Train}.OnQueue threw after its enqueue had already failed on "
+                                + "MaxQueueHookDuration.",
+                            trainName
+                        ),
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted,
+                    TaskScheduler.Default
+                );
+
+            throw new QueueHookTimeoutException(trainName, limit);
+        }
+    }
+
+    /// <summary>
     /// Returns the train's overridden <c>OnQueue</c> method, or null when the train does not
     /// override the no-op <c>ServiceTrain&lt;,&gt;.OnQueue</c>. Trains that do not override it (the
     /// common case) skip resolution entirely, so the enqueue path stays as light as it was before
@@ -954,6 +1026,7 @@ public class TrainExecutionService(
         private readonly object _state = new();
         private int _inFlight;
         private bool _closed;
+        private bool _abandoned;
         private Exception? _failure;
 
         public IDataContext Context { get; } = context;
@@ -977,6 +1050,14 @@ public class TrainExecutionService(
         {
             lock (_state)
             {
+                if (_abandoned)
+                    throw new InvalidOperationException(
+                        "This enqueue was started from an OnQueue hook whose own enqueue already "
+                            + "failed on MaxQueueHookDuration and was rolled back, so there is "
+                            + "nothing for it to join, and committing on its own would queue work "
+                            + "for a mutation the caller was told failed."
+                    );
+
                 if (_closed)
                     return null;
 
@@ -1010,6 +1091,19 @@ public class TrainExecutionService(
         {
             lock (_state)
                 _closed = true;
+        }
+
+        /// <summary>
+        /// Ends joining for good: the outer hook ran past its limit and the enqueue failed while
+        /// it was still running, so anything it enqueues from now on is refused.
+        /// </summary>
+        public void Abandon()
+        {
+            lock (_state)
+            {
+                _closed = true;
+                _abandoned = true;
+            }
         }
 
         /// <summary>

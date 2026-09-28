@@ -18,6 +18,7 @@ public partial class TraxMediatorBuilder
     private bool _skipChainVerification;
     private int _maxInputJsonBytes = 262_144;
     private int? _perPrincipalMaxConcurrentRun;
+    private TimeSpan _maxQueueHookDuration = MediatorConfiguration.DefaultMaxQueueHookDuration;
 
     internal TraxMediatorBuilder(TraxBuilderWithEffects parent)
     {

@@ -104,4 +104,37 @@ public partial class TraxMediatorBuilder
         _perPrincipalMaxConcurrentRun = limit;
         return this;
     }
+
+    /// <summary>
+    /// Sets how long an <c>OnQueue</c> hook may run while its enqueue holds a pooled connection
+    /// with a transaction open. Default is 30 seconds. Past the limit the hook's token is
+    /// cancelled and the enqueue fails with <see cref="Exceptions.QueueHookTimeoutException"/>,
+    /// rolling back everything the hook wrote on the enqueue's context and releasing the
+    /// connection, whether or not the hook stops.
+    /// </summary>
+    /// <remarks>
+    /// A hook that has to wait on something slow is better written as a deferring train
+    /// (<c>DeferQueuePromotion</c>), which holds no connection while its hook runs and is not
+    /// limited by this. A hook that blocks its thread instead of awaiting is not interrupted
+    /// until it yields.
+    /// </remarks>
+    /// <param name="limit">
+    /// A positive duration, or <see cref="Timeout.InfiniteTimeSpan"/> for no limit.
+    /// </param>
+    public TraxMediatorBuilder WithMaxQueueHookDuration(TimeSpan limit)
+    {
+        if (
+            limit != Timeout.InfiniteTimeSpan
+            && (limit <= TimeSpan.Zero || limit.TotalMilliseconds > int.MaxValue)
+        )
+            throw new ArgumentOutOfRangeException(
+                nameof(limit),
+                limit,
+                "MaxQueueHookDuration must be positive and at most int.MaxValue milliseconds, "
+                    + "or Timeout.InfiniteTimeSpan for no limit."
+            );
+
+        _maxQueueHookDuration = limit;
+        return this;
+    }
 }
