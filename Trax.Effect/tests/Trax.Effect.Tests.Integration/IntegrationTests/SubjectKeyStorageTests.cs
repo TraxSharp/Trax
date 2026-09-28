@@ -12,8 +12,9 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 /// <summary>
 /// The subject key limit counts characters, and a character can take four bytes in UTF-8, so the
 /// longest key <see cref="WorkQueue.Create"/> accepts has to fit the Postgres btree entry limit
-/// (2704 bytes) once the entry is dispatched and enters the partial subject index. A key that does
-/// not fit inserts fine while queued and then fails every claim.
+/// (2704 bytes) in both partial subject indexes: <c>ix_work_queue_subject_queued</c> takes the key on
+/// insert, and <c>ix_work_queue_subject_busy</c> takes it again once the entry is dispatched. Before
+/// the queued index, a key that did not fit inserted fine and then failed every claim.
 ///
 /// <para>Enforces Trax.Docs/adr/0019-queued-work-for-one-subject-runs-one-at-a-time.md.</para>
 /// </summary>
@@ -36,7 +37,7 @@ public class SubjectKeyStorageTests : TestSetup
             await context.SaveChanges(CancellationToken.None);
 
             // ix_work_queue_subject_busy is partial on status = 'dispatched', so this update is
-            // the write that has to fit the index.
+            // the write that has to fit that index; the insert above had to fit the queued one.
             entry.Status = WorkQueueStatus.Dispatched;
             var act = () => context.SaveChanges(CancellationToken.None);
 
