@@ -25,5 +25,26 @@ internal static class TestPostgres
         )
         {
             Port = Port,
+            ConnectionIdleLifetime = IdleLifetimeSeconds,
+            ConnectionPruningInterval = PruningIntervalSeconds,
         }.ConnectionString;
+
+    /// <summary>
+    /// A connection string for another test database on the same server, with the same pool
+    /// settings as <see cref="ConnectionString"/>.
+    /// </summary>
+    public static string ConnectionStringFor(string database) =>
+        new NpgsqlConnectionStringBuilder(ConnectionString)
+        {
+            Database = database,
+        }.ConnectionString;
+
+    // Most fixtures build their own service provider, and UsePostgres registers its
+    // NpgsqlDataSource as an instance the container never disposes, so a discarded provider's
+    // pool stays open. With Npgsql's defaults (a 300 s idle lifetime) a full run holds about 100
+    // connections at its peak and a second concurrent run is refused with 53300. Closing idle
+    // connections after two seconds brings the peak to about 35, with no measurable cost in run
+    // time. This is redundant once Trax.Effect disposes the data source itself.
+    private const int IdleLifetimeSeconds = 2;
+    private const int PruningIntervalSeconds = 1;
 }

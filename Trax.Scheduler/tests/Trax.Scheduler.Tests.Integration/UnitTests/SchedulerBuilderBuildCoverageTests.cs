@@ -27,8 +27,9 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class SchedulerBuilderBuildCoverageTests
 {
-    private static readonly string PostgresConnection =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_scheduler_builder_validation;Username=trax;Password=trax123";
+    private static readonly string PostgresConnection = TestPostgres.ConnectionStringFor(
+        "trax_scheduler_builder_validation"
+    );
 
     #region ValidateNoCyclicGroupDependencies
 

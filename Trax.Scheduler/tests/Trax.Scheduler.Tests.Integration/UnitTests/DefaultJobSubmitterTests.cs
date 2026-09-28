@@ -24,8 +24,9 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class DefaultJobSubmitterTests
 {
-    private static readonly string ConnectionString =
-        $"Host=localhost;Port={TestPostgres.Port};Database=trax_scheduler_default_submitter;Username=trax;Password=trax123";
+    private static readonly string ConnectionString = TestPostgres.ConnectionStringFor(
+        "trax_scheduler_default_submitter"
+    );
 
     /// <summary>
     /// Inspects the service collection to find which implementation type was registered
