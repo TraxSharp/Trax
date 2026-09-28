@@ -7,6 +7,13 @@ using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;
 
+/// <summary>
+/// Discovery reads <c>[TraxAuthorize]</c> from every surface a train can carry it on, and keeps
+/// the declared roles exactly as written.
+///
+/// <para>Enforces Trax.Docs/adr/0026-train-roles-match-exactly-like-authorize.md.</para>
+/// </summary>
+[Property("adr", "Trax.Docs/adr/0026-train-roles-match-exactly-like-authorize.md")]
 [TestFixture]
 public class TrainDiscoveryAuthorizationTests
 {
@@ -40,7 +47,7 @@ public class TrainDiscoveryAuthorizationTests
         var reg = Discover<IInterfaceAuthorizedTrain, InterfaceAuthorizedTrainImpl>();
 
         reg.HasAuthorizeAttribute.Should().BeTrue();
-        reg.RequiredRoles.Should().Contain("MANAGER");
+        reg.RequiredRoles.Should().Contain("Manager");
     }
 
     [Test]
@@ -59,9 +66,7 @@ public class TrainDiscoveryAuthorizationTests
 
         reg.HasAuthorizeAttribute.Should().BeTrue();
         reg.RequiredPolicies.Should().BeEquivalentTo(new[] { "FromInterface", "FromImpl" });
-        // Roles are normalized to upper-invariant at discovery so comparisons
-        // downstream are case-insensitive.
-        reg.RequiredRoles.Should().BeEquivalentTo(new[] { "ROLEA", "ROLEB" });
+        reg.RequiredRoles.Should().BeEquivalentTo(new[] { "RoleA", "RoleB" });
     }
 
     [Test]
@@ -75,11 +80,32 @@ public class TrainDiscoveryAuthorizationTests
     }
 
     [Test]
-    public void Roles_AreNormalized_ToUpperInvariant()
+    public void Roles_AreKept_AsDeclared()
     {
         var reg = Discover<IMixedCaseRolesTrain, MixedCaseRolesTrainImpl>();
 
-        reg.RequiredRoles.Should().BeEquivalentTo(new[] { "ADMIN", "MANAGER", "AUDITOR" });
+        reg.RequiredRoles.Should()
+            .Equal(
+                ["admin", "Manager", "AUDITOR"],
+                "train roles match a principal's role claims exactly and ordinally, like "
+                    + "@authorize, so discovery must not fold their case "
+                    + "(Trax.Docs/adr/0026-train-roles-match-exactly-like-authorize.md)"
+            );
+    }
+
+    [Test]
+    public void Roles_AreNotCaseMapped_SoLookalikesStayDistinct()
+    {
+        var reg = Discover<ILookalikeRolesTrain, LookalikeRolesTrainImpl>();
+
+        // Upper-casing with the invariant culture turned the long s into S, so a claim of
+        // "SUPERUSER" satisfied a role declared as "\u017Fuperuser".
+        reg.RequiredRoles.Should()
+            .Equal(
+                ["\u017Fuperuser", "Admin", "admin"],
+                "a role that only resembles another under case mapping is a different role "
+                    + "(Trax.Docs/adr/0026-train-roles-match-exactly-like-authorize.md)"
+            );
     }
 
     // The startup-time validation for malformed attribute shapes
@@ -88,6 +114,15 @@ public class TrainDiscoveryAuthorizationTests
     // IServiceTrain types in this shared test assembly would pollute every
     // assembly-scan-based integration test, so those fixtures live inside the
     // validator's test file and are registered manually.
+
+    [TraxAuthorize(Roles = "\u017Fuperuser, Admin, admin")]
+    public interface ILookalikeRolesTrain : IServiceTrain<EmptyIn, EmptyOut>;
+
+    public class LookalikeRolesTrainImpl : ServiceTrain<EmptyIn, EmptyOut>, ILookalikeRolesTrain
+    {
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
+            Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
+    }
 
     [TraxAuthorize(Roles = "admin, Manager, AUDITOR")]
     public interface IMixedCaseRolesTrain : IServiceTrain<EmptyIn, EmptyOut>;

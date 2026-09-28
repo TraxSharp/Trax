@@ -20,6 +20,12 @@ public class TrainRegistration
     public required string OutputTypeName { get; init; }
 
     public required IReadOnlyList<string> RequiredPolicies { get; init; }
+
+    /// <summary>
+    /// The roles from every <see cref="TraxAuthorizeAttribute"/> on the train, exactly as declared:
+    /// split on <c>','</c>, trimmed, de-duplicated ordinally, and never case-folded. The caller must
+    /// hold one of them, compared ordinally against its role claims, as <c>@authorize</c> does.
+    /// </summary>
     public required IReadOnlyList<string> RequiredRoles { get; init; }
 
     /// <summary>

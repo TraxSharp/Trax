@@ -195,13 +195,14 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             var parsed = attr.Roles!.Split(',', StringSplitOptions.TrimEntries)
                 .Where(r => r.Length > 0);
 
-            // Normalize to upper-invariant so role comparisons are case-insensitive
-            // regardless of what casing the user's ClaimTypes.Role claims carry.
+            // Kept exactly as declared. A role is matched against the principal's role claims
+            // ordinally, the way @authorize matches them, so "Admin" and "admin" are different
+            // roles. Folding case here once let a claim satisfy a role it only resembled: the
+            // invariant culture upper-cases the long s to S.
             foreach (var role in parsed)
             {
-                var normalized = role.ToUpperInvariant();
-                if (!roles.Contains(normalized))
-                    roles.Add(normalized);
+                if (!roles.Contains(role, StringComparer.Ordinal))
+                    roles.Add(role);
             }
         }
 
