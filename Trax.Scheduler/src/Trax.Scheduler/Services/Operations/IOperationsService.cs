@@ -94,6 +94,81 @@ public interface IOperationsService
     Task<OperationResult> CancelWorkQueueEntryAsync(long id, CancellationToken ct);
 
     /// <summary>
+    /// Requests cancellation of the given runs: every one still <c>Pending</c> or
+    /// <c>InProgress</c> has <c>CancellationRequested</c> set, which a run observes at its next
+    /// junction boundary on any host, and each is also cancelled at once through the
+    /// <c>ICancellationRegistry</c> when it runs on this host. Terminal and unknown ids are
+    /// skipped. <c>ITraxScheduler.CancelAsync</c> and <c>CancelGroupAsync</c> apply the same
+    /// rule to a manifest's or a group's runs.
+    /// </summary>
+    /// <returns>
+    /// <c>OperationResult(true, Count: N, ...)</c> where <c>N</c> is the number of runs flagged,
+    /// zero included. <c>OperationResult(false, ...)</c> for an empty list or more than
+    /// <c>OperationsService.MaxBatchSize</c> ids, with nothing flagged.
+    /// </returns>
+    Task<OperationResult> CancelExecutionsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(CancelExecutionsAsync));
+
+    /// <summary>
+    /// Cancels the given work queue entries that are still <c>Queued</c>, in one statement, so an
+    /// entry dispatched meanwhile is left alone. Other ids are skipped. Signals
+    /// <c>ChangeDomain.WorkQueue</c> when any entry changed.
+    /// </summary>
+    /// <returns>
+    /// <c>OperationResult(true, Count: N, ...)</c> where <c>N</c> is the number cancelled, zero
+    /// included; <c>OperationResult(false, ...)</c> for an empty list or too many ids.
+    /// </returns>
+    Task<OperationResult> CancelWorkQueueEntriesAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(CancelWorkQueueEntriesAsync));
+
+    /// <summary>
+    /// Enables or disables the given manifests by id. Only manifests whose flag differs are
+    /// written, and <c>ChangeDomain.Manifest</c> is signalled when any did.
+    /// </summary>
+    /// <returns>
+    /// <c>OperationResult(true, Count: N, ...)</c> where <c>N</c> is the number changed, zero
+    /// included; <c>OperationResult(false, ...)</c> for an empty list or too many ids.
+    /// </returns>
+    Task<OperationResult> SetManifestsEnabledAsync(
+        IReadOnlyCollection<long> ids,
+        bool enabled,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(SetManifestsEnabledAsync));
+
+    /// <summary>
+    /// Enables or disables the given manifest groups by id. Only groups whose flag differs are
+    /// written, with <c>UpdatedAt</c> bumped, and <c>ChangeDomain.ManifestGroup</c> is signalled
+    /// when any did.
+    /// </summary>
+    /// <returns>
+    /// <c>OperationResult(true, Count: N, ...)</c> where <c>N</c> is the number changed, zero
+    /// included; <c>OperationResult(false, ...)</c> for an empty list or too many ids.
+    /// </returns>
+    Task<OperationResult> SetManifestGroupsEnabledAsync(
+        IReadOnlyCollection<long> ids,
+        bool enabled,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(SetManifestGroupsEnabledAsync));
+
+    /// <summary>
+    /// Enables or disables every manifest group, as <see cref="SetManifestGroupsEnabledAsync"/>
+    /// does for a list. A separate method so that "all" is never what an empty or missing list
+    /// means.
+    /// </summary>
+    Task<OperationResult> SetAllManifestGroupsEnabledAsync(bool enabled, CancellationToken ct) =>
+        throw NotImplementedBy(nameof(SetAllManifestGroupsEnabledAsync));
+
+    private NotSupportedException NotImplementedBy(string member) =>
+        new(
+            $"{GetType().Name} does not implement {member}. It was added to IOperationsService "
+                + "after this implementation was written."
+        );
+
+    /// <summary>
     /// Patches mutable settings on a manifest group (max active jobs, priority, enabled
     /// flag). Each field on <paramref name="input"/> is optional and "no change by default":
     /// only properties explicitly set on the input are written. <c>UpdatedAt</c> is bumped

@@ -14,6 +14,14 @@ using Trax.Scheduler.Tests.Integration.Fixtures;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
+/// <summary>
+/// Cancelling a manifest's or a group's runs through <c>ITraxScheduler</c>. It follows the rule
+/// <c>IOperationsService.CancelExecutionsAsync</c> applies to a list of runs, so the dashboard's
+/// group page and the API's <c>cancelGroup</c> cancel the same runs as a selection would.
+///
+/// <para>Enforces <c>Trax.Docs/adr/0022-the-dashboard-and-the-api-share-one-operation-per-action.md</c>.</para>
+/// </summary>
+[Property("adr", "Trax.Docs/adr/0022-the-dashboard-and-the-api-share-one-operation-per-action.md")]
 [TestFixture]
 public class TraxSchedulerCancelTests : TestSetup
 {
@@ -124,9 +132,54 @@ public class TraxSchedulerCancelTests : TestSetup
         }
     }
 
+    [Test]
+    public async Task CancelAsync_FlagsAPendingRun_AsCancelExecutionsDoes()
+    {
+        var (manifest, runs) = await CreateManifestWithMultipleMetadata(
+            TrainState.Pending,
+            TrainState.InProgress,
+            TrainState.Completed
+        );
+
+        var count = await _scheduler.CancelAsync(manifest.ExternalId);
+
+        count
+            .Should()
+            .Be(
+                2,
+                "a manifest's runs are cancelled by the same rule as a list of runs (docs/0022)"
+            );
+        DataContext.Reset();
+        var flagged = await DataContext
+            .Metadatas.AsNoTracking()
+            .Where(m => m.ManifestId == manifest.Id && m.CancellationRequested)
+            .Select(m => m.Id)
+            .ToListAsync();
+        flagged.Should().BeEquivalentTo([runs[0].Id, runs[1].Id]);
+    }
+
     #endregion
 
     #region CancelGroupAsync Tests
+
+    [Test]
+    public async Task CancelGroupAsync_FlagsAPendingRun_AsCancelExecutionsDoes()
+    {
+        var group = await TestSetup.CreateAndSaveManifestGroup(
+            DataContext,
+            name: $"pending-group-{Guid.NewGuid():N}"
+        );
+        var manifest = await CreateManifestInGroup(group);
+        var pending = await CreateMetadataForManifest(manifest, TrainState.Pending);
+
+        var count = await _scheduler.CancelGroupAsync(group.Id);
+
+        count.Should().Be(1);
+        DataContext.Reset();
+        (await DataContext.Metadatas.AsNoTracking().SingleAsync(m => m.Id == pending.Id))
+            .CancellationRequested.Should()
+            .BeTrue();
+    }
 
     [Test]
     public async Task CancelGroupAsync_CancelsAllInProgressInGroup()

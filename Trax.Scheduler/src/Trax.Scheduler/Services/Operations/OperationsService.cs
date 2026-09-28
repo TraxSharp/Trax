@@ -22,6 +22,7 @@ using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Services.TrustedExecution;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Scheduler.Services.Operations;
@@ -473,6 +474,177 @@ public class OperationsService : IOperationsService
                 metadataId
             );
         }
+    }
+
+    /// <summary>
+    /// The most ids one batch operation takes. A batch is what an operator selects on a page, so
+    /// a list longer than this is a caller's mistake, and refusing it keeps one call from
+    /// becoming an unbounded statement.
+    /// </summary>
+    public const int MaxBatchSize = 1000;
+
+    /// <inheritdoc />
+    public async Task<OperationResult> CancelExecutionsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken ct
+    )
+    {
+        if (RefuseBatch(ids) is { } refused)
+            return refused;
+
+        var distinct = ids.Distinct().ToList();
+
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var flagged = await ExecutionCancellation.RequestAsync(
+            db,
+            db.Metadatas.Where(m => distinct.Contains(m.Id)),
+            _services?.GetService<ICancellationRegistry>(),
+            ct
+        );
+
+        // No change signal: ChangeDomain has no domain for runs, and a run's state change is
+        // published by the train's own events when the cancellation takes effect.
+        return new OperationResult(
+            true,
+            Count: flagged,
+            Message: $"Cancellation requested for {flagged} of {distinct.Count} execution(s)."
+        );
+    }
+
+    /// <inheritdoc />
+    public async Task<OperationResult> CancelWorkQueueEntriesAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken ct
+    )
+    {
+        if (RefuseBatch(ids) is { } refused)
+            return refused;
+
+        var distinct = ids.Distinct().ToList();
+
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        // One statement with the status test in it, so an entry the dispatcher claims meanwhile
+        // keeps its Dispatched status instead of being overwritten.
+        var cancelled = await db
+            .WorkQueues.Where(q => distinct.Contains(q.Id) && q.Status == WorkQueueStatus.Queued)
+            .ExecuteUpdateAsync(s => s.SetProperty(q => q.Status, WorkQueueStatus.Cancelled), ct);
+
+        if (cancelled > 0)
+            _changeSignal?.Notify(ChangeDomain.WorkQueue);
+
+        return new OperationResult(
+            true,
+            Count: cancelled,
+            Message: $"{cancelled} of {distinct.Count} work queue entry(s) cancelled."
+        );
+    }
+
+    /// <inheritdoc />
+    public async Task<OperationResult> SetManifestsEnabledAsync(
+        IReadOnlyCollection<long> ids,
+        bool enabled,
+        CancellationToken ct
+    )
+    {
+        if (RefuseBatch(ids) is { } refused)
+            return refused;
+
+        var distinct = ids.Distinct().ToList();
+
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var changed = await db
+            .Manifests.Where(m => distinct.Contains(m.Id) && m.IsEnabled != enabled)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.IsEnabled, enabled), ct);
+
+        if (changed > 0)
+            _changeSignal?.Notify(ChangeDomain.Manifest);
+
+        return new OperationResult(
+            true,
+            Count: changed,
+            Message: $"{changed} of {distinct.Count} manifest(s) {(enabled ? "enabled" : "disabled")}."
+        );
+    }
+
+    /// <inheritdoc />
+    public async Task<OperationResult> SetManifestGroupsEnabledAsync(
+        IReadOnlyCollection<long> ids,
+        bool enabled,
+        CancellationToken ct
+    )
+    {
+        if (RefuseBatch(ids) is { } refused)
+            return refused;
+
+        var distinct = ids.Distinct().ToList();
+
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var changed = await SetGroupsEnabledAsync(
+            db.ManifestGroups.Where(g => distinct.Contains(g.Id)),
+            enabled,
+            ct
+        );
+
+        return new OperationResult(
+            true,
+            Count: changed,
+            Message: $"{changed} of {distinct.Count} manifest group(s) {(enabled ? "enabled" : "disabled")}."
+        );
+    }
+
+    /// <inheritdoc />
+    public async Task<OperationResult> SetAllManifestGroupsEnabledAsync(
+        bool enabled,
+        CancellationToken ct
+    )
+    {
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var changed = await SetGroupsEnabledAsync(db.ManifestGroups, enabled, ct);
+
+        return new OperationResult(
+            true,
+            Count: changed,
+            Message: $"{changed} manifest group(s) {(enabled ? "enabled" : "disabled")}."
+        );
+    }
+
+    private async Task<int> SetGroupsEnabledAsync(
+        IQueryable<Trax.Effect.Models.ManifestGroup.ManifestGroup> groups,
+        bool enabled,
+        CancellationToken ct
+    )
+    {
+        var now = DateTime.UtcNow;
+        var changed = await groups
+            .Where(g => g.IsEnabled != enabled)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(g => g.IsEnabled, enabled).SetProperty(g => g.UpdatedAt, now),
+                ct
+            );
+
+        if (changed > 0)
+            _changeSignal?.Notify(ChangeDomain.ManifestGroup);
+
+        return changed;
+    }
+
+    /// <summary>
+    /// The failed result for a batch that cannot be run as given: no ids, or more than
+    /// <see cref="MaxBatchSize"/>. Null when the list is usable.
+    /// </summary>
+    private static OperationResult? RefuseBatch(IReadOnlyCollection<long> ids)
+    {
+        if (ids is null || ids.Count == 0)
+            return new OperationResult(false, Count: 0, Message: "No ids were given.");
+
+        if (ids.Count > MaxBatchSize)
+            return new OperationResult(
+                false,
+                Count: 0,
+                Message: $"At most {MaxBatchSize} ids can be given at once; {ids.Count} were."
+            );
+
+        return null;
     }
 
     /// <summary>

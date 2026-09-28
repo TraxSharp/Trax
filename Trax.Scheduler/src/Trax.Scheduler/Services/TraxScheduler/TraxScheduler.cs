@@ -496,30 +496,21 @@ public class TraxScheduler(
 
         var manifest = await GetManifestByExternalIdAsync(context, externalId, ct);
 
-        var inProgressMetadataIds = await context
-            .Metadatas.Where(m =>
-                m.ManifestId == manifest.Id && m.TrainState == TrainState.InProgress
-            )
-            .Select(m => m.Id)
-            .ToListAsync(ct);
-
-        if (inProgressMetadataIds.Count == 0)
-            return 0;
-
-        await context
-            .Metadatas.Where(m => inProgressMetadataIds.Contains(m.Id))
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.CancellationRequested, true), ct);
-
-        foreach (var metadataId in inProgressMetadataIds)
-            cancellationRegistry.TryCancel(metadataId);
-
-        logger.LogInformation(
-            "Cancellation requested for {Count} in-progress execution(s) of manifest {ExternalId}",
-            inProgressMetadataIds.Count,
-            externalId
+        var flagged = await ExecutionCancellation.RequestAsync(
+            context,
+            context.Metadatas.Where(m => m.ManifestId == manifest.Id),
+            cancellationRegistry,
+            ct
         );
 
-        return inProgressMetadataIds.Count;
+        if (flagged > 0)
+            logger.LogInformation(
+                "Cancellation requested for {Count} pending or in-progress execution(s) of manifest {ExternalId}",
+                flagged,
+                externalId
+            );
+
+        return flagged;
     }
 
     /// <inheritdoc />
@@ -527,32 +518,23 @@ public class TraxScheduler(
     {
         await using var context = CreateContext();
 
-        var inProgressMetadataIds = await context
-            .Metadatas.Where(m =>
-                m.Manifest != null
-                && m.Manifest.ManifestGroupId == groupId
-                && m.TrainState == TrainState.InProgress
-            )
-            .Select(m => m.Id)
-            .ToListAsync(ct);
-
-        if (inProgressMetadataIds.Count == 0)
-            return 0;
-
-        await context
-            .Metadatas.Where(m => inProgressMetadataIds.Contains(m.Id))
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.CancellationRequested, true), ct);
-
-        foreach (var metadataId in inProgressMetadataIds)
-            cancellationRegistry.TryCancel(metadataId);
-
-        logger.LogInformation(
-            "Cancellation requested for {Count} in-progress execution(s) in group {GroupId}",
-            inProgressMetadataIds.Count,
-            groupId
+        var flagged = await ExecutionCancellation.RequestAsync(
+            context,
+            context.Metadatas.Where(m =>
+                m.Manifest != null && m.Manifest.ManifestGroupId == groupId
+            ),
+            cancellationRegistry,
+            ct
         );
 
-        return inProgressMetadataIds.Count;
+        if (flagged > 0)
+            logger.LogInformation(
+                "Cancellation requested for {Count} pending or in-progress execution(s) in group {GroupId}",
+                flagged,
+                groupId
+            );
+
+        return flagged;
     }
 
     // ── Internal non-generic overloads (used by TrainConfigurator) ───

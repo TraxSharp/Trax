@@ -247,15 +247,16 @@ public interface ITraxScheduler
     Task<int> TriggerGroupAsync(long groupId, CancellationToken ct = default);
 
     /// <summary>
-    /// Cancels all currently running executions of a scheduled job.
+    /// Cancels all pending and running executions of a scheduled job.
     /// </summary>
     /// <param name="externalId">The external ID of the manifest whose executions should be cancelled.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The number of metadata records that had cancellation requested.</returns>
     /// <remarks>
-    /// Sets <c>CancellationRequested = true</c> on all InProgress metadata for the manifest
-    /// (cross-server, picked up at next junction boundary via CancellationCheckProvider) and also
-    /// attempts same-server instant cancellation via <see cref="ICancellationRegistry"/>.
+    /// Sets <c>CancellationRequested = true</c> on all Pending and InProgress metadata for the
+    /// manifest (cross-server, picked up at next junction boundary via CancellationCheckProvider)
+    /// and also attempts same-server instant cancellation via <see cref="ICancellationRegistry"/>.
+    /// The same rule <c>IOperationsService.CancelExecutionsAsync</c> applies to a list of runs.
     /// Cancelled trains transition to <see cref="TrainState.Cancelled"/> and are not retried.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
@@ -264,14 +265,16 @@ public interface ITraxScheduler
     Task<int> CancelAsync(string externalId, CancellationToken ct = default);
 
     /// <summary>
-    /// Cancels all currently running executions for all manifests in a manifest group.
+    /// Cancels all pending and running executions for all manifests in a manifest group.
     /// </summary>
     /// <param name="groupId">The ID of the manifest group whose executions should be cancelled.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The number of metadata records that had cancellation requested.</returns>
     /// <remarks>
-    /// Sets <c>CancellationRequested = true</c> on all InProgress metadata for manifests in
-    /// the group and attempts same-server instant cancellation via <see cref="ICancellationRegistry"/>.
+    /// Sets <c>CancellationRequested = true</c> on all Pending and InProgress metadata for
+    /// manifests in the group and attempts same-server instant cancellation via
+    /// <see cref="ICancellationRegistry"/>, the rule <c>IOperationsService.CancelExecutionsAsync</c>
+    /// applies to a list of runs.
     /// </remarks>
     Task<int> CancelGroupAsync(long groupId, CancellationToken ct = default);
 
