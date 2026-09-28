@@ -286,7 +286,7 @@ public class QueueInputTests : TestSetup
         using var context = await factory.CreateDbContextAsync(CancellationToken.None);
         (await context.WorkQueues.CountAsync(w => w.TrainName!.Contains("OptionalInputTrain")))
             .Should()
-            .Be(1, "the hook's own enqueue gets its own context rather than refusing to nest");
+            .Be(1, "the hook's enqueue joins the outer one rather than refusing to nest");
         (await EntryAsync(result.WorkQueueId)).Should().NotBeNull();
     }
 
