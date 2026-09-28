@@ -70,7 +70,8 @@ member may be removed when Trax.Core and Trax.Effect next take a coordinated maj
 
 A narrowing of `NewMonad()` is a runtime break for every published Effect, which is why the
 member is pinned by a test rather than left to the public API baseline, which shows the diff but
-cannot say it is a binary break.
+cannot say it is a binary break. Package validation now says so as well, at pack time, but only
+against the last Trax.Core release: the test holds the line whatever the baseline is.
 
 ## Exemplars
 
@@ -78,10 +79,19 @@ cannot say it is a binary break.
   `ChainRecordedException` as public and hidden.
 - The XML docs on both members say what they are and point here.
 
-Not covered: nothing checks the rest of Trax.Core's public surface for binary compatibility with
-the published Trax.Effect; the committed baseline (`Trax.Docs/adr/0010`) shows a surface change
-but not whether a published downstream assembly still loads.
+- Package validation (`EnablePackageValidation` in `Directory.Build.props`, run by the pack step
+  of the pull request workflow) fails a pack of Trax.Core or Trax.Core.Testing that is not binary
+  compatible with `PackageValidationBaselineVersion`, the last release. Narrowing `NewMonad()` is
+  one such break. `Trax.Docs/adr/0033` records the rule for every packing repo.
+
+Not covered: package validation compares Trax.Core with its own last release, not with what a
+published Trax.Effect was compiled against. A break that already shipped in a Core release is
+invisible to it from then on, and a baseline left stale after a release (the step is in the
+workspace release procedure, not automated) compares against an older version than consumers run.
 
 ## Changelog
 
+- **2026-09-27**: The "Not covered" line said nothing checks binary compatibility. Package
+  validation now does, against the last release, so it is named under Exemplars and the gap is
+  narrowed to what that comparison cannot see.
 - **2026-09-27**: Recorded.
