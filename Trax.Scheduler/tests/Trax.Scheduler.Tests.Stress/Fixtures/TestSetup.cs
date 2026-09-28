@@ -33,9 +33,19 @@ using Trax.Scheduler.Trains.JobRunner;
 
 namespace Trax.Scheduler.Tests.Stress.Fixtures;
 
+/// <summary>
+/// Base for the stress fixtures.
+/// </summary>
+/// <remarks>
+/// Every concrete fixture carries <c>[Explicit]</c>, so the suite never runs in a normal
+/// <c>dotnet test</c> and runs when selected:
+/// <code>dotnet test --filter TestCategory=Stress</code>
+/// The attribute goes on the concrete fixture, not here: NUnit does not inherit
+/// <c>[Explicit]</c> or <c>[Ignore]</c> from a base class, so one placed on this class skips
+/// nothing.
+/// </remarks>
 [TestFixture]
 [Category("Stress")]
-[Ignore("Stress tests — run manually with: dotnet test --filter TestCategory=Stress")]
 public abstract class TestSetup
 {
     private ServiceProvider ServiceProvider { get; set; } = null!;

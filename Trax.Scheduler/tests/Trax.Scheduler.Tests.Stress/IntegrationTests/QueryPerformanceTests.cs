@@ -32,6 +32,9 @@ namespace Trax.Scheduler.Tests.Stress.IntegrationTests;
 /// </summary>
 [TestFixture]
 [Category("Stress")]
+[Explicit(
+    "Stress suite: seeds and loads heavily. Run with dotnet test --filter TestCategory=Stress"
+)]
 public class QueryPerformanceTests : TestSetup
 {
     /// <summary>

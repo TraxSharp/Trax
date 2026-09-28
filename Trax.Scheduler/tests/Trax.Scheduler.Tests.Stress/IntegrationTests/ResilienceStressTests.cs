@@ -24,6 +24,10 @@ namespace Trax.Scheduler.Tests.Stress.IntegrationTests;
 /// NOT run on every PR.
 /// </summary>
 [TestFixture]
+[Category("Stress")]
+[Explicit(
+    "Stress suite: seeds and loads heavily. Run with dotnet test --filter TestCategory=Stress"
+)]
 public class ResilienceStressTests : TestSetup
 {
     #region Metadata Cleanup at Incident Scale

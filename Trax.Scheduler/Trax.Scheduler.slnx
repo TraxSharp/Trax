@@ -11,5 +11,6 @@
     <Project Path="tests/Trax.Scheduler.Tests.Integration/Trax.Scheduler.Tests.Integration.csproj" />
     <Project Path="tests/Trax.Scheduler.Tests.Sqlite.Integration/Trax.Scheduler.Tests.Sqlite.Integration.csproj" />
     <Project Path="tests/Trax.Scheduler.Tests.Meta/Trax.Scheduler.Tests.Meta.csproj" />
+    <Project Path="tests/Trax.Scheduler.Tests.Stress/Trax.Scheduler.Tests.Stress.csproj" />
   </Folder>
 </Solution>
