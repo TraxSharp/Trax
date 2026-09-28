@@ -153,6 +153,43 @@ public class SubjectKeyTests : TestSetup
             .Be(0, "a refused key writes no entry");
     }
 
+    // Built in code: an attribute argument is stored as UTF-8, which turns a lone surrogate into
+    // U+FFFD before the test ever sees it.
+    private static IEnumerable<TestCaseData> LoneSurrogateKeys()
+    {
+        yield return new TestCaseData("order:" + (char)0xD800).SetArgDisplayNames("trailing high");
+        yield return new TestCaseData((char)0xDC00 + "order").SetArgDisplayNames("leading low");
+        yield return new TestCaseData("a" + (char)0xDC00 + (char)0xD800 + "b").SetArgDisplayNames(
+            "reversed pair"
+        );
+    }
+
+    [TestCaseSource(nameof(LoneSurrogateKeys))]
+    public async Task A_key_with_a_lone_surrogate_aborts_the_enqueue(string key)
+    {
+        ConfigurableKeyTrain.Key = key;
+
+        var act = async () =>
+            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "*unpaired surrogate*",
+            "a key that is not valid UTF-16 cannot be encoded for the index, and used to fail at "
+                + "SaveChanges with an EncoderFallbackException instead of a refusal "
+                + "(Trax.Docs/adr/0019-queued-work-for-one-subject-runs-one-at-a-time.md)"
+        );
+    }
+
+    [Test]
+    public async Task A_key_with_a_paired_surrogate_is_accepted()
+    {
+        ConfigurableKeyTrain.Key = "order:\U0001F600";
+
+        var result = await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+
+        (await EntryAsync(result.WorkQueueId))!.SubjectKey.Should().Be("order:\U0001F600");
+    }
+
     [Test]
     public async Task A_key_longer_than_the_limit_aborts_the_enqueue()
     {

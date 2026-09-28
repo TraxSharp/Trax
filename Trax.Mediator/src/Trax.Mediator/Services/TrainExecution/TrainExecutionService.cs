@@ -96,6 +96,13 @@ public class TrainExecutionService(
         var declaresDeferral = ResolveDeferPromotion(registration, train);
         var deferPromotion = declaresDeferral && outer is null;
 
+        // The key is resolved before the entry exists and handed to WorkQueue.Create, so Create's
+        // own checks see it. The train computes it from the entry's ExternalId, which Create
+        // would otherwise generate, so the enqueue chooses it first (in Create's format) and
+        // stamps it on the entry: CreateWorkQueue has no ExternalId to pass it through.
+        var externalId = Guid.NewGuid().ToString("N");
+        var subjectKey = ResolveSubjectKey(registration, train, input, externalId);
+
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
@@ -105,10 +112,10 @@ public class TrainExecutionService(
                 Priority = priority,
                 ScheduledAt = ToUtc(scheduledAt),
                 DeferPromotion = deferPromotion,
+                SubjectKey = subjectKey,
             }
         );
-
-        entry.SubjectKey = ResolveSubjectKey(registration, train, input, entry.ExternalId);
+        entry.ExternalId = externalId;
 
         if (outer is not null)
             return await QueueIntoOuterAsync(
@@ -393,6 +400,15 @@ public class TrainExecutionService(
                     + "whitespace. Return null when the entry should not be serialized."
             );
 
+        // A lone surrogate is not valid UTF-16, so the key cannot be encoded for the index as
+        // written. Refused here with a message the caller can act on.
+        if (HasUnpairedSurrogate(key))
+            throw new InvalidOperationException(
+                $"{registration.ServiceTypeName}.QueueSubjectKey returned a key containing an "
+                    + "unpaired surrogate, which is not valid text. Build the key from whole "
+                    + "characters."
+            );
+
         // The key is indexed. One too long for the index inserts fine while queued and then
         // fails the claim on every cycle, so it is refused here, where the caller sees it.
         if (key.Length > MaxSubjectKeyLength)
@@ -403,6 +419,29 @@ public class TrainExecutionService(
             );
 
         return key;
+    }
+
+    private static bool HasUnpairedSurrogate(string value)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (!char.IsSurrogate(value[i]))
+                continue;
+
+            if (
+                char.IsHighSurrogate(value[i])
+                && i + 1 < value.Length
+                && char.IsLowSurrogate(value[i + 1])
+            )
+            {
+                i++;
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
