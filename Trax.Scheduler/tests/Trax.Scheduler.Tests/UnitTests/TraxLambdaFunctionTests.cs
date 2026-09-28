@@ -136,6 +136,36 @@ public class TraxLambdaFunctionTests
 
     #endregion
 
+    #region FunctionHandler — Duplicate properties
+
+    [TestCase("{\"MetadataId\":1,\"metadataId\":2}")]
+    [TestCase("{\"MetadataId\":1,\"MetadataId\":2}")]
+    public async Task FunctionHandler_ExecutePayload_WithARepeatedProperty_IsRefused(string payload)
+    {
+        var fn = new TestFunction();
+        var envelope = new LambdaEnvelope(LambdaRequestType.Execute, payload);
+
+        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+
+        await act.Should().ThrowAsync<JsonException>();
+        fn.Handler.ExecuteCalls.Should().BeEmpty();
+    }
+
+    [TestCase("{\"TrainName\":\"A\",\"trainName\":\"B\",\"InputJson\":\"{}\",\"InputType\":\"T\"}")]
+    [TestCase("{\"TrainName\":\"A\",\"TrainName\":\"B\",\"InputJson\":\"{}\",\"InputType\":\"T\"}")]
+    public async Task FunctionHandler_RunPayload_WithARepeatedProperty_IsRefused(string payload)
+    {
+        var fn = new TestFunction();
+        var envelope = new LambdaEnvelope(LambdaRequestType.Run, payload);
+
+        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+
+        await act.Should().ThrowAsync<JsonException>();
+        fn.Handler.RunCalls.Should().BeEmpty();
+    }
+
+    #endregion
+
     #region FunctionHandler — Unknown Type
 
     [Test]

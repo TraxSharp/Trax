@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -77,38 +78,44 @@ public static class JobRunnerExtensions
         string route = "/trax/execute"
     )
     {
-        return endpoints.MapPost(
-            route,
-            async (
-                RemoteJobRequest request,
-                ITraxRequestHandler handler,
-                ILogger<JobRunnerTrain> logger
-            ) =>
-            {
-                try
+        return endpoints
+            .MapPost(
+                route,
+                async (
+                    HttpRequest httpRequest,
+                    ITraxRequestHandler handler,
+                    ILogger<JobRunnerTrain> logger
+                ) =>
                 {
-                    var result = await handler.ExecuteJobAsync(request);
-                    return Results.Ok(new RemoteJobResponse(result.MetadataId));
+                    var (request, refused) = await ReadEnvelopeAsync<RemoteJobRequest>(httpRequest);
+                    if (request is null)
+                        return refused!;
+
+                    try
+                    {
+                        var result = await handler.ExecuteJobAsync(request);
+                        return Results.Ok(new RemoteJobResponse(result.MetadataId));
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(
+                            ex,
+                            "Remote job execution failed for Metadata {MetadataId}",
+                            request.MetadataId
+                        );
+                        return Results.Ok(
+                            new RemoteJobResponse(
+                                request.MetadataId,
+                                IsError: true,
+                                ErrorMessage: ex.Message,
+                                ExceptionType: ex.GetType().Name,
+                                StackTrace: ex.StackTrace
+                            )
+                        );
+                    }
                 }
-                catch (Exception ex)
-                {
-                    logger.LogError(
-                        ex,
-                        "Remote job execution failed for Metadata {MetadataId}",
-                        request.MetadataId
-                    );
-                    return Results.Ok(
-                        new RemoteJobResponse(
-                            request.MetadataId,
-                            IsError: true,
-                            ErrorMessage: ex.Message,
-                            ExceptionType: ex.GetType().Name,
-                            StackTrace: ex.StackTrace
-                        )
-                    );
-                }
-            }
-        );
+            )
+            .Accepts<RemoteJobRequest>("application/json");
     }
 
     /// <summary>
@@ -129,31 +136,79 @@ public static class JobRunnerExtensions
         string route = "/trax/run"
     )
     {
-        return endpoints.MapPost(
-            route,
-            async (
-                RemoteRunRequest request,
-                ITraxRequestHandler handler,
-                ILogger<TraxRequestHandler> logger
-            ) =>
-            {
-                try
+        return endpoints
+            .MapPost(
+                route,
+                async (
+                    HttpRequest httpRequest,
+                    ITraxRequestHandler handler,
+                    ILogger<TraxRequestHandler> logger
+                ) =>
                 {
-                    return Results.Json(await handler.RunTrainAsync(request), RemoteRunJson.Write);
+                    var (request, refused) = await ReadEnvelopeAsync<RemoteRunRequest>(httpRequest);
+                    if (request is null)
+                        return refused!;
+
+                    try
+                    {
+                        return Results.Json(
+                            await handler.RunTrainAsync(request),
+                            RemoteRunJson.Write
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(
+                            ex,
+                            "Remote run execution failed for train {TrainName}",
+                            request.TrainName
+                        );
+                        return Results.Json(
+                            TraxRequestHandler.BuildErrorResponse(ex),
+                            RemoteRunJson.Write
+                        );
+                    }
                 }
-                catch (Exception ex)
-                {
-                    logger.LogError(
-                        ex,
-                        "Remote run execution failed for train {TrainName}",
-                        request.TrainName
-                    );
-                    return Results.Json(
-                        TraxRequestHandler.BuildErrorResponse(ex),
-                        RemoteRunJson.Write
-                    );
-                }
-            }
-        );
+            )
+            .Accepts<RemoteRunRequest>("application/json");
+    }
+
+    /// <summary>
+    /// How the two endpoints read their envelope: the web defaults ASP.NET binds with, plus a
+    /// refusal of repeated properties. Scoped to these endpoints rather than set on the host's
+    /// JSON options, which govern every other endpoint the host maps.
+    /// </summary>
+    private static readonly JsonSerializerOptions EnvelopeOptions = new(JsonSerializerDefaults.Web)
+    {
+        AllowDuplicateProperties = false,
+    };
+
+    /// <summary>
+    /// Reads the request body as <typeparamref name="T"/>, or returns the response that refuses
+    /// it: 415 for a body that is not JSON, 400 for one that does not parse, repeats a property
+    /// (in any case), or is <c>null</c>.
+    /// </summary>
+    private static async Task<(T? Envelope, IResult? Refused)> ReadEnvelopeAsync<T>(
+        HttpRequest request
+    )
+        where T : class
+    {
+        if (!request.HasJsonContentType())
+            return (null, Results.StatusCode(StatusCodes.Status415UnsupportedMediaType));
+
+        try
+        {
+            var envelope = await JsonSerializer.DeserializeAsync<T>(
+                request.Body,
+                EnvelopeOptions,
+                request.HttpContext.RequestAborted
+            );
+
+            return envelope is null ? (null, Results.BadRequest()) : (envelope, null);
+        }
+        catch (JsonException)
+        {
+            return (null, Results.BadRequest());
+        }
     }
 }

@@ -35,6 +35,15 @@ namespace Trax.Scheduler.Sqs.Lambda;
 public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
 {
     /// <summary>
+    /// How a message body is read: System.Text.Json's defaults, with a repeated property refused
+    /// rather than resolved by whichever copy comes last.
+    /// </summary>
+    private static readonly JsonSerializerOptions EnvelopeOptions = new()
+    {
+        AllowDuplicateProperties = false,
+    };
+
+    /// <summary>
     /// Processes all SQS records in the event, running each through <see cref="ITraxRequestHandler"/>.
     /// </summary>
     /// <param name="sqsEvent">The SQS event containing one or more records</param>
@@ -50,7 +59,7 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
             try
             {
                 var request =
-                    JsonSerializer.Deserialize<RemoteJobRequest>(record.Body)
+                    JsonSerializer.Deserialize<RemoteJobRequest>(record.Body, EnvelopeOptions)
                     ?? throw new InvalidOperationException(
                         "Failed to deserialize SQS message body as RemoteJobRequest."
                     );

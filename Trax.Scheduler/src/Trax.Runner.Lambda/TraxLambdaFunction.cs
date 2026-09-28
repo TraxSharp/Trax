@@ -62,9 +62,14 @@ namespace Trax.Runner.Lambda;
 /// </remarks>
 public abstract class TraxLambdaFunction
 {
+    /// <summary>
+    /// How an envelope's payload is read. A property repeated in the payload, in the same or a
+    /// different case, is refused rather than resolved by whichever copy comes last.
+    /// </summary>
     private static readonly JsonSerializerOptions CaseInsensitiveOptions = new()
     {
         PropertyNameCaseInsensitive = true,
+        AllowDuplicateProperties = false,
     };
 
     private readonly Lazy<IServiceProvider> _serviceProvider;

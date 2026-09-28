@@ -38,6 +38,30 @@ public class SqsJobRunnerHandlerTests
     }
 
     [Test]
+    public async Task HandleAsync_BodyWithARepeatedProperty_IsRefused()
+    {
+        var handler = new FakeRequestHandler();
+        var sut = CreateHandler(handler);
+
+        var sqsEvent = new SQSEvent
+        {
+            Records =
+            [
+                new SQSEvent.SQSMessage
+                {
+                    MessageId = "m1",
+                    Body = "{\"MetadataId\":1,\"MetadataId\":2}",
+                },
+            ],
+        };
+
+        var act = async () => await sut.HandleAsync(sqsEvent);
+
+        await act.Should().ThrowAsync<JsonException>();
+        handler.ExecuteCalls.Should().BeEmpty();
+    }
+
+    [Test]
     public async Task HandleAsync_MultipleRecords_ProcessesAllInOrder()
     {
         var handler = new FakeRequestHandler();

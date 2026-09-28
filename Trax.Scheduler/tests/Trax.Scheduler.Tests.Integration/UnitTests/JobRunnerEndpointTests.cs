@@ -101,6 +101,25 @@ public class JobRunnerEndpointTests
 
     #endregion
 
+    [TestCase("{\"metadataId\":1,\"MetadataId\":2}")]
+    [TestCase("{\"metadataId\":1,\"metadataId\":2}")]
+    public async Task ExecuteJob_BodyWithARepeatedProperty_IsRefused(string body)
+    {
+        var handler = Substitute.For<ITraxRequestHandler>();
+        using var host = BuildHost(handler);
+        var client = host.GetTestServer().CreateClient();
+
+        var response = await client.PostAsync(
+            "/trax/execute",
+            new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+        );
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
+        await handler
+            .DidNotReceive()
+            .ExecuteJobAsync(Arg.Any<RemoteJobRequest>(), Arg.Any<CancellationToken>());
+    }
+
     #region UseTraxRunEndpoint — POST /trax/run
 
     [Test]
@@ -157,4 +176,23 @@ public class JobRunnerEndpointTests
     }
 
     #endregion
+
+    [TestCase("{\"trainName\":\"A\",\"TrainName\":\"B\",\"inputJson\":\"{}\",\"inputType\":\"T\"}")]
+    [TestCase("{\"trainName\":\"A\",\"trainName\":\"B\",\"inputJson\":\"{}\",\"inputType\":\"T\"}")]
+    public async Task RunTrain_BodyWithARepeatedProperty_IsRefused(string body)
+    {
+        var handler = Substitute.For<ITraxRequestHandler>();
+        using var host = BuildHost(handler);
+        var client = host.GetTestServer().CreateClient();
+
+        var response = await client.PostAsync(
+            "/trax/run",
+            new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+        );
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
+        await handler
+            .DidNotReceive()
+            .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>());
+    }
 }
