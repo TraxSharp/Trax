@@ -466,12 +466,16 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             {
                 try
                 {
+                    // Masked as the stored output is: hooks broadcast this to other
+                    // processes and subscribers.
                     Metadata.Output = System.Text.Json.JsonSerializer.Serialize(
                         (object)outputObject,
-                        Configuration
-                            .TraxEffectConfiguration
-                            .TraxEffectConfiguration
-                            .StaticSystemJsonSerializerOptions
+                        Utils.TraxRedaction.WithRedaction(
+                            Configuration
+                                .TraxEffectConfiguration
+                                .TraxEffectConfiguration
+                                .StaticSystemJsonSerializerOptions
+                        )
                     );
                 }
                 catch (Exception ex)

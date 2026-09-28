@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
 using Trax.Core.Junction;
+using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider;
 using Trax.Effect.Models.JunctionMetadata;
@@ -139,6 +140,52 @@ public class JunctionLoggerProviderTests
         await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
 
         junction.Metadata!.OutputJson.Should().BeNull();
+    }
+
+    [Test]
+    public async Task AfterJunctionExecution_MasksASensitiveOutputProperty()
+    {
+        var (train, _) = BuildPair("AfterSensitive");
+        var junction = new SensitiveEffectJunction();
+        typeof(EffectJunction<string, Token>)
+            .GetProperty("Metadata", BindingFlags.Public | BindingFlags.Instance)!
+            .SetValue(
+                junction,
+                JunctionMetadata.Create(
+                    new CreateJunctionMetadata
+                    {
+                        Name = "AfterSensitive",
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        InputType = typeof(string),
+                        OutputType = typeof(Token),
+                        State = EitherStatus.IsRight,
+                    },
+                    train.Metadata!
+                )
+            );
+        await junction.RailwayJunction(Either<Exception, string>.Right("ada"), train);
+
+        var provider = new JunctionLoggerProvider(
+            TestConfig(serializeJunctionData: true),
+            NullLogger<JunctionLoggerProvider>.Instance
+        );
+        await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+
+        junction.Metadata!.OutputJson.Should().Contain("ada").And.NotContain("tok-secret");
+    }
+
+    public sealed class Token
+    {
+        public string User { get; set; } = "";
+
+        [TraxSensitive]
+        public string Value { get; set; } = "";
+    }
+
+    private class SensitiveEffectJunction : EffectJunction<string, Token>
+    {
+        public override Task<Token> Run(string input) =>
+            Task.FromResult(new Token { User = input, Value = "tok-secret" });
     }
 
     [Test]

@@ -1,10 +1,12 @@
 using System.Text.Json;
 using FluentAssertions;
 using NUnit.Framework;
+using Trax.Effect.Attributes;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Provider.Parameter.Configuration;
 using Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 
@@ -63,6 +65,60 @@ public class ParameterEffectTests
             for (var i = 0; ; i++)
                 yield return i;
         }
+    }
+
+    private sealed class SignIn
+    {
+        public string User { get; set; } = "";
+
+        [TraxSensitive]
+        public string Password { get; set; } = "";
+    }
+
+    private sealed record Session(string User, [TraxSensitive] string Token);
+
+    [Test]
+    public async Task A_sensitive_input_property_is_masked_in_the_stored_input()
+    {
+        var effect = new ParameterEffect(
+            TraxJsonSerializationOptions.Default,
+            new ParameterEffectConfiguration()
+        );
+        var input = new SignIn { User = "ada", Password = "hunter2" };
+        var meta = NewMetadata(input: input);
+
+        await effect.Track(meta);
+        await effect.SaveChanges(CancellationToken.None);
+
+        meta.Input.Should().Contain("ada").And.NotContain("hunter2");
+        TraxRedaction.ContainsRedaction(meta.Input!).Should().BeTrue();
+        input.Password.Should().Be("hunter2", "the train runs with the real value");
+    }
+
+    [Test]
+    public async Task A_sensitive_output_property_is_masked_in_the_stored_output()
+    {
+        var effect = new ParameterEffect(
+            TraxJsonSerializationOptions.Default,
+            new ParameterEffectConfiguration()
+        );
+        var meta = NewMetadata(output: new Session("ada", "tok-123"));
+
+        await effect.Track(meta);
+        await effect.SaveChanges(CancellationToken.None);
+
+        meta.Output.Should().Contain("ada").And.NotContain("tok-123");
+    }
+
+    [Test]
+    public async Task A_sensitive_property_is_masked_under_a_byte_ceiling_too()
+    {
+        var effect = NewEffect(maxParameterBytes: 4096);
+        var meta = NewMetadata(input: new SignIn { User = "ada", Password = "hunter2" });
+
+        await effect.Track(meta);
+
+        meta.Input.Should().Contain("ada").And.NotContain("hunter2");
     }
 
     [Test]

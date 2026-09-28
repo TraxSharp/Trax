@@ -10,6 +10,7 @@ using Trax.Effect.Models;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Provider.Parameter.Configuration;
 using Trax.Effect.Services.EffectProvider;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;
 
@@ -35,6 +36,12 @@ public class ParameterEffect(
     ParameterEffectConfiguration configuration
 ) : IEffectProvider
 {
+    /// <summary>
+    /// The given options, writing every <c>[TraxSensitive]</c> member as a mask: the stored input
+    /// and output are a copy for people and tools to read, not the value the train runs with.
+    /// </summary>
+    private readonly JsonSerializerOptions _options = TraxRedaction.WithRedaction(options);
+
     private readonly HashSet<Metadata> _trackedMetadatas = [];
     private readonly object _lock = new();
 
@@ -135,7 +142,7 @@ public class ParameterEffect(
                 {
                     metadata.Input = SerializeBounded(
                         inputObject,
-                        options,
+                        _options,
                         configuration.MaxParameterBytes
                     );
                 }
@@ -166,7 +173,7 @@ public class ParameterEffect(
                 {
                     metadata.Output = SerializeBounded(
                         outputObject,
-                        options,
+                        _options,
                         configuration.MaxParameterBytes
                     );
                 }

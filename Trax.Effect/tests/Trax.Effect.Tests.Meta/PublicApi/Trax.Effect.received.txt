@@ -98,6 +98,11 @@ namespace Trax.Effect.Attributes
     {
         public TraxRemoteAttribute() { }
     }
+    [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Field | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=true)]
+    public sealed class TraxSensitiveAttribute : System.Attribute
+    {
+        public TraxSensitiveAttribute() { }
+    }
 }
 namespace Trax.Effect.Configuration.BroadcasterBuilder
 {
@@ -1255,6 +1260,12 @@ namespace Trax.Effect.Utils
         public static System.Text.Json.JsonSerializerOptions Default { get; set; }
         public static System.Text.Json.JsonSerializerOptions JunctionLogging { get; set; }
         public static System.Text.Json.JsonSerializerOptions ManifestProperties { get; set; }
+    }
+    public static class TraxRedaction
+    {
+        public const string MarkerProperty = "_redacted";
+        public static bool ContainsRedaction(string json) { }
+        public static System.Text.Json.JsonSerializerOptions WithRedaction(System.Text.Json.JsonSerializerOptions options) { }
     }
     public class ValueTupleConverter : System.Text.Json.Serialization.JsonConverterFactory
     {

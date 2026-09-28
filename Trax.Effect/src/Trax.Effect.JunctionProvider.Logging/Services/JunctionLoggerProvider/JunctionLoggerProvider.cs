@@ -47,7 +47,7 @@ public class JunctionLoggerProvider(
                 effectJunction.Metadata.OutputJson = configuration.SerializeJunctionData
                     ? JsonSerializer.Serialize<object>(
                         resultOut,
-                        TraxJsonSerializationOptions.JunctionLogging
+                        TraxRedaction.WithRedaction(TraxJsonSerializationOptions.JunctionLogging)
                     )
                     : null;
             },
