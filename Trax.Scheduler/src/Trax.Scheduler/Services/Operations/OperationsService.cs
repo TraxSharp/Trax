@@ -92,6 +92,9 @@ public class OperationsService : IOperationsService
         }
         catch (TrainInputValidationException ex)
         {
+            // Generic by design: the cap and the observed size are on the exception's properties,
+            // not in its message, so the caller cannot map the cap. Trax.Api's error filter makes
+            // the same promise for the typed exception.
             return new OperationResult(false, Message: ex.Message);
         }
         catch (Exception ex)

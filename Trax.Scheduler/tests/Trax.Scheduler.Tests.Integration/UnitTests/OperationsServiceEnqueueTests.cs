@@ -25,6 +25,7 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 [TestFixture]
 public class OperationsServiceEnqueueTests
 {
+    private ITrainDiscoveryService _discovery = null!;
     private ITrainExecutionService _execution = null!;
     private OperationsService _service = null!;
 
@@ -38,7 +39,7 @@ public class OperationsServiceEnqueueTests
     [SetUp]
     public void SetUp()
     {
-        var discovery = Substitute.For<ITrainDiscoveryService>();
+        var discovery = _discovery = Substitute.For<ITrainDiscoveryService>();
         discovery
             .DiscoverTrains()
             .Returns([
@@ -170,6 +171,45 @@ public class OperationsServiceEnqueueTests
             .ThrowAsync<UnauthorizedAccessException>(
                 "not being allowed to run something is not a validation outcome, and reporting it "
                     + "as one would tell the caller more than it should"
+            );
+    }
+
+    [Test]
+    public async Task An_oversized_input_is_refused_without_the_cap_or_its_size()
+    {
+        // The real mediator, so the refusal is the size cap's own: nothing about the cap or the
+        // input's size may reach the caller, the same promise Trax.Api's error filter makes.
+        var mediatorConfiguration = new Trax.Mediator.Configuration.MediatorConfiguration();
+        var service = new OperationsService(
+            _discovery,
+            Substitute.For<IDataContextProviderFactory>(),
+            new SchedulerConfiguration(),
+            new TrainExecutionService(
+                _discovery,
+                runExecutor: null!,
+                concurrencyLimiter: null!,
+                Substitute.For<IDataContextProviderFactory>(),
+                mediatorConfiguration,
+                new ServiceCollection().BuildServiceProvider()
+            )
+        );
+        var oversized =
+            "{\"customerId\":1,\"pad\":\""
+            + new string('x', mediatorConfiguration.MaxInputJsonBytes)
+            + "\"}";
+
+        var result = await service.QueueTrainAsync(
+            new QueueTrainInput(typeof(IProbeTrain).FullName!, oversized),
+            CancellationToken.None
+        );
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("The train input failed validation.");
+        result
+            .Message.Should()
+            .NotContain(
+                mediatorConfiguration.MaxInputJsonBytes.ToString(),
+                "the cap is not echoed to the caller"
             );
     }
 
