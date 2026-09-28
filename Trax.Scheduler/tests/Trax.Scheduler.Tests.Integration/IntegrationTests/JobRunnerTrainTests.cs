@@ -13,12 +13,15 @@ using Trax.Scheduler.Trains.JobRunner;
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
 /// <summary>
-/// The JobRunner loads, validates and runs a scheduled train, then records its success.
+/// The JobRunner loads, validates and runs a scheduled train against a real database, then
+/// records its success.
 ///
 /// <para>Enforces <c>docs/adr/0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md</c>: a cancellation
 /// that lands after the scheduled train completed does not lose the manifest update.</para>
+/// <para>Enforces <c>docs/adr/0006-a-runner-requires-an-authorization-posture.md</c>.</para>
 /// </summary>
 [Property("adr", "docs/adr/0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md")]
+[Property("adr", "docs/adr/0006-a-runner-requires-an-authorization-posture.md")]
 [TestFixture]
 public class JobRunnerTrainTests : TestSetup
 {
@@ -267,6 +270,62 @@ public class JobRunnerTrainTests : TestSetup
 
         updatedManifest.Should().NotBeNull();
         updatedManifest!.LastSuccessfulRun.Should().NotBeNull();
+    }
+
+    #endregion
+
+    #region Run - Input Belongs To Another Train
+
+    [Test]
+    public async Task Run_WhenInputBelongsToAnotherTrain_IsRefusedAndTheRowStaysPending()
+    {
+        // Arrange: a Pending row of SchedulerTestTrain, given the failing train's input.
+        var manifest = await CreateAndSaveManifest();
+        var metadata = await CreateAndSaveMetadata(manifest, TrainState.Pending);
+        var otherInput = new FailingSchedulerTestInput { FailureMessage = "should not run" };
+
+        // Act
+        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, otherInput));
+
+        // Assert
+        await act.Should().ThrowAsync<TrainException>().WithMessage("*belongs to train*");
+
+        DataContext.Reset();
+        var row = await DataContext.Metadatas.AsNoTracking().FirstAsync(x => x.Id == metadata.Id);
+        row.TrainState.Should()
+            .Be(
+                TrainState.Pending,
+                "a row is run only with its own train's input, and a refusal leaves it untouched (see docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+        var reloaded = await DataContext
+            .Manifests.AsNoTracking()
+            .FirstAsync(x => x.Id == manifest.Id);
+        reloaded.LastSuccessfulRun.Should().BeNull();
+    }
+
+    [Test]
+    public async Task Run_WhenRowNamesTheTrainByItsInterface_Runs()
+    {
+        var manifest = await CreateAndSaveManifest();
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(ISchedulerTestTrain).FullName!,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = manifest.GetProperties<SchedulerTestInput>(),
+                ManifestId = manifest.Id,
+            }
+        );
+        await DataContext.Track(metadata);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        var act = async () =>
+            await JobRunner.Run(
+                new RunJobRequest(metadata.Id, manifest.GetProperties<SchedulerTestInput>())
+            );
+
+        await act.Should().NotThrowAsync();
     }
 
     #endregion

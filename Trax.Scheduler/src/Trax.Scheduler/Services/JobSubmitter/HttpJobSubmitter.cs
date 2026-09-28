@@ -5,6 +5,7 @@ using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Http;
+using Trax.Scheduler.Services.RequestSigning;
 
 namespace Trax.Scheduler.Services.JobSubmitter;
 
@@ -68,7 +69,9 @@ public class HttpJobSubmitter(
             request,
             options.Retry,
             logger,
-            cancellationToken
+            cancellationToken,
+            options.SigningKey,
+            RunnerRequestPurpose.Execute
         );
 
         if (!httpResponse.IsSuccessStatusCode)
@@ -79,6 +82,9 @@ public class HttpJobSubmitter(
             );
         }
 
+        // A 2xx is not enough: a proxy, a load balancer's default page or a misrouted base URL can
+        // answer 200 without the job having reached a runner. Only a runner response for this job
+        // counts as delivered.
         RemoteJobResponse? response;
         try
         {
@@ -86,14 +92,15 @@ public class HttpJobSubmitter(
                 cancellationToken
             );
         }
-        catch
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
-            // Response body is not valid RemoteJobResponse JSON — treat as success
-            // (e.g., older runner returning { metadataId: 123 } without IsError field)
-            return;
+            response = null;
         }
 
-        if (response is { IsError: true })
+        if (response is null)
+            throw NotARunnerResponse(request.MetadataId);
+
+        if (response.IsError)
         {
             throw new TrainException(
                 $"Remote worker reported error: {response.ErrorMessage}"
@@ -104,7 +111,16 @@ public class HttpJobSubmitter(
                     )
             );
         }
+
+        if (response.MetadataId != request.MetadataId)
+            throw NotARunnerResponse(request.MetadataId);
     }
+
+    private static TrainException NotARunnerResponse(long metadataId) =>
+        new(
+            $"Remote worker did not return a runner response for Metadata {metadataId}; "
+                + "the endpoint answered with success but the job may not have reached a runner."
+        );
 
     private static async Task<string> ReadErrorBodyAsync(HttpResponseMessage response)
     {

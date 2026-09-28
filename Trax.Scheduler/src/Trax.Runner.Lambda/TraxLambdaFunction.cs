@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Amazon.Lambda.Core;
 using Microsoft.AspNetCore.Builder;
@@ -6,10 +7,13 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Exceptions;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.Lambda;
 using Trax.Scheduler.Services.RequestHandler;
+using Trax.Scheduler.Services.RequestSigning;
 using Trax.Scheduler.Services.RunExecutor;
 
 namespace Trax.Runner.Lambda;
@@ -23,6 +27,16 @@ namespace Trax.Runner.Lambda;
 /// and train assemblies. The base class automatically registers logging,
 /// <c>IConfiguration</c> (from appsettings.json + environment variables),
 /// and <c>AddTraxJobRunner()</c> — do not call these yourself.
+/// </para>
+///
+/// <para>
+/// Override <see cref="ConfigureRunner"/> to set the runner's posture: a <c>SigningKey</c> shared
+/// with the scheduler's <c>UseLambdaWorkers</c> / <c>UseLambdaRun</c> options, or
+/// <c>AllowUnsignedRequests()</c> for a function only the scheduler's IAM role can invoke. Without
+/// either, every invocation is refused. A <c>Run</c> envelope's signature must be fresh and not
+/// repeated; an <c>Execute</c> envelope's is checked for its signature only, because an
+/// asynchronous invocation is retried with the same payload and the job's Pending metadata row is
+/// what stops it running twice.
 /// </para>
 ///
 /// <para>
@@ -91,6 +105,24 @@ public abstract class TraxLambdaFunction
     );
 
     /// <summary>
+    /// Override to set the runner's posture. Called by the default <see cref="BuildServiceProvider"/>
+    /// after <see cref="ConfigureServices"/>. The default sets nothing, so every invocation is refused
+    /// until a signing key or <c>AllowUnsignedRequests()</c> is configured.
+    /// </summary>
+    /// <param name="runner">The runner options to configure</param>
+    /// <param name="configuration">Configuration loaded from appsettings.json and environment variables</param>
+    /// <example>
+    /// <code>
+    /// protected override void ConfigureRunner(TraxJobRunnerOptions runner, IConfiguration configuration) =>
+    ///     runner.SigningKey = Convert.FromBase64String(configuration["Trax:RunnerSigningKey"]!);
+    /// </code>
+    /// </example>
+    protected virtual void ConfigureRunner(
+        TraxJobRunnerOptions runner,
+        IConfiguration configuration
+    ) { }
+
+    /// <summary>
     /// Override to customize logging. Default adds console logging at <see cref="LogLevel.Information"/>.
     /// </summary>
     /// <param name="logging">The logging builder to configure</param>
@@ -131,6 +163,37 @@ public abstract class TraxLambdaFunction
         using var scope = _serviceProvider.Value.CreateScope();
         var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraxLambdaFunction>>();
+
+        var purpose = envelope.Type switch
+        {
+            LambdaRequestType.Execute => RunnerRequestPurpose.Execute,
+            LambdaRequestType.Run => RunnerRequestPurpose.Run,
+            _ => throw new InvalidOperationException(
+                $"Unknown Lambda request type: {envelope.Type}"
+            ),
+        };
+
+        // An Execute arrives by asynchronous invocation, which Lambda retries with the same
+        // payload, so only its signature is checked; a Run is synchronous and must be fresh.
+        var verdict = await RequireVerifier(scope.ServiceProvider)
+            .VerifyAsync(
+                purpose,
+                Encoding.UTF8.GetBytes(envelope.PayloadJson),
+                envelope.Signature,
+                requireFresh: purpose == RunnerRequestPurpose.Run,
+                cts.Token
+            );
+        if (verdict != RunnerRequestVerdict.Accepted)
+        {
+            logger.LogWarning(
+                "Refused a {Type} invocation: signature {Verdict}",
+                envelope.Type,
+                verdict
+            );
+            throw new InvalidOperationException(
+                $"Refused a {envelope.Type} invocation: signature {verdict}."
+            );
+        }
 
         return envelope.Type switch
         {
@@ -192,6 +255,25 @@ public abstract class TraxLambdaFunction
                 var logger = scope.ServiceProvider.GetRequiredService<
                     ILogger<TraxLambdaFunction>
                 >();
+
+                var verdict = await RequireVerifier(scope.ServiceProvider)
+                    .VerifyAsync(
+                        RunnerRequestPurpose.Execute,
+                        Encoding.UTF8.GetBytes(body),
+                        ctx.Request.Headers[RunnerRequestSignature.HeaderName].ToString(),
+                        requireFresh: true,
+                        ctx.RequestAborted
+                    );
+                if (verdict != RunnerRequestVerdict.Accepted)
+                {
+                    logger.LogWarning(
+                        "Refused a request to {Path}: signature {Verdict}",
+                        ctx.Request.Path,
+                        verdict
+                    );
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return;
+                }
                 var result = await HandleExecute(body, handler, logger, ctx.RequestAborted);
 
                 ctx.Response.ContentType = "application/json";
@@ -213,6 +295,25 @@ public abstract class TraxLambdaFunction
                 var logger = scope.ServiceProvider.GetRequiredService<
                     ILogger<TraxLambdaFunction>
                 >();
+
+                var verdict = await RequireVerifier(scope.ServiceProvider)
+                    .VerifyAsync(
+                        RunnerRequestPurpose.Run,
+                        Encoding.UTF8.GetBytes(body),
+                        ctx.Request.Headers[RunnerRequestSignature.HeaderName].ToString(),
+                        requireFresh: true,
+                        ctx.RequestAborted
+                    );
+                if (verdict != RunnerRequestVerdict.Accepted)
+                {
+                    logger.LogWarning(
+                        "Refused a request to {Path}: signature {Verdict}",
+                        ctx.Request.Path,
+                        verdict
+                    );
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return;
+                }
                 var result = await HandleRun(body, handler, logger, ctx.RequestAborted);
 
                 ctx.Response.ContentType = "application/json";
@@ -247,12 +348,15 @@ public abstract class TraxLambdaFunction
                 request.MetadataId
             );
 
+            // A TrainException's message is Trax's own account of the failure; anything else, and
+            // every stack trace, stays in this function's log.
             return new RemoteJobResponse(
                 request.MetadataId,
                 IsError: true,
-                ErrorMessage: ex.Message,
-                ExceptionType: ex.GetType().Name,
-                StackTrace: ex.StackTrace
+                ErrorMessage: ex is TrainException
+                    ? ex.Message
+                    : "The runner could not complete the request; its log has the detail.",
+                ExceptionType: ex.GetType().Name
             );
         }
     }
@@ -283,8 +387,21 @@ public abstract class TraxLambdaFunction
     /// Builds the service provider used by all Lambda invocations. Override only when you need
     /// full control over DI (e.g. test harnesses). The default loads <c>appsettings.json</c>
     /// plus environment variables, registers logging, calls <see cref="ConfigureServices"/>,
-    /// and finalises with <c>AddTraxJobRunner()</c>.
+    /// and finalises with <c>AddTraxJobRunner()</c>, configured by <see cref="ConfigureRunner"/>.
+    /// An override registers <c>AddTraxJobRunner(runner => ...)</c> itself.
     /// </summary>
+    private static RunnerRequestVerifier RequireVerifier(IServiceProvider services)
+    {
+        var verifier =
+            services.GetService<RunnerRequestVerifier>()
+            ?? throw new InvalidOperationException(
+                "TraxLambdaFunction requires AddTraxJobRunner(runner => ...) with a SigningKey "
+                    + "or AllowUnsignedRequests()."
+            );
+        verifier.EnsurePosture(nameof(TraxLambdaFunction));
+        return verifier;
+    }
+
     protected virtual IServiceProvider BuildServiceProvider()
     {
         var configuration = new ConfigurationBuilder()
@@ -297,7 +414,7 @@ public abstract class TraxLambdaFunction
         services.AddSingleton<IConfiguration>(configuration);
         services.AddLogging(ConfigureLogging);
         ConfigureServices(services, configuration);
-        services.AddTraxJobRunner();
+        services.AddTraxJobRunner(runner => ConfigureRunner(runner, configuration));
         return services.BuildServiceProvider();
     }
 }

@@ -18,7 +18,9 @@ namespace Trax.Scheduler.Tests.UnitTests;
 /// executor constructs the record positionally, so a permutation compiles clean and swaps
 /// values that no round-trip test would notice.</para>
 ///
-/// <para>Enforces <c>docs/adr/0001-remote-execution-is-a-json-wire-contract.md</c>.</para>
+/// <para>Enforces <c>docs/adr/0001-remote-execution-is-a-json-wire-contract.md</c>. The output
+/// type a response may name is <c>docs/adr/0006-a-runner-requires-an-authorization-posture.md</c>,
+/// pinned by <c>RemoteRunOutputTests</c>.</para>
 /// </summary>
 [Property("adr", "docs/adr/0001-remote-execution-is-a-json-wire-contract.md")]
 [TestFixture]
@@ -50,6 +52,92 @@ public class HttpRunExecutorTests
         var output = (TestOutput)result.Output!;
         output.Value.Should().Be("hello");
         output.Count.Should().Be(7);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_ResponseNamingAnotherOutputType_ReadsIntoTheExpectedType()
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 43,
+            OutputJson: """{"value":"hello","count":7}""",
+            OutputType: typeof(Dictionary<string, object>).AssemblyQualifiedName
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var result = await executor.ExecuteAsync(
+            "My.Train",
+            new TestInput { Name = "test" },
+            typeof(TestOutput)
+        );
+
+        result.Output.Should().BeOfType<TestOutput>();
+    }
+
+    [TestCase(typeof(ITestOutput))]
+    [TestCase(typeof(TestOutputBase))]
+    public async Task ExecuteAsync_TrainDeclaringAnInterfaceOrAbstractOutput_ReturnsTheOutput(
+        Type declaredOutput
+    )
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 44,
+            OutputJson: """{"value":"hello","count":7}""",
+            OutputType: typeof(TestOutput).FullName
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var result = await executor.ExecuteAsync(
+            "My.Train",
+            new TestInput { Name = "test" },
+            declaredOutput
+        );
+
+        result.Output.Should().BeAssignableTo(declaredOutput);
+        ((ITestOutput)result.Output!).Value.Should().Be("hello");
+    }
+
+    [TestCase(typeof(ITestOutput))]
+    [TestCase(typeof(TestOutputBase))]
+    public async Task ExecuteAsync_InterfaceOrAbstractOutput_WorkerNamingATypeThatDoesNotImplementIt_IsRefused(
+        Type declaredOutput
+    ) =>
+        await RunNaming(declaredOutput, typeof(TestInput).FullName)
+            .Should()
+            .ThrowAsync<TrainException>(
+                "only an implementation of the expected output type is read (see {0})",
+                "docs/adr/0006-a-runner-requires-an-authorization-posture.md"
+            );
+
+    [TestCase("Some.Assembly.That.Is.Not.Loaded.Output")]
+    [TestCase("Some.Assembly.That.Is.Not.Loaded.Output, Some.Assembly")]
+    [TestCase(null)]
+    public async Task ExecuteAsync_InterfaceOutput_WorkerNamingNoLoadedImplementation_IsRefused(
+        string? namedType
+    ) =>
+        await RunNaming(typeof(ITestOutput), namedType)
+            .Should()
+            .ThrowAsync<TrainException>(
+                "a type is never loaded by the name a response gives (see {0})",
+                "docs/adr/0006-a-runner-requires-an-authorization-posture.md"
+            );
+
+    private static Func<Task> RunNaming(Type declaredOutput, string? namedType)
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 45,
+            OutputJson: """{"value":"hello","count":7}""",
+            OutputType: namedType
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        return () =>
+            executor.ExecuteAsync("My.Train", new TestInput { Name = "test" }, declaredOutput);
     }
 
     [Test]
@@ -381,6 +469,57 @@ public class HttpRunExecutorTests
         ex.Message.Should().Contain("Service Unavailable");
     }
 
+    [Test]
+    public async Task ExecuteAsync_Non2xx_OffersTheClientNoMessage()
+    {
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.BadGateway,
+            responseBody: "<html>upstream 10.0.0.5 down</html>"
+        );
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "error" },
+                typeof(TestOutput)
+            );
+
+        (await act.Should().ThrowAsync<RemoteRunException>())
+            .Which.PublicMessage.Should()
+            .BeNull("a transport failure is not a message a train author wrote");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_ErrorResponse_CarriesTheRunnersPublicMessage()
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 0,
+            IsError: true,
+            ErrorMessage: "Order 42 is already closed.",
+            ExceptionType: nameof(TrainException),
+            FailureJunction: "CloseOrder"
+        )
+        {
+            PublicMessage = "Order 42 is already closed.",
+        };
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.FailingTrain",
+                new TestInput { Name = "fail" },
+                typeof(TestOutput)
+            );
+
+        (await act.Should().ThrowAsync<RemoteRunException>())
+            .Which.PublicMessage.Should()
+            .Be("Order 42 is already closed.");
+    }
+
     #endregion
 
     #region Error Handling — Null Response
@@ -553,9 +692,18 @@ public class HttpRunExecutorTests
         public string Name { get; init; } = "";
     }
 
-    public record TestOutput
+    public interface ITestOutput
+    {
+        string Value { get; }
+    }
+
+    public abstract record TestOutputBase : ITestOutput
     {
         public string Value { get; init; } = "";
+    }
+
+    public record TestOutput : TestOutputBase
+    {
         public int Count { get; init; }
     }
 

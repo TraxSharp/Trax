@@ -68,6 +68,7 @@ namespace Trax.Scheduler.Configuration
         public string BaseUrl { get; set; }
         public System.Action<System.Net.Http.HttpClient>? ConfigureHttpClient { get; set; }
         public Trax.Scheduler.Configuration.HttpRetryOptions Retry { get; set; }
+        public byte[]? SigningKey { get; set; }
         public System.TimeSpan Timeout { get; set; }
     }
     public class RemoteWorkerOptions
@@ -76,6 +77,7 @@ namespace Trax.Scheduler.Configuration
         public string BaseUrl { get; set; }
         public System.Action<System.Net.Http.HttpClient>? ConfigureHttpClient { get; set; }
         public Trax.Scheduler.Configuration.HttpRetryOptions Retry { get; set; }
+        public byte[]? SigningKey { get; set; }
         public System.TimeSpan Timeout { get; set; }
     }
     public class RoutedSubmitterRegistration : System.IEquatable<Trax.Scheduler.Configuration.RoutedSubmitterRegistration>
@@ -248,6 +250,17 @@ namespace Trax.Scheduler.Configuration
         public Trax.Scheduler.Configuration.SubmitterRouting ForTrain<TTrain>()
             where TTrain :  class { }
     }
+    public sealed class TraxJobRunnerOptions
+    {
+        public TraxJobRunnerOptions() { }
+        public string? AuthorizationPolicy { get; set; }
+        public bool InMemoryNonceStore { get; }
+        public System.TimeSpan MaxClockSkew { get; set; }
+        public byte[]? SigningKey { get; set; }
+        public bool UnsignedRequestsAllowed { get; }
+        public Trax.Scheduler.Configuration.TraxJobRunnerOptions AllowUnsignedRequests() { }
+        public Trax.Scheduler.Configuration.TraxJobRunnerOptions UseInMemoryNonceStore() { }
+    }
 }
 namespace Trax.Scheduler.Extensions
 {
@@ -267,6 +280,7 @@ namespace Trax.Scheduler.Extensions
     public static class JobRunnerExtensions
     {
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxJobRunner(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxJobRunner(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Scheduler.Configuration.TraxJobRunnerOptions> configure) { }
         public static Microsoft.AspNetCore.Builder.RouteHandlerBuilder UseTraxJobRunner(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string route = "/trax/execute") { }
         public static Microsoft.AspNetCore.Builder.RouteHandlerBuilder UseTraxRunEndpoint(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string route = "/trax/run") { }
     }
@@ -371,6 +385,7 @@ namespace Trax.Scheduler.Services.Lambda
     {
         public LambdaEnvelope(Trax.Scheduler.Services.Lambda.LambdaRequestType Type, string PayloadJson) { }
         public string PayloadJson { get; init; }
+        public string? Signature { get; init; }
         public Trax.Scheduler.Services.Lambda.LambdaRequestType Type { get; init; }
     }
     public enum LambdaRequestType
@@ -695,12 +710,55 @@ namespace Trax.Scheduler.Services.RequestHandler
         System.Threading.Tasks.Task<Trax.Scheduler.Services.RunExecutor.RemoteRunResponse> RunTrainAsync(Trax.Scheduler.Services.RunExecutor.RemoteRunRequest request, System.Threading.CancellationToken ct = default);
     }
 }
+namespace Trax.Scheduler.Services.RequestSigning
+{
+    public interface INonceStore
+    {
+        System.Threading.Tasks.ValueTask<bool> TryRecordAsync(string nonce, System.DateTimeOffset expiresAt, System.DateTimeOffset now, System.Threading.CancellationToken cancellationToken);
+    }
+    public sealed class InMemoryNonceStore : Trax.Scheduler.Services.RequestSigning.INonceStore
+    {
+        public InMemoryNonceStore() { }
+        public System.Threading.Tasks.ValueTask<bool> TryRecordAsync(string nonce, System.DateTimeOffset expiresAt, System.DateTimeOffset now, System.Threading.CancellationToken cancellationToken) { }
+    }
+    public enum RunnerRequestPurpose
+    {
+        Execute = 0,
+        Run = 1,
+    }
+    public static class RunnerRequestSignature
+    {
+        public const string HeaderName = "Trax-Signature";
+        public const int MinimumKeyLength = 32;
+        public static string Create(byte[] key, Trax.Scheduler.Services.RequestSigning.RunnerRequestPurpose purpose, System.ReadOnlySpan<byte> body) { }
+        public static void EnsureKey(byte[]? key, string paramName) { }
+    }
+    public enum RunnerRequestVerdict
+    {
+        Accepted = 0,
+        Missing = 1,
+        Invalid = 2,
+        Stale = 3,
+        Replayed = 4,
+    }
+    public sealed class RunnerRequestVerifier
+    {
+        public RunnerRequestVerifier(Trax.Scheduler.Configuration.TraxJobRunnerOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier> logger, Trax.Scheduler.Services.RequestSigning.INonceStore? nonces = null, System.TimeProvider? time = null) { }
+        public void EnsurePosture(string entryPoint) { }
+        public System.Threading.Tasks.ValueTask<Trax.Scheduler.Services.RequestSigning.RunnerRequestVerdict> VerifyAsync(Trax.Scheduler.Services.RequestSigning.RunnerRequestPurpose purpose, System.ReadOnlyMemory<byte> body, string? signature, bool requireFresh, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+}
 namespace Trax.Scheduler.Services.RunExecutor
 {
     public class HttpRunExecutor : Trax.Mediator.Services.RunExecutor.IRunExecutor
     {
         public HttpRunExecutor(System.Net.Http.HttpClient httpClient, Trax.Scheduler.Configuration.RemoteRunOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.RunExecutor.HttpRunExecutor> logger) { }
         public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> ExecuteAsync(string trainName, object input, System.Type outputType, System.Threading.CancellationToken ct = default) { }
+    }
+    public class RemoteRunException : Trax.Core.Exceptions.TrainException
+    {
+        public RemoteRunException(string message, string? publicMessage = null) { }
+        public string? PublicMessage { get; }
     }
     public static class RemoteRunJson
     {
@@ -726,6 +784,7 @@ namespace Trax.Scheduler.Services.RunExecutor
         public long MetadataId { get; init; }
         public string? OutputJson { get; init; }
         public string? OutputType { get; init; }
+        public string? PublicMessage { get; init; }
         public string? StackTrace { get; init; }
         public Trax.Core.Exceptions.TrainException ToTrainException() { }
     }

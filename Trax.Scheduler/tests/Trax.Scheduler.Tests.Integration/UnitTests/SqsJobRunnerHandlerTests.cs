@@ -3,13 +3,21 @@ using Amazon.Lambda.SQSEvents;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RequestHandler;
+using Trax.Scheduler.Services.RequestSigning;
 using Trax.Scheduler.Services.RunExecutor;
 using Trax.Scheduler.Sqs.Lambda;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
 
+/// <summary>
+/// The SQS runner entry point, its posture and its signature check.
+///
+/// <para>Enforces <c>docs/adr/0006-a-runner-requires-an-authorization-posture.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0006-a-runner-requires-an-authorization-posture.md")]
 [TestFixture]
 public class SqsJobRunnerHandlerTests
 {
@@ -175,12 +183,100 @@ public class SqsJobRunnerHandlerTests
         handler.LastCancellationToken.Should().Be(token);
     }
 
-    private static SqsJobRunnerHandler CreateHandler(FakeRequestHandler handler)
+    private static SqsJobRunnerHandler CreateHandler(
+        FakeRequestHandler handler,
+        Action<TraxJobRunnerOptions>? runner = null
+    )
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<ITraxRequestHandler>(handler);
+        var options = new TraxJobRunnerOptions();
+        (runner ?? (o => o.AllowUnsignedRequests()))(options);
+        services.AddSingleton(options);
+        services.AddSingleton<INonceStore, InMemoryNonceStore>();
+        services.AddSingleton<RunnerRequestVerifier>();
         return new SqsJobRunnerHandler(services.BuildServiceProvider());
+    }
+
+    private static readonly byte[] Key = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+
+    private static SQSEvent.SQSMessage Message(long metadataId, byte[]? signWith = null)
+    {
+        var body = JsonSerializer.Serialize(new RemoteJobRequest(MetadataId: metadataId));
+        var message = new SQSEvent.SQSMessage { MessageId = $"m{metadataId}", Body = body };
+        if (signWith is not null)
+            message.MessageAttributes = new Dictionary<string, SQSEvent.MessageAttribute>
+            {
+                [RunnerRequestSignature.HeaderName] = new()
+                {
+                    DataType = "String",
+                    StringValue = RunnerRequestSignature.Create(
+                        signWith,
+                        RunnerRequestPurpose.Execute,
+                        System.Text.Encoding.UTF8.GetBytes(body)
+                    ),
+                },
+            };
+        return message;
+    }
+
+    [Test]
+    public async Task HandleAsync_NoPosture_IsRefused()
+    {
+        var handler = new FakeRequestHandler();
+        var sut = CreateHandler(handler, _ => { });
+
+        var act = async () => await sut.HandleAsync(new SQSEvent { Records = [Message(1)] });
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*no authorization posture*");
+        handler.ExecuteCalls.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task HandleAsync_SigningKey_UnsignedMessage_IsRefused()
+    {
+        var handler = new FakeRequestHandler();
+        var sut = CreateHandler(handler, o => o.SigningKey = Key);
+
+        var act = async () => await sut.HandleAsync(new SQSEvent { Records = [Message(1)] });
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Missing*");
+        handler
+            .ExecuteCalls.Should()
+            .BeEmpty(
+                "a runner with a signing key refuses an unsigned message (see docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+    }
+
+    [Test]
+    public async Task HandleAsync_SigningKey_MessageSignedWithAnotherKey_IsRefused()
+    {
+        var handler = new FakeRequestHandler();
+        var sut = CreateHandler(handler, o => o.SigningKey = Key);
+        var otherKey = Enumerable.Repeat((byte)9, 32).ToArray();
+
+        var act = async () =>
+            await sut.HandleAsync(new SQSEvent { Records = [Message(1, otherKey)] });
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Invalid*");
+        handler.ExecuteCalls.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task HandleAsync_SigningKey_RedeliveredSignedMessage_RunsEachTime()
+    {
+        // SQS redelivers the same message by design; the Pending metadata row stops a second run.
+        var handler = new FakeRequestHandler();
+        var sut = CreateHandler(handler, o => o.SigningKey = Key);
+        var message = Message(3, Key);
+
+        await sut.HandleAsync(new SQSEvent { Records = [message] });
+        await sut.HandleAsync(new SQSEvent { Records = [message] });
+
+        handler.ExecuteCalls.Should().HaveCount(2);
     }
 
     private sealed class FakeRequestHandler : ITraxRequestHandler

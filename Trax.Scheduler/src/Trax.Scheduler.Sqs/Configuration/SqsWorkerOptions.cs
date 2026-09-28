@@ -26,4 +26,11 @@ public class SqsWorkerOptions
     /// Only applicable to FIFO queues; ignored for standard queues.
     /// </summary>
     public string? MessageGroupId { get; set; }
+
+    /// <summary>
+    /// The key shared with the runner's <c>AddTraxJobRunner(runner => runner.SigningKey = ...)</c>,
+    /// at least 32 bytes. When set, every request carries a <c>Trax-Signature</c> over its body,
+    /// timestamp and nonce, which the runner verifies before it reads the request.
+    /// </summary>
+    public byte[]? SigningKey { get; set; }
 }

@@ -45,6 +45,11 @@ public static class LambdaSchedulerExtensions
     {
         var options = new LambdaWorkerOptions();
         configure(options);
+        if (options.SigningKey is not null)
+            Trax.Scheduler.Services.RequestSigning.RunnerRequestSignature.EnsureKey(
+                options.SigningKey,
+                nameof(LambdaWorkerOptions.SigningKey)
+            );
 
         var submitterRouting = new SubmitterRouting();
         routing?.Invoke(submitterRouting);
@@ -99,6 +104,11 @@ public static class LambdaSchedulerExtensions
         {
             var options = new LambdaRunOptions();
             configure(options);
+            if (options.SigningKey is not null)
+                Trax.Scheduler.Services.RequestSigning.RunnerRequestSignature.EnsureKey(
+                    options.SigningKey,
+                    nameof(LambdaRunOptions.SigningKey)
+                );
             services.AddSingleton(options);
 
             services.AddSingleton<IAmazonLambda>(_ =>

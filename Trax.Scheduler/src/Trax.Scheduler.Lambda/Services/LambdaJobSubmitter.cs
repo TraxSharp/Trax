@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
@@ -7,6 +8,7 @@ using Trax.Effect.Utils;
 using Trax.Scheduler.Lambda.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.Lambda;
+using Trax.Scheduler.Services.RequestSigning;
 
 namespace Trax.Scheduler.Lambda.Services;
 
@@ -63,10 +65,17 @@ public class LambdaJobSubmitter(
 
     private async Task InvokeAsync(RemoteJobRequest request, CancellationToken cancellationToken)
     {
-        var envelope = new LambdaEnvelope(
-            LambdaRequestType.Execute,
-            JsonSerializer.Serialize(request)
-        );
+        var payloadJson = JsonSerializer.Serialize(request);
+        var envelope = new LambdaEnvelope(LambdaRequestType.Execute, payloadJson)
+        {
+            Signature = options.SigningKey is { } key
+                ? RunnerRequestSignature.Create(
+                    key,
+                    RunnerRequestPurpose.Execute,
+                    Encoding.UTF8.GetBytes(payloadJson)
+                )
+                : null,
+        };
 
         var invokeRequest = new InvokeRequest
         {

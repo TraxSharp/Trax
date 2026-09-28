@@ -1,9 +1,11 @@
+using System.Text;
 using System.Text.Json;
 using Amazon.Lambda.SQSEvents;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RequestHandler;
+using Trax.Scheduler.Services.RequestSigning;
 
 namespace Trax.Scheduler.Sqs.Lambda;
 
@@ -29,8 +31,13 @@ namespace Trax.Scheduler.Sqs.Lambda;
 /// }
 /// </code>
 ///
-/// The host must register <c>AddTrax()</c>, <c>AddMediator()</c>, and <c>AddTraxJobRunner()</c>
-/// before building the <see cref="IServiceProvider"/>.
+/// The host must register <c>AddTrax()</c>, <c>AddMediator()</c>, and
+/// <c>AddTraxJobRunner(runner => ...)</c> before building the <see cref="IServiceProvider"/>. The
+/// runner options need a <c>SigningKey</c> matching the scheduler's <c>SqsWorkerOptions.SigningKey</c>,
+/// or <c>AllowUnsignedRequests()</c> for a queue that only the scheduler can write to; without
+/// either, every batch is refused. A signed message is checked for its signature only, not its age
+/// or a repeat, because SQS redelivers the same message by design; the job's Pending metadata row
+/// is what stops it running twice.
 /// </remarks>
 public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
 {
@@ -50,6 +57,14 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
     /// <param name="cancellationToken">Cancellation token</param>
     public async Task HandleAsync(SQSEvent sqsEvent, CancellationToken cancellationToken = default)
     {
+        var verifier =
+            serviceProvider.GetService<RunnerRequestVerifier>()
+            ?? throw new InvalidOperationException(
+                "SqsJobRunnerHandler requires AddTraxJobRunner(runner => ...) with a SigningKey "
+                    + "or AllowUnsignedRequests()."
+            );
+        verifier.EnsurePosture(nameof(SqsJobRunnerHandler));
+
         foreach (var record in sqsEvent.Records)
         {
             using var scope = serviceProvider.CreateScope();
@@ -58,8 +73,26 @@ public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
 
             try
             {
+                var body = Encoding.UTF8.GetBytes(record.Body ?? "");
+                var signature =
+                    record.MessageAttributes is { } attributes
+                    && attributes.TryGetValue(RunnerRequestSignature.HeaderName, out var attribute)
+                        ? attribute.StringValue
+                        : null;
+
+                var verdict = await verifier.VerifyAsync(
+                    RunnerRequestPurpose.Execute,
+                    body,
+                    signature,
+                    requireFresh: false
+                );
+                if (verdict != RunnerRequestVerdict.Accepted)
+                    throw new InvalidOperationException(
+                        $"Refused SQS message {record.MessageId}: signature {verdict}."
+                    );
+
                 var request =
-                    JsonSerializer.Deserialize<RemoteJobRequest>(record.Body, EnvelopeOptions)
+                    JsonSerializer.Deserialize<RemoteJobRequest>(body, EnvelopeOptions)
                     ?? throw new InvalidOperationException(
                         "Failed to deserialize SQS message body as RemoteJobRequest."
                     );

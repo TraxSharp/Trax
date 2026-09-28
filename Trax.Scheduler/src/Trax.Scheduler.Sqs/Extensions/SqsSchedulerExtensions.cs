@@ -41,6 +41,11 @@ public static class SqsSchedulerExtensions
     {
         var options = new SqsWorkerOptions();
         configure(options);
+        if (options.SigningKey is not null)
+            Trax.Scheduler.Services.RequestSigning.RunnerRequestSignature.EnsureKey(
+                options.SigningKey,
+                nameof(SqsWorkerOptions.SigningKey)
+            );
 
         var submitterRouting = new SubmitterRouting();
         routing?.Invoke(submitterRouting);

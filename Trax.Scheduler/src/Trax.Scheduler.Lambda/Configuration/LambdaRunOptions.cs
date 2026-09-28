@@ -30,4 +30,11 @@ public class LambdaRunOptions
     /// Retry options for transient Lambda invocation failures (throttling, service errors).
     /// </summary>
     public LambdaRetryOptions Retry { get; set; } = new();
+
+    /// <summary>
+    /// The key shared with the runner's <c>AddTraxJobRunner(runner => runner.SigningKey = ...)</c>,
+    /// at least 32 bytes. When set, every request carries a <c>Trax-Signature</c> over its body,
+    /// timestamp and nonce, which the runner verifies before it reads the request.
+    /// </summary>
+    public byte[]? SigningKey { get; set; }
 }

@@ -15,6 +15,12 @@ using Trax.Scheduler.Trains.JobRunner;
 
 namespace Trax.Scheduler.Tests.UnitTests;
 
+/// <summary>
+/// The hosting-agnostic request handler behind every runner entry point.
+///
+/// <para>Enforces <c>docs/adr/0006-a-runner-requires-an-authorization-posture.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0006-a-runner-requires-an-authorization-posture.md")]
 [TestFixture]
 public class TraxRequestHandlerTests
 {
@@ -76,6 +82,43 @@ public class TraxRequestHandlerTests
         var act = async () => await handler.ExecuteJobAsync(request);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Train exploded");
+    }
+
+    [Test]
+    public async Task ExecuteJobAsync_InputTypeNoRegisteredTrainTakes_IsRefusedWithoutRunning()
+    {
+        var request = new RemoteJobRequest(
+            MetadataId: 400,
+            Input: "{}",
+            InputType: typeof(UnregisteredInput).FullName
+        );
+        var jobRunner = new FakeJobRunnerTrain();
+        var handler = CreateHandler(jobRunner: jobRunner);
+
+        var act = async () => await handler.ExecuteJobAsync(request);
+
+        await act.Should()
+            .ThrowAsync<TrainException>()
+            .WithMessage("*not the input of any registered train*");
+        jobRunner.ReceivedRequest.Should().BeNull();
+    }
+
+    [Test]
+    public async Task ExecuteJobAsync_InputTypeNamingALoadableType_IsRefusedWithoutRunning()
+    {
+        // A name Type.GetType would resolve, but that no registered train takes.
+        var request = new RemoteJobRequest(
+            MetadataId: 401,
+            Input: "\"x\"",
+            InputType: typeof(string).AssemblyQualifiedName
+        );
+        var jobRunner = new FakeJobRunnerTrain();
+        var handler = CreateHandler(jobRunner: jobRunner);
+
+        var act = async () => await handler.ExecuteJobAsync(request);
+
+        await act.Should().ThrowAsync<TrainException>();
+        jobRunner.ReceivedRequest.Should().BeNull();
     }
 
     #endregion
@@ -145,7 +188,7 @@ public class TraxRequestHandlerTests
     #region RunTrainAsync — Error Handling
 
     [Test]
-    public async Task RunTrainAsync_TrainFailsWithPlainException_PopulatesExceptionTypeAndStackTrace()
+    public async Task RunTrainAsync_TrainFailsWithPlainException_ReportsTypeButNotMessageOrStack()
     {
         var executionService = new FakeTrainExecutionService
         {
@@ -162,9 +205,9 @@ public class TraxRequestHandlerTests
 
         response.IsError.Should().BeTrue();
         response.MetadataId.Should().Be(0);
-        response.ErrorMessage.Should().Be("Something broke");
+        response.ErrorMessage.Should().Be(TraxRequestHandler.UnreportedFailureMessage);
         response.ExceptionType.Should().Be("InvalidOperationException");
-        response.StackTrace.Should().NotBeNull();
+        response.StackTrace.Should().BeNull();
         response.FailureJunction.Should().BeNull();
         response.OutputJson.Should().BeNull();
     }
@@ -198,7 +241,7 @@ public class TraxRequestHandlerTests
         response.ExceptionType.Should().Be("ArgumentException");
         response.FailureJunction.Should().Be("ValidateInputJunction");
         response.ErrorMessage.Should().Be("Input was invalid");
-        response.StackTrace.Should().NotBeNull();
+        response.StackTrace.Should().BeNull();
     }
 
     [Test]
@@ -218,11 +261,11 @@ public class TraxRequestHandlerTests
 
         response.IsError.Should().BeTrue();
         response.ExceptionType.Should().Be("InvalidOperationException");
-        response.ErrorMessage.Should().Be("Operation failed");
+        response.ErrorMessage.Should().Be(TraxRequestHandler.UnreportedFailureMessage);
     }
 
     [Test]
-    public async Task RunTrainAsync_TrainFails_StackTraceIsPopulated()
+    public async Task RunTrainAsync_TrainFails_StackTraceIsNotSent()
     {
         var executionService = new FakeTrainExecutionService
         {
@@ -238,7 +281,7 @@ public class TraxRequestHandlerTests
         var response = await handler.RunTrainAsync(request);
 
         response.IsError.Should().BeTrue();
-        response.StackTrace.Should().NotBeNullOrEmpty();
+        response.StackTrace.Should().BeNull();
     }
 
     #endregion
@@ -267,7 +310,7 @@ public class TraxRequestHandlerTests
     }
 
     [Test]
-    public void BuildErrorResponse_WithPlainException_UsesRawExceptionDetails()
+    public void BuildErrorResponse_WithPlainException_ReportsTypeOnly()
     {
         var ex = new ArgumentException("Bad value");
 
@@ -275,7 +318,7 @@ public class TraxRequestHandlerTests
 
         response.IsError.Should().BeTrue();
         response.ExceptionType.Should().Be("ArgumentException");
-        response.ErrorMessage.Should().Be("Bad value");
+        response.ErrorMessage.Should().Be(TraxRequestHandler.UnreportedFailureMessage);
         response.FailureJunction.Should().BeNull();
     }
 
@@ -288,7 +331,77 @@ public class TraxRequestHandlerTests
 
         response.IsError.Should().BeTrue();
         response.ExceptionType.Should().Be("InvalidOperationException");
-        response.ErrorMessage.Should().Be("This is not { valid JSON");
+        response.ErrorMessage.Should().Be(TraxRequestHandler.UnreportedFailureMessage);
+    }
+
+    #endregion
+
+    #region RunTrainAsync — Scheduler Trains
+
+    [Test]
+    public async Task RunTrainAsync_SchedulerTrainFullName_IsRefusedWithoutRunning()
+    {
+        var executionService = new FakeTrainExecutionService();
+        var handler = CreateHandler(executionService: executionService);
+
+        var response = await handler.RunTrainAsync(
+            new RemoteRunRequest(
+                typeof(Trax.Scheduler.Trains.JobRunner.IJobRunnerTrain).FullName!,
+                "{}",
+                "ignored"
+            )
+        );
+
+        response.IsError.Should().BeTrue();
+        response.ErrorMessage.Should().Contain("scheduler's own");
+        executionService
+            .Calls.Should()
+            .Be(
+                0,
+                "a runner does not run the scheduler's own trains (see docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+    }
+
+    [Test]
+    public async Task RunTrainAsync_SchedulerTrainShortName_IsRefusedWithoutRunning()
+    {
+        var executionService = new FakeTrainExecutionService();
+        var handler = CreateHandler(executionService: executionService);
+
+        var response = await handler.RunTrainAsync(
+            new RemoteRunRequest("IManifestManagerTrain", "{}", "ignored")
+        );
+
+        response.IsError.Should().BeTrue();
+        response.ErrorMessage.Should().Contain("scheduler's own");
+        executionService
+            .Calls.Should()
+            .Be(
+                0,
+                "a runner does not run the scheduler's own trains (see docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+    }
+
+    [Test]
+    public async Task RunTrainAsync_ShortNameAHostTrainShares_StillRuns()
+    {
+        var executionService = new FakeTrainExecutionService();
+        var handler = CreateHandler(
+            executionService: executionService,
+            registeredTrains: typeof(HostTrains.IJobRunnerTrain)
+        );
+
+        var response = await handler.RunTrainAsync(
+            new RemoteRunRequest("IJobRunnerTrain", "{}", "ignored")
+        );
+
+        response.IsError.Should().BeFalse();
+        executionService
+            .Calls.Should()
+            .Be(
+                1,
+                "only the scheduler's trains are refused, not a host train sharing a short name (see docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
     }
 
     #endregion
@@ -297,13 +410,16 @@ public class TraxRequestHandlerTests
 
     private static TraxRequestHandler CreateHandler(
         FakeJobRunnerTrain? jobRunner = null,
-        FakeTrainExecutionService? executionService = null
+        FakeTrainExecutionService? executionService = null,
+        params Type[] registeredTrains
     )
     {
         return new TraxRequestHandler(
             jobRunner ?? new FakeJobRunnerTrain(),
             executionService ?? new FakeTrainExecutionService(),
             new TrustedExecutionScope(),
+            new FakeTrainRegistry(typeof(TestInput)),
+            new FakeTrainDiscovery(registeredTrains),
             NullLogger<TraxRequestHandler>.Instance
         );
     }
@@ -311,6 +427,48 @@ public class TraxRequestHandlerTests
     #endregion
 
     #region Test Types
+
+    public record UnregisteredInput;
+
+    private sealed class FakeTrainRegistry(params Type[] inputTypes)
+        : Trax.Mediator.Services.TrainRegistry.ITrainRegistry
+    {
+        public Dictionary<Type, Type> InputTypeToTrain { get; set; } =
+            inputTypes.ToDictionary(t => t, _ => typeof(IJobRunnerTrain));
+    }
+
+    private sealed class FakeTrainDiscovery(Type[] serviceTypes)
+        : Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService
+    {
+        public IReadOnlyList<Trax.Mediator.Services.TrainDiscovery.TrainRegistration> DiscoverTrains() =>
+            serviceTypes
+                .Select(t => new Trax.Mediator.Services.TrainDiscovery.TrainRegistration
+                {
+                    ServiceType = t,
+                    ImplementationType = t,
+                    InputType = typeof(TestInput),
+                    OutputType = typeof(Unit),
+                    Lifetime = Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped,
+                    ServiceTypeName = t.Name,
+                    ImplementationTypeName = t.Name,
+                    InputTypeName = nameof(TestInput),
+                    OutputTypeName = nameof(Unit),
+                    RequiredPolicies = [],
+                    RequiredRoles = [],
+                    IsQuery = false,
+                    IsMutation = false,
+                    IsBroadcastEnabled = false,
+                    IsRemote = false,
+                    GraphQLOperations = default,
+                })
+                .ToList();
+    }
+
+    /// <summary>A host train that shares its short name with the scheduler's JobRunner.</summary>
+    public static class HostTrains
+    {
+        public interface IJobRunnerTrain;
+    }
 
     public record TestInput
     {
@@ -354,6 +512,7 @@ public class TraxRequestHandlerTests
     {
         public RunTrainResult? ResultToReturn { get; init; }
         public Exception? ExceptionToThrow { get; init; }
+        public int Calls { get; private set; }
 
         public Task<QueueTrainResult> QueueAsync(
             string trainName,
@@ -372,6 +531,7 @@ public class TraxRequestHandlerTests
             CancellationToken ct = default
         )
         {
+            Calls++;
             if (ExceptionToThrow is not null)
                 throw ExceptionToThrow;
 

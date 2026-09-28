@@ -4,6 +4,9 @@ using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectJunction;
+using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainRegistry;
+using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Trains.JobRunner.Junctions;
 
@@ -15,8 +18,12 @@ namespace Trax.Scheduler.Trains.JobRunner.Junctions;
 /// The Manifest is eagerly loaded so that UpdateManifestSuccessJunction can persist
 /// LastSuccessfulRun via SaveChanges.
 /// </remarks>
-internal class LoadMetadataJunction(IDataContext dataContext, ILogger<LoadMetadataJunction> logger)
-    : EffectJunction<RunJobRequest, (Metadata, ResolvedTrainInput)>
+internal class LoadMetadataJunction(
+    IDataContext dataContext,
+    ITrainRegistry trainRegistry,
+    ITrainDiscoveryService trainDiscovery,
+    ILogger<LoadMetadataJunction> logger
+) : EffectJunction<RunJobRequest, (Metadata, ResolvedTrainInput)>
 {
     public override async Task<(Metadata, ResolvedTrainInput)> Run(RunJobRequest input)
     {
@@ -38,6 +45,26 @@ internal class LoadMetadataJunction(IDataContext dataContext, ILogger<LoadMetada
                 $"Train input is required for Metadata ID {input.MetadataId}. All executions must provide input via the work queue dispatch pipeline."
             );
 
+        // The bus runs whichever train is registered for the input's type, so the row must belong
+        // to that train. Checked before anything touches the row, which stays Pending.
+        if (!trainRegistry.InputTypeToTrain.TryGetValue(input.Input.GetType(), out var trainType))
+            throw new TrainException(
+                $"No registered train takes the input given for Metadata ID {input.MetadataId}."
+            );
+
+        // The scheduler starts its own trains in its own process; a job never carries one.
+        if (AdminTrains.Includes(trainType))
+            throw new TrainException(
+                $"Metadata ID {input.MetadataId} was given the input of '{trainType.FullName}', "
+                    + "one of the scheduler's own trains, which a runner does not run."
+            );
+
+        if (!NamesTrain(metadata.Name, trainType))
+            throw new TrainException(
+                $"Metadata ID {input.MetadataId} belongs to train '{metadata.Name}', "
+                    + $"not to '{trainType.FullName}', which takes the input given."
+            );
+
         logger.LogDebug(
             "Loaded metadata for train {TrainName} (MetadataId: {MetadataId})",
             metadata.Name,
@@ -45,5 +72,28 @@ internal class LoadMetadataJunction(IDataContext dataContext, ILogger<LoadMetada
         );
 
         return (metadata, new ResolvedTrainInput(input.Input));
+    }
+
+    /// <summary>
+    /// Whether a row's name is one of the names the train goes by: its interface's full or short
+    /// name (the canonical name and the wire's fallback), or its class's, which older rows carry.
+    /// </summary>
+    private bool NamesTrain(string name, Type serviceType)
+    {
+        if (Matches(name, serviceType))
+            return true;
+
+        foreach (var registration in trainDiscovery.DiscoverTrains())
+            if (
+                registration.ServiceType == serviceType
+                && Matches(name, registration.ImplementationType)
+            )
+                return true;
+
+        return false;
+
+        static bool Matches(string name, Type type) =>
+            string.Equals(name, type.FullName, StringComparison.Ordinal)
+            || string.Equals(name, type.Name, StringComparison.Ordinal);
     }
 }

@@ -148,7 +148,7 @@ public class HttpJobSubmitterTests
         var input = new SchedulerTestInput { Value = "test" };
 
         var jobId1 = await submitter.EnqueueAsync(1, input);
-        var jobId2 = await submitter.EnqueueAsync(2, input);
+        var jobId2 = await submitter.EnqueueAsync(1, input);
 
         jobId1.Should().NotBe(jobId2);
     }
@@ -321,16 +321,66 @@ public class HttpJobSubmitterTests
 
     #endregion
 
+    #region Error Handling — A 200 That Is Not A Runner Response
+
+    [TestCase("<html><body>Welcome</body></html>")]
+    [TestCase("")]
+    [TestCase("null")]
+    [TestCase("[1, 2, 3]")]
+    public async Task EnqueueAsync_200WithoutARunnerResponse_ThrowsTrainException(string body)
+    {
+        var (submitter, _) = CreateSubmitter(responseBody: body);
+
+        var act = async () => await submitter.EnqueueAsync(42);
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("did not return a runner response");
+    }
+
+    [Test]
+    public async Task EnqueueAsync_200WithNoBody_ThrowsTrainException()
+    {
+        var (submitter, _) = CreateSubmitter(responseBody: null);
+
+        var act = async () => await submitter.EnqueueAsync(42);
+
+        await act.Should().ThrowAsync<TrainException>();
+    }
+
+    [Test]
+    public async Task EnqueueAsync_200ForADifferentMetadataId_ThrowsTrainException()
+    {
+        var (submitter, _) = CreateSubmitter(responseBody: SerializeSuccessResponse(7));
+
+        var act = async () => await submitter.EnqueueAsync(42);
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("did not return a runner response");
+    }
+
+    [Test]
+    public async Task EnqueueAsync_WithInput_200WithoutARunnerResponse_ThrowsTrainException()
+    {
+        var (submitter, _) = CreateSubmitter(responseBody: "{}");
+        var input = new SchedulerTestInput { Value = "test" };
+
+        var act = async () => await submitter.EnqueueAsync(42, input);
+
+        await act.Should().ThrowAsync<TrainException>();
+    }
+
+    #endregion
+
     #region Multiple Calls Tests
 
     [Test]
     public async Task EnqueueAsync_MultipleCalls_EachProducesUniqueJobId()
     {
-        var (submitter, _) = CreateSubmitter(responseBody: SerializeSuccessResponse(0));
         var jobIds = new HashSet<string>();
 
         for (var i = 0; i < 10; i++)
         {
+            var (submitter, _) = CreateSubmitter(responseBody: SerializeSuccessResponse(i));
             var jobId = await submitter.EnqueueAsync(i);
             jobIds.Add(jobId);
         }

@@ -373,10 +373,12 @@ public partial class SchedulerConfigurationBuilder
     /// Jobs are POSTed as JSON to the configured <see cref="RemoteWorkerOptions.BaseUrl"/>.
     /// The remote endpoint runs <see cref="Trains.JobRunner.JobRunnerTrain"/> to execute the train.
     ///
-    /// Trax does not bake in any authentication. Use <see cref="RemoteWorkerOptions.ConfigureHttpClient"/>
-    /// to add authorization headers or any custom HTTP configuration.
+    /// The runner refuses requests that do not meet its posture. Set
+    /// <see cref="RemoteWorkerOptions.SigningKey"/> to the key the runner verifies, or use
+    /// <see cref="RemoteWorkerOptions.ConfigureHttpClient"/> to add the credentials its
+    /// authorization policy expects.
     ///
-    /// Set up the remote side with <c>AddTraxJobRunner()</c> and <c>UseTraxJobRunner()</c>.
+    /// Set up the remote side with <c>AddTraxJobRunner(runner => ...)</c> and <c>UseTraxJobRunner()</c>.
     /// </remarks>
     /// <param name="configure">Action to configure the remote endpoint URL and HTTP client</param>
     /// <param name="routing">Action to specify which trains should be dispatched remotely</param>
@@ -388,6 +390,11 @@ public partial class SchedulerConfigurationBuilder
     {
         var options = new RemoteWorkerOptions();
         configure(options);
+        if (options.SigningKey is not null)
+            Services.RequestSigning.RunnerRequestSignature.EnsureKey(
+                options.SigningKey,
+                nameof(RemoteWorkerOptions.SigningKey)
+            );
 
         var submitterRouting = new SubmitterRouting();
         routing?.Invoke(submitterRouting);
@@ -423,7 +430,9 @@ public partial class SchedulerConfigurationBuilder
     ///
     /// Without this, runs execute in-process via <see cref="LocalRunExecutor"/> (the default).
     ///
-    /// Set up the remote side with <c>UseTraxRunEndpoint()</c> in the runner process.
+    /// Set up the remote side with <c>AddTraxJobRunner(runner => ...)</c> and
+    /// <c>UseTraxRunEndpoint()</c> in the runner process, and set
+    /// <see cref="RemoteRunOptions.SigningKey"/> to the key it verifies.
     /// </remarks>
     /// <param name="configure">Action to configure the remote endpoint URL and HTTP client</param>
     /// <returns>The builder for method chaining</returns>
@@ -433,6 +442,11 @@ public partial class SchedulerConfigurationBuilder
         {
             var options = new RemoteRunOptions();
             configure(options);
+            if (options.SigningKey is not null)
+                Services.RequestSigning.RunnerRequestSignature.EnsureKey(
+                    options.SigningKey,
+                    nameof(RemoteRunOptions.SigningKey)
+                );
             services.AddSingleton(options);
 
             services.AddHttpClient<IRunExecutor, HttpRunExecutor>(client =>

@@ -29,6 +29,56 @@ public class SqsJobSubmitterTests
 
     #endregion
 
+    #region Signing
+
+    [Test]
+    public async Task EnqueueAsync_WithSigningKey_AttachesAVerifiableSignatureAttribute()
+    {
+        var key = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+        var client = new MockSqsClient();
+        var submitter = new SqsJobSubmitter(
+            client,
+            new SqsWorkerOptions { QueueUrl = "https://sqs/q", SigningKey = key }
+        );
+
+        await submitter.EnqueueAsync(42);
+
+        var attribute = client.LastRequest!.MessageAttributes[
+            Trax.Scheduler.Services.RequestSigning.RunnerRequestSignature.HeaderName
+        ];
+        (
+            await new Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier(
+                new Trax.Scheduler.Configuration.TraxJobRunnerOptions { SigningKey = key },
+                Microsoft
+                    .Extensions
+                    .Logging
+                    .Abstractions
+                    .NullLogger<Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier>
+                    .Instance,
+                new Trax.Scheduler.Services.RequestSigning.InMemoryNonceStore()
+            ).VerifyAsync(
+                Trax.Scheduler.Services.RequestSigning.RunnerRequestPurpose.Execute,
+                System.Text.Encoding.UTF8.GetBytes(client.LastRequest.MessageBody),
+                attribute.StringValue,
+                requireFresh: false
+            )
+        )
+            .Should()
+            .Be(Trax.Scheduler.Services.RequestSigning.RunnerRequestVerdict.Accepted);
+    }
+
+    [Test]
+    public async Task EnqueueAsync_WithoutSigningKey_SendsNoAttributes()
+    {
+        var (submitter, client) = CreateSubmitter();
+
+        await submitter.EnqueueAsync(42);
+
+        client.LastRequest!.MessageAttributes.Should().BeNullOrEmpty();
+    }
+
+    #endregion
+
     #region EnqueueAsync(metadataId) Tests
 
     [Test]

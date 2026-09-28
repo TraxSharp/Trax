@@ -3,6 +3,7 @@ using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -11,6 +12,7 @@ using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Utils;
+using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Utilities;
@@ -38,6 +40,7 @@ internal class DispatchJobsJunction(
     JobSubmitterRoutingConfiguration routingConfiguration,
     SchedulerConfiguration schedulerConfiguration,
     ISqlDialect sqlDialect,
+    ITrainRegistry trainRegistry,
     ITraxChangeSignal? changeSignal = null
 ) : EffectJunction<List<WorkQueue>, Unit>
 {
@@ -167,7 +170,14 @@ internal class DispatchJobsJunction(
         object? deserializedInput = null;
         if (claimed is { Input: not null, InputTypeName: not null })
         {
-            var inputType = TypeResolver.ResolveType(claimed.InputTypeName);
+            // Resolved among the registered trains' inputs only. A name that is not one of them
+            // throws inside the claim transaction, which rolls back and leaves the entry Queued.
+            var inputType =
+                RegisteredInputTypes.Find(trainRegistry, claimed.InputTypeName)
+                ?? throw new TrainException(
+                    $"Work queue entry {claimed.Id} names input type '{claimed.InputTypeName}', "
+                        + "which is not the input of any registered train."
+                );
             deserializedInput = JsonSerializer.Deserialize(
                 claimed.Input,
                 inputType,

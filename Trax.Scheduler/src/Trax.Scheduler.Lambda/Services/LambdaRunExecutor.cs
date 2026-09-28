@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
@@ -8,8 +9,8 @@ using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Lambda.Configuration;
 using Trax.Scheduler.Services.Lambda;
+using Trax.Scheduler.Services.RequestSigning;
 using Trax.Scheduler.Services.RunExecutor;
-using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Lambda.Services;
 
@@ -45,10 +46,17 @@ public class LambdaRunExecutor(
         );
 
         var runRequest = new RemoteRunRequest(trainName, inputJson, input.GetType().FullName!);
-        var envelope = new LambdaEnvelope(
-            LambdaRequestType.Run,
-            JsonSerializer.Serialize(runRequest)
-        );
+        var payloadJson = JsonSerializer.Serialize(runRequest);
+        var envelope = new LambdaEnvelope(LambdaRequestType.Run, payloadJson)
+        {
+            Signature = options.SigningKey is { } key
+                ? RunnerRequestSignature.Create(
+                    key,
+                    RunnerRequestPurpose.Run,
+                    Encoding.UTF8.GetBytes(payloadJson)
+                )
+                : null,
+        };
 
         var invokeRequest = new InvokeRequest
         {
@@ -74,7 +82,7 @@ public class LambdaRunExecutor(
         if (!string.IsNullOrEmpty(invokeResponse.FunctionError))
         {
             var errorPayload = await ReadPayloadAsync(invokeResponse);
-            throw new TrainException(
+            throw new RemoteRunException(
                 $"Lambda function '{options.FunctionName}' returned error: "
                     + $"{invokeResponse.FunctionError}. {errorPayload}"
             );
@@ -85,23 +93,16 @@ public class LambdaRunExecutor(
                 invokeResponse.Payload,
                 RemoteRunJson.Read,
                 cancellationToken: ct
-            ) ?? throw new TrainException("Lambda function returned null response.");
+            ) ?? throw new RemoteRunException("Lambda function returned null response.");
 
         // Shared with the HTTP executor, so a field the worker sends back, such as its failure
         // classification, is carried by both transports rather than by whichever was updated.
         if (response.IsError)
             throw response.ToTrainException();
 
-        object? output = null;
-        if (response.OutputJson is not null && response.OutputType is not null)
-        {
-            var resolvedType = TypeResolver.ResolveType(response.OutputType);
-            output = JsonSerializer.Deserialize(
-                response.OutputJson,
-                resolvedType,
-                TraxJsonSerializationOptions.ManifestProperties
-            );
-        }
+        // Read into the output type the caller expects, or, when that is an interface or abstract
+        // type, into the loaded implementation of it the response names; never a type loaded by name.
+        var output = RemoteRunOutput.Read(response.OutputJson, outputType, response.OutputType);
 
         return new RunTrainResult(response.MetadataId, response.ExternalId ?? "", output);
     }

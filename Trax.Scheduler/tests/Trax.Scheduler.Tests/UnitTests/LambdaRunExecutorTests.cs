@@ -62,6 +62,112 @@ public class LambdaRunExecutorTests
     }
 
     [Test]
+    public async Task ExecuteAsync_ResponseNamingAnotherOutputType_ReadsIntoTheExpectedType()
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 43,
+            OutputJson: """{"value":"hello","count":7}""",
+            OutputType: typeof(Dictionary<string, object>).AssemblyQualifiedName
+        );
+        var executor = CreateExecutor(CreateMockClient(response));
+
+        var result = await executor.ExecuteAsync(
+            "My.Train",
+            new TestRunInput { Name = "test" },
+            typeof(TestRunOutput)
+        );
+
+        result.Output.Should().BeOfType<TestRunOutput>();
+    }
+
+    [TestCase(typeof(ITestRunOutput))]
+    [TestCase(typeof(TestRunOutputBase))]
+    public async Task ExecuteAsync_TrainDeclaringAnInterfaceOrAbstractOutput_ReturnsTheOutput(
+        Type declaredOutput
+    )
+    {
+        var result = await RunNaming(declaredOutput, typeof(TestRunOutput).FullName)();
+
+        result.Output.Should().BeOfType<TestRunOutput>();
+        ((ITestRunOutput)result.Output!).Value.Should().Be("hello");
+    }
+
+    [TestCase(typeof(ITestRunOutput))]
+    [TestCase(typeof(TestRunOutputBase))]
+    public async Task ExecuteAsync_InterfaceOrAbstractOutput_WorkerNamingATypeThatDoesNotImplementIt_IsRefused(
+        Type declaredOutput
+    ) =>
+        await RunNaming(declaredOutput, typeof(TestRunInput).FullName)
+            .Should()
+            .ThrowAsync<TrainException>(
+                "only an implementation of the expected output type is read (see {0})",
+                "docs/adr/0006-a-runner-requires-an-authorization-posture.md"
+            );
+
+    [TestCase("Some.Assembly.That.Is.Not.Loaded.Output")]
+    [TestCase(null)]
+    public async Task ExecuteAsync_InterfaceOutput_WorkerNamingNoLoadedImplementation_IsRefused(
+        string? namedType
+    ) =>
+        await RunNaming(typeof(ITestRunOutput), namedType)
+            .Should()
+            .ThrowAsync<TrainException>(
+                "a type is never loaded by the name a response gives (see {0})",
+                "docs/adr/0006-a-runner-requires-an-authorization-posture.md"
+            );
+
+    private static Func<Task<Trax.Mediator.Services.TrainExecution.RunTrainResult>> RunNaming(
+        Type declaredOutput,
+        string? namedType
+    )
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 44,
+            OutputJson: """{"value":"hello","count":7}""",
+            OutputType: namedType
+        );
+        var executor = CreateExecutor(CreateMockClient(response));
+
+        return () =>
+            executor.ExecuteAsync("My.Train", new TestRunInput { Name = "test" }, declaredOutput);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_WithSigningKey_SignsThePayloadForRun()
+    {
+        var key = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+        var client = CreateMockClient(new RemoteRunResponse(MetadataId: 1));
+        var executor = new LambdaRunExecutor(
+            client,
+            new LambdaRunOptions { FunctionName = "my-runner", SigningKey = key },
+            NullLogger<LambdaRunExecutor>.Instance
+        );
+
+        await executor.ExecuteAsync(
+            "My.Train",
+            new TestRunInput { Name = "x" },
+            typeof(TestRunOutput)
+        );
+
+        var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(client.LastRequest!.Payload)!;
+        var verifier = new Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier(
+            new Trax.Scheduler.Configuration.TraxJobRunnerOptions { SigningKey = key },
+            NullLogger<Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier>.Instance,
+            new Trax.Scheduler.Services.RequestSigning.InMemoryNonceStore()
+        );
+        (
+            await verifier.VerifyAsync(
+                Trax.Scheduler.Services.RequestSigning.RunnerRequestPurpose.Run,
+                Encoding.UTF8.GetBytes(envelope.PayloadJson),
+                envelope.Signature,
+                requireFresh: true
+            )
+        )
+            .Should()
+            .Be(Trax.Scheduler.Services.RequestSigning.RunnerRequestVerdict.Accepted);
+    }
+
+    [Test]
     public async Task ExecuteAsync_UnitResponse_ReturnsNullOutput()
     {
         // Arrange
@@ -341,6 +447,50 @@ public class LambdaRunExecutorTests
         await act.Should().ThrowAsync<TrainException>().WithMessage("*Unhandled*");
     }
 
+    [Test]
+    public async Task ExecuteAsync_FunctionError_OffersTheClientNoMessage()
+    {
+        var client = new MockLambdaClient { FunctionError = "Unhandled" };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestRunInput { Name = "crash" },
+                typeof(TestRunOutput)
+            );
+
+        (await act.Should().ThrowAsync<RemoteRunException>())
+            .Which.PublicMessage.Should()
+            .BeNull("a function error is not a message a train author wrote");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_ErrorResponse_CarriesTheRunnersPublicMessage()
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 0,
+            IsError: true,
+            ErrorMessage: "Order 42 is already closed.",
+            ExceptionType: nameof(TrainException)
+        )
+        {
+            PublicMessage = "Order 42 is already closed.",
+        };
+        var executor = CreateExecutor(CreateMockClient(response));
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.FailingTrain",
+                new TestRunInput { Name = "fail" },
+                typeof(TestRunOutput)
+            );
+
+        (await act.Should().ThrowAsync<RemoteRunException>())
+            .Which.PublicMessage.Should()
+            .Be("Order 42 is already closed.");
+    }
+
     #endregion
 
     #region Error Handling — Null Response
@@ -477,9 +627,18 @@ public class LambdaRunExecutorTests
         public string Name { get; init; } = "";
     }
 
-    public record TestRunOutput
+    public interface ITestRunOutput
+    {
+        string Value { get; }
+    }
+
+    public abstract record TestRunOutputBase : ITestRunOutput
     {
         public string Value { get; init; } = "";
+    }
+
+    public record TestRunOutput : TestRunOutputBase
+    {
         public int Count { get; init; }
     }
 

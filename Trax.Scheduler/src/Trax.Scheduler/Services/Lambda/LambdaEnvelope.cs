@@ -8,7 +8,14 @@ namespace Trax.Scheduler.Services.Lambda;
 /// </summary>
 /// <param name="Type">The operation to perform</param>
 /// <param name="PayloadJson">The JSON-serialized inner request (<see cref="JobSubmitter.RemoteJobRequest"/> or <see cref="RunExecutor.RemoteRunRequest"/>)</param>
-public record LambdaEnvelope(LambdaRequestType Type, string PayloadJson);
+public record LambdaEnvelope(LambdaRequestType Type, string PayloadJson)
+{
+    /// <summary>
+    /// The <see cref="RequestSigning.RunnerRequestSignature"/> over the UTF-8 bytes of
+    /// <see cref="PayloadJson"/>, or null when the sender has no signing key.
+    /// </summary>
+    public string? Signature { get; init; }
+}
 
 /// <summary>
 /// Identifies the operation type within a <see cref="LambdaEnvelope"/>.

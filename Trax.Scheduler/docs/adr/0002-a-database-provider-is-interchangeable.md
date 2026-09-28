@@ -53,10 +53,10 @@ the dialect or not at all.
 matching the exception type's `FullName` against `"Npgsql."`. It inspects no connection and
 no connection string. Provider names appear elsewhere in `src/` on types the branch selects
 between, such as `PostgresJobSubmitter` and `InMemoryManifestManagerTrain`; this is the only
-place a provider is named in a *string*. Moving it
-behind `ISqlDialect` would mean adding exception classification to an interface that today
-returns nothing but SQL strings, so the string stays until a second provider needs the same
-treatment.
+place a provider is named in a *string*. `ISqlDialect` now classifies one exception,
+`IsUniqueViolation`, which the runner nonce store ([0009](./0009-a-runner-shares-its-accepted-nonces-through-the-database.md))
+needed to tell a key conflict from any other failed save on both providers, so the dialect could
+hold this check too; it has not been moved.
 
 ## Exemplars
 
@@ -78,6 +78,8 @@ Not covered:
 
 ## Changelog
 
+- **2026-09-28**: `ISqlDialect` classifies exceptions now (`IsUniqueViolation`), so the
+  `"Npgsql."` string is no longer blocked on the interface returning only SQL.
 - **2026-09-12**: Corrected the unconditional-registration list (three hosted services, not
   two) and narrowed the "only mention of a provider" claim to string literals.
 - **2026-09-11**: Corrected the InMemory branch, the

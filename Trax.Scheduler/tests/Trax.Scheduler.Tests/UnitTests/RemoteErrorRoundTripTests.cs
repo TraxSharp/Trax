@@ -87,7 +87,7 @@ public class RemoteErrorRoundTripTests
 
         runnerResponse.IsError.Should().BeTrue();
         runnerResponse.ExceptionType.Should().Be("InvalidOperationException");
-        runnerResponse.ErrorMessage.Should().Be("Connection timed out");
+        runnerResponse.ErrorMessage.Should().Be(TraxRequestHandler.UnreportedFailureMessage);
         runnerResponse.FailureJunction.Should().BeNull();
 
         // Step 3: Wire round-trip
@@ -118,7 +118,7 @@ public class RemoteErrorRoundTripTests
         metadata.AddException(reconstructedException);
 
         metadata.FailureException.Should().Be("InvalidOperationException");
-        metadata.FailureReason.Should().Be("Connection timed out");
+        metadata.FailureReason.Should().Be(TraxRequestHandler.UnreportedFailureMessage);
         metadata.FailureJunction.Should().Be("Unknown");
     }
 

@@ -4,8 +4,8 @@ namespace Trax.Scheduler.Configuration;
 /// Configuration options for dispatching jobs to a remote HTTP endpoint via <c>UseRemoteWorkers()</c>.
 /// </summary>
 /// <remarks>
-/// Trax does not bake in any authentication mechanism. Use <see cref="ConfigureHttpClient"/>
-/// to add authorization headers, API keys, or any custom HTTP configuration your endpoint requires.
+/// Set <see cref="SigningKey"/> to sign each request for a runner that verifies signatures, or use
+/// <see cref="ConfigureHttpClient"/> to add the credentials a runner's authorization policy expects.
 /// </remarks>
 public class RemoteWorkerOptions
 {
@@ -40,4 +40,11 @@ public class RemoteWorkerOptions
     /// Set <see cref="HttpRetryOptions.MaxRetries"/> to 0 to disable retries.
     /// </remarks>
     public HttpRetryOptions Retry { get; set; } = new();
+
+    /// <summary>
+    /// The key shared with the runner's <c>AddTraxJobRunner(runner => runner.SigningKey = ...)</c>,
+    /// at least 32 bytes. When set, every request carries a <c>Trax-Signature</c> over its body,
+    /// timestamp and nonce, which the runner verifies before it reads the request.
+    /// </summary>
+    public byte[]? SigningKey { get; set; }
 }

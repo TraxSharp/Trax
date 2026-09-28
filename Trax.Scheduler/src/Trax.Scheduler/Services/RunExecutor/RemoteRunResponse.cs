@@ -34,6 +34,18 @@ public record RemoteRunResponse(
 )
 {
     /// <summary>
+    /// The message a client of the calling side may see, chosen by the runner: a train author's
+    /// own <see cref="TrainException"/> message, and null for every other failure.
+    /// </summary>
+    /// <remarks>
+    /// An init property rather than a constructor parameter, so the constructor a separately
+    /// shipped runner package was built against stays. An older runner omits it, and the calling
+    /// side then has no public message. See
+    /// <c>Trax.Docs/adr/0028-a-remote-runs-client-message-is-chosen-by-the-runner.md</c>.
+    /// </remarks>
+    public string? PublicMessage { get; init; }
+
+    /// <summary>
     /// Rebuilds the failure this response reports as the <see cref="TrainException"/> the calling
     /// side records.
     /// </summary>
@@ -43,7 +55,8 @@ public record RemoteRunResponse(
     /// JSON, so <c>Metadata.AddException()</c> on the calling side parses it into its structured
     /// fields (FailureException, FailureJunction, FailureReason) and keeps the worker's
     /// <see cref="FailureClass"/>. Every executor that reads a remote response uses this, so the
-    /// HTTP and Lambda paths record a remote failure the same way.
+    /// HTTP and Lambda paths record a remote failure the same way. The instance is a
+    /// <see cref="RemoteRunException"/> carrying <see cref="PublicMessage"/>.
     /// </remarks>
     public TrainException ToTrainException()
     {
@@ -61,9 +74,12 @@ public record RemoteRunResponse(
                 FailureClass = FailureClass,
             };
 
-            return new TrainException(JsonSerializer.Serialize(data));
+            return new RemoteRunException(JsonSerializer.Serialize(data), PublicMessage);
         }
 
-        return new TrainException($"Remote train execution failed: {ErrorMessage}");
+        return new RemoteRunException(
+            $"Remote train execution failed: {ErrorMessage}",
+            PublicMessage
+        );
     }
 }

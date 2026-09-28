@@ -3,10 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Utils;
+using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Trains.JobRunner;
@@ -211,7 +213,17 @@ internal class LocalWorkerService(
             object? deserializedInput = null;
             if (inputJson != null && inputType != null)
             {
-                var type = TypeResolver.ResolveType(inputType);
+                // Resolved among the registered trains' inputs only; a name that is not one of
+                // them fails this job like any other failure, and its row is deleted below.
+                var type =
+                    RegisteredInputTypes.Find(
+                        executeScope.ServiceProvider.GetRequiredService<ITrainRegistry>(),
+                        inputType
+                    )
+                    ?? throw new TrainException(
+                        $"Background job {jobId} names input type '{inputType}', which is not "
+                            + "the input of any registered train."
+                    );
                 deserializedInput = JsonSerializer.Deserialize(
                     inputJson,
                     type,

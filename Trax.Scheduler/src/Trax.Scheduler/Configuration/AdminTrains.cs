@@ -1,3 +1,4 @@
+using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Trains.DeadLetterCleanup;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.JobRunner;
@@ -8,7 +9,8 @@ namespace Trax.Scheduler.Configuration;
 
 /// <summary>
 /// Central registry of internal/administrative scheduler trains.
-/// These trains are excluded from dashboard statistics and max-active-job counts.
+/// These trains are excluded from dashboard statistics and max-active-job counts, and a runner
+/// refuses to run them (see scheduler/0006).
 /// </summary>
 public static class AdminTrains
 {
@@ -41,4 +43,15 @@ public static class AdminTrains
     /// Short (unqualified) type names of admin trains, used for display filtering.
     /// </summary>
     public static readonly IReadOnlyList<string> ShortNames = Types.Select(t => t.Name).ToList();
+
+    /// <summary>
+    /// Whether the registration is one of the scheduler's own trains, by its interface or its class.
+    /// </summary>
+    internal static bool Includes(TrainRegistration registration) =>
+        Includes(registration.ServiceType) || Includes(registration.ImplementationType);
+
+    /// <summary>
+    /// Whether the type is one of the scheduler's own train interfaces or classes.
+    /// </summary>
+    internal static bool Includes(Type trainType) => Types.Contains(trainType);
 }

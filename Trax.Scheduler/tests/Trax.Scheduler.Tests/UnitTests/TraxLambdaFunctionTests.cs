@@ -11,13 +11,21 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Runner.Lambda;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.Lambda;
 using Trax.Scheduler.Services.RequestHandler;
+using Trax.Scheduler.Services.RequestSigning;
 using Trax.Scheduler.Services.RunExecutor;
 
 namespace Trax.Scheduler.Tests.UnitTests;
 
+/// <summary>
+/// The Lambda runner entry point and its local HTTP routes, their posture and signature checks.
+///
+/// <para>Enforces <c>docs/adr/0006-a-runner-requires-an-authorization-posture.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0006-a-runner-requires-an-authorization-posture.md")]
 [TestFixture]
 public class TraxLambdaFunctionTests
 {
@@ -65,7 +73,8 @@ public class TraxLambdaFunctionTests
         var response = (RemoteJobResponse)result!;
         response.MetadataId.Should().Be(7);
         response.IsError.Should().BeTrue();
-        response.ErrorMessage.Should().Be("boom");
+        response.ErrorMessage.Should().NotContain("boom");
+        response.StackTrace.Should().BeNull();
         response.ExceptionType.Should().Be(nameof(InvalidOperationException));
     }
 
@@ -166,6 +175,171 @@ public class TraxLambdaFunctionTests
 
     #endregion
 
+    #region Posture and signatures
+
+    private static readonly byte[] Key = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+
+    private static LambdaEnvelope Signed(
+        LambdaRequestType type,
+        string payload,
+        byte[]? key = null
+    ) =>
+        new(type, payload)
+        {
+            Signature = RunnerRequestSignature.Create(
+                key ?? Key,
+                type == LambdaRequestType.Run
+                    ? RunnerRequestPurpose.Run
+                    : RunnerRequestPurpose.Execute,
+                System.Text.Encoding.UTF8.GetBytes(payload)
+            ),
+        };
+
+    private static string RunPayload() =>
+        JsonSerializer.Serialize(new RemoteRunRequest("My.Train", "{}", "Foo"));
+
+    [Test]
+    public async Task FunctionHandler_NoPosture_IsRefused()
+    {
+        var fn = new TestFunction(_ => { });
+        var envelope = new LambdaEnvelope(LambdaRequestType.Run, RunPayload());
+
+        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*no authorization posture*");
+        fn.Handler.RunCalls.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task FunctionHandler_SigningKey_UnsignedEnvelope_IsRefused()
+    {
+        var fn = new TestFunction(o => o.SigningKey = Key);
+        var envelope = new LambdaEnvelope(LambdaRequestType.Run, RunPayload());
+
+        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Missing*");
+        fn.Handler.RunCalls.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task FunctionHandler_SigningKey_SignedEnvelope_Runs()
+    {
+        var fn = new TestFunction(o => o.SigningKey = Key);
+
+        await fn.FunctionHandler(Signed(LambdaRequestType.Run, RunPayload()), CreateContext());
+
+        fn.Handler.RunCalls.Should().HaveCount(1);
+    }
+
+    [Test]
+    public async Task FunctionHandler_SigningKey_EnvelopeSignedWithAnotherKey_IsRefused()
+    {
+        var fn = new TestFunction(o => o.SigningKey = Key);
+        var otherKey = Enumerable.Repeat((byte)7, 32).ToArray();
+
+        var act = async () =>
+            await fn.FunctionHandler(
+                Signed(LambdaRequestType.Run, RunPayload(), otherKey),
+                CreateContext()
+            );
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Invalid*");
+        fn.Handler.RunCalls.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task FunctionHandler_SigningKey_ExecuteSignatureOnARunEnvelope_IsRefused()
+    {
+        var fn = new TestFunction(o => o.SigningKey = Key);
+        var payload = RunPayload();
+        var envelope = new LambdaEnvelope(LambdaRequestType.Run, payload)
+        {
+            Signature = Signed(LambdaRequestType.Execute, payload).Signature,
+        };
+
+        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Invalid*");
+    }
+
+    [Test]
+    public async Task FunctionHandler_SigningKey_RepeatedRunEnvelope_IsRefused()
+    {
+        var fn = new TestFunction(o => o.SigningKey = Key);
+        var envelope = Signed(LambdaRequestType.Run, RunPayload());
+
+        await fn.FunctionHandler(envelope, CreateContext());
+        var act = async () => await fn.FunctionHandler(envelope, CreateContext());
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Replayed*");
+        fn.Handler.RunCalls.Should()
+            .HaveCount(
+                1,
+                "a synchronous Run is accepted once per nonce (see docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+    }
+
+    [Test]
+    public async Task FunctionHandler_SigningKey_RepeatedExecuteEnvelope_IsDeliveredAgain()
+    {
+        // Lambda retries an asynchronous invocation with the same payload; the job's Pending
+        // metadata row, not the nonce, stops a second run.
+        var fn = new TestFunction(o => o.SigningKey = Key);
+        var envelope = Signed(
+            LambdaRequestType.Execute,
+            JsonSerializer.Serialize(new RemoteJobRequest(MetadataId: 5))
+        );
+
+        await fn.FunctionHandler(envelope, CreateContext());
+        await fn.FunctionHandler(envelope, CreateContext());
+
+        fn.Handler.ExecuteCalls.Should().HaveCount(2);
+    }
+
+    [Test]
+    public async Task ConfigureRoutes_SigningKey_UnsignedRequest_Is401()
+    {
+        var fn = new TestFunction(o => o.SigningKey = Key);
+        using var host = await CreateRouteHost(fn);
+        var client = host.GetTestClient();
+
+        var response = await client.PostAsync("/trax/run", new StringContent(RunPayload()));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        fn.Handler.RunCalls.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task ConfigureRoutes_SigningKey_SignedRequest_Runs()
+    {
+        var fn = new TestFunction(o => o.SigningKey = Key);
+        using var host = await CreateRouteHost(fn);
+        var client = host.GetTestClient();
+        var payload = RunPayload();
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/trax/run")
+        {
+            Content = new StringContent(payload),
+        };
+        request.Headers.Add(
+            RunnerRequestSignature.HeaderName,
+            RunnerRequestSignature.Create(
+                Key,
+                RunnerRequestPurpose.Run,
+                System.Text.Encoding.UTF8.GetBytes(payload)
+            )
+        );
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        fn.Handler.RunCalls.Should().HaveCount(1);
+    }
+
+    #endregion
+
     #region FunctionHandler — Unknown Type
 
     [Test]
@@ -241,7 +415,7 @@ public class TraxLambdaFunctionTests
         var payload = await response.Content.ReadAsStringAsync();
         var parsed = JsonSerializer.Deserialize<RemoteJobResponse>(payload, JsonOptions);
         parsed!.IsError.Should().BeTrue();
-        parsed.ErrorMessage.Should().Be("inner-fail");
+        parsed.ErrorMessage.Should().NotContain("inner-fail");
     }
 
     #endregion
@@ -326,7 +500,8 @@ public class TraxLambdaFunctionTests
 
     #region TestFunction
 
-    private sealed class TestFunction : TraxLambdaFunction
+    private sealed class TestFunction(Action<TraxJobRunnerOptions>? runner = null)
+        : TraxLambdaFunction
     {
         public FakeRequestHandler Handler { get; } = new();
 
@@ -344,6 +519,12 @@ public class TraxLambdaFunctionTests
             services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
             services.AddLogging();
             services.AddSingleton<ITraxRequestHandler>(Handler);
+
+            var options = new TraxJobRunnerOptions();
+            (runner ?? (o => o.AllowUnsignedRequests()))(options);
+            services.AddSingleton(options);
+            services.AddSingleton<INonceStore, InMemoryNonceStore>();
+            services.AddSingleton<RunnerRequestVerifier>();
             return services.BuildServiceProvider();
         }
 

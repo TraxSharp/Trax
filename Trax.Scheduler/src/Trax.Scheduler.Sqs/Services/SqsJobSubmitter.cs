@@ -1,8 +1,10 @@
+using System.Text;
 using System.Text.Json;
 using Amazon.SQS;
 using Amazon.SQS.Model;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.RequestSigning;
 using Trax.Scheduler.Sqs.Configuration;
 
 namespace Trax.Scheduler.Sqs.Services;
@@ -62,6 +64,20 @@ public class SqsJobSubmitter(IAmazonSQS sqsClient, SqsWorkerOptions options) : I
             QueueUrl = options.QueueUrl,
             MessageBody = body,
         };
+
+        if (options.SigningKey is { } key)
+            sendRequest.MessageAttributes = new Dictionary<string, MessageAttributeValue>
+            {
+                [RunnerRequestSignature.HeaderName] = new()
+                {
+                    DataType = "String",
+                    StringValue = RunnerRequestSignature.Create(
+                        key,
+                        RunnerRequestPurpose.Execute,
+                        Encoding.UTF8.GetBytes(body)
+                    ),
+                },
+            };
 
         var isFifo = options.QueueUrl.EndsWith(".fifo", StringComparison.OrdinalIgnoreCase);
 

@@ -7,8 +7,8 @@ namespace Trax.Scheduler.Configuration;
 /// When configured, <c>run</c> mutations are POSTed to the remote endpoint and block until the
 /// train completes and the response is returned. Without this, runs execute in-process (the default).
 ///
-/// Trax does not bake in any authentication mechanism. Use <see cref="ConfigureHttpClient"/>
-/// to add authorization headers, API keys, or any custom HTTP configuration your endpoint requires.
+/// Set <see cref="SigningKey"/> to sign each request for a runner that verifies signatures, or use
+/// <see cref="ConfigureHttpClient"/> to add the credentials a runner's authorization policy expects.
 /// </remarks>
 public class RemoteRunOptions
 {
@@ -38,4 +38,11 @@ public class RemoteRunOptions
     /// Set <see cref="HttpRetryOptions.MaxRetries"/> to 0 to disable retries.
     /// </remarks>
     public HttpRetryOptions Retry { get; set; } = new();
+
+    /// <summary>
+    /// The key shared with the runner's <c>AddTraxJobRunner(runner => runner.SigningKey = ...)</c>,
+    /// at least 32 bytes. When set, every request carries a <c>Trax-Signature</c> over its body,
+    /// timestamp and nonce, which the runner verifies before it reads the request.
+    /// </summary>
+    public byte[]? SigningKey { get; set; }
 }

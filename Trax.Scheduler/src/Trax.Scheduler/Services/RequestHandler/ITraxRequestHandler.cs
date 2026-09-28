@@ -16,7 +16,8 @@ public interface ITraxRequestHandler
 {
     /// <summary>
     /// Executes a queued job (fire-and-forget path).
-    /// Deserializes input via <see cref="Utilities.TypeResolver"/>, runs the job through
+    /// Deserializes the input into the registered train input type whose full name the request
+    /// gives (a name no registered train takes is refused), then runs the job through
     /// <see cref="Trains.JobRunner.IJobRunnerTrain"/>.
     /// </summary>
     /// <param name="request">The remote job request containing metadata ID and optional serialized input</param>

@@ -10,7 +10,7 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 public class TraxRequestHandlerErrorTests
 {
     [Test]
-    public void BuildErrorResponse_NonStructuredMessage_FallsBackToRawDetails()
+    public void BuildErrorResponse_NonStructuredMessage_ReportsTheTypeOnly()
     {
         var ex = new InvalidOperationException("plain failure");
 
@@ -18,7 +18,8 @@ public class TraxRequestHandlerErrorTests
 
         resp.IsError.Should().BeTrue();
         resp.MetadataId.Should().Be(0);
-        resp.ErrorMessage.Should().Be("plain failure");
+        resp.ErrorMessage.Should().Be(TraxRequestHandler.UnreportedFailureMessage);
+        resp.StackTrace.Should().BeNull();
         resp.ExceptionType.Should().Be(nameof(InvalidOperationException));
     }
 
@@ -61,12 +62,12 @@ public class TraxRequestHandlerErrorTests
         var resp = TraxRequestHandler.BuildErrorResponse(ex);
 
         resp.IsError.Should().BeTrue();
-        resp.ErrorMessage.Should().Be("{not really json");
+        resp.ErrorMessage.Should().Be(TraxRequestHandler.UnreportedFailureMessage);
         resp.ExceptionType.Should().Be(nameof(Exception));
     }
 
     [Test]
-    public void BuildErrorResponse_RecordShapedMessageOnAnotherExceptionType_IsItsOwnText()
+    public void BuildErrorResponse_RecordShapedMessageOnAnotherExceptionType_IsNotReadAsARecord()
     {
         var message = JsonSerializer.Serialize(
             new TrainExceptionData
@@ -86,7 +87,11 @@ public class TraxRequestHandlerErrorTests
         resp.FailureClass.Should()
             .BeNull("only a TrainException's message is read as a failure record");
         resp.ExceptionType.Should().Be(nameof(InvalidOperationException));
-        resp.ErrorMessage.Should().Be(message);
+        resp.ErrorMessage.Should()
+            .Be(
+                TraxRequestHandler.UnreportedFailureMessage,
+                "a message that is not a TrainException's is not sent at all"
+            );
         resp.FailureJunction.Should().BeNull();
     }
 

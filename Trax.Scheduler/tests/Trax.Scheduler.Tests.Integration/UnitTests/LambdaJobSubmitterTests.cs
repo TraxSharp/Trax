@@ -38,6 +38,58 @@ public class LambdaJobSubmitterTests
 
     #endregion
 
+    #region Signing
+
+    [Test]
+    public async Task EnqueueAsync_WithSigningKey_SignsTheEnvelopePayloadForExecute()
+    {
+        var key = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+        var client = new MockLambdaClient();
+        var submitter = new LambdaJobSubmitter(
+            client,
+            new LambdaWorkerOptions { FunctionName = "fn", SigningKey = key },
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<LambdaJobSubmitter>.Instance
+        );
+
+        await submitter.EnqueueAsync(42);
+
+        var envelope = JsonSerializer.Deserialize<LambdaEnvelope>(client.LastRequest!.Payload)!;
+        (
+            await new Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier(
+                new Trax.Scheduler.Configuration.TraxJobRunnerOptions { SigningKey = key },
+                Microsoft
+                    .Extensions
+                    .Logging
+                    .Abstractions
+                    .NullLogger<Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier>
+                    .Instance,
+                new Trax.Scheduler.Services.RequestSigning.InMemoryNonceStore()
+            ).VerifyAsync(
+                Trax.Scheduler.Services.RequestSigning.RunnerRequestPurpose.Execute,
+                System.Text.Encoding.UTF8.GetBytes(envelope.PayloadJson),
+                envelope.Signature,
+                requireFresh: true
+            )
+        )
+            .Should()
+            .Be(Trax.Scheduler.Services.RequestSigning.RunnerRequestVerdict.Accepted);
+    }
+
+    [Test]
+    public async Task EnqueueAsync_WithoutSigningKey_SendsNoSignature()
+    {
+        var (submitter, client) = CreateSubmitter();
+
+        await submitter.EnqueueAsync(42);
+
+        JsonSerializer
+            .Deserialize<LambdaEnvelope>(client.LastRequest!.Payload)!
+            .Signature.Should()
+            .BeNull();
+    }
+
+    #endregion
+
     #region EnqueueAsync(metadataId) Tests
 
     [Test]
