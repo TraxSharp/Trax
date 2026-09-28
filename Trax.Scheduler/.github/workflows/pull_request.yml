@@ -57,6 +57,11 @@ jobs:
         run: dotnet restore --locked-mode
       - name: Build
         run: dotnet build --configuration Release --no-restore
+      - name: Pack (package validation)
+        # Package validation runs on pack, not build. Packing here compares the five packages with
+        # the baseline release before a merge, instead of at release time, after semantic-release
+        # has already tagged the version.
+        run: dotnet pack --configuration Release --no-build --output "$RUNNER_TEMP/nupkg"
       - name: Create per-fixture test databases
         env:
           PGPASSWORD: trax123
