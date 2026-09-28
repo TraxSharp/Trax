@@ -6,6 +6,20 @@
     <NuGetAuditMode>all</NuGetAuditMode>
     <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
+
+  <!-- Package validation: `dotnet pack` compares each published library with the last release on
+       nuget.org and fails on a binary break, such as narrowing a member a published downstream
+       package calls or overrides. It runs on pack only, so the pull request workflow packs too.
+       Every project under src/ ships as a package, so a new one is validated without being listed
+       here. Until its first release there is no baseline to compare with, so set
+       EnablePackageValidation to false in its csproj and remove that once it has shipped. Bump the
+       baseline to the new version after each release. The Version above (1.99.99 locally, the released
+       version in CI) is the package being checked, not the baseline. -->
+  <PropertyGroup Condition="$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectDirectory)').Replace('\', '/').StartsWith('src/'))">
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>1.56.0</PackageValidationBaselineVersion>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
   </ItemGroup>
