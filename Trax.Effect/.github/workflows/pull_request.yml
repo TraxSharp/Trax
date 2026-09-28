@@ -72,7 +72,7 @@ jobs:
       - name: Restore (locked)
         run: dotnet restore --locked-mode
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build --configuration Release --no-restore -warnaserror
       - name: Pack (package validation)
         # Package validation runs on pack, not build. Packing here compares every package under
         # src/ with the baseline release before a merge, instead of at release time, after
