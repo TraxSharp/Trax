@@ -45,6 +45,13 @@ internal class SqliteSqlDialect : ISqlDialect
               )
             """;
 
+    /// <summary>
+    /// SQLite keeps no row estimate a query can read (<c>sqlite_stat1</c> exists only after an
+    /// <c>ANALYZE</c> nothing here runs), and a SQLite database is small enough to count, so a
+    /// caller counts exactly.
+    /// </summary>
+    public string? EstimateRowCount() => null;
+
     public string DequeueBackgroundJobs() =>
         """
             SELECT * FROM background_job

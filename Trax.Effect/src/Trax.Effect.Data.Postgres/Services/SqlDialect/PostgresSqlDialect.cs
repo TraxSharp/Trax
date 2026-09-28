@@ -12,6 +12,25 @@ internal class PostgresSqlDialect : ISqlDialect
         $"""SELECT pg_try_advisory_xact_lock(hashtext('{lockName}')) AS "Value" """;
 
     /// <summary>
+    /// Reads <c>pg_class.reltuples</c> for a table in the <c>trax</c> schema.
+    /// </summary>
+    /// <remarks>
+    /// Since Postgres 14, <c>reltuples</c> is <c>-1</c> for a table that has never been analyzed
+    /// or vacuumed. That means "unknown", not a count, so it is filtered out and the caller sees
+    /// no row, the same as for a table that does not exist.
+    /// </remarks>
+    public string EstimateRowCount() =>
+        """
+            SELECT c.reltuples::bigint AS "Value"
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'trax'
+              AND c.relname = {0}
+              AND c.relkind IN ('r', 'p')
+              AND c.reltuples >= 0
+            """;
+
+    /// <summary>
     /// Claims one confirmed, queued entry, unless its subject already has a run in flight.
     /// </summary>
     /// <remarks>

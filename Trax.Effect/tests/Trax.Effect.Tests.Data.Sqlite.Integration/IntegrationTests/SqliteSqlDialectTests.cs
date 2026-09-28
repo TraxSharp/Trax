@@ -148,6 +148,22 @@ public class SqliteSqlDialectTests
 
     #endregion
 
+    #region EstimateRowCount
+
+    [Test]
+    public void EstimateRowCount_IsNull_BecauseSqliteKeepsNoRowEstimate()
+    {
+        _dialect
+            .EstimateRowCount()
+            .Should()
+            .BeNull(
+                "SQLite keeps no planner row estimate without sqlite_stat1, and a caller should "
+                    + "count instead"
+            );
+    }
+
+    #endregion
+
     #region TryAcquireLeaderLock
 
     [Test]
