@@ -125,7 +125,7 @@ public class SubjectKeyTests : TestSetup
             await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
-            "*empty key*",
+            "*empty or whitespace*",
             "an empty key would serialize every train returning it against every other"
         );
     }
@@ -141,7 +141,7 @@ public class SubjectKeyTests : TestSetup
             await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
-            "*only whitespace*",
+            "*empty or whitespace*",
             "a blank key is as unset as an empty one, and would serialize every train returning "
                 + "it against every other (Trax.Docs/adr/0019-queued-work-for-one-subject-runs-one-at-a-time.md)"
         );
@@ -199,8 +199,52 @@ public class SubjectKeyTests : TestSetup
             await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
-            "*limit is 512*",
+            "*limit of 512*",
             "a key too long for the index would insert and then fail its claim on every cycle"
+        );
+    }
+
+    // Characters outside the Basic Multilingual Plane, two UTF-16 units each. Varied rather than
+    // repeated so nothing about the key is special beyond its length. The seed is fixed.
+    private static string Emoji(int count)
+    {
+        var random = new Random(13);
+        return string.Concat(
+            Enumerable
+                .Range(0, count)
+                .Select(_ => char.ConvertFromUtf32(0x1F300 + random.Next(0x250)))
+        );
+    }
+
+    [Test]
+    public async Task A_key_of_512_characters_outside_the_BMP_is_accepted()
+    {
+        var key = Emoji(512);
+        key.Length.Should().Be(1024, "each character takes two UTF-16 units");
+        ConfigurableKeyTrain.Key = key;
+
+        var result = await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+
+        (await EntryAsync(result.WorkQueueId))!
+            .SubjectKey.Should()
+            .Be(
+                key,
+                "the limit counts Unicode characters, not UTF-16 units "
+                    + "(Trax.Docs/adr/0019-queued-work-for-one-subject-runs-one-at-a-time.md)"
+            );
+    }
+
+    [Test]
+    public async Task A_key_of_513_characters_outside_the_BMP_is_refused_by_its_character_count()
+    {
+        ConfigurableKeyTrain.Key = Emoji(513);
+
+        var act = async () =>
+            await Execution.QueueAsync(typeof(IConfigurableKeyTrain).FullName!, "{}");
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "*513 characters*",
+            "the refusal counts what the author wrote, not the 1026 UTF-16 units it takes"
         );
     }
 

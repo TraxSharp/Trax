@@ -103,7 +103,8 @@ public class TrainExecutionService(
         var externalId = Guid.NewGuid().ToString("N");
         var subjectKey = ResolveSubjectKey(registration, train, input, externalId);
 
-        var entry = WorkQueue.Create(
+        var entry = CreateEntry(
+            registration,
             new CreateWorkQueue
             {
                 TrainName = registration.ServiceType.FullName,
@@ -381,74 +382,35 @@ public class TrainExecutionService(
             throw;
         }
 
-        if (key is null)
-            return null;
-
-        // Empty is refused rather than treated as a subject: every train returning it would be
-        // serialized against every other, and it is almost always an unset identity.
-        if (key.Length == 0)
-            throw new InvalidOperationException(
-                $"{registration.ServiceTypeName}.QueueSubjectKey returned an empty key. Return "
-                    + "null when the entry should not be serialized."
-            );
-
-        // A key of only whitespace is refused for the same reason: it is just as surely an unset
-        // identity, and every train returning one would serialize against every other.
-        if (string.IsNullOrWhiteSpace(key))
-            throw new InvalidOperationException(
-                $"{registration.ServiceTypeName}.QueueSubjectKey returned a key that is only "
-                    + "whitespace. Return null when the entry should not be serialized."
-            );
-
-        // A lone surrogate is not valid UTF-16, so the key cannot be encoded for the index as
-        // written. Refused here with a message the caller can act on.
-        if (HasUnpairedSurrogate(key))
-            throw new InvalidOperationException(
-                $"{registration.ServiceTypeName}.QueueSubjectKey returned a key containing an "
-                    + "unpaired surrogate, which is not valid text. Build the key from whole "
-                    + "characters."
-            );
-
-        // The key is indexed. One too long for the index inserts fine while queued and then
-        // fails the claim on every cycle, so it is refused here, where the caller sees it.
-        if (key.Length > MaxSubjectKeyLength)
-            throw new InvalidOperationException(
-                $"{registration.ServiceTypeName}.QueueSubjectKey returned a key of {key.Length} "
-                    + $"characters; the limit is {MaxSubjectKeyLength}. Use a record identity, or "
-                    + "a hash of a longer one."
-            );
-
         return key;
     }
 
-    private static bool HasUnpairedSurrogate(string value)
-    {
-        for (var i = 0; i < value.Length; i++)
-        {
-            if (!char.IsSurrogate(value[i]))
-                continue;
-
-            if (
-                char.IsHighSurrogate(value[i])
-                && i + 1 < value.Length
-                && char.IsLowSurrogate(value[i + 1])
-            )
-            {
-                i++;
-                continue;
-            }
-
-            return true;
-        }
-
-        return false;
-    }
-
     /// <summary>
-    /// The longest subject key an enqueue accepts. Well inside the Postgres btree entry limit
-    /// even when every character takes three bytes, the most a UTF-16 unit encodes to.
+    /// Builds the entry. <c>WorkQueue.Create</c> owns the subject-key rules (not empty or
+    /// whitespace, no unpaired surrogate, at most <c>WorkQueue.MaxSubjectKeyLength</c> Unicode
+    /// characters), so the mediator keeps no copy of them: it names the train in Create's refusal
+    /// and throws it as the <see cref="InvalidOperationException"/> an enqueue refusal has always
+    /// been.
     /// </summary>
-    private const int MaxSubjectKeyLength = WorkQueue.MaxSubjectKeyLength;
+    private static WorkQueue CreateEntry(TrainRegistration registration, CreateWorkQueue dto)
+    {
+        try
+        {
+            return WorkQueue.Create(dto);
+        }
+        catch (ArgumentException refused) when (dto.SubjectKey is not null)
+        {
+            var reason = refused.ParamName is { } param
+                ? refused.Message.Replace($" (Parameter '{param}')", "")
+                : refused.Message;
+
+            throw new InvalidOperationException(
+                $"{registration.ServiceTypeName}.QueueSubjectKey returned a key the work queue "
+                    + $"cannot use. {reason}",
+                refused
+            );
+        }
+    }
 
     /// <summary>
     /// A scheduled time stored as UTC whatever it arrived as. Local times are converted; an

@@ -21,7 +21,7 @@ public interface ITrainExecutionService
     /// <exception cref="UnauthorizedAccessException">The train's <c>[TraxAuthorize]</c> requirements refuse the caller (<c>TrainAuthorizationException</c> is one).</exception>
     /// <exception cref="Exceptions.TrainInputValidationException">The input is larger than <c>MaxInputJsonBytes</c>.</exception>
     /// <exception cref="System.Text.Json.JsonException">The input is not valid JSON for the train's input type, is the JSON literal <c>null</c>, or is missing and the input type needs values.</exception>
-    /// <exception cref="InvalidOperationException">The train declares <c>[TraxAuthorize]</c> and no <c>ITrainAuthorizationService</c> is registered, outside a trusted scope; or its <c>QueueSubjectKey</c> returned an empty key or one longer than <c>WorkQueue.MaxSubjectKeyLength</c>.</exception>
+    /// <exception cref="InvalidOperationException">The train declares <c>[TraxAuthorize]</c> and no <c>ITrainAuthorizationService</c> is registered, outside a trusted scope; or its <c>QueueSubjectKey</c> returned a key <c>WorkQueue.Create</c> refuses: empty or whitespace, containing an unpaired surrogate, or longer than <c>WorkQueue.MaxSubjectKeyLength</c> Unicode characters.</exception>
     /// <exception cref="Exceptions.QueuedWorkCancelledException">The train defers promotion and its staged entry was cancelled while its <c>OnQueue</c> hook ran. The work will not run, but the hook's side-effect may have landed.</exception>
     /// <remarks>
     /// An exception thrown by the train's <c>OnQueue</c> hook or <c>QueueSubjectKey</c>
