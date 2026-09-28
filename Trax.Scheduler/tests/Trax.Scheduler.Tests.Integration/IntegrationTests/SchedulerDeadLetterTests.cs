@@ -224,4 +224,194 @@ public class SchedulerDeadLetterTests
 
         result.Count.Should().Be(2);
     }
+
+    #region One queued entry per manifest (the partial unique index on work_queue)
+
+    private static async Task SeedQueuedEntryAsync(SchedulerE2EFixture fx, string externalId)
+    {
+        var manifest = await fx.DataContext.Manifests.FirstAsync(m => m.ExternalId == externalId);
+        var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+            new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue
+            {
+                TrainName = manifest.Name,
+                Input = manifest.Properties,
+                InputTypeName = manifest.PropertyTypeName,
+                ManifestId = manifest.Id,
+            }
+        );
+        await fx.DataContext.Track(entry);
+        await fx.DataContext.SaveChanges(default);
+        fx.DataContext.Reset();
+    }
+
+    private static async Task<int> QueuedFor(SchedulerE2EFixture fx, string externalId) =>
+        await fx
+            .DataContext.WorkQueues.AsNoTracking()
+            .CountAsync(q =>
+                q.Manifest!.ExternalId == externalId && q.Status == WorkQueueStatus.Queued
+            );
+
+    private static Task<SchedulerE2EFixture> CreateWithTwoManifestsAsync(string a, string b) =>
+        SchedulerE2EFixture
+            .CreateAsync(s =>
+                s.Schedule<ISchedulerTestTrain>(a, new SchedulerTestInput(), Every.Minutes(5))
+                    .Include<ISchedulerTestTrain>(b, new SchedulerTestInput())
+            )
+            .ContinueWith(async t =>
+            {
+                await t.Result.MaterializePendingManifestsAsync();
+                return t.Result;
+            })
+            .Unwrap();
+
+    [Test]
+    public async Task RequeueAllDeadLettersAsync_ManifestAlreadyQueued_IsSkippedAndTheRestSucceed()
+    {
+        await using var fx = await CreateWithTwoManifestsAsync("dl-q1a", "dl-q1b");
+        await SeedQueuedEntryAsync(fx, "dl-q1a");
+        var blocked = await SeedDeadLetterAsync(fx, "dl-q1a");
+        var free = await SeedDeadLetterAsync(fx, "dl-q1b");
+
+        var result = await fx.Scheduler.RequeueAllDeadLettersAsync();
+
+        result.Count.Should().Be(1, "only the dead letter whose manifest was free is requeued");
+        result.Message.Should().Contain("1 skipped");
+        (await QueuedFor(fx, "dl-q1a")).Should().Be(1, "the unique index allows one queued entry");
+        (await QueuedFor(fx, "dl-q1b")).Should().Be(1);
+        var statuses = await fx
+            .DataContext.DeadLetters.AsNoTracking()
+            .ToDictionaryAsync(d => d.Id, d => d.Status);
+        statuses[blocked.Id]
+            .Should()
+            .Be(
+                DeadLetterStatus.AwaitingIntervention,
+                "a skipped dead letter stays for the operator"
+            );
+        statuses[free.Id].Should().Be(DeadLetterStatus.Retried);
+    }
+
+    [Test]
+    public async Task RequeueDeadLettersAsync_ManifestAlreadyQueued_IsSkipped()
+    {
+        await using var fx = await CreateWithTwoManifestsAsync("dl-q2a", "dl-q2b");
+        await SeedQueuedEntryAsync(fx, "dl-q2a");
+        var blocked = await SeedDeadLetterAsync(fx, "dl-q2a");
+        var free = await SeedDeadLetterAsync(fx, "dl-q2b");
+
+        var result = await fx.Scheduler.RequeueDeadLettersAsync(new[] { blocked.Id, free.Id });
+
+        result.Count.Should().Be(1);
+        result.Message.Should().Contain("1 skipped");
+        (await QueuedFor(fx, "dl-q2a")).Should().Be(1);
+    }
+
+    [Test]
+    public async Task RequeueAllDeadLettersAsync_TwoDeadLettersForOneManifest_CollapseToOneQueuedEntry()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-q3");
+        var first = await SeedDeadLetterAsync(fx, "dl-q3");
+        var second = await SeedDeadLetterAsync(fx, "dl-q3");
+
+        var result = await fx.Scheduler.RequeueAllDeadLettersAsync();
+
+        result
+            .Count.Should()
+            .Be(2, "both are resolved, since a requeue re-runs the manifest's own input");
+        result.Message.Should().Contain("1 folded");
+        (await QueuedFor(fx, "dl-q3")).Should().Be(1);
+        var resolved = await fx
+            .DataContext.DeadLetters.AsNoTracking()
+            .Where(d => d.Id == first.Id || d.Id == second.Id)
+            .ToListAsync();
+        resolved.Should().AllSatisfy(d => d.Status.Should().Be(DeadLetterStatus.Retried));
+        var entry = await fx.DataContext.WorkQueues.AsNoTracking().SingleAsync();
+        resolved
+            .Should()
+            .AllSatisfy(d => d.ResolutionNote.Should().Contain($"WorkQueue {entry.Id}"));
+    }
+
+    [Test]
+    public async Task RequeueDeadLetterAsync_ManifestAlreadyQueued_IsRefusedAndLeavesTheDeadLetter()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-q4");
+        await SeedQueuedEntryAsync(fx, "dl-q4");
+        var dl = await SeedDeadLetterAsync(fx, "dl-q4");
+
+        var result = await fx.Scheduler.RequeueDeadLetterAsync(dl.Id);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("already has a queued entry");
+        (await QueuedFor(fx, "dl-q4")).Should().Be(1);
+        (await fx.DataContext.DeadLetters.AsNoTracking().SingleAsync(d => d.Id == dl.Id))
+            .Status.Should()
+            .Be(DeadLetterStatus.AwaitingIntervention);
+    }
+
+    [Test]
+    public async Task Two_concurrent_requeue_alls_for_one_manifest_both_succeed_and_queue_one_entry()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-race");
+        var dl = await SeedDeadLetterAsync(fx, "dl-race");
+
+        // Hold both calls between their "already queued?" check and their insert, so both pass
+        // the check before either writes: the window a concurrent requeue or the ManifestManager
+        // can land in.
+        var scheduler = (Trax.Scheduler.Services.TraxScheduler.TraxScheduler)fx.Scheduler;
+        using var bothChecked = new Barrier(2);
+        scheduler.BeforeRequeueInsert = _ =>
+            Task.Run(() => bothChecked.SignalAndWait(TimeSpan.FromSeconds(10)));
+
+        var results = await Task.WhenAll(
+            Task.Run(() => fx.Scheduler.RequeueAllDeadLettersAsync()),
+            Task.Run(() => fx.Scheduler.RequeueAllDeadLettersAsync())
+        );
+
+        results.Select(r => r.Count).Sum().Should().Be(1, "the dead letter is resolved once");
+        (await QueuedFor(fx, "dl-race")).Should().Be(1);
+        (await fx.DataContext.DeadLetters.AsNoTracking().SingleAsync(d => d.Id == dl.Id))
+            .Status.Should()
+            .Be(DeadLetterStatus.Retried);
+    }
+
+    #endregion
+
+    #region Acknowledge in one statement
+
+    [Test]
+    public async Task AcknowledgeAllDeadLettersAsync_ResolvesEveryAwaitingOneAndLeavesResolvedOnesAlone()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-a1");
+        var awaiting = await SeedDeadLetterAsync(fx, "dl-a1");
+        var done = await SeedDeadLetterAsync(fx, "dl-a1");
+        await fx.Scheduler.AcknowledgeDeadLetterAsync(done.Id, "earlier");
+        var before = DateTime.UtcNow;
+
+        var result = await fx.Scheduler.AcknowledgeAllDeadLettersAsync("clearing");
+
+        result.Count.Should().Be(1);
+        fx.DataContext.Reset();
+        var rows = await fx.DataContext.DeadLetters.AsNoTracking().ToDictionaryAsync(d => d.Id);
+        rows[awaiting.Id].Status.Should().Be(DeadLetterStatus.Acknowledged);
+        rows[awaiting.Id].ResolutionNote.Should().Be("clearing");
+        rows[awaiting.Id].ResolvedAt.Should().BeOnOrAfter(before.AddSeconds(-1));
+        rows[done.Id].ResolutionNote.Should().Be("earlier", "an already resolved one is untouched");
+    }
+
+    [Test]
+    public async Task AcknowledgeDeadLettersAsync_OnlyTheListedAwaitingOnes()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-a2");
+        var listed = await SeedDeadLetterAsync(fx, "dl-a2");
+        var unlisted = await SeedDeadLetterAsync(fx, "dl-a2");
+
+        var result = await fx.Scheduler.AcknowledgeDeadLettersAsync(new[] { listed.Id }, "one");
+
+        result.Count.Should().Be(1);
+        fx.DataContext.Reset();
+        var rows = await fx.DataContext.DeadLetters.AsNoTracking().ToDictionaryAsync(d => d.Id);
+        rows[listed.Id].Status.Should().Be(DeadLetterStatus.Acknowledged);
+        rows[unlisted.Id].Status.Should().Be(DeadLetterStatus.AwaitingIntervention);
+    }
+
+    #endregion
 }

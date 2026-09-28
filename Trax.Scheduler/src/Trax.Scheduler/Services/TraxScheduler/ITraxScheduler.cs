@@ -286,7 +286,8 @@ public interface ITraxScheduler
     /// <remarks>
     /// Only dead letters in <see cref="DeadLetterStatus.AwaitingIntervention"/> status
     /// can be requeued. The dead letter's failure counter is reset, allowing the manifest
-    /// to resume normal scheduling.
+    /// to resume normal scheduling. A manifest may have one queued entry at a time, so when it
+    /// already has one the result is a failure and the dead letter is left awaiting intervention.
     /// </remarks>
     Task<DeadLetterOperationResult> RequeueDeadLetterAsync(
         long deadLetterId,
@@ -311,7 +312,13 @@ public interface ITraxScheduler
     /// </summary>
     /// <param name="deadLetterIds">The IDs of the dead letters to requeue.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>The number of dead letters successfully requeued.</returns>
+    /// <returns>The number of dead letters resolved, and a message that also counts the folded and skipped ones.</returns>
+    /// <remarks>
+    /// At most one work queue entry is created per manifest. A dead letter whose manifest already
+    /// has a queued entry is skipped and left awaiting intervention; dead letters that share a
+    /// manifest are folded into one entry and all resolved, since a requeue runs the manifest's
+    /// own properties.
+    /// </remarks>
     Task<BatchDeadLetterResult> RequeueDeadLettersAsync(
         long[] deadLetterIds,
         CancellationToken ct = default
@@ -334,7 +341,8 @@ public interface ITraxScheduler
     /// Requeues all dead letters in AwaitingIntervention status.
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>The number of dead letters requeued.</returns>
+    /// <returns>The number of dead letters resolved, and a message that also counts the folded and skipped ones.</returns>
+    /// <remarks>Creates at most one entry per manifest, as <see cref="RequeueDeadLettersAsync"/> does.</remarks>
     Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(CancellationToken ct = default);
 
     /// <summary>

@@ -867,6 +867,12 @@ public class TraxScheduler(
 
     // ── Dead Letter Operations ────────────────────────────────────────────
 
+    /// <summary>
+    /// Test seam: awaited after a requeue has checked for a queued entry and before it inserts,
+    /// on the first attempt only, so a test can hold two requeues inside that window at once.
+    /// </summary>
+    internal Func<CancellationToken, Task>? BeforeRequeueInsert { get; set; }
+
     /// <inheritdoc />
     public async Task<DeadLetterOperationResult> RequeueDeadLetterAsync(
         long deadLetterId,
@@ -889,11 +895,46 @@ public class TraxScheduler(
                 "Dead letter not found or already resolved"
             );
 
+        // One queued entry per manifest (ix_work_queue_unique_queued_manifest). A second would
+        // fail the insert; the queued one already runs the manifest's work.
+        var queuedId = await context
+            .WorkQueues.Where(q =>
+                q.ManifestId == deadLetter.ManifestId && q.Status == WorkQueueStatus.Queued
+            )
+            .Select(q => (long?)q.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (queuedId is { } existing)
+            return new DeadLetterOperationResult(
+                false,
+                null,
+                $"The manifest already has a queued entry (WorkQueue {existing}); the dead letter "
+                    + "is left awaiting intervention."
+            );
+
         var entry = CreateWorkQueueFromDeadLetter(deadLetter);
         context.WorkQueues.Add(entry);
 
         deadLetter.Requeue($"Re-queued (WorkQueue {entry.Id})");
-        await context.SaveChanges(ct);
+
+        try
+        {
+            await context.SaveChanges(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Queued by someone else between the check above and this insert: the index refused
+            // the second entry and nothing was written. Anything else is rethrown.
+            if (!await AnyQueuedAsync([deadLetter.ManifestId], ct))
+                throw;
+
+            return new DeadLetterOperationResult(
+                false,
+                null,
+                "The manifest already has a queued entry; the dead letter is left awaiting "
+                    + "intervention."
+            );
+        }
 
         // WorkQueue ID is available after SaveChanges — update the resolution note
         deadLetter.ResolutionNote = $"Re-queued (WorkQueue {entry.Id})";
@@ -948,16 +989,14 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
-        await using var context = CreateContext();
-
-        var deadLetters = await context
-            .DeadLetters.Include(d => d.Manifest)
-            .Where(d =>
-                deadLetterIds.Contains(d.Id) && d.Status == DeadLetterStatus.AwaitingIntervention
-            )
-            .ToListAsync(ct);
-
-        return await RequeueDeadLetterBatch(context, deadLetters, ct);
+        return await RequeueDeadLetterBatch(
+            context =>
+                context.DeadLetters.Where(d =>
+                    deadLetterIds.Contains(d.Id)
+                    && d.Status == DeadLetterStatus.AwaitingIntervention
+                ),
+            ct
+        );
     }
 
     /// <inheritdoc />
@@ -969,24 +1008,20 @@ public class TraxScheduler(
     {
         await using var context = CreateContext();
 
-        var deadLetters = await context
-            .DeadLetters.Where(d =>
+        var acknowledged = await AcknowledgeAwaitingAsync(
+            context,
+            context.DeadLetters.Where(d =>
                 deadLetterIds.Contains(d.Id) && d.Status == DeadLetterStatus.AwaitingIntervention
-            )
-            .ToListAsync(ct);
+            ),
+            note,
+            ct
+        );
 
-        foreach (var dl in deadLetters)
-            dl.Acknowledge(note);
-
-        await context.SaveChanges(ct);
-        if (deadLetters.Count > 0)
-            changeSignal?.Notify(ChangeDomain.DeadLetter);
-
-        logger.LogInformation("Acknowledged {Count} dead letters", deadLetters.Count);
+        logger.LogInformation("Acknowledged {Count} dead letters", acknowledged);
 
         return new BatchDeadLetterResult(
-            deadLetters.Count,
-            $"{deadLetters.Count} dead letter(s) acknowledged"
+            acknowledged,
+            $"{acknowledged} dead letter(s) acknowledged"
         );
     }
 
@@ -995,14 +1030,11 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
-        await using var context = CreateContext();
-
-        var deadLetters = await context
-            .DeadLetters.Include(d => d.Manifest)
-            .Where(d => d.Status == DeadLetterStatus.AwaitingIntervention)
-            .ToListAsync(ct);
-
-        return await RequeueDeadLetterBatch(context, deadLetters, ct);
+        return await RequeueDeadLetterBatch(
+            context =>
+                context.DeadLetters.Where(d => d.Status == DeadLetterStatus.AwaitingIntervention),
+            ct
+        );
     }
 
     /// <inheritdoc />
@@ -1013,51 +1045,198 @@ public class TraxScheduler(
     {
         await using var context = CreateContext();
 
-        var deadLetters = await context
-            .DeadLetters.Where(d => d.Status == DeadLetterStatus.AwaitingIntervention)
-            .ToListAsync(ct);
+        var acknowledged = await AcknowledgeAwaitingAsync(
+            context,
+            context.DeadLetters.Where(d => d.Status == DeadLetterStatus.AwaitingIntervention),
+            note,
+            ct
+        );
 
-        foreach (var dl in deadLetters)
-            dl.Acknowledge(note);
-
-        await context.SaveChanges(ct);
-        if (deadLetters.Count > 0)
-            changeSignal?.Notify(ChangeDomain.DeadLetter);
-
-        logger.LogInformation("Acknowledged all {Count} dead letters", deadLetters.Count);
+        logger.LogInformation("Acknowledged all {Count} dead letters", acknowledged);
 
         return new BatchDeadLetterResult(
-            deadLetters.Count,
-            $"{deadLetters.Count} dead letter(s) acknowledged"
+            acknowledged,
+            $"{acknowledged} dead letter(s) acknowledged"
         );
     }
 
-    private async Task<BatchDeadLetterResult> RequeueDeadLetterBatch(
+    /// <summary>
+    /// Acknowledges every dead letter <paramref name="awaiting"/> selects, in one statement on a
+    /// relational store: loading and saving each row took seconds per fifty thousand, which an
+    /// "acknowledge all" over a large backlog reaches. The InMemory provider has no set-based
+    /// update, so there the rows are loaded and saved, which is what every provider used to do.
+    /// Signals <c>DeadLetter</c> when any row changed.
+    /// </summary>
+    private async Task<int> AcknowledgeAwaitingAsync(
         IDataContext context,
-        List<Effect.Models.DeadLetter.DeadLetter> deadLetters,
+        IQueryable<Effect.Models.DeadLetter.DeadLetter> awaiting,
+        string note,
         CancellationToken ct
     )
     {
-        foreach (var dl in deadLetters)
+        int acknowledged;
+
+        if (((DbContext)context).Database.IsRelational())
         {
-            var entry = CreateWorkQueueFromDeadLetter(dl);
+            var now = DateTime.UtcNow;
+            acknowledged = await awaiting.ExecuteUpdateAsync(
+                s =>
+                    s.SetProperty(d => d.Status, DeadLetterStatus.Acknowledged)
+                        .SetProperty(d => d.ResolvedAt, now)
+                        .SetProperty(d => d.ResolutionNote, note),
+                ct
+            );
+        }
+        else
+        {
+            var rows = await awaiting.ToListAsync(ct);
+            foreach (var row in rows)
+                row.Acknowledge(note);
+            await context.SaveChanges(ct);
+            acknowledged = rows.Count;
+        }
+
+        if (acknowledged > 0)
+            changeSignal?.Notify(ChangeDomain.DeadLetter);
+
+        return acknowledged;
+    }
+
+    /// <summary>
+    /// Requeues a batch of dead letters with at most one queued entry per manifest, which is what
+    /// <c>ix_work_queue_unique_queued_manifest</c> allows. A dead letter whose manifest already
+    /// has a queued entry is skipped and stays awaiting intervention. Dead letters that share a
+    /// manifest are folded into one entry: a requeue runs the manifest's own properties, so each
+    /// would queue the same work. The newest one carries the entry's <c>DeadLetterId</c>, and every
+    /// one of them is resolved with a note naming the entry. The result's message counts both.
+    /// </summary>
+    /// <remarks>
+    /// The "already queued?" check and the insert are separate statements, so a concurrent
+    /// requeue or the ManifestManager can queue one of the manifests in between, and the insert
+    /// then fails on the index. That is caught provider-neutrally: when the save fails and one of
+    /// the manifests this attempt meant to queue now has a queued entry, the whole attempt is
+    /// rolled back and rerun from a fresh read, which skips that manifest and no longer sees dead
+    /// letters another requeue resolved. Any other failure is rethrown.
+    /// </remarks>
+    private async Task<BatchDeadLetterResult> RequeueDeadLetterBatch(
+        Func<IDataContext, IQueryable<Effect.Models.DeadLetter.DeadLetter>> select,
+        CancellationToken ct
+    )
+    {
+        const int maxAttempts = 3;
+
+        for (var attempt = 1; ; attempt++)
+        {
+            await using var context = CreateContext();
+            var deadLetters = await select(context).Include(d => d.Manifest).ToListAsync(ct);
+
+            try
+            {
+                return await RequeueDeadLetterBatchOnce(context, deadLetters, attempt == 1, ct);
+            }
+            catch (DbUpdateException ex) when (attempt < maxAttempts)
+            {
+                var manifestIds = deadLetters.Select(d => d.ManifestId).Distinct().ToList();
+                if (!await AnyQueuedAsync(manifestIds, ct))
+                    throw;
+
+                logger.LogInformation(
+                    ex,
+                    "A dead-letter requeue lost a race for a manifest's queued entry; retrying (attempt {Attempt})",
+                    attempt
+                );
+            }
+        }
+    }
+
+    private async Task<bool> AnyQueuedAsync(List<long> manifestIds, CancellationToken ct)
+    {
+        await using var context = CreateContext();
+        return await context.WorkQueues.AnyAsync(
+            q =>
+                q.ManifestId != null
+                && manifestIds.Contains(q.ManifestId.Value)
+                && q.Status == WorkQueueStatus.Queued,
+            ct
+        );
+    }
+
+    private async Task<BatchDeadLetterResult> RequeueDeadLetterBatchOnce(
+        IDataContext context,
+        List<Effect.Models.DeadLetter.DeadLetter> deadLetters,
+        bool firstAttempt,
+        CancellationToken ct
+    )
+    {
+        var manifestIds = deadLetters.Select(d => d.ManifestId).Distinct().ToList();
+        var alreadyQueued = (
+            await context
+                .WorkQueues.Where(q =>
+                    q.ManifestId != null
+                    && manifestIds.Contains(q.ManifestId.Value)
+                    && q.Status == WorkQueueStatus.Queued
+                )
+                .Select(q => q.ManifestId!.Value)
+                .ToListAsync(ct)
+        ).ToHashSet();
+
+        var skipped = deadLetters.Count(d => alreadyQueued.Contains(d.ManifestId));
+        var batches = deadLetters
+            .Where(d => !alreadyQueued.Contains(d.ManifestId))
+            .GroupBy(d => d.ManifestId)
+            .Select(g =>
+            {
+                var members = g.OrderByDescending(d => d.Id).ToList();
+                return (Entry: CreateWorkQueueFromDeadLetter(members[0]), Members: members);
+            })
+            .ToList();
+
+        if (firstAttempt && BeforeRequeueInsert is { } hook)
+            await hook(ct);
+
+        foreach (var (entry, members) in batches)
+        {
             context.WorkQueues.Add(entry);
-            dl.Requeue($"Re-queued (batch)");
+            foreach (var dl in members)
+                dl.Requeue("Re-queued (batch)");
         }
 
         await context.SaveChanges(ct);
-        if (deadLetters.Count > 0)
+
+        // Entry ids exist only after the first save; name them in the notes, as a single requeue does.
+        foreach (var (entry, members) in batches)
         {
+            members[0].ResolutionNote = $"Re-queued (WorkQueue {entry.Id})";
+            foreach (var dl in members.Skip(1))
+                dl.ResolutionNote =
+                    $"Re-queued with dead letter {members[0].Id} (WorkQueue {entry.Id})";
+        }
+
+        var resolved = batches.Sum(b => b.Members.Count);
+        var folded = resolved - batches.Count;
+
+        if (resolved > 0)
+        {
+            await context.SaveChanges(ct);
             changeSignal?.Notify(ChangeDomain.DeadLetter);
             changeSignal?.Notify(ChangeDomain.WorkQueue);
         }
 
-        logger.LogInformation("Requeued {Count} dead letters", deadLetters.Count);
-
-        return new BatchDeadLetterResult(
-            deadLetters.Count,
-            $"{deadLetters.Count} dead letter(s) requeued"
+        logger.LogInformation(
+            "Requeued {Count} dead letters as {Entries} work queue entries ({Folded} folded, {Skipped} skipped)",
+            resolved,
+            batches.Count,
+            folded,
+            skipped
         );
+
+        var message = $"{resolved} dead letter(s) requeued";
+        if (folded > 0)
+            message += $"; {folded} folded into another dead letter's entry for the same manifest";
+        if (skipped > 0)
+            message += $"; {skipped} skipped because their manifest already has a queued entry";
+
+        return new BatchDeadLetterResult(resolved, message + ".");
     }
 
     private static WorkQueue CreateWorkQueueFromDeadLetter(
