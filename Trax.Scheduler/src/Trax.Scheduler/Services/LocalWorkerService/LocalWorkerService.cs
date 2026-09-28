@@ -214,17 +214,25 @@ internal class LocalWorkerService(
             );
         }
 
-        // Phase 3: Delete the job row (always, on both success and failure)
+        // Phase 3: Delete the job row (always, on both success and failure).
+        // Not cancellable by the stopping token: that token fires when shutdown begins, which is
+        // exactly when in-flight jobs finish inside their ShutdownTimeout grace period. The run
+        // has already recorded its outcome, so this is bookkeeping for finished work, for the same
+        // reason the train's own outcome write is uncancellable (effect/0005). A row left here is
+        // re-claimed after VisibilityTimeout and refused as no longer Pending.
         try
         {
             using var cleanupScope = serviceProvider.CreateScope();
             var cleanupContext = cleanupScope.ServiceProvider.GetRequiredService<IDataContext>();
 
-            var entity = await cleanupContext.BackgroundJobs.FindAsync(jobId, stoppingToken);
+            var entity = await cleanupContext.BackgroundJobs.FindAsync(
+                jobId,
+                CancellationToken.None
+            );
             if (entity != null)
             {
                 cleanupContext.BackgroundJobs.Remove(entity);
-                await cleanupContext.SaveChanges(stoppingToken);
+                await cleanupContext.SaveChanges(CancellationToken.None);
             }
         }
         catch (Exception ex)

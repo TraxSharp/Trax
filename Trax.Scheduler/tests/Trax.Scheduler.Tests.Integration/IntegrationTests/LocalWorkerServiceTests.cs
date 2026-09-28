@@ -1,8 +1,10 @@
 using System.Text.Json;
 using FluentAssertions;
+using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NSubstitute;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -21,6 +23,7 @@ using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.LocalWorkerService;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
+using Trax.Scheduler.Trains.JobRunner;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -265,6 +268,93 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
         var remainingJob = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId);
         remainingJob.Should().BeNull("job should be deleted even after failed execution");
+    }
+
+    #endregion
+
+    #region Shutdown Tests
+
+    [Test]
+    public async Task Worker_JobFinishingDuringShutdown_DeletesItsJobRow()
+    {
+        // Arrange - a job whose train blocks until the test releases it, so it is still
+        // running when the host asks the worker to stop.
+        var metadata = await CreateMetadataForTestTrain();
+        var job = BackgroundJob.Create(new CreateBackgroundJob { MetadataId = metadata.Id });
+        await DataContext.Track(job);
+        await DataContext.SaveChanges(CancellationToken.None);
+        var jobId = job.Id;
+        DataContext.Reset();
+
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var train = Substitute.For<IJobRunnerTrain>();
+        train
+            .Run(Arg.Any<RunJobRequest>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                started.TrySetResult();
+                await release.Task;
+                return Unit.Default;
+            });
+
+        var options = new LocalWorkerOptions
+        {
+            WorkerCount = 1,
+            PollingInterval = TimeSpan.FromMilliseconds(100),
+            VisibilityTimeout = TimeSpan.FromMinutes(30),
+            ShutdownTimeout = TimeSpan.FromSeconds(30),
+        };
+
+        var workerService = new LocalWorkerService(
+            new JobRunnerOverride(Scope.ServiceProvider, train),
+            options,
+            new CancellationRegistry(),
+            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>(),
+            Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
+        );
+
+        await workerService.StartAsync(CancellationToken.None);
+        await started.Task.WaitAsync(WorkerCompletionTimeout);
+
+        // Act - the host stops (the worker's stopping token fires), then the in-flight job
+        // finishes inside its shutdown grace period.
+        var stopping = workerService.StopAsync(CancellationToken.None);
+        release.SetResult();
+        await stopping.WaitAsync(WorkerCompletionTimeout);
+
+        // Assert - the row is deleted, so no worker re-claims it once the visibility
+        // timeout passes.
+        DataContext.Reset();
+        var remainingJob = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId);
+        remainingJob
+            .Should()
+            .BeNull("a job that finished during shutdown is finished work, not work to re-claim");
+        await train.Received(1).Run(Arg.Any<RunJobRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Resolves <see cref="IJobRunnerTrain"/> to a fixed instance in every scope the worker
+    /// creates, and everything else from the fixture's container.
+    /// </summary>
+    private sealed class JobRunnerOverride(IServiceProvider inner, IJobRunnerTrain train)
+        : IServiceProvider,
+            IServiceScopeFactory
+    {
+        public object? GetService(Type serviceType) =>
+            serviceType == typeof(IJobRunnerTrain) ? train
+            : serviceType == typeof(IServiceScopeFactory) ? this
+            : inner.GetService(serviceType);
+
+        public IServiceScope CreateScope() => new Scope(inner.CreateScope(), train);
+
+        private sealed class Scope(IServiceScope innerScope, IJobRunnerTrain train) : IServiceScope
+        {
+            public IServiceProvider ServiceProvider { get; } =
+                new JobRunnerOverride(innerScope.ServiceProvider, train);
+
+            public void Dispose() => innerScope.Dispose();
+        }
     }
 
     #endregion
