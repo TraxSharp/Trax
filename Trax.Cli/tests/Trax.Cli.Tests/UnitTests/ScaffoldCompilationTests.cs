@@ -106,7 +106,10 @@ public class ScaffoldCompilationTests
         renderer
             .RenderJunction(op, "MyApi")
             .Should()
-            .Contain("Junction<DeletePlayerInput, Unit>", "the premise is the Unit branch");
+            .Contain(
+                "Junction<DeletePlayerInput, global::LanguageExt.Unit>",
+                "the premise is the Unit branch"
+            );
 
         AssertCompiles(
             renderer,

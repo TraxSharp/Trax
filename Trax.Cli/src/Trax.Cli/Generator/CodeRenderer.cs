@@ -5,10 +5,12 @@ using Trax.Cli.Models;
 
 namespace Trax.Cli.Generator;
 
-public class CodeRenderer
+public partial class CodeRenderer
 {
     private readonly Dictionary<string, Template> _templates = new();
     private string? _modelsNamespace;
+    private HashSet<string> _modelNames = new(StringComparer.Ordinal);
+    private const string UnitType = "global::LanguageExt.Unit";
 
     public CodeRenderer()
     {
@@ -21,11 +23,19 @@ public class CodeRenderer
     /// </summary>
     public void SetModelsNamespace(string modelsNamespace) => _modelsNamespace = modelsNamespace;
 
+    /// <summary>
+    /// The shared model types (under <see cref="SetModelsNamespace"/>). Code outside the models namespace
+    /// refers to each one fully qualified rather than through a using directive, so a model named like a
+    /// framework type (<c>Task</c>, <c>File</c>) is never ambiguous with it.
+    /// </summary>
+    internal void SetModelNames(IEnumerable<string> names) =>
+        _modelNames = new HashSet<string>(names, StringComparer.Ordinal);
+
     public string RenderTrainInterface(ApiOperation operation, string projectName)
     {
         var isUnit = IsUnitOutput(operation.OutputType);
         var ns = $"{projectName}.Trains.{operation.Group}.{operation.Name}";
-        var outputName = isUnit ? "Unit" : QualifyIfCollides(operation.OutputType.Name, operation);
+        var outputName = isUnit ? UnitType : QualifyModels(operation.OutputType.Name);
         return Render(
             "TrainInterface",
             new
@@ -36,7 +46,6 @@ public class CodeRenderer
                 OutputIsUnit = isUnit,
                 InputTypeName = operation.InputType.Name,
                 InputIsUnit = false,
-                ModelsUsing = _modelsNamespace,
             }
         );
     }
@@ -47,7 +56,7 @@ public class CodeRenderer
         var ns = $"{projectName}.Trains.{operation.Group}.{operation.Name}";
         var attribute = operation.Kind == OperationKind.Query ? "TraxQuery" : "TraxMutation";
         var description = operation.Description ?? $"{operation.Name} operation";
-        var outputName = isUnit ? "Unit" : QualifyIfCollides(operation.OutputType.Name, operation);
+        var outputName = isUnit ? UnitType : QualifyModels(operation.OutputType.Name);
         return Render(
             "TrainImplementation",
             new
@@ -61,7 +70,6 @@ public class CodeRenderer
                 Attribute = attribute,
                 DocDescription = GeneratedText.DocComment(description),
                 Description = GeneratedText.StringLiteralContent(description),
-                ModelsUsing = _modelsNamespace,
                 GraphQLNamespace = operation.Group,
                 TrainsNamespace = $"{projectName}.Trains",
             }
@@ -77,9 +85,8 @@ public class CodeRenderer
             {
                 Namespace = ns,
                 TypeName = operation.InputType.Name,
-                Fields = operation.InputType.Fields.Select(MapField).ToList(),
+                Fields = operation.InputType.Fields.Select(QualifiedField).ToList(),
                 HasFields = operation.InputType.Fields.Count > 0,
-                ModelsUsing = _modelsNamespace,
             }
         );
     }
@@ -93,9 +100,8 @@ public class CodeRenderer
             {
                 Namespace = ns,
                 TypeName = operation.OutputType.Name,
-                Fields = operation.OutputType.Fields.Select(MapField).ToList(),
+                Fields = operation.OutputType.Fields.Select(QualifiedField).ToList(),
                 HasFields = operation.OutputType.Fields.Count > 0,
-                ModelsUsing = _modelsNamespace,
             }
         );
     }
@@ -104,7 +110,7 @@ public class CodeRenderer
     {
         var isUnit = IsUnitOutput(operation.OutputType);
         var ns = $"{projectName}.Trains.{operation.Group}.{operation.Name}";
-        var outputName = isUnit ? "Unit" : QualifyIfCollides(operation.OutputType.Name, operation);
+        var outputName = isUnit ? UnitType : QualifyModels(operation.OutputType.Name);
         return Render(
             "Junction",
             new
@@ -121,7 +127,6 @@ public class CodeRenderer
                 HttpPath = operation.HttpPath is null
                     ? null
                     : GeneratedText.Comment(operation.HttpPath),
-                ModelsUsing = _modelsNamespace,
             }
         );
     }
@@ -235,27 +240,37 @@ public class CodeRenderer
         return obj;
     }
 
-    /// <summary>
-    /// Qualifies a type name with the full models namespace if it collides with
-    /// any segment of the operation's namespace (group or operation name).
-    /// This prevents CS0118 where C# resolves the name to the namespace instead of the type.
-    /// </summary>
-    private string QualifyIfCollides(string typeName, ApiOperation operation)
+    private ScriptObject QualifiedField(ApiField field)
     {
-        if (_modelsNamespace == null)
-            return typeName;
-
-        // Check if the type name matches the group or operation name (namespace segments)
-        if (
-            string.Equals(typeName, operation.Group, StringComparison.Ordinal)
-            || string.Equals(typeName, operation.Name, StringComparison.Ordinal)
-        )
-        {
-            return $"global::{_modelsNamespace}.{typeName}";
-        }
-
-        return typeName;
+        var obj = MapField(field);
+        obj["TypeName"] = QualifyModels(field.TypeName);
+        return obj;
     }
+
+    /// <summary>
+    /// Rewrites every model name in a type expression (<c>Player</c>, <c>List&lt;Player&gt;</c>) to its
+    /// <c>global::</c>-qualified name. A name followed by type arguments is a framework generic
+    /// (<c>List&lt;T&gt;</c>), never a model: models are not generic.
+    /// </summary>
+    private string QualifyModels(string typeExpression)
+    {
+        if (_modelsNamespace == null || _modelNames.Count == 0)
+            return typeExpression;
+
+        return ModelName()
+            .Replace(
+                typeExpression,
+                m =>
+                    _modelNames.Contains(m.Value) && !FollowedByTypeArguments(typeExpression, m)
+                        ? $"global::{_modelsNamespace}.{m.Value}"
+                        : m.Value
+            );
+    }
+
+    private static bool FollowedByTypeArguments(
+        string text,
+        System.Text.RegularExpressions.Match m
+    ) => m.Index + m.Length < text.Length && text[m.Index + m.Length] == '<';
 
     private static bool IsUnitOutput(ApiType outputType) =>
         outputType.Name == "Unit"
@@ -293,4 +308,7 @@ public class CodeRenderer
             _templates[templateName] = Template.Parse(content, resourceName);
         }
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(SchemaNames.Pattern)]
+    private static partial System.Text.RegularExpressions.Regex ModelName();
 }

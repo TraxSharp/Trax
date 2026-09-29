@@ -1,11 +1,4 @@
-{{- if OutputIsUnit }}
-using LanguageExt;
-{{- end }}
-{{- if ModelsUsing }}
-using {{ ModelsUsing }};
-{{- end }}
-using Trax.Effect.Services.ServiceTrain;
-
 namespace {{ Namespace }};
 
-public interface I{{ TrainName }}Train : IServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>;
+public interface I{{ TrainName }}Train
+    : global::Trax.Effect.Services.ServiceTrain.IServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>;

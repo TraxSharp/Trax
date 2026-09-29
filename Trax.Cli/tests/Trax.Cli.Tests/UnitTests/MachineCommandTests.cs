@@ -306,12 +306,21 @@ public class MachineCommandTests
     }
 
     [Test]
-    public void Migrate_prints_the_deferred_notice()
+    public void Migrate_fails_with_the_deferred_notice_on_stderr()
     {
+        // It does nothing, so a CI step that runs it must not report success.
         var command = MachineCommand.Create();
-        var stdout = CaptureOut(() => command.Parse("migrate").Invoke());
+        var exit = 0;
+        var stderr = CaptureErr(() => exit = command.Parse("migrate").Invoke());
 
-        stdout.Should().Contain("deferred");
+        exit.Should().Be(1);
+        stderr.Should().Contain("not implemented");
+    }
+
+    [Test]
+    public void RunMigrate_returns_non_zero()
+    {
+        CaptureErr(() => MachineCommand.RunMigrate().Should().NotBe(0));
     }
 
     private static string CaptureOut(Action action)

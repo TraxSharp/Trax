@@ -107,7 +107,7 @@ public class CodeRendererFixTests
     }
 
     [Test]
-    public void RenderJunction_UnitOutput_ContainsLanguageExtUsing()
+    public void RenderJunction_UnitOutput_QualifiesLanguageExtUnit()
     {
         var op = MakeOperation(
             "DeletePlayer",
@@ -119,11 +119,11 @@ public class CodeRendererFixTests
 
         var result = _renderer.RenderJunction(op, "MyApi");
 
-        result.Should().Contain("using LanguageExt;");
+        result.Should().Contain("global::LanguageExt.Unit");
     }
 
     [Test]
-    public void RenderJunction_EmptyInputAndUnitOutput_ContainsLanguageExtUsing()
+    public void RenderJunction_EmptyInputAndUnitOutput_QualifiesLanguageExtUnit()
     {
         var op = MakeOperation(
             "Ping",
@@ -136,9 +136,8 @@ public class CodeRendererFixTests
 
         var result = _renderer.RenderJunction(op, "MyApi");
 
-        // LanguageExt is included because the output is Unit
-        result.Should().Contain("using LanguageExt;");
-        result.Should().Contain("Junction<Unit, Unit>");
+        // The input is the operation's own empty record; the output is LanguageExt's Unit
+        result.Should().Contain("Junction<Unit, global::LanguageExt.Unit>");
     }
 
     [Test]
@@ -167,13 +166,13 @@ public class CodeRendererFixTests
     }
 
     [Test]
-    public void RenderTrainInterface_UnitOutput_ContainsLanguageExtUsing()
+    public void RenderTrainInterface_UnitOutput_QualifiesLanguageExtUnit()
     {
         var op = MakeOperation("DeletePlayer", OperationKind.Mutation, output: UnitType);
 
         var result = _renderer.RenderTrainInterface(op, "MyApi");
 
-        result.Should().Contain("using LanguageExt;");
+        result.Should().Contain("global::LanguageExt.Unit");
     }
 
     [Test]
@@ -191,9 +190,10 @@ public class CodeRendererFixTests
     #region RenderInput_ModelsNamespace
 
     [Test]
-    public void RenderInput_WithModelsNamespace_ContainsUsingDirective()
+    public void RenderInput_WithModelsNamespace_QualifiesModelTypes()
     {
         _renderer.SetModelsNamespace("MyApi.Trains.Models");
+        _renderer.SetModelNames(["Status"]);
         var input = new ApiType
         {
             Name = "ListItemsInput",
@@ -212,7 +212,8 @@ public class CodeRendererFixTests
 
         var result = _renderer.RenderInput(op, "MyApi");
 
-        result.Should().Contain("using MyApi.Trains.Models;");
+        result.Should().Contain("global::MyApi.Trains.Models.Status? Status");
+        result.Should().NotContain("using MyApi.Trains.Models;");
     }
 
     [Test]

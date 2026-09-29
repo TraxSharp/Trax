@@ -77,7 +77,7 @@ public class CodeRendererTests
     }
 
     [Test]
-    public void RenderTrainInterface_UnitOutput_ContainsLanguageExtUsing()
+    public void RenderTrainInterface_UnitOutput_QualifiesLanguageExtUnit()
     {
         var unitOutput = new ApiType
         {
@@ -89,7 +89,7 @@ public class CodeRendererTests
 
         var result = _renderer.RenderTrainInterface(op, "MyApi");
 
-        result.Should().Contain("using LanguageExt");
+        result.Should().Contain("global::LanguageExt.Unit");
     }
 
     #endregion

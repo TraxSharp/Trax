@@ -43,7 +43,7 @@ internal sealed record CheckResult(IReadOnlyList<ArtifactCheck> Checks)
 /// generated into a staging directory first, so a failing step leaves the target tree untouched; only when all
 /// requested artifacts are produced does <c>generate</c> place them, and <c>check</c> diffs them instead.
 /// </summary>
-internal sealed class MachineGenerator
+internal sealed partial class MachineGenerator
 {
     private readonly INodeRunner _node;
 
@@ -105,6 +105,13 @@ internal sealed class MachineGenerator
             );
 
         var id = o.Machine.Name;
+        // The id names every file below; refuse it before anything is written (cli/0005).
+        if (!IsMachineId(id))
+            throw new InvalidOperationException(
+                $"The machine id '{id}' is not kebab-case (lowercase letters and digits in words joined by "
+                    + "'-', starting with a letter, e.g. 'write-to-congress'). It names the generated files, "
+                    + "so change the machine's Id(...)."
+            );
         var planned = new List<PlannedArtifact>();
 
         var stagedIr = Path.Combine(staging, $"{id}.ir.json");
@@ -209,6 +216,16 @@ internal sealed class MachineGenerator
             );
         return Path.Combine(parent.FullName, "tools");
     }
+
+    /// <summary>
+    /// A machine id is kebab-case: lowercase ASCII words of letters and digits joined by single
+    /// hyphens, starting with a letter (<c>checkout</c>, <c>write-to-congress</c>). It names every
+    /// artifact file, so nothing else may reach a path.
+    /// </summary>
+    internal static bool IsMachineId(string id) => MachineId().IsMatch(id);
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^[a-z][a-z0-9]*(-[a-z0-9]+)*\z")]
+    private static partial System.Text.RegularExpressions.Regex MachineId();
 
     private static bool FilesEqual(string a, string b) =>
         File.ReadAllBytes(a).AsSpan().SequenceEqual(File.ReadAllBytes(b));

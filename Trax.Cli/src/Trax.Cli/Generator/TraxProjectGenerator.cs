@@ -6,27 +6,80 @@ namespace Trax.Cli.Generator;
 public class TraxProjectGenerator
 {
     private readonly CodeRenderer _renderer = new();
+    private readonly Action<string, string> _scaffoldHub;
+
+    public TraxProjectGenerator()
+        : this(RunDotnetNew) { }
+
+    /// <summary>Takes the step that scaffolds the hub (name, directory), so a test can make it fail.</summary>
+    internal TraxProjectGenerator(Action<string, string> scaffoldHub) => _scaffoldHub = scaffoldHub;
 
     public void Generate(ApiSchema schema, string outputDir, string projectName, bool force)
     {
         // Before the output directory is touched, so a refused schema deletes nothing.
         SchemaNames.Validate(schema, projectName);
 
-        if (Directory.Exists(outputDir))
+        outputDir = Path.GetFullPath(outputDir);
+        var replacing = Directory.Exists(outputDir);
+        if (replacing)
         {
             if (!force)
                 throw new InvalidOperationException(
                     $"Output directory already exists: {outputDir}. Use --force to overwrite."
                 );
-            Directory.Delete(outputDir, recursive: true);
+            EnsureReplaceable(outputDir, Directory.GetCurrentDirectory());
         }
 
-        Directory.CreateDirectory(outputDir);
+        // Build the project in a sibling directory and swap it in only when every step has succeeded, so a
+        // failure (most often `dotnet new`) leaves the existing directory as it was. A sibling keeps the swap
+        // a rename on one volume.
+        var parent = Path.GetDirectoryName(outputDir)!;
+        Directory.CreateDirectory(parent);
+        var staging = Path.Combine(
+            parent,
+            $".{Path.GetFileName(outputDir)}.trax-generate-{Guid.NewGuid():N}"
+        );
+        try
+        {
+            Directory.CreateDirectory(staging);
+            GenerateInto(schema, staging, projectName);
+        }
+        catch
+        {
+            TryDeleteDirectory(staging);
+            throw;
+        }
 
+        if (!replacing)
+        {
+            Directory.Move(staging, outputDir);
+            return;
+        }
+
+        var previous = Path.Combine(
+            parent,
+            $".{Path.GetFileName(outputDir)}.trax-previous-{Guid.NewGuid():N}"
+        );
+        Directory.Move(outputDir, previous);
+        try
+        {
+            Directory.Move(staging, outputDir);
+        }
+        catch
+        {
+            Directory.Move(previous, outputDir);
+            TryDeleteDirectory(staging);
+            throw;
+        }
+        TryDeleteDirectory(previous);
+    }
+
+    private void GenerateInto(ApiSchema schema, string outputDir, string projectName)
+    {
         // 1. Scaffold the hub project via dotnet new
         var hubProjectName = $"{projectName}.Hub";
         var hubDir = Path.Combine(outputDir, hubProjectName);
-        RunDotnetNew(hubProjectName, hubDir);
+        _scaffoldHub(hubProjectName, hubDir);
 
         // 2. Create the trains library
         var trainsProjectName = $"{projectName}.Trains";
@@ -38,6 +91,73 @@ public class TraxProjectGenerator
 
         // 4. Patch hub Program.cs to scan the trains assembly
         PatchProgramCs(hubDir, projectName);
+    }
+
+    /// <summary>
+    /// Refuses a <c>--force</c> target that replacing would do real damage to: the current directory or one of
+    /// its parents (<c>--output .</c>), and any directory holding a git repository or worktree, at any depth.
+    /// </summary>
+    internal static void EnsureReplaceable(string outputDir, string currentDirectory)
+    {
+        var target = TrimSeparators(Path.GetFullPath(outputDir));
+        var current = TrimSeparators(Path.GetFullPath(currentDirectory));
+        var comparison = OperatingSystem.IsLinux()
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
+
+        if (
+            string.Equals(target, current, comparison)
+            || current.StartsWith(target + Path.DirectorySeparatorChar, comparison)
+            || Path.GetPathRoot(target) == target + Path.DirectorySeparatorChar
+            || Path.GetPathRoot(target) == target
+        )
+            throw new InvalidOperationException(
+                $"Refusing to replace {outputDir}: it is the current directory or one of its parents. "
+                    + "Choose a new output directory."
+            );
+
+        if (ContainsGitRepository(target))
+            throw new InvalidOperationException(
+                $"Refusing to replace {outputDir}: it holds a git repository (.git) at some depth. "
+                    + "Choose a new output directory."
+            );
+    }
+
+    // A .git directory or a worktree's .git file, in the target itself or anywhere below it. Dot-files carry the
+    // Hidden attribute on Unix, which the default enumeration skips, so nothing is skipped except symlinks: they
+    // are not followed, and deleting the directory removes a link, not what it points at.
+    private static bool ContainsGitRepository(string target) =>
+        Directory
+            .EnumerateFileSystemEntries(
+                target,
+                ".git",
+                new EnumerationOptions
+                {
+                    RecurseSubdirectories = true,
+                    IgnoreInaccessible = true,
+                    AttributesToSkip = FileAttributes.ReparsePoint,
+                    MatchCasing = MatchCasing.CaseSensitive,
+                }
+            )
+            .Any();
+
+    private static string TrimSeparators(string path) =>
+        path.Length > 1
+            ? path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            : path;
+
+    private static void TryDeleteDirectory(string dir)
+    {
+        try
+        {
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Best effort: a leftover staging directory is visible, named, and harmless.
+        }
+        catch (UnauthorizedAccessException) { }
     }
 
     internal void GenerateTrainsLibrary(ApiSchema schema, string trainsDir, string projectName)
@@ -52,7 +172,15 @@ public class TraxProjectGenerator
         var hasSharedTypes =
             schema.Types.Any(t => !t.IsBuiltIn && t.Fields.Count > 0) || schema.Enums.Count > 0;
         if (hasSharedTypes)
+        {
             _renderer.SetModelsNamespace($"{projectName}.Trains.Models");
+            _renderer.SetModelNames(
+                schema
+                    .Types.Where(t => !t.IsBuiltIn && t.Fields.Count > 0)
+                    .Select(t => t.Name)
+                    .Concat(schema.Enums.Select(e => e.Name))
+            );
+        }
 
         // Write trains csproj
         WriteFile(
@@ -86,7 +214,7 @@ public class TraxProjectGenerator
         // Write shared types in Models/
         foreach (var apiType in schema.Types)
         {
-            if (apiType.IsBuiltIn || apiType.Name == "Unit" || apiType.Fields.Count == 0)
+            if (apiType.IsBuiltIn || apiType.Fields.Count == 0)
                 continue;
 
             var modelsDir = Path.Combine(trainsDir, "Models");
@@ -169,68 +297,58 @@ public class TraxProjectGenerator
         File.WriteAllText(csprojPath, content);
     }
 
+    /// <summary>
+    /// Adds the trains assembly to the hub's <c>AddMediator(typeof(Program).Assembly)</c> scan. The name is
+    /// written fully qualified, so no using directive is inserted: finding where one may go needs a parse, and
+    /// the template's last <c>using</c> is a statement inside a block. A template that no longer has the scan
+    /// is refused, since the hub would otherwise build and register none of the generated trains.
+    /// </summary>
     internal static void PatchProgramCs(string hubDir, string projectName)
     {
+        const string scan = "typeof(Program).Assembly";
         var programPath = Path.Combine(hubDir, "Program.cs");
         if (!File.Exists(programPath))
-            return;
+            throw new InvalidOperationException(
+                $"The hub template produced no Program.cs at {programPath}, so the generated trains cannot be "
+                    + "registered. The installed trax-hub template does not match this version of trax."
+            );
 
         var content = File.ReadAllText(programPath);
+        if (!content.Contains(scan, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"The hub's Program.cs ({programPath}) has no '{scan}' to add the trains assembly to, so the "
+                    + "generated trains would not be registered. The installed trax-hub template does not match "
+                    + "this version of trax."
+            );
 
-        // Add the trains assembly alongside Program's assembly so both get scanned
         content = content.Replace(
-            "typeof(Program).Assembly",
-            $"typeof(Program).Assembly, typeof({projectName}.Trains.ManifestNames).Assembly"
+            scan,
+            $"{scan}, typeof({projectName}.Trains.ManifestNames).Assembly",
+            StringComparison.Ordinal
         );
-
-        // Add using for the trains namespace if not already present
-        var trainsUsing = $"using {projectName}.Trains;";
-        if (!content.Contains(trainsUsing))
-        {
-            var lastUsingIndex = content.LastIndexOf("using ", StringComparison.Ordinal);
-            if (lastUsingIndex >= 0)
-            {
-                var endOfLine = content.IndexOf('\n', lastUsingIndex);
-                if (endOfLine >= 0)
-                {
-                    content = content.Insert(endOfLine + 1, trainsUsing + "\n");
-                }
-            }
-        }
 
         File.WriteAllText(programPath, content);
     }
 
     private static void RunDotnetNew(string name, string outputDir)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            ArgumentList = { "new", "trax-hub", "-n", name, "-o", outputDir },
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        var (exitCode, _, stderr) = ChildProcess.Run(
+            new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                ArgumentList = { "new", "trax-hub", "-n", name, "-o", outputDir },
+            }
+        );
 
-        using var process =
-            Process.Start(psi) ?? throw new InvalidOperationException("Failed to start dotnet.");
-
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-
-        if (process.ExitCode != 0)
-        {
-            var message = stderr.Contains(
-                "No templates or subcommands found",
-                StringComparison.Ordinal
-            )
-                ? "The 'trax-hub' template is not installed. Run: dotnet new install Trax.Samples"
-                : $"dotnet new failed (exit code {process.ExitCode}): {stderr}";
-            throw new InvalidOperationException(message);
-        }
+        if (exitCode != 0)
+            throw new InvalidOperationException(DotnetNewFailure(exitCode, stderr));
     }
+
+    /// <summary>The message for a failed <c>dotnet new trax-hub</c>.</summary>
+    internal static string DotnetNewFailure(int exitCode, string stderr) =>
+        stderr.Contains("No templates or subcommands found", StringComparison.Ordinal)
+            ? "The 'trax-hub' template is not installed. Run: dotnet new install Trax.Samples.Templates"
+            : $"dotnet new failed (exit code {exitCode}): {stderr}";
 
     public static bool IsDotnetAvailable()
     {

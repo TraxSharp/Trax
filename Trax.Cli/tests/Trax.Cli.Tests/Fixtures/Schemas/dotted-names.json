@@ -82,11 +82,6 @@
             "schema": { "type": "string" }
           },
           {
-            "name": "updateValue",
-            "in": "query",
-            "schema": { "type": "string" }
-          },
-          {
             "name": "update_value",
             "in": "path",
             "required": true,

@@ -747,22 +747,6 @@ public class OpenApiParserFixTests
     }
 
     [Test]
-    public void Parse_DottedSchemaNames_DuplicateParamNamesAfterPascalCaseDeduped()
-    {
-        var parser = new OpenApiSchemaParser();
-
-        var schema = parser.Parse(FixturePath("dotted-names.json"));
-
-        var tagOp = schema.Operations.Single(o =>
-            o.HttpPath == "/items/{itemId}/tags/{update_value}"
-        );
-        // updateValue (query) and update_value (path) both become UpdateValue
-        // Should be deduplicated to avoid CS0102
-        var fieldNames = tagOp.InputType.Fields.Select(f => f.Name).ToList();
-        fieldNames.Should().OnlyHaveUniqueItems();
-    }
-
-    [Test]
     public void Parse_DottedSchemaNames_EmptySchemaParamResolvedToObject()
     {
         var parser = new OpenApiSchemaParser();

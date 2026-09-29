@@ -55,19 +55,7 @@ public class TraxProjectGeneratorInternalsTests
     }
 
     [Test]
-    public void PatchProgramCs_NoProgramFile_NoOp()
-    {
-        var hubDir = Path.Combine(_tempDir, "EmptyHub");
-        Directory.CreateDirectory(hubDir);
-
-        Action act = () => TraxProjectGenerator.PatchProgramCs(hubDir, "MyApi");
-
-        act.Should().NotThrow();
-        Directory.GetFiles(hubDir).Should().BeEmpty();
-    }
-
-    [Test]
-    public void PatchProgramCs_RewritesAssemblyScanAndAddsUsing()
+    public void PatchProgramCs_RewritesAssemblyScanWithoutAUsing()
     {
         var hubDir = Path.Combine(_tempDir, "Hub");
         Directory.CreateDirectory(hubDir);
@@ -91,7 +79,7 @@ public class TraxProjectGeneratorInternalsTests
         updated
             .Should()
             .Contain("typeof(Program).Assembly, typeof(MyApi.Trains.ManifestNames).Assembly");
-        updated.Should().Contain("using MyApi.Trains;");
+        updated.Should().NotContain("using MyApi.Trains;");
     }
 
     [Test]
@@ -136,5 +124,21 @@ public class TraxProjectGeneratorInternalsTests
             );
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*--force*");
+    }
+
+    [Test]
+    public void DotnetNewFailure_WhenTheTemplateIsMissing_NamesThePackageThatShipsIt()
+    {
+        var message = TraxProjectGenerator.DotnetNewFailure(
+            103,
+            "No templates or subcommands found matching: 'trax-hub'."
+        );
+
+        message
+            .Should()
+            .Contain(
+                "dotnet new install Trax.Samples.Templates",
+                "Trax.Samples is not a package on nuget.org; the templates ship in Trax.Samples.Templates"
+            );
     }
 }

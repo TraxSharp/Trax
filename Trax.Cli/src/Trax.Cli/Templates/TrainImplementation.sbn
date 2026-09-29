@@ -1,9 +1,4 @@
-using LanguageExt;
 using Trax.Effect.Attributes;
-using Trax.Effect.Services.ServiceTrain;
-{{- if ModelsUsing }}
-using {{ ModelsUsing }};
-{{- end }}
 {{- if GraphQLNamespace }}
 using {{ TrainsNamespace }};
 {{- end }}
@@ -20,9 +15,11 @@ namespace {{ Namespace }};
 // endpoint with UseTraxGraphQL(configure: e => e.RequireAuthorization(...)).
 [TraxAllowAnonymous]
 public class {{ TrainName }}Train
-    : ServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>,
+    : global::Trax.Effect.Services.ServiceTrain.ServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>,
         I{{ TrainName }}Train
 {
-    protected override Task<Either<Exception, {{ OutputTypeName }}>> Junctions() =>
+    protected override global::System.Threading.Tasks.Task<
+        global::LanguageExt.Either<global::System.Exception, {{ OutputTypeName }}>
+    > Junctions() =>
         Chain<{{ TrainName }}Junction>().Resolve();
 }

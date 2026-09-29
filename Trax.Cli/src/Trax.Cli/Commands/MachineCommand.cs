@@ -174,14 +174,19 @@ internal static class MachineCommand
             "migrate",
             "Scaffold a forward migration by diffing the context schema (deferred until migrations are in the IR)."
         );
-        command.SetAction(_ =>
-            Console.WriteLine(
-                "trax machine migrate is not yet implemented: migrations are deferred (Decision E). A stored "
-                    + "snapshot whose version does not match the current machine is rejected as a typed "
-                    + "version-mismatch and the client starts fresh. The command exists so the surface is complete."
-            )
-        );
+        command.SetAction(_ => RunMigrate());
         return command;
+    }
+
+    // Migrations are not implemented, so the command fails: a CI step that runs it must not pass.
+    internal static int RunMigrate()
+    {
+        Console.Error.WriteLine(
+            "trax machine migrate is not implemented: migrations are deferred (Decision E). A stored "
+                + "snapshot whose version does not match the current machine is rejected as a typed "
+                + "version-mismatch and the client starts fresh."
+        );
+        return 1;
     }
 
     // Returns the process exit code (0 success, 1 failure). The action returns it so InvokeAsync propagates it;

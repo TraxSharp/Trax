@@ -1,0 +1,39 @@
+type Query {
+  task(id: ID!): Task
+  tasks: [Task!]!
+  file(path: String!): File
+  lastError: Exception
+}
+
+type Mutation {
+  retryTask(task: TaskInput!): Task
+  logEntry(level: LogLevel!): ILogger
+}
+
+type Task {
+  id: ID!
+  files: [File!]!
+  error: Exception
+}
+
+type File {
+  path: String!
+}
+
+type Exception {
+  message: String!
+}
+
+type ILogger {
+  name: String!
+}
+
+input TaskInput {
+  id: ID!
+  file: String
+}
+
+enum LogLevel {
+  DEBUG
+  ERROR
+}

@@ -41,10 +41,10 @@ Supports two schema formats:
 
 ## Prerequisites
 
-The `trax-hub` template must be installed:
+The `trax-hub` template must be installed. It ships in the `Trax.Samples.Templates` package:
 
 ```bash
-dotnet new install Trax.Samples
+dotnet new install Trax.Samples.Templates
 ```
 
 ## Installation
@@ -77,7 +77,7 @@ trax generate --schema ./schema.graphql --output ./MyProject --name MyProject --
 | `--output` | Yes | Output directory |
 | `--name` | Yes | Project name (namespace + csproj) |
 | `--type` | No | Force `graphql` or `openapi` |
-| `--force` | No | Overwrite existing output directory |
+| `--force` | No | Replace an existing output directory once generation succeeds (refused for the current directory, its parents, and a git repository) |
 
 ## Generated Output
 

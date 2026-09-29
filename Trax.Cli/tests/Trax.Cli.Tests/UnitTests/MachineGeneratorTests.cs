@@ -1,6 +1,8 @@
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 
 namespace Trax.Cli.Tests.UnitTests;
@@ -10,9 +12,13 @@ namespace Trax.Cli.Tests.UnitTests;
 /// must stage-then-place so a failed step never half-writes the tree, and diff faithfully under <c>check</c>.
 /// A <see cref="FakeNodeRunner"/> stands in for node so these pin the orchestration without spawning a process;
 /// real byte-parity is covered by the node integration tests.
+///
+/// <para>The machine id tests enforce cli/0005 (<c>docs/adr/0005-a-machine-id-is-kebab-case.md</c>).</para>
 /// </summary>
+[Property("adr", "docs/adr/0005-a-machine-id-is-kebab-case.md")]
 public class MachineGeneratorTests
 {
+    private const string Adr = "see cli/0005 (docs/adr/0005-a-machine-id-is-kebab-case.md)";
     private string _root = null!;
     private string _tools = null!;
     private static readonly IMachine Turnstile = new DeclarativeTurnstileMachine();
@@ -61,6 +67,51 @@ public class MachineGeneratorTests
             specifier,
             ToolsDir: _tools
         );
+
+    [TestCase("../x")]
+    [TestCase("a/b")]
+    [TestCase("")]
+    [TestCase("Checkout")]
+    [TestCase("write_to_congress")]
+    public void An_id_that_is_not_kebab_case_is_refused_and_nothing_is_written(string id)
+    {
+        var node = new FakeNodeRunner();
+        var irOut = Dir("ir");
+        var twinOut = Dir("twin");
+        var options = Options(irOut: irOut, twinOut: twinOut) with
+        {
+            Machine = new MachineWithId(id),
+        };
+
+        var act = () => new MachineGenerator(node).Generate(options);
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*kebab-case*", "the id becomes the artifacts' file names; " + Adr);
+        node.Calls.Should().BeEmpty();
+        Directory
+            .EnumerateFileSystemEntries(_root, "*", SearchOption.AllDirectories)
+            .Where(p => !p.StartsWith(_tools, StringComparison.Ordinal))
+            .Should()
+            .BeEquivalentTo([Path.Combine(_root, "engine"), irOut, twinOut], Adr);
+    }
+
+    [TestCase("checkout")]
+    [TestCase("write-to-congress")]
+    [TestCase("turnstile-2")]
+    public void A_kebab_case_id_is_accepted(string id)
+    {
+        MachineGenerator.IsMachineId(id).Should().BeTrue(Adr);
+    }
+
+    private sealed class MachineWithId(string id) : Machine<TurnstileState, TurnstileTrigger>
+    {
+        protected override void Configure(IMachineBuilder<TurnstileState, TurnstileTrigger> m)
+        {
+            m.Id(id).Version(1).StartsAt(TurnstileState.Locked, () => new JsonObject());
+            m.In(TurnstileState.Locked).On(TurnstileTrigger.Coin).To(TurnstileState.Unlocked);
+        }
+    }
 
     [Test]
     public void Generate_ir_only_writes_the_canonical_ir_and_never_touches_node()

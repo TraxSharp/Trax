@@ -318,17 +318,7 @@ public class TraxProjectGeneratorTests
         content
             .Should()
             .Contain("typeof(Program).Assembly, typeof(TestProject.Trains.ManifestNames).Assembly");
-        content.Should().Contain("using TestProject.Trains;");
-    }
-
-    [Test]
-    public void PatchProgramCs_NoProgramCs_DoesNotThrow()
-    {
-        Directory.CreateDirectory(_tempDir);
-
-        var act = () => TraxProjectGenerator.PatchProgramCs(_tempDir, "TestProject");
-
-        act.Should().NotThrow();
+        content.Should().NotContain("using TestProject.Trains;", "the name is fully qualified");
     }
 
     #endregion

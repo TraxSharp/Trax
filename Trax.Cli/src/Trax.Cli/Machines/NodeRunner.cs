@@ -42,26 +42,12 @@ internal sealed class NodeRunner : INodeRunner
 
     public NodeResult Run(string scriptPath, IReadOnlyList<string> args)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = _nodePath,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        var psi = new ProcessStartInfo { FileName = _nodePath };
         psi.ArgumentList.Add(scriptPath);
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
-        using var process =
-            Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start node ('{_nodePath}').");
-
-        // Read both streams fully before waiting, so a child that fills a pipe buffer cannot deadlock.
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        return new NodeResult(process.ExitCode, stdout, stderr);
+        var (exitCode, stdout, stderr) = ChildProcess.Run(psi);
+        return new NodeResult(exitCode, stdout, stderr);
     }
 }

@@ -137,8 +137,8 @@ public class OpenApiFixEndToEndTests
 
         content.Should().Contain("Status");
         content.Should().Contain("SortBy");
-        // Should have using directive for Models namespace
-        content.Should().Contain("using TestProject.Trains.Models;");
+        // Models are referenced fully qualified, never through a using directive
+        content.Should().Contain("global::TestProject.Trains.Models.Status");
     }
 
     [Test]
@@ -156,8 +156,7 @@ public class OpenApiFixEndToEndTests
         );
         var content = File.ReadAllText(inputFile);
 
-        content.Should().Contain("Priority");
-        content.Should().Contain("using TestProject.Trains.Models;");
+        content.Should().Contain("global::TestProject.Trains.Models.Priority");
     }
 
     #endregion
@@ -349,7 +348,7 @@ public class OpenApiFixEndToEndTests
                 "DeleteUsersJunction.cs"
             )
         );
-        deleteJunction.Should().Contain("using LanguageExt;");
+        deleteJunction.Should().Contain("global::LanguageExt.Unit");
         deleteJunction.Should().Contain("Unit");
     }
 
@@ -477,7 +476,7 @@ public class OpenApiFixEndToEndTests
         File.Exists(outputFile).Should().BeTrue();
 
         var content = File.ReadAllText(outputFile);
-        content.Should().Contain("List<ListEventsItem>");
+        content.Should().Contain("List<global::TestProject.Trains.Models.ListEventsItem>");
     }
 
     [Test]

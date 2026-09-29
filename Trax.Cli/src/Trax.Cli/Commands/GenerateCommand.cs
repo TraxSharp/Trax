@@ -36,7 +36,8 @@ public static class GenerateCommand
 
         var forceOption = new Option<bool>("--force")
         {
-            Description = "Overwrite the output directory if it exists",
+            Description =
+                "Replace the output directory if it exists, once generation has succeeded (refused for the current directory, its parents, or a git repository)",
         };
 
         var command = new Command("generate", "Generate a Trax API project from a schema file")
@@ -69,7 +70,8 @@ public static class GenerateCommand
         DirectoryInfo output,
         string name,
         string? type,
-        bool force
+        bool force,
+        TraxProjectGenerator? generator = null
     )
     {
         if (!TraxProjectGenerator.IsDotnetAvailable())
@@ -113,8 +115,12 @@ public static class GenerateCommand
                     + $"{apiSchema.Enums.Count} enums from {schemaType} schema."
             );
 
-            var generator = new TraxProjectGenerator();
-            generator.Generate(apiSchema, output.FullName, name, force);
+            (generator ?? new TraxProjectGenerator()).Generate(
+                apiSchema,
+                output.FullName,
+                name,
+                force
+            );
         }
         catch (InvalidOperationException ex)
         {

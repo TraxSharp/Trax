@@ -1,0 +1,9 @@
+type Query {
+  player(id: ID!): Player
+}
+
+type Player {
+  id: ID!
+  first_name: String
+  firstName: String
+}

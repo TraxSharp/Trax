@@ -39,4 +39,31 @@ public class NodeRunnerTests
     {
         new NodeRunner("trax-no-such-binary-zzz").IsAvailable().Should().BeFalse();
     }
+
+    [Test]
+    public void Run_returns_when_the_child_writes_more_than_a_pipe_buffer_to_stderr()
+    {
+        if (OperatingSystem.IsWindows())
+            Assert.Ignore(
+                "Uses sh to write to stderr; the runner's code path is the same on every OS."
+            );
+
+        // 200 KB to stderr, then a line to stdout: reading stdout to the end first waits for a child
+        // that is itself blocked writing to a full stderr pipe.
+        var run = System.Threading.Tasks.Task.Run(() =>
+            new NodeRunner("sh").Run(
+                "-c",
+                ["head -c 200000 /dev/zero | tr '\\0' 'e' 1>&2; echo done"]
+            )
+        );
+
+        run.Wait(TimeSpan.FromSeconds(30))
+            .Should()
+            .BeTrue(
+                "the runner reads stdout and stderr at once, so a full stderr pipe cannot block it"
+            );
+        run.Result.ExitCode.Should().Be(0);
+        run.Result.StdErr.Length.Should().Be(200000);
+        run.Result.StdOut.Trim().Should().Be("done");
+    }
 }

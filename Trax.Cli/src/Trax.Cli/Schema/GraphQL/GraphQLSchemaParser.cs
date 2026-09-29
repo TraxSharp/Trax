@@ -92,6 +92,7 @@ public class GraphQLSchemaParser : ISchemaParser
                     Name = NamingConventions.ToPascalCase(name),
                     Values = enumDef.Values!.Select(v => v.Name.StringValue).ToList(),
                     Description = enumDef.Description?.Value.ToString(),
+                    SourceName = name,
                 }
             );
         }
@@ -211,6 +212,7 @@ public class GraphQLSchemaParser : ISchemaParser
                     Group = NamingConventions.DeriveGroupName(field.Name.StringValue),
                     InputType = inputType,
                     OutputType = outputType,
+                    SourceName = $"{rootType.Name.StringValue}.{field.Name.StringValue}",
                 }
             );
         }
@@ -393,6 +395,7 @@ public class GraphQLSchemaParser : ISchemaParser
             Name = NamingConventions.ToPascalCase(typeDef.Name.StringValue),
             Fields = fields,
             IsBuiltIn = false,
+            SourceName = typeDef.Name.StringValue,
         };
     }
 
@@ -426,6 +429,7 @@ public class GraphQLSchemaParser : ISchemaParser
             Name = nameOverride ?? NamingConventions.ToPascalCase(inputDef.Name.StringValue),
             Fields = fields,
             IsBuiltIn = false,
+            SourceName = inputDef.Name.StringValue,
         };
     }
 

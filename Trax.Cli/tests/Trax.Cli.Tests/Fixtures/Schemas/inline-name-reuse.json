@@ -1,0 +1,54 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "Inline names", "version": "1.0" },
+  "paths": {
+    "/customers": {
+      "get": {
+        "operationId": "getCustomer",
+        "tags": ["Customers"],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Customer" } } }
+          }
+        }
+      }
+    },
+    "/tickets": {
+      "get": {
+        "operationId": "getTicket",
+        "tags": ["Tickets"],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ticket" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "object",
+            "properties": { "line1": { "type": "string" } }
+          },
+          "status": { "type": "string", "enum": ["active", "suspended"] }
+        }
+      },
+      "Ticket": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["open", "closed"] }
+        }
+      },
+      "Address": {
+        "type": "object",
+        "properties": { "street": { "type": "string" }, "city": { "type": "string" } }
+      }
+    }
+  }
+}

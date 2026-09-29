@@ -10,4 +10,7 @@ public class ApiOperation
     public required ApiType OutputType { get; init; }
     public string? HttpMethod { get; init; }
     public string? HttpPath { get; init; }
+
+    /// <summary>The name as the schema writes it, before conversion; named in a collision refusal.</summary>
+    internal string? SourceName { get; init; }
 }
