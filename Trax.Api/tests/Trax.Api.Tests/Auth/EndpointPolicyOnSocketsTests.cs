@@ -270,7 +270,7 @@ public class EndpointPolicyOnSocketsTests
     {
         var client = host.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        return await client.ConnectAsync(new Uri("ws://localhost/trax/graphql"), default);
+        return await client.ConnectClosingAsync(new Uri("ws://localhost/trax/graphql"), default);
     }
 
     private static Task SendAsync(WebSocket ws, object message) =>

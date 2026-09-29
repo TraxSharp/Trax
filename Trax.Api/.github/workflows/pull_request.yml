@@ -90,7 +90,7 @@ jobs:
             psql -h localhost -U trax -d trax -c "CREATE DATABASE $db;"
           done
       - name: Test
-        run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
+        run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults --blame-hang-timeout 5m --blame-hang-dump-type none
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@0b35c9ecc4f0529d0eb674914510c22f85b196b4  # v7.1.0
         with:

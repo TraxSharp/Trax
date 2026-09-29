@@ -223,7 +223,7 @@ public class SubscriptionPrincipalPropagationE2ETests
     {
         var client = host.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        return await client.ConnectAsync(new Uri(WsUri), CancellationToken.None);
+        return await client.ConnectClosingAsync(new Uri(WsUri), CancellationToken.None);
     }
 
     private static async Task InitAsync(WebSocket ws, object payload)

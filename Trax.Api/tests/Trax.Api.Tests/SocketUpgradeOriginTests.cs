@@ -323,7 +323,7 @@ public class SocketUpgradeOriginTests
         WebSocket ws;
         try
         {
-            ws = await client.ConnectAsync(new Uri("ws://localhost" + path), default);
+            ws = await client.ConnectClosingAsync(new Uri("ws://localhost" + path), default);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("status code"))
         {

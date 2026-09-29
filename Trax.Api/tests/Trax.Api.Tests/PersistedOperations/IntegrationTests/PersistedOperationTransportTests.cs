@@ -307,7 +307,10 @@ public class PersistedOperationTransportTests
     {
         var client = app.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        using var ws = await client.ConnectAsync(new Uri("ws://localhost/trax/graphql"), default);
+        using var ws = await client.ConnectClosingAsync(
+            new Uri("ws://localhost/trax/graphql"),
+            default
+        );
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
         await SendAsync(ws, """{"type":"connection_init","payload":{}}""", cts.Token);

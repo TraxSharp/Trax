@@ -184,7 +184,7 @@ public class CustomSocketInterceptorE2ETests
     {
         var client = host.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        return await client.ConnectAsync(new Uri(WsUri), CancellationToken.None);
+        return await client.ConnectClosingAsync(new Uri(WsUri), CancellationToken.None);
     }
 
     private static async Task SendInitAsync(WebSocket ws, object payload)
