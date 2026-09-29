@@ -7,7 +7,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Trax.Dashboard.Components.Dialogs;
 using Trax.Dashboard.Tests.Integration.Fakes.Data;
-using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
@@ -33,17 +32,10 @@ public class QueueTrainDialogFormTests
 {
     private Bunit.TestContext _ctx = null!;
     private InMemoryDataContextFactory _data = null!;
-    private JsonSerializerOptions _previousOptions = null!;
 
     [SetUp]
     public void SetUp()
     {
-        // A host's Trax.Effect build sets these to the train parameter options (camelCase); a
-        // bare test process leaves them at JsonSerializerOptions.Default.
-        _previousOptions = TraxEffectConfiguration.StaticSystemJsonSerializerOptions;
-        TraxEffectConfiguration.StaticSystemJsonSerializerOptions =
-            TraxJsonSerializationOptions.Default;
-
         _ctx = new Bunit.TestContext();
         _ctx.Services.AddRadzenComponents();
         _ctx.JSInterop.Mode = JSRuntimeMode.Loose;
@@ -54,7 +46,6 @@ public class QueueTrainDialogFormTests
     public void TearDown()
     {
         _ctx.Dispose();
-        TraxEffectConfiguration.StaticSystemJsonSerializerOptions = _previousOptions;
     }
 
     [Test]

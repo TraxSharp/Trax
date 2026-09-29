@@ -14,7 +14,7 @@
        released version in CI) is the package being checked, not the baseline. -->
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Dashboard'">
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>1.15.1</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>1.16.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <!-- Package metadata shared by every package this repo publishes. A project can
