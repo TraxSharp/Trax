@@ -177,7 +177,7 @@ public interface ISnapshotDraftService
 /// method is total for expected outcomes — including concurrency conflicts, which come back as a typed
 /// <c>Conflict</c> rather than a thrown <c>DbUpdateException</c>.
 /// </summary>
-public sealed class SnapshotDraftService<TState, TTrigger>(
+internal sealed class SnapshotDraftService<TState, TTrigger>(
     SnapshotMachine<TState, TTrigger> machine,
     ISnapshotStore store,
     IReadOnlyCollection<TState>? committedStates = null,

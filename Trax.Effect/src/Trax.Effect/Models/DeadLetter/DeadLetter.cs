@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
@@ -99,6 +100,7 @@ public class DeadLetter : IModel
     /// </summary>
     /// <param name="createDeadLetter"></param>
     /// <returns>A new DeadLetter instance</returns>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static DeadLetter Create(CreateDeadLetter createDeadLetter)
     {
         return new DeadLetter

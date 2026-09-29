@@ -47,7 +47,7 @@ public static class TraxJsonSerializationOptions
     /// These options can be modified if needed, but changing them may affect the
     /// behavior of components that rely on the default configuration.
     /// </remarks>
-    public static JsonSerializerOptions Default { get; set; } =
+    public static JsonSerializerOptions Default { get; internal set; } =
         new()
         {
             WriteIndented = true,
@@ -70,7 +70,7 @@ public static class TraxJsonSerializationOptions
     /// Identical to <see cref="Default"/> but without <see cref="ReferenceHandler.Preserve"/>,
     /// producing clean JSON without $id/$ref/$values noise.
     /// </summary>
-    public static JsonSerializerOptions ManifestProperties { get; set; } =
+    public static JsonSerializerOptions ManifestProperties { get; internal set; } =
         new()
         {
             WriteIndented = true,
@@ -95,7 +95,7 @@ public static class TraxJsonSerializationOptions
     /// rather than preserved, depth capped at 8, and any <see cref="IDisposable"/> written as a placeholder by
     /// <see cref="DisposableConverter"/>. Process-wide and settable; replacing it affects every junction logger.
     /// </summary>
-    public static JsonSerializerOptions JunctionLogging { get; set; } =
+    public static JsonSerializerOptions JunctionLogging { get; internal set; } =
         new()
         {
             WriteIndented = false,

@@ -8,7 +8,7 @@ namespace Trax.Effect.Models.Log;
 /// The shape of a row in <c>trax.log</c>. Infrastructure implemented only by <see cref="Log"/>;
 /// not intended to be used directly: query <see cref="Log"/> instead.
 /// </summary>
-public interface ILog : IModel
+internal interface ILog : IModel
 {
     /// <summary>Database-generated primary key; its order is the only time axis the table has.</summary>
     [Column("id")]

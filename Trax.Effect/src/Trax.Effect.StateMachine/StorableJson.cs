@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -11,12 +12,14 @@ namespace Trax.Effect.StateMachine;
 /// refuses both as <c>malformed</c>, and the persistence layer checks an advance's result the same way
 /// before it writes, so a stored draft always serializes and always loads.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class StorableJson
 {
     /// <summary>
     /// Returns a message naming the first value that cannot be stored, or <c>null</c> when every value
     /// in <paramref name="node"/> can. Never throws.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static string? Problem(JsonNode? node)
     {
         try

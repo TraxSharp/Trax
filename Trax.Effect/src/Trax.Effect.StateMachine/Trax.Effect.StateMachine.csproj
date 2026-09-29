@@ -6,4 +6,8 @@
     <Description>Portable, resumable snapshot state-machine engine. Pure, dependency-free: represents a multi-step flow's state as language-neutral JSON so a C# backend and a TypeScript client agree on it, with illegal (state, context) pairs unrepresentable and every operation total.</Description>
     <AssemblyName>Trax.Effect.StateMachine</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Tests" />
+  </ItemGroup>
 </Project>

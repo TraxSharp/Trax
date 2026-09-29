@@ -1,8 +1,11 @@
+using System.ComponentModel;
+
 namespace Trax.Effect.Models.BackgroundJob.DTOs;
 
 /// <summary>
 /// Data transfer object for creating a new BackgroundJob entry.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public class CreateBackgroundJob
 {
     /// <summary>

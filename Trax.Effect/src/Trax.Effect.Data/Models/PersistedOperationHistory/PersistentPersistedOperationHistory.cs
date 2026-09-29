@@ -7,7 +7,7 @@ namespace Trax.Effect.Data.Models.PersistedOperationHistory;
 /// EF Core configuration for
 /// <see cref="Trax.Effect.Models.PersistedOperationHistory.PersistedOperationHistory"/>.
 /// </summary>
-public class PersistentPersistedOperationHistory : BaseModel
+internal class PersistentPersistedOperationHistory : BaseModel
 {
     /// <summary>
     /// Apply EF Core mapping for <see cref="BaseModel"/>. Public because

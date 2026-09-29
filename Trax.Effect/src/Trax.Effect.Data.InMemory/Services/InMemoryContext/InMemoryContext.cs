@@ -32,5 +32,5 @@ namespace Trax.Effect.Data.InMemory.Services.InMemoryContext;
 /// so this implementation is not suitable for production scenarios where data persistence
 /// is required.
 /// </remarks>
-public class InMemoryContext(DbContextOptions<InMemoryContext> options)
+internal class InMemoryContext(DbContextOptions<InMemoryContext> options)
     : DataContext<InMemoryContext>(options) { }

@@ -8,4 +8,4 @@ namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
 /// resolves it: <c>AddDataContextLogging</c> registers the implementation as an
 /// <see cref="ILoggerProvider"/>. Not intended for direct use.
 /// </summary>
-public interface IDataContextLoggingProvider : ILoggerProvider { }
+internal interface IDataContextLoggingProvider : ILoggerProvider { }

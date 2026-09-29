@@ -10,4 +10,8 @@
   <ItemGroup>
     <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Integration" />
+  </ItemGroup>
 </Project>

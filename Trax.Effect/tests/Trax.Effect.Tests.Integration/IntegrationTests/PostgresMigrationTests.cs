@@ -140,7 +140,7 @@ public class PostgresMigrationTests
             await Seed("dispatched-recent", "dispatched", "1 hour");
             await Seed("dispatched-old", "dispatched", "10 days");
 
-            var assembly = typeof(Trax.Effect.Data.Postgres.AssemblyMarker).Assembly;
+            var assembly = typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly;
             var to041 = DeployChanges
                 .To.PostgresqlDatabase(connectionString)
                 .JournalToPostgresqlTable("trax", "migrations")
@@ -228,7 +228,7 @@ public class PostgresMigrationTests
                 .To.PostgresqlDatabase(connectionString)
                 .JournalToPostgresqlTable("trax", "migrations")
                 .WithScriptsEmbeddedInAssembly(
-                    typeof(Trax.Effect.Data.Postgres.AssemblyMarker).Assembly,
+                    typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly,
                     name => MigrationNumber(name) <= 40
                 )
                 .LogToNowhere()
@@ -248,7 +248,7 @@ public class PostgresMigrationTests
 
     private static async Task<string> ReadMigration041()
     {
-        var assembly = typeof(Trax.Effect.Data.Postgres.AssemblyMarker).Assembly;
+        var assembly = typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly;
         var resource = assembly
             .GetManifestResourceNames()
             .Single(name => name.EndsWith("041_work_queue_confirmed_at.sql"));

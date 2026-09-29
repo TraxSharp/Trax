@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text.Json.Nodes;
 
 namespace Trax.Effect.StateMachine;
@@ -12,9 +13,11 @@ namespace Trax.Effect.StateMachine;
 /// <para>This lives in the core engine (not the test-only package) so a running host can replay a committed
 /// corpus at startup as a self-check, the same proof the differential test runs in CI.</para>
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class CorpusReplay
 {
     /// <summary>Replay a committed golden through <paramref name="machine"/>; empty result == exact agreement.</summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static IReadOnlyList<string> Replay<TState, TTrigger>(
         SnapshotMachine<TState, TTrigger> machine,
         string goldenJson

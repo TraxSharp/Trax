@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -111,6 +112,7 @@ public class Log : ILog
     /// refuses) and truncating each text field to its limit without splitting a surrogate pair.
     /// </summary>
     /// <param name="createLog">The logging call's values.</param>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static Log Create(CreateLog createLog)
     {
         var newLog = new Log()

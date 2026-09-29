@@ -69,7 +69,7 @@ public static class TestTurnstile
         Definition
     );
 
-    public static SnapshotDraftService<TurnstileState, TurnstileTrigger> Service(
+    internal static SnapshotDraftService<TurnstileState, TurnstileTrigger> Service(
         ISnapshotStore store
     ) => new(Machine, store);
 

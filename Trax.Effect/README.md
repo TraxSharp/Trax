@@ -67,7 +67,7 @@ Then any of the optional providers:
 | `Trax.Effect.Data.Testing` | | Data-layer architecture guards for your own test suite |
 | `Trax.Effect.StateMachine.Testing` | | Replays a differential corpus to prove the C# and TypeScript engines agree |
 
-You rarely install `Trax.Effect.Data` directly: every data provider depends on it. `Trax.Effect.Tests.ArrayLogger` is a test helper, an in-memory `ILoggerProvider` for asserting on logs.
+You rarely install `Trax.Effect.Data` directly: every data provider depends on it.
 
 ## Setup
 

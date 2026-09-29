@@ -12,7 +12,7 @@ namespace Trax.Effect.Extensions;
 /// particularly using the Aggregate pattern to process collections sequentially
 /// while maintaining proper error handling and state management.
 /// </remarks>
-public static class EnumerableExtensions
+internal static class EnumerableExtensions
 {
     /// <summary>
     /// Executes an action on each element in the collection, ensuring all elements are processed

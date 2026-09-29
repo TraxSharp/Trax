@@ -1,25 +1,5 @@
-namespace Trax.Effect.Data
-{
-    public class AssemblyMarker
-    {
-        public AssemblyMarker() { }
-    }
-}
-namespace Trax.Effect.Data.Enums
-{
-    public enum EvaluationStrategy
-    {
-        Eager = 0,
-        Lazy = 1,
-    }
-}
 namespace Trax.Effect.Data.Extensions
 {
-    public static class ModelBuilderExtensions
-    {
-        public static Microsoft.EntityFrameworkCore.ModelBuilder ApplyEntityOnModelCreating(this Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
-        public static Microsoft.EntityFrameworkCore.ModelBuilder ApplyUtcDateTimeConverter(this Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
-    }
     public static class ServiceExtensions
     {
         public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDataContextLogging(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder, Microsoft.Extensions.Logging.LogLevel? minimumLogLevel = default, System.Collections.Generic.List<string>? blacklist = null) { }
@@ -41,85 +21,9 @@ namespace Trax.Effect.Data.Junctions.CommitTransaction
         public override System.Threading.Tasks.Task<LanguageExt.Unit> Run(LanguageExt.Unit input) { }
     }
 }
-namespace Trax.Effect.Data.Models.BackgroundJob
-{
-    public class PersistentBackgroundJob : Trax.Effect.Models.BackgroundJob.BackgroundJob
-    {
-        public PersistentBackgroundJob() { }
-    }
-}
-namespace Trax.Effect.Data.Models.DeadLetter
-{
-    public class PersistentDeadLetter : Trax.Effect.Models.DeadLetter.DeadLetter
-    {
-        public PersistentDeadLetter() { }
-    }
-}
 namespace Trax.Effect.Data.Models
 {
     public interface IEntityReference { }
-}
-namespace Trax.Effect.Data.Models.Log
-{
-    public class PersistentLog : Trax.Effect.Models.Log.Log
-    {
-        public PersistentLog() { }
-    }
-}
-namespace Trax.Effect.Data.Models.Manifest
-{
-    public class PersistentManifest : Trax.Effect.Models.Manifest.Manifest
-    {
-        public PersistentManifest() { }
-    }
-}
-namespace Trax.Effect.Data.Models.ManifestGroup
-{
-    public class PersistentManifestGroup : Trax.Effect.Models.ManifestGroup.ManifestGroup
-    {
-        public PersistentManifestGroup() { }
-    }
-}
-namespace Trax.Effect.Data.Models.Metadata
-{
-    public class PersistentMetadata : Trax.Effect.Models.Metadata.Metadata
-    {
-        public PersistentMetadata() { }
-    }
-}
-namespace Trax.Effect.Data.Models.PersistedOperation
-{
-    public class PersistentPersistedOperation : Trax.Effect.Models.PersistedOperation.PersistedOperation
-    {
-        public PersistentPersistedOperation() { }
-        public static void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
-    }
-}
-namespace Trax.Effect.Data.Models.PersistedOperationHistory
-{
-    public class PersistentPersistedOperationHistory : Trax.Effect.Models.PersistedOperationHistory.PersistedOperationHistory
-    {
-        public PersistentPersistedOperationHistory() { }
-        public static void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
-    }
-}
-namespace Trax.Effect.Data.Models.RunnerNonce
-{
-    public class PersistentRunnerNonce : Trax.Effect.Models.RunnerNonce.RunnerNonce
-    {
-        public PersistentRunnerNonce() { }
-    }
-}
-namespace Trax.Effect.Data.Models.SchedulerConfig
-{
-    public class PersistentSchedulerConfig : Trax.Effect.Models.SchedulerConfig.SchedulerConfig
-    {
-        public PersistentSchedulerConfig() { }
-    }
-}
-namespace Trax.Effect.Data.Models.WorkQueue
-{
-    public class PersistentWorkQueue : Trax.Effect.Models.WorkQueue.WorkQueue { }
 }
 namespace Trax.Effect.Data.Services.DataContext
 {
@@ -186,7 +90,7 @@ namespace Trax.Effect.Data.Services.DataContextLoggingProvider
         public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) { }
         public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, System.Exception? exception, System.Func<TState, System.Exception?, string> formatter) { }
     }
-    public class DataContextLoggingProvider : Microsoft.Extensions.Logging.ILoggerProvider, System.IDisposable, Trax.Effect.Data.Services.DataContextLoggingProvider.IDataContextLoggingProvider
+    public class DataContextLoggingProvider : Microsoft.Extensions.Logging.ILoggerProvider, System.IDisposable
     {
         public DataContextLoggingProvider(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dbContextFactory, Trax.Effect.Data.Services.DataContextLoggingProvider.IDataContextLoggingProviderConfiguration configuration) { }
         public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) { }
@@ -198,7 +102,6 @@ namespace Trax.Effect.Data.Services.DataContextLoggingProvider
         public System.Collections.Generic.List<string> Blacklist { get; set; }
         public Microsoft.Extensions.Logging.LogLevel MinimumLogLevel { get; set; }
     }
-    public interface IDataContextLoggingProvider : Microsoft.Extensions.Logging.ILoggerProvider, System.IDisposable { }
     public interface IDataContextLoggingProviderConfiguration
     {
         System.Collections.Generic.List<string> Blacklist { get; }
@@ -207,13 +110,6 @@ namespace Trax.Effect.Data.Services.DataContextLoggingProvider
 }
 namespace Trax.Effect.Data.Services.DataContextTransaction
 {
-    public class DataContextTransaction : System.IDisposable, Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction
-    {
-        public DataContextTransaction(Trax.Effect.Data.Services.DataContext.IDataContext db, Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction tx) { }
-        public System.Threading.Tasks.Task Commit() { }
-        public void Dispose() { }
-        public System.Threading.Tasks.Task Rollback() { }
-    }
     public interface IDataContextTransaction : System.IDisposable
     {
         System.Threading.Tasks.Task Commit();

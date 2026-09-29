@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace Trax.Effect.Models.Metadata.DTOs;
 
 /// <summary>
@@ -5,6 +7,7 @@ namespace Trax.Effect.Models.Metadata.DTOs;
 /// by service trains, the mediator and the scheduler to pre-create a run; not intended to be used
 /// directly.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public class CreateMetadata
 {
     /// <summary>

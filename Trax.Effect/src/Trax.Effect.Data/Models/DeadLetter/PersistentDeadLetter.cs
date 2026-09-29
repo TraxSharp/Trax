@@ -7,7 +7,7 @@ namespace Trax.Effect.Data.Models.DeadLetter;
 /// indexed on the manifest id, with a restricting foreign key to its manifest. Infrastructure applied by the data context; not intended for direct use. Query the rows
 /// through <c>IDataContext</c>.
 /// </summary>
-public class PersistentDeadLetter : Effect.Models.DeadLetter.DeadLetter
+internal class PersistentDeadLetter : Effect.Models.DeadLetter.DeadLetter
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {

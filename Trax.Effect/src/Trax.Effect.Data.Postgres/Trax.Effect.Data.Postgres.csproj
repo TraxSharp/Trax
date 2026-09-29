@@ -25,4 +25,8 @@
     <PackageReference Include="dbup-core" />
     <PackageReference Include="dbup-postgresql" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Integration" />
+  </ItemGroup>
 </Project>

@@ -9,7 +9,7 @@ namespace Trax.Effect.Data.Sqlite.Services.SqliteContext;
 /// remaps JSONB columns to TEXT, and applies UTC DateTime conversion.
 /// Infrastructure registered by <c>UseSqlite</c>; not intended to be constructed directly.
 /// </summary>
-public class SqliteContext(DbContextOptions<SqliteContext> options)
+internal class SqliteContext(DbContextOptions<SqliteContext> options)
     : DataContext<SqliteContext>(options)
 {
     /// <summary>

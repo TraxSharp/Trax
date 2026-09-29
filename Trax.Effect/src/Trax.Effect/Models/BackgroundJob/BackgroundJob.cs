@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -74,6 +75,7 @@ public class BackgroundJob : IModel
     /// <summary>
     /// Creates a new BackgroundJob ready for enqueue.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static BackgroundJob Create(CreateBackgroundJob dto)
     {
         return new BackgroundJob

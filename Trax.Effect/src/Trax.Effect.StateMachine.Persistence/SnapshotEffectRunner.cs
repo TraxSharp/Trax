@@ -43,7 +43,7 @@ public interface ISnapshotEffectRunner
 /// </summary>
 /// <typeparam name="TState">The machine's state enum.</typeparam>
 /// <typeparam name="TTrigger">The machine's trigger enum.</typeparam>
-public sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRunner
+internal sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRunner
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {

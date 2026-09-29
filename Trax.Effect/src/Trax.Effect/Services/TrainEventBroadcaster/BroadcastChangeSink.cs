@@ -14,7 +14,7 @@ namespace Trax.Effect.Services.TrainEventBroadcaster;
 /// originated it (which already delivered the signal to its own subscribers in-process).
 /// Registered by <c>UseBroadcaster()</c>.
 /// </summary>
-public sealed class BroadcastChangeSink : IChangeSignalSink
+internal sealed class BroadcastChangeSink : IChangeSignalSink
 {
     private static readonly string? LocalExecutor = Assembly
         .GetEntryAssembly()

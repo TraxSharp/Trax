@@ -21,7 +21,7 @@ namespace Trax.Effect.StateMachine;
 /// <para>Infrastructure behind <c>Context&lt;T&gt;()</c> and <c>WithInput&lt;T&gt;()</c>; not intended to be
 /// called directly.</para>
 /// </summary>
-public static class SchemaReflection
+internal static class SchemaReflection
 {
     /// <summary>Builds the schema for <typeparamref name="T"/>; see <see cref="For(Type)"/>.</summary>
     public static ContextSchema For<T>() => For(typeof(T));

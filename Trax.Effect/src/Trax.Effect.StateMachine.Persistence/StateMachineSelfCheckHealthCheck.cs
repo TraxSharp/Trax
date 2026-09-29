@@ -16,7 +16,8 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// Infrastructure registered by <see cref="StateMachineHealthCheckExtensions.AddTraxStateMachineSelfCheck"/>;
 /// not intended to be constructed directly.
 /// </summary>
-public sealed class StateMachineSelfCheckHealthCheck(IEnumerable<IMachine> machines) : IHealthCheck
+internal sealed class StateMachineSelfCheckHealthCheck(IEnumerable<IMachine> machines)
+    : IHealthCheck
 {
     /// <summary>
     /// Replays every machine's corpus synchronously on each call and reports Healthy when none drifts, or

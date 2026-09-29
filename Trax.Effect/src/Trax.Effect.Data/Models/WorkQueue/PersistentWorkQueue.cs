@@ -5,7 +5,7 @@ namespace Trax.Effect.Data.Models.WorkQueue;
 /// <summary>
 /// Provides Entity Framework Core configuration for the WorkQueue model.
 /// </summary>
-public class PersistentWorkQueue : Effect.Models.WorkQueue.WorkQueue
+internal class PersistentWorkQueue : Effect.Models.WorkQueue.WorkQueue
 {
     // Holds the EF configuration and is never instantiated. Private so it is not a way around
     // WorkQueue.Create, which is the only way to build an entry that dispatches.

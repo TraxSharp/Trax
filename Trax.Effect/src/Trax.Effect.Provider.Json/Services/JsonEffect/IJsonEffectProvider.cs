@@ -19,4 +19,4 @@ namespace Trax.Effect.Provider.Json.Services.JsonEffect;
 /// IEffectProvider, but it establishes a distinct type that can be registered and
 /// resolved separately from other effect provider implementations.
 /// </remarks>
-public interface IJsonEffectProvider : IEffectProvider { }
+internal interface IJsonEffectProvider : IEffectProvider { }

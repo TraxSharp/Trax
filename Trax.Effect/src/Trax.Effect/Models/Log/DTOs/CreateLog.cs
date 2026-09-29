@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.Extensions.Logging;
 
 namespace Trax.Effect.Models.Log.DTOs;
@@ -6,6 +7,7 @@ namespace Trax.Effect.Models.Log.DTOs;
 /// One <c>ILogger</c> call, as <see cref="Log.Create"/> takes it. Infrastructure used by the
 /// data-context logger (<c>AddDataContextLogging</c>); not intended to be used directly.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public class CreateLog
 {
     /// <summary>The level the message was logged at.</summary>

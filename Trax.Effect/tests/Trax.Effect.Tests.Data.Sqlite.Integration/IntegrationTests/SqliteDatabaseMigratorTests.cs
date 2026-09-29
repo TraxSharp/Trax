@@ -79,7 +79,7 @@ public class SqliteDatabaseMigratorTests
             var upTo006 = DeployChanges
                 .To.SqliteDatabase(connectionString)
                 .WithScriptsEmbeddedInAssembly(
-                    typeof(Trax.Effect.Data.Sqlite.AssemblyMarker).Assembly,
+                    typeof(Trax.Effect.Data.Sqlite.Utils.DatabaseMigrator).Assembly,
                     name => MigrationNumber(name) <= 6
                 )
                 .LogToNowhere()

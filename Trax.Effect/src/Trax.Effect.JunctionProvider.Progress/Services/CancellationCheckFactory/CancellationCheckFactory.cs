@@ -11,7 +11,7 @@ namespace Trax.Effect.JunctionProvider.Progress.Services.CancellationCheckFactor
 /// registry key for the cancellation check. Not intended for direct use.
 /// </summary>
 /// <param name="serviceProvider">The provider the cancellation check is resolved from.</param>
-public class CancellationCheckFactory(IServiceProvider serviceProvider)
+internal class CancellationCheckFactory(IServiceProvider serviceProvider)
     : IJunctionEffectProviderFactory
 {
     /// <inheritdoc/>

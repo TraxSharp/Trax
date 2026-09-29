@@ -6,7 +6,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Configuration;
 /// Built, immutable configuration for the SignalR sink.
 /// Produced by <see cref="SignalRSinkOptions.SignalRSinkOptions.Build"/> and registered as a singleton.
 /// </summary>
-public sealed class SignalRSinkConfiguration
+internal sealed class SignalRSinkConfiguration
 {
     internal SignalRSinkConfiguration(
         IReadOnlySet<string> eventTypeFilter,

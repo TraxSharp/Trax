@@ -12,7 +12,7 @@ namespace Trax.Effect.Services.JunctionEffectRunner;
 /// Default <see cref="IJunctionEffectRunner"/>, registered as transient so each train run gets its own providers.
 /// Infrastructure; not intended to be constructed or called directly.
 /// </summary>
-public class JunctionEffectRunner : IJunctionEffectRunner
+internal class JunctionEffectRunner : IJunctionEffectRunner
 {
     private List<IJunctionEffectProvider> ActiveJunctionEffectProviders { get; init; }
 

@@ -25,7 +25,7 @@ public class TraxEffectConfiguration : ITraxEffectConfiguration
     /// <see cref="Type"/>: a model logged before anything was configured made its
     /// <c>ToString()</c> throw.
     /// </remarks>
-    public static JsonSerializerOptions StaticSystemJsonSerializerOptions { get; set; } =
+    public static JsonSerializerOptions StaticSystemJsonSerializerOptions { get; internal set; } =
         TraxJsonSerializationOptions.Default;
 
     /// <inheritdoc/>

@@ -206,11 +206,6 @@ namespace Trax.Effect.StateMachine
         public required int Version { get; init; }
         public Trax.Effect.StateMachine.Snapshot CreateInitialSnapshot() { }
     }
-    public static class MemberPath
-    {
-        public static string Of<T, TField>(System.Linq.Expressions.Expression<System.Func<T, TField>> selector) { }
-        public static string ToJsonName(string memberName) { }
-    }
     public sealed class MigrationResult : System.IEquatable<Trax.Effect.StateMachine.MigrationResult>
     {
         public MigrationResult(string State, System.Text.Json.Nodes.JsonObject Context) { }
@@ -382,15 +377,6 @@ namespace Trax.Effect.StateMachine
         public static Trax.Effect.StateMachine.Reduction Keep() { }
         public static Trax.Effect.StateMachine.Reduction Reset() { }
         public static Trax.Effect.StateMachine.SetBuilder Set<TContext, TField>(System.Linq.Expressions.Expression<System.Func<TContext, TField>> field) { }
-    }
-    public static class SchemaReflection
-    {
-        public static Trax.Effect.StateMachine.ContextSchema For(System.Type contextType) { }
-        public static Trax.Effect.StateMachine.ContextSchema For<T>() { }
-    }
-    public static class SchemaValidator
-    {
-        public static string? Validate(Trax.Effect.StateMachine.ContextSchema schema, System.Text.Json.Nodes.JsonObject context) { }
     }
     public sealed class SetBuilder
     {

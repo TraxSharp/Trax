@@ -26,10 +26,6 @@ namespace Trax.Effect.Provider.Parameter.Extensions
 }
 namespace Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory
 {
-    public interface IParameterEffectProviderFactory : Trax.Effect.Services.EffectProviderFactory.IConfigurableEffectProviderFactory<Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration>, Trax.Effect.Services.EffectProviderFactory.IConfigurableProviderFactory, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
-    {
-        System.Collections.Generic.List<Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory.ParameterEffect> Providers { get; }
-    }
     public class ParameterEffect : System.IDisposable, Trax.Effect.Services.EffectProvider.IEffectProvider
     {
         public ParameterEffect(System.Text.Json.JsonSerializerOptions options, Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration configuration) { }
@@ -38,7 +34,7 @@ namespace Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory
         public System.Threading.Tasks.Task Track(Trax.Effect.Models.IModel model) { }
         public System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model) { }
     }
-    public class ParameterEffectProviderFactory : Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory.IParameterEffectProviderFactory, Trax.Effect.Services.EffectProviderFactory.IConfigurableEffectProviderFactory<Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration>, Trax.Effect.Services.EffectProviderFactory.IConfigurableProviderFactory, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
+    public class ParameterEffectProviderFactory : Trax.Effect.Services.EffectProviderFactory.IConfigurableEffectProviderFactory<Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration>, Trax.Effect.Services.EffectProviderFactory.IConfigurableProviderFactory, Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
     {
         public ParameterEffectProviderFactory(Trax.Effect.Configuration.TraxEffectConfiguration.ITraxEffectConfiguration configuration, Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration effectConfiguration) { }
         public Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration Configuration { get; }

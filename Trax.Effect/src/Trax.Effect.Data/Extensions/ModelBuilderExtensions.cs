@@ -20,7 +20,7 @@ namespace Trax.Effect.Data.Extensions;
 /// By using these extensions, the system can maintain a clean separation of concerns
 /// while ensuring consistent entity configuration across different database implementations.
 /// </remarks>
-public static class ModelBuilderExtensions
+internal static class ModelBuilderExtensions
 {
     /// <summary>
     /// Applies entity configurations from all model classes in the assembly.

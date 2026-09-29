@@ -11,7 +11,7 @@ namespace Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerFactory;
 /// enabling or disabling the junction logger in the effect registry. Not intended for direct use.
 /// </summary>
 /// <param name="serviceProvider">The provider the junction logger is resolved from.</param>
-public class JunctionLoggerFactory(IServiceProvider serviceProvider)
+internal class JunctionLoggerFactory(IServiceProvider serviceProvider)
     : IJunctionEffectProviderFactory
 {
     /// <inheritdoc/>

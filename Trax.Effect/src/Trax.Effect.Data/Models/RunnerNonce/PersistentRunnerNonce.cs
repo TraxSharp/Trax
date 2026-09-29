@@ -8,7 +8,7 @@ namespace Trax.Effect.Data.Models.RunnerNonce;
 /// Mirrors the <see cref="Trax.Effect.Data.Models.PersistedOperation.PersistentPersistedOperation"/>
 /// pattern: a feature package's table, keyed by a string, mapped on the core data context.
 /// </summary>
-public class PersistentRunnerNonce : BaseModel
+internal class PersistentRunnerNonce : BaseModel
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {

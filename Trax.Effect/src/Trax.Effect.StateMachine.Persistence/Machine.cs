@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Effect.StateMachine.Persistence;
@@ -51,6 +52,7 @@ public interface IMachine
     );
 
     /// <summary>Build the exactly-once effect runner (resolving the effect from the container), or null if none.</summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     ISnapshotEffectRunner? CreateEffectRunner(
         ISnapshotDraftService service,
         IdempotentEffect idempotent,
@@ -183,6 +185,7 @@ public abstract class Machine<TState, TTrigger> : IMachine
     /// <param name="services">The container the effect is resolved from; the effect must be registered.</param>
     /// <exception cref="InvalidCastException"><paramref name="service"/> was not created by this machine.</exception>
     /// <exception cref="InvalidOperationException">The effect type is not registered in <paramref name="services"/>.</exception>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public ISnapshotEffectRunner? CreateEffectRunner(
         ISnapshotDraftService service,
         IdempotentEffect idempotent,

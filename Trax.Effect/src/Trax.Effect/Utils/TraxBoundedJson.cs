@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 
@@ -7,11 +8,13 @@ namespace Trax.Effect.Utils;
 /// Serializes a train's input or output under a byte ceiling, the way every copy of a parameter
 /// that Trax keeps or hands on is bounded.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class TraxBoundedJson
 {
     /// <summary>
     /// The JSON written in place of a value whose serialization crossed <paramref name="maxBytes"/>.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static string TruncatedPlaceholder(int maxBytes) =>
         $$"""{"_truncated": true, "_maxBytes": {{maxBytes}}}""";
 
@@ -28,6 +31,7 @@ public static class TraxBoundedJson
     /// polymorphically. A value System.Text.Json cannot represent still throws
     /// <see cref="JsonException"/> or <see cref="NotSupportedException"/>.
     /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static string Serialize(object value, JsonSerializerOptions options, int? maxBytes)
     {
         ArgumentNullException.ThrowIfNull(value);

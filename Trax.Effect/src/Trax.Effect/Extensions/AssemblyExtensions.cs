@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection;
 
 namespace Trax.Effect.Extensions;
@@ -11,6 +12,7 @@ namespace Trax.Effect.Extensions;
 /// for identifying the source of trains and tracking their execution across
 /// different assemblies in a modular application.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class AssemblyExtensions
 {
     /// <summary>
@@ -28,6 +30,7 @@ public static class AssemblyExtensions
     /// In the Trax.Effect system, this is used to identify the source of trains
     /// in the metadata tracking system, allowing for filtering and analysis by project.
     /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static string GetAssemblyProject(this Assembly assembly)
     {
         if (assembly.FullName is null)

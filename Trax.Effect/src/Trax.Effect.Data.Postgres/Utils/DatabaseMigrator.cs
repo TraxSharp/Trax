@@ -24,7 +24,7 @@ namespace Trax.Effect.Data.Postgres.Utils;
 /// This class is typically used when the application starts up to ensure that
 /// the database schema is compatible with the current version of the application.
 /// </remarks>
-public class DatabaseMigrator
+public static class DatabaseMigrator
 {
     /// <summary>
     /// Creates a DbUp upgrade engine configured with embedded SQL scripts.

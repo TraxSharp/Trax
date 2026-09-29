@@ -8,7 +8,7 @@ using System.Text.Json.Serialization;
 /// so a junction output holding a connection or stream can still be logged. Part of
 /// <see cref="TraxJsonSerializationOptions.JunctionLogging"/>; infrastructure not intended for direct use.
 /// </summary>
-public sealed class DisposableConverter : JsonConverter<object>
+internal sealed class DisposableConverter : JsonConverter<object>
 {
     /// <summary>
     /// <c>true</c> for any type assignable to <see cref="IDisposable"/>.

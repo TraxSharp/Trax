@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace Trax.Effect.Configuration.TraxEffectBuilder;
 
 /// <summary>
@@ -16,6 +18,7 @@ public class TraxEffectBuilderWithData : TraxEffectBuilder
     /// after a data provider has been registered.
     /// </summary>
     /// <param name="source">The effect builder to promote.</param>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public TraxEffectBuilderWithData(TraxEffectBuilder source)
         : base(source) { }
 }

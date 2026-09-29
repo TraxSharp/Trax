@@ -16,7 +16,7 @@ namespace Trax.Effect.Broadcaster.RabbitMQ;
 /// published transient and unmandatory: an event published while no receiver queue is bound is
 /// dropped by the broker.
 /// </remarks>
-public class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDisposable
+internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDisposable
 {
     private readonly RabbitMqBroadcasterOptions _options;
     private readonly ILogger<RabbitMqTrainEventBroadcaster>? _logger;

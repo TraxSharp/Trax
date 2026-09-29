@@ -14,12 +14,6 @@ namespace Trax.Effect.Broadcaster.RabbitMQ
         public string ExchangeName { get; set; }
         public ushort PrefetchCount { get; set; }
     }
-    public class RabbitMqTrainEventBroadcaster : System.IAsyncDisposable, Trax.Effect.Services.TrainEventBroadcaster.ITrainEventBroadcaster
-    {
-        public RabbitMqTrainEventBroadcaster(Trax.Effect.Broadcaster.RabbitMQ.RabbitMqBroadcasterOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Broadcaster.RabbitMQ.RabbitMqTrainEventBroadcaster>? logger = null) { }
-        public System.Threading.Tasks.ValueTask DisposeAsync() { }
-        public System.Threading.Tasks.Task PublishAsync(Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage message, System.Threading.CancellationToken ct) { }
-    }
     public class RabbitMqTrainEventReceiver : System.IAsyncDisposable, Trax.Effect.Services.TrainEventBroadcaster.ITrainEventReceiver
     {
         public RabbitMqTrainEventReceiver(Trax.Effect.Broadcaster.RabbitMQ.RabbitMqBroadcasterOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Broadcaster.RabbitMQ.RabbitMqTrainEventReceiver>? logger = null) { }

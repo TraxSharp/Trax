@@ -15,7 +15,7 @@ namespace Trax.Effect.Data.Models.Manifest;
 /// 2. Primary key configuration with auto-generation
 /// 3. JSONB column type for the Properties column
 /// </remarks>
-public class PersistentManifest : Effect.Models.Manifest.Manifest
+internal class PersistentManifest : Effect.Models.Manifest.Manifest
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {

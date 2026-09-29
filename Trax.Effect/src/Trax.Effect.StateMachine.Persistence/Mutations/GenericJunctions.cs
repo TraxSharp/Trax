@@ -33,7 +33,7 @@ internal static class SnapshotGuards
 }
 
 /// <summary>Autosave (soft path): validate + store a client snapshot for any registered machine. Infrastructure chained by <see cref="SaveSnapshot"/>; not intended to be called directly.</summary>
-public class SaveSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
+internal class SaveSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
     : Junction<SaveSnapshotInput, SaveSnapshotOutput>
 {
     /// <summary>
@@ -79,7 +79,7 @@ public class SaveSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPr
 }
 
 /// <summary>Authoritative advance: re-drive the stored draft by one trigger, server-side. Infrastructure chained by <see cref="AdvanceSnapshot"/>; not intended to be called directly.</summary>
-public class AdvanceSnapshotJunction(
+internal class AdvanceSnapshotJunction(
     ISnapshotMachineRegistry registry,
     ISnapshotPrincipal principal
 ) : Junction<AdvanceSnapshotInput, AdvanceSnapshotOutput>
@@ -167,7 +167,7 @@ public class AdvanceSnapshotJunction(
 }
 
 /// <summary>Resume read: load the caller's stored draft. A missing draft is normal (start fresh), not an error. Infrastructure chained by <see cref="LoadSnapshot"/>; not intended to be called directly.</summary>
-public class LoadSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
+internal class LoadSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
     : Junction<LoadSnapshotInput, LoadSnapshotOutput>
 {
     /// <summary>
@@ -210,7 +210,7 @@ public class LoadSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPr
 }
 
 /// <summary>Run a machine's one irreversible effect exactly once (state-gated, idempotent). Infrastructure chained by <see cref="SendSnapshot"/>; not intended to be called directly.</summary>
-public class SendSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
+internal class SendSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
     : Junction<SendSnapshotInput, SendSnapshotOutput>
 {
     /// <summary>

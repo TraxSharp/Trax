@@ -99,7 +99,7 @@ public static class StressOrder
 
     public static string EffectKey(string userKey, Guid id) => $"order:place:{userKey}:{id}";
 
-    public static SnapshotDraftService<OrderState, OrderTrigger> Service(
+    internal static SnapshotDraftService<OrderState, OrderTrigger> Service(
         ISnapshotStore store,
         IEffectClaimStore? claims = null
     ) =>

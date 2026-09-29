@@ -11,7 +11,7 @@ namespace Trax.Effect.Services.LifecycleHookRunner;
 /// Exceptions in individual hooks are caught and logged — a failing hook never causes
 /// the train itself to fail.
 /// </summary>
-public class LifecycleHookRunner : ILifecycleHookRunner
+internal class LifecycleHookRunner : ILifecycleHookRunner
 {
     private readonly List<ITrainLifecycleHook> _hooks;
     private readonly ILogger<LifecycleHookRunner>? _logger;

@@ -30,26 +30,26 @@ public class PublicApiSurfaceTests
         yield return new TestCaseData(
             typeof(Trax.Effect.Configuration.TraxBuilder.TraxBuilder).Assembly
         ).SetName("Trax.Effect");
-        yield return new TestCaseData(typeof(Trax.Effect.Data.AssemblyMarker).Assembly).SetName(
-            "Trax.Effect.Data"
-        );
         yield return new TestCaseData(
-            typeof(Trax.Effect.Data.InMemory.Services.InMemoryContext.InMemoryContext).Assembly
+            typeof(Trax.Effect.Data.Services.DataContext.IDataContext).Assembly
+        ).SetName("Trax.Effect.Data");
+        yield return new TestCaseData(
+            typeof(Trax.Effect.Data.InMemory.Services.InMemoryContextFactory.InMemoryContextProviderFactory).Assembly
         ).SetName("Trax.Effect.Data.InMemory");
         yield return new TestCaseData(
             typeof(Trax.Effect.Data.Postgres.Services.PostgresContext.PostgresContext).Assembly
         ).SetName("Trax.Effect.Data.Postgres");
         yield return new TestCaseData(
-            typeof(Trax.Effect.Data.Sqlite.Services.SqliteContext.SqliteContext).Assembly
+            typeof(Trax.Effect.Data.Sqlite.Utils.DatabaseMigrator).Assembly
         ).SetName("Trax.Effect.Data.Sqlite");
         yield return new TestCaseData(
             typeof(Trax.Effect.Data.Testing.DataLayerGuards).Assembly
         ).SetName("Trax.Effect.Data.Testing");
         yield return new TestCaseData(
-            typeof(Trax.Effect.Broadcaster.RabbitMQ.RabbitMqTrainEventBroadcaster).Assembly
+            typeof(Trax.Effect.Broadcaster.RabbitMQ.RabbitMqTrainEventReceiver).Assembly
         ).SetName("Trax.Effect.Broadcaster.RabbitMQ");
         yield return new TestCaseData(
-            typeof(Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkConfiguration).Assembly
+            typeof(Trax.Effect.Broadcaster.SignalR.Services.ITraxTrainEventClient).Assembly
         ).SetName("Trax.Effect.Broadcaster.SignalR");
         yield return new TestCaseData(
             typeof(Trax.Effect.JunctionProvider.Logging.Extensions.ServiceExtensions).Assembly

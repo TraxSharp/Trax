@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.EntityFrameworkCore;
 
 namespace Trax.Effect.Data.Services.FeatureDbConfigurator;
@@ -12,6 +13,7 @@ namespace Trax.Effect.Data.Services.FeatureDbConfigurator;
 /// <c>IDataContext</c>, so a feature sharing it would share the effect layer's change tracker. This seam lets
 /// a feature register a context on the same database but with its own tracker.</para>
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public interface ITraxFeatureDbConfigurator
 {
     /// <summary>Apply the provider and connection the host configured to <paramref name="options"/>.</summary>
@@ -24,6 +26,7 @@ public interface ITraxFeatureDbConfigurator
 /// provider. Infrastructure registered by the provider packages; not intended for direct use.
 /// </summary>
 /// <param name="configure">The provider call to apply, such as <c>o =&gt; o.UseNpgsql(dataSource)</c>.</param>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class DelegateFeatureDbConfigurator(Action<DbContextOptionsBuilder> configure)
     : ITraxFeatureDbConfigurator
 {

@@ -129,7 +129,6 @@ namespace Trax.Effect.Configuration.TraxBuilder
     }
     public class TraxBuilderWithEffects
     {
-        public TraxBuilderWithEffects(Trax.Effect.Configuration.TraxBuilder.TraxBuilder root) { }
         public bool HasDataProvider { get; }
         public bool HasDatabaseProvider { get; }
         public Trax.Effect.Configuration.TraxBuilder.TraxBuilder Root { get; }
@@ -174,7 +173,7 @@ namespace Trax.Effect.Configuration.TraxEffectConfiguration
         public Microsoft.Extensions.Logging.LogLevel LogLevel { get; set; }
         public bool SerializeJunctionData { get; set; }
         public System.Text.Json.JsonSerializerOptions SystemJsonSerializerOptions { get; set; }
-        public static System.Text.Json.JsonSerializerOptions StaticSystemJsonSerializerOptions { get; set; }
+        public static System.Text.Json.JsonSerializerOptions StaticSystemJsonSerializerOptions { get; }
     }
 }
 namespace Trax.Effect.Enums
@@ -225,17 +224,6 @@ namespace Trax.Effect.Extensions
     {
         public static TBuilder UseBroadcaster<TBuilder>(this TBuilder builder, System.Action<Trax.Effect.Configuration.BroadcasterBuilder.BroadcasterBuilder> configure)
             where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
-    }
-    public static class DisposableExtensions
-    {
-        public static bool IsDisposed(this System.IDisposable disposable) { }
-    }
-    public static class EnumerableExtensions
-    {
-        public static void RunAll<T>(this System.Collections.Generic.IEnumerable<T> source, System.Action<T> action) { }
-        public static System.Collections.Generic.List<TResult> RunAll<T, TResult>(this System.Collections.Generic.IEnumerable<T> source, System.Func<T, TResult> func) { }
-        public static System.Threading.Tasks.Task RunAllAsync<T>(this System.Collections.Generic.IEnumerable<T> source, System.Func<T, System.Threading.Tasks.Task> func) { }
-        public static System.Threading.Tasks.Task<System.Collections.Generic.List<TResult>> RunAllAsync<T, TResult>(this System.Collections.Generic.IEnumerable<T> source, System.Func<T, System.Threading.Tasks.Task<TResult>> func) { }
     }
     public static class ServiceExtensions
     {
@@ -385,7 +373,7 @@ namespace Trax.Effect.Models.Host
         public string HostInstanceId { get; init; }
         public string HostName { get; init; }
         public System.Collections.Generic.Dictionary<string, string> Labels { get; init; }
-        public static Trax.Effect.Models.Host.TraxHostInfo? Current { get; set; }
+        public static Trax.Effect.Models.Host.TraxHostInfo? Current { get; }
         public static Trax.Effect.Models.Host.TraxHostInfo AutoDetect() { }
     }
 }
@@ -462,19 +450,7 @@ namespace Trax.Effect.Models.Log.DTOs
 }
 namespace Trax.Effect.Models.Log
 {
-    public interface ILog : Trax.Effect.Models.IModel
-    {
-        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
-        new long Id { get; }
-        [System.ComponentModel.DataAnnotations.Schema.Column("level")]
-        Microsoft.Extensions.Logging.LogLevel Level { get; set; }
-        [System.ComponentModel.DataAnnotations.Schema.Column("message")]
-        string Message { get; set; }
-        [System.ComponentModel.DataAnnotations.Schema.Column("metadata_id")]
-        [System.Text.Json.Serialization.JsonInclude]
-        long MetadataId { get; }
-    }
-    public class Log : Trax.Effect.Models.IModel, Trax.Effect.Models.Log.ILog
+    public class Log : Trax.Effect.Models.IModel
     {
         [System.Text.Json.Serialization.JsonConstructor]
         public Log() { }
@@ -961,17 +937,13 @@ namespace Trax.Effect.Services.ChangeSignal
 }
 namespace Trax.Effect.Services.EffectJunction
 {
-    public abstract class EffectJunction<TIn, TOut> : Trax.Core.Junction.Junction<TIn, TOut>, Trax.Core.Junction.IJunction<TIn, TOut>, Trax.Effect.Services.EffectJunction.IEffectJunction<TIn, TOut>
+    public abstract class EffectJunction<TIn, TOut> : Trax.Core.Junction.Junction<TIn, TOut>, Trax.Core.Junction.IJunction<TIn, TOut>
     {
         protected EffectJunction() { }
         public Trax.Effect.Models.JunctionMetadata.JunctionMetadata? Metadata { get; }
         public override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(LanguageExt.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
         public System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(LanguageExt.Either<System.Exception, TIn> previousOutput, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain) { }
         public abstract override System.Threading.Tasks.Task<TOut> Run(TIn input) { }
-    }
-    public interface IEffectJunction<TIn, TOut> : Trax.Core.Junction.IJunction<TIn, TOut>
-    {
-        System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(LanguageExt.Either<System.Exception, TIn> previousOutput, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain);
     }
 }
 namespace Trax.Effect.Services.EffectProvider
@@ -1083,13 +1055,6 @@ namespace Trax.Effect.Services.JunctionEffectRunner
         System.Threading.Tasks.Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken);
         System.Threading.Tasks.Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken);
     }
-    public class JunctionEffectRunner : System.IDisposable, Trax.Effect.Services.JunctionEffectRunner.IJunctionEffectRunner
-    {
-        public JunctionEffectRunner(System.Collections.Generic.IEnumerable<Trax.Effect.Services.JunctionEffectProviderFactory.IJunctionEffectProviderFactory> junctionEffectProviderFactories, Trax.Effect.Services.EffectRegistry.IEffectRegistry effectRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.JunctionEffectRunner.JunctionEffectRunner>? logger = null) { }
-        public System.Threading.Tasks.Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
-        public System.Threading.Tasks.Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
-        public void Dispose() { }
-    }
 }
 namespace Trax.Effect.Services.LifecycleHookOutputPolicy
 {
@@ -1113,17 +1078,6 @@ namespace Trax.Effect.Services.LifecycleHookRunner
         System.Threading.Tasks.Task OnFailed(Trax.Effect.Models.Metadata.Metadata metadata, System.Exception exception, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task OnStarted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task OnStateChanged(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct);
-    }
-    public class LifecycleHookRunner : System.IDisposable, Trax.Effect.Services.LifecycleHookRunner.ILifecycleHookRunner
-    {
-        public LifecycleHookRunner(System.Collections.Generic.IEnumerable<Trax.Effect.Services.TrainLifecycleHookFactory.ITrainLifecycleHookFactory> hookFactories, Trax.Effect.Services.EffectRegistry.IEffectRegistry effectRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.LifecycleHookRunner.LifecycleHookRunner>? logger = null) { }
-        public LifecycleHookRunner(System.Collections.Generic.IEnumerable<Trax.Effect.Services.TrainLifecycleHookFactory.ITrainLifecycleHookFactory> hookFactories, Trax.Effect.Services.EffectRegistry.IEffectRegistry effectRegistry, System.IServiceProvider serviceProvider, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.LifecycleHookRunner.LifecycleHookRunner>? logger = null) { }
-        public void Dispose() { }
-        public System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
-        public System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
-        public System.Threading.Tasks.Task OnFailed(Trax.Effect.Models.Metadata.Metadata metadata, System.Exception exception, System.Threading.CancellationToken ct) { }
-        public System.Threading.Tasks.Task OnStarted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
-        public System.Threading.Tasks.Task OnStateChanged(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
     }
 }
 namespace Trax.Effect.Services.ServiceTrain
@@ -1176,20 +1130,6 @@ namespace Trax.Effect.Services.ServiceTrain
 }
 namespace Trax.Effect.Services.TrainEventBroadcaster
 {
-    public sealed class BroadcastChangeSink : Trax.Effect.Services.ChangeSignal.IChangeSignalSink
-    {
-        public BroadcastChangeSink(Trax.Effect.Services.TrainEventBroadcaster.ITrainEventBroadcaster broadcaster, System.TimeProvider timeProvider, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.TrainEventBroadcaster.BroadcastChangeSink>? logger = null) { }
-        public System.Threading.Tasks.Task FlushAsync(System.Collections.Generic.IReadOnlyCollection<Trax.Effect.Services.ChangeSignal.ChangeDomain> domains, System.Threading.CancellationToken ct) { }
-    }
-    public class BroadcastLifecycleHook : Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook
-    {
-        public BroadcastLifecycleHook(Trax.Effect.Services.TrainEventBroadcaster.ITrainEventBroadcaster broadcaster, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.TrainEventBroadcaster.BroadcastLifecycleHook>? logger = null) { }
-        public System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
-        public System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
-        public System.Threading.Tasks.Task OnFailed(Trax.Effect.Models.Metadata.Metadata metadata, System.Exception exception, System.Threading.CancellationToken ct) { }
-        public System.Threading.Tasks.Task OnStarted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
-        public System.Threading.Tasks.Task OnStateChanged(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
-    }
     public interface ITrainEventBroadcaster
     {
         System.Threading.Tasks.Task PublishAsync(Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage message, System.Threading.CancellationToken ct);
@@ -1269,19 +1209,6 @@ namespace Trax.Effect.Services.TrainLifecycleHookFactory
 }
 namespace Trax.Effect.Utils
 {
-    public sealed class DisposableConverter : System.Text.Json.Serialization.JsonConverter<object>
-    {
-        public DisposableConverter() { }
-        public override bool CanConvert(System.Type typeToConvert) { }
-        public override object Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
-        public override void Write(System.Text.Json.Utf8JsonWriter writer, object value, System.Text.Json.JsonSerializerOptions options) { }
-    }
-    public class SystemTypeConverter : System.Text.Json.Serialization.JsonConverter<System.Type>
-    {
-        public SystemTypeConverter() { }
-        public override System.Type? Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
-        public override void Write(System.Text.Json.Utf8JsonWriter writer, System.Type value, System.Text.Json.JsonSerializerOptions options) { }
-    }
     public static class TraxBoundedJson
     {
         public static string Serialize(object value, System.Text.Json.JsonSerializerOptions options, int? maxBytes) { }
@@ -1289,9 +1216,9 @@ namespace Trax.Effect.Utils
     }
     public static class TraxJsonSerializationOptions
     {
-        public static System.Text.Json.JsonSerializerOptions Default { get; set; }
-        public static System.Text.Json.JsonSerializerOptions JunctionLogging { get; set; }
-        public static System.Text.Json.JsonSerializerOptions ManifestProperties { get; set; }
+        public static System.Text.Json.JsonSerializerOptions Default { get; }
+        public static System.Text.Json.JsonSerializerOptions JunctionLogging { get; }
+        public static System.Text.Json.JsonSerializerOptions ManifestProperties { get; }
     }
     public static class TraxLogSerialization
     {
@@ -1303,11 +1230,5 @@ namespace Trax.Effect.Utils
         public const string MarkerProperty = "_redacted";
         public static bool ContainsRedaction(string json) { }
         public static System.Text.Json.JsonSerializerOptions WithRedaction(System.Text.Json.JsonSerializerOptions options) { }
-    }
-    public class ValueTupleConverter : System.Text.Json.Serialization.JsonConverterFactory
-    {
-        public ValueTupleConverter() { }
-        public override bool CanConvert(System.Type typeToConvert) { }
-        public override System.Text.Json.Serialization.JsonConverter? CreateConverter(System.Type type, System.Text.Json.JsonSerializerOptions options) { }
     }
 }

@@ -24,7 +24,7 @@ namespace Trax.Effect.Utils;
 /// The converter is registered in the TraxJsonSerializationOptions.Default
 /// options, making it available throughout the system.
 /// </remarks>
-public class ValueTupleConverter : JsonConverterFactory
+internal class ValueTupleConverter : JsonConverterFactory
 {
     /// <summary>
     /// Determines whether the converter can convert the specified type.

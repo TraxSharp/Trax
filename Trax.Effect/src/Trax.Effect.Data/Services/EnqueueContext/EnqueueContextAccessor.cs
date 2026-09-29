@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Trax.Effect.Data.Services.DataContext;
 
 namespace Trax.Effect.Data.Services.EnqueueContext;
@@ -9,6 +10,7 @@ namespace Trax.Effect.Data.Services.EnqueueContext;
 /// outer enqueue's context and transaction (Trax.Mediator docs/adr/0003); where there is none to
 /// join it sees its own for as long as it runs and hands the outer one back when it finishes.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public class EnqueueContextAccessor : IEnqueueContextAccessor
 {
     // Static so that every instance, whatever scope or lifetime resolved it, sees the enqueue

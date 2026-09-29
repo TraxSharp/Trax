@@ -6,7 +6,7 @@ namespace Trax.Effect.Data.Sqlite.Utils;
 /// <summary>
 /// Applies embedded SQL migrations to a SQLite database using DbUp.
 /// </summary>
-public class DatabaseMigrator
+public static class DatabaseMigrator
 {
     /// <remarks>
     /// Each script runs in its own transaction, together with its journal row. SQLite has no

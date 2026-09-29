@@ -9,7 +9,7 @@ namespace Trax.Effect.Data.Models.Metadata;
 /// with its input, output and host labels stored as <c>jsonb</c> and restricting foreign keys to its parent metadata and its manifest. Infrastructure applied by the data context; not intended for direct use. Query the rows
 /// through <c>IDataContext</c>.
 /// </summary>
-public class PersistentMetadata : Effect.Models.Metadata.Metadata
+internal class PersistentMetadata : Effect.Models.Metadata.Metadata
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {

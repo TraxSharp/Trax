@@ -6,4 +6,4 @@ namespace Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider;
 /// Service key for the junction logger, so <see cref="JunctionLoggerFactory.JunctionLoggerFactory"/> can
 /// resolve it. Infrastructure registered by <c>AddJunctionLogger</c>; not intended for direct use.
 /// </summary>
-public interface IJunctionLoggerProvider : IJunctionEffectProvider { }
+internal interface IJunctionLoggerProvider : IJunctionEffectProvider { }

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection;
 
 namespace Trax.Effect.Attributes;
@@ -16,6 +17,7 @@ namespace Trax.Effect.Attributes;
 /// Full names of authorization attributes from another framework found on the same member. Trax
 /// does not read them, and a surface carrying one has not declared a posture Trax can enforce.
 /// </param>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed record TraxAuthorizationDeclaration(
     IReadOnlyList<TraxAuthorizeAttribute> Authorize,
     bool AllowAnonymous,
@@ -54,6 +56,7 @@ public sealed record TraxAuthorizationDeclaration(
 /// <c>Trax.Api</c>-layer concern.
 /// </para>
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class TraxAuthorization
 {
     /// <summary>
@@ -66,6 +69,7 @@ public static class TraxAuthorization
     /// actions, which is a different surface that Trax does not own, and banning it there would
     /// be wrong.
     /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static IReadOnlyList<string> ForeignAuthorizationAttributes { get; } =
     [
         "HotChocolate.Authorization.AuthorizeAttribute",
@@ -79,6 +83,7 @@ public static class TraxAuthorization
     /// Reads the declaration on a method. Inherited attributes count, so an override of a
     /// declared base method keeps the base's posture.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static TraxAuthorizationDeclaration Read(MethodInfo method)
     {
         ArgumentNullException.ThrowIfNull(method);
@@ -89,6 +94,7 @@ public static class TraxAuthorization
     /// Reads the declaration on a type, including attributes inherited from base classes and
     /// declared on implemented interfaces.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static TraxAuthorizationDeclaration Read(Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -150,6 +156,7 @@ public static class TraxAuthorization
     /// attribute. <paramref name="subject"/> describes what was decorated, for example
     /// <c>"GraphQL field 'Issue.content' (Nwyc.IssueContentExtension.GetContent)"</c>.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static string ForeignAttributeMessage(
         string subject,
         IReadOnlyList<string> foreignAttributes
@@ -168,6 +175,7 @@ public static class TraxAuthorization
     /// <see cref="TraxAuthorizationDeclaration.ForeignAttributes"/> instead and reports them
     /// together.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static void Validate(TraxAuthorizationDeclaration declaration, string subject)
     {
         ArgumentNullException.ThrowIfNull(declaration);

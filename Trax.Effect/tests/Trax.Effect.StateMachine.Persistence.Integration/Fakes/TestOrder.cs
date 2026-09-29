@@ -108,7 +108,7 @@ public static class TestOrder
     public static string EffectKey(string userKey, Guid id) => $"order:place:{userKey}:{id}";
 
     /// <summary>A draft service wired WITH the committed state and the effect-claim release hook.</summary>
-    public static SnapshotDraftService<OrderState, OrderTrigger> Service(
+    internal static SnapshotDraftService<OrderState, OrderTrigger> Service(
         ISnapshotStore store,
         IEffectClaimStore? claims = null
     ) =>

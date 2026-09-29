@@ -15,7 +15,7 @@ namespace Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider;
 /// </summary>
 /// <param name="configuration">Supplies the log level and whether junction output is serialized.</param>
 /// <param name="logger">The logger entries are written to.</param>
-public class JunctionLoggerProvider(
+internal class JunctionLoggerProvider(
     ITraxEffectConfiguration configuration,
     ILogger<JunctionLoggerProvider> logger
 ) : IJunctionLoggerProvider

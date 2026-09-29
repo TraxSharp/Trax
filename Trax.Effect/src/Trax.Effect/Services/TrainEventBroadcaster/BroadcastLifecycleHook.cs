@@ -10,7 +10,7 @@ namespace Trax.Effect.Services.TrainEventBroadcaster;
 /// Lifecycle hook that publishes train state transitions to an <see cref="ITrainEventBroadcaster"/>
 /// for cross-process delivery. Registered automatically by <c>UseBroadcaster()</c>.
 /// </summary>
-public class BroadcastLifecycleHook : ITrainLifecycleHook
+internal class BroadcastLifecycleHook : ITrainLifecycleHook
 {
     private static readonly string? LocalExecutor = Assembly
         .GetEntryAssembly()

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
@@ -8,6 +9,7 @@ using Trax.Effect.Models.WorkQueue;
 namespace Trax.Effect.Data.Services.WorkQueuePromotion;
 
 /// <inheritdoc />
+[EditorBrowsable(EditorBrowsableState.Never)]
 public class WorkQueuePromotion(IDataContextProviderFactory contextFactory) : IWorkQueuePromotion
 {
     /// <inheritdoc />

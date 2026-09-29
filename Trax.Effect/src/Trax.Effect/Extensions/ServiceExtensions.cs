@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -172,6 +173,7 @@ public static class ServiceExtensions
     /// </summary>
     /// <param name="serviceProvider">The service provider to resolve dependencies from.</param>
     /// <param name="instance">The object whose <see cref="InjectAttribute"/>-decorated properties will be populated.</param>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static void InjectProperties(this IServiceProvider serviceProvider, object instance)
     {
         var properties = instance

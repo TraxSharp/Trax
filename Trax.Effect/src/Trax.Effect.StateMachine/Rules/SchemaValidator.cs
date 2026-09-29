@@ -12,7 +12,7 @@ namespace Trax.Effect.StateMachine;
 ///
 /// <para>Infrastructure that <c>Context&lt;T&gt;()</c> compiles to; not intended to be called directly.</para>
 /// </summary>
-public static class SchemaValidator
+internal static class SchemaValidator
 {
     /// <summary>
     /// Checks <paramref name="context"/> against <paramref name="schema"/>, stopping at the first failure.

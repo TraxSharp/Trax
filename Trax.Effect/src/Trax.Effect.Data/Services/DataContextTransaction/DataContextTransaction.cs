@@ -22,7 +22,7 @@ namespace Trax.Effect.Data.Services.DataContextTransaction;
 /// By wrapping the EF Core transaction, this class simplifies transaction management for consumers
 /// and ensures that transactions are properly managed regardless of the specific database provider.
 /// </remarks>
-public class DataContextTransaction(IDataContext db, IDbContextTransaction tx)
+internal class DataContextTransaction(IDataContext db, IDbContextTransaction tx)
     : IDataContextTransaction
 {
     /// <summary>

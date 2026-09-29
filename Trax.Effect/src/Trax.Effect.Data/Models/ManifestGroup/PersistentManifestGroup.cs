@@ -5,7 +5,7 @@ namespace Trax.Effect.Data.Models.ManifestGroup;
 /// <summary>
 /// Provides Entity Framework Core configuration for the ManifestGroup model.
 /// </summary>
-public class PersistentManifestGroup : Effect.Models.ManifestGroup.ManifestGroup
+internal class PersistentManifestGroup : Effect.Models.ManifestGroup.ManifestGroup
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)
     {

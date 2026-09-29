@@ -20,7 +20,7 @@ namespace Trax.Effect.Provider.Json.Services.JsonEffectFactory;
 /// directly depending on the concrete implementation.
 /// </remarks>
 /// <param name="serviceProvider">The service provider used to resolve dependencies</param>
-public class JsonEffectProviderFactory(IServiceProvider serviceProvider) : IEffectProviderFactory
+internal class JsonEffectProviderFactory(IServiceProvider serviceProvider) : IEffectProviderFactory
 {
     /// <summary>
     /// Creates a new instance of a JSON effect provider.

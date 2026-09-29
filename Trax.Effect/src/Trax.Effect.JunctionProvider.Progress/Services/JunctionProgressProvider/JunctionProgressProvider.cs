@@ -10,7 +10,7 @@ namespace Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressProvide
 /// progress. Registered by <c>AddJunctionProgress</c>; not intended to be constructed directly.
 /// </summary>
 /// <remarks>Does nothing for a train that has no metadata or no effect runner.</remarks>
-public class JunctionProgressProvider : IJunctionProgressProvider
+internal class JunctionProgressProvider : IJunctionProgressProvider
 {
     /// <summary>
     /// Sets <c>CurrentlyRunningJunction</c> to the junction's name and <c>JunctionStartedAt</c> to now (UTC),

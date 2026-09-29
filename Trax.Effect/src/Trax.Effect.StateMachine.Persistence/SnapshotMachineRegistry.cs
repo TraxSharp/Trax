@@ -31,7 +31,7 @@ public interface ISnapshotMachineRegistry
 /// lifetime and is not thread-safe. Infrastructure resolved through <see cref="ISnapshotMachineRegistry"/>; not
 /// intended to be constructed directly.
 /// </summary>
-public sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
+internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
 {
     private readonly IReadOnlyDictionary<string, IMachine> _machines;
     private readonly ISnapshotStore _store;

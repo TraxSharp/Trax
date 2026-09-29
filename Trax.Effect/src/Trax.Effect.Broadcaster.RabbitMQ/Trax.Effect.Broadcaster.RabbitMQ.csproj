@@ -14,4 +14,8 @@
   <ItemGroup>
     <PackageReference Include="RabbitMQ.Client" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Broadcaster" />
+  </ItemGroup>
 </Project>

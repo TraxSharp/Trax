@@ -21,7 +21,7 @@ public class TraxBuilderWithEffects
     /// constructs this directly.
     /// </summary>
     /// <param name="root">The root builder whose state this view shares; nothing is copied.</param>
-    public TraxBuilderWithEffects(TraxBuilder root)
+    internal TraxBuilderWithEffects(TraxBuilder root)
     {
         Root = root;
     }

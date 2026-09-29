@@ -41,7 +41,7 @@ public static class ModelBuilderExtensions
     ///
     /// This method is typically called from the OnModelCreating method of the PostgresContext.
     /// </remarks>
-    public static ModelBuilder AddPostgresEnums(this ModelBuilder modelBuilder)
+    internal static ModelBuilder AddPostgresEnums(this ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresEnum<TrainState>(schema: "trax");
         modelBuilder.HasPostgresEnum<FailureClass>(schema: "trax");
@@ -115,7 +115,7 @@ public static class ModelBuilderExtensions
     ///
     /// This method is typically called from the OnModelCreating method of the PostgresContext.
     /// </remarks>
-    public static void ApplyUtcDateTimeConverter(this ModelBuilder builder)
+    internal static void ApplyUtcDateTimeConverter(this ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
 

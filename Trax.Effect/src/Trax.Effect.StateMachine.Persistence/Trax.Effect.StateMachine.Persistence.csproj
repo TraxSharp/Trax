@@ -22,4 +22,9 @@
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Tests.Stress" />
+  </ItemGroup>
 </Project>

@@ -37,7 +37,7 @@ public record TraxHostInfo
     /// Read by <see cref="Metadata.Metadata.Create"/> and
     /// <see cref="Extensions.ServiceTrainExtensions"/> to stamp host identity.
     /// </summary>
-    public static TraxHostInfo? Current { get; set; }
+    public static TraxHostInfo? Current { get; internal set; }
 
     /// <summary>
     /// Auto-detects the host environment by probing well-known environment variables.

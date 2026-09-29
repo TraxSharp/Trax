@@ -11,4 +11,8 @@
     <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
     <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Integration" />
+  </ItemGroup>
 </Project>

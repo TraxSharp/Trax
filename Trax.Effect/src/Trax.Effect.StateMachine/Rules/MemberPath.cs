@@ -9,7 +9,7 @@ namespace Trax.Effect.StateMachine;
 /// instead of by string: refactor-safe and typo-proof, while the stored rule and the IR still carry the JSON
 /// key as data.
 /// </summary>
-public static class MemberPath
+internal static class MemberPath
 {
     /// <summary>The JSON field name a single-member selector points at.</summary>
     public static string Of<T, TField>(Expression<Func<T, TField>> selector) =>

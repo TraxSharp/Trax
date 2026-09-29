@@ -25,4 +25,8 @@
   <ItemGroup>
     <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Data.Sqlite.Integration" />
+  </ItemGroup>
 </Project>

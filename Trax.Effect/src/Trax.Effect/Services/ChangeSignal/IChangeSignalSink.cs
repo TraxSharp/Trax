@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace Trax.Effect.Services.ChangeSignal;
 
 /// <summary>
@@ -6,6 +8,7 @@ namespace Trax.Effect.Services.ChangeSignal;
 /// fan the signal out to a delivery mechanism: the in-process GraphQL topic
 /// (<c>onDataChanged</c>) or the cross-process broadcaster.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public interface IChangeSignalSink
 {
     /// <summary>Delivers the distinct set of changed <paramref name="domains"/>.</summary>

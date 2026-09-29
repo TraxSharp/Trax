@@ -6,4 +6,4 @@ namespace Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressProvide
 /// Service key for junction progress, so <c>JunctionProgressFactory</c> can resolve it. Infrastructure
 /// registered by <c>AddJunctionProgress</c>; not intended for direct use.
 /// </summary>
-public interface IJunctionProgressProvider : IJunctionEffectProvider { }
+internal interface IJunctionProgressProvider : IJunctionEffectProvider { }

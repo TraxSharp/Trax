@@ -34,7 +34,7 @@ namespace Trax.Effect.Data.Postgres.Services.PostgresContextFactory;
 /// );
 /// ```
 /// </remarks>
-public class PostgresContextProviderFactory(
+internal class PostgresContextProviderFactory(
     IDbContextFactory<PostgresContext.PostgresContext> dbContextFactory
 ) : IDataContextProviderFactory
 {

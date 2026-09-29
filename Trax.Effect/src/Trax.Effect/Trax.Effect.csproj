@@ -15,4 +15,9 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Integration" />
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Broadcaster" />
+  </ItemGroup>
 </Project>

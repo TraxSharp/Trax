@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Trax.Effect.Data.Enums;
 
 namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
 

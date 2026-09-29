@@ -18,7 +18,7 @@ namespace Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory
 /// Implementations of this interface are responsible for creating instances of
 /// ParameterEffect, which serialize train input and output parameters to JSON format.
 /// </remarks>
-public interface IParameterEffectProviderFactory
+internal interface IParameterEffectProviderFactory
     : IConfigurableEffectProviderFactory<ParameterEffectConfiguration>
 {
     /// <summary>

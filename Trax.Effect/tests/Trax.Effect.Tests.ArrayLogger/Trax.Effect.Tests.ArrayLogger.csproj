@@ -4,9 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Trax.Effect.Tests.ArrayLogger</AssemblyName>
-    <!-- Packable on purpose: downstream Trax test suites can capture logs the same way. -->
-    <Description>Test helper for Trax: an in-memory ILoggerProvider (ArrayLoggingProvider) that captures every log line as a Trax.Effect Log model, so a test can assert on what a train logged. Not for production use.</Description>
-    <PackageTags>trax;dotnet;testing;logging</PackageTags>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

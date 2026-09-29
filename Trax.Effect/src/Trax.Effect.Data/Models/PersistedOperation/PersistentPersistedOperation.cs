@@ -9,7 +9,7 @@ namespace Trax.Effect.Data.Models.PersistedOperation;
 /// Mirrors the <see cref="Trax.Effect.Data.Models.Manifest.PersistentManifest"/>
 /// pattern.
 /// </summary>
-public class PersistentPersistedOperation : BaseModel
+internal class PersistentPersistedOperation : BaseModel
 {
     /// <summary>
     /// Apply EF Core mapping for <see cref="BaseModel"/>. Public because

@@ -11,7 +11,7 @@ namespace Trax.Effect.Data.Sqlite.Services.SqliteContextFactory;
 /// data access. Infrastructure registered by <c>UseSqlite</c>; not intended to be constructed directly.
 /// </summary>
 /// <param name="dbContextFactory">The EF Core factory configured with the SQLite connection string.</param>
-public class SqliteContextProviderFactory(
+internal class SqliteContextProviderFactory(
     IDbContextFactory<SqliteContext.SqliteContext> dbContextFactory
 ) : IDataContextProviderFactory
 {

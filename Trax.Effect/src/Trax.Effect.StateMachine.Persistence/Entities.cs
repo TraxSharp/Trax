@@ -89,7 +89,7 @@ public class SnapshotRecord
     /// that maps the table on its own context calls it from that context's <c>OnModelCreating</c>.
     /// </summary>
     /// <param name="modelBuilder">The model being built.</param>
-    public static void OnModelCreating(ModelBuilder modelBuilder)
+    internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
         var entity = modelBuilder.Entity<SnapshotRecord>();
         // The client-chosen id is unique only per user; (user_key, id) also serves the user-scoped reads
@@ -143,7 +143,7 @@ public class EffectClaim
     /// that context's <c>OnModelCreating</c>.
     /// </summary>
     /// <param name="modelBuilder">The model being built.</param>
-    public static void OnModelCreating(ModelBuilder modelBuilder) =>
+    internal static void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.Entity<EffectClaim>().HasKey(x => x.EffectKey);
 }
 

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
 using System.Text.Json;
@@ -380,6 +381,7 @@ public class Metadata : IModel, IDisposable
     /// 5. Sets the StartTime to the current UTC time
     /// 6. Sets the ParentId if provided
     /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static Metadata Create(CreateMetadata metadata)
     {
         var host = TraxHostInfo.Current;

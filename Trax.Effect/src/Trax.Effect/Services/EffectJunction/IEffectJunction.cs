@@ -10,7 +10,7 @@ namespace Trax.Effect.Services.EffectJunction;
 /// </summary>
 /// <typeparam name="TIn">The junction's input type.</typeparam>
 /// <typeparam name="TOut">The junction's output type.</typeparam>
-public interface IEffectJunction<TIn, TOut> : IJunction<TIn, TOut>
+internal interface IEffectJunction<TIn, TOut> : IJunction<TIn, TOut>
 {
     /// <summary>
     /// Runs the junction inside <paramref name="serviceTrain"/>, with its junction effects around it.

@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace Trax.Effect.Models.DeadLetter.DTOs;
 
 /// <summary>
@@ -5,6 +7,7 @@ namespace Trax.Effect.Models.DeadLetter.DTOs;
 /// by the scheduler's manifest manager when a manifest's failed runs reach its <c>MaxRetries</c>;
 /// not intended to be used directly.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public class CreateDeadLetter
 {
     /// <summary>
