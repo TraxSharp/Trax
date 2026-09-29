@@ -39,6 +39,12 @@ public class TrainRegistry : ITrainRegistry
     public Dictionary<Type, Type> InputTypeToTrain { get; set; }
 
     /// <summary>
+    /// The discovered (serviceType, implementationType) pairs from assembly scanning.
+    /// Reused by <c>RegisterServiceTrains</c> to avoid a second assembly scan.
+    /// </summary>
+    internal IReadOnlyList<(Type ServiceType, Type ImplementationType)> DiscoveredTrains { get; }
+
+    /// <summary>
     /// Initializes a new instance of the TrainRegistry class by scanning the provided assemblies for train implementations.
     /// </summary>
     /// <param name="assemblies">The assemblies to scan for train implementations</param>
@@ -58,12 +64,6 @@ public class TrainRegistry : ITrainRegistry
     /// IServiceTrain&lt;TIn, TOut&gt; interface, a TrainException is thrown
     /// with detailed information about the invalid implementation.
     /// </remarks>
-    /// <summary>
-    /// The discovered (serviceType, implementationType) pairs from assembly scanning.
-    /// Reused by <c>RegisterServiceTrains</c> to avoid a second assembly scan.
-    /// </summary>
-    internal IReadOnlyList<(Type ServiceType, Type ImplementationType)> DiscoveredTrains { get; }
-
     public TrainRegistry(params Assembly[] assemblies)
     {
         // The type we will be looking for in our assemblies

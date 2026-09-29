@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Trax.Mediator</AssemblyName>
+    <PackageDescription>Decoupled dispatch for Trax trains: ITrainBus runs the train registered for an input's type, so callers never reference a concrete train. Adds assembly scanning, the train registry, [TraxAuthorize] train authorization and concurrency limits. Install it when callers should hand over an input rather than inject a specific train.</PackageDescription>
   </PropertyGroup>
 
   <ItemGroup>

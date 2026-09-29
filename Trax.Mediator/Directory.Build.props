@@ -7,6 +7,40 @@
     <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 
+  <!-- Package metadata shared by every packable project. A project overrides a value by setting
+       it in its own csproj.
+       No separate symbol package: DotNet.ReproducibleBuilds (below) sets DebugType to embedded, so
+       the PDB, with its SourceLink map to this repository, ships inside each DLL. A .snupkg would
+       hold no PDB, and nuget.org rejects an empty one. -->
+  <PropertyGroup>
+    <Authors>Theauxm</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Mediator</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
+    <PackageTags>trax;dotnet;mediator;train-bus;dispatch;trains</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None
+      Include="$(MSBuildThisFileDirectory)README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+  </ItemGroup>
+
+  <!-- XML docs for the shipped libraries, so the summaries in source reach IntelliSense for
+       package consumers. CS1591 (a public member with no comment) is the only warning turned off:
+       the existing summaries ship now, and the members that still lack one are a tracked burn-down.
+       Every other doc-comment warning (malformed XML, a bad cref, a param mismatch) stays on.
+       Trax.Mediator.Testing already documents every public member, so it keeps the warning. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Mediator' Or '$(MSBuildProjectName)' == 'Trax.Mediator.Tests.ArrayLogger'">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
   <!-- Package validation: `dotnet pack` compares each published library with the last release on
        nuget.org and fails on a binary break, such as narrowing a member a published downstream
        package calls or overrides. It runs on pack only, so the pull request workflow packs too.

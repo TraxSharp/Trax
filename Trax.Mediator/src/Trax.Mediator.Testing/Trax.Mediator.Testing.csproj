@@ -6,8 +6,7 @@
     <AssemblyName>Trax.Mediator.Testing</AssemblyName>
     <Authors>Theauxm,mark-keaton</Authors>
     <PackageDescription>Architecture-guard checkers for Trax trains: every ServiceTrain has its companion I{Name} interface. Framework-agnostic: returns offender lists you assert on.</PackageDescription>
-    <PackageTags>trax;testing;architecture;guards;trains;mediator</PackageTags>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Mediator</RepositoryUrl>
+    <PackageTags>trax;dotnet;testing;architecture;guards;trains;mediator</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 

@@ -4,12 +4,69 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Mediator)](https://www.nuget.org/packages/Trax.Mediator/)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Mediator)](https://www.nuget.org/packages/Trax.Mediator/)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Mediator/blob/main/LICENSE)
 [![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Mediator)](https://github.com/TraxSharp/Trax.Mediator/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Mediator/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Mediator)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 Dispatch station for [Trax](https://www.nuget.org/packages/Trax.Effect/) trains. Hand it the cargo and it routes it to the right train, no need to know which train handles what.
+
+Trax is a .NET framework for writing business operations as trains: a `ServiceTrain<TIn, TOut>` runs a chain of junctions, and every run is recorded. Trax.Mediator adds the `ITrainBus`, which finds the train registered for an input's type and runs it, so callers depend on the input type rather than on a train class. It also scans assemblies to register trains, keeps the registry of known trains, enforces `[TraxAuthorize]` on trains, and caps concurrent runs.
+
+```bash
+dotnet add package Trax.Mediator
+dotnet add package Trax.Effect.Data.InMemory   # or Trax.Effect.Data.Postgres
+```
+
+A minimal host: one train, registered by scanning, run through the bus.
+
+```csharp
+using LanguageExt;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Trax.Core.Junction;
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Mediator.Extensions;
+using Trax.Mediator.Services.TrainBus;
+
+var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UseInMemory())
+        .AddMediator(mediator => mediator.ScanAssemblies(typeof(Program).Assembly))
+);
+
+using var host = builder.Build();
+await host.StartAsync(); // startup checks every train's chain and refuses to start on a bad one
+
+using var scope = host.Services.CreateScope();
+var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
+
+var greeting = await trainBus.RunAsync<Greeting>(new GreetRequest("Jane"));
+Console.WriteLine(greeting.Message); // Hello, Jane!
+
+public record GreetRequest(string Name);
+public record Greeting(string Message);
+
+// Every train needs its own interface; the bus resolves the train through it.
+public interface IGreetTrain : IServiceTrain<GreetRequest, Greeting>;
+
+public class GreetTrain : ServiceTrain<GreetRequest, Greeting>, IGreetTrain
+{
+    protected override Task<Either<Exception, Greeting>> Junctions() =>
+        Chain<BuildGreetingJunction>().Resolve();
+}
+
+public class BuildGreetingJunction : Junction<GreetRequest, Greeting>
+{
+    public override Task<Greeting> Run(GreetRequest input) =>
+        Task.FromResult(new Greeting($"Hello, {input.Name}!"));
+}
+```
+
+`ITrainBus` is scoped, so resolve it from a scope (in ASP.NET Core, inject it into a controller or endpoint). The documentation is at [traxsharp.net/docs](https://traxsharp.net/docs).
 
 ## The Trax Stack
 
@@ -57,6 +114,12 @@ dotnet add package Trax.Mediator
 ```
 
 Trax.Mediator depends on [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/), which depends on [Trax.Core](https://www.nuget.org/packages/Trax.Core/). Both are pulled in transitively.
+
+For tests, `Trax.Mediator.Testing` ships `TrainGuards.EveryTrainHasInterface(assemblies)`, an architecture guard that lists every `ServiceTrain` missing its `I{Name}` interface:
+
+```bash
+dotnet add package Trax.Mediator.Testing
+```
 
 ## Setup
 
