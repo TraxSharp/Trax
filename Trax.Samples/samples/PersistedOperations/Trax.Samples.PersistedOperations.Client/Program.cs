@@ -13,7 +13,8 @@
 // - The client no longer touches the database. All admin actions go through
 //   the GraphQL mutations exposed by the server's persisted-operations
 //   subsystem. The same mutations are what the Trax dashboard calls.
-// - Run after starting Trax.Samples.PersistedOperations.Api.
+// - Run after starting Trax.Samples.PersistedOperations.Api with `dotnet run`, which
+//   starts it in Development.
 // ─────────────────────────────────────────────────────────────────────────────
 
 using System.Net.Http.Json;
@@ -22,6 +23,10 @@ using System.Text.Json;
 const string ApiUrl = "http://localhost:5000/trax/graphql/";
 
 using var http = new HttpClient { BaseAddress = new Uri(ApiUrl) };
+
+// The upload mutation requires the Operator role. This demo key is registered by the API only in
+// Development; against any other environment the upload is refused.
+http.DefaultRequestHeaders.Add("X-Api-Key", "operator-key-do-not-use-in-production");
 
 // 1. Upload the manifest via the mutation.
 foreach (var op in LoadManifest())

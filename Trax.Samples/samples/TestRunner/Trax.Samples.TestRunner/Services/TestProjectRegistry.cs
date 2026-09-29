@@ -25,6 +25,10 @@ public class TestProjectRegistry
 
     public IReadOnlyList<TestProject> Projects => _projects.Value;
 
+    /// <summary>The discovered project with exactly this name, or null.</summary>
+    public TestProject? Find(string name) =>
+        Projects.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
+
     private static List<TestProject> ScanProjects(string root, ILogger logger)
     {
         var projects = new List<TestProject>();

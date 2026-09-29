@@ -12,7 +12,7 @@ dotnet run --project Trax.Samples/samples/ApiAudit/Trax.Samples.ApiAudit
 Issue a request with a demo key:
 
 ```bash
-curl -H "X-Api-Key: alice-key" -H "Content-Type: application/json" \
+curl -H "X-Api-Key: alice-key-do-not-use-in-production" -H "Content-Type: application/json" \
      -d '{"query":"{ dispatch { echo(input:{message:\"hi\"}) { output { echoed } } } }"}' \
      http://localhost:5220/trax/graphql
 ```
@@ -27,4 +27,4 @@ Each request produces one line like:
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [SECURITY-DISCLAIMER.md](../../../../Trax.Api/SECURITY-DISCLAIMER.md).
 
-The demo keys (`alice-key`, `bob-key`) are plaintext constants for illustration only. Production systems must source keys from a secret manager, enforce HTTPS, and rotate credentials.
+The demo keys (`alice-key-do-not-use-in-production`, `bob-key-do-not-use-in-production`) are plaintext constants for illustration only. Production systems must source keys from a secret manager, enforce HTTPS, and rotate credentials.

@@ -28,7 +28,7 @@ export const client = new Client({
     }),
   ],
   fetchOptions: () => {
-    const apiKey = localStorage.getItem("jobhunt-api-key") || "alice-key";
+    const apiKey = localStorage.getItem("jobhunt-api-key") || "alice-key-do-not-use-in-production";
     return { headers: { "X-Api-Key": apiKey } };
   },
 });

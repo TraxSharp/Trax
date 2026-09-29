@@ -21,6 +21,7 @@
   <ItemGroup>
     <PackageReference Include="HotChocolate.AspNetCore" />
     <PackageReference Include="Trax.Api" />
+    <PackageReference Include="Trax.Api.Auth.ApiKey" />
     <PackageReference Include="Trax.Api.GraphQL" />
     <PackageReference Include="Trax.Api.GraphQL.PersistedOperations" />
     <PackageReference Include="Trax.Dashboard" />

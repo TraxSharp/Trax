@@ -58,15 +58,20 @@ var connectionString =
 builder.Services.AddLogging(logging => logging.AddConsole());
 
 // ── Auth: API-key wiring (NO WARRANTY, demo keys) ────────────────────────
-builder.Services.AddTraxApiKeyAuth(keys =>
-    keys.Add(SampleKeys.MemberKey, id: "member", BookwormRoles.Member)
-        .Add(
-            SampleKeys.LibrarianKey,
-            id: "librarian",
-            BookwormRoles.Librarian,
-            BookwormRoles.Member
-        )
-);
+// The demo keys are published in this repository, so they are registered only in Development
+// (Properties/launchSettings.json sets it for `dotnet run`). Anywhere else no credential exists
+// until you register real ones, and every [TraxAuthorize] operation is refused.
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddTraxApiKeyAuth(keys =>
+        keys.Add(SampleKeys.MemberKey, id: "member", BookwormRoles.Member)
+            .Add(
+                SampleKeys.LibrarianKey,
+                id: "librarian",
+                BookwormRoles.Librarian,
+                BookwormRoles.Member
+            )
+    );
+builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
 // ── Trax effect + mediator (trains, bus, execution) ──────────────────────

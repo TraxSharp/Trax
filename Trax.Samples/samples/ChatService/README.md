@@ -47,16 +47,16 @@ Fake API key authentication via `X-Api-Key` header (for demonstration only):
 
 | API Key       | User ID   | Display Name |
 |---------------|-----------|--------------|
-| `alice-key`   | `alice`   | Alice        |
-| `bob-key`     | `bob`     | Bob          |
-| `charlie-key` | `charlie` | Charlie      |
+| `alice-key-do-not-use-in-production`   | `alice`   | Alice        |
+| `bob-key-do-not-use-in-production`     | `bob`     | Bob          |
+| `charlie-key-do-not-use-in-production` | `charlie` | Charlie      |
 
 The React client provides a dropdown to switch between users. Open multiple browser tabs to simulate different users chatting in real time.
 
 ## Quick Walkthrough (GraphQL IDE)
 
 ```graphql
-# 1. Create a room (as Alice — set X-Api-Key: alice-key)
+# 1. Create a room (as Alice — set X-Api-Key: alice-key-do-not-use-in-production)
 mutation {
   dispatch {
     createChatRoom(input: { name: "General", userId: "alice", displayName: "Alice" }) {
@@ -66,7 +66,7 @@ mutation {
   }
 }
 
-# 2. Join the room (as Bob — set X-Api-Key: bob-key)
+# 2. Join the room (as Bob — set X-Api-Key: bob-key-do-not-use-in-production)
 mutation {
   dispatch {
     joinChatRoom(input: { chatRoomId: "<id>", userId: "bob", displayName: "Bob" }) {
@@ -127,4 +127,4 @@ dotnet test tests/Trax.Samples.ChatService.Tests
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [SECURITY-DISCLAIMER.md](../../../Trax.Api/SECURITY-DISCLAIMER.md).
 
-The sample keys (`alice-key`, `bob-key`, `charlie-key`) are plaintext constants for demonstration only. Never ship them in production.
+The sample keys (`alice-key-do-not-use-in-production`, `bob-key-do-not-use-in-production`, `charlie-key-do-not-use-in-production`) are plaintext constants for demonstration only. Never ship them in production.

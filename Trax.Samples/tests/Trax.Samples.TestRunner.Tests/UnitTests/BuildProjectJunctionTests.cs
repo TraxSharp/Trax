@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
+using Trax.Samples.TestRunner.Models;
 using Trax.Samples.TestRunner.Trains.RunTests;
 using Trax.Samples.TestRunner.Trains.RunTests.Junctions;
 
@@ -13,10 +14,13 @@ public class ExecuteTestsJunctionFileNotFoundTests
     public async Task Run_DllMissing_ThrowsFileNotFoundException()
     {
         var junction = new ExecuteTestsJunction(NullLogger<ExecuteTestsJunction>.Instance);
-        var input = new RunTestsInput
+        var input = new TestRun
         {
-            ProjectName = "NoBuild",
-            ProjectPath = "/tmp/__missing__/Foo.csproj",
+            Project = new TestProject
+            {
+                Name = "NoBuild",
+                ProjectPath = "/tmp/__missing__/Foo.csproj",
+            },
             Build = false,
         };
 
@@ -35,27 +39,33 @@ public class BuildProjectJunctionTests
     public async Task Run_BuildFalse_SkipsAndReturnsInputUnchanged()
     {
         var junction = new BuildProjectJunction(NullLogger<BuildProjectJunction>.Instance);
-        var input = new RunTestsInput
+        var input = new TestRun
         {
-            ProjectName = "Some.Project",
-            ProjectPath = "/does/not/exist/Some.Project.csproj",
+            Project = new TestProject
+            {
+                Name = "Some.Project",
+                ProjectPath = "/does/not/exist/Some.Project.csproj",
+            },
             Build = false,
         };
 
         var result = await junction.Run(input);
 
         result.Should().BeSameAs(input);
-        result.ProjectName.Should().Be("Some.Project");
+        result.Project.Name.Should().Be("Some.Project");
     }
 
     [Test]
     public async Task Run_BuildTrueOnInvalidPath_Throws()
     {
         var junction = new BuildProjectJunction(NullLogger<BuildProjectJunction>.Instance);
-        var input = new RunTestsInput
+        var input = new TestRun
         {
-            ProjectName = "NoSuchProject",
-            ProjectPath = "/tmp/__definitely_does_not_exist__.csproj",
+            Project = new TestProject
+            {
+                Name = "NoSuchProject",
+                ProjectPath = "/tmp/__definitely_does_not_exist__.csproj",
+            },
             Build = true,
         };
 

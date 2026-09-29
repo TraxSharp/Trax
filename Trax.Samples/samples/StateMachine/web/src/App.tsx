@@ -14,8 +14,8 @@ const TURNSTILE_ID = "a0000000-0000-0000-0000-000000000001";
 const CHECKOUT_ID = "b0000000-0000-0000-0000-000000000002";
 
 const USERS = [
-  { label: "Alice", key: "alice-key" },
-  { label: "Bob", key: "bob-key" },
+  { label: "Alice", key: "alice-key-do-not-use-in-production" },
+  { label: "Bob", key: "bob-key-do-not-use-in-production" },
 ];
 
 // Module-level so the references are stable (the hook resumes on identity change).

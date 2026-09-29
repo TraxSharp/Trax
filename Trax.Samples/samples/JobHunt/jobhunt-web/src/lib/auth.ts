@@ -1,13 +1,13 @@
 const USERS = [
-  { key: "alice-key", id: "alice", name: "Alice" },
-  { key: "bob-key", id: "bob", name: "Bob" },
-  { key: "charlie-key", id: "charlie", name: "Charlie" },
+  { key: "alice-key-do-not-use-in-production", id: "alice", name: "Alice" },
+  { key: "bob-key-do-not-use-in-production", id: "bob", name: "Bob" },
+  { key: "charlie-key-do-not-use-in-production", id: "charlie", name: "Charlie" },
 ] as const;
 
 export type User = (typeof USERS)[number];
 
 export function getApiKey(): string {
-  return localStorage.getItem("jobhunt-api-key") || "alice-key";
+  return localStorage.getItem("jobhunt-api-key") || "alice-key-do-not-use-in-production";
 }
 
 export function setApiKey(key: string) {

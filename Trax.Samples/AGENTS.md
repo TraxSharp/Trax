@@ -16,13 +16,17 @@ if your work contradicts one, say so rather than silently overriding it.
 | --- | --- |
 | a new sample, or an E2E factory's connection string | [0001](./docs/adr/0001-a-sample-e2e-database-must-be-one-ci-provisions.md), a factory CI does not provision reports green while testing nothing |
 | a guard fixture, here or upstream | [0002](./docs/adr/0002-the-samples-adopt-the-guards-as-a-consumer-would.md), Bookworm is the only place the fixtures are adopted across a real PackageReference |
+| a template's `Program.cs` or its dashboard | [0003](./docs/adr/0003-templates-serve-the-dashboard-only-in-development.md), the dashboard and the demo key exist only in Development |
+| a template's package versions | [0004](./docs/adr/0004-the-template-package-carries-its-package-versions.md), versions are generated at pack from the central pins |
+| `docker-compose.yml` | [0005](./docs/adr/0005-sample-infrastructure-listens-on-loopback-only.md), every published port binds `127.0.0.1` because the credentials sit beside it |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Fourteen name `samples`: executable guards, exact version pinning, the
+index lists them by repo. Fifteen name `samples`: executable guards, exact version pinning, the
 dependency direction, the three test conventions, the canonical train name, the documentation
 lints, test frameworks staying out of shipped libraries, exemplars declared by attribute, Trax
 owning its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced
-package, and a chain being a declaration (`0016`). Once the samples consume a Trax.Mediator with
+package, a chain being a declaration (`0016`), and a demo credential carrying the
+`do-not-use-in-production` marker and existing only in Development (`0035`). Once the samples consume a Trax.Mediator with
 the startup chain check, every sample train's `Junctions()` must satisfy it for its host to
 start; until the pins move to that version, nothing here enforces it. In a workspace checkout the index is at
 `../Trax.Docs/adr/README.md`; that path does not resolve on GitHub, because it crosses a
@@ -48,11 +52,15 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Samples.Tests.Meta/` holds twelve convention guards. Eleven are shared with other
-repos; `E2EDatabaseProvisioningTests` is this repo's own and reads the CI workflow, checking
-every sample factory's *default* connection string against the ports and databases CI actually
-creates. A factory that declares none, because its sample runs on SQLite or the in-memory
-provider or reads the connection from configuration, gives it nothing to check.
+`tests/Trax.Samples.Tests.Meta/` holds fifteen convention guards. Eleven are shared with other
+repos, and four are this repo's own. `E2EDatabaseProvisioningTests` reads the CI workflow,
+checking every sample factory's *default* connection string against the ports and databases
+CI actually creates; a factory that declares none, because its sample runs on SQLite or the
+in-memory provider or reads the connection from configuration, gives it nothing to check.
+`WorkflowJobFileAccessTests` checks that a workflow job reading a repository file checks the
+repository out. `ComposePortsBindLoopbackTests` checks that every port `docker-compose.yml`
+publishes is bound to `127.0.0.1`. `DemoKeysCarryTheMarkerTests` checks that every demo
+credential a sample registers carries the `do-not-use-in-production` marker.
 
 This repo has no `PublicApiSurfaceTests`, which is right: the samples are applications, and
 the one package it does ship, `Trax.Samples.Templates`, is template content with no API

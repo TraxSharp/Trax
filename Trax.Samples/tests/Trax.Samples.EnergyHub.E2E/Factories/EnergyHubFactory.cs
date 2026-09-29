@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Samples.EnergyHub.E2E.Fixtures;
 using Trax.Scheduler.Configuration;
 
 namespace Trax.Samples.EnergyHub.E2E.Factories;
@@ -16,7 +17,10 @@ public class EnergyHubFactory : WebApplicationFactory<Trax.Samples.EnergyHub.Hub
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseSetting("ConnectionStrings:TraxDatabase", ConnectionString);
+        builder.UseSetting(
+            "ConnectionStrings:TraxDatabase",
+            TestPostgres.WithPort(ConnectionString)
+        );
         builder.UseSetting("ConnectionStrings:RabbitMQ", RabbitMqConnectionString);
 
         builder.ConfigureServices(services =>

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Samples.PersistedOperations.Api.Auth;
 
 namespace Trax.Samples.PersistedOperations.E2E.Fixtures;
 
@@ -25,7 +26,10 @@ public abstract class ApiTestBase
         // stale state.
         await SharedApiSetup.ClearAsync(SharedApiSetup.Factory.Services);
 
+        // The suite acts as the operator: the management mutations it drives require the role
+        // the demo key holds. ProductionPostureTests covers the anonymous caller.
         Http = SharedApiSetup.Factory.CreateClient();
+        Http.DefaultRequestHeaders.Add("X-Api-Key", DemoKeys.OperatorKey);
         Store = SharedApiSetup.Factory.Services.GetRequiredService<IPersistedOperationStore>();
     }
 

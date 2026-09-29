@@ -7,15 +7,15 @@
 //   checkout   Cart → Review → Paid             (Paid committed, one exactly-once charge on Pay)
 //
 // Authentication: fake API key via X-Api-Key header (demonstration only)
-//   alice-key → user "alice"
-//   bob-key   → user "bob"
+//   alice-key-do-not-use-in-production → user "alice"
+//   bob-key-do-not-use-in-production   → user "bob"
 //
 // Run it:
 //   1. Start Postgres:  cd Trax.Samples && docker compose up -d
 //   2. Pack local:      ./pack-local.sh
 //   3. Start the host:  dotnet run --project samples/StateMachine/Trax.Samples.StateMachine.Api
 //
-// Then open http://localhost:5220/trax/graphql (Banana Cake Pop). Send X-Api-Key: alice-key and try:
+// Then open http://localhost:5220/trax/graphql (Banana Cake Pop). Send X-Api-Key: alice-key-do-not-use-in-production and try:
 //
 //   # What machines are available?
 //   { discover { stateMachine { listMachines { machines { name hasEffect } } } } }
@@ -52,9 +52,15 @@ var connectionString =
 builder.Services.AddLogging(logging => logging.AddConsole());
 
 // Fake API keys for the demo (NO WARRANTY — see the samples security disclaimer).
-builder.Services.AddTraxApiKeyAuth(keys =>
-    keys.Add("alice-key", id: "alice", "User").Add("bob-key", id: "bob", "User")
-);
+// The demo keys are published in this repository, so they are registered only in Development
+// (Properties/launchSettings.json sets it for `dotnet run`). Anywhere else no credential exists
+// until you register real ones, and every [TraxAuthorize] operation is refused.
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddTraxApiKeyAuth(keys =>
+        keys.Add("alice-key-do-not-use-in-production", id: "alice", "User")
+            .Add("bob-key-do-not-use-in-production", id: "bob", "User")
+    );
+builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
 // Trax + the state machine, in one builder chain. AddStateMachines discovers the machines in the sample

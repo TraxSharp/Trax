@@ -8,11 +8,11 @@ using Trax.Samples.TestRunner.Models;
 namespace Trax.Samples.TestRunner.Trains.RunTests.Junctions;
 
 public class ExecuteTestsJunction(ILogger<ExecuteTestsJunction> logger)
-    : Junction<RunTestsInput, RunTestsOutput>
+    : Junction<TestRun, RunTestsOutput>
 {
-    public override Task<RunTestsOutput> Run(RunTestsInput input)
+    public override Task<RunTestsOutput> Run(TestRun input)
     {
-        var dllPath = ResolveDllPath(input.ProjectPath);
+        var dllPath = ResolveDllPath(input.Project.ProjectPath);
 
         if (!File.Exists(dllPath))
         {
@@ -24,7 +24,7 @@ public class ExecuteTestsJunction(ILogger<ExecuteTestsJunction> logger)
 
         logger.LogInformation(
             "Running tests in-process for {ProjectName} from {DllPath}",
-            input.ProjectName,
+            input.Project.Name,
             dllPath
         );
 
@@ -35,11 +35,11 @@ public class ExecuteTestsJunction(ILogger<ExecuteTestsJunction> logger)
         try
         {
             var resultXml = runner.Run(listener: null, TestFilter.Empty);
-            var result = ParseResults(input.ProjectName, resultXml);
+            var result = ParseResults(input.Project.Name, resultXml);
 
             logger.LogInformation(
                 "Tests completed for {ProjectName}: {Passed}/{Total} passed, {Failed} failed",
-                input.ProjectName,
+                input.Project.Name,
                 result.Passed,
                 result.Total,
                 result.Failed

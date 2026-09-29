@@ -24,8 +24,8 @@
 //   # List all test projects
 //   { discover { discoverTestProjects(input: {}) { projects { name repoName requiresPostgres } } } }
 //
-//   # Queue a test run
-//   mutation { dispatch { runTests(input: { projectName: "Trax.Core.Tests.Unit", projectPath: "/path/to/Trax.Core.Tests.Unit.csproj" }) { externalId workQueueId } } }
+//   # Queue a test run (a project name from discoverTestProjects; any other name is refused)
+//   mutation { dispatch { runTests(input: { projectName: "Trax.Core.Tests.Unit" }) { externalId workQueueId } } }
 //
 //   # Subscribe to results
 //   subscription { onTrainCompleted { externalId trainName output } }
@@ -44,6 +44,17 @@ using Trax.Samples.TestRunner.Services;
 using Trax.Scheduler.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// This hub builds and runs the test projects on this machine, and it registers no
+// authentication, so it is a local developer tool only: it refuses to start outside
+// Development (`dotnet run` starts in Development through Properties/launchSettings.json),
+// listens on localhost, and answers only requests whose Host header is localhost
+// (AllowedHosts in appsettings.json), which keeps a DNS-rebinding page from reaching it.
+if (!builder.Environment.IsDevelopment())
+    throw new InvalidOperationException(
+        "The TestRunner hub builds and runs code on this machine and has no authentication. "
+            + "It starts only in Development."
+    );
 
 var connectionString =
     builder.Configuration.GetConnectionString("TraxDatabase")

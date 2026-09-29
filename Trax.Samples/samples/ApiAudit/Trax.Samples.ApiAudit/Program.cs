@@ -6,12 +6,12 @@
 // channel, gets batched by the writer, and lands in the log as a single line.
 //
 // Authentication: fake API key via X-Api-Key header (demo only, NO WARRANTY).
-//   alice-key   resolves to user alice
-//   bob-key     resolves to user bob
+//   alice-key-do-not-use-in-production   resolves to user alice
+//   bob-key-do-not-use-in-production     resolves to user bob
 //
 // Try it:
 //   dotnet run --project Trax.Samples.ApiAudit
-//   curl -H "X-Api-Key: alice-key" -H "Content-Type: application/json" \
+//   curl -H "X-Api-Key: alice-key-do-not-use-in-production" -H "Content-Type: application/json" \
 //        -d '{"query":"{ dispatch { echo(input:{message:\"hi\"}) { output { echoed } } } }"}' \
 //        http://localhost:5220/trax/graphql
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,10 +37,15 @@ var traxConnectionString =
 builder.Services.AddLogging(logging => logging.AddConsole());
 
 // ── Authentication, fake API key for demonstration (NO WARRANTY) ──
-builder.Services.AddTraxApiKeyAuth(keys =>
-    keys.Add(SampleKeys.AliceKey, id: "alice", nameof(AuditRole.User))
-        .Add(SampleKeys.BobKey, id: "bob", nameof(AuditRole.User))
-);
+// The demo keys are published in this repository, so they are registered only in Development
+// (Properties/launchSettings.json sets it for `dotnet run`). Anywhere else this host refuses to
+// start: RequireAuthorization() below has no policy to require until you register a real scheme.
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddTraxApiKeyAuth(keys =>
+        keys.Add(SampleKeys.AliceKey, id: "alice", nameof(AuditRole.User))
+            .Add(SampleKeys.BobKey, id: "bob", nameof(AuditRole.User))
+    );
+builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
 // ── Trax core ──

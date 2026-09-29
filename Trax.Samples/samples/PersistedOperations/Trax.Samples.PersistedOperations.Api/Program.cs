@@ -11,11 +11,17 @@
 //     code) without redeploying clients, as long as the response shape stays
 //     compatible. The shape-diff guardrail in IPersistedOperationStore
 //     enforces this contract on every edit.
+//   - The management mutations (upload, deactivate, ...) live under the
+//     `operations` namespace and require the Operator role. The demo
+//     operator key (X-Api-Key: operator-key-do-not-use-in-production), the
+//     dev_ allowlist and the dashboard exist only in Development, which
+//     `dotnet run` starts through Properties/launchSettings.json.
 //
 // Run alongside the Client project to see the upload + query + hot-fix loop.
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Microsoft.EntityFrameworkCore;
+using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Dashboard.Extensions;
@@ -23,6 +29,7 @@ using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.PersistedOperations;
+using Trax.Samples.PersistedOperations.Api.Auth;
 using Trax.Samples.PersistedOperations.Models;
 using Trax.Scheduler.Extensions;
 
@@ -32,13 +39,18 @@ var connectionString =
     builder.Configuration.GetConnectionString("TraxDatabase")
     ?? "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123";
 
-// AddAuthentication() (no scheme) registers IAuthenticationSchemeProvider so
-// Trax's QueryModelAuthenticationInterceptor (wired automatically when any
-// [TraxAuthorize] is present) can resolve. A real host would register a
-// concrete scheme (API key, JWT, cookies, ...) here; this sample skips that
-// because the only thing it needs to demonstrate is that persisted-operation
-// upload succeeds with @authorize in the schema. The userNotes query would
-// of course be rejected at runtime without an authenticated principal.
+var isDevelopment = builder.Environment.IsDevelopment();
+
+// The demo operator key is published in this repository, so it is registered
+// only in Development. Anywhere else no credential exists until you register a
+// real scheme (API key from a secret store, JWT, cookies, ...), so the
+// management mutations and the gated userNotes query are refused.
+// AddAuthentication() registers IAuthenticationSchemeProvider either way, so
+// UseAuthentication() and Trax's QueryModelAuthenticationInterceptor resolve.
+if (isDevelopment)
+    builder.Services.AddTraxApiKeyAuth(keys =>
+        keys.Add(DemoKeys.OperatorKey, id: "operator", DemoKeys.OperatorRole)
+    );
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
@@ -68,24 +80,28 @@ builder.Services.AddTraxGraphQL(graphql =>
     graphql
         .AddDbContext<UserNotesDbContext>()
         .UsePersistedOperations(opts =>
-            opts.UseDatabase(connectionString)
-                .RequirePersisted(true)
-                .LogNonPersistedRequests(true)
-                // Dev-prefixed operations bypass enforcement so developers can
-                // iterate on a query during development without round-tripping
-                // through the manifest uploader.
-                .AllowOperationsMatching(id => id.StartsWith("dev_"))
-        )
-        // UsePersistedOperations exposes the management mutations; this demo has no endpoint
-        // auth, so acknowledge the ops surface is intentionally reachable.
-        .AllowAnonymousOperations()
+        {
+            opts.UseDatabase(connectionString).RequirePersisted(true).LogNonPersistedRequests(true);
+
+            // Dev-prefixed operations bypass enforcement so developers can iterate on a query
+            // without round-tripping through the manifest uploader. The operation name is chosen
+            // by the caller, so outside Development this would let anyone run any document by
+            // naming it dev_something: it is registered only here.
+            if (isDevelopment)
+                opts.AllowOperationsMatching(id => id.StartsWith("dev_"));
+        })
+        // UsePersistedOperations exposes the management mutations under `operations`. Gate
+        // that namespace, leaving the persisted trains on the rest of the endpoint reachable.
+        .GateOperations(roles: DemoKeys.OperatorRole)
 );
 
 // Dashboard: mounts the operations control room (including the Persisted
 // Operations management page) under /trax. The page only shows up because
 // IPersistedOperationsCapability is in DI thanks to UsePersistedOperations
-// above.
-builder.AddTraxDashboard();
+// above. This sample puts no authorization in front of it, so it is served only
+// in Development; gate it before serving it anywhere else.
+if (isDevelopment)
+    builder.AddTraxDashboard();
 
 var app = builder.Build();
 
@@ -113,11 +129,7 @@ using (var scope = app.Services.CreateScope())
 
 app.UseRouting();
 
-// No authentication scheme is registered in this sample, so UseAuthentication
-// would throw on startup. The persisted-operation validator fix exercised by
-// this sample fires during upload (a server-side mutation), not during
-// runtime auth, so an auth scheme is not needed to reproduce the original
-// MissingStateException.
+app.UseAuthentication();
 app.UseAuthorization();
 
 // Persisted-op enforcement only applies to the GraphQL endpoint. Scoping
@@ -129,7 +141,8 @@ app.UseWhen(
     branch => branch.UsePersistedOperationsEnforcement()
 );
 app.UseTraxGraphQL();
-app.UseTraxDashboard();
+if (app.Environment.IsDevelopment())
+    app.UseTraxDashboard();
 
 app.Run();
 

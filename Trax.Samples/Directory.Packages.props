@@ -54,6 +54,10 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.12" />
+    <!-- Referenced directly by JobHunt.Data so the version EF Design builds it against
+         (10.0.12) is the one every project above it resolves. Left transitive, those
+         projects took Npgsql's floor (10.0.4) and warned MSB3277. -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     <!-- Referenced directly by the SQLite-using projects to override the vulnerable
          native lib EF Core Sqlite pulls transitively (CVE-2025-6965). -->

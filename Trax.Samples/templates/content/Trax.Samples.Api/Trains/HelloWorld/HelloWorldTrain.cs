@@ -8,8 +8,9 @@ namespace Trax.Samples.Api.Trains.HelloWorld;
 /// <summary>
 /// A simple mutation train that logs a greeting.
 /// Exposed as a typed mutation field under mutation { dispatch { runHelloWorld(...) } }.
+/// Callers need the User role, which the demo key carries in Development (see Program.cs).
 /// </summary>
-[TraxAllowAnonymous]
+[TraxAuthorize(Roles = "User")]
 [TraxMutation(GraphQLOperation.Run, Description = "Runs a hello world greeting")]
 public class HelloWorldTrain : ServiceTrain<HelloWorldInput, Unit>, IHelloWorldTrain
 {

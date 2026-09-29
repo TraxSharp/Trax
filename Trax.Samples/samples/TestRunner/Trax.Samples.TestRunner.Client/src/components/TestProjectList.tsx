@@ -33,7 +33,6 @@ export function TestProjectList({
       variables: {
         input: {
           projectName: project.name,
-          projectPath: project.projectPath,
           build: buildBeforeRun,
         },
       },

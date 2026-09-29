@@ -14,10 +14,87 @@
     <ContentTargetFolders>content</ContentTargetFolders>
     <NoDefaultExcludes>true</NoDefaultExcludes>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackTemplatePackageVersions</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="content/**" Exclude="**/bin/**;**/obj/**" />
+    <!-- The lockfiles hold this repo's restore of the template projects, not a consumer's. -->
+    <Content Include="content/**" Exclude="**/bin/**;**/obj/**;**/packages.lock.json" />
     <Compile Remove="**/*" />
   </ItemGroup>
+
+  <!--
+    The template projects carry no versions: in this repo they take them from the root
+    Directory.Packages.props, which a scaffolded project never sees. At pack time each template
+    gets its own Directory.Packages.props, holding the pin of every package it references and
+    nothing else, so the package ships exactly the versions this repo builds and tests against.
+    It is generated into obj/ rather than kept beside the template, where it would shadow the
+    root pins inside the repo. docs/adr/0004-the-template-package-carries-its-package-versions.md
+  -->
+  <ItemGroup>
+    <_TraxTemplateProject Include="content/*/*.csproj" />
+  </ItemGroup>
+
+  <Target Name="PackTemplatePackageVersions" DependsOnTargets="_WriteTemplatePackageVersions">
+    <ItemGroup>
+      <TfmSpecificPackageFile
+        Include="@(_TraxTemplatePackageVersionsFile)"
+        PackagePath="$(ContentTargetFolders)/content/%(TemplateName)/Directory.Packages.props"
+      />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_WriteTemplatePackageVersions" Outputs="%(_TraxTemplateProject.Identity)">
+    <PropertyGroup>
+      <_TemplateName>%(_TraxTemplateProject.Filename)</_TemplateName>
+      <_TemplateVersionsFile>$(IntermediateOutputPath)template-versions/$(_TemplateName)/Directory.Packages.props</_TemplateVersionsFile>
+    </PropertyGroup>
+
+    <XmlPeek
+      XmlInputPath="%(_TraxTemplateProject.FullPath)"
+      Query="/Project/ItemGroup/PackageReference/@Include"
+    >
+      <Output TaskParameter="Result" ItemName="_TemplateReference" />
+    </XmlPeek>
+
+    <ItemGroup>
+      <_TemplateUnpinned Include="@(_TemplateReference)" Exclude="@(PackageVersion)" />
+      <_TemplateUnreferenced Include="@(PackageVersion)" Exclude="@(_TemplateReference)" />
+      <_TemplatePin Include="@(PackageVersion)" Exclude="@(_TemplateUnreferenced)" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <_TemplateVersionsText>&lt;Project&gt;
+  &lt;PropertyGroup&gt;
+    &lt;ManagePackageVersionsCentrally&gt;true&lt;/ManagePackageVersionsCentrally&gt;
+  &lt;/PropertyGroup&gt;
+  &lt;ItemGroup&gt;
+@(_TemplatePin->'    &lt;PackageVersion Include=&quot;%(Identity)&quot; Version=&quot;%(Version)&quot; /&gt;', '%0A')
+  &lt;/ItemGroup&gt;
+&lt;/Project&gt;</_TemplateVersionsText>
+    </PropertyGroup>
+
+    <Error
+      Condition="'@(_TemplateUnpinned)' != ''"
+      Text="$(_TemplateName) references @(_TemplateUnpinned) with no PackageVersion in Directory.Packages.props, so the packed template could not restore."
+    />
+
+    <WriteLinesToFile
+      File="$(_TemplateVersionsFile)"
+      Lines="$(_TemplateVersionsText)"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true"
+    />
+
+    <ItemGroup>
+      <_TraxTemplatePackageVersionsFile
+        Include="$(_TemplateVersionsFile)"
+        TemplateName="$(_TemplateName)"
+      />
+      <_TemplateReference Remove="@(_TemplateReference)" />
+      <_TemplateUnpinned Remove="@(_TemplateUnpinned)" />
+      <_TemplateUnreferenced Remove="@(_TemplateUnreferenced)" />
+      <_TemplatePin Remove="@(_TemplatePin)" />
+    </ItemGroup>
+  </Target>
 </Project>

@@ -697,17 +697,6 @@
         "resolved": "10.0.12",
         "contentHash": "Kd4o2oO1A6dfKxjz5LS16QyLtpCFTUiFWwmBABETAXRsSImBdRdWeKjSgbbRhAMiV3a3/nWr95ZtzClT4uaADQ=="
       },
-      "Microsoft.EntityFrameworkCore.Relational": {
-        "type": "Transitive",
-        "resolved": "10.0.4",
-        "contentHash": "DOTjTHy93W3TwpMLM4SCm0n57Sc0Jj3+m2S6LSTstKyBB34eT1UouaMS19mpWwvtj42+sRiEjA3+rOTNoNzXFQ==",
-        "dependencies": {
-          "Microsoft.EntityFrameworkCore": "10.0.4",
-          "Microsoft.Extensions.Caching.Memory": "10.0.4",
-          "Microsoft.Extensions.Configuration.Abstractions": "10.0.4",
-          "Microsoft.Extensions.Logging": "10.0.4"
-        }
-      },
       "Microsoft.Extensions.Caching.Abstractions": {
         "type": "Transitive",
         "resolved": "10.0.12",
@@ -1205,6 +1194,7 @@
         "dependencies": {
           "HotChocolate.AspNetCore": "[16.6.6, )",
           "Trax.Api": "[1.43.1, )",
+          "Trax.Api.Auth.ApiKey": "[1.43.1, )",
           "Trax.Api.GraphQL": "[1.43.1, )",
           "Trax.Api.GraphQL.PersistedOperations": "[1.43.1, )",
           "Trax.Dashboard": "[1.15.0, )",
@@ -1239,6 +1229,18 @@
           "Microsoft.EntityFrameworkCore.Analyzers": "10.0.12",
           "Microsoft.Extensions.Caching.Memory": "10.0.12",
           "Microsoft.Extensions.Logging": "10.0.12"
+        }
+      },
+      "Microsoft.EntityFrameworkCore.Relational": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.12, )",
+        "resolved": "10.0.4",
+        "contentHash": "DOTjTHy93W3TwpMLM4SCm0n57Sc0Jj3+m2S6LSTstKyBB34eT1UouaMS19mpWwvtj42+sRiEjA3+rOTNoNzXFQ==",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore": "10.0.4",
+          "Microsoft.Extensions.Caching.Memory": "10.0.4",
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.4",
+          "Microsoft.Extensions.Logging": "10.0.4"
         }
       },
       "Microsoft.Extensions.Configuration": {
@@ -1282,6 +1284,19 @@
         "contentHash": "LzkJ1COIy9DY0/sW0YXDxOD5U9Xo01ZbI7avF4EwBUU1ku9KtqA1teZW3ggJ3u/1o33EtTGv5SsgaVHE1Fy9jg==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.9",
+          "Trax.Effect": "1.54.0",
+          "Trax.Effect.Data": "1.54.0",
+          "Trax.Mediator": "1.22.0"
+        }
+      },
+      "Trax.Api.Auth.ApiKey": {
+        "type": "CentralTransitive",
+        "requested": "[1.43.1, )",
+        "resolved": "1.43.1",
+        "contentHash": "eK2yj0YkA+xZmBUNE04cam2MAr6WYlvYu+il9ILJNyIM9jN16MCWuuL98ppe6gKFgjc6w6vT3IDwaBfTuG2c7Q==",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore": "10.0.9",
+          "Trax.Api.Auth": "1.43.1",
           "Trax.Effect": "1.54.0",
           "Trax.Effect.Data": "1.54.0",
           "Trax.Mediator": "1.22.0"

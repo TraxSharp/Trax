@@ -9,11 +9,11 @@ namespace Trax.Samples.ChatService.Auth;
 public static class ApiKeyDefaults
 {
     /// <summary>Resolves to user <c>alice</c> (display name <c>Alice</c>).</summary>
-    public const string AliceKey = "alice-key";
+    public const string AliceKey = "alice-key-do-not-use-in-production";
 
     /// <summary>Resolves to user <c>bob</c> (display name <c>Bob</c>).</summary>
-    public const string BobKey = "bob-key";
+    public const string BobKey = "bob-key-do-not-use-in-production";
 
     /// <summary>Resolves to user <c>charlie</c> (display name <c>Charlie</c>).</summary>
-    public const string CharlieKey = "charlie-key";
+    public const string CharlieKey = "charlie-key-do-not-use-in-production";
 }

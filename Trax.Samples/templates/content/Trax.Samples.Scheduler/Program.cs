@@ -2,7 +2,7 @@
 // Trax Scheduler with Dashboard
 //
 // Runs scheduled trains on a configurable interval. Includes a Blazor
-// dashboard for monitoring at /trax. Uses an in-memory data provider by
+// dashboard for monitoring at /trax, in Development only. Uses an in-memory data provider by
 // default so you can run it immediately without any external dependencies.
 //
 // To switch providers, replace UseInMemory() with UseSqlite(connectionString) or
@@ -51,11 +51,17 @@ builder.Services.AddTrax(trax =>
 );
 
 // ── Dashboard ───────────────────────────────────────────────────────────
-builder.AddTraxDashboard();
+// The dashboard can queue, run and cancel trains and change scheduler settings, and this
+// template puts no authorization in front of it, so it is served only in Development, where
+// `dotnet run` starts (see Properties/launchSettings.json). Gate it before serving it anywhere
+// else: see https://traxsharp.net/docs/dashboard.
+if (builder.Environment.IsDevelopment())
+    builder.AddTraxDashboard();
 
 var app = builder.Build();
 
 // ── Map dashboard ───────────────────────────────────────────────────────
-app.UseTraxDashboard();
+if (app.Environment.IsDevelopment())
+    app.UseTraxDashboard();
 
 app.Run();

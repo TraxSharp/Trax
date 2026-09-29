@@ -34,7 +34,7 @@ cd Trax.Samples && docker compose up -d          # Postgres
 dotnet run --project samples/StateMachine/Trax.Samples.StateMachine.Api
 ```
 
-Open http://localhost:5220/trax/graphql and send `X-Api-Key: alice-key`.
+Open http://localhost:5220/trax/graphql and send `X-Api-Key: alice-key-do-not-use-in-production`.
 
 ```graphql
 # What machines are available?

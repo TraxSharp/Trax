@@ -8,9 +8,9 @@
 // to that room receives the event via WebSocket.
 //
 // Authentication: fake API key via X-Api-Key header (for demonstration only)
-//   alice-key   → user "alice"
-//   bob-key     → user "bob"
-//   charlie-key → user "charlie"
+//   alice-key-do-not-use-in-production   → user "alice"
+//   bob-key-do-not-use-in-production     → user "bob"
+//   charlie-key-do-not-use-in-production → user "charlie"
 //
 // Prerequisites:
 //   1. Pack local:      ./pack-local.sh
@@ -66,12 +66,16 @@ builder.Services.AddLogging(logging => logging.AddConsole());
 builder.Services.AddDbContext<ChatDbContext>(options => options.UseSqlite(chatConnectionString));
 
 // ── Authentication, fake API key for demonstration (NO WARRANTY, see SECURITY-DISCLAIMER.md) ──
-builder.Services.AddTraxApiKeyAuth(keys =>
-    keys.Add(SampleKeys.AliceKey, id: "alice", nameof(ChatRole.User))
-        .Add(SampleKeys.BobKey, id: "bob", nameof(ChatRole.User))
-        .Add(SampleKeys.CharlieKey, id: "charlie", nameof(ChatRole.User))
-);
-
+// The demo keys are published in this repository, so they are registered only in Development
+// (Properties/launchSettings.json sets it for `dotnet run`). Anywhere else no credential exists
+// until you register real ones, and every [TraxAuthorize] operation is refused.
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddTraxApiKeyAuth(keys =>
+        keys.Add(SampleKeys.AliceKey, id: "alice", nameof(ChatRole.User))
+            .Add(SampleKeys.BobKey, id: "bob", nameof(ChatRole.User))
+            .Add(SampleKeys.CharlieKey, id: "charlie", nameof(ChatRole.User))
+    );
+builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
 // ── Register Trax Effect + Mediator + ChatLifecycleHook ─────────────────────

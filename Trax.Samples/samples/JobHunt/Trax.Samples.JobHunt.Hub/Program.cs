@@ -10,9 +10,9 @@
 // X-Api-Key headers, and auto-migrate the JobHunt domain database.
 //
 // Authentication: fake API key via X-Api-Key header (for demonstration only)
-//   alice-key   to user "alice"   (display name: Alice)
-//   bob-key     to user "bob"     (display name: Bob)
-//   charlie-key to user "charlie" (display name: Charlie)
+//   alice-key-do-not-use-in-production   to user "alice"   (display name: Alice)
+//   bob-key-do-not-use-in-production     to user "bob"     (display name: Bob)
+//   charlie-key-do-not-use-in-production to user "charlie" (display name: Charlie)
 //
 // Prerequisites:
 //   1. Start Postgres:  cd Trax.Samples && docker compose up -d
@@ -64,7 +64,12 @@ builder.Services.AddLogging(logging => logging.AddConsole());
 builder.Services.AddDbContext<JobHuntDbContext>(options => options.UseNpgsql(connectionString));
 
 // ── Authentication, fake API key for demonstration (NO WARRANTY, see SECURITY-DISCLAIMER.md) ──
-builder.Services.AddTraxApiKeyAuth<JobHuntApiKeyResolver>();
+// The demo keys are published in this repository, so they are registered only in Development
+// (Properties/launchSettings.json sets it for `dotnet run`). Anywhere else no credential exists
+// until you register real ones, and every [TraxAuthorize] operation is refused.
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddTraxApiKeyAuth<JobHuntApiKeyResolver>();
+builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
 // ── Trax: Effects + Mediator + Scheduler ────────────────────────────────────

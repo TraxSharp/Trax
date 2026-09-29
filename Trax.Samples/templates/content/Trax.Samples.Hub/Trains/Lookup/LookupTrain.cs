@@ -8,8 +8,9 @@ namespace Trax.Samples.Hub.Trains.Lookup;
 /// <summary>
 /// A query train that looks up a record by ID.
 /// Exposed as a typed query field under query { discover { lookup(...) } }.
+/// Callers need the User role, which the demo key carries in Development (see Program.cs).
 /// </summary>
-[TraxAllowAnonymous]
+[TraxAuthorize(Roles = "User")]
 [TraxQuery(Description = "Looks up a record by ID")]
 public class LookupTrain : ServiceTrain<LookupInput, LookupOutput>, ILookupTrain
 {

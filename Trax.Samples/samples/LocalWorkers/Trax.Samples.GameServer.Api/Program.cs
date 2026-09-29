@@ -8,12 +8,12 @@
 //
 // Authentication (schemes coexist, pick any per request):
 //
-//   1. API key via X-Api-Key header — service-to-service / scripting
+//   1. API key via X-Api-Key header — service-to-service / scripting (Development only)
 //        Admin key:  admin-key-do-not-use-in-production  (roles: Admin, Player)
 //        Player key: player-key-do-not-use-in-production (role: Player)
 //
 //   2. JWT bearer via Authorization: Bearer <token>, dispatched by the token's
-//      `iss` claim across two demo issuers: "player" (the game client's own
+//      `iss` claim across two demo issuers (Development only): "player" (the game client's own
 //      session tokens) and "partner" (a partner service). Both are symmetric
 //      HS256 so the sample runs with no external identity provider. AddTraxJwt
 //      Dispatcher routes each token to its scheme; the same dispatch applies to
@@ -144,27 +144,39 @@ builder.Services.AddCors(options =>
 // ── Authentication (NO WARRANTY, see SECURITY-DISCLAIMER.md) ──────────
 // Two schemes coexist. Both contribute to the combined TraxAuthPolicy, so a
 // route gated by that policy accepts either credential type.
+//
+// The demo API keys and both demo JWT signing keys are published in this
+// repository: anyone who has read them could call as Admin or mint a Player
+// token. They are registered only in Development (Properties/launchSettings.json
+// sets it for `dotnet run`). Anywhere else only the Google issuer, when
+// configured, is accepted, and every [TraxAuthorize] operation is otherwise
+// refused.
+var demoCredentials = builder.Environment.IsDevelopment();
 
-// 1. Fake API keys for scripting / service-to-service.
-builder.Services.AddTraxApiKeyAuth(keys =>
-    keys.Add(SampleKeys.AdminKey, id: "admin", nameof(GameRole.Admin), nameof(GameRole.Player))
-        .Add(SampleKeys.PlayerKey, id: "player", nameof(GameRole.Player))
-);
+if (demoCredentials)
+{
+    // 1. Fake API keys for scripting / service-to-service.
+    builder.Services.AddTraxApiKeyAuth(keys =>
+        keys.Add(SampleKeys.AdminKey, id: "admin", nameof(GameRole.Admin), nameof(GameRole.Player))
+            .Add(SampleKeys.PlayerKey, id: "player", nameof(GameRole.Player))
+    );
 
-// 2. Two JWT issuers, dispatched by the token's `iss` claim. This mirrors a real
-//    multi-issuer host: a game client that mints its own session tokens
-//    ("player") plus a partner service integration ("partner"). Both are
-//    symmetric HS256 so the sample runs with no external identity provider. See
-//    DemoJwt.cs for the issuers, keys, and a token-minting helper; GET
-//    /dev/token/{player|partner} hands you a token to try.
-builder.Services.AddTraxJwtAuth(
-    DemoJwt.PlayerScheme,
-    jwt => jwt.UseSymmetricKey(DemoJwt.PlayerIssuer, DemoJwt.Audience, DemoJwt.PlayerKey)
-);
-builder.Services.AddTraxJwtAuth(
-    DemoJwt.PartnerScheme,
-    jwt => jwt.UseSymmetricKey(DemoJwt.PartnerIssuer, DemoJwt.Audience, DemoJwt.PartnerKey)
-);
+    // 2. Two JWT issuers, dispatched by the token's `iss` claim. This mirrors a real
+    //    multi-issuer host: a game client that mints its own session tokens
+    //    ("player") plus a partner service integration ("partner"). Both are
+    //    symmetric HS256 so the sample runs with no external identity provider. See
+    //    DemoJwt.cs for the issuers, keys, and a token-minting helper; GET
+    //    /dev/token/{player|partner} hands you a token to try.
+    builder.Services.AddTraxJwtAuth(
+        DemoJwt.PlayerScheme,
+        jwt => jwt.UseSymmetricKey(DemoJwt.PlayerIssuer, DemoJwt.Audience, DemoJwt.PlayerKey)
+    );
+    builder.Services.AddTraxJwtAuth(
+        DemoJwt.PartnerScheme,
+        jwt => jwt.UseSymmetricKey(DemoJwt.PartnerIssuer, DemoJwt.Audience, DemoJwt.PartnerKey)
+    );
+}
+builder.Services.AddAuthentication();
 
 // 3. Optional third issuer: Google id-tokens (RS256, validated against Google's
 //    JWKS). Enabled only when Google:ClientId is configured
@@ -187,13 +199,19 @@ if (googleEnabled)
 // claim, over HTTP and over GraphQL subscription WebSockets alike. Each scheme
 // still runs full validation (signature, issuer, audience, lifetime, JWKS); the
 // `iss` peek only chooses which validator to run.
-builder.Services.AddTraxJwtDispatcher(d =>
+if (demoCredentials || googleEnabled)
 {
-    d.MapIssuer(DemoJwt.PlayerIssuer, DemoJwt.PlayerScheme);
-    d.MapIssuer(DemoJwt.PartnerIssuer, DemoJwt.PartnerScheme);
-    if (googleEnabled)
-        d.MapIssuer(GoogleAuthority, GoogleScheme);
-});
+    builder.Services.AddTraxJwtDispatcher(d =>
+    {
+        if (demoCredentials)
+        {
+            d.MapIssuer(DemoJwt.PlayerIssuer, DemoJwt.PlayerScheme);
+            d.MapIssuer(DemoJwt.PartnerIssuer, DemoJwt.PartnerScheme);
+        }
+        if (googleEnabled)
+            d.MapIssuer(GoogleAuthority, GoogleScheme);
+    });
+}
 
 // ── Authorization policies ──────────────────────────────────────────────
 builder.Services.AddAuthorization(options =>

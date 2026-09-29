@@ -1,3 +1,4 @@
+using Trax.Samples.Bookworm.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
 
 namespace Trax.Samples.Bookworm.E2E.Factories;
@@ -15,5 +16,6 @@ public sealed class BookwormApiFactory : SampleApiFactory<Api.Program>
         + "Maximum Pool Size=8;Minimum Pool Size=0";
 
     protected override string ConnectionString =>
-        Environment.GetEnvironmentVariable("BOOKWORM_TEST_DB") ?? DefaultConnectionString;
+        Environment.GetEnvironmentVariable("BOOKWORM_TEST_DB")
+        ?? TestPostgres.WithPort(DefaultConnectionString);
 }

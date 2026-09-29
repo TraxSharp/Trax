@@ -30,7 +30,7 @@ export interface User {
 }
 
 export const USERS: User[] = [
-  { key: "alice-key", userId: "alice", displayName: "Alice" },
-  { key: "bob-key", userId: "bob", displayName: "Bob" },
-  { key: "charlie-key", userId: "charlie", displayName: "Charlie" },
+  { key: "alice-key-do-not-use-in-production", userId: "alice", displayName: "Alice" },
+  { key: "bob-key-do-not-use-in-production", userId: "bob", displayName: "Bob" },
+  { key: "charlie-key-do-not-use-in-production", userId: "charlie", displayName: "Charlie" },
 ];
