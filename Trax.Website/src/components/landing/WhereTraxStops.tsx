@@ -9,11 +9,11 @@ const limits = [
   },
   {
     title: "Not a message bus",
-    body: "Trax runs work and records it. If your services talk to each other through RabbitMQ or Azure Service Bus with sagas between them, Wolverine, MassTransit or NServiceBus fit that better.",
+    body: "Trax runs work and records it. It does not carry messages between services through a broker, or coordinate sagas across them. If that is the heart of your system, a service bus is the better fit.",
   },
   {
     title: "One language, one region",
-    body: "Trains are C#, and the database is the coordinator. If you need workflows written in several languages or replicated across regions, Temporal does that and Trax does not.",
+    body: "Trains are C#, and one Postgres database coordinates them. Workflows written in several languages, or replicated across regions, are outside what Trax does.",
   },
   {
     title: "No tracing export yet",

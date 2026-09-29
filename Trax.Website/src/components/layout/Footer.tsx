@@ -26,12 +26,6 @@ export default function Footer() {
               >
                 Getting Started
               </Link>
-              <Link
-                href="/blog"
-                className="block text-text-muted hover:text-text-secondary"
-              >
-                Blog
-              </Link>
             </div>
             <div className="space-y-2">
               <a

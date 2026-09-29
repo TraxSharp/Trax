@@ -20,8 +20,8 @@ const fields: { name: string; value: string; tone?: "fail" }[] = [
 export default function RunRecord() {
   return (
     <section className="border-b border-border py-24">
-      <div className="mx-auto max-w-6xl px-6 sm:px-8 lg:flex lg:gap-16">
-        <div className="max-w-md">
+      <div className="mx-auto grid max-w-6xl gap-10 px-6 sm:px-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-16">
+        <div>
           <h2 className="text-2xl font-semibold text-text-primary">
             Every run leaves a record
           </h2>
@@ -45,8 +45,8 @@ export default function RunRecord() {
           </Link>
         </div>
 
-        <div className="mt-10 flex-1 lg:mt-0">
-          <div className="overflow-x-auto rounded border border-border/50 bg-bg-secondary">
+        <div className="min-w-0">
+          <div className="rounded border border-border/50 bg-bg-secondary">
             <div className="border-b border-border/50 px-4 py-2">
               <span className="font-mono text-xs text-text-muted">
                 trax.metadata, id 88213
@@ -57,11 +57,9 @@ export default function RunRecord() {
                 <div key={f.name} className="contents">
                   <dt className="text-text-muted">{f.name}</dt>
                   <dd
-                    className={
-                      f.tone === "fail"
-                        ? "text-derail"
-                        : "text-text-primary"
-                    }
+                    className={`min-w-0 [overflow-wrap:anywhere] ${
+                      f.tone === "fail" ? "text-derail" : "text-text-primary"
+                    }`}
                   >
                     {f.value}
                   </dd>

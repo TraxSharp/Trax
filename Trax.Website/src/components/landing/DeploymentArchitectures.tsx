@@ -90,7 +90,7 @@ builder.Services.AddTraxWorker(opts => {
   {
     name: "Ephemeral dispatch",
     description:
-      "The API dispatches work over HTTP to a stateless runner, such as a Lambda function or a short-lived container. No persistent worker process, no polling. The runner boots, executes one pipeline, and exits. Good for bursty workloads where you don't want idle compute.",
+      "The API hands work to an AWS Lambda function through the AWS SDK. There is no public endpoint to secure: IAM decides who may invoke the function. No persistent worker process, no polling. The function boots, runs one pipeline, and exits. Good for bursty workloads where you don't want idle compute.",
     blocks: [
       {
         label: "Api / Program.cs",
@@ -98,13 +98,13 @@ builder.Services.AddTraxWorker(opts => {
     trax.AddEffects(effects => effects.UsePostgres(conn))
         .AddMediator(assembly)
         .AddScheduler(scheduler => scheduler
-            .UseRemoteWorkers(
-                remote => remote.BaseUrl = "https://runner/trax/execute",
+            .UseLambdaWorkers(
+                lambda => lambda.FunctionName = "trax-runner",
                 routing => routing
                     .ForTrain<IProcessOrderTrain>()
             )
-            .UseRemoteRun(
-                remote => remote.BaseUrl = "https://runner/trax/run"
+            .UseLambdaRun(
+                lambda => lambda.FunctionName = "trax-runner"
             )
         )
 );`,
@@ -159,12 +159,12 @@ async function HighlightedBlock({ block }: { block: CodeBlock }) {
   });
 
   return (
-    <div className="overflow-x-auto rounded border border-border/50">
+    <div className="overflow-hidden rounded border border-border/50">
       <div className="border-b border-border/50 bg-bg-secondary px-4 py-2">
         <span className="font-mono text-xs text-text-muted">{block.label}</span>
       </div>
       <div
-        className="[&_pre]:bg-bg-secondary [&_pre]:p-4 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:leading-relaxed"
+        className="[&_pre]:overflow-x-auto [&_pre]:bg-bg-secondary [&_pre]:p-4 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:leading-relaxed"
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>

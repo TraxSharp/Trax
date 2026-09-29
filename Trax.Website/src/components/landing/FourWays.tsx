@@ -83,15 +83,16 @@ public class RecalculateLeaderboardTrain
   {
     label: "Move it",
     caption:
-      "Route the train to workers on other machines, or to a Lambda function. The train class does not change, and the run is still recorded in the same table.",
+      "Start worker processes on other machines against the same database. Each one polls Postgres and claims jobs with FOR UPDATE SKIP LOCKED, so each job is claimed by exactly one worker. Nothing calls the workers over HTTP, and the train class does not change.",
     blocks: [
       {
-        file: "Program.cs",
+        file: "Worker / Program.cs",
         lang: "csharp",
-        code: `.AddScheduler(scheduler => scheduler
-    .UseRemoteWorkers(
-        remote => remote.BaseUrl = "https://workers.internal/trax/execute",
-        routing => routing.ForTrain<IRecalculateLeaderboardTrain>()))`,
+        code: `builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(typeof(RecalculateLeaderboardTrain).Assembly));
+
+builder.Services.AddTraxWorker(options => options.WorkerCount = 4);`,
       },
     ],
   },
@@ -131,7 +132,7 @@ export default async function FourWays() {
         </p>
 
         <div
-          className="mt-8 overflow-x-auto rounded border border-accent/30 [&_pre]:bg-bg-secondary [&_pre]:p-5 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:leading-relaxed"
+          className="mt-8 overflow-hidden rounded border border-accent/30 [&_pre]:overflow-x-auto [&_pre]:bg-bg-secondary [&_pre]:p-5 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:leading-relaxed"
           dangerouslySetInnerHTML={{ __html: trainHtml }}
         />
 

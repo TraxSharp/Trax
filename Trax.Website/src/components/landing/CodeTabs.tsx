@@ -40,7 +40,7 @@ export default function CodeTabs({ tabs }: { tabs: CodeTab[] }) {
           {tab.blocks.map((block) => (
             <div
               key={block.file}
-              className="overflow-x-auto rounded border border-border/50"
+              className="overflow-hidden rounded border border-border/50"
             >
               <div className="border-b border-border/50 bg-bg-secondary px-4 py-2">
                 <span className="font-mono text-xs text-text-muted">
@@ -48,7 +48,7 @@ export default function CodeTabs({ tabs }: { tabs: CodeTab[] }) {
                 </span>
               </div>
               <div
-                className="[&_pre]:bg-bg-secondary [&_pre]:p-4 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:leading-relaxed"
+                className="[&_pre]:overflow-x-auto [&_pre]:bg-bg-secondary [&_pre]:p-4 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:leading-relaxed"
                 dangerouslySetInnerHTML={{ __html: block.html }}
               />
             </div>

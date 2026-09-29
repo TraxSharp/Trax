@@ -11,7 +11,7 @@ Source for [traxsharp.net](https://traxsharp.net), the documentation and marketi
 - **Next.js 15** (App Router, static export)
 - **Tailwind CSS 4** (dark theme)
 - **Shiki** for server-side syntax highlighting
-- **MDX** via `next-mdx-remote` for docs and blog rendering
+- **MDX** via `next-mdx-remote` for docs rendering
 - **Trax.Docs** as content source (local workspace or cloned at build time)
 
 ## Getting Started
@@ -37,21 +37,15 @@ Documentation markdown lives in [Trax.Docs](https://github.com/TraxSharp/Trax.Do
 
 ```
 src/
-├── app/              # Next.js pages (landing, docs, blog, demo, about)
+├── app/              # Next.js pages (landing, docs)
 ├── components/
 │   ├── landing/      # Landing page sections
 │   ├── docs/         # Docs layout, sidebar, table of contents
-│   ├── blog/         # Blog card components
-│   ├── demo/         # Live demo widgets (connects to Trax GraphQL)
 │   ├── layout/       # Header, footer, mobile nav
 │   └── mdx/          # Custom MDX components
-├── lib/
-│   ├── docs.ts       # Markdown parsing, frontmatter, Jekyll transforms
-│   ├── nav-tree.ts   # Sidebar navigation tree builder
-│   ├── blog.ts       # Blog post loading
-│   └── graphql/      # GraphQL client, queries, subscriptions
-content/
-└── blog/             # Blog posts (MDX)
+└── lib/
+    ├── docs.ts       # Markdown parsing, frontmatter, Jekyll transforms
+    └── nav-tree.ts   # Sidebar navigation tree builder
 scripts/
 └── sync-docs.sh      # Docs sync script
 ```
