@@ -372,23 +372,11 @@ public partial class ManifestGroupDetailPage
 
         try
         {
-            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
+            // The scheduler's own group cancel: it flags every in-progress run in the group and
+            // signals the ones running on this server, the same call the API makes.
+            var count = await TraxScheduler.CancelGroupAsync(ManifestGroupId, DisposalToken);
 
-            var manifestIdsSubquery = context
-                .Manifests.Where(m => m.ManifestGroupId == ManifestGroupId)
-                .Select(m => m.Id);
-
-            var inProgressIds = await context
-                .Metadatas.AsNoTracking()
-                .Where(m =>
-                    m.ManifestId.HasValue
-                    && manifestIdsSubquery.Contains(m.ManifestId.Value)
-                    && m.TrainState == TrainState.InProgress
-                )
-                .Select(m => m.Id)
-                .ToListAsync(DisposalToken);
-
-            if (inProgressIds.Count == 0)
+            if (count == 0)
             {
                 NotificationService.Notify(
                     NotificationSeverity.Info,
@@ -398,13 +386,6 @@ public partial class ManifestGroupDetailPage
                 );
                 return;
             }
-
-            var count = await CancellationHelper.CancelTrainsAsync(
-                DataContextFactory,
-                ServiceProvider,
-                inProgressIds,
-                DisposalToken
-            );
 
             NotificationService.Notify(
                 NotificationSeverity.Success,

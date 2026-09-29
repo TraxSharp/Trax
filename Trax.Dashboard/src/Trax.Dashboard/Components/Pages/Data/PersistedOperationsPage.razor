@@ -1,11 +1,10 @@
 @page "/trax/data/persisted-operations"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
-@using Microsoft.EntityFrameworkCore
 @using Microsoft.Extensions.DependencyInjection
 @using Trax.Api.GraphQL.PersistedOperations
-@using Trax.Api.GraphQL.PersistedOperations.Storage
+@using Trax.Api.GraphQL.PersistedOperations.GraphQL
+@using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models
 @using Trax.Effect.Data.Services.IDataContextFactory
-@using Trax.Effect.Models.PersistedOperation
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
 @inject IServiceProvider ServiceProvider
@@ -34,22 +33,45 @@
         Persisted Operations is not enabled on this server. Call <code>UsePersistedOperations(...)</code> on the Trax GraphQL builder to enable management.
     </RadzenAlert>
 }
-else if (_loading)
-{
-    <RadzenProgressBarCircular IsIndeterminate="true" />
-}
-else if (_items.Count == 0)
-{
-    <RadzenCard Style="padding: 1.5rem; text-align: center;">
-        <RadzenText TextStyle="TextStyle.Body1" Style="margin-bottom: 1rem;">No persisted operations yet.</RadzenText>
-        <RadzenButton Text="Upload" Icon="upload" ButtonStyle="ButtonStyle.Primary" Click="@OpenEditor" />
-    </RadzenCard>
-}
 else
 {
-    <RadzenDataGrid Data="@_items" TItem="PersistedOperation" AllowFiltering="true" AllowPaging="true" PageSize="25">
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="0.75rem" Wrap="FlexWrap.Wrap" class="rz-mb-3">
+        <RadzenFormField Text="Tenant" Variant="Variant.Outlined">
+            <RadzenDropDown TValue="string"
+                            Data="@TenantScopes"
+                            Value="@_tenantScope"
+                            ValueChanged="@((string v) => OnTenantScopeChanged(v))"
+                            Style="width: 12rem;" />
+        </RadzenFormField>
+        @if (_tenantScope == TenantScopeNamed)
+        {
+            <RadzenFormField Text="Tenant key" Variant="Variant.Outlined">
+                <RadzenTextBox Value="@_tenantKey"
+                               Name="PersistedOperationsTenantFilter"
+                               Change="@((string v) => OnFilterChanged(() => _tenantKey = v))" />
+            </RadzenFormField>
+        }
+        <RadzenFormField Text="Status" Variant="Variant.Outlined">
+            <RadzenDropDown TValue="string"
+                            Data="@StatusScopes"
+                            Value="@_status"
+                            ValueChanged="@((string v) => OnFilterChanged(() => _status = v))"
+                            Style="width: 9rem;" />
+        </RadzenFormField>
+        <RadzenFormField Text="Id starts with" Variant="Variant.Outlined">
+            <RadzenTextBox Value="@_idPrefix"
+                           Change="@((string v) => OnFilterChanged(() => _idPrefix = v))" />
+        </RadzenFormField>
+    </RadzenStack>
+
+    <TraxDataGrid @ref="_grid"
+                  TItem="PersistedOperationDto"
+                  ServerLoadData="@LoadPageAsync"
+                  AllowFiltering="false"
+                  AllowSorting="false"
+                  PageSize="25">
         <Columns>
-            <RadzenDataGridColumn TItem="PersistedOperation"
+            <RadzenDataGridColumn TItem="PersistedOperationDto"
                                   Title=""
                                   Width="50px"
                                   Sortable="false"
@@ -60,42 +82,105 @@ else
                     <RadzenButton Icon="visibility"
                                   Variant="Variant.Text"
                                   Size="ButtonSize.Small"
-                                  Click="@(() => Navigation.NavigateTo($"trax/data/persisted-operations/{r.Id}"))" />
+                                  Click="@(() => Navigation.NavigateTo(DetailPath(r)))" />
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn TItem="PersistedOperation" Property="Id" Title="Id" Width="240px" />
-            <RadzenDataGridColumn TItem="PersistedOperation" Property="OperationName" Title="Operation" Width="200px" />
-            <RadzenDataGridColumn TItem="PersistedOperation" Property="Version" Title="Version" Width="100px" />
-            <RadzenDataGridColumn TItem="PersistedOperation" Property="IsActive" Title="Active" Width="100px" />
-            <RadzenDataGridColumn TItem="PersistedOperation" Property="UpdatedAt" Title="Updated" Width="180px" FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-            <RadzenDataGridColumn TItem="PersistedOperation" Property="Description" Title="Description" />
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="Id" Title="Id" Width="240px" />
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="TenantKey" Title="Tenant" Width="160px">
+                <Template Context="r">@(string.IsNullOrEmpty(r.TenantKey) ? "(default)" : r.TenantKey)</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="OperationName" Title="Operation" Width="200px" />
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="Version" Title="Version" Width="100px" />
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="IsActive" Title="Active" Width="100px" />
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="UpdatedAt" Title="Updated" Width="180px" FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="Description" Title="Description" />
         </Columns>
-    </RadzenDataGrid>
+    </TraxDataGrid>
 }
 
 @code {
-    private bool _available;
-    private bool _loading = true;
-    private List<PersistedOperation> _items = [];
+    private const string TenantScopeAll = "All tenants";
+    private const string TenantScopeDefault = "Default tenant";
+    private const string TenantScopeNamed = "Named tenant";
+    private static readonly string[] TenantScopes = [TenantScopeAll, TenantScopeDefault, TenantScopeNamed];
 
-    protected override async Task OnInitializedAsync()
+    private const string StatusAll = "All";
+    private const string StatusActive = "Active";
+    private const string StatusInactive = "Inactive";
+    private static readonly string[] StatusScopes = [StatusAll, StatusActive, StatusInactive];
+
+    private bool _available;
+    private TraxDataGrid<PersistedOperationDto>? _grid;
+    private string _tenantScope = TenantScopeAll;
+    private string _tenantKey = "";
+    private string _status = StatusAll;
+    private string _idPrefix = "";
+
+    protected override Task OnInitializedAsync()
     {
         _available = ServiceProvider.GetService<IPersistedOperationsCapability>() is not null;
-        if (_available)
-            await LoadAsync();
-        _loading = false;
+        return Task.CompletedTask;
     }
 
-    private async Task LoadAsync()
+    /// <summary>
+    /// One page of rows from the resolver the API's <c>persistedOperations</c> field runs, with
+    /// the same filter, ordering and page bounds (central ADR 0022). Nothing is capped: the
+    /// grid pages through every row the filter admits.
+    /// </summary>
+    private async Task<ServerDataResult<PersistedOperationDto>> LoadPageAsync(
+        LoadDataArgs args,
+        CancellationToken ct
+    )
     {
-        _loading = true;
-        using var ctx = await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
-        _items = await ctx.PersistedOperations
-            .AsNoTracking()
-            .OrderByDescending(p => p.UpdatedAt)
-            .Take(500)
-            .ToListAsync();
-        _loading = false;
+        var page = await new PersistedOperationQueries().PersistedOperations(
+            DataContextFactory,
+            ct,
+            BuildFilter(),
+            skip: args.Skip ?? 0,
+            take: args.Top ?? 25
+        );
+        return new ServerDataResult<PersistedOperationDto>(page.Items, page.TotalCount);
+    }
+
+    private PersistedOperationFilter BuildFilter() =>
+        new(
+            IsActive: _status switch
+            {
+                StatusActive => true,
+                StatusInactive => false,
+                _ => null,
+            },
+            // The API reads a null tenant key as every tenant and an empty one as the default.
+            TenantKey: _tenantScope switch
+            {
+                TenantScopeDefault => "",
+                TenantScopeNamed when !string.IsNullOrWhiteSpace(_tenantKey) => _tenantKey.Trim(),
+                _ => null,
+            },
+            IdStartsWith: string.IsNullOrWhiteSpace(_idPrefix) ? null : _idPrefix.Trim()
+        );
+
+    private static string DetailPath(PersistedOperationDto row) =>
+        PersistedOperationRoutes.Detail(row.Id, row.TenantKey);
+
+    private async Task OnTenantScopeChanged(string scope)
+    {
+        _tenantScope = scope;
+        if (scope != TenantScopeNamed)
+            _tenantKey = "";
+        await ReloadAsync();
+    }
+
+    private async Task OnFilterChanged(Action apply)
+    {
+        apply();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid is not null)
+            await _grid.ReloadAsync();
     }
 
     private async Task OpenEditor()
@@ -108,7 +193,7 @@ else
         if (result is true)
         {
             NotificationService.Notify(NotificationSeverity.Success, "Saved", "Operation uploaded.", duration: 3000);
-            await LoadAsync();
+            await ReloadAsync();
         }
     }
 }

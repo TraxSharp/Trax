@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
+using Trax.Dashboard.Components.Shared;
+using Trax.Dashboard.Models;
 using Trax.Dashboard.Utilities;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -44,7 +46,20 @@ public partial class MetadataDetailPage
     public long MetadataId { get; set; }
 
     private Metadata? _metadata;
-    private List<Log> _logs = [];
+    private int _logCount;
+    private TraxDataGrid<Log>? _logsGrid;
+
+    private Task<ServerDataResult<Log>> LoadLogsPageAsync(
+        LoadDataArgs args,
+        CancellationToken ct
+    ) =>
+        DataGridQueryHelper.LoadPageAsync(
+            DataContextFactory,
+            db => db.Logs.AsNoTracking().Where(l => l.MetadataId == MetadataId).OrderBy(l => l.Id),
+            args,
+            ct
+        );
+
     private bool _rerunning;
     private string? _rerunError;
     private bool _cancelling;
@@ -62,10 +77,14 @@ public partial class MetadataDetailPage
 
         if (_metadata is not null)
         {
-            _logs = await context
+            // The grid pages its logs from the database, as the API's logs query does; the
+            // page only needs to know whether there are any.
+            _logCount = await context
                 .Logs.AsNoTracking()
-                .Where(l => l.MetadataId == MetadataId)
-                .ToListAsync(cancellationToken);
+                .CountAsync(l => l.MetadataId == MetadataId, cancellationToken);
+
+            if (_logsGrid is not null)
+                await _logsGrid.ReloadAsync();
         }
     }
 

@@ -7,6 +7,7 @@
 @inject ITraxScheduler Scheduler
 @inject IServiceProvider ServiceProvider
 @inject NotificationService NotificationService
+@inject Trax.Scheduler.Services.Operations.IOperationsService OperationsService
 
 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
     <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">Manifest Groups</RadzenText>
@@ -142,6 +143,13 @@
                               Title="Failed"
                               Width="100px" />
         <RadzenDataGridColumn TItem="GroupSummary"
+                              Title="In Progress"
+                              Width="120px"
+                              Sortable="false"
+                              Filterable="false">
+            <Template Context="g">@_inProgressByGroup.GetValueOrDefault(g.Id)</Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="GroupSummary"
                               Property="LastRun"
                               Title="Last Run"
                               Width="180px"
@@ -151,6 +159,7 @@
 
 @code {
     private List<GroupSummary> _items = [];
+    private Dictionary<long, int> _inProgressByGroup = [];
     private HashSet<GroupSummary> _selectedGroups = [];
     private DagLayout? _dagLayout;
     private bool _operating;
@@ -176,30 +185,30 @@
             })
             .ToListAsync(cancellationToken);
 
-        // Build group-level dependency graph
-        var crossGroupEdges = await context.Manifests
+        // In-progress runs per group, which the API's group stats report alongside the rest.
+        _inProgressByGroup = await context.Metadatas
             .AsNoTracking()
-            .Where(m => m.DependsOnManifestId != null)
+            .Where(md => md.TrainState == TrainState.InProgress && md.ManifestId != null)
             .Join(
                 context.Manifests.AsNoTracking(),
-                dependent => dependent.DependsOnManifestId,
-                parent => (long?)parent.Id,
-                (dependent, parent) => new
-                {
-                    ParentGroupId = parent.ManifestGroupId,
-                    DependentGroupId = dependent.ManifestGroupId,
-                }
+                md => md.ManifestId,
+                m => (long?)m.Id,
+                (md, m) => m.ManifestGroupId
             )
-            .Where(e => e.ParentGroupId != e.DependentGroupId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
+            .GroupBy(groupId => groupId)
+            .Select(g => new { GroupId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.GroupId, x => x.Count, cancellationToken);
 
-        var dagNodes = _items
-            .Select(g => new DagNode { Id = g.Id, Label = g.Name })
+        // The group-level dependency graph comes from the shared operations service, so it is
+        // the graph the GraphQL dependencyGraph query returns, not a second copy of its query.
+        var graph = await OperationsService.GetGlobalManifestGroupGraphAsync(cancellationToken);
+
+        var dagNodes = graph.Nodes
+            .Select(n => new DagNode { Id = n.Id, Label = n.Name })
             .ToList();
 
-        var dagEdges = crossGroupEdges
-            .Select(e => new DagEdge { FromId = e.ParentGroupId, ToId = e.DependentGroupId })
+        var dagEdges = graph.Edges
+            .Select(e => new DagEdge { FromId = e.FromId, ToId = e.ToId })
             .ToList();
 
         _dagLayout = DagLayoutEngine.ComputeLayout(dagNodes, dagEdges);

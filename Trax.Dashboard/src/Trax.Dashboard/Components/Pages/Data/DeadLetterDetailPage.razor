@@ -218,10 +218,11 @@
 @* ── Failed Execution History ── *@
 <RadzenCard>
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Failed Execution History</RadzenText>
-    @if (_failedRuns.Count > 0)
+    @if (_failedRunCount > 0)
     {
-        <TraxDataGrid Data="@_failedRuns"
-                            TItem="Metadata">
+        <TraxDataGrid @ref="_failedRunsGrid"
+                      TItem="Metadata"
+                      ServerLoadData="@LoadFailedRunsPageAsync">
             <Columns>
                 <RadzenDataGridColumn TItem="Metadata"
                                       Title=""

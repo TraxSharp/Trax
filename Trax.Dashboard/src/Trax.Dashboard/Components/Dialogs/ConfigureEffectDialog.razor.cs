@@ -21,7 +21,6 @@ public partial class ConfigureEffectDialog
 
     private PropertyInfo[] _configProperties = [];
     private readonly Dictionary<string, object?> _formValues = new();
-    private Dictionary<string, object?> _originalValues = new();
     private string? _error;
 
     protected override void OnInitialized()
@@ -48,8 +47,6 @@ public partial class ConfigureEffectDialog
             {
                 _formValues[prop.Name] = currentValue?.ToString() ?? "";
             }
-
-            _originalValues[prop.Name] = currentValue;
         }
     }
 
@@ -58,67 +55,82 @@ public partial class ConfigureEffectDialog
 
     private void SetFormValue(string name, object? value) => _formValues[name] = value;
 
+    /// <summary>
+    /// Applies the form to the live configuration all or nothing. The object is the effect's
+    /// process-wide configuration, read by every train that runs next, so every field is
+    /// converted before any is written, and if a setter throws part way the fields already
+    /// written are put back.
+    /// </summary>
     private void Save()
     {
         _error = null;
 
+        List<(PropertyInfo Property, object? Value)> converted;
         try
         {
-            foreach (var prop in _configProperties)
-            {
-                var formValue = _formValues.GetValueOrDefault(prop.Name);
-                var underlying = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
-
-                object? converted;
-                if (underlying == typeof(bool))
-                {
-                    converted = formValue is bool b && b;
-                }
-                else if (underlying.IsEnum)
-                {
-                    converted =
-                        formValue is string s && !string.IsNullOrEmpty(s)
-                            ? Enum.Parse(underlying, s)
-                            : prop.GetValue(Configuration);
-                }
-                else
-                {
-                    converted = ConvertValue(formValue?.ToString(), underlying);
-                }
-
-                prop.SetValue(Configuration, converted);
-            }
-
-            NotificationService.Notify(
-                new NotificationMessage
-                {
-                    Severity = NotificationSeverity.Success,
-                    Summary = "Configuration Saved",
-                    Detail =
-                        $"{ConfigurationType.Name} updated. Changes apply to the next train execution.",
-                    Duration = 4000,
-                }
-            );
-
-            DialogService.Close();
+            converted = _configProperties.Select(p => (p, Convert(p))).ToList();
         }
         catch (Exception ex)
         {
             _error = $"Failed to save configuration: {ex.Message}";
+            return;
         }
-    }
 
-    private void Cancel()
-    {
-        // Restore original values on cancel
-        foreach (var prop in _configProperties)
+        var applied = new List<(PropertyInfo Property, object? Previous)>();
+        try
         {
-            if (_originalValues.TryGetValue(prop.Name, out var original))
-                prop.SetValue(Configuration, original);
+            foreach (var (prop, value) in converted)
+            {
+                var previous = prop.GetValue(Configuration);
+                prop.SetValue(Configuration, value);
+                applied.Add((prop, previous));
+            }
         }
+        catch (Exception ex)
+        {
+            for (var i = applied.Count - 1; i >= 0; i--)
+                applied[i].Property.SetValue(Configuration, applied[i].Previous);
+
+            _error = $"Failed to save configuration: {ex.InnerException?.Message ?? ex.Message}";
+            return;
+        }
+
+        NotificationService.Notify(
+            new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Configuration Saved",
+                Detail =
+                    $"{ConfigurationType.Name} updated. Changes apply to the next train execution.",
+                Duration = 4000,
+            }
+        );
 
         DialogService.Close();
     }
+
+    private object? Convert(PropertyInfo prop)
+    {
+        var formValue = _formValues.GetValueOrDefault(prop.Name);
+        var underlying = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+
+        if (underlying == typeof(bool))
+            return formValue is bool b && b;
+
+        if (underlying.IsEnum)
+            return formValue is string s && !string.IsNullOrEmpty(s)
+                ? Enum.Parse(underlying, s)
+                : prop.GetValue(Configuration);
+
+        return ConvertValue(formValue?.ToString(), underlying);
+    }
+
+    /// <summary>
+    /// Closes without writing. Nothing reaches the configuration except through Save, so there
+    /// is nothing to put back, and writing the values the dialog opened with would undo a
+    /// change saved from elsewhere in the meantime.
+    /// </summary>
+    private void Cancel() => DialogService.Close();
 
     private static object? ConvertValue(string? value, Type targetType)
     {
@@ -140,7 +152,7 @@ public partial class ConfigureEffectDialog
         if (targetType == typeof(Guid) && Guid.TryParse(value, out var g))
             return g;
 
-        return Convert.ChangeType(value, targetType);
+        return System.Convert.ChangeType(value, targetType);
     }
 
     private static string FormatLabel(string name) =>

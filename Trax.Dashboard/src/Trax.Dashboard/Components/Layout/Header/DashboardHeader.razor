@@ -17,6 +17,15 @@
         </RadzenStack>
         <RadzenStack Orientation="Orientation.Horizontal"
                      AlignItems="AlignItems.Center" Gap="0.75rem">
+            @if (DashboardSettings.LastPollError is { } pollError)
+            {
+                <div class="cs-refresh-failed"
+                     style="display: flex; align-items: center; gap: 0.3rem; color: var(--rz-danger);"
+                     title="@pollError">
+                    <RadzenIcon Icon="sync_problem" Style="font-size: 0.95rem;" />
+                    <span style="font-size: 0.75rem;">Last refresh failed</span>
+                </div>
+            }
             <div style="display: flex; align-items: center; gap: 0.4rem; opacity: 0.7;"
                  title="Time until next data refresh">
                 <RadzenIcon Icon="sync" Style="font-size: 0.85rem;" />

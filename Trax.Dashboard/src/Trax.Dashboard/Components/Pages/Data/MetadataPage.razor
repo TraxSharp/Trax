@@ -202,7 +202,7 @@
                 IQueryable<Metadata> query = db.Metadatas.AsNoTracking();
 
                 if (DashboardSettings.HideAdminTrains)
-                    query = query.ExcludeAdmin(DashboardSettings.AdminTrainNames);
+                    query = query.ExcludeAdmin(AdminTrains.FullNames);
 
                 return query.OrderByDescending(m => m.Id);
             },

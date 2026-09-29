@@ -192,6 +192,8 @@ namespace Trax.Dashboard.Components.Pages.Data
         public PersistedOperationDetailPage() { }
         [Microsoft.AspNetCore.Components.Parameter]
         public string Id { get; set; }
+        [Microsoft.AspNetCore.Components.SupplyParameterFromQuery(Name="tenant")]
+        public string? Tenant { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
         protected override System.Threading.Tasks.Task OnInitializedAsync() { }
     }
@@ -204,6 +206,8 @@ namespace Trax.Dashboard.Components.Pages.Data
         public string? ExistingDocument { get; set; }
         [Microsoft.AspNetCore.Components.Parameter]
         public string? ExistingId { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? ExistingTenantKey { get; set; }
         [Microsoft.AspNetCore.Components.Parameter]
         public int ExistingVersion { get; set; }
         [Microsoft.AspNetCore.Components.Parameter]
@@ -382,6 +386,9 @@ namespace Trax.Dashboard.Configuration
         public string EnvironmentName { get; set; }
         public string RoutePrefix { get; set; }
         public string Title { get; set; }
+        public Trax.Dashboard.Configuration.DashboardOptions AllowAnonymousDashboard() { }
+        public Trax.Dashboard.Configuration.DashboardOptions RequirePolicy(string policy) { }
+        public Trax.Dashboard.Configuration.DashboardOptions RequireRoles(params string[] roles) { }
     }
 }
 namespace Trax.Dashboard.Extensions
@@ -390,7 +397,7 @@ namespace Trax.Dashboard.Extensions
     {
         public static Microsoft.AspNetCore.Builder.WebApplicationBuilder AddTraxDashboard(this Microsoft.AspNetCore.Builder.WebApplicationBuilder builder, System.Action<Trax.Dashboard.Configuration.DashboardOptions>? configure = null) { }
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxDashboard(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Dashboard.Configuration.DashboardOptions>? configure = null) { }
-        public static Microsoft.AspNetCore.Builder.WebApplication UseTraxDashboard(this Microsoft.AspNetCore.Builder.WebApplication app, string routePrefix = "/trax", string? title = null) { }
+        public static Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilder UseTraxDashboard(this Microsoft.AspNetCore.Builder.WebApplication app, string routePrefix = "/trax", string? title = null) { }
     }
 }
 namespace Trax.Dashboard.Models
@@ -472,6 +479,7 @@ namespace Trax.Dashboard.Services.DashboardSettings
         public DashboardSettingsService(Trax.Dashboard.Services.LocalStorage.ILocalStorageService localStorage) { }
         public System.Collections.Generic.IReadOnlyList<string> AdminTrainNames { get; }
         public bool HideAdminTrains { get; }
+        public string? LastPollError { get; }
         public System.DateTime LastPollTime { get; }
         public System.TimeSpan PollingInterval { get; }
         public bool ShowAvgDuration { get; }
@@ -480,6 +488,7 @@ namespace Trax.Dashboard.Services.DashboardSettings
         public bool ShowServerHealth { get; }
         public bool ShowSummaryCards { get; }
         public System.Threading.Tasks.Task InitializeAsync() { }
+        public void NotifyPollFailed(string message) { }
         public void NotifyPolled() { }
         public System.Threading.Tasks.Task SetComponentVisibilityAsync(string key, bool visible) { }
         public System.Threading.Tasks.Task SetHideAdminTrainsAsync(bool hide) { }
@@ -489,6 +498,7 @@ namespace Trax.Dashboard.Services.DashboardSettings
     {
         System.Collections.Generic.IReadOnlyList<string> AdminTrainNames { get; }
         bool HideAdminTrains { get; }
+        string? LastPollError { get; }
         System.DateTime LastPollTime { get; }
         System.TimeSpan PollingInterval { get; }
         bool ShowAvgDuration { get; }
@@ -497,6 +507,7 @@ namespace Trax.Dashboard.Services.DashboardSettings
         bool ShowServerHealth { get; }
         bool ShowSummaryCards { get; }
         System.Threading.Tasks.Task InitializeAsync();
+        void NotifyPollFailed(string message);
         void NotifyPolled();
         System.Threading.Tasks.Task SetComponentVisibilityAsync(string key, bool visible);
         System.Threading.Tasks.Task SetHideAdminTrainsAsync(bool hide);

@@ -35,11 +35,13 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 
 | Area | ADRs |
 | --- | --- |
-| `platform` | [0001](./0001-the-dashboard-mounts-into-the-host-app.md) |
-| `ui` | [0001](./0001-the-dashboard-mounts-into-the-host-app.md) |
+| `platform` | [0001](./0001-the-dashboard-mounts-into-the-host-app.md), [0002](./0002-the-dashboard-requires-an-authorization-posture.md), [0004](./0004-persisted-operations-pages-call-the-api-resolvers.md) |
+| `ui` | [0001](./0001-the-dashboard-mounts-into-the-host-app.md), [0004](./0004-persisted-operations-pages-call-the-api-resolvers.md) |
 
 ## All of them
 
 | # | Decision | Areas |
 | --- | --- | --- |
 | [0001](./0001-the-dashboard-mounts-into-the-host-app.md) | The dashboard mounts into the host's application | platform, ui |
+| [0002](./0002-the-dashboard-requires-an-authorization-posture.md) | The dashboard refuses to start without an authorization posture | platform |
+| [0004](./0004-persisted-operations-pages-call-the-api-resolvers.md) | The persisted-operations pages call the API package's resolvers | platform, ui |

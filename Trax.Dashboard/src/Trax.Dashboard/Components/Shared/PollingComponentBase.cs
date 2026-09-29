@@ -201,9 +201,11 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
                         StateHasChanged();
                     });
                 }
-                catch (Exception) when (!ct.IsCancellationRequested)
+                catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
-                    // Transient failure — skip this tick, retry on next interval.
+                    // Keep polling: the next tick may succeed. Until one does, the header says
+                    // the rows on screen are from the last refresh that worked.
+                    DashboardSettings.NotifyPollFailed(ex.Message);
                 }
             }
         }

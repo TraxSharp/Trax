@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
 using Radzen;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrustedExecution;
 using Trax.Scheduler.Services.Operations;
@@ -113,14 +114,39 @@ public partial class QueueTrainDialog : IDisposable
     private string BuildInputJsonFromForm()
     {
         var jsonObj = new JsonObject();
+        var names = JsonPropertyNames(Registration.InputType);
 
         foreach (var prop in _inputProperties)
         {
             var value = _formValues.GetValueOrDefault(prop.Name);
-            jsonObj[prop.Name] = ToJsonNode(value, prop.PropertyType);
+            jsonObj[names.GetValueOrDefault(prop.Name, prop.Name)] = ToJsonNode(
+                value,
+                prop.PropertyType
+            );
         }
 
         return jsonObj.ToJsonString();
+    }
+
+    /// <summary>
+    /// The name each input property is read by, keyed by its C# name. The operations service
+    /// reads the input with the host's train parameter options, which use a camelCase naming
+    /// policy and match names exactly, so a form key written as the C# name matched nothing
+    /// and its value was dropped. Asking those options' contract for the names also honours
+    /// <c>[JsonPropertyName]</c>, which the naming policy alone would not.
+    /// </summary>
+    private static Dictionary<string, string> JsonPropertyNames(Type inputType)
+    {
+        var options = new JsonSerializerOptions(
+            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+        );
+        options.MakeReadOnly(populateMissingResolver: true);
+
+        return options
+            .GetTypeInfo(inputType)
+            .Properties.Where(p => p.AttributeProvider is MemberInfo)
+            .GroupBy(p => ((MemberInfo)p.AttributeProvider!).Name)
+            .ToDictionary(g => g.Key, g => g.First().Name);
     }
 
     private static JsonNode? ToJsonNode(object? value, Type targetType)

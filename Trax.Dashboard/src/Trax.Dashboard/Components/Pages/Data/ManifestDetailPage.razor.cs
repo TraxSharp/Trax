@@ -2,7 +2,10 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
 using Trax.Dashboard.Components.Shared;
+using Trax.Dashboard.Models;
+using Trax.Dashboard.Utilities;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -30,7 +33,11 @@ public partial class ManifestDetailPage
     protected override object? GetRouteKey() => ManifestId;
 
     private Manifest? _manifest;
-    private List<Metadata> _metadataItems = [];
+    private TraxDataGrid<Metadata>? _runsGrid;
+    private long _totalRuns;
+    private long _completedRuns;
+    private long _failedRuns;
+    private long _inProgressRuns;
     private List<Exclusion> _exclusions = [];
     private bool _triggering;
     private string? _triggerError;
@@ -48,14 +55,41 @@ public partial class ManifestDetailPage
         {
             _exclusions = _manifest.GetExclusions();
 
-            _metadataItems = await context
+            // Counted over every run of the manifest, the way the API's manifestStats counts
+            // them, rather than over the page of runs the grid shows.
+            var byState = await context
                 .Metadatas.AsNoTracking()
                 .Where(m => m.ManifestId == ManifestId)
-                .OrderByDescending(m => m.StartTime)
-                .Take(500)
+                .GroupBy(m => m.TrainState)
+                .Select(g => new { State = g.Key, Count = (long)g.Count() })
                 .ToListAsync(cancellationToken);
+
+            long CountOf(TrainState state) =>
+                byState.FirstOrDefault(x => x.State == state)?.Count ?? 0;
+
+            _totalRuns = byState.Sum(x => x.Count);
+            _completedRuns = CountOf(TrainState.Completed);
+            _failedRuns = CountOf(TrainState.Failed);
+            _inProgressRuns = CountOf(TrainState.InProgress);
+
+            if (_runsGrid is not null)
+                await _runsGrid.ReloadAsync();
         }
     }
+
+    private Task<ServerDataResult<Metadata>> LoadRunsPageAsync(
+        LoadDataArgs args,
+        CancellationToken ct
+    ) =>
+        DataGridQueryHelper.LoadPageAsync(
+            DataContextFactory,
+            db =>
+                db.Metadatas.AsNoTracking()
+                    .Where(m => m.ManifestId == ManifestId)
+                    .OrderByDescending(m => m.StartTime),
+            args,
+            ct
+        );
 
     private static string FormatExclusion(Exclusion exclusion)
     {

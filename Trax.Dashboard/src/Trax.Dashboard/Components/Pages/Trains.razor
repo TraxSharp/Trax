@@ -30,7 +30,7 @@
                               Width="120px" />
         <RadzenDataGridColumn TItem="TrainRegistration"
                               Title="Actions"
-                              Width="100px"
+                              Width="180px"
                               Filterable="false"
                               Sortable="false">
             <Template Context="registration">
@@ -39,6 +39,12 @@
                               ButtonStyle="ButtonStyle.Primary"
                               Size="ButtonSize.Small"
                               Click="@(() => OpenQueueDialog(registration))" />
+                <RadzenButton Text="Run"
+                              Icon="play_arrow"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Size="ButtonSize.Small"
+                              class="rz-ms-2"
+                              Click="@(() => OpenRunDialog(registration))" />
             </Template>
         </RadzenDataGridColumn>
     </Columns>
@@ -55,8 +61,11 @@
 
         if (DashboardSettings.HideAdminTrains)
         {
-            var adminNames = DashboardSettings.AdminTrainNames;
-            _trains = all.Where(w => !adminNames.Contains(w.ImplementationTypeName)).ToList();
+            // A train is administrative when its interface FullName is one of the scheduler's,
+            // the rule the run and manifest lists and the API's hideAdminTrains filter use. The
+            // short class name would also hide a consumer's train that happens to share it.
+            _trains = all.Where(w => !AdminTrains.FullNames.Contains(w.ServiceType.FullName))
+                .ToList();
         }
         else
         {
@@ -68,6 +77,23 @@
     {
         await DialogService.OpenAsync<QueueTrainDialog>(
             $"Queue {registration.ServiceTypeName}",
+            new Dictionary<string, object?> { ["Registration"] = registration },
+            new DialogOptions
+            {
+                Width = "600px",
+                Resizable = true,
+                Draggable = true,
+            }
+        );
+    }
+
+    // Runs the train now on its job submitter, bypassing the work queue and its subject lock
+    // (docs/0019 names this bypass). The dialog still builds the run itself; it moves to
+    // IOperationsService.RunTrainAsync once a Scheduler release carries it (docs/0022).
+    private async Task OpenRunDialog(TrainRegistration registration)
+    {
+        await DialogService.OpenAsync<RunTrainDialog>(
+            $"Run {registration.ServiceTypeName}",
             new Dictionary<string, object?> { ["Registration"] = registration },
             new DialogOptions
             {

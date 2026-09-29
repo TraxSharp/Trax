@@ -204,10 +204,11 @@
 @* ── Logs ── *@
 <RadzenCard>
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Logs</RadzenText>
-    @if (_logs.Count > 0)
+    @if (_logCount > 0)
     {
-        <TraxDataGrid Data="@_logs"
-                            TItem="Log">
+        <TraxDataGrid @ref="_logsGrid"
+                      TItem="Log"
+                      ServerLoadData="@LoadLogsPageAsync">
             <Columns>
                 <RadzenDataGridColumn TItem="Log"
                                       Property="Id"

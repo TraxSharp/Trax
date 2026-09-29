@@ -112,7 +112,7 @@
         <RadzenCard>
             <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                 <RadzenIcon Icon="bar_chart" Style="font-size: 2rem; color: var(--rz-primary);" />
-                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count</RadzenText>
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_totalRuns</RadzenText>
                 <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Total Runs</RadzenText>
             </RadzenStack>
         </RadzenCard>
@@ -121,7 +121,7 @@
         <RadzenCard>
             <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                 <RadzenIcon Icon="check_circle" Style="font-size: 2rem; color: var(--rz-success);" />
-                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.TrainState == TrainState.Completed)</RadzenText>
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_completedRuns</RadzenText>
                 <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Completed</RadzenText>
             </RadzenStack>
         </RadzenCard>
@@ -130,7 +130,7 @@
         <RadzenCard>
             <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                 <RadzenIcon Icon="error" Style="font-size: 2rem; color: var(--rz-danger);" />
-                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.TrainState == TrainState.Failed)</RadzenText>
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_failedRuns</RadzenText>
                 <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Failed</RadzenText>
             </RadzenStack>
         </RadzenCard>
@@ -139,7 +139,7 @@
         <RadzenCard>
             <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
                 <RadzenIcon Icon="sync" Style="font-size: 2rem; color: var(--rz-info);" />
-                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_metadataItems.Count(m => m.TrainState == TrainState.InProgress)</RadzenText>
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_inProgressRuns</RadzenText>
                 <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">In Progress</RadzenText>
             </RadzenStack>
         </RadzenCard>
@@ -149,10 +149,11 @@
 @* ── Metadata Runs ── *@
 <RadzenCard>
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Execution History</RadzenText>
-    @if (_metadataItems.Count > 0)
+    @if (_totalRuns > 0)
     {
-        <TraxDataGrid Data="@_metadataItems"
-                            TItem="Metadata">
+        <TraxDataGrid @ref="_runsGrid"
+                      TItem="Metadata"
+                      ServerLoadData="@LoadRunsPageAsync">
             <Columns>
                 <RadzenDataGridColumn TItem="Metadata"
                                       Title=""

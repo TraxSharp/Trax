@@ -1,14 +1,12 @@
 @page "/trax/data/persisted-operations/{Id}"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
-@using Microsoft.EntityFrameworkCore
 @using Microsoft.Extensions.DependencyInjection
 @using Trax.Api.GraphQL.PersistedOperations
+@using Trax.Api.GraphQL.PersistedOperations.GraphQL
+@using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models
 @using Trax.Api.GraphQL.PersistedOperations.Storage
 @using Trax.Effect.Data.Services.IDataContextFactory
-@using Trax.Effect.Models.PersistedOperation
-@using Trax.Effect.Models.PersistedOperationHistory
 @inject IDataContextProviderFactory DataContextFactory
-@inject IPersistedOperationStore Store
 @inject NavigationManager Navigation
 @inject IServiceProvider ServiceProvider
 @inject DialogService DialogService
@@ -17,6 +15,7 @@
 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
     <RadzenButton Icon="arrow_back" Variant="Variant.Text" Click="@(() => Navigation.NavigateTo("trax/data/persisted-operations"))" />
     <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">@Id</RadzenText>
+    <RadzenBadge BadgeStyle="BadgeStyle.Light" Text="@TenantLabel" title="Tenant" />
     @if (_row is not null)
     {
         <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Style="margin-left: auto;">
@@ -45,12 +44,16 @@ else if (_loading)
 }
 else if (_row is null)
 {
-    <RadzenAlert AlertStyle="AlertStyle.Warning">Persisted operation '@Id' not found.</RadzenAlert>
+    <RadzenAlert AlertStyle="AlertStyle.Warning">Persisted operation '@Id' not found for tenant @TenantLabel.</RadzenAlert>
 }
 else
 {
     <RadzenCard class="rz-mb-3">
         <RadzenStack Gap="0.5rem">
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Tenant</strong></RadzenColumn>
+                <RadzenColumn Size="9">@TenantLabel</RadzenColumn>
+            </RadzenRow>
             <RadzenRow>
                 <RadzenColumn Size="3"><strong>Operation</strong></RadzenColumn>
                 <RadzenColumn Size="9">@_row.OperationName (v@_row.Version)</RadzenColumn>
@@ -87,16 +90,16 @@ else
     </RadzenCard>
 
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">History</RadzenText>
-    <RadzenDataGrid Data="@_history" TItem="PersistedOperationHistory" PageSize="20" AllowPaging="true">
+    <RadzenDataGrid Data="@_history" TItem="PersistedOperationHistoryDto" PageSize="20" AllowPaging="true">
         <Columns>
-            <RadzenDataGridColumn TItem="PersistedOperationHistory" Property="ChangedAt" Title="When" Width="180px" FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-            <RadzenDataGridColumn TItem="PersistedOperationHistory" Property="ChangeType" Title="Change" Width="140px" />
-            <RadzenDataGridColumn TItem="PersistedOperationHistory" Property="ShapeFingerprint" Title="Shape" Width="220px">
+            <RadzenDataGridColumn TItem="PersistedOperationHistoryDto" Property="ChangedAt" Title="When" Width="180px" FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+            <RadzenDataGridColumn TItem="PersistedOperationHistoryDto" Property="ChangeType" Title="Change" Width="140px" />
+            <RadzenDataGridColumn TItem="PersistedOperationHistoryDto" Property="ShapeFingerprint" Title="Shape" Width="220px">
                 <Template Context="h">
                     <code>@h.ShapeFingerprint.Substring(0, 12)…</code>
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn TItem="PersistedOperationHistory" Property="ChangedReason" Title="Reason" />
+            <RadzenDataGridColumn TItem="PersistedOperationHistoryDto" Property="ChangedReason" Title="Reason" />
         </Columns>
     </RadzenDataGrid>
 }
@@ -105,32 +108,57 @@ else
     [Parameter]
     public string Id { get; set; } = "";
 
+    /// <summary>
+    /// The row's tenant. A persisted operation is keyed by tenant and id, so two rows can share
+    /// an id; absent or empty means the default tenant, as in the API.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "tenant")]
+    public string? Tenant { get; set; }
+
     private bool _available;
     private bool _loading = true;
-    private PersistedOperation? _row;
-    private List<PersistedOperationHistory> _history = [];
+    private IPersistedOperationStore? _store;
+    private PersistedOperationDto? _row;
+    private IReadOnlyList<PersistedOperationHistoryDto> _history = [];
+
+    private string? TenantKey => string.IsNullOrEmpty(Tenant) ? null : Tenant;
+
+    private string TenantLabel => TenantKey ?? "(default)";
 
     protected override async Task OnInitializedAsync()
     {
-        _available = ServiceProvider.GetService<IPersistedOperationsCapability>() is not null;
+        // The store is resolved only once the capability says persisted operations are on. A
+        // host without them registers no store, and an @inject of it would fail the page's
+        // construction and end the circuit instead of showing the notice below.
+        _store = ServiceProvider.GetService<IPersistedOperationsCapability>() is not null
+            ? ServiceProvider.GetService<IPersistedOperationStore>()
+            : null;
+        _available = _store is not null;
         if (_available)
             await LoadAsync();
         _loading = false;
     }
 
+    /// <summary>
+    /// Reads the row and its history through the resolvers the API's
+    /// <c>persistedOperation</c> and <c>persistedOperationHistory</c> fields run, for this
+    /// page's tenant and id (central ADR 0022).
+    /// </summary>
     private async Task LoadAsync()
     {
         _loading = true;
-        using var ctx = await DataContextFactory.CreateDbContextAsync(CancellationToken.None);
-        _row = await ctx.PersistedOperations
-            .AsNoTracking()
-            .FirstOrDefaultAsync(p => (p.TenantKey == "" || p.TenantKey == null) && p.Id == Id);
-        _history = await ctx.PersistedOperationHistories
-            .AsNoTracking()
-            .Where(h => (h.TenantKey == "" || h.TenantKey == null) && h.Id == Id)
-            .OrderByDescending(h => h.HistoryId)
-            .Take(100)
-            .ToListAsync();
+        var queries = new PersistedOperationQueries();
+        _row = await queries.PersistedOperation(Id, DataContextFactory, CancellationToken.None, TenantKey);
+        _history = _row is null
+            ? []
+            : await queries.PersistedOperationHistory(
+                Id,
+                DataContextFactory,
+                CancellationToken.None,
+                TenantKey,
+                skip: 0,
+                take: 100
+            );
         _loading = false;
     }
 
@@ -140,6 +168,7 @@ else
         var parameters = new Dictionary<string, object?>
         {
             ["ExistingId"] = _row.Id,
+            ["ExistingTenantKey"] = TenantKey ?? "",
             ["ExistingDocument"] = _row.Document,
             ["ExistingDescription"] = _row.Description ?? "",
             ["ExistingVersion"] = _row.Version,
@@ -157,27 +186,53 @@ else
         }
     }
 
+    /// <summary>
+    /// Deactivates this tenant's row through the API's <c>deactivatePersistedOperation</c>
+    /// resolver, so the dashboard refuses exactly what the API refuses.
+    /// </summary>
     private async Task Deactivate()
     {
-        if (_row is null) return;
+        if (_row is null || _store is null) return;
         var reason = await DialogService.OpenAsync<DeactivationReasonDialog>(
             "Deactivate persisted operation",
             parameters: new Dictionary<string, object?>(),
             options: new DialogOptions { Width = "520px", Height = "auto" }
         );
-        if (reason is string r && !string.IsNullOrWhiteSpace(r))
-        {
-            await Store.DeactivateAsync(_row.Id, null, r, CancellationToken.None);
-            NotificationService.Notify(NotificationSeverity.Success, "Deactivated", _row.Id, duration: 3000);
-            await LoadAsync();
-        }
+        if (reason is not string r)
+            return;
+
+        var payload = await new PersistedOperationMutations().DeactivatePersistedOperation(
+            new DeactivatePersistedOperationInput(_row.Id, r, TenantKey),
+            _store,
+            CancellationToken.None
+        );
+        await ReportAsync(payload.Success, payload.Errors, "Deactivated");
     }
 
+    /// <summary>Restores this tenant's row through the API's <c>restorePersistedOperation</c> resolver.</summary>
     private async Task Restore()
     {
-        if (_row is null) return;
-        await Store.RestoreAsync(_row.Id, null, CancellationToken.None);
-        NotificationService.Notify(NotificationSeverity.Success, "Restored", _row.Id, duration: 3000);
+        if (_row is null || _store is null) return;
+        var payload = await new PersistedOperationMutations().RestorePersistedOperation(
+            new RestorePersistedOperationInput(_row.Id, TenantKey),
+            _store,
+            DataContextFactory,
+            CancellationToken.None
+        );
+        await ReportAsync(payload.Success, payload.Errors, "Restored");
+    }
+
+    private async Task ReportAsync(bool success, IReadOnlyList<PersistedOperationError> errors, string summary)
+    {
+        if (success)
+            NotificationService.Notify(NotificationSeverity.Success, summary, $"{Id} ({TenantLabel})", duration: 3000);
+        else
+            NotificationService.Notify(
+                NotificationSeverity.Error,
+                "Not changed",
+                string.Join(" ", errors.Select(e => e.Message)),
+                duration: 8000
+            );
         await LoadAsync();
     }
 }

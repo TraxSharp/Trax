@@ -3,6 +3,16 @@
         Input Type: <strong>@Registration.InputTypeName</strong>
     </RadzenText>
 
+    @* Run hands the input straight to the job submitter: no work queue entry, so dispatch never
+       sees it and QueueSubjectKey is not consulted. A documented bypass (docs/0019). Nothing
+       published says whether a train is subject-keyed, so the warning is always shown. *@
+    <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" AllowClose="false"
+                 data-testid="run-subject-bypass-warning">
+        Run bypasses subject serialization. If this train overrides <code>QueueSubjectKey</code>, this run
+        may execute concurrently with queued or in-flight work for the same subject. Use <strong>Queue</strong>
+        instead to wait for the subject to be free.
+    </RadzenAlert>
+
     <RadzenTabs @bind-SelectedIndex="_selectedTab">
         <Tabs>
             <RadzenTabsItem Text="Form">

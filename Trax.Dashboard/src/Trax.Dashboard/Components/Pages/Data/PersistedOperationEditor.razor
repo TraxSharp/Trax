@@ -2,6 +2,8 @@
 @using Trax.Api.GraphQL.PersistedOperations
 @using Trax.Api.GraphQL.PersistedOperations.Storage
 @using Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions
+@using Trax.Api.GraphQL.PersistedOperations.GraphQL
+@using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models
 @inject IPersistedOperationStore Store
 @inject DialogService DialogService
 
@@ -10,13 +12,19 @@
     {
         <RadzenFormField Text="Id" Variant="Variant.Outlined" Style="width: 100%;">
             <ChildContent>
-                <RadzenTextBox @bind-Value="_id" Placeholder="e.g. greet_v1" />
+                <RadzenTextBox @bind-Value="_id" Name="PersistedOperationId" Placeholder="e.g. greet.v1" />
+            </ChildContent>
+        </RadzenFormField>
+        <RadzenFormField Text="Tenant (optional, blank for the default tenant)" Variant="Variant.Outlined" Style="width: 100%;">
+            <ChildContent>
+                <RadzenTextBox @bind-Value="_tenantKey" Name="PersistedOperationTenant" />
             </ChildContent>
         </RadzenFormField>
     }
     else
     {
         <RadzenText><strong>Id:</strong> <code>@ExistingId</code></RadzenText>
+        <RadzenText><strong>Tenant:</strong> @(string.IsNullOrEmpty(_tenantKey) ? "(default)" : _tenantKey)</RadzenText>
     }
 
     <RadzenFormField Text="Description (optional)" Variant="Variant.Outlined" Style="width: 100%;">
@@ -53,42 +61,21 @@
         }
     }
 
-    @if (_parseError is not null)
+    @foreach (var error in _errors)
     {
         <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false">
-            <strong>Parse error</strong>
-            @if (_parseError.Line.HasValue && _parseError.Column.HasValue)
+            <strong>@ErrorTitle(error.Code)</strong>
+            @if (error.Locations is { Count: > 0 } locations)
             {
-                <span> at line @_parseError.Line, column @_parseError.Column</span>
+                <span> at line @locations[0].Line, column @locations[0].Column</span>
             }
-            <div>@_parseError.OriginalMessage</div>
-        </RadzenAlert>
-    }
-    @if (_validationFailures is not null)
-    {
-        <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false">
-            <strong>Schema validation failed</strong>
-            <ul style="margin: 0.5rem 0 0 1rem;">
-                @foreach (var f in _validationFailures)
-                {
-                    <li>
-                        @f.Message
-                        @if (f.Locations.Count > 0)
-                        {
-                            <em> (line @f.Locations[0].Line)</em>
-                        }
-                    </li>
-                }
-            </ul>
-        </RadzenAlert>
-    }
-    @if (_shapeDiff is not null)
-    {
-        <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false">
-            <strong>Shape change rejected</strong>
-            <div>Old fingerprint: <code>@_shapeDiff.OldFingerprint.Substring(0, 16)…</code></div>
-            <div>New fingerprint: <code>@_shapeDiff.NewFingerprint.Substring(0, 16)…</code></div>
-            <div>Tick "Bypass shape-diff guardrail" if the change is verified safe.</div>
+            <div>@error.Message</div>
+            @if (error.OldFingerprint is not null && error.NewFingerprint is not null)
+            {
+                <div>Old fingerprint: <code>@Abbreviate(error.OldFingerprint)</code></div>
+                <div>New fingerprint: <code>@Abbreviate(error.NewFingerprint)</code></div>
+                <div>Tick "Bypass shape-diff guardrail" if the change is verified safe.</div>
+            }
         </RadzenAlert>
     }
     @if (_otherError is not null)
@@ -104,26 +91,27 @@
 
 @code {
     [Parameter] public string? ExistingId { get; set; }
+    [Parameter] public string? ExistingTenantKey { get; set; }
     [Parameter] public string? ExistingDocument { get; set; }
     [Parameter] public string? ExistingDescription { get; set; }
     [Parameter] public int ExistingVersion { get; set; }
     [Parameter] public bool ShowBypassShapeDiff { get; set; }
 
     private string _id = "";
+    private string _tenantKey = "";
     private string _document = "";
     private string _description = "";
     private int _version;
     private bool _bypassShapeDiff;
     private bool _submitting;
 
-    private PersistedOperationParseException? _parseError;
-    private IReadOnlyList<ValidationFailure>? _validationFailures;
-    private ShapeDiffViolationException? _shapeDiff;
+    private IReadOnlyList<PersistedOperationError> _errors = [];
     private string? _otherError;
 
     protected override void OnInitialized()
     {
         if (!string.IsNullOrEmpty(ExistingId)) _id = ExistingId;
+        if (ExistingTenantKey is not null) _tenantKey = ExistingTenantKey;
         if (ExistingDocument is not null) _document = ExistingDocument;
         if (ExistingDescription is not null) _description = ExistingDescription;
         _version = ExistingVersion;
@@ -131,39 +119,33 @@
 
     private void Cancel() => DialogService.Close(false);
 
+    /// <summary>
+    /// Saves through the API's <c>uploadPersistedOperation</c> resolver, so an upload from the
+    /// dashboard is checked, and refused, exactly as one from the API (central ADR 0022).
+    /// </summary>
     private async Task Save()
     {
-        _parseError = null;
-        _validationFailures = null;
-        _shapeDiff = null;
+        _errors = [];
         _otherError = null;
         _submitting = true;
         try
         {
-            await Store.UpsertAsync(
-                _id,
-                _document,
-                new UpsertOptions
-                {
-                    Description = string.IsNullOrWhiteSpace(_description) ? null : _description,
-                    BypassShapeDiff = _bypassShapeDiff,
-                    Version = _version,
-                },
+            var payload = await new PersistedOperationMutations().UploadPersistedOperation(
+                new UploadPersistedOperationInput(
+                    _id,
+                    _document,
+                    Description: string.IsNullOrWhiteSpace(_description) ? null : _description,
+                    BypassShapeDiff: _bypassShapeDiff,
+                    Version: _version,
+                    TenantKey: string.IsNullOrWhiteSpace(_tenantKey) ? null : _tenantKey.Trim()
+                ),
+                Store,
                 CancellationToken.None
             );
-            DialogService.Close(true);
-        }
-        catch (PersistedOperationParseException ex)
-        {
-            _parseError = ex;
-        }
-        catch (PersistedOperationValidationException ex)
-        {
-            _validationFailures = ex.Failures;
-        }
-        catch (ShapeDiffViolationException ex)
-        {
-            _shapeDiff = ex;
+            if (payload.Success)
+                DialogService.Close(true);
+            else
+                _errors = payload.Errors;
         }
         catch (Exception ex)
         {
@@ -174,4 +156,17 @@
             _submitting = false;
         }
     }
+
+    private static string ErrorTitle(string code) =>
+        code switch
+        {
+            "INVALID_INPUT" => "Invalid input",
+            PersistedOperationParseException.CodeValue => "Parse error",
+            PersistedOperationValidationException.CodeValue => "Schema validation failed",
+            ShapeDiffViolationException.CodeValue => "Shape change rejected",
+            _ => code,
+        };
+
+    private static string Abbreviate(string fingerprint) =>
+        fingerprint.Length > 16 ? fingerprint[..16] + "…" : fingerprint;
 }

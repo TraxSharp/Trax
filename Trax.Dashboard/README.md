@@ -59,10 +59,17 @@ builder.Services.AddTrax(trax =>
         .AddMediator(typeof(Program).Assembly)
 );
 
-builder.AddTraxDashboard();    // must follow AddTrax; it checks for it and throws otherwise
+builder.Services.AddAuthorization(o =>
+    o.AddPolicy("TraxAdmin", p => p.RequireRole("Admin"))
+);
+
+// Must follow AddTrax; it checks for it and throws otherwise.
+builder.AddTraxDashboard(dashboard => dashboard.RequirePolicy("TraxAdmin"));
 
 var app = builder.Build();
 
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseTraxDashboard();    // Mounts at /trax
 
 app.Run();
@@ -86,11 +93,12 @@ The mount path is fixed. Every page carries a compile-time `@page "/trax/..."` r
 route prefix argument to `UseTraxDashboard()` only changes the links the sidebar builds and
 leaves the pages where they are. Passing one gives you navigation that points at nothing.
 
-The dashboard applies no authorization of its own. It is served wherever you mount it, gated
-by whatever your application already applies to that path: everything if you have registered
-a fallback authorization policy, nothing if your `[Authorize]` attributes sit on your own
-controllers and pages. Put a fallback policy or path-scoped middleware in front of `/trax`
-before you expose the host.
+The dashboard requires an authorization posture, and `UseTraxDashboard()` refuses to start
+without one. Choose it in `AddTraxDashboard`: `RequirePolicy("...")` with a policy registered
+through `AddAuthorization`, `RequireRoles(...)`, or both, in which case a caller must satisfy
+both. It applies to every dashboard endpoint, the pages and the Blazor circuit hub alike.
+`AllowAnonymousDashboard()` opts out explicitly, for a host that gates `/trax` some other way
+(a fallback policy, an ingress rule); it logs a warning on every start.
 
 ## Pages
 

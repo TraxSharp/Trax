@@ -2,6 +2,12 @@
 @using System.Linq.Dynamic.Core
 @implements IAsyncDisposable
 
+@if (_loadError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false" class="rz-mb-2">
+        Could not load rows: @_loadError
+    </RadzenAlert>
+}
 <RadzenDataGrid @ref="_grid"
                 TItem="TItem"
                 Data="@_view"
@@ -34,6 +40,7 @@
     private CancellationTokenSource? _loadCts;
     private bool _serverLoading;
     private bool _serverLoadStarted;
+    private string? _loadError;
 
     // ── Client-side mode (existing) ──
     [Parameter]
@@ -153,6 +160,7 @@
             {
                 _view = result.Items;
                 _count = result.TotalCount;
+                _loadError = null;
                 _serverLoading = false;
                 StateHasChanged();
             });
@@ -161,10 +169,15 @@
         {
             // Superseded by a newer request — ignore.
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            // The rows on screen belong to the previous filter or page. Showing them under the
+            // new one would present them as its answer, so clear them and say why.
             await InvokeAsync(() =>
             {
+                _view = [];
+                _count = 0;
+                _loadError = ex.Message;
                 _serverLoading = false;
                 StateHasChanged();
             });

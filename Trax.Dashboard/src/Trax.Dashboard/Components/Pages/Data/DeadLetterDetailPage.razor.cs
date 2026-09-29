@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
+using Trax.Dashboard.Components.Shared;
+using Trax.Dashboard.Models;
+using Trax.Dashboard.Utilities;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
@@ -28,7 +31,25 @@ public partial class DeadLetterDetailPage
     public long DeadLetterId { get; set; }
 
     private DeadLetter? _deadLetter;
-    private List<Metadata> _failedRuns = [];
+    private int _failedRunCount;
+    private TraxDataGrid<Metadata>? _failedRunsGrid;
+
+    private Task<ServerDataResult<Metadata>> LoadFailedRunsPageAsync(
+        LoadDataArgs args,
+        CancellationToken ct
+    ) =>
+        DataGridQueryHelper.LoadPageAsync(
+            DataContextFactory,
+            db =>
+                db.Metadatas.AsNoTracking()
+                    .Where(m =>
+                        m.ManifestId == _deadLetter!.ManifestId && m.TrainState == TrainState.Failed
+                    )
+                    .OrderByDescending(m => m.StartTime),
+            args,
+            ct
+        );
+
     private Metadata? _latestFailedRun;
 
     private bool _requeueing;
@@ -50,15 +71,21 @@ public partial class DeadLetterDetailPage
 
         if (_deadLetter is not null)
         {
-            _failedRuns = await context
+            var failedRuns = context
                 .Metadatas.AsNoTracking()
                 .Where(m =>
                     m.ManifestId == _deadLetter.ManifestId && m.TrainState == TrainState.Failed
-                )
-                .OrderByDescending(m => m.StartTime)
-                .ToListAsync(cancellationToken);
+                );
 
-            _latestFailedRun = _failedRuns.FirstOrDefault();
+            // The grid pages the failed runs from the database; the page reads only the count
+            // and the most recent one.
+            _failedRunCount = await failedRuns.CountAsync(cancellationToken);
+            _latestFailedRun = await failedRuns
+                .OrderByDescending(m => m.StartTime)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (_failedRunsGrid is not null)
+                await _failedRunsGrid.ReloadAsync();
         }
     }
 

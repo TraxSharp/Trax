@@ -9,7 +9,7 @@ namespace Trax.Dashboard.Utilities;
 
 /// <summary>
 /// Centralizes the "set CancellationRequested + notify CancellationRegistry" pattern
-/// used by MetadataPage, MetadataDetailPage, and ManifestGroupDetailPage.
+/// used by MetadataPage and MetadataDetailPage.
 /// </summary>
 public static class CancellationHelper
 {

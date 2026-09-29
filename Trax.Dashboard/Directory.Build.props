@@ -7,6 +7,16 @@
     <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 
+  <!-- Package validation: `dotnet pack` compares the published library with the last release on
+       nuget.org and fails on a binary break, such as removing or narrowing a public member a host
+       compiled against. It runs on pack only, so the pull request workflow packs too. Bump the
+       baseline to the new version after each release. The Version above (1.99.99 locally, the
+       released version in CI) is the package being checked, not the baseline. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Dashboard'">
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>1.15.1</PackageValidationBaselineVersion>
+  </PropertyGroup>
+
   <!-- Package metadata shared by every package this repo publishes. A project can
        override any of it. -->
   <PropertyGroup>

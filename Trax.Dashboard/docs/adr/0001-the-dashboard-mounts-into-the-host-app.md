@@ -31,25 +31,25 @@ ordinary shape, gates `/trax` with nothing and serves it to anyone who can reach
 What mounting buys is an identity the dashboard could reuse, not a gate that is closed by
 default.
 
-**So closing it is the consumer's job, and it is not optional.** Either register a fallback
-policy, so that every endpoint including this one requires an authenticated principal, or put
-authorization middleware or an ingress rule in front of `/trax` specifically. This package
-ships no `[Authorize]`, no `AuthorizeView` and no `RequireAuthorization()`, and it will not
-warn you that you skipped this.
+**So the host has to choose the gate, and since
+[0002](./0002-the-dashboard-requires-an-authorization-posture.md) it cannot skip choosing.**
+`UseTraxDashboard()` refuses to start until the host names a policy or roles, which it applies
+to the dashboard's endpoints, or calls `AllowAnonymousDashboard()` to say something in front of
+it (a fallback policy, an ingress rule) is the gate.
 
 **A built-in authentication model** has never been weighed on its merits. It was simply never
 built. The argument against one is the argument against any framework-owned auth: it would
 have to ship a user store, which duplicates the host's, or consume the host's claims through
 a configuration surface that ends up no smaller than the `[Authorize]` the host can already
 write. That is an argument for the gate belonging to the host. It is not an argument for
-shipping with the gate open and saying nothing, which is what this package does today. The
-option stays open.
+shipping with the gate open and saying nothing, which is what this package did until
+[0002](./0002-the-dashboard-requires-an-authorization-posture.md). The option stays open.
 
 ## Consequences
 
 **`UseTraxDashboard()` mutates the host's application.** It calls `UseStaticFiles()`,
 `UseAntiforgery()` and `MapStaticAssets()`, maps Razor components with the interactive server
-render mode, and writes the route prefix and the environment name into the shared
+render mode (and returns their convention builder), and writes the route prefix and the environment name into the shared
 `DashboardOptions` singleton, plus the title when one is passed. Those are side effects on
 somebody else's application, and a host that already calls that middleware gets it twice.
 
@@ -92,11 +92,9 @@ check and still has no discovery. What the check actually catches is a host that
   discovery of its own, and that the `TraxMarker` precondition throws with a message naming
   the call to add.
 
-Not covered: four things, in descending order of reach.
-
-**The dashboard applies no authorization, and nothing asserts that the host must supply it.**
-An unguarded host serves `/trax` to anyone who can reach the port, and no guard, test or
-startup check says so. Closing that is a product decision, not a test gap.
+Not covered: three things, in descending order of reach. (Authorization was the first of
+four until [0002](./0002-the-dashboard-requires-an-authorization-posture.md), whose
+exemplars now pin it.)
 
 **`RoutePrefix` does not move the pages**, and nothing fails when the sidebar and the routes
 disagree. The tests set a custom prefix and assert it reaches `DashboardOptions`, which is the
@@ -118,6 +116,9 @@ the overload the tests do exercise, `AddRadzenComponents()` and
 
 ## Changelog
 
+- **2026-09-27**: The authorization half moved to
+  [0002](./0002-the-dashboard-requires-an-authorization-posture.md): the dashboard now refuses
+  to start without a posture, so the host can no longer skip the gate silently.
 - **2026-09-11**: Corrected the claim that mounting into the host puts the dashboard behind
   the host's login. That holds only under a fallback authorization policy; the package applies
   none of its own. Reworked `## Considered options` around that and recorded a built-in auth

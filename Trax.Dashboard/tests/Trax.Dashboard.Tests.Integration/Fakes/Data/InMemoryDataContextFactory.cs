@@ -12,9 +12,11 @@ namespace Trax.Dashboard.Tests.Integration.Fakes.Data;
 /// The Trax data context over EF Core's in-memory provider, so a page that reads and writes
 /// through <see cref="IDataContextProviderFactory"/> can be rendered without a database. Every
 /// context it creates shares one store, as the in-memory provider in Trax.Effect.Data.InMemory
-/// does; that package is not referenced here.
+/// does; that package is not referenced here. Interceptors passed in are added to every context,
+/// so a test can observe what a page reads.
 /// </summary>
-public sealed class InMemoryDataContextFactory : IDataContextProviderFactory
+public sealed class InMemoryDataContextFactory(params IInterceptor[] interceptors)
+    : IDataContextProviderFactory
 {
     private readonly InMemoryDatabaseRoot _root = new();
 
@@ -23,6 +25,7 @@ public sealed class InMemoryDataContextFactory : IDataContextProviderFactory
             new DbContextOptionsBuilder<InMemoryDataContext>()
                 .UseInMemoryDatabase("dashboard-tests", _root)
                 .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+                .AddInterceptors(interceptors)
                 .Options
         );
 

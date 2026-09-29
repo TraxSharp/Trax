@@ -42,9 +42,9 @@
     <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@BatchError</RadzenAlert>
 }
 
-<TraxDataGrid Data="@_items"
-                    TItem="Manifest"
-                    IsLoading="@IsLoading">
+<TraxDataGrid @ref="_grid"
+              TItem="Manifest"
+              ServerLoadData="@LoadPageAsync">
     <Columns>
         <RadzenDataGridColumn TItem="Manifest"
                               Width="40px"
@@ -53,8 +53,8 @@
                               Frozen="true">
             <Template Context="m">
                 <RadzenCheckBox TValue="bool"
-                                Value="@(_selectedManifests.Contains(m))"
-                                Change="@(args => { if ((bool)args!) _selectedManifests.Add(m); else _selectedManifests.Remove(m); PausePolling = _selectedManifests.Count > 0; })" />
+                                Value="@(_selectedManifests.ContainsKey(m.Id))"
+                                Change="@(args => { if ((bool)args!) _selectedManifests[m.Id] = m; else _selectedManifests.Remove(m.Id); PausePolling = _selectedManifests.Count > 0; })" />
             </Template>
         </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="Manifest"
@@ -128,24 +128,39 @@
 </TraxDataGrid>
 
 @code {
-    private List<Manifest> _items = [];
-    private HashSet<Manifest> _selectedManifests = [];
+    private TraxDataGrid<Manifest>? _grid;
+
+    // Keyed by id: the grid reads a fresh page of manifests on every load, so a selection kept
+    // by reference would stop matching the rows it was made on.
+    private Dictionary<long, Manifest> _selectedManifests = [];
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
-        using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
-        IQueryable<Manifest> query = context.Manifests.Include(m => m.ManifestGroup).AsNoTracking();
-
-        if (DashboardSettings.HideAdminTrains)
-            query = query.ExcludeAdmin(DashboardSettings.AdminTrainNames);
-
-        _items = await query.ToListAsync(cancellationToken);
+        if (_grid is not null)
+            await _grid.ReloadAsync();
     }
+
+    // One page at a time from the database, as the API's manifests query reads them.
+    private Task<ServerDataResult<Manifest>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+        => DataGridQueryHelper.LoadPageAsync(
+            DataContextFactory,
+            db =>
+            {
+                IQueryable<Manifest> query = db.Manifests.Include(m => m.ManifestGroup).AsNoTracking();
+
+                if (DashboardSettings.HideAdminTrains)
+                    query = query.ExcludeAdmin(AdminTrains.FullNames);
+
+                return query.OrderByDescending(m => m.Id);
+            },
+            args,
+            ct
+        );
 
     private Task TriggerSelected() => RunBatchOperationAsync(async () =>
     {
         var count = 0;
-        foreach (var manifest in _selectedManifests)
+        foreach (var manifest in _selectedManifests.Values)
         {
             await Scheduler.TriggerAsync(manifest.ExternalId);
             count++;
@@ -160,7 +175,7 @@
 
     private Task SetSelectedEnabled(bool enabled) => RunBatchOperationAsync(async () =>
     {
-        var ids = _selectedManifests.Select(m => m.Id).ToList();
+        var ids = _selectedManifests.Keys.ToList();
 
         using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
         var count = await context.Manifests

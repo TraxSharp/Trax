@@ -193,8 +193,8 @@ public class TrainDiscoveryServiceTests
     [Test]
     public void DiscoverTrains_CorrectLifetime_Singleton()
     {
-        // Arrange
-        _services.AddSingletonTraxRoute<IFakeTrainC, FakeTrainC>();
+        // Arrange: registered directly, because AddSingletonTraxRoute refuses a service train
+        _services.AddSingleton<IFakeTrainC, FakeTrainC>();
         var discoveryService = new TrainDiscoveryService(_services);
 
         // Act

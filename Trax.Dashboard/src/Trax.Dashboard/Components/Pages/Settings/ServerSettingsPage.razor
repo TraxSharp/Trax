@@ -32,7 +32,7 @@
                     <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                         Scans scheduled manifests for due work and creates work queue entries. Disable to stop new work from being queued.
                     </RadzenText>
-                    <RadzenSwitch @bind-Value="_schedulerConfig!.ManifestManagerEnabled" />
+                    <RadzenSwitch @bind-Value="_manifestManagerEnabled" />
                 </RadzenStack>
 
                 <RadzenStack Gap="0.25rem">
@@ -40,7 +40,7 @@
                     <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                         Picks queued work and dispatches it to the background task server. Disable to stop jobs from being dispatched while allowing the queue to accumulate.
                     </RadzenText>
-                    <RadzenSwitch @bind-Value="_schedulerConfig!.JobDispatcherEnabled" />
+                    <RadzenSwitch @bind-Value="_jobDispatcherEnabled" />
                 </RadzenStack>
             </RadzenStack>
         </RadzenFieldset>
@@ -64,17 +64,17 @@
                     <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                         Maximum number of active jobs (Pending + InProgress) allowed. Leave empty for unlimited.
                     </RadzenText>
-                    <RadzenNumeric @bind-Value="_schedulerConfig!.MaxActiveJobs" TValue="int?" Min="1" Style="max-width: 400px;" Name="MaxActiveJobs" />
+                    <RadzenNumeric @bind-Value="_maxActiveJobs" TValue="int?" Min="1" Style="max-width: 400px;" Name="MaxActiveJobs" />
                 </RadzenStack>
 
-                @if (_localWorkerOptions is not null)
+                @if (_hasLocalWorkers)
                 {
                     <RadzenStack Gap="0.25rem">
                         <RadzenLabel Text="Worker Count" Component="WorkerCount" />
                         <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                             Number of concurrent worker tasks polling for and executing background jobs. Defaults to the number of processor cores (@Environment.ProcessorCount). Requires an application restart to take effect.
                         </RadzenText>
-                        <RadzenNumeric @bind-Value="_localWorkerOptions.WorkerCount" TValue="int" Min="1" Style="max-width: 400px;" Name="WorkerCount" />
+                        <RadzenNumeric @bind-Value="_workerCount" TValue="int" Min="1" Style="max-width: 400px;" Name="WorkerCount" />
                     </RadzenStack>
                 }
             </RadzenStack>
@@ -88,7 +88,7 @@
                     <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                         Number of retry attempts before a job is dead-lettered. Can be overridden per-manifest.
                     </RadzenText>
-                    <RadzenNumeric @bind-Value="_schedulerConfig!.DefaultMaxRetries" TValue="int" Min="0" Style="max-width: 400px;" Name="DefaultMaxRetries" />
+                    <RadzenNumeric @bind-Value="_defaultMaxRetries" TValue="int" Min="0" Style="max-width: 400px;" Name="DefaultMaxRetries" />
                 </RadzenStack>
 
                 <RadzenStack Gap="0.25rem">
@@ -107,7 +107,7 @@
                     <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                         Multiplier applied to retry delay on each subsequent attempt. Set to 1.0 for constant delay.
                     </RadzenText>
-                    <RadzenNumeric @bind-Value="_schedulerConfig!.RetryBackoffMultiplier" TValue="double" Min="1" Step="0.1" Format="0.0" Style="max-width: 400px;" Name="RetryBackoffMultiplier" />
+                    <RadzenNumeric @bind-Value="_retryBackoffMultiplier" TValue="double" Min="1" Step="0.1" Format="0.0" Style="max-width: 400px;" Name="RetryBackoffMultiplier" />
                 </RadzenStack>
 
                 <RadzenStack Gap="0.25rem">
@@ -153,7 +153,7 @@
                     <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                         Re-evaluate and requeue jobs that were still in-progress when the application last shut down.
                     </RadzenText>
-                    <RadzenSwitch @bind-Value="_schedulerConfig!.RecoverStuckJobsOnStartup" />
+                    <RadzenSwitch @bind-Value="_recoverStuckJobsOnStartup" />
                 </RadzenStack>
             </RadzenStack>
         </RadzenFieldset>
@@ -177,13 +177,13 @@
                     <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                         Automatically delete dead letter records that exceed the retention period.
                     </RadzenText>
-                    <RadzenSwitch @bind-Value="_schedulerConfig!.AutoPurgeDeadLetters" />
+                    <RadzenSwitch @bind-Value="_autoPurgeDeadLetters" />
                 </RadzenStack>
             </RadzenStack>
         </RadzenFieldset>
 
         @* ── Metadata Cleanup (conditional) ── *@
-        @if (_schedulerConfig!.MetadataCleanup is not null)
+        @if (_hasMetadataCleanup)
         {
             <RadzenFieldset Text="Metadata Cleanup" class="@(IsMetadataCleanupDirty ? "cs-fieldset-dirty" : "")">
                 <RadzenStack Gap="1.5rem">

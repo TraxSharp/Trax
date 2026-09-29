@@ -16,6 +16,8 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
 
     public DateTime LastPollTime { get; private set; } = DateTime.UtcNow;
 
+    public string? LastPollError { get; private set; }
+
     public bool HideAdminTrains { get; private set; } = DefaultHideAdminTrains;
 
     public IReadOnlyList<string> AdminTrainNames => AdminTrains.ShortNames;
@@ -90,7 +92,10 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
     public void NotifyPolled()
     {
         LastPollTime = DateTime.UtcNow;
+        LastPollError = null;
     }
+
+    public void NotifyPollFailed(string message) => LastPollError = message;
 
     private async Task<bool> LoadVisibilityAsync(string key)
     {

@@ -3,9 +3,11 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
+using Microsoft.EntityFrameworkCore;
 using Radzen;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -78,7 +80,7 @@ public partial class RunTrainDialog : IDisposable
                     : JsonSerializer.Deserialize(
                         _jsonInput,
                         Registration.InputType,
-                        TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+                        InputOptions()
                     );
 
             if (input is null)
@@ -97,11 +99,21 @@ public partial class RunTrainDialog : IDisposable
                 }
             );
 
-            using var dataContext = await DataContextFactory.CreateDbContextAsync(_cts.Token);
-            await dataContext.Track(metadata);
-            await dataContext.SaveChanges(_cts.Token);
+            using (var dataContext = await DataContextFactory.CreateDbContextAsync(_cts.Token))
+            {
+                await dataContext.Track(metadata);
+                await dataContext.SaveChanges(_cts.Token);
+            }
 
-            await JobSubmitter.EnqueueAsync(metadata.Id, input);
+            try
+            {
+                await JobSubmitter.EnqueueAsync(metadata.Id, input, _cts.Token);
+            }
+            catch (Exception submitFailure)
+            {
+                await FailUnsubmittedRun(metadata.Id, submitFailure);
+                throw;
+            }
 
             DialogService.Close();
             Navigation.NavigateTo($"trax/data/metadata/{metadata.Id}");
@@ -120,6 +132,33 @@ public partial class RunTrainDialog : IDisposable
         }
     }
 
+    /// <summary>
+    /// The job submitter refused the run, so no job exists to move its row out of Pending. Fail
+    /// it here with the submitter's exception, as the job dispatcher does when a submit fails,
+    /// rather than leave it for the stale-pending reaper to fail later for the wrong reason.
+    /// </summary>
+    private async Task FailUnsubmittedRun(long metadataId, Exception submitFailure)
+    {
+        try
+        {
+            using var dataContext = await DataContextFactory.CreateDbContextAsync(
+                CancellationToken.None
+            );
+            var metadata = await dataContext.Metadatas.FirstOrDefaultAsync(m => m.Id == metadataId);
+            if (metadata is null || metadata.TrainState != TrainState.Pending)
+                return;
+
+            metadata.TrainState = TrainState.Failed;
+            metadata.EndTime = DateTime.UtcNow;
+            metadata.AddException(submitFailure);
+            await dataContext.SaveChanges(CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            // The dialog reports the submit failure itself; the reaper still fails the row.
+        }
+    }
+
     private object? BuildInputFromForm()
     {
         var jsonObj = new JsonObject();
@@ -133,9 +172,48 @@ public partial class RunTrainDialog : IDisposable
         return JsonSerializer.Deserialize(
             jsonObj.ToJsonString(),
             Registration.InputType,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+            InputOptions()
         );
     }
+
+    /// <summary>
+    /// The options both tabs read an input with: the host's train parameter options, so an
+    /// enum or any other converter it configures reads the same from either tab, made
+    /// case-insensitive and refusing a property given twice. The form's keys are the C#
+    /// property names, and a person typing JSON may write them that way too; under a camelCase
+    /// policy either would otherwise match nothing and leave the property at its default
+    /// without an error. Once case is ignored, <c>{"amount":1,"Amount":999}</c> names one
+    /// property twice, which is refused rather than resolved to either value.
+    /// Trax.Docs/adr/0023-caller-supplied-train-input-is-read-case-insensitively.md records
+    /// both rules for every caller-supplied train input.
+    ///
+    /// <para>One copy is kept for as long as the host's options are the same instance, and
+    /// rebuilt if they are replaced.</para>
+    /// </summary>
+    private static JsonSerializerOptions InputOptions()
+    {
+        var source = TraxEffectConfiguration.StaticSystemJsonSerializerOptions;
+        var cached = _inputOptions;
+        if (cached is not null && ReferenceEquals(cached.Source, source))
+            return cached.Options;
+
+        var options = new JsonSerializerOptions(source)
+        {
+            PropertyNameCaseInsensitive = true,
+            AllowDuplicateProperties = false,
+        };
+        options.MakeReadOnly(populateMissingResolver: true);
+
+        _inputOptions = new DerivedOptions(source, options);
+        return options;
+    }
+
+    private static DerivedOptions? _inputOptions;
+
+    private sealed record DerivedOptions(
+        JsonSerializerOptions Source,
+        JsonSerializerOptions Options
+    );
 
     private static JsonNode? ToJsonNode(object? value, Type targetType)
     {
