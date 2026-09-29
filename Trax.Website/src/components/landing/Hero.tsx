@@ -4,27 +4,22 @@ export default function Hero() {
   return (
     <section className="relative overflow-hidden border-b border-border">
       <div className="mx-auto max-w-6xl px-6 pb-20 pt-24 sm:px-8 lg:flex lg:items-start lg:gap-16 lg:pt-32">
-        {/* Left — text, left-aligned */}
+        {/* Left: text, left-aligned */}
         <div className="max-w-xl">
           <p className="font-mono text-sm tracking-wider text-accent">
-            MIT licensed.
+            MIT licensed. .NET 10. Runs inside your ASP.NET app.
           </p>
           <h1 className="mt-4 text-4xl font-bold leading-[1.15] tracking-tight text-text-primary sm:text-5xl">
-            A framework for
-            <br />
-            readable .NET
+            Business logic you can call, schedule, or serve as an API
           </h1>
           <p className="mt-6 text-lg leading-relaxed text-text-secondary">
-            Single responsibility code is hard to write. Business requirements
-            lose their meaning somewhere between controllers, handlers,
-            services, and routing. Side effects begin to bleed across these
-            boundaries. Code becomes mismanaged, and difficult to understand.
-            Without a strong code style, readability stops being a priority.
+            A train is a typed pipeline of small steps. Call it from a
+            controller, put it on a cron schedule, send it to a worker on
+            another machine, or publish it as a GraphQL mutation.
           </p>
           <p className="mt-4 text-text-muted">
-            Trax consolidates all of that into one framework. Your configuration
-            lives in Program.cs, your logic lives in pipelines, and everything
-            reads like a language your team already understands.
+            It is the same class each time, and every run is written to your
+            Postgres: when it started, how it ended, and which step failed.
           </p>
           <div className="mt-10 flex items-center gap-4">
             <Link
@@ -47,7 +42,7 @@ export default function Hero() {
           </p>
         </div>
 
-        {/* Right — visual pipeline diagram */}
+        {/* Right: visual pipeline diagram */}
         <div className="mt-12 lg:mt-2 lg:flex-1">
           <pre className="overflow-x-auto font-mono text-[13px] leading-relaxed text-text-muted">
             <span className="text-accent">{"  Input"}</span>

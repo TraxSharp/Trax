@@ -1,8 +1,11 @@
 import Hero from "@/components/landing/Hero";
-import ProblemSolution from "@/components/landing/ProblemSolution";
+import StepShape from "@/components/landing/StepShape";
+import FourWays from "@/components/landing/FourWays";
+import RunRecord from "@/components/landing/RunRecord";
 import LayerDiagram from "@/components/landing/LayerDiagram";
-import FeatureGrid from "@/components/landing/FeatureGrid";
 import DeploymentArchitectures from "@/components/landing/DeploymentArchitectures";
+import WhereTraxStops from "@/components/landing/WhereTraxStops";
+import ComingFrom from "@/components/landing/ComingFrom";
 import QuickStart from "@/components/landing/QuickStart";
 import PackageList from "@/components/landing/PackageList";
 
@@ -10,10 +13,13 @@ export default function Home() {
   return (
     <>
       <Hero />
-      <ProblemSolution />
+      <StepShape />
+      <FourWays />
+      <RunRecord />
       <LayerDiagram />
-      <FeatureGrid />
       <DeploymentArchitectures />
+      <WhereTraxStops />
+      <ComingFrom />
       <QuickStart />
       <PackageList />
     </>

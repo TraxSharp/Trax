@@ -15,7 +15,7 @@ const architectures: Architecture[] = [
   {
     name: "All-in-one",
     description:
-      "API, scheduler, and job execution in a single process. The simplest setup — good for small services, internal tools, or getting started. One deployable, one connection string, done.",
+      "API, scheduler, and job execution in a single process. The simplest setup, and a good fit for small services, internal tools, or getting started. One deployable, one connection string, done.",
     blocks: [
       {
         label: "Program.cs",
@@ -35,7 +35,7 @@ builder.Services.AddTraxGraphQL();`,
   {
     name: "API + Scheduler",
     description:
-      "The API handles requests and queues work. A separate scheduler process picks up jobs and runs them locally. Good when you want to isolate heavy processing from your request path — the API stays fast, the scheduler does the lifting.",
+      "The API handles requests and queues work. A separate scheduler process picks up jobs and runs them locally. Good when you want to isolate heavy processing from your request path. The API stays fast and the scheduler does the lifting.",
     blocks: [
       {
         label: "Api / Program.cs",
@@ -61,7 +61,7 @@ builder.AddTraxDashboard();`,
   {
     name: "Hub + Workers",
     description:
-      "A hub manages scheduling and the API. Stateless worker nodes poll the database for jobs and execute them independently. Scale workers horizontally — add more when load increases, remove them when it drops. Workers coordinate through PostgreSQL row locking, no message broker required.",
+      "A hub manages scheduling and the API. Stateless worker nodes poll the database for jobs and execute them independently. Scale workers horizontally: add more when load increases, remove them when it drops. Workers coordinate through PostgreSQL row locking, no message broker required.",
     blocks: [
       {
         label: "Hub / Program.cs",
@@ -90,7 +90,7 @@ builder.Services.AddTraxWorker(opts => {
   {
     name: "Ephemeral dispatch",
     description:
-      "The API dispatches work over HTTP to a stateless runner — think Lambda functions or short-lived containers. No persistent worker process, no polling. The runner boots, executes one pipeline, and exits. Good for bursty workloads where you don't want idle compute.",
+      "The API dispatches work over HTTP to a stateless runner, such as a Lambda function or a short-lived container. No persistent worker process, no polling. The runner boots, executes one pipeline, and exits. Good for bursty workloads where you don't want idle compute.",
     blocks: [
       {
         label: "Api / Program.cs",
@@ -130,7 +130,7 @@ builder.Services.AddTraxWorker(opts => {
   {
     name: "Just the scheduler",
     description:
-      "No API at all. A standalone process that runs pipelines on a schedule — data processing, ETL, report generation, background maintenance. If you don't need an external trigger, you don't need an API.",
+      "No API at all. A standalone process that runs pipelines on a schedule: data processing, ETL, report generation, background maintenance. If you don't need an external trigger, you don't need an API.",
     blocks: [
       {
         label: "Program.cs",
@@ -181,7 +181,7 @@ export default async function DeploymentArchitectures() {
         <p className="mt-3 max-w-2xl text-text-secondary">
           Same pipelines, different topologies. Move from a single process to
           distributed workers to serverless dispatch by changing a few lines of
-          configuration — the pipeline code stays the same.
+          configuration. The pipeline code stays the same.
         </p>
 
         <div className="mt-12 space-y-16">

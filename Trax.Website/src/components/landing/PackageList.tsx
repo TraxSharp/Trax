@@ -49,7 +49,8 @@ export default function PackageList() {
           Packages
         </h2>
         <p className="mt-2 text-text-muted">
-          All MIT licensed. All on NuGet.
+          All on NuGet, all MIT licensed. There is no commercial edition, and
+          there will not be one.
         </p>
 
         {/* Simple list, not cards */}

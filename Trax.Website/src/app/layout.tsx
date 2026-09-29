@@ -16,11 +16,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Trax - Railway Oriented Programming for .NET",
+    default: "Trax: business logic, background jobs and APIs for .NET",
     template: "%s | Trax",
   },
   description:
-    "A .NET framework for Railway Oriented Programming with Effects, Scheduling, and more.",
+    "An MIT .NET framework for business logic you can call, schedule, run on workers, or serve as a GraphQL API, with every run recorded in Postgres.",
   metadataBase: new URL("https://traxsharp.net"),
 };
 
