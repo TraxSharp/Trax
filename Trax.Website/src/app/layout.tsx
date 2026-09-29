@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import { SITE_DESCRIPTION, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,9 +20,8 @@ export const metadata: Metadata = {
     default: "Trax: business logic, background jobs and APIs for .NET",
     template: "%s | Trax",
   },
-  description:
-    "An MIT .NET framework for business logic you can call, schedule, run on workers, or serve as a GraphQL API, with every run recorded in Postgres.",
-  metadataBase: new URL("https://traxsharp.net"),
+  description: SITE_DESCRIPTION,
+  metadataBase: new URL(SITE_URL),
 };
 
 export default function RootLayout({

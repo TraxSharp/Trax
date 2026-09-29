@@ -1,17 +1,25 @@
 import type { Metadata } from "next";
 import { MDXRemote } from "next-mdx-remote/rsc";
-import remarkGfm from "remark-gfm";
-import rehypeSlug from "rehype-slug";
-import rehypePrettyCode from "rehype-pretty-code";
-import { getAllDocs, getDocBySlug } from "@/lib/docs";
+import { getAllDocs, getDocBySlug, markdownPath } from "@/lib/docs";
+import { docsMdxOptions } from "@/lib/mdx-options";
 import { buildNavTree } from "@/lib/nav-tree";
 import DocsLayout from "@/components/docs/DocsLayout";
+import MarkdownLink from "@/components/docs/MarkdownLink";
 import { mdxComponents } from "@/components/mdx/MdxComponents";
 
-export const metadata: Metadata = {
-  title: "Documentation",
-  description: "Trax documentation — Railway Oriented Programming for .NET",
-};
+export function generateMetadata(): Metadata {
+  const doc = getDocBySlug("");
+  return {
+    title: "Documentation",
+    description:
+      doc?.description ??
+      "Trax documentation — Railway Oriented Programming for .NET",
+    alternates: {
+      canonical: "/docs",
+      ...(doc ? { types: { "text/markdown": markdownPath("") } } : {}),
+    },
+  };
+}
 
 export default function DocsHomePage() {
   const allDocs = getAllDocs();
@@ -22,24 +30,13 @@ export default function DocsHomePage() {
     <DocsLayout navTree={navTree}>
       {doc ? (
         <div className="docs-content">
+          <div className="mb-6 flex justify-end">
+            <MarkdownLink slug="" />
+          </div>
           <MDXRemote
             source={doc.content}
             components={mdxComponents}
-            options={{
-              mdxOptions: {
-                remarkPlugins: [remarkGfm],
-                rehypePlugins: [
-                  rehypeSlug,
-                  [
-                    rehypePrettyCode,
-                    {
-                      theme: "github-dark-dimmed",
-                      keepBackground: false,
-                    },
-                  ],
-                ],
-              },
-            }}
+            options={docsMdxOptions}
           />
         </div>
       ) : (

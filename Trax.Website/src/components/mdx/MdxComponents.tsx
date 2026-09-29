@@ -76,14 +76,28 @@ export const mdxComponents: MDXComponents = {
       {...props}
     />
   ),
-  code: (props: ComponentPropsWithoutRef<"code">) => {
-    // Inline code (not inside a pre)
-    const isBlock =
-      typeof props.className === "string" &&
-      props.className.includes("language-");
-    if (isBlock) {
-      return <code {...props} />;
+  code: ({
+    className,
+    ...props
+  }: ComponentPropsWithoutRef<"code"> & { "data-language"?: string }) => {
+    // rehype-pretty-code marks every fenced block with data-language (a fence
+    // with no language gets "text"). Emit the conventional language-<lang>
+    // class too, so HTML-to-markdown converters keep the fence language.
+    const language = props["data-language"];
+    if (language) {
+      return (
+        <code
+          className={[`language-${language}`, "font-mono", className]
+            .filter(Boolean)
+            .join(" ")}
+          {...props}
+        />
+      );
     }
+    if (typeof className === "string" && className.includes("language-")) {
+      return <code className={className} {...props} />;
+    }
+    // Inline code
     return (
       <code
         className="rounded bg-bg-tertiary px-1.5 py-0.5 font-mono text-sm text-accent"

@@ -1,13 +1,17 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { MDXRemote } from "next-mdx-remote/rsc";
-import remarkGfm from "remark-gfm";
-import rehypeSlug from "rehype-slug";
-import rehypePrettyCode from "rehype-pretty-code";
-import { getAllDocs, getDocBySlug, generateStaticParams as genParams } from "@/lib/docs";
+import {
+  getAllDocs,
+  getDocBySlug,
+  generateStaticParams as genParams,
+  markdownPath,
+} from "@/lib/docs";
+import { docsMdxOptions } from "@/lib/mdx-options";
 import { buildNavTree } from "@/lib/nav-tree";
 import DocsLayout from "@/components/docs/DocsLayout";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
+import MarkdownLink from "@/components/docs/MarkdownLink";
 import { mdxComponents } from "@/components/mdx/MdxComponents";
 
 interface PageProps {
@@ -27,7 +31,11 @@ export async function generateMetadata({
   if (!doc) return { title: "Not Found" };
   return {
     title: doc.title,
-    description: `Trax documentation: ${doc.title}`,
+    description: doc.description,
+    alternates: {
+      canonical: `/docs/${slugStr}`,
+      types: { "text/markdown": markdownPath(slugStr) },
+    },
   };
 }
 
@@ -45,30 +53,19 @@ export default async function DocPage({ params }: PageProps) {
 
   return (
     <DocsLayout navTree={navTree}>
-      <DocsBreadcrumb
-        title={doc.title}
-        parent={doc.parent}
-        grandParent={doc.grandParent}
-      />
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <DocsBreadcrumb
+          title={doc.title}
+          parent={doc.parent}
+          grandParent={doc.grandParent}
+        />
+        <MarkdownLink slug={slugStr} />
+      </div>
       <div className="docs-content">
         <MDXRemote
           source={doc.content}
           components={mdxComponents}
-          options={{
-            mdxOptions: {
-              remarkPlugins: [remarkGfm],
-              rehypePlugins: [
-                rehypeSlug,
-                [
-                  rehypePrettyCode,
-                  {
-                    theme: "github-dark-dimmed",
-                    keepBackground: false,
-                  },
-                ],
-              ],
-            },
-          }}
+          options={docsMdxOptions}
         />
       </div>
     </DocsLayout>

@@ -12,7 +12,7 @@ export default function DocsBreadcrumb({
   grandParent,
 }: DocsBreadcrumbProps) {
   return (
-    <nav className="mb-6 flex items-center gap-2 text-sm text-text-muted">
+    <nav className="flex flex-wrap items-center gap-2 text-sm text-text-muted">
       <Link href="/docs" className="hover:text-text-secondary">
         Docs
       </Link>
