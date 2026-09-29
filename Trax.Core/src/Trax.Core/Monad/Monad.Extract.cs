@@ -1,3 +1,4 @@
+using System.Reflection;
 using Trax.Core.Exceptions;
 
 namespace Trax.Core.Monad;
@@ -16,9 +17,7 @@ public partial class Monad<TInput, TReturn>
         }
 
         // Try to get the source object from Memory
-        var typeFromMemory = (TIn?)Memory.GetValueOrDefault(typeof(TIn));
-
-        if (typeFromMemory is null)
+        if (!Memory.TryGetValue(typeof(TIn), out var stored) || stored is not TIn typeFromMemory)
         {
             Exception ??= new TrainException($"Could not find type: ({typeof(TIn)}).");
 
@@ -63,12 +62,18 @@ public partial class Monad<TInput, TReturn>
         return this;
     }
 
+    private const BindingFlags InstanceMembers = BindingFlags.Public | BindingFlags.Instance;
+
     private object? GetPropertyValue<TIn, TOut>(TIn input)
     {
+        // Instance properties only: a static member of the same type is not this object's value,
+        // and an indexer cannot be read without arguments.
         var propertyInfo = input!
             .GetType()
-            .GetProperties()
-            .FirstOrDefault(x => x.PropertyType == typeof(TOut));
+            .GetProperties(InstanceMembers)
+            .FirstOrDefault(x =>
+                x.PropertyType == typeof(TOut) && x.GetIndexParameters().Length == 0
+            );
 
         return propertyInfo?.GetValue(input);
     }
@@ -77,7 +82,7 @@ public partial class Monad<TInput, TReturn>
     {
         var fieldInfo = input!
             .GetType()
-            .GetFields()
+            .GetFields(InstanceMembers)
             .FirstOrDefault(x => x.FieldType == typeof(TOut));
 
         return fieldInfo?.GetValue(input);

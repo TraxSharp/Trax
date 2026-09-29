@@ -26,6 +26,24 @@ public class HygieneGuardsTests
         result.Inspected.Should().Be(1);
     }
 
+    [TestCase("[TestCase(1, Ignore = \"x\")]")]
+    [TestCase("[TestCase(1, IgnoreReason = \"x\")]")]
+    [TestCase("[NUnit.Framework.Ignore(\"x\")]")]
+    [TestCase("[IgnoreAttribute(\"x\")]")]
+    [TestCase("[Test,\n Ignore(\"x\")]")]
+    public void NoIgnoreAttribute_FlagsEveryDeclarationTimeSkip(string attribute)
+    {
+        using var repo = new TempRepo().Write(
+            "tests/Sample/FooTests.cs",
+            "public class FooTests { " + attribute + " public void A(int n) {} }"
+        );
+
+        HygieneGuards
+            .NoIgnoreAttribute(OptionsFor(repo))
+            .Passed.Should()
+            .BeFalse($"{attribute} skips the test at declaration time, which ADR 0005 rejects");
+    }
+
     [Test]
     public void NoIgnoreAttribute_IgnoresCommentedOccurrence()
     {

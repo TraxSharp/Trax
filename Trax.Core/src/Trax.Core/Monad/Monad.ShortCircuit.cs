@@ -61,6 +61,10 @@ public partial class Monad<TInput, TReturn>
     private Task<Monad<TInput, TReturn>> ShortCircuitAsync<TJunction>()
         where TJunction : class
     {
+        // Skipped after a failure, like every other step, without building the junction.
+        if (Exception is not null)
+            return Task.FromResult(this);
+
         var junctionInstance = this.InitializeJunction<TJunction, TInput, TReturn>();
 
         if (junctionInstance is null)
@@ -86,6 +90,9 @@ public partial class Monad<TInput, TReturn>
     )
         where TJunction : class
     {
+        if (Exception is not null)
+            return this;
+
         var (tIn, tOut) = ReflectionHelpers.ExtractJunctionTypeArguments<TJunction>();
 
         var chainMethod = ReflectionHelpers.FindGenericShortCircuitJunctionMethod<

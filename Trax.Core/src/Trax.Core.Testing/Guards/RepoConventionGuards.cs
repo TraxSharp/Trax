@@ -111,9 +111,18 @@ public static class RepoConventionGuards
                 var version =
                     reference.Attribute("Version")?.Value ?? reference.Element("Version")?.Value;
 
+                // VersionOverride sidesteps the central pin just as an inline Version does.
+                var versionOverride =
+                    reference.Attribute("VersionOverride")?.Value
+                    ?? reference.Element("VersionOverride")?.Value;
+
                 if (version is not null)
                     offenders.Add(
                         $"{rel} -> {include} carries inline Version=\"{version}\" (must be centrally managed)"
+                    );
+                else if (versionOverride is not null)
+                    offenders.Add(
+                        $"{rel} -> {include} carries VersionOverride=\"{versionOverride}\" (must be centrally managed)"
                     );
                 else if (!centralPins.Contains(include))
                     offenders.Add(

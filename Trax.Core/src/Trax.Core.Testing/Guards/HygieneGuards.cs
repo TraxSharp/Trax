@@ -10,9 +10,19 @@ namespace Trax.Core.Testing.Guards;
 public static class HygieneGuards
 {
     // Matches an [Ignore] attribute whether standalone ([Ignore] / [Ignore("...")]) or combined with
-    // others ([Test, Ignore(...)]), i.e. preceded by an open bracket or a comma.
+    // others ([Test, Ignore(...)]), i.e. preceded by an open bracket or a comma. The name may be
+    // qualified (NUnit.Framework.Ignore) or carry its suffix (IgnoreAttribute), and the list may
+    // span lines, so it is matched against the whole file rather than line by line. The lookahead
+    // leaves a following comma for the next attribute in the same list.
     private static readonly Regex IgnoreAttribute = new(
-        @"(?:\[|,)\s*Ignore(\s*\(|\s*\])",
+        @"(?:\[|,)\s*(?:[\w.]+\.)?Ignore(?:Attribute)?(?=\s*(?:\(|\]|,))",
+        RegexOptions.Compiled
+    );
+
+    // A per-case skip: [TestCase(1, Ignore = "...")] or IgnoreReason = on a case or fixture
+    // attribute. Same effect as [Ignore], one case at a time.
+    private static readonly Regex IgnoreNamedArgument = new(
+        @"\[[^\]]*?\b(?:TestCase|TestCaseSource|TestFixture|TestFixtureSource)(?:Attribute)?\b[^\]]*?\b(?:Ignore|IgnoreReason)\s*=(?!=)",
         RegexOptions.Compiled
     );
 
@@ -30,6 +40,9 @@ public static class HygieneGuards
         ("Assert.IsEmpty", new Regex(@"\bAssert\.IsEmpty\b", RegexOptions.Compiled)),
         ("Assert.IsNotEmpty", new Regex(@"\bAssert\.IsNotEmpty\b", RegexOptions.Compiled)),
         ("Assert.Contains", new Regex(@"\bAssert\.Contains\b", RegexOptions.Compiled)),
+        ("ClassicAssert", new Regex(@"\bClassicAssert\.\w+", RegexOptions.Compiled)),
+        ("CollectionAssert", new Regex(@"\bCollectionAssert\.\w+", RegexOptions.Compiled)),
+        ("StringAssert", new Regex(@"\bStringAssert\.\w+", RegexOptions.Compiled)),
     ];
 
     private static readonly Regex FixedDelay = new(
@@ -61,7 +74,12 @@ public static class HygieneGuards
                 continue;
 
             var stripped = SourceText.StripCommentsAndStrings(File.ReadAllText(file));
-            foreach (var (line, _) in SourceText.MatchingLines(stripped, IgnoreAttribute))
+            var lines = new SortedSet<int>();
+            foreach (var pattern in new[] { IgnoreAttribute, IgnoreNamedArgument })
+            foreach (Match match in pattern.Matches(stripped))
+                lines.Add(stripped.Take(match.Index).Count(c => c == '\n') + 1);
+
+            foreach (var line in lines)
                 offenders.Add($"{rel}:{line}");
         }
 

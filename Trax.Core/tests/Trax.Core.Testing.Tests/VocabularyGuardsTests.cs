@@ -274,6 +274,21 @@ public class VocabularyGuardsTests
             .BeTrue("the repo decides which concepts are Trax's, and this one listed none");
     }
 
+    [TestCase("[Authorize, UsePaging]")]
+    [TestCase("[AllowAnonymous, GraphQLName(\"read\")]")]
+    [TestCase("[property: Authorize]")]
+    public void ForeignAttribute_IsAnOffender_WhereverItSitsInTheAttributeList(string attributes)
+    {
+        using var repo = new TempRepo().Write(
+            "src/Thing.cs",
+            "using HotChocolate.Authorization;\npublic class T { "
+                + attributes
+                + " public string R { get; } = \"x\"; }"
+        );
+
+        Run(repo).Passed.Should().BeFalse($"{attributes} applies the library's attribute ({Adr})");
+    }
+
     [Test]
     public void NullBannedList_Throws()
     {

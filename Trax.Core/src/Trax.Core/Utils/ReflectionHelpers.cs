@@ -44,17 +44,20 @@ internal static class ReflectionHelpers
         if (JunctionTypeArgumentsCache.TryGetValue(junctionType, out var cached))
             return cached;
 
-        // Find the IJunction<,> interface
-        var interfaceType = junctionType
-            .GetInterfaces()
+        // Find the IJunction<,> interface. GetInterfaces() leaves out the type itself, so a
+        // chain naming IJunction<TIn, TOut> directly is its own candidate.
+        var interfaceType = new[] { junctionType }
+            .Concat(junctionType.GetInterfaces())
             .FirstOrDefault(i =>
-                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IJunction<,>)
+                i.IsInterface
+                && i.IsGenericType
+                && i.GetGenericTypeDefinition() == typeof(IJunction<,>)
             );
 
         if (interfaceType is null)
         {
             throw new InvalidOperationException(
-                $"{nameof(TJunction)} does not implement IJunction<TIn, TOut>."
+                $"{junctionType.FullName ?? junctionType.Name} does not implement IJunction<TIn, TOut>."
             );
         }
 

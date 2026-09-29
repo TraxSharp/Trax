@@ -64,4 +64,41 @@ public sealed class ChainRecorder
         _steps.Add(new ChainStep(kind, junction, tIn, tOut));
 
     internal void Refuse(string reason) => _refusals.Add(reason);
+
+    private string? _firstAsyncRootCall;
+
+    private bool _unlinkedRefused;
+
+    /// <summary>
+    /// Notes a chain call made on the train itself rather than on the result of an earlier call.
+    /// </summary>
+    /// <remarks>
+    /// Every such call starts from the train's monad, so two of them are two chains unless the
+    /// second is reached through the first. A synchronous call before the first junction step is
+    /// fine: it has finished by the time the next statement runs. After a junction step that the
+    /// body did not await, the next root call runs alongside that junction over the same Memory,
+    /// which no replay of the declaration can show, so it is refused. Awaiting the chain first
+    /// (<c>await Chain&lt;A&gt;(); Extract&lt;X, Y&gt;();</c>) keeps it one sequence.
+    /// </remarks>
+    internal void NoteRootCall(string call, bool startsAJunction)
+    {
+        if (_firstAsyncRootCall is not null && !_unlinkedRefused)
+        {
+            _unlinkedRefused = true;
+            Refuse(
+                $"Junctions() calls {call} as a separate statement after {_firstAsyncRootCall}, so "
+                    + "the two start separate chains that run at the same time. Link them into one "
+                    + "chain, for example Chain<A>().Chain<B>().Resolve()."
+            );
+        }
+
+        if (startsAJunction)
+            _firstAsyncRootCall ??= call;
+    }
+
+    /// <summary>
+    /// Notes that the body awaited the chain it started, so the next root call follows it
+    /// rather than running beside it.
+    /// </summary>
+    internal void NoteJoined() => _firstAsyncRootCall = null;
 }

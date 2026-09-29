@@ -15,4 +15,8 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="NUnit" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Core.Testing.Tests" />
+  </ItemGroup>
 </Project>

@@ -79,6 +79,24 @@ public class JunctionFailureClassTests : TestSetup
     }
 
     [Test]
+    public async Task AClassInTheMessage_IsNotReadFromATypeDerivedFromTrainException()
+    {
+        // A consumer's own exception type deriving from TrainException carries whatever text it
+        // was built with, often a remote system's response body. Trax never rebuilds a recorded
+        // failure as a derived type, so its message is not a record.
+        var data = await DataAfterFailing(
+            new UpstreamError(RecordJson(((int)FailureClass.Transient).ToString()))
+        );
+
+        data.FailureClass.Should()
+            .BeNull(
+                "only a TrainException that Trax rebuilt from a record carries a class in its message"
+            );
+    }
+
+    private sealed class UpstreamError(string body) : TrainException(body);
+
+    [Test]
     public async Task AnUndefinedClassInTheMessage_IsCarriedAsUnclassified()
     {
         var data = await DataAfterFailing(new TrainException(RecordJson("42")));

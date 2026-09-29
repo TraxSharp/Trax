@@ -72,17 +72,23 @@ public static class VocabularyGuards
         var patterns = banned.ToDictionary(
             entry => entry,
             entry => new Regex(
-                // Attribute position: opening the list or following another attribute, then the
-                // name, then arguments or the closing bracket.
-                @"(?:\[|,)\s*(?:[\w.]+\.)?(?:"
+                // Attribute position: opening the list (with an optional target such as
+                // property:) or following another attribute, then the name with or without its
+                // Attribute suffix, then arguments, the closing bracket, or another attribute. The
+                // lookahead leaves that comma for the next attribute in the list.
+                @"(?:\[\s*(?:\w+\s*:\s*)?|,)\s*(?:[\w.]+\.)?(?:"
                     + string.Join("|", entry.Attributes.Select(Regex.Escape))
-                    + @")\s*(?:\(|\])",
+                    + @")(?:Attribute)?(?=\s*(?:\(|\]|,))",
                 RegexOptions.Compiled
             )
         );
 
         var offenders = new List<string>();
         var inspected = 0;
+
+        // A global using makes a library's attributes visible in files that never name it, so a
+        // library imported that way counts as present everywhere.
+        var globallyImported = GloballyImported(root, roots);
 
         foreach (var file in SourceFiles.CSharpUnder(root, roots))
         {
@@ -98,7 +104,10 @@ public static class VocabularyGuards
 
             foreach (var (entry, pattern) in patterns)
             {
-                if (!text.Contains(entry.Library, StringComparison.Ordinal))
+                if (
+                    !globallyImported.Contains(entry.Library)
+                    && !text.Contains(entry.Library, StringComparison.Ordinal)
+                )
                     continue;
 
                 foreach (Match match in pattern.Matches(text))
@@ -122,5 +131,43 @@ public static class VocabularyGuards
                 + "behalf, add it to the allowlist with a reason. Offenders: "
                 + string.Join(", ", offenders)
         );
+    }
+
+    private static readonly Regex GlobalUsing = new(
+        @"^\s*global\s+using\s+(?:static\s+)?(?:\w+\s*=\s*)?([\w.]+)",
+        RegexOptions.Compiled | RegexOptions.Multiline
+    );
+
+    private static readonly Regex ProjectUsing = new(
+        @"<Using\s+Include\s*=\s*""([\w.]+)""",
+        RegexOptions.Compiled
+    );
+
+    /// <summary>
+    /// Every namespace a global using brings in, from source files or a project's
+    /// <c>&lt;Using Include&gt;</c>, with each of its parent namespaces: importing
+    /// <c>HotChocolate.Authorization</c> is a use of <c>HotChocolate</c>.
+    /// </summary>
+    private static HashSet<string> GloballyImported(string root, string[] roots)
+    {
+        var names = new List<string>();
+
+        foreach (var file in SourceFiles.CSharpUnder(root, roots))
+        foreach (Match match in GlobalUsing.Matches(File.ReadAllText(file)))
+            names.Add(match.Groups[1].Value);
+
+        foreach (var project in SourceFiles.ProjectsUnder(root, roots))
+        foreach (Match match in ProjectUsing.Matches(File.ReadAllText(project)))
+            names.Add(match.Groups[1].Value);
+
+        var imported = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var name in names)
+        {
+            var parts = name.Split('.');
+            for (var i = 1; i <= parts.Length; i++)
+                imported.Add(string.Join('.', parts.Take(i)));
+        }
+
+        return imported;
     }
 }

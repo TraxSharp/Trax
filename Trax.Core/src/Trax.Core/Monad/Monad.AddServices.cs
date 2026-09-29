@@ -122,6 +122,12 @@ public partial class Monad<TInput, TReturn>
 
                 if (services[i] is null)
                     Recorder.Refuse(NullServiceMessage(serviceType, whileRecording: true));
+                else if (services[i]!.GetType().IsValueType)
+                    // A struct passed as an interface is boxed, and the runtime refuses it.
+                    Recorder.Refuse(
+                        $"AddServices<{serviceType.Name}> received a value of the struct type "
+                            + $"{services[i]!.GetType().Name}; a service must be a class."
+                    );
 
                 // A value is stored under an interface it implements; the runtime refuses a
                 // class on every run.
@@ -141,8 +147,13 @@ public partial class Monad<TInput, TReturn>
             if (services[i] is null)
                 throw new Exception(NullServiceMessage(typeArray[i], whileRecording: false));
 
-        foreach (var service in services.OfType<object>())
+        // Each service goes under the type argument it was passed as, in the same position:
+        // one object may be passed under several interfaces, and each is a separate slot the
+        // chain can find.
+        for (var i = 0; i < typeArray.Length; i++)
         {
+            var service = services[i]!;
+            var slot = typeArray[i];
             var serviceType = service.GetType();
 
             // Special handling for Moq mock objects
@@ -163,20 +174,16 @@ public partial class Monad<TInput, TReturn>
                 return this;
             }
 
-            // Find the interface that matches the type parameter
-            var interfaces = serviceType.GetInterfaces();
-            var foundInterface = interfaces.FirstOrDefault(typeArray.Contains);
-
-            if (foundInterface is null)
+            if (!slot.IsInterface || !slot.IsInstanceOfType(service))
             {
                 Exception ??= new TrainException(
-                    $"Class ({serviceType}) does not have any interfaces."
+                    $"Class ({serviceType}) passed to AddServices as ({slot}) must be passed as an "
+                        + "interface it implements."
                 );
                 return this;
             }
 
-            // Store the service by its interface type
-            Memory[foundInterface] = service;
+            Memory[slot] = service;
         }
 
         return this;

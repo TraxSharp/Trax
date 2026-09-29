@@ -74,7 +74,13 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// Executes the train with Railway-oriented programming support.
     /// </summary>
     /// <param name="input">The input data for the train</param>
-    /// <returns>Either the result of the train or an exception</returns>
+    /// <returns>
+    /// Either the result of the train or an exception. Nothing a junction throws escapes this
+    /// method, cancellation included: a cancelled run returns Left holding the
+    /// <see cref="OperationCanceledException"/>, which a caller tells apart with
+    /// <c>is OperationCanceledException</c>. The token is the one <see cref="Run"/> was given, or
+    /// the one the host set on <see cref="CancellationToken"/>.
+    /// </returns>
     public Task<Either<Exception, TReturn>> RunEither(TInput input) => RunInternal(input);
 
     /// <summary>
@@ -145,6 +151,11 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// </remarks>
     /// <exception cref="ChainDeclarationException">
     /// The train read per-execution state while declaring its chain.
+    /// </exception>
+    /// <exception cref="Exception">
+    /// Whatever <c>Junctions()</c> throws while it is read, such as the base
+    /// <see cref="NotImplementedException"/> of a train that declares no chain, is thrown from here
+    /// rather than recorded as a refusal.
     /// </exception>
     public ChainRecorder DeclaredChain()
     {
@@ -221,44 +232,58 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     internal Monad<TInput, TReturn> Activate(TInput input, params object[] otherInputs) =>
         NewMonad().Activate(input, otherInputs);
 
+    /// <summary>
+    /// The train's monad, for a chain call made directly on the train. While the chain is read,
+    /// the call is noted so a second, unlinked chain is refused.
+    /// </summary>
+    private Monad<TInput, TReturn> Root(string call, bool startsAJunction)
+    {
+        ActiveRecorder?.NoteRootCall(call, startsAJunction);
+        return _monad!;
+    }
+
     #region Protected chain methods (Junctions API)
 
     /// <summary>
     /// Creates and executes a junction by its type. Input is extracted from Memory.
     /// </summary>
     protected MonadTask<TInput, TReturn> Chain<TJunction>()
-        where TJunction : class => _monad!.Chain<TJunction>();
+        where TJunction : class => Root("Chain", true).Chain<TJunction>();
 
     /// <summary>
     /// Executes a junction instance. Input is extracted from Memory.
     /// </summary>
     protected MonadTask<TInput, TReturn> Chain<TJunction>(TJunction instance)
-        where TJunction : class => _monad!.Chain(instance);
+        where TJunction : class => Root("Chain", true).Chain(instance);
 
     /// <summary>
     /// Executes a junction resolved from Memory by its interface type.
     /// </summary>
     protected MonadTask<TInput, TReturn> IChain<TJunction>()
-        where TJunction : class => _monad!.IChain<TJunction>();
+        where TJunction : class => Root("IChain", true).IChain<TJunction>();
 
     /// <summary>
     /// Executes a junction instance whose input and output types are stated explicitly, for
     /// chains where they cannot be inferred from the junction's interface.
     /// </summary>
     protected MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
-        where TJunction : IJunction<TIn, TOut> => _monad!.Chain<TJunction, TIn, TOut>(junction);
+        where TJunction : IJunction<TIn, TOut> =>
+        Root("Chain", true).Chain<TJunction, TIn, TOut>(junction);
 
     /// <inheritdoc cref="Chain{TJunction,TIn,TOut}(TJunction)"/>
     protected MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>()
-        where TJunction : IJunction<TIn, TOut>, new() => _monad!.Chain<TJunction, TIn, TOut>();
+        where TJunction : IJunction<TIn, TOut>, new() =>
+        Root("Chain", true).Chain<TJunction, TIn, TOut>();
 
     /// <inheritdoc cref="Chain{TJunction,TIn,TOut}(TJunction)"/>
     protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
-        where TJunction : IJunction<TIn, Unit> => _monad!.Chain<TJunction, TIn>(junction);
+        where TJunction : IJunction<TIn, Unit> =>
+        Root("Chain", true).Chain<TJunction, TIn>(junction);
 
     /// <inheritdoc cref="Chain{TJunction,TIn,TOut}(TJunction)"/>
     protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
-        where TJunction : IJunction<TIn, Unit>, new() => _monad!.Chain<TJunction, TIn>();
+        where TJunction : IJunction<TIn, Unit>, new() =>
+        Root("Chain", true).Chain<TJunction, TIn>();
 
     /// <summary>
     /// Ends a chain that declares no junctions, taking the train's return value from Memory.
@@ -270,18 +295,19 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// run, and stating a result directly would make the chain depend on something other than
     /// the junctions it names.
     /// </remarks>
-    protected Either<Exception, TReturn> Resolve() => _monad!.Resolve();
+    protected Either<Exception, TReturn> Resolve() => Root("Resolve", false).Resolve();
 
     /// <summary>
     /// Extracts a value of type TOut from an object of type TIn in Memory.
     /// </summary>
-    protected Monad<TInput, TReturn> Extract<TIn, TOut>() => _monad!.Extract<TIn, TOut>();
+    protected Monad<TInput, TReturn> Extract<TIn, TOut>() =>
+        Root("Extract", false).Extract<TIn, TOut>();
 
     /// <summary>
     /// Extracts a value of type TOut from the provided TIn object.
     /// </summary>
     protected Monad<TInput, TReturn> Extract<TIn, TOut>(TIn input) =>
-        _monad!.Extract<TIn, TOut>(input);
+        Root("Extract", false).Extract<TIn, TOut>(input);
 
     /// <summary>
     /// Executes a junction with short-circuit behavior. If the junction returns Right, its
@@ -295,30 +321,31 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// count a short circuit's output as available to the junctions after it.
     /// </remarks>
     protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>()
-        where TJunction : class => _monad!.ShortCircuit<TJunction>();
+        where TJunction : class => Root("ShortCircuit", true).ShortCircuit<TJunction>();
 
     /// <summary>
     /// Executes a junction instance with short-circuit behavior.
     /// </summary>
     protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction instance)
-        where TJunction : class => _monad!.ShortCircuit(instance);
+        where TJunction : class => Root("ShortCircuit", true).ShortCircuit(instance);
 
     /// <summary>
     /// Adds a service to the chain's Memory for interface-based junction resolution.
     /// </summary>
-    protected Monad<TInput, TReturn> AddServices<T1>(T1 service) => _monad!.AddServices(service);
+    protected Monad<TInput, TReturn> AddServices<T1>(T1 service) =>
+        Root("AddServices", false).AddServices(service);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2>(T1 s1, T2 s2) =>
-        _monad!.AddServices(s1, s2);
+        Root("AddServices", false).AddServices(s1, s2);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2, T3>(T1 s1, T2 s2, T3 s3) =>
-        _monad!.AddServices(s1, s2, s3);
+        Root("AddServices", false).AddServices(s1, s2, s3);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4>(T1 s1, T2 s2, T3 s3, T4 s4) =>
-        _monad!.AddServices(s1, s2, s3, s4);
+        Root("AddServices", false).AddServices(s1, s2, s3, s4);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5>(
@@ -327,7 +354,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         T3 s3,
         T4 s4,
         T5 s5
-    ) => _monad!.AddServices(s1, s2, s3, s4, s5);
+    ) => Root("AddServices", false).AddServices(s1, s2, s3, s4, s5);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6>(
@@ -337,7 +364,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         T4 s4,
         T5 s5,
         T6 s6
-    ) => _monad!.AddServices(s1, s2, s3, s4, s5, s6);
+    ) => Root("AddServices", false).AddServices(s1, s2, s3, s4, s5, s6);
 
     /// <inheritdoc cref="AddServices{T1}"/>
     protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6, T7>(
@@ -348,7 +375,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         T5 s5,
         T6 s6,
         T7 s7
-    ) => _monad!.AddServices(s1, s2, s3, s4, s5, s6, s7);
+    ) => Root("AddServices", false).AddServices(s1, s2, s3, s4, s5, s6, s7);
 
     #endregion
 }

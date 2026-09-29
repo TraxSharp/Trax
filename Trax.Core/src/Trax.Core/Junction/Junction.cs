@@ -124,8 +124,9 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
     /// worker or a nested train, keeps that answer. The data attached here replaces whatever the
     /// exception carried before, so without this the class would be dropped on the way through.
     ///
-    /// <para>Only a <see cref="TrainException"/> carries a class in its message, because that is
-    /// the type Trax rebuilds a recorded failure as. Any other exception's message is its own
+    /// <para>Only an exception whose type is exactly <see cref="TrainException"/> carries a class
+    /// in its message, because that is the type Trax rebuilds a recorded failure as. A type
+    /// derived from it is treated like any other exception. Any other exception's message is its own
     /// text, and is never read as a record. A value outside <see cref="FailureClass"/> is carried
     /// as <see cref="FailureClass.Unclassified"/>, as the remote wire already does.</para>
     /// </remarks>
@@ -134,7 +135,10 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
         if (e.Data["TrainExceptionData"] is TrainExceptionData attached)
             return Defined(attached.FailureClass);
 
-        if (e is not TrainException || !e.Message.StartsWith('{'))
+        // Exactly TrainException: a consumer subclass carries its own text (often a remote
+        // system's response body), and reading a class out of it would let that text choose
+        // whether the failure is retried.
+        if (e.GetType() != typeof(TrainException) || !e.Message.StartsWith('{'))
             return null;
 
         try

@@ -23,16 +23,28 @@ public readonly struct MonadTask<TInput, TReturn>
         Source = source;
     }
 
-    public TaskAwaiter<Monad<TInput, TReturn>> GetAwaiter() => Source.GetAwaiter();
+    public TaskAwaiter<Monad<TInput, TReturn>> GetAwaiter() => Joined().GetAwaiter();
 
     public ConfiguredTaskAwaitable<Monad<TInput, TReturn>> ConfigureAwait(
         bool continueOnCapturedContext
-    ) => Source.ConfigureAwait(continueOnCapturedContext);
+    ) => Joined().ConfigureAwait(continueOnCapturedContext);
 
-    public Task<Monad<TInput, TReturn>> AsTask() => Source;
+    public Task<Monad<TInput, TReturn>> AsTask() => Joined();
 
     public static implicit operator Task<Monad<TInput, TReturn>>(MonadTask<TInput, TReturn> mt) =>
-        mt.Source;
+        mt.Joined();
+
+    /// <summary>
+    /// The task, noting while a chain is read that the train waits for it, so a statement after
+    /// it starts from a finished chain rather than a second one running alongside.
+    /// </summary>
+    private Task<Monad<TInput, TReturn>> Joined()
+    {
+        if (Source.IsCompletedSuccessfully)
+            Source.Result.Recorder?.NoteJoined();
+
+        return Source;
+    }
 
     #region Chain
 

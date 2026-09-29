@@ -31,21 +31,21 @@ public abstract class HygieneGuardFixture
     public void Tests_do_not_use_the_Ignore_attribute()
     {
         var result = HygieneGuards.NoIgnoreAttribute(Options);
-        Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
+        GuardAssert.CheckedAndClean(result);
     }
 
     [Test]
     public void Tests_do_not_use_legacy_asserts()
     {
         var result = HygieneGuards.NoLegacyAsserts(Options);
-        Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
+        GuardAssert.CheckedAndClean(result);
     }
 
     [Test]
     public void Tests_do_not_use_fixed_delays()
     {
         var result = HygieneGuards.NoFixedDelays(Options);
-        Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
+        GuardAssert.CheckedAndClean(result);
     }
 }
 
@@ -63,13 +63,35 @@ public abstract class RepoConventionGuardFixture
     public void Directory_build_props_pins_the_expected_version()
     {
         var result = RepoConventionGuards.DirectoryBuildPropsVersion(Options);
-        Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
+        GuardAssert.CheckedAndClean(result);
     }
 
     [Test]
     public void Cross_repo_package_references_are_centrally_managed()
     {
         var result = RepoConventionGuards.CrossRepoPackageVersions(Options);
+        GuardAssert.CheckedAndClean(result);
+    }
+}
+
+/// <summary>
+/// The assertion both fixtures make: the guard looked at something, and found nothing wrong.
+/// </summary>
+internal static class GuardAssert
+{
+    /// <summary>
+    /// A guard that inspected nothing proves nothing: a repo whose tests live somewhere other
+    /// than the configured roots would otherwise pass every check. Fails first on that, then on
+    /// any offender.
+    /// </summary>
+    public static void CheckedAndClean(GuardResult result)
+    {
+        Assert.That(
+            result.Inspected,
+            Is.GreaterThan(0),
+            "The guard inspected no files, so it checked nothing. Point the options' scan roots at "
+                + "the directories that hold this repo's sources and tests."
+        );
         Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
     }
 }

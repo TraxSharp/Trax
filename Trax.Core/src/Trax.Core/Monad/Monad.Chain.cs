@@ -57,6 +57,9 @@ public partial class Monad<TInput, TReturn>
     )
         where TJunction : IJunction<TIn, TOut>
     {
+        if (Exception is not null)
+            return this;
+
         var input = this.ExtractTypeFromMemory<TIn, TInput, TReturn>();
 
         if (input is null)
@@ -105,6 +108,12 @@ public partial class Monad<TInput, TReturn>
             return Task.FromResult(this);
         }
 
+        // A failed train skips the rest of the chain, and skipping includes not resolving the
+        // junction or its input: building one runs constructors and container factories for a
+        // step that will never run.
+        if (Exception is not null)
+            return Task.FromResult(this);
+
         var junctionService = this.ExtractTypeFromMemory<TJunction, TInput, TReturn>();
 
         if (junctionService is null)
@@ -148,6 +157,9 @@ public partial class Monad<TInput, TReturn>
     private Task<Monad<TInput, TReturn>> ChainAsync<TJunction>(TJunction junctionInstance)
         where TJunction : class
     {
+        if (Exception is not null)
+            return Task.FromResult(this);
+
         var (tIn, tOut) = ReflectionHelpers.ExtractJunctionTypeArguments<TJunction>();
 
         var chainMethod = ReflectionHelpers.FindGenericChainJunctionMethod<

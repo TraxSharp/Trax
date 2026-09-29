@@ -1,5 +1,6 @@
 using FluentAssertions;
 using LanguageExt;
+using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Junction;
 using Trax.Core.Train;
 
@@ -61,6 +62,23 @@ public class CancellationTokenTests : TestSetup
 
         // Assert
         junction.CapturedToken.Should().Be(CancellationToken.None);
+    }
+
+    [Theory]
+    public async Task RunEither_WithACancelledToken_ReturnsLeftOperationCanceled()
+    {
+        // RunEither reports cancellation as Left rather than throwing; ServiceTrain relies on it
+        // to record the run. The docs say so, and this pins it.
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var junction = new CountingJunction();
+        var train = new SingleJunctionTrain(junction) { CancellationToken = cts.Token };
+
+        var result = await train.RunEither("input");
+
+        result.IsLeft.Should().BeTrue();
+        HasCancellationException(result.Swap().ValueUnsafe()).Should().BeTrue();
+        junction.ExecutionCount.Should().Be(0);
     }
 
     [Theory]
