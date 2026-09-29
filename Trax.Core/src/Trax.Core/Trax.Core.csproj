@@ -3,14 +3,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>Railway Oriented .NET Programming</PackageDescription>
-    <RepositoryUrl>https://github.com/Theauxm/Trax.Core</RepositoryUrl>
+    <PackageDescription>Railway-oriented pipelines for .NET: a train chains junctions (small single-purpose classes), passes each one the cargo it needs from the train's type-keyed memory, and stops at the first failure, returning Either&lt;Exception, T&gt;. Install it on its own for in-process pipelines; add Trax.Effect for dependency injection, execution logging and persistence.</PackageDescription>
     <AssemblyName>Trax.Core</AssemblyName>
-  </PropertyGroup>
-
-  <PropertyGroup>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>

@@ -7,6 +7,39 @@
     <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 
+  <!-- Package metadata for everything that ships from src/. A consumer, or an agent, that has
+       only the installed package learns the API from what is inside it: the XML doc file beside
+       the assembly, the README, and the description. A project overrides any of these in its own
+       csproj. -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src'))">
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Core</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>trax;dotnet;railway-oriented-programming;functional;pipeline;either</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591 (public member has no doc comment) is the one doc warning left off. The existing
+         summaries ship now; documenting the members that have none is a tracked burn-down, and
+         every other doc-comment warning (malformed XML, a bad cref, a param mismatch) still
+         fails the build. Trax.Core.Testing already documents every public member, so it keeps
+         CS1591 on. -->
+    <NoWarn Condition="'$(MSBuildProjectName)' != 'Trax.Core.Testing'">$(NoWarn);CS1591</NoWarn>
+    <!-- No .snupkg: DotNet.ReproducibleBuilds (below) sets DebugType=embedded, so the PDB, with its
+         SourceLink map to this repository's commit, is already inside the shipped DLL. A symbol
+         package would hold no PDB at all. -->
+  </PropertyGroup>
+
+  <ItemGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src'))">
+    <None
+      Include="$(MSBuildThisFileDirectory)README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+  </ItemGroup>
+
   <!-- Package validation: `dotnet pack` compares each published library with the last release on
        nuget.org and fails on a binary break, such as narrowing a member a published downstream
        package overrides. It runs on pack only, so the pull request workflow packs too. Bump the

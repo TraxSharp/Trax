@@ -4,12 +4,21 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Core)](https://www.nuget.org/packages/Trax.Core/)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Core)](https://www.nuget.org/packages/Trax.Core/)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Core/blob/main/LICENSE)
 [![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Core)](https://github.com/TraxSharp/Trax.Core/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Core/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Core)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 Railway Oriented Programming for .NET. Build trains that carry data through a sequence of stops, with automatic derailment handling when something goes wrong.
+
+A **train** (`Train<TIn, TOut>`) declares a chain of **junctions** (`Junction<TIn, TOut>`), small classes that each do one thing. The train keeps every value it has seen in a type-keyed memory, hands each junction the input and constructor arguments it asks for, and stops at the first junction that throws, returning `Either<Exception, TOut>` instead of throwing. Trax.Core is the in-process foundation of the Trax packages; the layers above it add dependency injection, execution logging, dispatch, scheduling and a dashboard.
+
+```bash
+dotnet add package Trax.Core
+dotnet add package Trax.Core.Testing   # optional: architecture-guard test fixtures
+```
+
+Documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
 
 ## The Trax Stack
 
@@ -84,49 +93,71 @@ Requires `net10.0`.
 dotnet add package Trax.Core
 ```
 
+`Trax.Core.Analyzers` is deprecated and reports nothing; do not install it.
+
 ## Quick Start
 
-**1. Define a junction.** Each junction takes one type of cargo in and produces one type of cargo out:
+**1. Define junctions.** Each junction takes one type of cargo in and produces one type of cargo out. Its constructor arguments are taken from the train's memory:
 
 ```csharp
+using LanguageExt;
+using Trax.Core.Junction;
+using Trax.Core.Train;
+
+public record CreateUserRequest(string Email);
+public record User(Guid Id, string Email);
+
+public interface IUserRepository
+{
+    Task<User?> GetByEmailAsync(string email);
+    Task<User> AddAsync(string email);
+}
+
 public class ValidateEmailJunction(IUserRepository repo) : Junction<CreateUserRequest, Unit>
 {
     public override async Task<Unit> Run(CreateUserRequest input)
     {
-        var existing = await repo.GetByEmailAsync(input.Email);
-        if (existing is not null)
-            throw new ValidationException($"Email {input.Email} is already taken");
+        if (await repo.GetByEmailAsync(input.Email) is not null)
+            throw new InvalidOperationException($"Email {input.Email} is already taken");
 
         return Unit.Default;
     }
+}
+
+public class CreateUserInDatabaseJunction(IUserRepository repo) : Junction<CreateUserRequest, User>
+{
+    public override Task<User> Run(CreateUserRequest input) => repo.AddAsync(input.Email);
 }
 ```
 
 **2. Build a route by chaining junctions into a train:**
 
 ```csharp
-public class CreateUserTrain : Train<CreateUserRequest, User>
+public class CreateUserTrain(IUserRepository repo) : Train<CreateUserRequest, User>
 {
     protected override Task<Either<Exception, User>> Junctions() =>
-        Chain<ValidateEmailJunction>()
+        AddServices(repo)
+            .Chain<ValidateEmailJunction>()
             .Chain<CreateUserInDatabaseJunction>()
-            .Chain<SendWelcomeEmailJunction>()
             .Resolve();
 }
 ```
 
-When the train is run with an input, the cargo is loaded automatically. At each stop, `.Chain<T>` picks up the cargo `T` needs from what the train is carrying, runs the junction, and loads the output back on. `Resolve` unloads the final delivery at the destination.
+When the train is run with an input, the cargo is loaded automatically. `AddServices` puts the repository on board, so each junction's constructor can take it. At each stop, `.Chain<T>` picks up the cargo `T` needs from what the train is carrying, runs the junction, and loads the output back on. `Resolve` unloads the final delivery at the destination.
 
 The train carries all of this in **Memory**, a type-keyed store that accumulates as the train moves through its route. Each stop can use anything a previous stop produced.
+
+With Trax.Effect, a `ServiceTrain` resolves junction dependencies from the DI container instead, so `AddServices` is not needed.
 
 **3. Run it:**
 
 ```csharp
-var train = new CreateUserTrain();
-Either<Exception, User> result = await train.RunEither(request);
+// repo is any IUserRepository implementation
+var train = new CreateUserTrain(repo);
+Either<Exception, User> result = await train.RunEither(new CreateUserRequest("ada@example.com"));
 
 // Or throw on failure:
-User user = await train.Run(request);
+User user = await new CreateUserTrain(repo).Run(new CreateUserRequest("grace@example.com"));
 ```
 
 ## Startup Chain Verification

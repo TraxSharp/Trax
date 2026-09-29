@@ -21,7 +21,7 @@ public static class FunctionalExtensions
     /// <typeparam name="R">The Right type (the result type)</typeparam>
     /// <param name="option">The Task of Either to unwrap</param>
     /// <returns>The Right value if present</returns>
-    /// <exception cref="L">Thrown if the Either contains a Left value</exception>
+    /// <exception cref="Exception">The Left value, of type <typeparamref name="L"/>, rethrown if the Either holds one</exception>
     /// <remarks>
     /// This method is typically used at the boundary of a Railway-oriented system,
     /// where you need to convert back to traditional exception handling.
@@ -44,7 +44,7 @@ public static class FunctionalExtensions
     /// <typeparam name="R">The Right type (the result type)</typeparam>
     /// <param name="option">The Either to unwrap</param>
     /// <returns>The Right value if present</returns>
-    /// <exception cref="L">Thrown if the Either contains a Left value</exception>
+    /// <exception cref="Exception">The Left value, of type <typeparamref name="L"/>, rethrown if the Either holds one</exception>
     /// <remarks>
     /// This method is typically used at the boundary of a Railway-oriented system,
     /// where you need to convert back to traditional exception handling.

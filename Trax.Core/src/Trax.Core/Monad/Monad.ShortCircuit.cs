@@ -48,7 +48,7 @@ public partial class Monad<TInput, TReturn>
 
     /// <summary>
     /// Executes a junction with short-circuit behavior. If the junction returns Right, its
-    /// TReturn value becomes what <see cref="Resolve"/> returns; if it returns Left, the failure
+    /// TReturn value becomes what <see cref="Resolve()"/> returns; if it returns Left, the failure
     /// is ignored. The chain does not end here: later junctions still run, and a failure in one
     /// of them still fails the chain.
     /// </summary>
@@ -75,7 +75,7 @@ public partial class Monad<TInput, TReturn>
 
     /// <summary>
     /// Executes a junction with short-circuit behavior. If the junction returns Right, its
-    /// TReturn value becomes what <see cref="Resolve"/> returns; if it returns Left, the failure
+    /// TReturn value becomes what <see cref="Resolve()"/> returns; if it returns Left, the failure
     /// is ignored. The chain does not end here: later junctions still run, and a failure in one
     /// of them still fails the chain.
     /// </summary>

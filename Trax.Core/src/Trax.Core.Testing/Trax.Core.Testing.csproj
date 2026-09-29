@@ -4,11 +4,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Trax.Core.Testing</AssemblyName>
-    <Authors>Theauxm,mark-keaton</Authors>
     <PackageDescription>Reusable architecture-guard infrastructure and hygiene checkers for Trax codebases, with NUnit base fixtures: subclass a fixture, supply options, and run dotnet test (no test bodies to write). The underlying checkers return offender lists if you prefer your own framework.</PackageDescription>
-    <PackageTags>trax;testing;architecture;guards;conventions;nunit</PackageTags>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Core</RepositoryUrl>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageTags>trax;dotnet;testing;architecture;guards;conventions;nunit</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
