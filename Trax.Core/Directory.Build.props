@@ -14,7 +14,7 @@
        released version in CI) is the package being checked, not the baseline. -->
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Core' Or '$(MSBuildProjectName)' == 'Trax.Core.Testing'">
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>1.7.3</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>1.7.4</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <!-- Propagate the Trax.Core analyzer to all projects in the solution -->
