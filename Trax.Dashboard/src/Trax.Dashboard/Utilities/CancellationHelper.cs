@@ -11,7 +11,7 @@ namespace Trax.Dashboard.Utilities;
 /// Centralizes the "set CancellationRequested + notify CancellationRegistry" pattern
 /// used by MetadataPage and MetadataDetailPage.
 /// </summary>
-public static class CancellationHelper
+internal static class CancellationHelper
 {
     /// <summary>
     /// Requests cancellation for the specified metadata IDs by setting the database flag

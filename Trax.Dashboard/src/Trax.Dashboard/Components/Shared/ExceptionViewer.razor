@@ -60,12 +60,15 @@
 </RadzenCard>
 
 @code {
+    /// <summary>The junction the run failed in, or <see langword="null"/> (shown as an em dash).</summary>
     [Parameter]
     public string? FailureJunction { get; set; }
 
+    /// <summary>The exception type name, or <see langword="null"/> (shown as an em dash).</summary>
     [Parameter]
     public string? FailureException { get; set; }
 
+    /// <summary>The failure message, or <see langword="null"/> (shown as an em dash).</summary>
     [Parameter]
     public string? FailureReason { get; set; }
 
@@ -76,6 +79,10 @@
     [Parameter]
     public FailureClass FailureClass { get; set; } = FailureClass.Unclassified;
 
+    /// <summary>
+    /// The stack trace, HTML-encoded and highlighted for display. Collapsed unless it has five
+    /// lines or fewer; hidden when blank.
+    /// </summary>
     [Parameter]
     public string? StackTrace { get; set; }
 

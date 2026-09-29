@@ -15,6 +15,14 @@ using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
+/// <summary>
+/// Dialog that runs a train immediately with input entered through a generated form or as raw
+/// JSON, opened from the Trains page. It writes a pending metadata row and hands the input
+/// straight to the job submitter, so no work queue entry is created, dispatch never sees the run
+/// and the train's subject key is not consulted; the dialog warns about this. If the submitter
+/// refuses the run, the row is marked failed. On success it navigates to the new run.
+/// Opened by the dashboard's own pages through Radzen's <c>DialogService</c>; not intended to be used directly.
+/// </summary>
 public partial class RunTrainDialog : IDisposable
 {
     private readonly CancellationTokenSource _cts = new();
@@ -31,6 +39,10 @@ public partial class RunTrainDialog : IDisposable
     [Inject]
     private DialogService DialogService { get; set; } = default!;
 
+    /// <summary>
+    /// The train to run, from train discovery. Its input type drives the form, and its service
+    /// type's FullName becomes the run's name.
+    /// </summary>
     [Parameter]
     public required TrainRegistration Registration { get; set; }
 
@@ -42,6 +54,10 @@ public partial class RunTrainDialog : IDisposable
     private PropertyInfo[] _inputProperties = [];
     private readonly Dictionary<string, object?> _formValues = new();
 
+    /// <summary>
+    /// Builds one form field per public readable property of the train's input type, starting
+    /// booleans at <see langword="false"/>, enums at their first name and everything else empty.
+    /// </summary>
     protected override void OnInitialized()
     {
         _inputProperties = Registration
@@ -293,6 +309,9 @@ public partial class RunTrainDialog : IDisposable
             _ => $"Enter {type.Name}",
         };
 
+    /// <summary>
+    /// Cancels a run request still in flight when the dialog closes.
+    /// </summary>
     public void Dispose()
     {
         _cts.Cancel();

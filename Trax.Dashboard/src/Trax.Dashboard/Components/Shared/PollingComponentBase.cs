@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Routing;
 using Trax.Dashboard.Services.DashboardSettings;
@@ -19,11 +20,21 @@ namespace Trax.Dashboard.Components.Shared;
 /// or clicking the highlighted node in a DAG graph) is intercepted via
 /// <see cref="NavigationManager.RegisterLocationChangingHandler"/> — the navigation is
 /// prevented and <see cref="RefreshNowAsync"/> is called instead.
+///
+/// A load that throws during a background tick is reported through
+/// <see cref="IDashboardSettingsService.NotifyPollFailed"/> and retried on the next tick.
+/// Infrastructure for the dashboard's own pages; it is public only because those pages derive
+/// from it, and is not intended for use outside this package.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
 {
+    /// <summary>
+    /// The circuit's dashboard preferences, injected. Supplies the polling interval and receives
+    /// <see cref="IDashboardSettingsService.NotifyPolled"/> after every completed load.
+    /// </summary>
     [Inject]
-    protected IDashboardSettingsService DashboardSettings { get; set; } = default!;
+    private protected IDashboardSettingsService DashboardSettings { get; set; } = default!;
 
     [Inject]
     private NavigationManager NavigationManager { get; set; } = default!;
@@ -32,7 +43,12 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     private object? _lastRouteKey;
     private IDisposable? _locationChangingRegistration;
 
-    protected bool IsLoading { get; set; } = true;
+    /// <summary>
+    /// <see langword="true"/> until the first load finishes, and again during a
+    /// <see cref="RefreshNowAsync"/> call made with <c>showLoading: true</c>. Background poll
+    /// ticks never set it.
+    /// </summary>
+    private protected bool IsLoading { get; set; } = true;
 
     /// <summary>
     /// When true, the polling loop skips data refreshes until the value is set back to false.
@@ -40,18 +56,18 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     /// middle of an interaction (e.g. batch operations with checkboxes).
     /// The next poll tick after the flag is cleared will refresh normally.
     /// </summary>
-    protected bool PausePolling { get; set; }
+    private protected bool PausePolling { get; set; }
 
     /// <summary>
     /// Error message from the most recent batch operation, displayed as an alert.
     /// Cleared at the start of each batch operation.
     /// </summary>
-    protected string? BatchError { get; set; }
+    private protected string? BatchError { get; set; }
 
     /// <summary>
     /// True while a batch operation is in progress. Used to disable action buttons.
     /// </summary>
-    protected bool BatchOperating { get; set; }
+    private protected bool BatchOperating { get; set; }
 
     /// <summary>
     /// Runs a batch operation with standardized error handling, loading state, and polling control.
@@ -60,7 +76,10 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     /// </summary>
     /// <param name="operation">The async operation to execute.</param>
     /// <param name="onSuccess">Optional callback invoked after the operation succeeds (e.g. clear selection).</param>
-    protected async Task RunBatchOperationAsync(Func<Task> operation, Action? onSuccess = null)
+    private protected async Task RunBatchOperationAsync(
+        Func<Task> operation,
+        Action? onSuccess = null
+    )
     {
         BatchError = null;
         BatchOperating = true;
@@ -86,17 +105,31 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     /// A CancellationToken that is cancelled when the component is disposed.
     /// Event handlers can pass this to async operations so they abort when the user navigates away.
     /// </summary>
-    protected CancellationToken DisposalToken => _cts?.Token ?? CancellationToken.None;
+    private protected CancellationToken DisposalToken => _cts?.Token ?? CancellationToken.None;
 
-    protected abstract Task LoadDataAsync(CancellationToken cancellationToken);
+    /// <summary>
+    /// Loads the page's data into component state. Called once on initialization, on every
+    /// poll tick that is not paused, on <see cref="RefreshNowAsync"/>, and after a successful
+    /// <see cref="RunBatchOperationAsync"/>. Background ticks run it on the renderer's
+    /// synchronization context and re-render afterwards.
+    /// </summary>
+    /// <param name="cancellationToken">
+    /// Cancelled when the component is disposed or a newer refresh supersedes this one.
+    /// </param>
+    private protected abstract Task LoadDataAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Override in pages with route parameters (e.g. <c>{Id:int}</c>) to return a value
     /// that uniquely identifies the current route. When this value changes between renders,
     /// the component cancels the current poll cycle, reloads data immediately, and restarts polling.
     /// </summary>
-    protected virtual object? GetRouteKey() => null;
+    private protected virtual object? GetRouteKey() => null;
 
+    /// <summary>
+    /// Registers the same-URL navigation handler, initializes <see cref="DashboardSettings"/>,
+    /// runs the first <see cref="LoadDataAsync"/> and starts the poll loop. A derived page that
+    /// overrides this must call the base implementation.
+    /// </summary>
     protected override async Task OnInitializedAsync()
     {
         _locationChangingRegistration = NavigationManager.RegisterLocationChangingHandler(
@@ -122,6 +155,11 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
         _ = PollAsync(token);
     }
 
+    /// <summary>
+    /// Reloads immediately, showing the loading state, when <see cref="GetRouteKey"/> returns a
+    /// different value than it did for the previous render. A derived page that overrides this
+    /// must call the base implementation.
+    /// </summary>
     protected override async Task OnParametersSetAsync()
     {
         var key = GetRouteKey();
@@ -158,7 +196,7 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     /// Call this from event handlers (e.g. button clicks, graph node clicks) to force an
     /// immediate refresh without waiting for the next tick.
     /// </summary>
-    protected async Task RefreshNowAsync(bool showLoading = false)
+    private protected async Task RefreshNowAsync(bool showLoading = false)
     {
         _cts?.Cancel();
         _cts?.Dispose();
@@ -215,6 +253,10 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Stops the poll loop, cancels <see cref="DisposalToken"/> and unregisters the navigation
+    /// handler. An override must call the base implementation.
+    /// </summary>
     public virtual ValueTask DisposeAsync()
     {
         _locationChangingRegistration?.Dispose();

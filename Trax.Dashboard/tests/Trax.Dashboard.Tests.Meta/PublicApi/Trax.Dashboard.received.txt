@@ -60,7 +60,6 @@ namespace Trax.Dashboard.Components.Layout
     public class DashboardLayout : Microsoft.AspNetCore.Components.LayoutComponentBase
     {
         public DashboardLayout() { }
-        public bool SidebarExpanded { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
         protected override System.Threading.Tasks.Task OnAfterRenderAsync(bool firstRender) { }
     }
@@ -118,22 +117,18 @@ namespace Trax.Dashboard.Components.Pages.Data
         [Microsoft.AspNetCore.Components.Parameter]
         public long DeadLetterId { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override object? GetRouteKey() { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/dead-letters")]
     public class DeadLettersPage : Trax.Dashboard.Components.Shared.PollingComponentBase
     {
         public DeadLettersPage() { }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/logs")]
     public class LogsPage : Trax.Dashboard.Components.Shared.PollingComponentBase
     {
         public LogsPage() { }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/manifests/{ManifestId:long}")]
     public class ManifestDetailPage : Trax.Dashboard.Components.Shared.PollingComponentBase
@@ -142,8 +137,6 @@ namespace Trax.Dashboard.Components.Pages.Data
         [Microsoft.AspNetCore.Components.Parameter]
         public long ManifestId { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override object? GetRouteKey() { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/manifest-groups/{ManifestGroupId:long}")]
     public class ManifestGroupDetailPage : Trax.Dashboard.Components.Shared.PollingComponentBase
@@ -152,22 +145,18 @@ namespace Trax.Dashboard.Components.Pages.Data
         [Microsoft.AspNetCore.Components.Parameter]
         public long ManifestGroupId { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override object? GetRouteKey() { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/manifest-groups")]
     public class ManifestGroupsPage : Trax.Dashboard.Components.Shared.PollingComponentBase
     {
         public ManifestGroupsPage() { }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/manifests")]
     public class ManifestsPage : Trax.Dashboard.Components.Shared.PollingComponentBase
     {
         public ManifestsPage() { }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/metadata/{MetadataId:long}")]
     public class MetadataDetailPage : Trax.Dashboard.Components.Shared.PollingComponentBase
@@ -176,15 +165,12 @@ namespace Trax.Dashboard.Components.Pages.Data
         [Microsoft.AspNetCore.Components.Parameter]
         public long MetadataId { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override object? GetRouteKey() { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/metadata")]
     public class MetadataPage : Trax.Dashboard.Components.Shared.PollingComponentBase
     {
         public MetadataPage() { }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/persisted-operations/{Id}")]
     public class PersistedOperationDetailPage : Microsoft.AspNetCore.Components.ComponentBase
@@ -229,15 +215,12 @@ namespace Trax.Dashboard.Components.Pages.Data
         [Microsoft.AspNetCore.Components.Parameter]
         public long WorkQueueId { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override object? GetRouteKey() { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/work-queue")]
     public class WorkQueuePage : Trax.Dashboard.Components.Shared.PollingComponentBase
     {
         public WorkQueuePage() { }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
 }
 namespace Trax.Dashboard.Components.Pages
@@ -247,7 +230,6 @@ namespace Trax.Dashboard.Components.Pages
     {
         public Index() { }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
-        protected override System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken) { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/trains")]
     public class Trains : Microsoft.AspNetCore.Components.ComponentBase
@@ -323,20 +305,9 @@ namespace Trax.Dashboard.Components.Shared
     public abstract class PollingComponentBase : Microsoft.AspNetCore.Components.ComponentBase, System.IAsyncDisposable
     {
         protected PollingComponentBase() { }
-        protected string? BatchError { get; set; }
-        protected bool BatchOperating { get; set; }
-        [Microsoft.AspNetCore.Components.Inject]
-        protected Trax.Dashboard.Services.DashboardSettings.IDashboardSettingsService DashboardSettings { get; set; }
-        protected System.Threading.CancellationToken DisposalToken { get; }
-        protected bool IsLoading { get; set; }
-        protected bool PausePolling { get; set; }
         public virtual System.Threading.Tasks.ValueTask DisposeAsync() { }
-        protected virtual object? GetRouteKey() { }
-        protected abstract System.Threading.Tasks.Task LoadDataAsync(System.Threading.CancellationToken cancellationToken);
         protected override System.Threading.Tasks.Task OnInitializedAsync() { }
         protected override System.Threading.Tasks.Task OnParametersSetAsync() { }
-        protected System.Threading.Tasks.Task RefreshNowAsync(bool showLoading = false) { }
-        protected System.Threading.Tasks.Task RunBatchOperationAsync(System.Func<System.Threading.Tasks.Task> operation, System.Action? onSuccess = null) { }
     }
     public class StateTimeline : Microsoft.AspNetCore.Components.ComponentBase
     {
@@ -375,7 +346,6 @@ namespace Trax.Dashboard.Components.Shared
         public System.Threading.Tasks.ValueTask DisposeAsync() { }
         protected override System.Threading.Tasks.Task OnAfterRenderAsync(bool firstRender) { }
         protected override System.Threading.Tasks.Task OnParametersSetAsync() { }
-        public System.Threading.Tasks.Task ReloadAsync() { }
     }
 }
 namespace Trax.Dashboard.Configuration
@@ -383,8 +353,8 @@ namespace Trax.Dashboard.Configuration
     public class DashboardOptions
     {
         public DashboardOptions() { }
-        public string EnvironmentName { get; set; }
-        public string RoutePrefix { get; set; }
+        public string EnvironmentName { get; }
+        public string RoutePrefix { get; }
         public string Title { get; set; }
         public Trax.Dashboard.Configuration.DashboardOptions AllowAnonymousDashboard() { }
         public Trax.Dashboard.Configuration.DashboardOptions RequirePolicy(string policy) { }
@@ -402,98 +372,15 @@ namespace Trax.Dashboard.Extensions
 }
 namespace Trax.Dashboard.Models
 {
-    public class DagEdge
-    {
-        public DagEdge() { }
-        public long FromId { get; init; }
-        public long ToId { get; init; }
-    }
-    public class DagNode
-    {
-        public DagNode() { }
-        public long Id { get; init; }
-        public bool IsHighlighted { get; init; }
-        public string Label { get; init; }
-    }
-    public class ExecutionTimePoint
-    {
-        public ExecutionTimePoint() { }
-        public int Cancelled { get; init; }
-        public int Completed { get; init; }
-        public int Failed { get; init; }
-        public string Label { get; init; }
-    }
-    public class GroupSummary
-    {
-        public GroupSummary() { }
-        public int CompletedCount { get; init; }
-        public int FailedCount { get; init; }
-        public long Id { get; init; }
-        public bool IsEnabled { get; init; }
-        public System.DateTime? LastRun { get; init; }
-        public int ManifestCount { get; init; }
-        public int? MaxActiveJobs { get; init; }
-        public string Name { get; init; }
-        public int Priority { get; init; }
-        public int TotalExecutions { get; init; }
-    }
     public class ServerDataResult<T> : System.IEquatable<Trax.Dashboard.Models.ServerDataResult<T>>
     {
         public ServerDataResult(System.Collections.Generic.IEnumerable<T> Items, int TotalCount) { }
         public System.Collections.Generic.IEnumerable<T> Items { get; init; }
         public int TotalCount { get; init; }
     }
-    public class ThroughputPoint
-    {
-        public ThroughputPoint() { }
-        public int Count { get; init; }
-        public string Label { get; init; }
-    }
-    public class ThroughputSeries
-    {
-        public ThroughputSeries() { }
-        public string Color { get; init; }
-        public string Name { get; init; }
-        public System.Collections.Generic.List<Trax.Dashboard.Models.ThroughputPoint> Points { get; init; }
-    }
-    public class TrainDuration
-    {
-        public TrainDuration() { }
-        public double AvgMs { get; init; }
-        public string Name { get; init; }
-    }
-    public class TrainFailureCount
-    {
-        public TrainFailureCount() { }
-        public int Count { get; init; }
-        public string Name { get; init; }
-    }
 }
 namespace Trax.Dashboard.Services.DashboardSettings
 {
-    public class DashboardSettingsService : Trax.Dashboard.Services.DashboardSettings.IDashboardSettingsService
-    {
-        public const bool DefaultComponentVisibility = true;
-        public const bool DefaultHideAdminTrains = true;
-        public const int DefaultPollingIntervalSeconds = 5;
-        public DashboardSettingsService(Trax.Dashboard.Services.LocalStorage.ILocalStorageService localStorage) { }
-        public System.Collections.Generic.IReadOnlyList<string> AdminTrainNames { get; }
-        public bool HideAdminTrains { get; }
-        public string? LastPollError { get; }
-        public System.DateTime LastPollTime { get; }
-        public System.TimeSpan PollingInterval { get; }
-        public bool ShowAvgDuration { get; }
-        public bool ShowExecutionsChart { get; }
-        public bool ShowFailures { get; }
-        public bool ShowServerHealth { get; }
-        public bool ShowSummaryCards { get; }
-        public System.Threading.Tasks.Task InitializeAsync() { }
-        public void NotifyPollFailed(string message) { }
-        public void NotifyPolled() { }
-        public System.Threading.Tasks.Task SetComponentVisibilityAsync(string key, bool visible) { }
-        public System.Threading.Tasks.Task SetHideAdminTrainsAsync(bool hide) { }
-        public System.Threading.Tasks.Task SetPollingIntervalAsync(int seconds) { }
-    }
     public interface IDashboardSettingsService
     {
         System.Collections.Generic.IReadOnlyList<string> AdminTrainNames { get; }
@@ -514,65 +401,8 @@ namespace Trax.Dashboard.Services.DashboardSettings
         System.Threading.Tasks.Task SetPollingIntervalAsync(int seconds);
     }
 }
-namespace Trax.Dashboard.Services.LocalStorage
-{
-    public interface ILocalStorageService
-    {
-        System.Threading.Tasks.Task<T?> GetAsync<T>(string key);
-        System.Threading.Tasks.Task RemoveAsync(string key);
-        System.Threading.Tasks.Task SetAsync<T>(string key, T value);
-    }
-    public class LocalStorageService : Trax.Dashboard.Services.LocalStorage.ILocalStorageService
-    {
-        public LocalStorageService(Microsoft.JSInterop.IJSRuntime jsRuntime) { }
-        public System.Threading.Tasks.Task<T?> GetAsync<T>(string key) { }
-        public System.Threading.Tasks.Task RemoveAsync(string key) { }
-        public System.Threading.Tasks.Task SetAsync<T>(string key, T value) { }
-    }
-    public static class StorageKeys
-    {
-        public const string HideAdminTrains = "trax-hide-admin-trains";
-        public const string PollingInterval = "trax-polling-interval";
-        public const string ShowAvgDuration = "trax-show-avg-duration";
-        public const string ShowExecutionsChart = "trax-show-executions-chart";
-        public const string ShowFailures = "trax-show-failures";
-        public const string ShowServerHealth = "trax-show-server-health";
-        public const string ShowSummaryCards = "trax-show-summary-cards";
-        public const string SidebarExpanded = "trax-sidebar-expanded";
-        public const string Theme = "trax-theme";
-    }
-}
-namespace Trax.Dashboard.Services.ThemeState
-{
-    public interface IThemeStateService
-    {
-        bool IsDarkMode { get; }
-        string Theme { get; }
-        System.Threading.Tasks.Task InitializeAsync();
-        System.Threading.Tasks.Task SetThemeAsync(string theme);
-        System.Threading.Tasks.Task ToggleThemeAsync();
-    }
-    public class ThemeStateService : Trax.Dashboard.Services.ThemeState.IThemeStateService
-    {
-        public ThemeStateService(Trax.Dashboard.Services.LocalStorage.ILocalStorageService localStorage, Radzen.ThemeService radzenThemeService) { }
-        public bool IsDarkMode { get; }
-        public string Theme { get; }
-        public System.Threading.Tasks.Task InitializeAsync() { }
-        public System.Threading.Tasks.Task SetThemeAsync(string theme) { }
-        public System.Threading.Tasks.Task ToggleThemeAsync() { }
-    }
-}
 namespace Trax.Dashboard.Utilities
 {
-    public static class AdminQueryFilters
-    {
-        public static System.Linq.IQueryable<Trax.Effect.Models.Manifest.Manifest> ExcludeAdmin(this System.Linq.IQueryable<Trax.Effect.Models.Manifest.Manifest> query, System.Collections.Generic.IReadOnlyList<string> adminNames) { }
-        public static System.Linq.IQueryable<Trax.Effect.Models.Metadata.Metadata> ExcludeAdmin(this System.Linq.IQueryable<Trax.Effect.Models.Metadata.Metadata> query, System.Collections.Generic.IReadOnlyList<string> adminNames) { }
-    }
-    public static class CancellationHelper
-    {
-        public static System.Threading.Tasks.Task<int> CancelTrainsAsync(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory factory, System.IServiceProvider serviceProvider, System.Collections.Generic.IEnumerable<long> metadataIds, System.Threading.CancellationToken ct) { }
-    }
     public class DagLayout
     {
         public DagLayout() { }
@@ -580,28 +410,6 @@ namespace Trax.Dashboard.Utilities
         public double Height { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Dashboard.Utilities.PositionedNode> Nodes { get; init; }
         public double Width { get; init; }
-    }
-    public static class DagLayoutEngine
-    {
-        public static Trax.Dashboard.Utilities.DagLayout ComputeLayout(System.Collections.Generic.IReadOnlyList<Trax.Dashboard.Models.DagNode> nodes, System.Collections.Generic.IReadOnlyList<Trax.Dashboard.Models.DagEdge> edges) { }
-    }
-    public static class DashboardFormatters
-    {
-        public static string FormatDuration(Trax.Effect.Models.Metadata.Metadata metadata) { }
-        public static string FormatDuration(double ms) { }
-        public static string FormatJson(string json) { }
-        public static string FormatSchedule(Trax.Effect.Models.Manifest.Manifest manifest) { }
-        public static string FormatUptime(System.TimeSpan uptime) { }
-        public static Radzen.BadgeStyle GetDeadLetterStatusBadgeStyle(Trax.Effect.Enums.DeadLetterStatus status) { }
-        public static Radzen.BadgeStyle GetLogLevelBadgeStyle(Microsoft.Extensions.Logging.LogLevel level) { }
-        public static Radzen.BadgeStyle GetStateBadgeStyle(Trax.Effect.Enums.TrainState state) { }
-        public static Radzen.BadgeStyle GetWorkQueueStatusBadgeStyle(Trax.Effect.Enums.WorkQueueStatus status) { }
-        public static string ShortName(string fullName) { }
-    }
-    public static class DataGridQueryHelper
-    {
-        public static System.Threading.Tasks.Task<Trax.Dashboard.Models.ServerDataResult<T>> LoadPageAsync<T>(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory factory, System.Func<Trax.Effect.Data.Services.DataContext.IDataContext, System.Linq.IQueryable<T>> queryFactory, Radzen.LoadDataArgs args, System.Threading.CancellationToken ct)
-            where T :  class { }
     }
     public class PositionedEdge
     {
@@ -618,12 +426,8 @@ namespace Trax.Dashboard.Utilities
         public bool IsHighlighted { get; init; }
         public string Label { get; init; }
         public double Width { get; init; }
-        public double X { get; set; }
-        public double Y { get; set; }
-    }
-    public static class SubjectSiblingQueries
-    {
-        public static System.Linq.IQueryable<Trax.Effect.Models.WorkQueue.WorkQueue> DispatchedAheadOf(this System.Linq.IQueryable<Trax.Effect.Models.WorkQueue.WorkQueue> source, Trax.Effect.Models.WorkQueue.WorkQueue entry, System.DateTime now) { }
+        public double X { get; init; }
+        public double Y { get; init; }
     }
 }
 namespace Trax.Dashboard

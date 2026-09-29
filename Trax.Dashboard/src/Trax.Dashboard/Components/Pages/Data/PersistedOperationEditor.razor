@@ -90,11 +90,20 @@
 </RadzenStack>
 
 @code {
+    /// <summary>The id of the operation being edited; when empty the dialog uploads a new one and asks for an id.</summary>
     [Parameter] public string? ExistingId { get; set; }
+    /// <summary>The tenant of the operation being edited; <see langword="null"/> for the default tenant.</summary>
     [Parameter] public string? ExistingTenantKey { get; set; }
+    /// <summary>The GraphQL document to start the editor with.</summary>
     [Parameter] public string? ExistingDocument { get; set; }
+    /// <summary>The description to start the editor with.</summary>
     [Parameter] public string? ExistingDescription { get; set; }
+    /// <summary>The version to start the editor with.</summary>
     [Parameter] public int ExistingVersion { get; set; }
+    /// <summary>
+    /// Whether to offer the "bypass shape-diff guardrail" checkbox, which lets a save change the
+    /// operation's result shape; the bypass is recorded in the audit log.
+    /// </summary>
     [Parameter] public bool ShowBypassShapeDiff { get; set; }
 
     private string _id = "";

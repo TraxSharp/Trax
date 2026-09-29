@@ -13,6 +13,11 @@ using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
 
+/// <summary>
+/// The page for one manifest, at <c>/trax/data/manifests/{id}</c>: its schedule, exclusions,
+/// group, run counts by state and a paged grid of its runs. The user can trigger the manifest to
+/// run now through the scheduler. Part of the dashboard UI, routed by the package; not intended to be used directly.
+/// </summary>
 public partial class ManifestDetailPage
 {
     [Inject]
@@ -27,10 +32,13 @@ public partial class ManifestDetailPage
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
 
+    /// <summary>The manifest's database id, from the route.</summary>
     [Parameter]
     public long ManifestId { get; set; }
 
-    protected override object? GetRouteKey() => ManifestId;
+    /// <inheritdoc/>
+    /// <remarks>Returns <see cref="ManifestId"/>.</remarks>
+    private protected override object? GetRouteKey() => ManifestId;
 
     private Manifest? _manifest;
     private TraxDataGrid<Metadata>? _runsGrid;
@@ -42,7 +50,13 @@ public partial class ManifestDetailPage
     private bool _triggering;
     private string? _triggerError;
 
-    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Loads the manifest with its group and exclusions, counts its runs by state over all time,
+    /// and reloads the runs grid, which pages its rows from the database. Leaves the page empty
+    /// when no manifest has the id.
+    /// </summary>
+    /// <param name="cancellationToken">Cancelled when the page is disposed or a newer load starts.</param>
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
 

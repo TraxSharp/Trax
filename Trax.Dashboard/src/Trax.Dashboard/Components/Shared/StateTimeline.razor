@@ -28,6 +28,10 @@
 </RadzenCard>
 
 @code {
+    /// <summary>
+    /// The run whose state transitions are drawn. The steps are inferred from its timestamps and
+    /// state, not from a stored history.
+    /// </summary>
     [Parameter, EditorRequired]
     public Metadata Metadata { get; set; } = default!;
 

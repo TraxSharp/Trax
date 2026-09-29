@@ -5,6 +5,11 @@ using Trax.Dashboard.Services.ThemeState;
 
 namespace Trax.Dashboard.Components.Layout;
 
+/// <summary>
+/// The layout every dashboard page renders in: the Radzen theme, header, collapsible sidebar and
+/// footer. The theme and the sidebar state are restored from the browser's <c>localStorage</c>
+/// after the first render. Part of the dashboard UI; not intended to be used directly.
+/// </summary>
 public partial class DashboardLayout
 {
     [Inject]
@@ -16,8 +21,17 @@ public partial class DashboardLayout
     [Inject]
     private DashboardOptions Options { get; set; } = default!;
 
-    public bool SidebarExpanded { get; set; } = true;
+    /// <summary>
+    /// Whether the sidebar is expanded. Not a component parameter: the layout sets it from storage
+    /// and from the header's toggle, and persists each toggle.
+    /// </summary>
+    private bool SidebarExpanded { get; set; } = true;
 
+    /// <summary>
+    /// On the first render only, initializes the theme and restores the stored sidebar state,
+    /// then re-renders. Both need JS interop, which is unavailable before the first render.
+    /// </summary>
+    /// <param name="firstRender"><see langword="true"/> on the component's first render.</param>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)

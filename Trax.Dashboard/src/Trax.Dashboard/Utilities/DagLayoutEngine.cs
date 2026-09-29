@@ -1,23 +1,52 @@
+using System.ComponentModel;
 using System.Globalization;
 using Trax.Dashboard.Models;
 using Trax.Scheduler.Utilities;
 
 namespace Trax.Dashboard.Utilities;
 
+/// <summary>
+/// A <see cref="DagNode"/> with its computed position, in SVG user units. Output of
+/// <see cref="DagLayoutEngine.ComputeLayout"/>; public only because <c>DagGraph.Layout</c>
+/// exposes it, and not intended for use outside this package.
+/// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public class PositionedNode
 {
+    /// <summary>The source node's <see cref="DagNode.Id"/>.</summary>
     public long Id { get; init; }
+
+    /// <summary>The source node's <see cref="DagNode.Label"/>.</summary>
     public string Label { get; init; } = "";
+
+    /// <summary>The source node's <see cref="DagNode.IsHighlighted"/>.</summary>
     public bool IsHighlighted { get; init; }
-    public double X { get; set; }
-    public double Y { get; set; }
+
+    /// <summary>Left edge of the node. Nodes in the same layer share it; layers run left to right.</summary>
+    public double X { get; init; }
+
+    /// <summary>Top edge of the node. Each layer is centred vertically against the tallest one.</summary>
+    public double Y { get; init; }
+
+    /// <summary>Node width; always 180.</summary>
     public double Width { get; init; }
+
+    /// <summary>Node height; always 40.</summary>
     public double Height { get; init; }
 }
 
+/// <summary>
+/// A <see cref="DagEdge"/> with the curve that draws it. Output of
+/// <see cref="DagLayoutEngine.ComputeLayout"/>; public only because <c>DagGraph.Layout</c>
+/// exposes it, and not intended for use outside this package.
+/// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public class PositionedEdge
 {
+    /// <summary>The upstream node's id; the curve starts at that node's right edge.</summary>
     public long FromId { get; init; }
+
+    /// <summary>The downstream node's id; the curve ends at that node's left edge.</summary>
     public long ToId { get; init; }
 
     /// <summary>
@@ -26,15 +55,35 @@ public class PositionedEdge
     public string PathData { get; init; } = "";
 }
 
+/// <summary>
+/// A laid-out dependency graph ready for <c>DagGraph</c> to draw as SVG. Output of
+/// <see cref="DagLayoutEngine.ComputeLayout"/>; public only because <c>DagGraph.Layout</c>
+/// exposes it, and not intended for use outside this package.
+/// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public class DagLayout
 {
+    /// <summary>Every input node, positioned. Empty when the input had no nodes.</summary>
     public IReadOnlyList<PositionedNode> Nodes { get; init; } = [];
+
+    /// <summary>
+    /// The input edges whose two ends are both nodes of the graph; edges naming an unknown node
+    /// are dropped.
+    /// </summary>
     public IReadOnlyList<PositionedEdge> Edges { get; init; } = [];
+
+    /// <summary>Width of the drawing including its 40-unit padding, for the SVG view box. Zero for an empty graph.</summary>
     public double Width { get; init; }
+
+    /// <summary>Height of the drawing including its 40-unit padding, for the SVG view box. Zero for an empty graph.</summary>
     public double Height { get; init; }
 }
 
-public static class DagLayoutEngine
+/// <summary>
+/// Lays out a dependency graph left to right in layers, for the manifest group graphs.
+/// Infrastructure for the dashboard's own pages; not intended to be called directly.
+/// </summary>
+internal static class DagLayoutEngine
 {
     private const double NodeWidth = 180;
     private const double NodeHeight = 40;
@@ -42,6 +91,23 @@ public static class DagLayoutEngine
     private const double NodeGap = 24;
     private const double Padding = 40;
 
+    /// <summary>
+    /// Computes node positions and edge curves. Each node's layer is the length of the longest
+    /// path to it from a node with no predecessors; nodes with no edges at all go in one extra
+    /// layer on the far right. Within a layer, nodes are ordered by label and then by two
+    /// barycenter sweeps to reduce edge crossings. The result is deterministic for the same input.
+    /// </summary>
+    /// <param name="nodes">The nodes. Ids must be unique, or the method throws.</param>
+    /// <param name="edges">
+    /// The dependencies, upstream to downstream. Edges naming an id not in
+    /// <paramref name="nodes"/> are ignored.
+    /// </param>
+    /// <returns>The layout, or an empty <see cref="DagLayout"/> when there are no nodes.</returns>
+    /// <exception cref="System.InvalidOperationException">
+    /// The edges contain a cycle and a node in it has no predecessor earlier in
+    /// <paramref name="nodes"/>. For a cyclic graph the input order replaces the topological
+    /// order, so layering needs a predecessor already placed.
+    /// </exception>
     public static DagLayout ComputeLayout(
         IReadOnlyList<DagNode> nodes,
         IReadOnlyList<DagEdge> edges

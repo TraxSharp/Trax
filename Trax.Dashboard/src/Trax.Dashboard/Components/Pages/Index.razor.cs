@@ -9,6 +9,13 @@ using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages;
 
+/// <summary>
+/// The dashboard home page, at <c>/trax</c>: today's run counts and success rate, running trains,
+/// unresolved dead letters, executions over the last 24 hours or 60 minutes, the top failing and
+/// slowest trains and seven-day throughput, all read through the scheduler's operations service
+/// (the same data the GraphQL dashboard metrics query returns), plus the health of the process
+/// hosting the dashboard. Each panel can be hidden from the user settings page. Part of the dashboard UI, routed by the package; not intended to be used directly.
+/// </summary>
 public partial class Index
 {
     private const string TimeRange1H = "1h";
@@ -48,7 +55,13 @@ public partial class Index
     private TimeSpan _prevCpuTime;
     private DateTime _prevSampleTime = DateTime.UtcNow;
 
-    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Samples the host process's CPU, memory, GC heap and uptime, then loads the 24-hour and
+    /// 60-minute dashboard metrics, leaving out administrative trains when the user's settings
+    /// say so.
+    /// </summary>
+    /// <param name="cancellationToken">Cancelled when the page is disposed or a newer load starts.</param>
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         await DashboardSettings.InitializeAsync();
 

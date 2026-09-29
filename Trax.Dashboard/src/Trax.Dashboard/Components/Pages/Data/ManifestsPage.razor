@@ -134,7 +134,7 @@
     // by reference would stop matching the rows it was made on.
     private Dictionary<long, Manifest> _selectedManifests = [];
 
-    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         if (_grid is not null)
             await _grid.ReloadAsync();

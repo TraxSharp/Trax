@@ -19,6 +19,11 @@ using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
 
+/// <summary>
+/// The page for one run (metadata row), at <c>/trax/data/metadata/{id}</c>: its state, input,
+/// output, failure details and a paged grid of its logs. The user can cancel it while it is in
+/// progress, or queue the train again with the run's saved input. Part of the dashboard UI, routed by the package; not intended to be used directly.
+/// </summary>
 public partial class MetadataDetailPage
 {
     [Inject]
@@ -42,6 +47,7 @@ public partial class MetadataDetailPage
     [Inject]
     private IServiceProvider ServiceProvider { get; set; } = default!;
 
+    /// <summary>The run's (metadata row's) database id, from the route.</summary>
     [Parameter]
     public long MetadataId { get; set; }
 
@@ -65,9 +71,16 @@ public partial class MetadataDetailPage
     private bool _cancelling;
     private string? _cancelError;
 
-    protected override object? GetRouteKey() => MetadataId;
+    /// <inheritdoc/>
+    /// <remarks>Returns <see cref="MetadataId"/>.</remarks>
+    private protected override object? GetRouteKey() => MetadataId;
 
-    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Loads the run and the number of its log entries, and reloads the logs grid, which pages its
+    /// rows from the database. Leaves the page empty when no run has the id.
+    /// </summary>
+    /// <param name="cancellationToken">Cancelled when the page is disposed or a newer load starts.</param>
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
 

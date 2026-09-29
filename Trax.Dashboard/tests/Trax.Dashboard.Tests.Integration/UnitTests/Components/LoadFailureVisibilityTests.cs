@@ -113,7 +113,7 @@ public class LoadFailureVisibilityTests
     {
         private int _loads;
 
-        protected override Task LoadDataAsync(CancellationToken cancellationToken) =>
+        private protected override Task LoadDataAsync(CancellationToken cancellationToken) =>
             ++_loads == 1
                 ? Task.CompletedTask
                 : throw new InvalidOperationException("the refresh failed");

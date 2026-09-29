@@ -11,7 +11,7 @@ namespace Trax.Dashboard.Utilities;
 /// Each page provides a query factory that returns the base IQueryable with default ordering;
 /// this helper applies dynamic filtering, sorting, pagination, and returns the result.
 /// </summary>
-public static class DataGridQueryHelper
+internal static class DataGridQueryHelper
 {
     /// <summary>
     /// Loads a page of data for a server-side TraxDataGrid.

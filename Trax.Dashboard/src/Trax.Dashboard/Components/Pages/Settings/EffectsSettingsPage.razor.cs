@@ -7,6 +7,13 @@ using Trax.Effect.Services.EffectRegistry;
 
 namespace Trax.Dashboard.Components.Pages.Settings;
 
+/// <summary>
+/// The effects settings page, at <c>/trax/settings/effects</c>: lists every registered effect
+/// provider, lets the user enable or disable the toggleable ones, and opens
+/// <see cref="Dialogs.ConfigureEffectDialog"/> for configurable ones. Changes apply to this
+/// process in memory and are not persisted. Shows a notice instead when no effect registry is
+/// registered. Part of the dashboard UI, routed by the package; not intended to be used directly.
+/// </summary>
 public partial class EffectsSettingsPage
 {
     [Inject]
@@ -31,6 +38,10 @@ public partial class EffectsSettingsPage
             e.Toggleable && e.Enabled != _savedEffectStates.GetValueOrDefault(e.FactoryType)
         );
 
+    /// <summary>
+    /// Resolves the effect registry, if any, and snapshots each effect's enabled state for
+    /// change tracking.
+    /// </summary>
     protected override void OnInitialized()
     {
         _effectRegistry = ServiceProvider.GetService<IEffectRegistry>();

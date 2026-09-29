@@ -7,14 +7,29 @@ using Trax.Effect.Models.Metadata;
 
 namespace Trax.Dashboard.Utilities;
 
-public static class DashboardFormatters
+/// <summary>
+/// Display formatting shared by the dashboard's pages: short train names, durations, schedules,
+/// JSON, and the Radzen badge style for each state. Infrastructure for the dashboard's own
+/// markup; not intended to be called directly.
+/// </summary>
+internal static class DashboardFormatters
 {
+    /// <summary>
+    /// Returns the part of a dotted name after the last dot, so a train's interface FullName
+    /// becomes its bare interface name. A name without a dot is returned unchanged.
+    /// </summary>
+    /// <param name="fullName">A type or train name.</param>
     public static string ShortName(string fullName)
     {
         var lastDot = fullName.LastIndexOf('.');
         return lastDot >= 0 ? fullName[(lastDot + 1)..] : fullName;
     }
 
+    /// <summary>
+    /// Formats how long a run took, from its start to its end time, using
+    /// <see cref="FormatDuration(double)"/>. Returns an em dash while the run has no end time.
+    /// </summary>
+    /// <param name="metadata">The run.</param>
     public static string FormatDuration(Metadata metadata)
     {
         if (metadata.EndTime is null)
@@ -23,6 +38,12 @@ public static class DashboardFormatters
         return FormatDuration((metadata.EndTime.Value - metadata.StartTime).TotalMilliseconds);
     }
 
+    /// <summary>
+    /// Formats a duration as whole milliseconds under a second (<c>850ms</c>), seconds with one
+    /// decimal under a minute (<c>12.3s</c>), and minutes with one decimal beyond that
+    /// (<c>75.0m</c>, never hours).
+    /// </summary>
+    /// <param name="ms">The duration in milliseconds.</param>
     public static string FormatDuration(double ms)
     {
         if (ms < 1000)
@@ -32,6 +53,14 @@ public static class DashboardFormatters
         return $"{ms / 60_000:F1}m";
     }
 
+    /// <summary>
+    /// Describes a manifest's schedule: the cron expression; <c>Every Ns</c>, <c>Every Nm</c> or
+    /// <c>Every Nh</c> for an interval, rounded down to the largest whole unit (so 90 seconds reads
+    /// <c>Every 1m</c>); or, for a one-off, <c>Once at {time}</c>, <c>Once (fired)</c> once the
+    /// time has passed, or <c>Once (no time set)</c>. Missing values give an em dash; other
+    /// schedule types give the enum name.
+    /// </summary>
+    /// <param name="manifest">The manifest.</param>
     public static string FormatSchedule(Manifest manifest) =>
         manifest.ScheduleType switch
         {
@@ -52,6 +81,11 @@ public static class DashboardFormatters
             _ => manifest.ScheduleType.ToString(),
         };
 
+    /// <summary>
+    /// Re-indents <paramref name="json"/> for display. Returns the input unchanged when it is not
+    /// valid JSON, so it is safe on arbitrary stored text.
+    /// </summary>
+    /// <param name="json">The text to format.</param>
     public static string FormatJson(string json)
     {
         try
@@ -68,6 +102,11 @@ public static class DashboardFormatters
         }
     }
 
+    /// <summary>
+    /// The badge colour for a run's state: success for completed, danger for failed, info for in
+    /// progress, warning for pending and cancelled, light for anything else.
+    /// </summary>
+    /// <param name="state">The run's state.</param>
     public static BadgeStyle GetStateBadgeStyle(TrainState state) =>
         state switch
         {
@@ -79,6 +118,11 @@ public static class DashboardFormatters
             _ => BadgeStyle.Light,
         };
 
+    /// <summary>
+    /// The badge colour for a dead letter's status: warning while awaiting intervention, info once
+    /// retried, success once acknowledged, light for anything else.
+    /// </summary>
+    /// <param name="status">The dead letter's status.</param>
     public static BadgeStyle GetDeadLetterStatusBadgeStyle(DeadLetterStatus status) =>
         status switch
         {
@@ -88,6 +132,10 @@ public static class DashboardFormatters
             _ => BadgeStyle.Light,
         };
 
+    /// <summary>
+    /// Formats an uptime with its two largest units: <c>3d 4h</c>, <c>5h 12m</c> or <c>7m 30s</c>.
+    /// </summary>
+    /// <param name="uptime">The elapsed time.</param>
     public static string FormatUptime(TimeSpan uptime)
     {
         if (uptime.TotalDays >= 1)
@@ -97,6 +145,11 @@ public static class DashboardFormatters
         return $"{(int)uptime.TotalMinutes}m {uptime.Seconds}s";
     }
 
+    /// <summary>
+    /// The badge colour for a work queue entry's status: info while queued, success once
+    /// dispatched, warning when cancelled, light for anything else.
+    /// </summary>
+    /// <param name="status">The work queue entry's status.</param>
     public static BadgeStyle GetWorkQueueStatusBadgeStyle(WorkQueueStatus status) =>
         status switch
         {
@@ -106,6 +159,11 @@ public static class DashboardFormatters
             _ => BadgeStyle.Light,
         };
 
+    /// <summary>
+    /// The badge colour for a log entry's level: danger for critical and error, warning for
+    /// warning, info for information, light for debug, trace and anything else.
+    /// </summary>
+    /// <param name="level">The log level.</param>
     public static BadgeStyle GetLogLevelBadgeStyle(LogLevel level) =>
         level switch
         {

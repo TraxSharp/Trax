@@ -43,7 +43,7 @@
 @code {
     private TraxDataGrid<Log>? _grid;
 
-    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         if (_grid is not null)
             await _grid.ReloadAsync();

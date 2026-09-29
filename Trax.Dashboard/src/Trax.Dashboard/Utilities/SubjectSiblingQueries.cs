@@ -6,7 +6,7 @@ namespace Trax.Dashboard.Utilities;
 /// <summary>
 /// Finds the queued sibling that dispatch would offer ahead of a given entry for the same subject.
 /// </summary>
-public static class SubjectSiblingQueries
+internal static class SubjectSiblingQueries
 {
     /// <summary>
     /// The confirmed, queued entries for <paramref name="entry"/>'s subject that dispatch would

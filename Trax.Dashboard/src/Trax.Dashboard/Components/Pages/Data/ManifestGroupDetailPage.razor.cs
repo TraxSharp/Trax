@@ -17,6 +17,12 @@ using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
 
+/// <summary>
+/// The page for one manifest group, at <c>/trax/data/manifest-groups/{id}</c>: its settings
+/// (max active jobs, priority, enabled), run counts, its manifests and runs, and the groups it
+/// depends on or that depend on it. The user can edit and save the settings, trigger every
+/// manifest in the group, and cancel all of its running trains. Part of the dashboard UI, routed by the package; not intended to be used directly.
+/// </summary>
 public partial class ManifestGroupDetailPage
 {
     [Inject]
@@ -37,10 +43,13 @@ public partial class ManifestGroupDetailPage
     [Inject]
     private IServiceProvider ServiceProvider { get; set; } = default!;
 
+    /// <summary>The manifest group's database id, from the route.</summary>
     [Parameter]
     public long ManifestGroupId { get; set; }
 
-    protected override object? GetRouteKey() => ManifestGroupId;
+    /// <inheritdoc/>
+    /// <remarks>Returns <see cref="ManifestGroupId"/>.</remarks>
+    private protected override object? GetRouteKey() => ManifestGroupId;
 
     private ManifestGroup? _group;
     private DagLayout? _dagLayout;
@@ -71,7 +80,13 @@ public partial class ManifestGroupDetailPage
             || _group.IsEnabled != _savedIsEnabled
         );
 
-    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Loads the group, its manifest count and completed, failed and in-progress run counts, and
+    /// the one-hop group dependency graph. The group's settings are not overwritten while the user
+    /// has unsaved edits. Leaves the page empty when no group has the id.
+    /// </summary>
+    /// <param name="cancellationToken">Cancelled when the page is disposed or a newer load starts.</param>
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
 

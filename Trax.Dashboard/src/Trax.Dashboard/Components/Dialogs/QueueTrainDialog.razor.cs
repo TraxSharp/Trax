@@ -11,6 +11,13 @@ using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
+/// <summary>
+/// Dialog that queues a train with input entered through a generated form or as raw JSON, opened
+/// from the Trains page. It enqueues through the scheduler's <c>IOperationsService</c> inside the
+/// <c>"dashboard"</c> trusted execution scope, so the train's queue hooks, subject key and input
+/// size cap apply but per-train authorization does not, and on success navigates to the new work
+/// queue entry. Opened by the dashboard's own pages through Radzen's <c>DialogService</c>; not intended to be used directly.
+/// </summary>
 public partial class QueueTrainDialog : IDisposable
 {
     private readonly CancellationTokenSource _cts = new();
@@ -27,6 +34,10 @@ public partial class QueueTrainDialog : IDisposable
     [Inject]
     private DialogService DialogService { get; set; } = default!;
 
+    /// <summary>
+    /// The train to queue, from train discovery. Its input type drives the form, and its service
+    /// type's FullName is the train name sent to the operations service.
+    /// </summary>
     [Parameter]
     public required TrainRegistration Registration { get; set; }
 
@@ -39,6 +50,10 @@ public partial class QueueTrainDialog : IDisposable
     private PropertyInfo[] _inputProperties = [];
     private readonly Dictionary<string, object?> _formValues = new();
 
+    /// <summary>
+    /// Builds one form field per public readable property of the train's input type, starting
+    /// booleans at <see langword="false"/>, enums at their first name and everything else empty.
+    /// </summary>
     protected override void OnInitialized()
     {
         _inputProperties = Registration
@@ -227,6 +242,9 @@ public partial class QueueTrainDialog : IDisposable
             _ => $"Enter {type.Name}",
         };
 
+    /// <summary>
+    /// Cancels a queue request still in flight when the dialog closes.
+    /// </summary>
     public void Dispose()
     {
         _cts.Cancel();

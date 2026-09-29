@@ -33,12 +33,6 @@
   <!-- Shipping libraries: everything under src/. Tests are not packed and do not need XML docs. -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Replace('\', '/').Contains('/src/'))">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- CS1591 (missing XML comment on a public member) is the one doc warning suppressed.
-         The summaries that exist ship in the package now; the undocumented public members,
-         including those the Razor compiler generates for every component, are a tracked
-         burn-down. Every other doc-comment warning (malformed XML, bad cref, param mismatch)
-         stays on and fails the zero-warning build. -->
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

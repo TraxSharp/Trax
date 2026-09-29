@@ -53,9 +53,11 @@
 </div>
 
 @code {
+    /// <summary>The laid-out graph to draw as SVG, from <c>DagLayoutEngine.ComputeLayout</c>.</summary>
     [Parameter]
     public DagLayout? Layout { get; set; }
 
+    /// <summary>Invoked with the node's id when the user clicks a node.</summary>
     [Parameter]
     public EventCallback<long> OnNodeClick { get; set; }
 

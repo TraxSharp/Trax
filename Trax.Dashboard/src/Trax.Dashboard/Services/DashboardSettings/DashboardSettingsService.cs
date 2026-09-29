@@ -3,32 +3,66 @@ using Trax.Scheduler.Configuration;
 
 namespace Trax.Dashboard.Services.DashboardSettings;
 
-public class DashboardSettingsService(ILocalStorageService localStorage) : IDashboardSettingsService
+/// <summary>
+/// Default <see cref="IDashboardSettingsService"/>: keeps each preference in memory for the
+/// circuit and persists it to the browser's <c>localStorage</c> through
+/// <see cref="ILocalStorageService"/>. Infrastructure registered by <c>AddTraxDashboard</c>;
+/// not intended to be used directly.
+/// </summary>
+/// <param name="localStorage">Browser storage the preferences are read from and written to.</param>
+internal class DashboardSettingsService(ILocalStorageService localStorage)
+    : IDashboardSettingsService
 {
+    /// <summary>Polling interval, in seconds, used until the browser stores a different one.</summary>
     public const int DefaultPollingIntervalSeconds = 5;
+
+    /// <summary>Administrative trains are hidden unless the browser stores otherwise.</summary>
     public const bool DefaultHideAdminTrains = true;
+
+    /// <summary>Every home page panel is shown unless the browser stores otherwise.</summary>
     public const bool DefaultComponentVisibility = true;
 
     private bool _isInitialized;
 
+    /// <inheritdoc/>
     public TimeSpan PollingInterval { get; private set; } =
         TimeSpan.FromSeconds(DefaultPollingIntervalSeconds);
 
+    /// <inheritdoc/>
+    /// <remarks>Starts at the time the service was constructed, before any poll has run.</remarks>
     public DateTime LastPollTime { get; private set; } = DateTime.UtcNow;
 
+    /// <inheritdoc/>
     public string? LastPollError { get; private set; }
 
+    /// <inheritdoc/>
     public bool HideAdminTrains { get; private set; } = DefaultHideAdminTrains;
 
+    /// <inheritdoc/>
+    /// <remarks>Taken from the scheduler's <see cref="AdminTrains.ShortNames"/>.</remarks>
     public IReadOnlyList<string> AdminTrainNames => AdminTrains.ShortNames;
 
-    // Dashboard component visibility (all default to true)
+    /// <inheritdoc/>
     public bool ShowSummaryCards { get; private set; } = DefaultComponentVisibility;
+
+    /// <inheritdoc/>
     public bool ShowExecutionsChart { get; private set; } = DefaultComponentVisibility;
+
+    /// <inheritdoc/>
     public bool ShowFailures { get; private set; } = DefaultComponentVisibility;
+
+    /// <inheritdoc/>
     public bool ShowAvgDuration { get; private set; } = DefaultComponentVisibility;
+
+    /// <inheritdoc/>
     public bool ShowServerHealth { get; private set; } = DefaultComponentVisibility;
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A stored polling interval of zero or less is ignored. When <c>localStorage</c> cannot be
+    /// read (for example during prerendering) the defaults stay in place, and the instance still
+    /// counts as initialized.
+    /// </remarks>
     public async Task InitializeAsync()
     {
         if (_isInitialized)
@@ -52,6 +86,7 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
         _isInitialized = true;
     }
 
+    /// <inheritdoc/>
     public async Task SetPollingIntervalAsync(int seconds)
     {
         seconds = Math.Max(1, seconds);
@@ -59,12 +94,14 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
         await localStorage.SetAsync(StorageKeys.PollingInterval, seconds);
     }
 
+    /// <inheritdoc/>
     public async Task SetHideAdminTrainsAsync(bool hide)
     {
         HideAdminTrains = hide;
         await localStorage.SetAsync(StorageKeys.HideAdminTrains, hide);
     }
 
+    /// <inheritdoc/>
     public async Task SetComponentVisibilityAsync(string key, bool visible)
     {
         switch (key)
@@ -89,12 +126,14 @@ public class DashboardSettingsService(ILocalStorageService localStorage) : IDash
         await localStorage.SetAsync(key, visible);
     }
 
+    /// <inheritdoc/>
     public void NotifyPolled()
     {
         LastPollTime = DateTime.UtcNow;
         LastPollError = null;
     }
 
+    /// <inheritdoc/>
     public void NotifyPollFailed(string message) => LastPollError = message;
 
     private async Task<bool> LoadVisibilityAsync(string key)

@@ -11,12 +11,15 @@
 </RadzenStack>
 
 @code {
+    /// <summary>The caption shown above the value.</summary>
     [Parameter, EditorRequired]
     public string Label { get; set; } = "";
 
+    /// <summary>The value text, shown when <see cref="ChildContent"/> is not set.</summary>
     [Parameter]
     public string Value { get; set; } = "";
 
+    /// <summary>Custom markup shown in place of <see cref="Value"/>.</summary>
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
 }

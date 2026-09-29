@@ -5,6 +5,13 @@ using Radzen;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
+/// <summary>
+/// Dialog that edits an effect provider's configuration object in place, opened from the
+/// Effects settings page for a configurable effect. Save converts every field first and applies
+/// all or none of them to the live object, which is process-wide and read by the next train
+/// that runs; nothing is persisted, so a restart restores the configured values. Cancel writes
+/// nothing. Opened by the dashboard's own pages through Radzen's <c>DialogService</c>; not intended to be used directly.
+/// </summary>
 public partial class ConfigureEffectDialog
 {
     [Inject]
@@ -13,9 +20,17 @@ public partial class ConfigureEffectDialog
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
 
+    /// <summary>
+    /// The configuration's type. Its public, readable and writable instance properties become
+    /// the form's fields.
+    /// </summary>
     [Parameter]
     public required Type ConfigurationType { get; set; }
 
+    /// <summary>
+    /// The live configuration instance to edit, an instance of <see cref="ConfigurationType"/>.
+    /// Save writes to it directly.
+    /// </summary>
     [Parameter]
     public required object Configuration { get; set; }
 
@@ -23,6 +38,9 @@ public partial class ConfigureEffectDialog
     private readonly Dictionary<string, object?> _formValues = new();
     private string? _error;
 
+    /// <summary>
+    /// Reads the current value of every editable property of <see cref="Configuration"/> into the form.
+    /// </summary>
     protected override void OnInitialized()
     {
         _configProperties = ConfigurationType

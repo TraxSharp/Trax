@@ -133,7 +133,7 @@
     private TraxDataGrid<WorkQueue>? _grid;
     private HashSet<WorkQueue> _selectedEntries = [];
 
-    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         if (_grid is not null)
             await _grid.ReloadAsync();

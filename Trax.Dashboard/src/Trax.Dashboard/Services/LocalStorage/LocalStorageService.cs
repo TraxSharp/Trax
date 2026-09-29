@@ -3,8 +3,15 @@ using Microsoft.JSInterop;
 
 namespace Trax.Dashboard.Services.LocalStorage;
 
-public class LocalStorageService(IJSRuntime jsRuntime) : ILocalStorageService
+/// <summary>
+/// Default <see cref="ILocalStorageService"/>, calling <c>localStorage.getItem</c>,
+/// <c>setItem</c> and <c>removeItem</c> through <see cref="IJSRuntime"/> and swallowing every
+/// failure. Infrastructure registered by <c>AddTraxDashboard</c>; not intended to be used directly.
+/// </summary>
+/// <param name="jsRuntime">The circuit's JS runtime.</param>
+internal class LocalStorageService(IJSRuntime jsRuntime) : ILocalStorageService
 {
+    /// <inheritdoc/>
     public async Task<T?> GetAsync<T>(string key)
     {
         try
@@ -26,6 +33,7 @@ public class LocalStorageService(IJSRuntime jsRuntime) : ILocalStorageService
         }
     }
 
+    /// <inheritdoc/>
     public async Task SetAsync<T>(string key, T value)
     {
         try
@@ -41,6 +49,7 @@ public class LocalStorageService(IJSRuntime jsRuntime) : ILocalStorageService
         }
     }
 
+    /// <inheritdoc/>
     public async Task RemoveAsync(string key)
     {
         try

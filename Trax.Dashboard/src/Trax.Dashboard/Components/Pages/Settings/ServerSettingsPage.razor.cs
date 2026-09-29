@@ -10,6 +10,13 @@ using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Components.Pages.Settings;
 
+/// <summary>
+/// The server settings page, at <c>/trax/settings/server</c>: scheduler settings (polling, retries,
+/// timeouts, dead letter and metadata cleanup, local workers) and log levels. Scheduler changes
+/// save through the scheduler's operations service, the same path as the GraphQL scheduler config
+/// mutation; log levels are applied to this process's logger filter. Each section appears only when
+/// its services are registered. Part of the dashboard UI, routed by the package; not intended to be used directly.
+/// </summary>
 public partial class ServerSettingsPage
 {
     [Inject]
@@ -123,6 +130,10 @@ public partial class ServerSettingsPage
             e.Level != _savedLogLevels.GetValueOrDefault(e.Category, "Information")
         );
 
+    /// <summary>
+    /// Loads a copy of the current scheduler settings into the form when a scheduler is
+    /// registered, and the configured <c>Logging:LogLevel</c> categories when there are any.
+    /// </summary>
     protected override void OnInitialized()
     {
         // Scheduler

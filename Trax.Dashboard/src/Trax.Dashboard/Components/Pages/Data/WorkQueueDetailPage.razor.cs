@@ -11,6 +11,12 @@ using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
 
+/// <summary>
+/// The page for one work queue entry, at <c>/trax/data/work-queue/{id}</c>. For a queued entry
+/// with a subject key it names what it is waiting on: the in-flight run holding its subject, or an
+/// older queued sibling that dispatch will take first. The user can cancel a queued entry.
+/// Part of the dashboard UI, routed by the package; not intended to be used directly.
+/// </summary>
 public partial class WorkQueueDetailPage
 {
     [Inject]
@@ -25,6 +31,7 @@ public partial class WorkQueueDetailPage
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
 
+    /// <summary>The work queue entry's database id, from the route.</summary>
     [Parameter]
     public long WorkQueueId { get; set; }
 
@@ -34,9 +41,16 @@ public partial class WorkQueueDetailPage
     private bool _cancelling;
     private string? _error;
 
-    protected override object? GetRouteKey() => WorkQueueId;
+    /// <inheritdoc/>
+    /// <remarks>Returns <see cref="WorkQueueId"/>.</remarks>
+    private protected override object? GetRouteKey() => WorkQueueId;
 
-    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Loads the entry and, when it is queued with a subject key, the id of the dispatched entry
+    /// whose run still holds the subject or, failing that, of the queued sibling ahead of it.
+    /// </summary>
+    /// <param name="cancellationToken">Cancelled when the page is disposed or a newer load starts.</param>
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
         _entry = await context

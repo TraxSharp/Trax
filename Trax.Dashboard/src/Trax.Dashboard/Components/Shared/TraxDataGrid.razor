@@ -42,41 +42,61 @@
     private bool _serverLoadStarted;
     private string? _loadError;
 
-    // ── Client-side mode (existing) ──
+    /// <summary>
+    /// The rows for client-side mode, filtered, sorted and paged in memory. The grid reloads when
+    /// a different collection instance is passed; mutating the same instance does not. Ignored
+    /// when <see cref="ServerLoadData"/> is set.
+    /// </summary>
     [Parameter]
     public IEnumerable<TItem>? Data { get; set; }
 
-    // ── Server-side mode ──
+    /// <summary>
+    /// Switches the grid to server-side mode: called with Radzen's filter, sort, skip and take
+    /// for every page the grid needs, and cancelled when a newer request supersedes it. If it
+    /// throws, the grid clears its rows and shows the exception message.
+    /// </summary>
     [Parameter]
     public Func<LoadDataArgs, CancellationToken, Task<ServerDataResult<TItem>>>? ServerLoadData { get; set; }
 
+    /// <summary>The Radzen column definitions.</summary>
     [Parameter]
     public RenderFragment? Columns { get; set; }
 
+    /// <summary>Shows the loading indicator, in addition to the grid's own while a server page loads.</summary>
     [Parameter]
     public bool IsLoading { get; set; }
 
+    /// <summary>Whether column filters are shown (case-insensitive, advanced mode). Defaults to <see langword="true"/>.</summary>
     [Parameter]
     public bool AllowFiltering { get; set; } = true;
 
+    /// <summary>Whether columns can be sorted. Defaults to <see langword="true"/>.</summary>
     [Parameter]
     public bool AllowSorting { get; set; } = true;
 
+    /// <summary>Whether the grid pages its rows. Defaults to <see langword="true"/>.</summary>
     [Parameter]
     public bool AllowPaging { get; set; } = true;
 
+    /// <summary>Rows per page. Defaults to 20.</summary>
     [Parameter]
     public int PageSize { get; set; } = 20;
 
+    /// <summary>Invoked when the user clicks a row.</summary>
     [Parameter]
     public EventCallback<DataGridRowMouseEventArgs<TItem>> RowClick { get; set; }
 
+    /// <summary>Inline CSS applied to the grid.</summary>
     [Parameter]
     public string? Style { get; set; }
 
     private bool IsServerMode => ServerLoadData is not null;
 
-    public async Task ReloadAsync()
+    /// <summary>
+    /// Asks the grid to load its current page again; in server-side mode this calls
+    /// <see cref="ServerLoadData"/>. Does nothing before the grid has rendered.
+    /// </summary>
+    internal async Task ReloadAsync()
     {
         if (_grid is not null)
             await _grid.Reload();
@@ -184,6 +204,7 @@
         }
     }
 
+    /// <summary>Cancels a server page load still in flight.</summary>
     public ValueTask DisposeAsync()
     {
         _loadCts?.Cancel();

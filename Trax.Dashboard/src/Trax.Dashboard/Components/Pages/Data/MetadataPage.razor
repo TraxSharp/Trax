@@ -188,7 +188,7 @@
             duration: 4000);
     }, () => _selectedMetadata.Clear());
 
-    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         if (_grid is not null)
             await _grid.ReloadAsync();

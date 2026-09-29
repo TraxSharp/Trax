@@ -5,6 +5,11 @@ using Trax.Dashboard.Services.LocalStorage;
 
 namespace Trax.Dashboard.Components.Pages.Settings;
 
+/// <summary>
+/// The user settings page, at <c>/trax/settings/user</c>: polling interval, whether to hide
+/// administrative trains, and which home page panels to show. Settings are saved per browser
+/// through <see cref="Services.DashboardSettings.IDashboardSettingsService"/>. Part of the dashboard UI, routed by the package; not intended to be used directly.
+/// </summary>
 public partial class UserSettingsPage
 {
     [Inject]
@@ -43,6 +48,9 @@ public partial class UserSettingsPage
         || _showFailures != _savedShowFailures
         || _showAvgDuration != _savedShowAvgDuration;
 
+    /// <summary>
+    /// Initializes the dashboard settings and copies them into the form.
+    /// </summary>
     protected override async Task OnInitializedAsync()
     {
         await DashboardSettings.InitializeAsync();

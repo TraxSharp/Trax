@@ -13,6 +13,12 @@ using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
 
+/// <summary>
+/// The page for one dead letter, at <c>/trax/data/dead-letters/{id}</c>: the dead letter, its
+/// manifest, and the manifest's failed runs. From here the user can re-queue the manifest, which
+/// goes through the scheduler and opens the new work queue entry, or acknowledge the dead letter
+/// with a note. Part of the dashboard UI, routed by the package; not intended to be used directly.
+/// </summary>
 public partial class DeadLetterDetailPage
 {
     [Inject]
@@ -27,6 +33,7 @@ public partial class DeadLetterDetailPage
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
 
+    /// <summary>The dead letter's database id, from the route.</summary>
     [Parameter]
     public long DeadLetterId { get; set; }
 
@@ -58,9 +65,17 @@ public partial class DeadLetterDetailPage
     private string _acknowledgeNote = "";
     private string? _actionError;
 
-    protected override object? GetRouteKey() => DeadLetterId;
+    /// <inheritdoc/>
+    /// <remarks>Returns <see cref="DeadLetterId"/>.</remarks>
+    private protected override object? GetRouteKey() => DeadLetterId;
 
-    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Loads the dead letter with its manifest, the count and most recent of the manifest's failed
+    /// runs, and reloads the failed-runs grid, which pages its rows from the database. Leaves the
+    /// page empty when no dead letter has the id.
+    /// </summary>
+    /// <param name="cancellationToken">Cancelled when the page is disposed or a newer load starts.</param>
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
 
