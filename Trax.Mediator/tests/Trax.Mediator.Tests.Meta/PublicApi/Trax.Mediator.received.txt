@@ -2,7 +2,6 @@ namespace Trax.Mediator.Configuration
 {
     public class MediatorConfiguration
     {
-        public static readonly System.TimeSpan DefaultMaxQueueHookDuration;
         public MediatorConfiguration() { }
         public bool AllowMissingAuthorizationService { get; }
         public System.Reflection.Assembly[] Assemblies { get; }
@@ -15,7 +14,6 @@ namespace Trax.Mediator.Configuration
     }
     public class TraxBuilderWithMediator
     {
-        public TraxBuilderWithMediator(Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects effectsBuilder) { }
         public bool HasDataProvider { get; }
         public bool HasDatabaseProvider { get; }
         public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
@@ -130,17 +128,6 @@ namespace Trax.Mediator.Services.TrainBus
         System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, Trax.Effect.Models.Metadata.Metadata? metadata = null);
         System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null);
     }
-    public class TrainBus : Trax.Mediator.Services.TrainBus.ITrainBus
-    {
-        public TrainBus(System.IServiceProvider serviceProvider, Microsoft.Extensions.DependencyInjection.IServiceScopeFactory scopeFactory, Trax.Mediator.Services.TrainRegistry.ITrainRegistry registryService) { }
-        public object InitializeTrain(object trainInput) { }
-        public System.Threading.Tasks.Task RunAsync(object trainInput, Trax.Effect.Models.Metadata.Metadata? metadata = null) { }
-        public System.Threading.Tasks.Task RunAsync(object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null) { }
-        public System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, Trax.Effect.Models.Metadata.Metadata? metadata = null) { }
-        public System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null) { }
-        public static void ClearMethodCache() { }
-        public static int GetMethodCacheSize() { }
-    }
 }
 namespace Trax.Mediator.Services.TrainDiscovery
 {
@@ -221,11 +208,6 @@ namespace Trax.Mediator.Services.TrainRegistry
     public interface ITrainRegistry
     {
         System.Collections.Generic.Dictionary<System.Type, System.Type> InputTypeToTrain { get; set; }
-    }
-    public class TrainRegistry : Trax.Mediator.Services.TrainRegistry.ITrainRegistry
-    {
-        public TrainRegistry(params System.Reflection.Assembly[] assemblies) { }
-        public System.Collections.Generic.Dictionary<System.Type, System.Type> InputTypeToTrain { get; set; }
     }
 }
 namespace Trax.Mediator.Services.TrustedExecution

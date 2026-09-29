@@ -4,8 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Trax.Mediator.Tests.ArrayLogger</AssemblyName>
-    <PackageDescription>An in-memory ILoggerProvider for Trax tests: each logger keeps its entries as Trax Log records in a list, so a test can assert on what a train or junction logged. Install it in a test project, not in production code.</PackageDescription>
-    <PackageTags>trax;dotnet;testing;logging;mediator</PackageTags>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

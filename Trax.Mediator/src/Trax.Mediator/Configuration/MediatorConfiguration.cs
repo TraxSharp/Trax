@@ -96,5 +96,5 @@ public class MediatorConfiguration
     public TimeSpan MaxQueueHookDuration { get; internal set; } = DefaultMaxQueueHookDuration;
 
     /// <summary>The default <see cref="MaxQueueHookDuration"/>: 30 seconds.</summary>
-    public static readonly TimeSpan DefaultMaxQueueHookDuration = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan DefaultMaxQueueHookDuration = TimeSpan.FromSeconds(30);
 }

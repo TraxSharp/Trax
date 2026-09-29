@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Attributes;
@@ -12,6 +13,7 @@ namespace Trax.Mediator.Services.TrainDiscovery;
 /// singleton by <c>AddMediator</c>; Trax.Scheduler and Trax.Api also construct it during
 /// registration. Infrastructure; resolve <see cref="ITrainDiscoveryService"/> instead.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public class TrainDiscoveryService : ITrainDiscoveryService
 {
     private readonly IServiceCollection _serviceCollection;

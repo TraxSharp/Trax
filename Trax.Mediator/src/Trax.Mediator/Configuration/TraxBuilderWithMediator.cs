@@ -19,7 +19,7 @@ public class TraxBuilderWithMediator
     /// find no mediator services. Not intended to be called directly.
     /// </summary>
     /// <param name="effectsBuilder">The builder returned by <c>AddEffects</c>.</param>
-    public TraxBuilderWithMediator(TraxBuilderWithEffects effectsBuilder)
+    internal TraxBuilderWithMediator(TraxBuilderWithEffects effectsBuilder)
     {
         EffectsBuilder = effectsBuilder;
     }

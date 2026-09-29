@@ -39,9 +39,8 @@ namespace Trax.Mediator.Services.TrustedExecution;
 /// <para>
 /// <strong>How far it reaches.</strong> The state lives in a static <c>AsyncLocal</c>, so it is
 /// shared by every instance in the process (not per container), follows <c>await</c>, and does
-/// not reach unrelated requests. Work started inside the scope captures it: a task started without
-/// being awaited, a timer or a background loop started there stays trusted even after the scope is
-/// disposed. Await what you start inside a scope, and dispose the handle on the flow that opened it.
+/// not reach unrelated requests. Await what you start inside a scope, and dispose the handle on the
+/// flow that opened it.
 /// </para>
 /// </remarks>
 /// <example>

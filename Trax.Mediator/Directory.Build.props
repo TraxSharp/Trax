@@ -35,7 +35,7 @@
        package consumers. Every public member is documented and CS1591 stays on, so a new public
        member without a comment fails the zero-warning build. Trax.Mediator.Testing already
        generates its documentation file from its own project. -->
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Mediator' Or '$(MSBuildProjectName)' == 'Trax.Mediator.Tests.ArrayLogger'">
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Mediator'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 

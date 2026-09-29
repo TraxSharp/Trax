@@ -46,7 +46,7 @@ namespace Trax.Mediator.Services.TrainBus;
 /// <param name="serviceProvider">The service provider used to resolve train instances for <see cref="InitializeTrain"/></param>
 /// <param name="scopeFactory">Factory for creating child scopes per <c>RunAsync</c> call</param>
 /// <param name="registryService">The registry service that maps input types to train types</param>
-public class TrainBus(
+internal class TrainBus(
     IServiceProvider serviceProvider,
     IServiceScopeFactory scopeFactory,
     ITrainRegistry registryService

@@ -162,6 +162,59 @@ public class TrustedExecutionScopeTests
     }
 
     [Test]
+    public async Task UnawaitedTaskStartedInsideScope_IsUntrustedOnceTheScopeIsDisposed()
+    {
+        var scope = new TrustedExecutionScope();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool trustedBeforeDispose;
+        Task<(bool IsTrusted, string? Reason)> captured;
+
+        using (scope.BeginTrusted("captured"))
+        {
+            // Started inside the scope and not awaited there, so it captures the scope's flow.
+            captured = Task.Run(async () =>
+            {
+                await release.Task;
+                return (scope.IsTrusted, scope.CurrentReason);
+            });
+            trustedBeforeDispose = scope.IsTrusted;
+        }
+
+        release.SetResult();
+        var (isTrusted, reason) = await captured;
+
+        trustedBeforeDispose.Should().BeTrue();
+        isTrusted
+            .Should()
+            .BeFalse("disposing the scope ends trust for every flow that captured it");
+        reason.Should().BeNull();
+    }
+
+    [Test]
+    public async Task UnawaitedTaskStartedInsideNestedScope_FallsBackToTheOpenOuterScope()
+    {
+        var scope = new TrustedExecutionScope();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<(bool IsTrusted, string? Reason)> captured;
+
+        using var outer = scope.BeginTrusted("outer");
+        using (scope.BeginTrusted("inner"))
+        {
+            captured = Task.Run(async () =>
+            {
+                await release.Task;
+                return (scope.IsTrusted, scope.CurrentReason);
+            });
+        }
+
+        release.SetResult();
+        var (isTrusted, reason) = await captured;
+
+        isTrusted.Should().BeTrue("the outer scope the task also started inside is still open");
+        reason.Should().Be("outer");
+    }
+
+    [Test]
     public void ScopeOpenedAfterAnOutOfOrderDispose_StillUnwindsToUntrusted()
     {
         var scope = new TrustedExecutionScope();

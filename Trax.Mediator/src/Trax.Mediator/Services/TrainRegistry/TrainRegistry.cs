@@ -27,7 +27,7 @@ namespace Trax.Mediator.Services.TrainRegistry;
 /// The registry is typically created during application startup and registered as a singleton
 /// in the dependency injection container, allowing it to be injected into the train bus.
 /// </remarks>
-public class TrainRegistry : ITrainRegistry
+internal class TrainRegistry : ITrainRegistry
 {
     /// <summary>
     /// Gets or sets the dictionary that maps train input types to their corresponding train types.
