@@ -21,7 +21,7 @@
        Every project under src/ ships as a package; the test projects do not. -->
   <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectDirectory)').Replace('\','/').Contains('/src/'))">
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>1.43.2</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>1.44.1</PackageValidationBaselineVersion>
     <!-- The XML doc file ships in the package so IntelliSense (and anyone reading the package
          without the source) gets the /// summaries. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

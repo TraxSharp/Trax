@@ -187,7 +187,7 @@
       "trax.api.auth": {
         "type": "Project",
         "dependencies": {
-          "Trax.Mediator": "[1.23.0, )"
+          "Trax.Mediator": "[1.23.1, )"
         }
       },
       "trax.api.auth.jwt": {
@@ -269,9 +269,9 @@
       },
       "Trax.Effect": {
         "type": "CentralTransitive",
-        "requested": "[1.57.1, )",
-        "resolved": "1.57.1",
-        "contentHash": "tUaQ31oGZoMCWdNuQ8tPCOq+PtpNZ8St6sd7imFibNe1HSqJFPSmEJup9n1vBH7cXTkP/pJgvE/kTDY7gtL7KA==",
+        "requested": "[1.57.2, )",
+        "resolved": "1.57.2",
+        "contentHash": "J7GwyYC31HVPjEIk5Eahr68rsH+yusp5zx3+2deIURDLQ4eex/0NORCD2weLwYMTnprZgCq47zz5aGaMd2szMw==",
         "dependencies": {
           "Microsoft.Extensions.Hosting.Abstractions": "10.0.12",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
@@ -280,9 +280,9 @@
       },
       "Trax.Effect.Data": {
         "type": "CentralTransitive",
-        "requested": "[1.57.1, )",
-        "resolved": "1.57.1",
-        "contentHash": "3Q/xYlebNfBmkeL/CHBLBN87S5FD4YvIgJbLKIO9hEHhPnHEN7LNceeWgkUEiyXlxnRzGvAHqgygJwytLCwz3A==",
+        "requested": "[1.57.2, )",
+        "resolved": "1.57.2",
+        "contentHash": "GI7znb2cTR6BGxMNSWhHJGGq0n8X+DcFYkaq2Vi0QqPbo43asCGT7GunxtWF1h1gaVn200kAv3/bIEcuwC3SvA==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.12",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.12",
@@ -292,18 +292,18 @@
           "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
           "Npgsql": "10.0.3",
           "Trax.Core": "1.7.4",
-          "Trax.Effect": "1.57.1"
+          "Trax.Effect": "1.57.2"
         }
       },
       "Trax.Mediator": {
         "type": "CentralTransitive",
-        "requested": "[1.23.0, )",
-        "resolved": "1.23.0",
-        "contentHash": "KXLpGrdt0sL9Qn2YIqcwyk9N1wtZ2C4XL6UphmvYOU6wMfu5IJd7YdUASwCDxjBHcJdhH3smKM2xHhSNnr+oTw==",
+        "requested": "[1.23.1, )",
+        "resolved": "1.23.1",
+        "contentHash": "Ph0JGAeY5s0VWvw5HpduZmkzulXOUuSd8yazHcKjjQ3W38wVbhokPmpdt5WeLQEuwUYOq2CgPXZy6XvR+CWFuw==",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection": "10.0.12",
-          "Trax.Effect": "1.56.0",
-          "Trax.Effect.Data": "1.56.0"
+          "Trax.Effect": "1.57.1",
+          "Trax.Effect.Data": "1.57.1"
         }
       }
     }
