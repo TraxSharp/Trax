@@ -102,7 +102,7 @@ else
     {
         var result = await DialogService.OpenAsync<PersistedOperationEditor>(
             "Upload persisted operation",
-            parameters: new Dictionary<string, object>(),
+            parameters: new Dictionary<string, object?>(),
             options: new DialogOptions { Width = "720px", Height = "auto", Resizable = false }
         );
         if (result is true)

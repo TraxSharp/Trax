@@ -344,6 +344,7 @@ namespace Trax.Dashboard.Components.Shared
         protected override void OnParametersSet() { }
     }
     public class TraxDataGrid<TItem> : Microsoft.AspNetCore.Components.ComponentBase, System.IAsyncDisposable
+        where TItem :  notnull
     {
         public TraxDataGrid() { }
         [Microsoft.AspNetCore.Components.Parameter]

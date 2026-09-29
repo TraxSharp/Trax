@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    <!-- Some packages (Radzen.Blazor 6.*, Microsoft.Extensions.DependencyInjection 10.*)
+    <!-- Some packages (Radzen.Blazor 11.*, Microsoft.Extensions.DependencyInjection 10.*)
          intentionally float. CPM rejects floating PackageVersion items unless this is set. -->
     <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
   </PropertyGroup>

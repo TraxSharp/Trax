@@ -6,6 +6,41 @@
     <NuGetAuditMode>all</NuGetAuditMode>
     <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
+
+  <!-- Package metadata shared by every package this repo publishes. A project can
+       override any of it. -->
+  <PropertyGroup>
+    <Authors>Theauxm</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Dashboard</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
+    <PackageTags>trax;dotnet;dashboard;blazor;blazor-server;radzen;monitoring;scheduler</PackageTags>
+    <!-- No .snupkg: DotNet.ReproducibleBuilds sets DebugType=embedded, so the PDB, with
+         SourceLink, ships inside the DLL. -->
+  </PropertyGroup>
+
+  <!-- Shipping libraries: everything under src/. Tests are not packed and do not need XML docs. -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.Replace('\', '/').Contains('/src/'))">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591 (missing XML comment on a public member) is the one doc warning suppressed.
+         The summaries that exist ship in the package now; the undocumented public members,
+         including those the Razor compiler generates for every component, are a tracked
+         burn-down. Every other doc-comment warning (malformed XML, bad cref, param mismatch)
+         stays on and fails the zero-warning build. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$(MSBuildProjectDirectory.Replace('\', '/').Contains('/src/'))">
+    <None
+      Include="$(MSBuildThisFileDirectory)README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
   </ItemGroup>

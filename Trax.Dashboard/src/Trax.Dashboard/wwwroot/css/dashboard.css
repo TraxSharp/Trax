@@ -1,4 +1,4 @@
-/* Trax.Core Dashboard — custom variables bridging Radzen theme tokens.
+/* Trax Dashboard — custom variables bridging Radzen theme tokens.
    --cs-* variables reference --rz-* tokens so they auto-cascade on theme change.
    The .cs-dashboard wrapper scopes Radzen variable overrides to this dashboard. */
 

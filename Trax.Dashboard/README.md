@@ -4,7 +4,7 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Dashboard)](https://www.nuget.org/packages/Trax.Dashboard/)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Dashboard)](https://www.nuget.org/packages/Trax.Dashboard/)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Dashboard/blob/main/LICENSE)
 [![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Dashboard)](https://github.com/TraxSharp/Trax.Dashboard/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Dashboard/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Dashboard)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
@@ -36,13 +36,22 @@ No separate service to deploy. It mounts directly into your existing application
 
 ## Installation
 
+Install it in the ASP.NET Core application that already hosts Trax. The example below also uses the
+Postgres data provider:
+
 ```bash
 dotnet add package Trax.Dashboard
+dotnet add package Trax.Effect.Data.Postgres
 ```
 
 ## Setup
 
 ```csharp
+using Trax.Dashboard.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddTrax(trax =>
@@ -58,6 +67,20 @@ app.UseTraxDashboard();    // Mounts at /trax
 
 app.Run();
 ```
+
+The host's csproj must also opt into the framework's Blazor web assets, or `_framework/blazor.web.js`
+is missing and the dashboard renders but ignores every click:
+
+```xml
+<PropertyGroup>
+  <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
+</PropertyGroup>
+```
+
+Use `builder.AddTraxDashboard()` on the `WebApplicationBuilder` rather than
+`builder.Services.AddTraxDashboard()`: only the builder overload calls
+`builder.WebHost.UseStaticWebAssets()` outside Development, which the dashboard's CSS and JS need in
+every environment.
 
 The mount path is fixed. Every page carries a compile-time `@page "/trax/..."` route, so the
 route prefix argument to `UseTraxDashboard()` only changes the links the sidebar builds and
@@ -86,10 +109,16 @@ The departure board. Grid of all registered `IServiceTrain<,>` implementations d
 - **Manifests**: the timetable. Scheduled train definitions from Trax.Scheduler. View schedule, retry policy, last departure time, and enable/disable individual manifests.
 - **Manifest Groups**: fleet-level statistics and dispatch settings (max active trains, priority) per group.
 - **Dead Letters**: the lost shipment office. Trains that derailed beyond their retry limit. Inspect the failure details and decide whether to re-dispatch or discard.
+- **Work Queue**: runs waiting to be dispatched, including staged entries. Cancel pending entries individually or in bulk.
+- **Persisted Operations**: the GraphQL persisted-operation documents the API accepts. Upload, edit and deactivate them.
 
 ### Effects
 
 Toggle individual station services on or off at runtime. Adjust settings like log levels and serialization options without restarting the application.
+
+### Server Settings
+
+Scheduler settings at runtime: the administrative trains, polling interval, max active jobs, worker count and default retry policy.
 
 ### User Settings
 
@@ -106,7 +135,7 @@ The dashboard handles its own static assets and routing, so you don't need to co
 
 ## License
 
-MIT
+MIT. See [LICENSE](https://github.com/TraxSharp/Trax.Dashboard/blob/main/LICENSE).
 
 ## Trademark & Brand Notice
 

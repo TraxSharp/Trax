@@ -135,7 +135,7 @@ public partial class EffectsSettingsPage
 
         await DialogService.OpenAsync<ConfigureEffectDialog>(
             $"Configure {entry.Name}",
-            new Dictionary<string, object>
+            new Dictionary<string, object?>
             {
                 ["ConfigurationType"] = configurable.GetConfigurationType(),
                 ["Configuration"] = configurable.GetConfiguration(),

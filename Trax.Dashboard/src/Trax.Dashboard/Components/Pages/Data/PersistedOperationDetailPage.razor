@@ -137,7 +137,7 @@ else
     private async Task OpenEditor()
     {
         if (_row is null) return;
-        var parameters = new Dictionary<string, object>
+        var parameters = new Dictionary<string, object?>
         {
             ["ExistingId"] = _row.Id,
             ["ExistingDocument"] = _row.Document,
@@ -162,7 +162,7 @@ else
         if (_row is null) return;
         var reason = await DialogService.OpenAsync<DeactivationReasonDialog>(
             "Deactivate persisted operation",
-            parameters: new Dictionary<string, object>(),
+            parameters: new Dictionary<string, object?>(),
             options: new DialogOptions { Width = "520px", Height = "auto" }
         );
         if (reason is string r && !string.IsNullOrWhiteSpace(r))

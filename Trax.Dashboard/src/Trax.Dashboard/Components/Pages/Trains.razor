@@ -68,7 +68,7 @@
     {
         await DialogService.OpenAsync<QueueTrainDialog>(
             $"Queue {registration.ServiceTypeName}",
-            new Dictionary<string, object> { ["Registration"] = registration },
+            new Dictionary<string, object?> { ["Registration"] = registration },
             new DialogOptions
             {
                 Width = "600px",
