@@ -14,9 +14,9 @@ Configuration class for the Trax.Core Dashboard. Passed via the `configure` call
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `RoutePrefix` | `string` | `"/trax"` | Prefix used to build the sidebar navigation links. Overwritten by [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard). It does not move the pages, whose routes are compile-time `/trax/...` templates. |
+| `RoutePrefix` | `string` | `"/trax"` | Read-only. Prefix used to build the sidebar navigation links, set from the `routePrefix` argument of [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard). It does not move the pages, whose routes are compile-time `/trax/...` templates. |
 | `Title` | `string` | `"Trax"` | Title displayed in the dashboard header and browser tab. |
-| `EnvironmentName` | `string` | `""` | The hosting environment name (e.g., "Development", "Production"). Auto-populated by `UseTraxDashboard`. |
+| `EnvironmentName` | `string` | `""` | Read-only. The hosting environment name (e.g., "Development", "Production"), set from `IHostEnvironment.EnvironmentName` by `UseTraxDashboard`. |
 
 ## Authorization posture
 
@@ -45,6 +45,6 @@ app.UseTraxDashboard();
 
 ## Remarks
 
-- `RoutePrefix` and `EnvironmentName` are set by `UseTraxDashboard`, not in the `configure` callback. Setting them in `configure` will be overwritten.
-- `RoutePrefix` is read only by the sidebar. Changing it from `/trax` leaves the pages where they are and points every navigation link somewhere that does not exist.
-- `Title` is the only property worth setting in the `configure` callback, alongside the posture.
+- `RoutePrefix` and `EnvironmentName` have no public setter. `UseTraxDashboard` sets both, and code can read them from the registered `DashboardOptions` singleton.
+- `RoutePrefix` is read only by the sidebar. Passing `UseTraxDashboard` a prefix other than `/trax` leaves the pages where they are and points every navigation link somewhere that does not exist.
+- `Title` is the only property the `configure` callback can set, alongside the posture.

@@ -152,7 +152,7 @@ Each train can only be routed to one submitter. Routing the same train to multip
 
 ## How It Works
 
-When the JobDispatcher processes a work queue entry, it checks the `JobSubmitterRoutingConfiguration` for the entry's train name. If a route exists to `LambdaJobSubmitter`, the submitter:
+When the JobDispatcher processes a work queue entry, it checks whether the entry's train is routed to this function. If it is, the Lambda submitter:
 
 1. Serializes a `RemoteJobRequest` containing the metadata ID and optional input
 2. Wraps it in a `LambdaEnvelope` with `Type = Execute`
@@ -182,7 +182,7 @@ The scheduler process needs:
 |---------|----------|-------------|
 | `LambdaWorkerOptions` | Singleton | Configuration options |
 | `IAmazonLambda` | Singleton | AWS Lambda client |
-| `LambdaJobSubmitter` | Scoped (concrete type) | Dispatches jobs via Lambda SDK, resolved per train via routing |
+| Lambda job submitter | Scoped | An internal `IJobSubmitter` that dispatches jobs via the Lambda SDK. The JobDispatcher resolves it for each train routed to this function; application code does not resolve it |
 
 > **Note:** `UseLambdaWorkers()` does **not** replace the default `IJobSubmitter`. Local workers continue to run for trains not routed to this function.
 

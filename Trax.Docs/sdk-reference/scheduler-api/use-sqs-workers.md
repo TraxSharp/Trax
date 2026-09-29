@@ -185,13 +185,13 @@ The handler:
 |---------|----------|-------------|
 | `SqsWorkerOptions` | Singleton | Configuration options |
 | `IAmazonSQS` | Singleton | AWS SQS client |
-| `SqsJobSubmitter` | Scoped (concrete type) | Dispatches jobs as SQS messages, resolved per train via routing |
+| SQS job submitter | Scoped | An internal `IJobSubmitter` that dispatches jobs as SQS messages. The JobDispatcher resolves it for each train routed to this queue; application code does not resolve it |
 
 > **Note:** `UseSqsWorkers()` does **not** replace the default `IJobSubmitter`. Local workers continue to run for trains not routed to this queue.
 
 ## How It Works
 
-When the JobDispatcher processes a work queue entry, it checks the `JobSubmitterRoutingConfiguration` for the entry's train name. If a route exists to `SqsJobSubmitter`, the `SqsJobSubmitter`:
+When the JobDispatcher processes a work queue entry, it checks whether the entry's train is routed to this queue. If it is, the SQS submitter:
 
 1. Serializes a `RemoteJobRequest` containing the metadata ID and optional input
 2. Sends the JSON as an SQS message to `QueueUrl`

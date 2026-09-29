@@ -74,17 +74,21 @@ Named `{Subsystem}Configuration` and registered as a singleton, though where and
 | Type | Setters | Registered by |
 |---|---|---|
 | `MediatorConfiguration` | `internal` | `AddMediator` |
-| `SchedulerConfiguration` | `public` | `SchedulerConfigurationBuilder.Build()` |
-| `GraphQLConfiguration` | none, assigned in the constructor | `AddTraxGraphQL` |
+| `SchedulerConfiguration` | mostly `internal`, a few hidden `public` | `SchedulerConfigurationBuilder.Build()` |
+| `GraphQLConfiguration` | none, assigned in an `internal` constructor | `AddTraxGraphQL` |
 | `TraxEffectConfiguration` | `public` | `AddTrax`, as `ITraxEffectConfiguration` |
 
 `MediatorConfiguration` is the shape to copy: internal setters make it immutable from outside
 the builder, which is what stops a consumer mutating resolved configuration at run time.
-`SchedulerConfiguration` is mutable after `Build()` on purpose, because
-`SchedulerConfigBootstrapHostedService` overwrites the singleton at startup from the
-`trax.scheduler_config` row the dashboard's server settings page writes.
-`TraxEffectConfiguration` has public setters with no such reason behind them.
-`GraphQLConfiguration` goes the other way and takes everything through its constructor.
+`SchedulerConfiguration` mostly follows it. Runtime changes go through the validated
+`operations.config` path that the dashboard's server settings page also uses, and the scheduler
+re-applies the `trax.scheduler_config` row that path writes to the singleton at startup. A few
+setters that existing hosts and tests assign directly (the polling intervals, `MaxActiveJobs`,
+`DefaultMaxRetries`, `DefaultRetryDelay`, `DefaultJobTimeout`, `ManifestManagerEnabled`) stay public but are hidden from
+IntelliSense.
+`TraxEffectConfiguration` has public setters with no reason behind them.
+`GraphQLConfiguration` goes the other way and takes everything through its constructor, which is
+`internal`: only `TraxGraphQLBuilder.Build()` creates one.
 
 ## State markers
 

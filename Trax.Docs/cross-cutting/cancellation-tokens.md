@@ -369,7 +369,7 @@ public interface IJobSubmitter
 }
 ```
 
-The built-in `PostgresJobSubmitter` and `InMemoryJobSubmitter` both implement the CT overloads. `PostgresJobSubmitter` passes the token to `SaveChangesAsync`, and `InMemoryJobSubmitter` passes it to `train.Run()`.
+The built-in submitters implement the CT overloads. `PostgresJobSubmitter` passes the token to `SaveChangesAsync`, and the in-memory submitter that `UseInMemory()` selects passes it to `train.Run()`.
 
 ## Testing with Cancellation Tokens
 

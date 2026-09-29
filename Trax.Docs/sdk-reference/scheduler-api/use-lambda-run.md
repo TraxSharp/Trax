@@ -99,13 +99,13 @@ services.AddTrax(trax => trax
 |---------|----------|-------------|
 | `LambdaRunOptions` | Singleton | Configuration options |
 | `IAmazonLambda` | Singleton | AWS Lambda client |
-| `IRunExecutor` -> `LambdaRunExecutor` | Scoped | Dispatches run requests via Lambda SDK, blocks until response |
+| `IRunExecutor` | Scoped | Replaced with an internal implementation that dispatches run requests via the Lambda SDK and blocks until the response |
 
 > **Note:** Without `UseLambdaRun()`, the default `LocalRunExecutor` executes trains in-process via `ITrainBus.RunAsync()`. `UseLambdaRun()` overrides this.
 
 ## How It Works
 
-When a GraphQL `run*` mutation is called, the `LambdaRunExecutor`:
+When a GraphQL `run*` mutation is called, the `IRunExecutor` registered by `UseLambdaRun()`:
 
 1. Serializes a `RemoteRunRequest` containing the train name, input JSON, and input type
 2. Wraps it in a `LambdaEnvelope` with `Type = Run`

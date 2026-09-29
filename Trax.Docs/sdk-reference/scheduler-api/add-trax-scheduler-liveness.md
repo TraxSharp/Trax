@@ -58,7 +58,7 @@ builder.Services
 
 ## Remarks
 
-- The scheduler registers the underlying `ISchedulerLivenessMonitor` automatically. `JobDispatcherPollingService` stamps it after each successful cycle, including empty no-op polls.
+- The scheduler registers the underlying `ISchedulerLivenessMonitor` automatically. The JobDispatcher's polling loop stamps it after each successful cycle, including empty no-op polls. The interface only exposes `StartedAt` and `LastDispatchCompletedAt`; recording a cycle is internal to the dispatcher.
 - Before the first cycle completes, the check measures from scheduler startup, so a cold start is healthy within the grace window but a scheduler that never dispatches still trips.
 - The check writes `lastDispatchCompletedAt`, `ageSeconds`, and `thresholdSeconds` into its result `data`.
 - The threshold can also be set on the scheduler builder with `.SchedulerLivenessThreshold(TimeSpan)`; the `threshold` argument here overrides it.

@@ -73,7 +73,7 @@ services.AddTrax(trax => trax
 3. Registers `IDbContextFactory<PostgresContext>` for creating database contexts
 4. Registers `IDataContext` (scoped) for direct database access
 5. Enables data context logging support (for [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging))
-6. Registers `PostgresContextProviderFactory` as a **non-toggleable** effect
+6. Registers the Postgres data context provider factory, resolvable as `IDataContextProviderFactory`, as a **non-toggleable** effect
 
 ## Remarks
 

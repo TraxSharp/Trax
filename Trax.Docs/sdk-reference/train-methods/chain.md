@@ -91,7 +91,7 @@ The parameterless forms construct the junction with `new()`, so they take no con
 
 ## Remarks
 
-- Junctions are created and injected with DI services from Memory via `InitializeJunction`. Constructor parameters are resolved from Memory by type.
+- `Chain<TJunction>()` creates the junction itself, through its single public constructor, whose parameters are resolved from Memory by type, DI services included. A junction with more than one constructor fails the train with a `TrainException`.
 - `TIn`/`TOut` are discovered via reflection from the junction's `IJunction<,>` interface at runtime.
 - See [Memory](/docs/core/memory) for how type-based lookup works, including tuple handling.
 

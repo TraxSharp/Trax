@@ -34,19 +34,23 @@ Two abstraction boundaries control where trains execute:
 | Implementation | What it does |
 |----------------|-------------|
 | `PostgresJobSubmitter` | Inserts into `background_job` table (default when Postgres is configured) |
-| `HttpJobSubmitter` | POSTs to a remote HTTP endpoint (used by `UseRemoteWorkers`) |
-| `SqsJobSubmitter` | Sends to an SQS queue for Lambda consumption (used by [`UseSqsWorkers`](/docs/sdk-reference/scheduler-api/use-sqs-workers), requires `Trax.Scheduler.Sqs`) |
-| `LambdaJobSubmitter` | Invokes an AWS Lambda function directly via SDK (used by [`UseLambdaWorkers`](/docs/sdk-reference/scheduler-api/use-lambda-workers), requires `Trax.Scheduler.Lambda`) |
-| `InMemoryJobSubmitter` | Runs inline, synchronously (automatic default when no database provider is configured) |
+| HTTP, from [`UseRemoteWorkers`](/docs/sdk-reference/scheduler-api/use-remote-workers) | POSTs to a remote HTTP endpoint |
+| SQS, from [`UseSqsWorkers`](/docs/sdk-reference/scheduler-api/use-sqs-workers) | Sends to an SQS queue for Lambda consumption (requires `Trax.Scheduler.Sqs`) |
+| Lambda, from [`UseLambdaWorkers`](/docs/sdk-reference/scheduler-api/use-lambda-workers) | Invokes an AWS Lambda function directly via SDK (requires `Trax.Scheduler.Lambda`) |
+| In-memory | Runs inline, synchronously (automatic default when no database provider is configured) |
 | Custom | Implement `IJobSubmitter` and register via `OverrideSubmitter()` |
+
+Only `PostgresJobSubmitter` is a public type. The HTTP, SQS, Lambda and in-memory submitters are internal: you select them with the builder method, and the JobDispatcher resolves them for the trains routed to them.
 
 **For run trains** (`run*` mutations, queries): The `IRunExecutor` interface controls where direct execution happens.
 
 | Implementation | What it does |
 |----------------|-------------|
 | `LocalRunExecutor` | Executes in-process via `ITrainBus.RunAsync` (default) |
-| `HttpRunExecutor` | POSTs to a remote HTTP endpoint, blocks until complete (used by [`UseRemoteRun`](/docs/sdk-reference/scheduler-api/use-remote-run)) |
-| `LambdaRunExecutor` | Invokes an AWS Lambda function directly via SDK, blocks until complete (used by [`UseLambdaRun`](/docs/sdk-reference/scheduler-api/use-lambda-run), requires `Trax.Scheduler.Lambda`) |
+| HTTP, from [`UseRemoteRun`](/docs/sdk-reference/scheduler-api/use-remote-run) | POSTs to a remote HTTP endpoint, blocks until complete |
+| Lambda, from [`UseLambdaRun`](/docs/sdk-reference/scheduler-api/use-lambda-run) | Invokes an AWS Lambda function directly via SDK, blocks until complete (requires `Trax.Scheduler.Lambda`) |
+
+The HTTP and Lambda executors are internal. Each builder method replaces the `IRunExecutor` registration, so the last one configured wins.
 
 ## Deployment Models
 
@@ -162,7 +166,7 @@ If you do use HTTP with Lambda, the `TraxLambdaFunction` base class handles serv
 │  JobDispatcher             │         │       │                        │
 │       │                    │         │       ▼                        │
 │       ▼                    │  HTTP   │  JobRunnerTrain                │
-│  HttpJobSubmitter ─────────┼────────→│  └─→ Your Train               │
+│  HTTP submitter ───────────┼────────→│  └─→ Your Train               │
 │                            │  POST   │                                │
 └────────────────────────────┘         └────────────────────────────────┘
                                                 │
@@ -239,7 +243,7 @@ public class Function
 │  JobDispatcher             │         │  queue       │       │       │                │
 │       │                    │   SQS   │              │  SQS  │       ▼                │
 │       ▼                    │  Send   │              │ Event │  JobRunnerTrain        │
-│  SqsJobSubmitter ──────────┼────────→│              │──────→│  └─→ Your Train        │
+│  SQS submitter ────────────┼────────→│              │──────→│  └─→ Your Train        │
 │                            │         │              │       │                        │
 └────────────────────────────┘         └──────────────┘       └────────────────────────┘
                                                                        │
@@ -329,7 +333,7 @@ The `TraxLambdaFunction` base class receives a `LambdaEnvelope` payload directly
 │  JobDispatcher             │         │       │                         │
 │       │                    │  SDK    │       ▼                         │
 │       ▼                    │ Invoke  │  TraxLambdaFunction             │
-│  LambdaJobSubmitter ───────┼────────→│  └─→ ITraxRequestHandler        │
+│  Lambda submitter ─────────┼────────→│  └─→ ITraxRequestHandler        │
 │                            │         │       └─→ Your Train            │
 └────────────────────────────┘         └─────────────────────────────────┘
                                                 │
@@ -536,9 +540,9 @@ Trax handles this with multiple layers of protection:
 
 All remote submitters (HTTP and Lambda) retry on transient failures with exponential backoff and jitter.
 
-`HttpJobSubmitter` and `HttpRunExecutor` retry on HTTP 429, 502, and 503. If the server sends a `Retry-After` header, the helper uses that instead of the computed backoff delay.
+The HTTP submitter and HTTP run executor retry on HTTP 429, 502, and 503. If the server sends a `Retry-After` header, the helper uses that instead of the computed backoff delay.
 
-`LambdaJobSubmitter` and `LambdaRunExecutor` retry on AWS status codes 429 (Throttling), 502, 503, and 504, plus network-level `HttpRequestException`.
+The Lambda submitter and Lambda run executor retry on AWS status codes 429 (Throttling), 502, 503, and 504, plus network-level `HttpRequestException`.
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -649,7 +653,7 @@ When a train fails on a remote worker, Trax preserves the full exception context
 | `FailureClass` | `/trax/run` only (`RemoteRunResponse`). The [failure class](/docs/core/trains-and-junctions#classifying-failures) the worker's classifier assigned, or null when the worker sent none |
 | `PublicMessage` | `/trax/run` only (`RemoteRunResponse`). The message a client of the calling side may see: the message of a plain `TrainException`, which a train author wrote for the caller, and null for every other failure |
 
-On the API side, `HttpJobSubmitter` and `HttpRunExecutor` read the response body and reconstruct a `TrainException` with the structured data intact. `HttpJobSubmitter` counts a job as submitted only when the body is a `RemoteJobResponse` for the job it sent; any other `200` fails the dispatch. On the run path it is a `RemoteRunException`, which carries the runner's `PublicMessage`; a transport failure (a non-success status, a Lambda function error, an empty reply) is a `RemoteRunException` with no public message. A surface that shows errors to clients reads `PublicMessage` and, when it is null, says only that the train failed. `Trax.Docs/adr/0028` records why. `Metadata.AddException()` populates `FailureException`, `FailureJunction`, `FailureReason` and (for `/trax/run`) `FailureClass` from the reconstructed exception. The class is carried rather than recomputed, because the original exception type is gone by the time the response arrives; a null `FailureClass` records as `Unclassified`, and the calling side's own classifier is never asked about a failure rebuilt from the response. The job-runner HTTP endpoint and the Lambda runner's local HTTP route write `RemoteRunResponse` with Trax's own JSON options (enums as integers) whatever the host's JSON configuration. A Lambda function's own invocation response is serialized by the function's Lambda serializer, which Trax does not control. Both `HttpRunExecutor` and `LambdaRunExecutor` therefore read `FailureClass` as either an integer or a name, and a class they do not know (an unknown number or name from a newer worker) reads as `Unclassified` while the worker's error is kept. `/trax/execute` needs no such field: the worker writes to the same metadata row, so its classification is already recorded. Locally-executed trains attach this data via `Exception.Data["TrainExceptionData"]`; remote trains carry it as JSON in the exception message instead. On the worker, the error fields come from the attached data, or, for a `TrainException` rebuilt from an earlier boundary, from the JSON in its message. Any other exception is sent with a fixed message and no `FailureClass`; its detail stays in the runner's log. A class outside the `FailureClass` values is sent as `Unclassified`.
+On the API side, the HTTP job submitter and HTTP run executor read the response body and reconstruct a `TrainException` with the structured data intact. The HTTP submitter counts a job as submitted only when the body is a `RemoteJobResponse` for the job it sent; any other `200` fails the dispatch. On the run path it is a `RemoteRunException`, which carries the runner's `PublicMessage`; a transport failure (a non-success status, a Lambda function error, an empty reply) is a `RemoteRunException` with no public message. A surface that shows errors to clients reads `PublicMessage` and, when it is null, says only that the train failed. `Trax.Docs/adr/0028` records why. `Metadata.AddException()` populates `FailureException`, `FailureJunction`, `FailureReason` and (for `/trax/run`) `FailureClass` from the reconstructed exception. The class is carried rather than recomputed, because the original exception type is gone by the time the response arrives; a null `FailureClass` records as `Unclassified`, and the calling side's own classifier is never asked about a failure rebuilt from the response. The job-runner HTTP endpoint and the Lambda runner's local HTTP route write `RemoteRunResponse` with Trax's own JSON options (enums as integers) whatever the host's JSON configuration. A Lambda function's own invocation response is serialized by the function's Lambda serializer, which Trax does not control. Both the HTTP and Lambda run executors therefore read `FailureClass` as either an integer or a name, and a class they do not know (an unknown number or name from a newer worker) reads as `Unclassified` while the worker's error is kept. `/trax/execute` needs no such field: the worker writes to the same metadata row, so its classification is already recorded. Locally-executed trains attach this data via `Exception.Data["TrainExceptionData"]`; remote trains carry it as JSON in the exception message instead. On the worker, the error fields come from the attached data, or, for a `TrainException` rebuilt from an earlier boundary, from the JSON in its message. Any other exception is sent with a fixed message and no `FailureClass`; its detail stays in the runner's log. A class outside the `FailureClass` values is sent as `Unclassified`.
 
 ```
 Runner Process                         API Process
@@ -664,7 +668,7 @@ Extracts: Type, Junction, Message
 RemoteRunResponse / RemoteJobResponse
 (structured error fields)
     │
-    ├───── HTTP 200 + JSON body ──────→ HttpRunExecutor / HttpJobSubmitter
+    ├───── HTTP 200 + JSON body ──────→ HTTP run executor / job submitter
                                         reads response body
                                             │
                                             ▼

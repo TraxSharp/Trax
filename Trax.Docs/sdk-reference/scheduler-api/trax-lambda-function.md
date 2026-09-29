@@ -209,9 +209,9 @@ To minimize cold start time:
 
 ## Error Handling
 
-For `Execute` requests, exceptions are logged and returned as a `RemoteJobResponse` with structured error fields (`IsError`, `ErrorMessage`, `ExceptionType`). `ErrorMessage` is the message of a `TrainException` or fixed text, and no stack trace is returned. Errors that occur within the train itself are also persisted to the `Metadata` table by `ServiceTrain.Run`. However, pre-train errors (e.g., deserialization failures) only appear in the log output. The payload is read case-insensitively, and one that repeats a property (in the same or a different case) is refused with a `JsonException`, before any handler runs. The `LambdaJobSubmitter` on the scheduler side does not read the response (fire-and-forget).
+For `Execute` requests, exceptions are logged and returned as a `RemoteJobResponse` with structured error fields (`IsError`, `ErrorMessage`, `ExceptionType`). `ErrorMessage` is the message of a `TrainException` or fixed text, and no stack trace is returned. Errors that occur within the train itself are also persisted to the `Metadata` table by `ServiceTrain.Run`. However, pre-train errors (e.g., deserialization failures) only appear in the log output. The payload is read case-insensitively, and one that repeats a property (in the same or a different case) is refused with a `JsonException`, before any handler runs. The Lambda job submitter on the scheduler side does not read the response (fire-and-forget).
 
-For `Run` requests, exceptions are logged before being rethrown. `ITraxRequestHandler.RunTrainAsync` returns a `RemoteRunResponse` that may contain structured error fields. The `LambdaRunExecutor` on the scheduler side reads the response and reconstructs a `TrainException` with the full error context.
+For `Run` requests, exceptions are logged before being rethrown. `ITraxRequestHandler.RunTrainAsync` returns a `RemoteRunResponse` that may contain structured error fields. The Lambda run executor on the scheduler side reads the response and reconstructs a `TrainException` with the full error context.
 
 ## See Also
 

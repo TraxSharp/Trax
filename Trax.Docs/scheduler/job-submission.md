@@ -13,7 +13,7 @@ The job submitter is the execution backend for the scheduler. When the JobDispat
 
 The recommended backend uses Trax.Core's own `trax.background_job` table for job queuing. No external dependencies, it shares the same PostgreSQL database already used by Trax.Core's data layer.
 
-The JobDispatcher commits the Metadata creation and WorkQueue status update in a `FOR UPDATE SKIP LOCKED` transaction before calling `EnqueueAsync`. The BackgroundJob insertion then happens as a separate operation. This ordering makes the Metadata record visible to the job submitter when it begins execution, necessary because the `InMemoryJobSubmitter` executes synchronously within the `EnqueueAsync` call.
+The JobDispatcher commits the Metadata creation and WorkQueue status update in a `FOR UPDATE SKIP LOCKED` transaction before calling `EnqueueAsync`. The BackgroundJob insertion then happens as a separate operation. This ordering makes the Metadata record visible to the job submitter when it begins execution, necessary because the in-memory job submitter executes synchronously within the `EnqueueAsync` call.
 
 ### How It Works
 
@@ -165,12 +165,12 @@ If you're using Hangfire and need to migrate, see [Migrating from Hangfire](#mig
 
 ## InMemory Workers
 
-When `UseInMemory()` is configured (no PostgreSQL), the scheduler automatically uses `InMemoryJobSubmitter`. This executes jobs immediately and synchronously. No background workers, no database tables. The `EnqueueAsync` call blocks until the train completes.
+When `UseInMemory()` is configured (no PostgreSQL), the scheduler automatically uses its built-in in-memory job submitter. This executes jobs immediately and synchronously. No background workers, no database tables. The `EnqueueAsync` call blocks until the train completes.
 
 This is useful for testing and local development where you want the scheduler API without database infrastructure:
 
 ```csharp
-// UseInMemory() → InMemoryJobSubmitter is used automatically
+// UseInMemory() → the in-memory job submitter is used automatically
 builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects.UseInMemory())
     .AddMediator(typeof(Program).Assembly)

@@ -15,7 +15,7 @@ A transport implements both `ITrainEventBroadcaster` (publish side) and `ITrainE
 
 Within a single host, the broadcaster wiring looks like:
 
-- Train completes locally → `BroadcastLifecycleHook` publishes via the transport's `ITrainEventBroadcaster`.
+- Train completes locally → the lifecycle hook that `UseBroadcaster()` registers publishes via the transport's `ITrainEventBroadcaster`.
 - A remote process publishes → that host's `TrainEventReceiverService` receives via `ITrainEventReceiver` and dispatches to every registered `ITrainEventHandler`.
 
 The receiver service skips events whose `Executor` matches the local process, so a host that both produces and consumes does not see its own events twice.

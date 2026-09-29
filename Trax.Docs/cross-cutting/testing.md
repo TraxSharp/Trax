@@ -221,7 +221,6 @@ Key points:
 - Always alias `Bunit.TestContext`. It collides with `NUnit.Framework.TestContext`.
 - Components that inject `IJSRuntime` need `JSRuntimeMode.Loose` (or explicit handler setup).
 - Pages that resolve scoped services often need a full Trax registration (`AddTrax`) plus a real database. Add the deeper services per test.
-- Polling components (`PollingComponentBase`) dispose themselves; pause polling via `PausePolling = true` if you want to assert on a single render.
 
 ## Choosing a Data Provider for Tests
 

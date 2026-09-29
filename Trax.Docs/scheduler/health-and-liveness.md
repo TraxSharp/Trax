@@ -33,7 +33,9 @@ Point your ECS/Kubernetes/ALB liveness probe at `/health`. When the dispatcher s
 
 ## How It Works
 
-The scheduler registers an `ISchedulerLivenessMonitor` singleton on startup. `JobDispatcherPollingService` calls `RecordDispatchCycle()` after each successful `train.Run`, including no-op polls where the work queue was empty (a no-op cycle still proves the poll loop and database round-trip work). A failed cycle does not stamp, so the timestamp goes stale and the check flips unhealthy.
+The scheduler registers an `ISchedulerLivenessMonitor` singleton on startup. The JobDispatcher's polling loop stamps it after each successful `train.Run`, including no-op polls where the work queue was empty (a no-op cycle still proves the poll loop and database round-trip work). A failed cycle does not stamp, so the timestamp goes stale and the check flips unhealthy.
+
+`ISchedulerLivenessMonitor` is read-only: `StartedAt` and `LastDispatchCompletedAt`. Only the dispatcher can record a cycle, so nothing else in the process can report the scheduler alive. Resolve the interface to read the timestamps. Registering your own implementation in its place does not work: the dispatcher keeps stamping the built-in monitor, and the health check reads yours.
 
 Before the first cycle completes, the check measures from startup time instead. A cold start stays healthy within the grace window, but a scheduler that never dispatches still trips once startup is older than the threshold.
 

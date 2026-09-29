@@ -264,7 +264,7 @@ Runtime settings can be adjusted via the Dashboard at `/trax/data/settings`.
 
 ## Testing
 
-For integration tests, use `UseInMemory()` and the scheduler will automatically use `InMemoryJobSubmitter`:
+For integration tests, use `UseInMemory()` and the scheduler will automatically use its in-memory job submitter:
 
 ```csharp
 services.AddTrax(trax => trax

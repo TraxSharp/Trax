@@ -120,13 +120,13 @@ app.Run();
 | Service | Lifetime | Description |
 |---------|----------|-------------|
 | `RemoteRunOptions` | Singleton | Configuration options |
-| `IRunExecutor` -> `HttpRunExecutor` | Scoped | Dispatches run requests via HTTP POST, blocks until response |
+| `IRunExecutor` | Scoped | Replaced with an internal implementation that dispatches run requests via HTTP POST and blocks until the response |
 
 > **Note:** Without `UseRemoteRun()`, the default `LocalRunExecutor` executes trains in-process via `ITrainBus.RunAsync()`. `UseRemoteRun()` overrides this via last-registration-wins.
 
 ## How It Works
 
-When a GraphQL `run*` mutation is called, the `HttpRunExecutor`:
+When a GraphQL `run*` mutation is called, the `IRunExecutor` registered by `UseRemoteRun()`:
 
 1. Serializes a `RemoteRunRequest` containing the train name, input JSON, and input type
 2. POSTs the JSON payload to `BaseUrl`

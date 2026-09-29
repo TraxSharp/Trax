@@ -56,7 +56,7 @@ After the junction completes:
 | `HasRan` | Whether the junction actually executed (skipped on failure track) |
 | `OutputJson` | Serialized output (only if `serializeJunctionData: true`) |
 
-The completed `JunctionMetadata` is logged at the configured log level via `ILogger<JunctionLoggerProvider>`.
+The completed `JunctionMetadata` is logged at the configured log level under the log category `Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider.JunctionLoggerProvider`, which is the name to use in a logging filter. The provider type itself is internal.
 
 ## Identifying the run from inside a junction
 

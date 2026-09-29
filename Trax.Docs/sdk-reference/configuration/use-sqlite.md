@@ -61,11 +61,11 @@ services.AddTrax(trax => trax
 
 1. Migrates the database schema via `DatabaseMigrator` (unless [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) was called). Each migration script runs in its own transaction with its journal entry, so a script that fails partway leaves nothing behind and runs again cleanly on the next start
 2. Enables WAL mode (`PRAGMA journal_mode=WAL`) for concurrent read/write performance
-3. Registers `IDbContextFactory<SqliteContext>` for creating database contexts
+3. Registers an internal EF Core context factory for the SQLite context
 4. Registers `IDataContext` (scoped) for direct database access
 5. Enables data context logging support (for [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging))
-6. Registers `SqliteContextProviderFactory` as a **non-toggleable** effect
-7. Registers `SqliteSqlDialect` as `ISqlDialect` for provider-specific SQL
+6. Registers the SQLite data context provider factory, resolvable as `IDataContextProviderFactory`, as a **non-toggleable** effect
+7. Registers the SQLite `ISqlDialect` for provider-specific SQL
 
 ## SQLite vs Postgres
 
@@ -80,7 +80,7 @@ SQLite is a lightweight, zero-infrastructure alternative to PostgreSQL. Use it f
 | Concurrent writes | Serialized (WAL mode) | Full concurrency |
 | FOR UPDATE SKIP LOCKED | No (serialized writes) | Yes |
 
-SQLite sets `HasDatabaseProvider = true`, which means it gets the full `ManifestManagerTrain` (not the simplified InMemory version), `JobDispatcherTrain`, `MetadataCleanupTrain`, and all other database-dependent scheduler features.
+SQLite sets `HasDatabaseProvider = true`, which means it gets the full ManifestManager train (not the simplified InMemory version), the JobDispatcher and metadata cleanup trains, and all other database-dependent scheduler features.
 
 Multi-server coordination (advisory locks, concurrent job dequeue across processes) is not supported. SQLite serializes writes at the file level, which prevents duplicate job dispatch within a single process but does not coordinate across multiple processes.
 

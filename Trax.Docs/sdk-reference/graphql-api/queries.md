@@ -817,7 +817,7 @@ The same suite times every operations mutation against those tables (each single
 
 The `operations.config` namespace returns the live scheduler runtime settings (the dashboard-editable subset of `SchedulerConfiguration`, `LocalWorkerOptions`, and `MetadataCleanupConfiguration`). The dashboard's ServerSettingsPage and this query both read from the same in-memory singleton, so they agree.
 
-Persistence: settings written via `operations.config.updateScheduler` (or the dashboard) are stored in the singleton-row `trax.scheduler_config` table and re-applied to the in-memory singleton at startup by the `SchedulerConfigBootstrapHostedService`. Settings survive restarts.
+Persistence: settings written via `operations.config.updateScheduler` (or the dashboard) are stored in the singleton-row `trax.scheduler_config` table and re-applied to the in-memory singleton when the scheduler starts. Settings survive restarts.
 
 ### scheduler
 

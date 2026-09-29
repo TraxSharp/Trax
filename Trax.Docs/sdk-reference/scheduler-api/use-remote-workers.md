@@ -150,7 +150,7 @@ If no `UseRemoteWorkers()` is configured, `[TraxRemote]` is silently ignored and
 
 ## Performance
 
-By default, the JobDispatcher dispatches entries sequentially, one at a time. For local workers (`PostgresJobSubmitter`), this is fine because `EnqueueAsync` just inserts a database row (microseconds). But for `HttpJobSubmitter`, each dispatch blocks until the remote endpoint finishes executing the train. If each Lambda invocation takes 2 seconds and 50 entries are eligible, a single dispatch cycle takes ~100 seconds.
+By default, the JobDispatcher dispatches entries sequentially, one at a time. For local workers (`PostgresJobSubmitter`), this is fine because `EnqueueAsync` just inserts a database row (microseconds). But for the HTTP submitter, each dispatch blocks until the remote endpoint finishes executing the train. If each Lambda invocation takes 2 seconds and 50 entries are eligible, a single dispatch cycle takes ~100 seconds.
 
 Use `MaxConcurrentDispatch` to parallelize HTTP dispatch:
 
@@ -182,13 +182,13 @@ See [Parallel Dispatch](/docs/scheduler/admin-trains/job-dispatcher#parallel-dis
 | Service | Lifetime | Description |
 |---------|----------|-------------|
 | `RemoteWorkerOptions` | Singleton | Configuration options |
-| `HttpJobSubmitter` | Scoped (concrete type) | Dispatches jobs via HTTP POST, resolved per train via routing |
+| HTTP job submitter | Scoped | An internal `IJobSubmitter` that dispatches jobs via HTTP POST. The JobDispatcher resolves it for each train routed to this endpoint; application code does not resolve it |
 
 > **Note:** `UseRemoteWorkers()` does **not** replace the default `IJobSubmitter`. Local workers continue to run for trains not routed to this endpoint.
 
 ## How It Works
 
-When the JobDispatcher processes a work queue entry, it checks the `JobSubmitterRoutingConfiguration` for the entry's train name. If a route exists to `HttpJobSubmitter`, the `HttpJobSubmitter`:
+When the JobDispatcher processes a work queue entry, it checks whether the entry's train is routed to these remote workers. If it is, the HTTP submitter:
 
 1. Serializes a `RemoteJobRequest` containing the metadata ID and optional input
 2. POSTs the JSON payload to `BaseUrl`

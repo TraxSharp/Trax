@@ -33,11 +33,11 @@ The generic type parameter `TBuilder` is inferred by the compiler, so callers ju
 
 | Component | Description |
 |-----------|-------------|
-| `BroadcastLifecycleHook` | Lifecycle hook that publishes events to `ITrainEventBroadcaster` |
-| `BroadcastChangeSink` | Forwards coalesced data-change signals (`onDataChanged`) to other processes over the same transport |
+| Broadcast lifecycle hook | Internal lifecycle hook that publishes events to `ITrainEventBroadcaster` |
+| Broadcast change sink | Internal sink that forwards coalesced data-change signals (`onDataChanged`) to other processes over the same transport |
 | `TrainEventReceiverService` | `BackgroundService` that consumes events from `ITrainEventReceiver` and dispatches to `ITrainEventHandler` instances |
 
-The transport-specific `ITrainEventBroadcaster` and `ITrainEventReceiver` are registered by the callback (e.g., `UseRabbitMq()`).
+The transport-specific `ITrainEventBroadcaster` and `ITrainEventReceiver` are registered by the callback (e.g., `UseRabbitMq()`). The hook and the sink are internal types: `UseBroadcaster()` is the only way to add them.
 
 ## Connection Resilience
 
@@ -45,7 +45,7 @@ The `TrainEventReceiverService` automatically retries if the transport connectio
 
 ## De-duplication
 
-When a train runs locally on the hub (via a `run` mutation), the `GraphQLSubscriptionHook` fires directly and notifies subscribers. The same event is also published to the message bus by `BroadcastLifecycleHook`. The `TrainEventReceiverService` detects this by comparing the event's `Executor` field against the local process name and **skips events that originated locally**. This prevents double-notification.
+When a train runs locally on the hub (via a `run` mutation), the `GraphQLSubscriptionHook` fires directly and notifies subscribers. The same event is also published to the message bus by the broadcast lifecycle hook. The `TrainEventReceiverService` detects this by comparing the event's `Executor` field against the local process name and **skips events that originated locally**. This prevents double-notification.
 
 The `Executor` field is always stamped by the **broadcasting process** (via `Assembly.GetEntryAssembly()`), not copied from `metadata.Executor`. This is important because metadata may be pre-created by a different process (e.g., the API pre-creates metadata for queued jobs that execute on a worker). If the hook used `metadata.Executor`, the hub would incorrectly discard worker events as "local."
 
