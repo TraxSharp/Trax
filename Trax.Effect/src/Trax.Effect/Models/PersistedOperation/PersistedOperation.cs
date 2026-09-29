@@ -10,7 +10,7 @@ namespace Trax.Effect.Models.PersistedOperation;
 /// </summary>
 /// <remarks>
 /// EF Core mapping lives in
-/// <see cref="Trax.Effect.Data.Models.PersistedOperation.PersistentPersistedOperation"/>.
+/// <c>Trax.Effect.Data.Models.PersistedOperation.PersistentPersistedOperation</c> (in Trax.Effect.Data).
 /// <para>
 /// <see cref="TenantKey"/> uses null at the C# boundary; storage layers
 /// normalize null to the empty-string sentinel used by the database

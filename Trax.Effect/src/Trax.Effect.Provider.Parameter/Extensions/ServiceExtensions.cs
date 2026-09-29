@@ -31,6 +31,7 @@ public static class ServiceExtensions
     /// </summary>
     /// <param name="builder">The Trax.Core effect configuration builder</param>
     /// <param name="jsonSerializerOptions">Optional JSON serializer options to use for parameter serialization</param>
+    /// <param name="configure">Optional callback that sets which parameters are saved, such as <c>SaveInputs</c> and <c>SaveOutputs</c>.</param>
     /// <returns>The configuration builder for method chaining</returns>
     /// <remarks>
     /// This method configures the Trax.Effect system to serialize train input and output

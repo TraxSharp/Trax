@@ -4,10 +4,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Trax.Effect.Data.Testing</AssemblyName>
-    <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>Architecture-guard checkers for the Trax data layer (DomainDataContext, one-schema-per-context, cross-schema reads). Framework-agnostic: returns offender lists you assert on.</PackageDescription>
+    <Description>Architecture-guard checkers for the Trax data layer (DomainDataContext, one-schema-per-context, cross-schema reads). Framework-agnostic: returns offender lists you assert on.</Description>
     <PackageTags>trax;testing;architecture;guards;data;efcore</PackageTags>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 

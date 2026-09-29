@@ -29,7 +29,7 @@ public abstract record AutosaveResult
     private AutosaveResult() { }
 }
 
-/// <summary>The total result of <see cref="SnapshotDraftService{TState,TTrigger}.Advance"/>.</summary>
+/// <summary>The total result of <see cref="SnapshotDraftService{TState,TTrigger}.Advance(string, Guid, string, JsonNode, string, CancellationToken)"/>.</summary>
 public abstract record AdvanceOutcome
 {
     public sealed record Advanced(Snapshot Snapshot) : AdvanceOutcome;

@@ -3,9 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>Postgres-backed persistence for the Trax snapshot state-machine engine: a user-scoped snapshot store with optimistic concurrency, the FE-drives/BE-validates draft service, and a generic exactly-once effect primitive (lease + fence token).</PackageDescription>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <Description>Postgres-backed persistence for the Trax snapshot state-machine engine: a user-scoped snapshot store with optimistic concurrency, the FE-drives/BE-validates draft service, and a generic exactly-once effect primitive (lease + fence token).</Description>
     <AssemblyName>Trax.Effect.StateMachine.Persistence</AssemblyName>
   </PropertyGroup>
 

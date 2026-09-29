@@ -1,11 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>JSON Effect Provider for Trax.Core Effects</PackageDescription>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <Description>JSON effect provider for Trax.Effect. Adds AddJson() to the AddEffects builder, which logs each tracked model's state as JSON as a train runs. For debugging.</Description>
     <AssemblyName>Trax.Effect.Provider.Json</AssemblyName>
   </PropertyGroup>
 

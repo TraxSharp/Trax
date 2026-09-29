@@ -11,7 +11,7 @@ namespace Trax.Effect.StateMachine;
 /// <c>JSON.stringify</c> does. The point is byte-for-byte identity with the TypeScript twin, whose
 /// <c>JSON.stringify</c> IS the ECMAScript algorithm RFC 8785 defers to.
 ///
-/// <para>Do not route this through <see cref="System.Text.Json.Nodes.JsonNode.ToJsonString()"/>: that
+/// <para>Do not route this through <see cref="System.Text.Json.Nodes.JsonNode.ToJsonString(System.Text.Json.JsonSerializerOptions)"/>: that
 /// uppercases <c>\uXXXX</c> hex, escapes non-ASCII, and formats numbers with .NET's rules (<c>1E+21</c>,
 /// not <c>1e+21</c>), none of which match <c>JSON.stringify</c>.</para>
 /// </summary>

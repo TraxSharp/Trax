@@ -1,11 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>Junction Logging Provider for Trax.Core Effects</PackageDescription>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <Description>Junction logging provider for Trax.Effect. Adds AddJunctionLogger(serializeJunctionData) to the AddEffects builder, which logs each junction's start, finish and duration, optionally with its serialized input and output.</Description>
     <AssemblyName>Trax.Effect.JunctionProvider.Logging</AssemblyName>
   </PropertyGroup>
 

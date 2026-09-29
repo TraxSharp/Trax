@@ -9,7 +9,7 @@ namespace Trax.Effect.Models.RunnerNonce;
 /// </summary>
 /// <remarks>
 /// EF Core mapping lives in
-/// <see cref="Trax.Effect.Data.Models.RunnerNonce.PersistentRunnerNonce"/>. The table ships in the
+/// <c>Trax.Effect.Data.Models.RunnerNonce.PersistentRunnerNonce</c> (in Trax.Effect.Data). The table ships in the
 /// core migration set (Postgres <c>047</c>, Sqlite <c>012</c>), and the Scheduler reaches it through
 /// <c>IDataContext.RunnerNonces</c> rather than through SQL of its own.
 /// </remarks>

@@ -1,11 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>Effects for Trax.Core Workflows</PackageDescription>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <Description>The effect layer for Trax trains: the ServiceTrain base class that records every run as a Metadata row (state, timing, input, output, failure), DI registration (AddTrax, AddEffects, AddScopedTraxRoute), lifecycle hooks and the UseBroadcaster event pipeline. Install it with one data provider (Trax.Effect.Data.Postgres, .Sqlite or .InMemory) to persist those runs.</Description>
     <AssemblyName>Trax.Effect</AssemblyName>
   </PropertyGroup>
 

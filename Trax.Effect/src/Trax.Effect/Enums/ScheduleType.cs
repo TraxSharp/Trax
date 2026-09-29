@@ -28,7 +28,7 @@ public enum ScheduleType
     /// </summary>
     /// <remarks>
     /// Standard cron expressions are supported (e.g., "0 3 * * *" for daily at 3am).
-    /// The <see cref="Manifest.Manifest.CronExpression"/> property must be set when using this type.
+    /// The <see cref="Models.Manifest.Manifest.CronExpression"/> property must be set when using this type.
     /// </remarks>
     Cron = 1,
 
@@ -37,7 +37,7 @@ public enum ScheduleType
     /// </summary>
     /// <remarks>
     /// Use this for simple recurring jobs where cron expressions are overkill.
-    /// The <see cref="Manifest.Manifest.IntervalSeconds"/> property must be set when using this type.
+    /// The <see cref="Models.Manifest.Manifest.IntervalSeconds"/> property must be set when using this type.
     /// </remarks>
     Interval = 2,
 
@@ -60,10 +60,10 @@ public enum ScheduleType
     /// </summary>
     /// <remarks>
     /// Use this for trains that should be triggered by the successful completion of
-    /// another train. The <see cref="Manifest.Manifest.DependsOnManifestId"/> property
+    /// another train. The <see cref="Models.Manifest.Manifest.DependsOnManifestId"/> property
     /// must be set to the parent manifest's ID. The dependent manifest is queued when the
-    /// parent's <see cref="Manifest.Manifest.LastSuccessfulRun"/> is newer than the
-    /// dependent's own <see cref="Manifest.Manifest.LastSuccessfulRun"/>.
+    /// parent's <see cref="Models.Manifest.Manifest.LastSuccessfulRun"/> is newer than the
+    /// dependent's own <see cref="Models.Manifest.Manifest.LastSuccessfulRun"/>.
     /// </remarks>
     Dependent = 4,
 
@@ -75,7 +75,7 @@ public enum ScheduleType
     /// Unlike <see cref="Dependent"/>, dormant dependents are never automatically queued
     /// when the parent succeeds. The parent train must explicitly call
     /// <c>IDormantDependentContext.ActivateAsync</c> with runtime-determined input.
-    /// The <see cref="Manifest.Manifest.DependsOnManifestId"/> property must be set
+    /// The <see cref="Models.Manifest.Manifest.DependsOnManifestId"/> property must be set
     /// to the parent manifest's ID. Use this when the parent needs to decide at runtime
     /// which dependents fire and with what input.
     /// </remarks>
@@ -86,7 +86,7 @@ public enum ScheduleType
     /// </summary>
     /// <remarks>
     /// Use this for delayed one-off jobs (e.g., "send reminder in 30 minutes").
-    /// The <see cref="Manifest.Manifest.ScheduledAt"/> property must be set.
+    /// The <see cref="Models.Manifest.Manifest.ScheduledAt"/> property must be set.
     /// After successful execution, the manifest is automatically disabled by the scheduler.
     /// </remarks>
     Once = 6,

@@ -40,11 +40,15 @@ public sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRunn
     private readonly string _receiptKey;
     private readonly TimeSpan? _lease;
 
+    /// <param name="drafts">The draft service that loads the draft and commits the effect's result to it.</param>
+    /// <param name="effect">The side effect to run once per intent; its receipt is recorded on the draft.</param>
+    /// <param name="idempotent">The exactly-once primitive that leases and fences the effect key.</param>
     /// <param name="fromState">The only state the effect may run from (e.g. Review/Preview) — enforced before the effect.</param>
     /// <param name="trigger">The trigger that commits the result (e.g. Place/Send).</param>
     /// <param name="toState">The terminal state the trigger lands in (e.g. Placed/Sent) — a draft already there replays.</param>
     /// <param name="effectKey">Produces the intent key (server-stable; names the intent, not the content).</param>
     /// <param name="receiptKey">The context key the receipt is written under by the reducer.</param>
+    /// <param name="lease">How long one attempt holds the effect's lease; null uses the <see cref="IdempotentEffect"/> default.</param>
     public SnapshotEffectRunner(
         SnapshotDraftService<TState, TTrigger> drafts,
         ISnapshotEffect effect,

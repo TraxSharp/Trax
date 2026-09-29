@@ -8,7 +8,7 @@ namespace Trax.Effect.Models.PersistedOperationHistory;
 /// </summary>
 /// <remarks>
 /// EF Core mapping lives in
-/// <see cref="Trax.Effect.Data.Models.PersistedOperationHistory.PersistentPersistedOperationHistory"/>.
+/// <c>Trax.Effect.Data.Models.PersistedOperationHistory.PersistentPersistedOperationHistory</c> (in Trax.Effect.Data).
 /// </remarks>
 public class PersistedOperationHistory
 {

@@ -41,7 +41,7 @@ namespace Trax.Effect.Data.Postgres.Extensions;
 public static class ServiceExtensions
 {
     /// <summary>
-    /// Disables the automatic database migration that normally runs inside <see cref="UsePostgres"/>.
+    /// Disables the automatic database migration that normally runs inside <see cref="UsePostgres(TraxEffectBuilder, string)"/>.
     /// When called before <c>UsePostgres()</c>, the schema migration step is skipped entirely.
     /// </summary>
     /// <remarks>

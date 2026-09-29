@@ -1,11 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>In Memory Provider for Trax.Effect.Data Library</PackageDescription>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <Description>In-memory data provider for Trax.Effect. Adds UseInMemory() to the AddEffects builder, which keeps train runs in an EF Core in-memory store that is lost on exit. For tests and prototyping.</Description>
     <AssemblyName>Trax.Effect.Data.InMemory</AssemblyName>
   </PropertyGroup>
 
