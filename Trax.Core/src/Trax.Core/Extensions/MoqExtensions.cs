@@ -6,7 +6,7 @@ namespace Trax.Core.Extensions;
 /// Provides extension methods for working with Moq mock objects.
 /// These methods enable Trax.Core to integrate with Moq for testing.
 /// </summary>
-public static class MoqExtensions
+internal static class MoqExtensions
 {
     /// <summary>
     /// Determines whether a type is a Moq proxy type.

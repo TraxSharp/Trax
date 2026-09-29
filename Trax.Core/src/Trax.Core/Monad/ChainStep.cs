@@ -47,6 +47,8 @@ public readonly record struct ChainStep(ChainStepKind Kind, Type? Junction, Type
 /// </remarks>
 public sealed class ChainRecorder
 {
+    internal ChainRecorder() { }
+
     private readonly List<ChainStep> _steps = [];
 
     private readonly List<string> _refusals = [];

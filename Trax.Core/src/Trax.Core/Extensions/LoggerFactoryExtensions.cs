@@ -8,7 +8,7 @@ namespace Trax.Core.Extensions;
 /// Provides extension methods for working with ILoggerFactory.
 /// These methods enable Trax.Core to create loggers dynamically at runtime.
 /// </summary>
-public static class LoggerExtensions
+internal static class LoggerExtensions
 {
     /// <summary>
     /// Cached generic CreateLogger method to avoid repeated reflection lookups.

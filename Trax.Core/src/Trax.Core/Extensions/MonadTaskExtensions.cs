@@ -437,7 +437,7 @@ public readonly struct MonadTask<TInput, TReturn>
 /// Helpers to lift a <see cref="Task{Monad}"/> into a <see cref="MonadTask{TInput, TReturn}"/>
 /// for fluent continuation, and to provide implicit-style conversions.
 /// </summary>
-public static class MonadTaskExtensions
+internal static class MonadTaskExtensions
 {
     /// <summary>
     /// Converts a <see cref="Task{Monad}"/> into a <see cref="MonadTask{TInput, TReturn}"/>

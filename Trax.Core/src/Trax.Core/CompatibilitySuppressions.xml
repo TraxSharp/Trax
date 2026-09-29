@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Core.Extensions.LoggerExtensions</Target>
+    <Left>lib/net10.0/Trax.Core.dll</Left>
+    <Right>lib/net10.0/Trax.Core.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Core.Extensions.MonadExtensions</Target>
+    <Left>lib/net10.0/Trax.Core.dll</Left>
+    <Right>lib/net10.0/Trax.Core.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Core.Extensions.MoqExtensions</Target>
+    <Left>lib/net10.0/Trax.Core.dll</Left>
+    <Right>lib/net10.0/Trax.Core.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Core.Train.MonadTaskExtensions</Target>
+    <Left>lib/net10.0/Trax.Core.dll</Left>
+    <Right>lib/net10.0/Trax.Core.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Core.Junction.Junction`2.get_ExceptionData</Target>
+    <Left>lib/net10.0/Trax.Core.dll</Left>
+    <Right>lib/net10.0/Trax.Core.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Core.Junction.Junction`2.get_PreviousResult</Target>
+    <Left>lib/net10.0/Trax.Core.dll</Left>
+    <Right>lib/net10.0/Trax.Core.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Core.Monad.ChainRecorder.#ctor</Target>
+    <Left>lib/net10.0/Trax.Core.dll</Left>
+    <Right>lib/net10.0/Trax.Core.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

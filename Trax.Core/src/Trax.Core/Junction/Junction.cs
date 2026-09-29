@@ -19,15 +19,13 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
     /// Structured exception context when a junction fails, including the train name, junction name, and error details.
     /// Set automatically by the railway error handler.
     /// </summary>
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public TrainExceptionData? ExceptionData { get; private set; }
+    internal TrainExceptionData? ExceptionData { get; private set; }
 
     /// <summary>
     /// The Either result from the preceding junction in the chain.
     /// Left contains an exception from a previous failure; Right contains this junction's input.
     /// </summary>
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public Either<Exception, TIn> PreviousResult { get; private set; }
+    internal Either<Exception, TIn> PreviousResult { get; private set; }
 
     /// <summary>
     /// This junction's Either result. Left contains the exception on failure; Right contains the output on success.
@@ -63,6 +61,7 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
     /// <param name="previousOutput">Either a result from the previous junction or an exception</param>
     /// <param name="train">Train calling the Junction</param>
     /// <returns>Either the result of this junction or an exception</returns>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public virtual async Task<Either<Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(
         Either<Exception, TIn> previousOutput,
         Train<TTrainIn, TTrainOut> train

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using LanguageExt;
 using Trax.Core.Train;
 
@@ -28,6 +29,7 @@ public interface IJunction<TIn, TOut>
     /// <param name="previousOutput">Either a result from the previous junction or an exception</param>
     /// <param name="train">The Train executing this junction</param>
     /// <returns>Either the result of this junction or an exception</returns>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public Task<Either<Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(
         Either<Exception, TIn> previousOutput,
         Train<TTrainIn, TTrainOut> train

@@ -14,7 +14,7 @@ namespace Trax.Core.Extensions;
 /// Provides extension methods for working with Monad instances.
 /// These methods enable dependency injection, type extraction, and tuple handling.
 /// </summary>
-public static class MonadExtensions
+internal static class MonadExtensions
 {
     /// <summary>
     /// Cache for junction constructor info and parameter types, keyed by junction type.

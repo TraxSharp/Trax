@@ -53,26 +53,6 @@ namespace Trax.Core.Extensions
         public static void AssertEachLoaded<T, U>([System.Diagnostics.CodeAnalysis.NotNull] this System.Collections.Generic.IEnumerable<T> values, System.Func<T, U> selector, [System.Runtime.CompilerServices.CallerArgumentExpression("values")] string? valuesExpr = null, [System.Runtime.CompilerServices.CallerArgumentExpression("selector")] string? selectorExpr = null) { }
         public static void AssertLoaded<T>([System.Diagnostics.CodeAnalysis.NotNull] this T? value, [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? valueExpr = null) { }
     }
-    public static class LoggerExtensions
-    {
-        public static dynamic CreateGenericLogger(this Microsoft.Extensions.Logging.ILoggerFactory loggerFactory, System.Type genericType) { }
-        public static System.Collections.Generic.List<Microsoft.Extensions.Logging.ILoggerProvider> GetLoggerProviders(this Microsoft.Extensions.Logging.ILoggerFactory loggerFactory) { }
-    }
-    public static class MonadExtensions
-    {
-        public static LanguageExt.Unit AddTupleToMemory<TIn, TInput, TReturn>(this Trax.Core.Monad.Monad<TInput, TReturn> monad, TIn input) { }
-        public static dynamic ExtractTuple<TInput, TReturn>(this Trax.Core.Monad.Monad<TInput, TReturn> monad, System.Type inputType) { }
-        public static dynamic? ExtractTypeFromMemory<TInput, TReturn>(this Trax.Core.Monad.Monad<TInput, TReturn> monad, System.Type tIn) { }
-        public static T? ExtractTypeFromMemory<T, TInput, TReturn>(this Trax.Core.Monad.Monad<TInput, TReturn> monad) { }
-        public static object?[] ExtractTypesFromMemory<TInput, TReturn>(this Trax.Core.Monad.Monad<TInput, TReturn> monad, System.Collections.Generic.IEnumerable<System.Type> types) { }
-        public static TJunction? InitializeJunction<TJunction, TInput, TReturn>(this Trax.Core.Monad.Monad<TInput, TReturn> monad)
-            where TJunction :  class { }
-    }
-    public static class MoqExtensions
-    {
-        public static System.Type? GetMockedTypeFromObject(this object mockedObject) { }
-        public static bool IsMoqProxy(this System.Type type) { }
-    }
 }
 namespace Trax.Core.Junction
 {
@@ -85,8 +65,6 @@ namespace Trax.Core.Junction
     {
         protected Junction() { }
         public System.Threading.CancellationToken CancellationToken { get; protected set; }
-        public Trax.Core.Exceptions.TrainExceptionData? ExceptionData { get; }
-        public LanguageExt.Either<System.Exception, TIn> PreviousResult { get; }
         public LanguageExt.Either<System.Exception, TOut> Result { get; }
         public virtual System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(LanguageExt.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
         public abstract System.Threading.Tasks.Task<TOut> Run(TIn input);
@@ -104,7 +82,6 @@ namespace Trax.Core.Monad
     }
     public sealed class ChainRecorder
     {
-        public ChainRecorder() { }
         public System.Collections.Generic.IReadOnlyList<string> Refusals { get; }
         public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainStep> Steps { get; }
     }
@@ -171,10 +148,6 @@ namespace Trax.Core.Route
 }
 namespace Trax.Core.Train
 {
-    public static class MonadTaskExtensions
-    {
-        public static Trax.Core.Train.MonadTask<TInput, TReturn> AsMonadTask<TInput, TReturn>(this System.Threading.Tasks.Task<Trax.Core.Monad.Monad<TInput, TReturn>> source) { }
-    }
     public readonly struct MonadTask<TInput, TReturn>
     {
         public Trax.Core.Train.MonadTask<TInput, TReturn> AddServices<T1>(T1 service) { }
