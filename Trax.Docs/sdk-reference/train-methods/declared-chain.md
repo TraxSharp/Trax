@@ -22,7 +22,7 @@ public bool IsDeclaringChain { get; }
 
 `IsDeclaringChain` is true while the chain is being read. Per-execution accessors check it: `ServiceTrain.TrainInput` and `TrainOutput` throw `ChainDeclarationException` while it is true.
 
-**Throws**: `ChainDeclarationException` when the train reads per-execution state while declaring. Other things a declaration does wrong are recorded as refusals, not thrown.
+**Throws**: `ChainDeclarationException` when the train reads per-execution state while declaring, and whatever else `Junctions()` itself throws while it is read (a train that never overrides it throws `NotImplementedException`, for instance). A declaration that completes but is wrong, such as a body that awaits, returns a result, or starts a second chain in a separate statement, is recorded as a refusal instead.
 
 ## ChainRecorder
 

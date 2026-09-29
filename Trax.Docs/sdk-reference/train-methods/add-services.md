@@ -58,11 +58,11 @@ public class ProcessOrderTrain(
 
 ## Behavior
 
-1. For each service, finds the interface from the type parameter list that the service's concrete type implements.
-2. Stores the service in Memory under that interface type.
+1. Stores each service under the type parameter in its own position: `AddServices<IReader, IWriter>(store, store)` fills both the `IReader` and the `IWriter` slot with `store`, whatever else `store` implements.
+2. The chain check records the same slots, so what it verifies is what the run fills.
 3. If a service is `null`, throws an `Exception` (`AddServices<IMyService> received null`). While a chain is being read, records a refusal instead.
-4. If a service's concrete type is not a class, sets the train exception.
-5. If a service doesn't implement any of the specified interfaces, sets the train exception.
+4. If a service's concrete type is not a class, sets the train exception. A struct passed as an interface is also refused while the chain is read.
+5. If a service does not implement the interface it was passed as, sets the train exception.
 
 ### Moq Proxy Handling
 

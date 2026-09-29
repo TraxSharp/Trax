@@ -300,6 +300,13 @@ start when:
   assigned after the train is built, in a lifecycle hook such as `OnStarted`, is null when the
   check reads the chain; assigning a service later is not supported
 - `Chain<T>` or `ShortCircuit<T>` names a type that is not a junction
+- a second chain call is made on the train as a separate statement after a junction step the body
+  did not await, as in `Chain<A>(); return Chain<B>().Resolve();`. Both calls start from the
+  train, so the two chains run at the same time over one Memory. Link them
+  (`Chain<A>().Chain<B>().Resolve()`), or await the first (`await Chain<A>();`) before the next
+  statement. Synchronous calls such as `AddServices` or `Extract` before the first junction step
+  are fine
+- `AddServices` receives a struct passed as an interface
 - a `ShortCircuit` junction's output cannot be the train's return type (its value is returned as
   the result by a cast, which would fail on every run)
 - the chain ends without the train's return type in Memory
@@ -514,7 +521,7 @@ Four things worth knowing:
 
 A class the failure already carries wins over the local classifier. That is the case for a failure from a remote worker, and for one a calling-side junction preserved when it enriched the exception. A failure rebuilt from a serialized record (a remote failure) is never passed to the local classifier at all: its original type is gone, so a catch-all classifier would stamp a class on something the worker deliberately left alone. The classifier's answer applies to everything else, including a failure raised outside any junction, whose class is attached to the exception so a remote worker reports it too.
 
-A class is carried in an exception's **message** only on a `TrainException`, which is the type Trax rebuilds a serialized failure as. Any other exception's message is its own text and is never read for a class, even when it is JSON; the classifier decides for it as usual. A carried value outside the vocabulary is carried as `Unclassified`.
+A class is carried in an exception's **message** only on an exception whose type is exactly `TrainException`, which is the type Trax rebuilds a serialized failure as. A type you derive from `TrainException` is treated like any other exception: its message is often text from somewhere else, such as a remote system's response body, and must not choose whether the failure is retried. Any other exception's message is its own text and is never read for a class, even when it is JSON; the classifier decides for it as usual. A carried value outside the vocabulary is carried as `Unclassified`.
 
 Failures the scheduler records itself, such as a dispatch failure or a run failed by the stale-run reaper, record `Unclassified`: no train saw an exception to classify.
 

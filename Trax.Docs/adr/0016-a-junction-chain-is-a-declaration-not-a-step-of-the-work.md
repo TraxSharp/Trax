@@ -165,6 +165,11 @@ cannot be the result is refused. `DeclaredChainTests` also pins that `IChain` an
 a class are refused, that `AddServices` of null is refused with a reason naming the
 service, that a monad created through `NewMonad()` while declaring records instead of
 running, and that naming a type which is not a junction is refused rather than thrown.
+`UnlinkedChainTests` in Trax.Core pins that a second chain started as a separate statement after
+an unawaited junction step is refused, while synchronous calls before the first junction, a
+statement after an awaited chain, and a linked chain still verify. `AddServicesSlotTests` pins that
+each `AddServices` argument fills the slot of the type argument it was passed as, which is the
+slot the replay counts, and that a struct passed as a service is refused.
 
 Not covered: nothing detects a chain that branches on ambient state or on instance state other
 than the input and output. The replay knows the train's declared input type, not the subtype that
@@ -175,6 +180,9 @@ Trax the Cli is pinned to; nothing checks a project an older Cli scaffolded agai
 release, or that Trax.Cli ships its template before Trax.Core ships a removal.
 
 ## Changelog
+- **2026-09-28**: Recorded that two chains started as separate statements are refused unless the
+  first is awaited, and that `AddServices` fills exactly the slots the replay counts. Added
+  `UnlinkedChainTests` and `AddServicesSlotTests`.
 
 - **2026-09-27**: Recorded that `AddServices` of null is refused, and that a service assigned
   after `Junctions()` runs is not supported.

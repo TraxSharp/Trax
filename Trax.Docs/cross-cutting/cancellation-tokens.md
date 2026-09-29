@@ -38,17 +38,14 @@ Run(input, cancellationToken)
 
 ## Passing a Token to a Train
 
-Every `Run` and `RunEither` overload has a `CancellationToken` variant:
+`Run` takes the token:
 
 ```csharp
-// Throws on failure
+// Throws on failure, and on cancellation
 await train.Run(input, cancellationToken);
-await train.Run(input, serviceProvider, cancellationToken);
-
-// Returns Either<Exception, TReturn>
-await train.RunEither(input, cancellationToken);
-await train.RunEither(input, serviceProvider, cancellationToken);
 ```
+
+`RunEither(input)` has no token parameter, and `Train.CancellationToken` cannot be set from outside the train. A train that a host runs (the mediator, the scheduler, a `ServiceTrain` resolved from the container) gets its token from the host.
 
 If you call `Run(input)` without a token, `CancellationToken` defaults to `CancellationToken.None` and all existing code works unchanged.
 
@@ -155,10 +152,10 @@ public override async Task<string> Run(string input)
 Cancellation is treated differently from regular exceptions:
 
 - **Regular exceptions** are enriched with `TrainExceptionData` (junction name, train name, original stack trace, etc.) via `Exception.Data` and returned as `Left` in the Railway pattern. The original exception type and message are preserved - callers outside Trax see the exception exactly as the junction threw it
-- **`OperationCanceledException` while the train's token is cancelled** propagates cleanly without wrapping. It is not a junction failure, it is an explicit abort signal
+- **`OperationCanceledException` while the train's token is cancelled** is passed on without enrichment. It is not a junction failure, it is an explicit abort signal
 - **`OperationCanceledException` while the train's token is not cancelled**, such as an `HttpClient` timeout, is treated as a regular exception: enriched and returned as `Left`
 
-This means a requested cancellation always throws (even with `RunEither`), which matches the .NET convention that cancellation is exceptional flow, not a business error.
+`Run` rethrows it, so a caller of `Run` sees cancellation as an exception, the .NET convention. `RunEither` lets nothing escape, so it returns the `OperationCanceledException` as `Left`: check `is OperationCanceledException` before treating a `Left` as a business failure. `ServiceTrain` relies on this to record the run as `Cancelled`.
 
 ### TrainState.Cancelled
 

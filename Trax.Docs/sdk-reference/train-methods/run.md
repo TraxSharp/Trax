@@ -46,12 +46,12 @@ public Task<Either<Exception, TReturn>> RunEither(TInput input)
 | `input` | `TInput` | Yes | The input data for the train |
 | `cancellationToken` | `CancellationToken` | No | Token to monitor for cancellation requests. When provided, it is stored on the `Train.CancellationToken` property and propagated to every junction before execution. Defaults to `CancellationToken.None` when omitted. |
 
-> **Note:** `RunEither` does not accept a `CancellationToken` parameter. Set the token via `Run` or by assigning `Train.CancellationToken` directly before calling `RunEither`.
+> **Note:** `RunEither` does not accept a `CancellationToken` parameter, and a caller cannot assign `Train.CancellationToken` (its setter is not public). Pass the token to `Run`, or run the train through a host (a `ServiceTrain` resolved from the container, the mediator or the scheduler), which sets it.
 
 ## Returns
 
 - **`Run`**: `Task<TReturn>`, the train result. Throws the captured exception if the train failed. Throws `OperationCanceledException` if the token is cancelled.
-- **`RunEither`**: `Task<Either<Exception, TReturn>>`, `Left` on failure, `Right` on success. Note: cancellation still throws `OperationCanceledException` rather than returning `Left` because cancellation is not a business error.
+- **`RunEither`**: `Task<Either<Exception, TReturn>>`, `Left` on failure, `Right` on success. Nothing escapes it, cancellation included: a cancelled run returns `Left` holding the `OperationCanceledException`. Tell it apart from a business failure with `is OperationCanceledException` before treating the `Left` as one.
 
 ## Examples
 

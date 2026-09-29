@@ -15,12 +15,12 @@ Each package lives in the repo that owns the concern it checks, and depends only
 
 | Package | Owns | Guards |
 |---|---|---|
-| `Trax.Core.Testing` | Infrastructure + hygiene | `RepoRoot` / `SourceFiles` / `SourceText`, `ArchitectureGuardOptions`, `GuardResult`; `HygieneGuards` (no `[Ignore]`, no legacy asserts, no fixed delays); `RepoConventionGuards` (`Directory.Build.props` version; cross-repo Trax refs centrally managed via `Directory.Packages.props` with no inline `Version`) |
+| `Trax.Core.Testing` | Infrastructure + hygiene | `RepoRoot` / `SourceFiles` / `SourceText`, `ArchitectureGuardOptions`, `GuardResult`; `HygieneGuards` (no `[Ignore]` in any form, including a qualified or suffixed name, an attribute list split across lines, and `Ignore =` or `IgnoreReason =` on a `TestCase`; no legacy asserts, including `ClassicAssert`, `CollectionAssert` and `StringAssert`; no fixed delays); `RepoConventionGuards` (`Directory.Build.props` version; cross-repo Trax refs centrally managed via `Directory.Packages.props` with no inline `Version` or `VersionOverride`); `VocabularyGuards` (a listed third-party attribute, found wherever it sits in an attribute list, with or without its `Attribute` suffix, including in files that see its library only through a global or project-level using) |
 | `Trax.Effect.Data.Testing` | Data layer | `DomainContextsDeriveBase`, `CompanionInterfaces`, `OneSchemaPerContext`, `NoPendingModelChanges`, `OwnerScopeCompleteness`, `OwnerScopeFilterBypasses` |
 | `Trax.Api.GraphQL.Testing` | GraphQL | `EdgeManifestIsValid`, `EdgeResolversUseLoader` |
 | `Trax.Mediator.Testing` | Trains | `EveryTrainHasInterface` |
 
-A checker returns a `GuardResult` with the offenders it found, how many items it inspected, and a ready-to-use failure message.
+A checker returns a `GuardResult` with the offenders it found, how many items it inspected, and a ready-to-use failure message. The `Trax.Core.Testing` fixtures also fail when a guard inspected nothing: scan roots that point at the wrong directory would otherwise pass every check. Assert `Inspected > 0` yourself if you call a checker directly.
 
 Most guards scan source on disk. `NoPendingModelChanges` and `OwnerScopeCompleteness` are the exceptions. `NoPendingModelChanges` builds each migration-based context offline (no database) and asserts its EF model matches the latest migration snapshot, catching a model edit that shipped without `dotnet ef migrations add` before it trips `PendingModelChangesWarning` at host startup.
 

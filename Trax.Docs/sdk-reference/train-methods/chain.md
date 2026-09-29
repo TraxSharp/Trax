@@ -83,7 +83,7 @@ The parameterless forms construct the junction with `new()`, so they take no con
 
 ## Behavior
 
-1. If the train already has an exception, the junction is **skipped** (short-circuited).
+1. If the train already has an exception, the junction is **skipped** (short-circuited). Nothing is built for it: the junction, its constructor dependencies and its input are not resolved from Memory or the container.
 2. The junction's input is extracted from Memory by type.
 3. The junction is executed via `RailwayJunction`.
 4. On **success** (Right): the output is stored in Memory by its type. Tuple outputs are decomposed into individual Memory entries.
