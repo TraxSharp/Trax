@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text.Json;
 using Trax.Core.Exceptions;
 
@@ -59,6 +60,7 @@ public record RemoteRunResponse(
     /// HTTP and Lambda paths record a remote failure the same way. The instance is a
     /// <see cref="RemoteRunException"/> carrying <see cref="PublicMessage"/>.
     /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public TrainException ToTrainException()
     {
         if (ExceptionType is not null)

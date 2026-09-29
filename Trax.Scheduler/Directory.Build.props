@@ -34,12 +34,10 @@
   </PropertyGroup>
 
   <!-- The published libraries (the same five as package validation above) ship their XML doc
-       comments, so the API is documented from the installed package alone. CS1591 (a public member
-       with no doc comment) is the one warning suppressed: the existing summaries ship now, and the
-       undocumented members are a tracked burn-down. Every other doc-comment warning stays on. -->
+       comments, so the API is documented from the installed package alone. Every public member is
+       documented, and CS1591 (a public member with no doc comment) stays on to keep it that way. -->
   <PropertyGroup Condition="'$(EnablePackageValidation)' == 'true'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(IsPackable)' != 'false'">

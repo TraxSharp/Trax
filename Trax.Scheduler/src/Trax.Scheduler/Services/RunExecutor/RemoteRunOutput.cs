@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;
 using Trax.Core.Exceptions;
@@ -15,8 +16,15 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// implementation, but only from the concrete types already loaded in this process that implement
 /// the declared type, matched by name. Nothing is loaded by the name a response gives, and a name
 /// that matches no such implementation is refused (see scheduler/0006).
+/// <para>
+/// Public because Trax.Scheduler.Lambda ships as a separate package and calls it. A package that
+/// reached it through InternalsVisibleTo would break with MissingMethodException the first time a
+/// consumer pulled in a newer Trax.Scheduler than it was built against. It is hidden from
+/// IntelliSense because it is plumbing between the Trax packages, not something to call.
+/// </para>
 /// </remarks>
-internal static class RemoteRunOutput
+[EditorBrowsable(EditorBrowsableState.Never)]
+public static class RemoteRunOutput
 {
     private static readonly ConcurrentDictionary<Type, Implementations> Cache = new();
 

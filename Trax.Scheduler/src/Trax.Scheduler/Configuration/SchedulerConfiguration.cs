@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Trax.Effect.Enums;
 
 namespace Trax.Scheduler.Configuration;
@@ -25,7 +26,12 @@ public class SchedulerConfiguration
     /// no new work queue entries will be created from scheduled manifests. Existing
     /// work queue entries are not affected. Takes effect on the next polling cycle.
     /// </remarks>
-    public bool ManifestManagerEnabled { get; set; } = true;
+    public bool ManifestManagerEnabled
+    {
+        get;
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        set;
+    } = true;
 
     /// <summary>
     /// Whether the JobDispatcher train is enabled during polling cycles.
@@ -36,24 +42,34 @@ public class SchedulerConfiguration
     /// entries will continue to accumulate if the ManifestManager is still enabled.
     /// Takes effect on the next polling cycle.
     /// </remarks>
-    public bool JobDispatcherEnabled { get; set; } = true;
+    public bool JobDispatcherEnabled { get; internal set; } = true;
 
     /// <summary>
     /// The interval at which the ManifestManagerPollingService polls for pending jobs.
     /// </summary>
-    public TimeSpan ManifestManagerPollingInterval { get; set; } = TimeSpan.FromSeconds(5);
+    public TimeSpan ManifestManagerPollingInterval
+    {
+        get;
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        set;
+    } = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// The interval at which the JobDispatcherPollingService polls the work queue.
     /// </summary>
-    public TimeSpan JobDispatcherPollingInterval { get; set; } = TimeSpan.FromSeconds(2);
+    public TimeSpan JobDispatcherPollingInterval
+    {
+        get;
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        set;
+    } = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// How long the JobDispatcher may go without completing a polling cycle before the
     /// <c>AddTraxSchedulerLiveness()</c> health check reports unhealthy. When null, the
     /// check uses max(<see cref="JobDispatcherPollingInterval"/> * 10, 30s).
     /// </summary>
-    public TimeSpan? SchedulerLivenessThreshold { get; set; }
+    public TimeSpan? SchedulerLivenessThreshold { get; internal set; }
 
     /// <summary>
     /// The maximum number of work queue entries dispatched concurrently within a single
@@ -68,7 +84,7 @@ public class SchedulerConfiguration
     /// INSERT returns in microseconds.
     /// Set to 1 for sequential dispatch (default, backward compatible).
     /// </remarks>
-    public int MaxConcurrentDispatch { get; set; } = 1;
+    public int MaxConcurrentDispatch { get; internal set; } = 1;
 
     /// <summary>
     /// The maximum number of active jobs (Pending + InProgress Metadata) allowed across all manifests.
@@ -82,7 +98,12 @@ public class SchedulerConfiguration
     /// Work queue entries remain in Queued status as a buffer.
     /// Set to null to disable this limit (unlimited).
     /// </remarks>
-    public int? MaxActiveJobs { get; set; } = 10;
+    public int? MaxActiveJobs
+    {
+        get;
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        set;
+    } = 10;
 
     /// <summary>
     /// The maximum number of dispatch attempts before a work queue entry is permanently failed.
@@ -94,7 +115,7 @@ public class SchedulerConfiguration
     /// dead letter mechanism handles it. Set to 0 to disable requeuing (fail immediately on
     /// first dispatch failure, preserving pre-1.2.0 behavior).
     /// </remarks>
-    public int MaxDispatchAttempts { get; set; } = 5;
+    public int MaxDispatchAttempts { get; internal set; } = 5;
 
     /// <summary>
     /// Priority boost automatically applied to dependent train work queue entries.
@@ -104,7 +125,7 @@ public class SchedulerConfiguration
     /// (ScheduleType.Dependent), this value is added to the manifest's base priority,
     /// clamped to [0, 31]. Set to 0 to disable the automatic boost.
     /// </remarks>
-    public int DependentPriorityBoost { get; set; } = 16;
+    public int DependentPriorityBoost { get; internal set; } = 16;
 
     /// <summary>
     /// Train type names excluded from the MaxActiveJobs count.
@@ -123,7 +144,12 @@ public class SchedulerConfiguration
     /// <remarks>
     /// This can be overridden per-manifest via ManifestScheduleProperties.
     /// </remarks>
-    public int DefaultMaxRetries { get; set; } = 3;
+    public int DefaultMaxRetries
+    {
+        get;
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        set;
+    } = 3;
 
     /// <summary>
     /// The default delay between retry attempts.
@@ -131,7 +157,12 @@ public class SchedulerConfiguration
     /// <remarks>
     /// This can be combined with RetryBackoffMultiplier for exponential backoff.
     /// </remarks>
-    public TimeSpan DefaultRetryDelay { get; set; } = TimeSpan.FromMinutes(5);
+    public TimeSpan DefaultRetryDelay
+    {
+        get;
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        set;
+    } = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// Multiplier applied to retry delay on each subsequent retry (exponential backoff).
@@ -139,12 +170,12 @@ public class SchedulerConfiguration
     /// <remarks>
     /// Set to 1.0 for constant retry delay. Default of 2.0 means delays of 5m, 10m, 20m, etc.
     /// </remarks>
-    public double RetryBackoffMultiplier { get; set; } = 2.0;
+    public double RetryBackoffMultiplier { get; internal set; } = 2.0;
 
     /// <summary>
     /// Maximum retry delay to prevent unbounded backoff growth.
     /// </summary>
-    public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromHours(1);
+    public TimeSpan MaxRetryDelay { get; internal set; } = TimeSpan.FromHours(1);
 
     /// <summary>
     /// Timeout after which a running job is considered stuck.
@@ -153,7 +184,12 @@ public class SchedulerConfiguration
     /// Jobs that have been in "InProgress" state longer than this duration
     /// may be automatically failed and potentially retried.
     /// </remarks>
-    public TimeSpan DefaultJobTimeout { get; set; } = TimeSpan.FromMinutes(20);
+    public TimeSpan DefaultJobTimeout
+    {
+        get;
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        set;
+    } = TimeSpan.FromMinutes(20);
 
     /// <summary>
     /// Timeout after which a Pending job that was never picked up is automatically failed.
@@ -165,7 +201,7 @@ public class SchedulerConfiguration
     /// deliver the job (e.g. remote worker unreachable, Lambda timeout) and the
     /// immediate failure handling in DispatchJobsJunction also failed.
     /// </remarks>
-    public TimeSpan StalePendingTimeout { get; set; } = TimeSpan.FromMinutes(20);
+    public TimeSpan StalePendingTimeout { get; internal set; } = TimeSpan.FromMinutes(20);
 
     /// <summary>
     /// Timeout after which an InProgress job that never completed is automatically failed.
@@ -177,7 +213,7 @@ public class SchedulerConfiguration
     /// will mark it as Failed. This should be longer than <see cref="DefaultJobTimeout"/>
     /// to allow cooperative cancellation to propagate before force-failing.
     /// </remarks>
-    public TimeSpan StaleInProgressTimeout { get; set; } = TimeSpan.FromMinutes(60);
+    public TimeSpan StaleInProgressTimeout { get; internal set; } = TimeSpan.FromMinutes(60);
 
     /// <summary>
     /// How long a work queue entry may stay unconfirmed before the ManifestManager resolves it.
@@ -189,7 +225,7 @@ public class SchedulerConfiguration
     /// slowest hook, because an entry resolved while its hook is still running is resolved
     /// wrongly.
     /// </remarks>
-    public TimeSpan StaleStagedEntryTimeout { get; set; } = TimeSpan.FromMinutes(10);
+    public TimeSpan StaleStagedEntryTimeout { get; internal set; } = TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// Whether a stale unconfirmed entry is promoted instead of cancelled. Defaults to false.
@@ -199,7 +235,7 @@ public class SchedulerConfiguration
     /// never ran or one that rejected the mutation. Promote only when every deferring train's
     /// chain re-checks what its hook checked and its hook is idempotent.
     /// </remarks>
-    public bool PromoteStaleStagedEntries { get; set; }
+    public bool PromoteStaleStagedEntries { get; internal set; }
 
     /// <summary>
     /// The default misfire policy applied to manifests that do not specify one.
@@ -208,7 +244,7 @@ public class SchedulerConfiguration
     /// Defaults to <see cref="MisfirePolicy.FireOnceNow"/> for backward compatibility.
     /// Can be overridden per-manifest via the ScheduleOptions fluent API.
     /// </remarks>
-    public MisfirePolicy DefaultMisfirePolicy { get; set; } = MisfirePolicy.FireOnceNow;
+    public MisfirePolicy DefaultMisfirePolicy { get; internal set; } = MisfirePolicy.FireOnceNow;
 
     /// <summary>
     /// The default misfire threshold — the grace period for determining when a missed
@@ -219,7 +255,7 @@ public class SchedulerConfiguration
     /// of its <see cref="MisfirePolicy"/>. If overdue by more, the manifest's MisfirePolicy
     /// determines behavior. Can be overridden per-manifest via MisfireThresholdSeconds.
     /// </remarks>
-    public TimeSpan DefaultMisfireThreshold { get; set; } = TimeSpan.FromSeconds(60);
+    public TimeSpan DefaultMisfireThreshold { get; internal set; } = TimeSpan.FromSeconds(60);
 
     /// <summary>
     /// Whether to automatically recover stuck jobs on scheduler startup.
@@ -234,22 +270,27 @@ public class SchedulerConfiguration
     /// executing elsewhere. The recovery itself requeues nothing. Skipped when no database
     /// provider is registered.
     /// </remarks>
-    public bool RecoverStuckJobsOnStartup { get; set; } = true;
+    public bool RecoverStuckJobsOnStartup
+    {
+        get;
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        set;
+    } = true;
 
     /// <summary>
     /// How long to retain dead letter records after resolution.
     /// </summary>
-    public TimeSpan DeadLetterRetentionPeriod { get; set; } = TimeSpan.FromDays(30);
+    public TimeSpan DeadLetterRetentionPeriod { get; internal set; } = TimeSpan.FromDays(30);
 
     /// <summary>
     /// Whether to enable automatic purging of old dead letter records.
     /// </summary>
-    public bool AutoPurgeDeadLetters { get; set; } = true;
+    public bool AutoPurgeDeadLetters { get; internal set; } = true;
 
     /// <summary>
     /// The interval at which the dead letter cleanup service checks for expired dead letters.
     /// </summary>
-    public TimeSpan DeadLetterCleanupInterval { get; set; } = TimeSpan.FromHours(1);
+    public TimeSpan DeadLetterCleanupInterval { get; internal set; } = TimeSpan.FromHours(1);
 
     /// <summary>
     /// Configuration for automatic metadata cleanup, if enabled.
@@ -259,7 +300,7 @@ public class SchedulerConfiguration
     /// periodically delete old metadata entries for the configured train types.
     /// Null means metadata cleanup is disabled.
     /// </remarks>
-    public MetadataCleanupConfiguration? MetadataCleanup { get; set; }
+    public MetadataCleanupConfiguration? MetadataCleanup { get; internal set; }
 
     /// <summary>
     /// The maximum number of queued work queue entries loaded per manifest group per JobDispatcher cycle.
@@ -274,7 +315,7 @@ public class SchedulerConfiguration
     /// Manual entries (no manifest) are always included regardless of this limit.
     /// Set to null to disable the limit (load all queued entries without group-fair batching).
     /// </remarks>
-    public int? MaxQueuedJobsPerCycle { get; set; } = 100;
+    public int? MaxQueuedJobsPerCycle { get; internal set; } = 100;
 
     /// <summary>
     /// The maximum number of work queue entries created per ManifestManager polling cycle.
@@ -288,7 +329,12 @@ public class SchedulerConfiguration
     /// groups (e.g., 5000 cache manifests crowding out 15 delta manifests).
     /// Set to null to disable the limit (unlimited — all due manifests are enqueued per cycle).
     /// </remarks>
-    public int? MaxWorkQueueEntriesPerCycle { get; set; } = 200;
+    public int? MaxWorkQueueEntriesPerCycle
+    {
+        get;
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        set;
+    } = 200;
 
     /// <summary>
     /// Whether to automatically prune manifests from the database that are no longer
@@ -303,7 +349,7 @@ public class SchedulerConfiguration
     /// Disable this if you create manifests dynamically at runtime via
     /// <see cref="Services.TraxScheduler.ITraxScheduler"/>.
     /// </remarks>
-    public bool PruneOrphanedManifests { get; set; } = true;
+    public bool PruneOrphanedManifests { get; internal set; } = true;
 
     /// <summary>
     /// Whether a real database provider (e.g. PostgreSQL) is configured.

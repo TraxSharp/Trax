@@ -13,10 +13,13 @@ namespace Trax.Scheduler.Services.Scheduling;
 /// </remarks>
 public record Schedule
 {
+    // Only the factories build a schedule, so its type always matches the field that is set.
+    internal Schedule() { }
+
     /// <summary>
     /// Gets the type of schedule (Cron or Interval).
     /// </summary>
-    public ScheduleType Type { get; init; }
+    public ScheduleType Type { get; internal init; }
 
     /// <summary>
     /// Gets the interval for Interval-type schedules.
@@ -24,7 +27,7 @@ public record Schedule
     /// <remarks>
     /// Only used when <see cref="Type"/> is <see cref="ScheduleType.Interval"/>.
     /// </remarks>
-    public TimeSpan? Interval { get; init; }
+    public TimeSpan? Interval { get; internal init; }
 
     /// <summary>
     /// Gets the cron expression for Cron-type schedules.
@@ -33,7 +36,7 @@ public record Schedule
     /// Only used when <see cref="Type"/> is <see cref="ScheduleType.Cron"/>.
     /// Supports both 5-field (minute granularity) and 6-field (second granularity) cron formats.
     /// </remarks>
-    public string? CronExpression { get; init; }
+    public string? CronExpression { get; internal init; }
 
     /// <summary>
     /// Gets the maximum random delay added to each scheduled run.

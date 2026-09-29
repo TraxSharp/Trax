@@ -25,7 +25,7 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 /// );
 /// </code>
 /// </remarks>
-public class InMemoryJobSubmitter(IJobRunnerTrain jobRunnerTrain) : IJobSubmitter
+internal class InMemoryJobSubmitter(IJobRunnerTrain jobRunnerTrain) : IJobSubmitter
 {
     private int _jobCounter;
 

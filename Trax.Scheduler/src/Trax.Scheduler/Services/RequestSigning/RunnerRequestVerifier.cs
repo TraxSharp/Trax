@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Trax.Scheduler.Configuration;
 
@@ -83,6 +84,7 @@ public sealed class RunnerRequestVerifier
     /// </summary>
     /// <param name="entryPoint">A name for the entry point, used in the error and the warning.</param>
     /// <exception cref="InvalidOperationException">No posture is configured.</exception>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public void EnsurePosture(string entryPoint) => EnsurePosture(entryPoint, policyApplies: false);
 
     internal void EnsurePosture(string entryPoint, bool policyApplies)

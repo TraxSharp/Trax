@@ -45,10 +45,12 @@ public partial class SchedulerConfigurationBuilder
         // AddHealthChecks().AddTraxSchedulerLiveness(). TryAdd so a consumer-provided
         // TimeProvider (e.g. a test clock) wins.
         _parentBuilder.ServiceCollection.TryAddSingleton(TimeProvider.System);
-        _parentBuilder.ServiceCollection.AddSingleton<
-            ISchedulerLivenessMonitor,
-            SchedulerLivenessMonitor
-        >();
+        // The dispatcher takes the concrete monitor, the only type that can record a cycle; the
+        // health check and everything else resolve the read-only interface over the same instance.
+        _parentBuilder.ServiceCollection.AddSingleton<SchedulerLivenessMonitor>();
+        _parentBuilder.ServiceCollection.AddSingleton<ISchedulerLivenessMonitor>(sp =>
+            sp.GetRequiredService<SchedulerLivenessMonitor>()
+        );
 
         // Register the cancellation registry (singleton — shared across all workers)
         _parentBuilder.ServiceCollection.AddSingleton<

@@ -7,6 +7,7 @@ namespace Trax.Scheduler.Trains.ManifestManager;
 /// <summary>
 /// InMemory-compatible manifest manager that skips PostgreSQL-specific junctions
 /// and dispatches jobs directly via <see cref="Junctions.InMemoryDispatchJobsJunction"/>.
+/// Infrastructure the scheduler registers and runs itself; not intended to be called directly.
 /// </summary>
 /// <remarks>
 /// The standard <see cref="ManifestManagerTrain"/> includes junctions that use
@@ -18,8 +19,13 @@ namespace Trax.Scheduler.Trains.ManifestManager;
 /// <see cref="InMemoryDispatchJobsJunction"/>, which creates Metadata and dispatches inline
 /// via <see cref="Services.JobSubmitter.InMemoryJobSubmitter"/>.
 /// </remarks>
-public class InMemoryManifestManagerTrain : ServiceTrain<Unit, Unit>, IManifestManagerTrain
+internal class InMemoryManifestManagerTrain : ServiceTrain<Unit, Unit>, IManifestManagerTrain
 {
+    /// <summary>
+    /// Loads manifests, reaps failed jobs, determines which manifests are due, and dispatches them
+    /// inline. The timeout, stale-metadata and work-queue junctions of
+    /// <see cref="ManifestManagerTrain"/> are left out (see the remarks on the type).
+    /// </summary>
     protected override Task<Either<Exception, Unit>> Junctions() =>
         Chain<LoadManifestsJunction>()
             .Chain<ReapFailedJobsJunction>()

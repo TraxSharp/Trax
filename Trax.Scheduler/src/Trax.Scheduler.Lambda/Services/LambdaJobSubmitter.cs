@@ -23,7 +23,7 @@ namespace Trax.Scheduler.Lambda.Services;
 ///
 /// No public endpoint is created — access is governed by IAM policies.
 /// </remarks>
-public class LambdaJobSubmitter(
+internal class LambdaJobSubmitter(
     IAmazonLambda lambdaClient,
     LambdaWorkerOptions options,
     ILogger<LambdaJobSubmitter> logger

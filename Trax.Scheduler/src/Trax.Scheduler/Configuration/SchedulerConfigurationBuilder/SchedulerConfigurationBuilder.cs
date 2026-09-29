@@ -78,6 +78,7 @@ public partial class SchedulerConfigurationBuilder
 /// Record for tracking a routed submitter registration.
 /// Used by extension methods (e.g., <c>UseSqsWorkers()</c>) to register additional submitter backends.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public record RoutedSubmitterRegistration(
     SubmitterRouting Routing,
     Type SubmitterType,

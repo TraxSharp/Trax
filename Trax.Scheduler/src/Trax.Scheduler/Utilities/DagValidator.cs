@@ -1,8 +1,11 @@
+using System.ComponentModel;
+
 namespace Trax.Scheduler.Utilities;
 
 /// <summary>
 /// Result of a topological sort operation on a directed graph.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public class TopologicalSortResult<TKey>
     where TKey : notnull
 {
@@ -25,6 +28,7 @@ public class TopologicalSortResult<TKey>
 /// <summary>
 /// Generic DAG validation and topological sort using Kahn's algorithm.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class DagValidator
 {
     /// <summary>

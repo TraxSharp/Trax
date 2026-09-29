@@ -13,7 +13,7 @@ namespace Trax.Scheduler.Extensions;
 /// <summary>
 /// Extension methods for <see cref="IDataContext"/> used by the scheduler.
 /// </summary>
-public static class DataContextExtensions
+internal static class DataContextExtensions
 {
     /// <summary>
     /// Ensures a ManifestGroup exists with the given name, creating one if necessary.

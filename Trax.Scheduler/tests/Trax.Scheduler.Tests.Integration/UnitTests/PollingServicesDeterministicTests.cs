@@ -8,6 +8,7 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.DeadLetterCleanupPollingService;
 using Trax.Scheduler.Services.JobDispatcherPollingService;
 using Trax.Scheduler.Services.SchedulerLiveness;
+using Trax.Scheduler.Tests.Integration.Fakes;
 using Trax.Scheduler.Trains.DeadLetterCleanup;
 using Trax.Scheduler.Trains.JobDispatcher;
 
@@ -69,17 +70,14 @@ public class PollingServicesDeterministicTests
     public async Task DeadLetterCleanupPollingService_TrainThrows_CatchBlockSwallowsAndLoopStaysAlive()
     {
         var trainHit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var train = Substitute.For<IDeadLetterCleanupTrain>();
-        train
-            .When(t => t.Run(Arg.Any<DeadLetterCleanupRequest>(), Arg.Any<CancellationToken>()))
-            .Do(_ =>
-            {
-                trainHit.TrySetResult();
-                throw new InvalidOperationException("dead-letter-fail");
-            });
+        var train = new FakeDeadLetterCleanupTrain(() =>
+        {
+            trainHit.TrySetResult();
+            throw new InvalidOperationException("dead-letter-fail");
+        });
 
         var service = new DeadLetterCleanupPollingService(
-            Provide(train),
+            Provide<IDeadLetterCleanupTrain>(train),
             LongIntervalConfig(),
             NullLogger<DeadLetterCleanupPollingService>.Instance
         );

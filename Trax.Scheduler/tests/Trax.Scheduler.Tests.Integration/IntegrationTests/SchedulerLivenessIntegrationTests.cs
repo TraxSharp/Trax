@@ -18,7 +18,11 @@ public class SchedulerLivenessIntegrationTests : TestSetup
     [Test]
     public async Task JobDispatcherPollingService_StampsLivenessMonitor_OnCycleCompletion()
     {
-        var monitor = Scope.ServiceProvider.GetRequiredService<ISchedulerLivenessMonitor>();
+        var monitor = Scope.ServiceProvider.GetRequiredService<SchedulerLivenessMonitor>();
+        Scope
+            .ServiceProvider.GetRequiredService<ISchedulerLivenessMonitor>()
+            .Should()
+            .BeSameAs(monitor, "the health check must read the instance the dispatcher stamps");
         monitor
             .LastDispatchCompletedAt.Should()
             .BeNull("no dispatch cycle has run yet in this fixture");

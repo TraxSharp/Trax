@@ -5,7 +5,7 @@ namespace Trax.Scheduler.Extensions;
 /// <summary>
 /// Extension methods for <see cref="ITrainRegistry"/> used by the scheduler.
 /// </summary>
-public static class TrainRegistryExtensions
+internal static class TrainRegistryExtensions
 {
     /// <summary>
     /// Validates that a train is registered for the specified input type.

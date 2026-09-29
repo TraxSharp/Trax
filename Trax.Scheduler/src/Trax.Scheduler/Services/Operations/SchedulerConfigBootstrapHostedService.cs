@@ -10,7 +10,8 @@ namespace Trax.Scheduler.Services.Operations;
 /// Reads the persisted <c>trax.scheduler_config</c> row at startup and applies it to
 /// the in-memory <see cref="SchedulerConfiguration"/> singleton (and
 /// <see cref="LocalWorkerOptions"/> / <c>MetadataCleanup</c> when registered) so
-/// settings survive restarts.
+/// settings survive restarts. Registered by <c>AddScheduler</c>; infrastructure not intended for
+/// direct use.
 /// </summary>
 /// <remarks>
 /// A persisted value outside <see cref="SchedulerConfigLimits"/> is skipped and logged, and the
@@ -18,11 +19,14 @@ namespace Trax.Scheduler.Services.Operations;
 /// older deployment skipped the migration), or no row is present, the in-memory
 /// builder defaults remain in effect.
 /// </remarks>
-public class SchedulerConfigBootstrapHostedService : IHostedService
+internal class SchedulerConfigBootstrapHostedService : IHostedService
 {
     private readonly IServiceProvider _services;
     private readonly ILogger<SchedulerConfigBootstrapHostedService> _logger;
 
+    /// <summary>Created by the host through DI.</summary>
+    /// <param name="services">Root provider; a scope is created from it for the one read at startup.</param>
+    /// <param name="logger">Receives the applied, skipped and failed outcomes.</param>
     public SchedulerConfigBootstrapHostedService(
         IServiceProvider services,
         ILogger<SchedulerConfigBootstrapHostedService> logger
@@ -32,6 +36,13 @@ public class SchedulerConfigBootstrapHostedService : IHostedService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Reads the singleton <c>trax.scheduler_config</c> row once and copies its values onto
+    /// <see cref="SchedulerConfiguration"/>, the <see cref="LocalWorkerOptions"/> worker count and
+    /// the metadata cleanup interval and retention. Never throws: a missing row, a missing table or
+    /// a database error is logged and leaves the builder's values in place.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the database read.</param>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         try
@@ -189,5 +200,7 @@ public class SchedulerConfigBootstrapHostedService : IHostedService
         apply(value);
     }
 
+    /// <summary>Does nothing; the service holds no resources after startup.</summary>
+    /// <param name="cancellationToken">Unused.</param>
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

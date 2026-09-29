@@ -16,6 +16,10 @@ namespace Trax.Scheduler.Trains.JobRunner;
 /// </remarks>
 public class JobRunnerTrain : ServiceTrain<RunJobRequest, Unit>, IJobRunnerTrain
 {
+    /// <summary>
+    /// Loads the job's metadata and manifest, refuses to run unless the metadata is Pending, then
+    /// runs the scheduled train and, when it succeeds, records the run on its manifest.
+    /// </summary>
     protected override Task<Either<Exception, Unit>> Junctions() =>
         Chain<LoadMetadataJunction>()
             .Chain<ValidateMetadataStateJunction>()

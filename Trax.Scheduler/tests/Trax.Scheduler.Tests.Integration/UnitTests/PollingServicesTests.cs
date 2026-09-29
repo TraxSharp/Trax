@@ -11,6 +11,7 @@ using Trax.Scheduler.Services.JobDispatcherPollingService;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.SchedulerLiveness;
+using Trax.Scheduler.Tests.Integration.Fakes;
 using Trax.Scheduler.Trains.DeadLetterCleanup;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.ManifestManager;
@@ -191,8 +192,8 @@ public class PollingServicesTests
     [Test]
     public async Task DeadLetterCleanupPollingService_RunsImmediateCycle()
     {
-        var train = Substitute.For<IDeadLetterCleanupTrain>();
-        var sp = Provide(train);
+        var train = new FakeDeadLetterCleanupTrain();
+        var sp = Provide<IDeadLetterCleanupTrain>(train);
 
         var service = new DeadLetterCleanupPollingService(
             sp,
@@ -202,9 +203,7 @@ public class PollingServicesTests
 
         await RunBriefly(service);
 
-        await train
-            .Received()
-            .Run(Arg.Any<DeadLetterCleanupRequest>(), Arg.Any<CancellationToken>());
+        train.Runs.Should().BeGreaterThan(0);
     }
 
     #endregion

@@ -88,6 +88,10 @@ public abstract class TraxLambdaFunction
 
     private readonly Lazy<IServiceProvider> _serviceProvider;
 
+    /// <summary>
+    /// Initializes the function without building its service provider; that is deferred to the
+    /// first invocation (see <see cref="BuildServiceProvider"/>) to keep cold starts short.
+    /// </summary>
     protected TraxLambdaFunction()
     {
         _serviceProvider = new Lazy<IServiceProvider>(BuildServiceProvider);
@@ -384,11 +388,8 @@ public abstract class TraxLambdaFunction
     }
 
     /// <summary>
-    /// Builds the service provider used by all Lambda invocations. Override only when you need
-    /// full control over DI (e.g. test harnesses). The default loads <c>appsettings.json</c>
-    /// plus environment variables, registers logging, calls <see cref="ConfigureServices"/>,
-    /// and finalises with <c>AddTraxJobRunner()</c>, configured by <see cref="ConfigureRunner"/>.
-    /// An override registers <c>AddTraxJobRunner(runner => ...)</c> itself.
+    /// Resolves the <see cref="RunnerRequestVerifier"/> that <c>AddTraxJobRunner</c> registers and
+    /// checks the runner has a signing posture.
     /// </summary>
     private static RunnerRequestVerifier RequireVerifier(IServiceProvider services)
     {
@@ -402,6 +403,19 @@ public abstract class TraxLambdaFunction
         return verifier;
     }
 
+    /// <summary>
+    /// Builds the service provider used by all Lambda invocations. Override only when you need
+    /// full control over DI (e.g. test harnesses). The default loads <c>appsettings.json</c>
+    /// plus environment variables, registers logging, calls <see cref="ConfigureServices"/>,
+    /// and finalises with <c>AddTraxJobRunner()</c>, configured by <see cref="ConfigureRunner"/>.
+    /// An override registers <c>AddTraxJobRunner(runner => ...)</c> itself.
+    /// </summary>
+    /// <remarks>
+    /// Called once, lazily, on the first invocation (or the first request under
+    /// <see cref="RunLocalAsync"/>), and the result is reused for the life of the instance.
+    /// Every invocation is refused unless the provider resolves a
+    /// <see cref="RunnerRequestVerifier"/> with a signing key or with unsigned requests allowed.
+    /// </remarks>
     protected virtual IServiceProvider BuildServiceProvider()
     {
         var configuration = new ConfigurationBuilder()

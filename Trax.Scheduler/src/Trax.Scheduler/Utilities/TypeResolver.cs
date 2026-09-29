@@ -9,7 +9,7 @@ namespace Trax.Scheduler.Utilities;
 /// worker and the runners match those names against the registered trains' input types instead
 /// (see scheduler/0006). Kept for compatibility.
 /// </remarks>
-public static class TypeResolver
+internal static class TypeResolver
 {
     /// <summary>
     /// Resolves a <see cref="Type"/> by its fully-qualified name, searching all loaded assemblies.

@@ -20,7 +20,7 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 /// Retries transient HTTP failures (429, 502, 503) with exponential backoff.
 /// Configure retry behavior via <see cref="RemoteWorkerOptions.Retry"/>.
 /// </remarks>
-public class HttpJobSubmitter(
+internal class HttpJobSubmitter(
     HttpClient httpClient,
     RemoteWorkerOptions options,
     ILogger<HttpJobSubmitter> logger

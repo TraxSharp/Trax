@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -32,6 +33,7 @@ public enum RunnerRequestPurpose
 /// and verifies, Trax.Scheduler.Lambda and Trax.Scheduler.Sqs sign, and Trax.Runner.Lambda verifies.
 /// </para>
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class RunnerRequestSignature
 {
     /// <summary>The HTTP header and SQS message attribute that carry the signature.</summary>

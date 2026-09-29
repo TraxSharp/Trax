@@ -15,7 +15,7 @@ namespace Trax.Scheduler.Services.JobDispatcherPollingService;
 internal class JobDispatcherPollingService(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration,
-    ISchedulerLivenessMonitor livenessMonitor,
+    SchedulerLivenessMonitor livenessMonitor,
     ILogger<JobDispatcherPollingService> logger
 ) : BackgroundService
 {

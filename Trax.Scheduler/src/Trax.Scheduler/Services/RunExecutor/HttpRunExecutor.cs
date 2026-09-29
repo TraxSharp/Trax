@@ -13,7 +13,8 @@ namespace Trax.Scheduler.Services.RunExecutor;
 
 /// <summary>
 /// HTTP implementation of <see cref="IRunExecutor"/> that dispatches synchronous run requests
-/// to a remote endpoint and blocks until the train completes.
+/// to a remote endpoint and blocks until the train completes. Registered by <c>UseRemoteRun()</c>;
+/// not intended to be constructed directly.
 /// </summary>
 /// <remarks>
 /// Used by <c>UseRemoteRun()</c>. Serializes a <see cref="RemoteRunRequest"/> as JSON
@@ -24,7 +25,7 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// Retries transient HTTP failures (429, 502, 503) with exponential backoff.
 /// Configure retry behavior via <see cref="RemoteRunOptions.Retry"/>.
 /// </remarks>
-public class HttpRunExecutor(
+internal class HttpRunExecutor(
     HttpClient httpClient,
     RemoteRunOptions options,
     ILogger<HttpRunExecutor> logger
@@ -32,6 +33,30 @@ public class HttpRunExecutor(
 {
     private const int MaxErrorBodyLength = 2000;
 
+    /// <summary>
+    /// Serializes <paramref name="input"/>, POSTs it as a <see cref="RemoteRunRequest"/> (signed
+    /// when <see cref="RemoteRunOptions.SigningKey"/> is set, retried on transient statuses), and
+    /// waits for the remote train to finish. The output is read into
+    /// <paramref name="outputType"/>, or, when that is an interface or abstract type, into the
+    /// loaded implementation of it that the response names.
+    /// </summary>
+    /// <param name="trainName">The canonical name of the train the remote endpoint runs.</param>
+    /// <param name="input">The train input; serialized using its runtime type.</param>
+    /// <param name="outputType">The output type the caller expects.</param>
+    /// <param name="ct">Cancels the HTTP call, including waits between retries.</param>
+    /// <returns>The remote run's metadata id, external id (empty when none) and output.</returns>
+    /// <exception cref="RemoteRunException">
+    /// The endpoint answered with a non-success status after retries, or with an empty body.
+    /// </exception>
+    /// <exception cref="TrainException">
+    /// The remote train failed (rebuilt by <see cref="RemoteRunResponse.ToTrainException"/>), or
+    /// the output type the response names is not a loaded implementation of
+    /// <paramref name="outputType"/>.
+    /// </exception>
+    /// <exception cref="HttpRequestException">
+    /// The endpoint could not be reached. Only transient status codes are retried, not connection
+    /// failures.
+    /// </exception>
     public async Task<RunTrainResult> ExecuteAsync(
         string trainName,
         object input,

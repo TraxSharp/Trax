@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Trax.Core.Exceptions;
@@ -22,6 +23,7 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// consumer pulled in a newer Trax.Scheduler than it was built against. Both options are read-only,
 /// so nothing that uses them can change the wire for everyone else.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class RemoteRunJson
 {
     /// <summary>What a worker writes: web defaults, enums as integers.</summary>

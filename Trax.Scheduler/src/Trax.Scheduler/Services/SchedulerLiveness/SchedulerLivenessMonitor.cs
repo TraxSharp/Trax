@@ -19,11 +19,12 @@ public interface ISchedulerLivenessMonitor
     /// completed one since startup.
     /// </summary>
     DateTimeOffset? LastDispatchCompletedAt { get; }
-
-    /// <summary>Records that the JobDispatcher just completed a polling cycle.</summary>
-    void RecordDispatchCycle();
 }
 
+/// <summary>
+/// The monitor, with its one writer. Only the JobDispatcher stamps a cycle: the interface above is
+/// what anything else resolves, and it has no way to report the scheduler alive.
+/// </summary>
 internal sealed class SchedulerLivenessMonitor : ISchedulerLivenessMonitor
 {
     private readonly TimeProvider _timeProvider;
@@ -46,6 +47,7 @@ internal sealed class SchedulerLivenessMonitor : ISchedulerLivenessMonitor
         }
     }
 
+    /// <summary>Records that the JobDispatcher just completed a polling cycle.</summary>
     public void RecordDispatchCycle() =>
         Interlocked.Exchange(ref _lastDispatchTicks, _timeProvider.GetUtcNow().UtcTicks);
 }

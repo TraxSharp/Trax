@@ -16,4 +16,8 @@
     <PackageReference Include="AWSSDK.SQS" />
     <PackageReference Include="Amazon.Lambda.SQSEvents" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
+  </ItemGroup>
 </Project>

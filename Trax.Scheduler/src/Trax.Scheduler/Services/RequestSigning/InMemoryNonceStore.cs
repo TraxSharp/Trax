@@ -7,7 +7,7 @@ namespace Trax.Scheduler.Services.RequestSigning;
 /// single instance: a second instance keeps its own memory and accepts the same request again.
 /// Chosen with <c>UseInMemoryNonceStore()</c> (see scheduler/0009).
 /// </summary>
-public sealed class InMemoryNonceStore : INonceStore
+internal sealed class InMemoryNonceStore : INonceStore
 {
     private readonly ConcurrentDictionary<string, long> _seen = new(StringComparer.Ordinal);
     private long _recordedSinceSweep;
