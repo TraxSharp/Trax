@@ -43,7 +43,13 @@ the data for that step, and only that step, so its shape is discriminated by `st
    error, never quietly accepted.
 3. **No unhandled exceptions.** Every operation is total. `Advance` returns a transitioned or rejected
    result. `Rehydrate` returns an ok or error result. An unpermitted trigger, a failed guard, or malformed
-   stored JSON all become typed values, never a throw.
+   stored JSON all become typed values, never a throw. That includes JSON that parses but cannot be kept:
+   `Rehydrate` refuses a number outside the range of a double (`1e400`) and a NUL character as `malformed`,
+   so an accepted snapshot always has a canonical wire and always fits a `jsonb` column.
+
+A state or trigger token is matched by its exact declared name. `"1"`, `" Unlocked"` and `"Locked, Unlocked"`
+are not aliases of `Unlocked`, as they would be to `Enum.TryParse`, and a rehydrated snapshot always carries
+the declared name, so the value that is stored and served is canonical.
 
 ## Two runtimes, one behavior
 
@@ -57,7 +63,9 @@ The machine is authored in C#, which is the source of truth, and exported to a n
 (`<machine>.ir.json`). Common guards and reducers are authored declaratively and travel in the IR as data;
 a small interpreter on each side runs them, so they are single-sourced rather than hand-written per language.
 A genuinely-custom guard or reducer is bound by name in the IR and hand-written per runtime (the escape
-hatch). The snapshot itself still carries only structure and data, never logic. A machine's structure and its
+hatch): in C# with `CustomGuard(name, fn)` / `CustomReducer(name, fn)` on the builder, in TypeScript with
+`customGuards` / `customReducers`. A C# machine that names a custom rule or reduction with no handler bound
+fails at `Build()`, rather than refusing that edge forever. The snapshot itself still carries only structure and data, never logic. A machine's structure and its
 declarative logic are generated for the frontend from that IR, and a drift check fails the build if a
 committed generated file goes stale. (The one unmigrated sample, `checkout`, still uses a hand-authored
 `machine.json`; the IR replaces it everywhere else.)
@@ -81,7 +89,10 @@ The **canonical wire** is what makes a byte-for-byte comparison meaningful. The 
 `version`, `state`, `context`) is emitted in fixed order; the context is canonicalized per RFC 8785 (JCS):
 object keys sorted by UTF-16 code unit (recursively, with array order preserved), numbers formatted by the
 ECMAScript `Number` algorithm (so `1e21` is `1e+21`, not .NET's `1E+21`), and strings escaped exactly as
-`JSON.stringify` (non-ASCII stays literal, control characters use the short escapes or lowercase `\u00xx`).
+`JSON.stringify` (non-ASCII and valid surrogate pairs stay literal; control characters use the short escapes
+or lowercase `\u00xx`, and a lone surrogate, which has no UTF-8 encoding, is escaped as lowercase `\udxxx`).
+Integer-like keys are ordered like any other (`"10"` before `"2"`), and a key named `__proto__` is an
+ordinary key.
 Both engines emit identical bytes regardless of how the snapshot was constructed, which is the prerequisite
 for the differential's byte-exact compare and for any hash or signature over a stored snapshot.
 

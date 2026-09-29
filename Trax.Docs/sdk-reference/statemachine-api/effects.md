@@ -64,5 +64,8 @@ under a lease with a fence token, and a crash mid-flight replays without re-runn
 key is `{keyPrefix}:{userKey}:{id}`, so it is scoped per draft per user.
 
 The receipt `Run` returns is handed to the transition's reducer as `input["receipt"]`, which is how the send
-gets recorded in the destination context. A guard on the same edge can require it (so the transition only
+gets recorded in the destination context. It must be non-empty. The ledger reads a claim with no receipt as
+still in flight, so a `null` or `""` receipt is treated as a failed effect: the claim is released,
+`IdempotentEffect.RunOnce` throws `InvalidOperationException`, and the send returns `delivery-failed` with the
+draft unchanged, exactly as if `Run` had thrown. A guard on the same edge can require it (so the transition only
 completes once the effect has produced a receipt).

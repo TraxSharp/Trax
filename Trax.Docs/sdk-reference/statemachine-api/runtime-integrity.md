@@ -40,12 +40,15 @@ string? hash = registry.SchemaHash("checkout");
 ```
 
 A machine with no exportable IR returns `null`, and the guard treats null as "no check" rather than throwing.
+The hash is computed once, on first read, and every concurrent reader waits for that value: a request that
+arrives while the first one is still building the machine gets the hash, never a `null` that would switch the
+check off.
 
 ## Divergence detection
 
 The schema hash catches a version mismatch; this catches a genuine behavioural disagreement on a *real* input.
 On `advanceSnapshot`, the client may send `clientResult`, the snapshot its twin computed for the advance, as
-canonical wire. The server re-drives the advance authoritatively, then compares:
+canonical wire. The server re-drives the advance authoritatively and compares before it writes anything:
 
 ```
 client twin: (pre-state, trigger, input) -> clientResult
@@ -54,7 +57,13 @@ server C#:   (pre-state, trigger, input) -> serverResult   <- authoritative
 
 If the two canonical wires differ, the advance is refused with a
 [`client-divergence`](/docs/sdk-reference/statemachine-api/result-codes) problem and the client reloads. The
-server's result is always authoritative; a client that sends no `clientResult` is not checked.
+refusal is real: the stored draft is exactly as it was before the request, so the reload shows the pre-state
+and a retry fires the trigger once. A client that sends no `clientResult` is not checked.
+
+The comparison lives in `ISnapshotDraftService.Advance(userKey, id, trigger, input, requestId, clientResult)`,
+which computes the advance, checks it, and only then writes. A custom `ISnapshotDraftService` that does not
+override that overload throws `NotSupportedException` when handed a client result, rather than persisting an
+advance it would then report as refused.
 
 Because the server drives from the stored snapshot and, under optimistic concurrency, the client's pre-state
 equals the last server snapshot, a post-state mismatch is a real divergence signal: a skew the schema hash
@@ -93,6 +102,6 @@ is skipped, not failed.
 | Code | Returned by | Meaning |
 | --- | --- | --- |
 | `schema-mismatch` | save, advance, load, send | the client's `schemaHash` differs from the server's machine; reload |
-| `client-divergence` | advance | the client's `clientResult` differs from the server's authoritative result; reload |
+| `client-divergence` | advance | the client's `clientResult` differs from the server's authoritative result; nothing was written, reload |
 
 Both surface on the mutation's `problem` field like every other [result code](/docs/sdk-reference/statemachine-api/result-codes).

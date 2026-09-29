@@ -135,8 +135,14 @@ evidence:
 
 - The channel is `DropOldest`, so a burst larger than the buffer silently discards the oldest
   entries.
-- A failed flush catches everything and drops the whole batch rather than retrying, on the
-  grounds that a logging failure should not take the host down.
+- Every entry is made storable before it is queued: a NUL character is removed from the message,
+  category, exception and stack trace, and a field cut to its column length is cut on a character
+  boundary, never through the middle of an emoji. The message keeps 4000 UTF-16 units, the
+  category 500, the exception message 2000 and the stack trace 4000.
+- When a batch still fails, its entries are written one at a time, so an entry the database
+  refuses costs its own line and not the rest of the batch. An entry that fails on its own is
+  dropped rather than retried, on the grounds that a logging failure should not take the host
+  down.
 
 Console and structured logging providers still run alongside this one. The database table is
 the convenient shared view, not the system of record.

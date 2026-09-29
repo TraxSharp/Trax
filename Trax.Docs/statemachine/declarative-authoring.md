@@ -20,6 +20,21 @@ The state's context and the trigger's input are C# records. The schema, its fiel
 nullability, and constraints, falls out of the type. `[MinLength(1)]` on a string or array becomes a
 non-empty constraint.
 
+Each field's JSON type is the one System.Text.Json writes for its CLR type, so a record always validates
+against its own camelCase JSON:
+
+| CLR type | JSON type |
+| --- | --- |
+| `string`, `char`, `Guid`, `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly`, `TimeSpan`, `Uri`, any enum | string (an enum under `JsonStringEnumConverter`) |
+| every integral and floating-point type, signed or unsigned, including `Int128`, `UInt128` and `Half` | number |
+| `bool` | boolean |
+| `IDictionary<K, V>`, `IReadOnlyDictionary<K, V>`, `JsonObject`, a record or class | object |
+| any other `IEnumerable`, `JsonArray` | array, with an element-type constraint when the element is one of the scalars above |
+
+A property with no fixed JSON type (`object`, `JsonNode`, `JsonElement`, `BigInteger`, a delegate) makes
+`Context<T>()` and `WithInput<T>()` throw `InvalidOperationException` naming it, when the machine is
+configured. Validate such a state with `Holds(...)` instead.
+
 ```csharp
 using System.ComponentModel.DataAnnotations;
 using static Trax.Effect.StateMachine.Rules;

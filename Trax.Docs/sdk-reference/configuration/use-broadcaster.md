@@ -110,6 +110,7 @@ Options:
 |----------|------|---------|-------------|
 | `ConnectionString` | `string` | N/A | AMQP connection URI |
 | `ExchangeName` | `string` | `"trax.lifecycle"` | Fanout exchange name |
+| `PrefetchCount` | `ushort` | `64` | How many received events the receiver may hold unacknowledged at once. The broker holds the rest until the handlers acknowledge one, so a slow handler leaves events queued on the broker rather than in the receiving process. `0` (no limit) is refused: `UseRabbitMq` throws `ArgumentException`, and a directly constructed receiver throws `InvalidOperationException` from `StartAsync`. |
 
 The RabbitMQ transport uses a **fanout exchange** so all connected hub instances receive every event. Each receiver creates its own exclusive, auto-delete queue.
 

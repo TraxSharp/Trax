@@ -17,12 +17,30 @@ public static HubEndpointConventionBuilder MapTraxTrainEventHub(
     this IEndpointRouteBuilder endpoints,
     string path = "/hubs/trax-events"
 )
+
+public static HubEndpointConventionBuilder MapTraxTrainEventHub(
+    this IEndpointRouteBuilder endpoints,
+    string path,
+    Action<HttpConnectionDispatcherOptions> configureOptions
+)
 ```
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `endpoints` | `IEndpointRouteBuilder` | Yes | N/A | Typically `WebApplication` |
-| `path` | `string` | No | `"/hubs/trax-events"` | URL where clients open the SignalR connection |
+| `path` | `string` | No (first overload) | `"/hubs/trax-events"` | URL where clients open the SignalR connection |
+| `configureOptions` | `Action<HttpConnectionDispatcherOptions>` | Yes (second overload) | N/A | Adjusts the hub's connection options after Trax applies its defaults, so a value set here wins |
+
+## Send timeout
+
+Both overloads set the hub's `HttpConnectionDispatcherOptions.TransportSendTimeout` to `SignalRHubEndpointExtensions.DefaultTransportSendTimeout`, 2 seconds, instead of ASP.NET Core's 10. A client that cannot take a send within that time is disconnected, and a client using `WithAutomaticReconnect()` reconnects. The timeout bounds how long one slow client can delay delivery to the others (see [UseSignalRHub: Delivery](/docs/sdk-reference/configuration/use-signalr-hub#delivery)); it never delays a train, which does not wait for clients at all.
+
+To change it, use the second overload:
+
+```csharp
+app.MapTraxTrainEventHub("/hubs/trax-events", options =>
+    options.TransportSendTimeout = TimeSpan.FromSeconds(5));
+```
 
 ## Prerequisites
 

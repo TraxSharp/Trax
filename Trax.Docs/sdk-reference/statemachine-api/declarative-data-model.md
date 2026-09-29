@@ -30,9 +30,11 @@ A guard or a field constraint, as data. `abstract record Rule` with these cases:
 | `ArrayOf` | `Source`, `Field`, `ElementType` | an array whose every element is of `ElementType` |
 | `All` | `Rules` | every sub-rule holds (empty is true) |
 | `Any` | `Rules` | at least one sub-rule holds (empty is false) |
-| `Custom` | `Name` | a named handler resolves it (the escape hatch) |
+| `Custom` | `Name` | the handler bound with `CustomGuard(name, fn)` resolves it (the escape hatch) |
 
 Evaluation is total: `RuleEvaluator` returns `false` for a missing or wrong-typed field, never an exception.
+A `Custom` name with no handler in the map is also `false`, but a machine built with `MachineBuilder` cannot
+reach that case: `Build()` refuses a custom name that has no handler bound.
 
 ## Reduction
 
@@ -44,7 +46,7 @@ How a transition computes the destination context, as data. `abstract record Red
 | `Clear` | | an empty context |
 | `Reset` | | the machine's initial context |
 | `Set` | `Steps` | a clone of the context with each `SetStep` applied |
-| `Custom` | `Name` | the result of a named handler |
+| `Custom` | `Name` | the result of the handler bound with `CustomReducer(name, fn)` |
 
 `ReductionEvaluator` always returns a fresh `JsonObject`; it never mutates the inputs.
 

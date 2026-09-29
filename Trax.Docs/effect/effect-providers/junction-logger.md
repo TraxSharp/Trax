@@ -30,6 +30,8 @@ When `serializeJunctionData` is `false` (the default), the junction logger recor
 
 When `true`, after each junction completes, the logger serializes the junction's output to JSON and stores it in `JunctionMetadata.OutputJson`. This is useful for debugging since you can see exactly what each junction produced, but it adds serialization overhead per junction.
 
+The output is written with the same logging options as a model's `ToString()`: members marked `[TraxSensitive]` are written as `{"_redacted": true}`, a manifest's `Properties`, a queued entry's `Input` and a background job's `Input` as `{"_omitted": true}`, and a metadata row's `Manifest`, `Parent`, `Children` and `Logs` are left out. A junction that returns queued entries therefore logs them without the inputs they will run with.
+
 ## How It Works
 
 The junction logger is a **junction effect provider**, not a regular effect provider. It hooks into the `EffectJunction` lifecycle rather than the train-level `Track`/`SaveChanges` cycle.

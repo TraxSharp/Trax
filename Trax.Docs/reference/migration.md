@@ -168,3 +168,15 @@ PostgreSQL does not auto-index the referencing side of a foreign key, so without
 | `ix_work_queue_subject_queued` | `work_queue` | The "queued behind" lookup on a work queue entry's detail, in the API and the dashboard (partial: `queued` with a non-null `subject_key`) |
 
 The two subject indexes from migration 042 cover dispatched rows, so before this the lookup read every queued row and filtered on the key. With 500,000 queued entries that took about 137 ms per detail view; through this index it takes about 1 ms. Entries without a subject key, which is most manifest work, are left out of the index, so it stays small.
+
+## State-machine Request Scope Migration (048)
+
+`048_snapshot_draft_request_scope.sql` (Postgres) or `013_snapshot_draft_request_scope.sql` (SQLite) adds two
+nullable columns to `snapshot_draft`: `last_request_trigger` and `last_request_from_state`. The Postgres
+statements are `ADD COLUMN IF NOT EXISTS` and safe to re-run. Nothing is backfilled.
+
+A draft now records the trigger and from-state of its last request id, and replays a retry only for the same
+trigger ([how a request id is matched](/docs/sdk-reference/statemachine-api/persistence-ports#how-a-request-id-is-matched)).
+A draft written before the migration has no recorded trigger, so a retry of its last request is refused once
+as `request-id-reused` rather than replayed. A custom `ISnapshotStore` should override `UpdateWithRequest` to
+store the whole request; without it, every retry against that store is refused the same way.

@@ -31,6 +31,14 @@ public abstract class Machine<TState, TTrigger>
 | `MigrateFrom(int fromVersion, Func<string, JsonObject, MigrationResult> migrate)` | Forward-migrate a stored snapshot from `fromVersion` to this definition's version. The migrator gets the stored state name and context and returns a `MigrationResult`. |
 | `Differential(Action<IDifferentialBuilder> configure)` | Authors the cross-language differential fuzzing inputs (test-only): per-trigger input samples, per-state seed contexts, and dense probe contexts. Exported into the IR's `differential` block so the differential harness enumerates off the one C# source, with no hand-written machine.json. Only valid on a declaratively-authored machine. See [IDifferentialBuilder](#idifferentialbuilder). |
 | `In(TState state)` | Opens a state to declare its context rule and outgoing transitions. Returns an `IStateBuilder`. |
+| `CustomGuard(string name, Func<JsonObject, JsonNode?, bool> guard)` | Binds the C# handler for `Rule.Custom(name)`, wherever the machine uses it (a `When` or a `Requires`, nested or not). The TypeScript twin's `customGuards` is the other half. |
+| `CustomReducer(string name, Func<JsonObject, JsonNode?, JsonObject> reducer)` | Binds the C# handler for `Reduction.Custom(name)`: it gets the context and the trigger input and returns the destination context. The twin's `customReducers` is the other half. |
+
+`Build()` throws `InvalidOperationException` for a custom rule or reduction whose name has no handler bound,
+so an unbound name fails when the machine is built rather than refusing its edge forever. Handlers may be
+bound before or after the rules that name them. `CustomGuard` and `CustomReducer` are default interface
+methods that throw `NotSupportedException` on a custom `IMachineBuilder` implementation that does not
+override them.
 
 ## IStateBuilder
 

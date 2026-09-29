@@ -17,12 +17,15 @@ branching.
 | `no-transition` | advance | no edge matches the `(state, trigger)` pair |
 | `guard-failed` | advance | an edge matched but its guard rejected the trigger; the detail is the `Because(...)` message |
 | `invalid-context` | advance, rehydrate | the resulting (advance) or stored (rehydrate) context failed the target state's rule |
-| `malformed` | rehydrate | the snapshot JSON could not be parsed |
-| `unknown-state` | rehydrate | the snapshot names a state the definition does not have |
+| `malformed` | rehydrate, advance (persisted) | the snapshot JSON could not be parsed, or its context holds a value no store can keep: a number outside the range of a double (`1e400`) or a NUL character in a string or key. On a persisted advance, the result held such a value and nothing was written |
+| `unknown-state` | rehydrate | the snapshot names a state the definition does not have. Only the exact declared name is a state: `"1"`, `" Unlocked"` and `"Locked, Unlocked"` are unknown, and an unknown trigger token is `no-transition` |
 | `version-mismatch` | rehydrate | the snapshot version is newer than the definition, or a [migration](/docs/sdk-reference/statemachine-api/migrations) is missing |
 | `unknown-machine` | rehydrate | no registered machine has that name |
 | `schema-mismatch` | save, advance, load, send | the client's machine [schema hash](/docs/sdk-reference/statemachine-api/runtime-integrity) differs from the server's; the client is out of date and should reload |
-| `client-divergence` | advance | the client's computed result differs from the server's authoritative result ([divergence detection](/docs/sdk-reference/statemachine-api/runtime-integrity)); reload |
+| `client-divergence` | advance | the client's computed result differs from the server's authoritative result ([divergence detection](/docs/sdk-reference/statemachine-api/runtime-integrity)); nothing was written, reload |
+| `too-large` | save, advance | the snapshot, the trigger input, or the advanced snapshot exceeds `SnapshotLimits.MaxSnapshotBytes` (64 KiB); nothing was written |
+| `request-id-reused` | advance, send | the request id was last used for a different trigger, so this is not a retry of it; send a new id. A send is refused before its effect runs |
+| `delivery-failed` | send | the effect threw, or returned no receipt; the draft was not advanced, so the send can be retried |
 
 Over GraphQL these surface on the mutation's `problem` field, so a client reads the code and reacts (re-enable
 a control on `guard-failed`, start fresh on `version-mismatch`) without ever seeing a stack trace.

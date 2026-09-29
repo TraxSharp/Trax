@@ -34,6 +34,7 @@ public static BroadcasterBuilder UseSignalRHub(
 | `OnlyForTrains<T1>()` ... `<T1, T2, T3>()` | type parameters | Restrict to listed train interface types. Stores `typeof(T).FullName` (the canonical identifier Trax puts on the wire), not the short name. |
 | `OnlyForTrains` | `params Type[]` | Same as the generic overloads. Throws if any type is not an interface. |
 | `WithProjection<TClient>` | `Func<TrainLifecycleEventMessage, TClient>` | Replace the default `TraxClientEvent` projection. Last call wins. |
+| `WithDeliveryQueueCapacity` | `int capacity` | How many events may wait for delivery to clients. Default `SignalRSinkOptions.DefaultDeliveryQueueCapacity` (1024). Throws `ArgumentOutOfRangeException` below 1. See [Delivery](#delivery). |
 
 ## Default projection
 
@@ -85,9 +86,21 @@ b.UseSignalRHub(opts => opts.WithProjection(msg =>
 
 The projection is invoked once per matching event, after filtering. The hub serializes the result via SignalR's configured `IHubProtocol` (JSON by default).
 
+## Delivery
+
+The lifecycle hook and the event handler do not wait for clients. They apply the filters and write the event to a bounded queue, then return. One background sender takes events off the queue in the order they were raised, applies the projection, and sends each to `Clients.All`. A train's `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled` and `OnStateChanged` therefore take the same time whether the connected clients are fast, slow or stalled.
+
+Delivery is best effort. `Clients.All` waits for every connection, so a client that cannot keep up slows the sender for everyone until [`MapTraxTrainEventHub`'s send timeout](/docs/sdk-reference/configuration/map-trax-train-event-hub#send-timeout) disconnects it. If clients fall behind by more than the queue's capacity, further events are dropped rather than holding up trains. The first drop logs a `Warning` naming the capacity, and when the queue next empties a second `Warning` gives how many were dropped. A client that must not miss an event reads it from the store or from a durable transport, not from this sink.
+
+The dispatcher is also a hosted service. When the host stops, it stops accepting events and waits for the queued ones to be sent, within the host's shutdown timeout; whatever is left when that timeout runs out is abandoned and logged. The reasoning is recorded in Trax.Effect's ADR 0012.
+
+```csharp
+b.UseSignalRHub(opts => opts.WithDeliveryQueueCapacity(4096))
+```
+
 ## Error handling
 
-If the hub send fails for any reason (e.g. one connection's outbound buffer is full, a client disconnects mid-send, a transient transport error), the dispatcher logs at `Error` level and the broadcaster pipeline continues. A single slow or broken client never throws out of the lifecycle hook or event handler.
+If the hub send fails for any reason (e.g. a client disconnects mid-send, a transient transport error), the background sender logs at `Error` level and carries on with the next event. A slow or broken client never throws out of the lifecycle hook or event handler, and never holds them up.
 
 ## Local vs remote coverage
 

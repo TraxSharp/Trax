@@ -47,7 +47,7 @@ services.AddTrax(trax => trax
 
 - This is a **junction-level effect** (runs per junction, not per train).
 - Junction metadata includes: junction name, start/end times, duration, input/output types.
-- When `serializeJunctionData` is `true`, the actual junction input and output values are serialized to JSON.
+- When `serializeJunctionData` is `true`, the actual junction input and output values are serialized to JSON. Members marked `[TraxSensitive]` are written as `{"_redacted": true}`, and the copies a train is run from (a manifest's `Properties`, a queued entry's `Input`, a background job's `Input`) as `{"_omitted": true}`.
 - Registered as a toggleable effect.
 
 ## Package

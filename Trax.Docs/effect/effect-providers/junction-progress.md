@@ -45,7 +45,9 @@ Runs **before** each junction to set two columns on the train's `Metadata`:
 | `CurrentlyRunningJunction` | The name of the junction about to execute |
 | `JunctionStartedAt` | `DateTime.UtcNow` at the moment the junction begins |
 
-After each junction completes, it clears both columns back to `null`. The provider calls `EffectRunner.Update()` and `EffectRunner.SaveChanges(ct)` on both paths so the changes are persisted immediately.
+After each junction completes, it clears both columns back to `null`. The provider calls `EffectRunner.Update()` and `EffectRunner.SaveChanges()` on both paths so the changes are persisted immediately.
+
+The write after a junction does not take the train's cancellation token, and a failure of it is logged rather than thrown. By then the junction's work has returned, so the write is bookkeeping about work that happened. A caller that cancelled while a junction was finishing its work still gets that work recorded `Completed`, as it is without junction progress, and a database error on this write does not turn a finished junction into a failed run. The outcome write clears the same columns, so a skipped write leaves nothing stale.
 
 As a safety net, `FinishServiceTrain` always clears both junction progress columns regardless of outcome. This prevents stale values if a train crashes mid-junction.
 

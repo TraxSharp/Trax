@@ -116,6 +116,12 @@ mutation {
 
 Every rejection comes back as a typed `problem` in the data, never a thrown error across the boundary: an
 unknown machine is `unknown-machine`, an invalid snapshot is `invalid-context`, a stale write is `conflict`.
+A snapshot, a trigger input, or an advanced snapshot larger than 64 KiB is `too-large`, and nothing is written.
+
+A `requestId` makes a retry safe: the same id with the same trigger returns the current snapshot instead of
+firing again, and the same id with a different trigger is refused as `request-id-reused`. Advance and send
+share one id space; a send with no `requestId` uses `send:{id}`. The full rule is under
+[persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports#how-a-request-id-is-matched).
 An unauthenticated caller gets the opaque authorization error at HTTP 200, not a crash.
 
 A complete, runnable version of this (two machines, a GraphQL host, exactly-once over the wire) lives in the

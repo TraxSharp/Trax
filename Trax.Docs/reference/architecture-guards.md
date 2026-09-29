@@ -109,9 +109,9 @@ The model says a filter exists; it cannot say that a resolver or a train switche
 
 - `IgnoreQueryFilters()` on a per-user set. It switches every filter off, the owner scope included;
 - an EF10 named-filter disable, `IgnoreQueryFilters(["Owner"])`, that names an owner-scope filter (a named filter reading your principal accessor), or whose names are not string literals the scan can read. Disabling only a soft-delete or visibility filter by name is fine;
-- either call on a set the scan cannot name, such as a query passed into a helper, because it may be a per-user one.
+- either call on a set the scan cannot name, such as a query passed into a helper, or a generic repository's `Set<T>()` over a type parameter, because it may be a per-user one.
 
-The set is read from the call's statement: a `DbSet<T>` or `IQueryable<T>` property declared under the scan roots, or `Set<T>()`. A call on a set of shared rows (a soft-deleted article archive, say) passes. When a file switches the owner scope off on purpose, list it with the reason:
+The set is read from the receiver the call chain starts from: a `DbSet<T>` or `IQueryable<T>` property declared under the scan roots, or `Set<T>()` over a mapped entity. A call on a set of shared rows (a soft-deleted article archive, say) passes. A shared set mentioned elsewhere in the statement, inside a lambda for instance, does not make the receiver shared, and a per-user set mentioned anywhere in the statement is reported, because the call switches the filter off for its subqueries too. When a file switches the owner scope off on purpose, list it with the reason:
 
 ```csharp
 protected override OwnerScopeCensusOptions OwnerScope => new()

@@ -138,7 +138,7 @@ If you need multiple trains that share an input type, inject them directly by in
 |----------|-------------|
 | `Transient` (default) | Most trains -- each execution gets a fresh instance |
 | `Scoped` | When the train needs to share state with other scoped services in the same request |
-| `Singleton` | Rarely appropriate -- trains typically have per-execution state |
+| `Singleton` | Not supported: a train carries per-run state, and `AddSingletonTraxRoute` refuses a service train at registration with an `InvalidOperationException` |
 
 ## Remarks
 

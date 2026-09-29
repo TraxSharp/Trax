@@ -123,7 +123,9 @@ public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
 
 #### Serialized JSON output
 
-`metadata.Output` is always available as serialized JSON in `OnCompleted` hooks, regardless of whether [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save-train-parameters) is configured. When `SaveTrainParameters()` is not configured, the output is serialized in-memory before hooks fire but is not persisted to the database. This means GraphQL subscriptions and custom hooks can always read `metadata.Output` without requiring `SaveTrainParameters()`.
+`metadata.Output` is serialized JSON in `OnCompleted` hooks, whether or not [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save-train-parameters) is configured. When the output was not stored, it is serialized in memory before hooks fire and is not persisted to the database.
+
+The copy follows the stored copy's rules. An output the parameter effect was told to skip (`ExcludeOutput`, `ShouldSaveOutputs`, `SaveOutputs = false`) is not serialized for the hooks, so `metadata.Output` is `null` for that train. Otherwise the copy is bounded by `MaxParameterBytes`, or by 1 MiB when that is unset or `SaveTrainParameters()` is not configured, and an output past the ceiling arrives as `{"_truncated": true, "_maxBytes": N}`. `metadata.GetOutput<T>()` still returns the object itself. The decision comes from the registered `ILifecycleHookOutputPolicy`; `SaveTrainParameters()` registers one that follows its configuration.
 
 ## ITrainLifecycleHookFactory (Advanced)
 
@@ -131,10 +133,15 @@ public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
 public interface ITrainLifecycleHookFactory
 {
     ITrainLifecycleHook Create();
+
+    // Called for each run with the run's scope. Defaults to Create().
+    ITrainLifecycleHook Create(IServiceProvider serviceProvider) => Create();
 }
 ```
 
 Most users do not need to implement this interface. `AddLifecycleHook<THook>()` generates a factory automatically. Use a custom factory only if you need non-standard creation logic. The factory is a singleton; it creates a new hook instance per train execution.
+
+Trax calls `Create(IServiceProvider)` with the service provider of the run's scope. A factory that builds hooks from services it captured itself gets the root container's, where a scoped service such as `IDataContext` is either refused (when the container validates scopes, as ASP.NET Core does in Development) or one instance shared by every run in the process. Override `Create(IServiceProvider)` and resolve from the provider it is given. A factory that implements only `Create()` keeps working, through the default.
 
 ## Error Handling
 
@@ -162,7 +169,7 @@ builder.Services.AddTrax(trax => trax
 );
 ```
 
-No factory class needed. Trax creates one internally and resolves your hook's constructor dependencies from DI.
+No factory class needed. Trax creates one internally and resolves your hook's constructor dependencies from DI, from the scope the train runs in. A scoped dependency such as `IDataContext` is therefore the run's own, not one shared across runs.
 
 ## Built-in Hooks
 
