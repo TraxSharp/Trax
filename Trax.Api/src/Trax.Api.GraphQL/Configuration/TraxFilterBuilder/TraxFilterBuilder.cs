@@ -9,5 +9,8 @@ namespace Trax.Api.GraphQL.Configuration.TraxFilterBuilder;
 /// </summary>
 public partial class TraxFilterBuilder
 {
+    // Created by ConfigureFiltering and handed to its callback.
+    internal TraxFilterBuilder() { }
+
     internal List<ITraxFilterModule> Modules { get; } = [];
 }

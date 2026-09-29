@@ -19,6 +19,13 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
     private readonly bool _streamAllTrains;
     private readonly HashSet<string> _enabledTrains;
 
+    /// <summary>
+    /// Creates the hook and captures, once, the set of trains marked <c>[TraxBroadcast]</c>.
+    /// Registered by <c>AddTraxGraphQL</c>; not intended to be constructed directly.
+    /// </summary>
+    /// <param name="eventSender">HotChocolate's subscription transport.</param>
+    /// <param name="discoveryService">Supplies the registered trains.</param>
+    /// <param name="options">Decides whether every train is published or only broadcast ones.</param>
     public GraphQLSubscriptionHook(
         ITopicEventSender eventSender,
         ITrainDiscoveryService discoveryService,
@@ -38,6 +45,9 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
     private bool ShouldPublish(string trainName) =>
         _streamAllTrains || _enabledTrains.Contains(trainName);
 
+    /// <summary>Publishes to <c>onTrainStarted</c> when the train is published at all.</summary>
+    /// <param name="metadata">The execution that started.</param>
+    /// <param name="ct">Cancels the send.</param>
     public async Task OnStarted(Metadata metadata, CancellationToken ct)
     {
         if (!ShouldPublish(metadata.Name))
@@ -50,6 +60,9 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         );
     }
 
+    /// <summary>Publishes to <c>onTrainCompleted</c> when the train is published at all.</summary>
+    /// <param name="metadata">The execution that completed.</param>
+    /// <param name="ct">Cancels the send.</param>
     public async Task OnCompleted(Metadata metadata, CancellationToken ct)
     {
         if (!ShouldPublish(metadata.Name))
@@ -62,6 +75,13 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         );
     }
 
+    /// <summary>
+    /// Publishes to <c>onTrainFailed</c> when the train is published at all. The event carries the
+    /// recorded failure, not <paramref name="exception"/> itself.
+    /// </summary>
+    /// <param name="metadata">The execution that failed.</param>
+    /// <param name="exception">The exception the train failed with (not sent).</param>
+    /// <param name="ct">Cancels the send.</param>
     public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {
         if (!ShouldPublish(metadata.Name))
@@ -74,6 +94,9 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         );
     }
 
+    /// <summary>Publishes to <c>onTrainCancelled</c> when the train is published at all.</summary>
+    /// <param name="metadata">The execution that was cancelled.</param>
+    /// <param name="ct">Cancels the send.</param>
     public async Task OnCancelled(Metadata metadata, CancellationToken ct)
     {
         if (!ShouldPublish(metadata.Name))
@@ -86,6 +109,9 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         );
     }
 
+    /// <summary>Publishes to <c>onTrainStateChanged</c> when the train is published at all.</summary>
+    /// <param name="metadata">The execution whose state changed.</param>
+    /// <param name="ct">Cancels the send.</param>
     public async Task OnStateChanged(Metadata metadata, CancellationToken ct)
     {
         if (!ShouldPublish(metadata.Name))

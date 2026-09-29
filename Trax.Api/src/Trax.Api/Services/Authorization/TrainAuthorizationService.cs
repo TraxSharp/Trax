@@ -38,6 +38,7 @@ public class TrainAuthorizationService(
     ILogger<TrainAuthorizationService> logger
 ) : ITrainAuthorizationService
 {
+    /// <inheritdoc/>
     public async Task AuthorizeAsync(TrainRegistration registration, CancellationToken ct = default)
     {
         if (!registration.HasAuthorizeAttribute)

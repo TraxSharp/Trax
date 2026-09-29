@@ -24,7 +24,7 @@ namespace Trax.Api.Auth.ApiKey;
 /// </list>
 /// </para>
 /// </remarks>
-public sealed class ApiKeyAuthHandler(
+internal sealed class ApiKeyAuthHandler(
     IOptionsMonitor<ApiKeyAuthenticationOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,

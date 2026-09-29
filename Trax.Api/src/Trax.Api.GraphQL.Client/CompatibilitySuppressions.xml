@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Api.GraphQL.Client.GraphQLClientConfiguration</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.Client.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.Client.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Api.GraphQL.Client.GraphQLClientValidator</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.Client.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.Client.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Api.GraphQL.Client.Utils.Converters.DateOnlyConverter</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.Client.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.Client.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Client.GraphQLClientConfigurationBuilder.Build</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.Client.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.Client.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

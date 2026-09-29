@@ -7,6 +7,9 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration;
 /// </summary>
 public sealed class PersistedOperationsOptions
 {
+    // Built only by PersistedOperationsBuilder; every property is set there.
+    internal PersistedOperationsOptions() { }
+
     /// <summary>
     /// When true (the default), <c>UsePersistedOperations</c> grafts the <c>operations</c>
     /// namespace onto the schema, which is where the persisted-operation management mutations

@@ -12,6 +12,10 @@ namespace Trax.Api.GraphQL.Queries;
 /// </summary>
 public class ConfigQueries
 {
+    /// <summary>
+    /// The scheduler's current runtime settings, as this process holds them in memory (including
+    /// any change made with <c>updateScheduler</c>).
+    /// </summary>
     public SchedulerConfigSnapshot GetScheduler([Service] IOperationsService operationsService) =>
         operationsService.GetSchedulerConfig();
 

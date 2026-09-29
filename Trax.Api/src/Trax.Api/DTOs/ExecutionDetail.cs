@@ -5,9 +5,8 @@ namespace Trax.Api.DTOs;
 /// <summary>
 /// Full detail for a single execution, including the input/output payloads and stack trace
 /// that <see cref="ExecutionSummary"/> deliberately omits so paginated list reads stay lean.
-/// Backed by a single <c>trax.metadata</c> row; there is no separate junction table, so
-/// junction context is the <see cref="CurrentlyRunningJunction"/> / <see cref="FailureJunction"/>
-/// fields the framework records on the metadata itself.
+/// Junction-level context is limited to <see cref="CurrentlyRunningJunction"/> while the
+/// execution runs and <see cref="FailureJunction"/> once it has failed.
 /// </summary>
 /// <param name="Id">The execution's database id.</param>
 /// <param name="ExternalId">The execution's stable external id.</param>

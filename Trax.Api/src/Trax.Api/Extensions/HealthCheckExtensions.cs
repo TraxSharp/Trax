@@ -3,6 +3,9 @@ using Trax.Api.Services.HealthCheck;
 
 namespace Trax.Api.Extensions;
 
+/// <summary>
+/// Adds the Trax health check to ASP.NET Core health checks.
+/// </summary>
 public static class HealthCheckExtensions
 {
     /// <summary>

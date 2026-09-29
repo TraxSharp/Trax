@@ -11,6 +11,18 @@ namespace Trax.Api.GraphQL.Queries;
 /// </summary>
 public class WorkQueueQueries
 {
+    /// <summary>
+    /// A page of work queue entries, newest first. Pass the previous page's <c>nextCursor</c> as
+    /// <c>afterId</c> to page deeply; <c>skip</c> is ignored when <c>afterId</c> is set. Carries no
+    /// train input; <c>detail</c> does.
+    /// </summary>
+    /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the read.</param>
+    /// <param name="skip">How many entries to skip (negative is treated as 0).</param>
+    /// <param name="take">The page size, clamped to 1 through 500.</param>
+    /// <param name="status">Only entries in this status.</param>
+    /// <param name="trainName">Only entries for this train (matched exactly).</param>
+    /// <param name="afterId">Only entries older than this id (a keyset cursor).</param>
     public async Task<PagedResult<WorkQueueSummary>> GetWorkQueues(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
@@ -88,6 +100,9 @@ public class WorkQueueQueries
         );
     }
 
+    /// <summary>
+    /// One work queue entry by id, without its train input, or <c>null</c> when none has that id.
+    /// </summary>
     public async Task<WorkQueueSummary?> GetWorkQueue(
         long id,
         [Service] IDataContextProviderFactory dataContextFactory,

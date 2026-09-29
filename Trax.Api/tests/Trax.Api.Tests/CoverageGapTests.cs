@@ -175,54 +175,10 @@ public class CoverageGapTests
     }
 
     [Test]
-    public void QueueTrainRequest_Constructs_AndDefaultsPriority()
-    {
-        var input = JsonDocument.Parse("{\"x\": 1}").RootElement;
-        var dto = new QueueTrainRequest("MyApp.IMyTrain", input);
-
-        dto.TrainName.Should().Be("MyApp.IMyTrain");
-        dto.Priority.Should().BeNull();
-
-        var withPriority = new QueueTrainRequest("MyApp.IMyTrain", input, Priority: 10);
-        withPriority.Priority.Should().Be(10);
-    }
-
-    [Test]
-    public void RunTrainRequest_Constructs()
-    {
-        var input = JsonDocument.Parse("{}").RootElement;
-        var dto = new RunTrainRequest("IT", input);
-        dto.TrainName.Should().Be("IT");
-    }
-
-    [Test]
     public void RunTrainResponse_Constructs()
     {
         var dto = new RunTrainResponse(123);
         dto.MetadataId.Should().Be(123);
-    }
-
-    [Test]
-    public void ScheduleOnceRequest_Constructs()
-    {
-        var input = JsonDocument.Parse("{}").RootElement;
-        var dto = new ScheduleOnceRequest("IT", input, TimeSpan.FromSeconds(30));
-        dto.Delay.Should().Be(TimeSpan.FromSeconds(30));
-    }
-
-    [Test]
-    public void ScheduleOnceResponse_Constructs()
-    {
-        var dto = new ScheduleOnceResponse(7, "ext");
-        dto.ManifestId.Should().Be(7);
-        dto.ExternalId.Should().Be("ext");
-    }
-
-    [Test]
-    public void TriggerDelayedRequest_Constructs()
-    {
-        var dto = new TriggerDelayedRequest(TimeSpan.FromMinutes(5));
-        dto.Delay.Should().Be(TimeSpan.FromMinutes(5));
     }
 
     #endregion

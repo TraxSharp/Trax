@@ -32,14 +32,6 @@
     <!-- No .snupkg: DotNet.ReproducibleBuilds embeds the PDB, SourceLink included, in each DLL. -->
   </PropertyGroup>
 
-  <!-- These packages still have public members with no /// comment. Their existing summaries ship
-       now, and the undocumented members are a tracked burn-down: take a project off this list once
-       it builds clean without it. Only CS1591 (missing comment) is silenced; every other
-       doc-comment warning (malformed XML, a bad cref, a param mismatch) stays on. -->
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Api' Or '$(MSBuildProjectName)' == 'Trax.Api.GraphQL' Or '$(MSBuildProjectName)' == 'Trax.Api.GraphQL.Client' Or '$(MSBuildProjectName)' == 'Trax.Api.GraphQL.Client.Trax' Or '$(MSBuildProjectName)' == 'Trax.Api.GraphQL.Client.Typed'">
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
-  </PropertyGroup>
-
   <!-- Item conditions are evaluated after every property, so a TraxPackageReadme set in the
        project file is the one packed here. -->
   <ItemGroup Condition="$([System.String]::Copy('$(MSBuildProjectDirectory)').Replace('\','/').Contains('/src/'))">

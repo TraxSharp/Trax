@@ -15,13 +15,21 @@ namespace Trax.Api.GraphQL.Client.Trax;
 /// <see cref="TraxGraphQLClientBuilder"/>. The hosted service runs once on
 /// <see cref="StartAsync"/>.
 /// </summary>
-public sealed class GraphQLClientStartupValidator : IHostedService
+internal sealed class GraphQLClientStartupValidator : IHostedService
 {
     private readonly IGraphQLClientValidator _validator;
     private readonly IReadOnlyList<Assembly> _assemblies;
     private readonly Func<Type, bool>? _typeFilter;
     private readonly ILogger<GraphQLClientStartupValidator>? _logger;
 
+    /// <summary>
+    /// Creates the validator. <c>UseStartupValidation</c> registers it; not intended to be constructed
+    /// directly.
+    /// </summary>
+    /// <param name="validator">The client's validator.</param>
+    /// <param name="assemblies">The assemblies whose request types are validated.</param>
+    /// <param name="typeFilter">Which request types to validate; <c>null</c> for all.</param>
+    /// <param name="logger">Logs progress and the failing query; optional.</param>
     public GraphQLClientStartupValidator(
         IGraphQLClientValidator validator,
         IReadOnlyList<Assembly> assemblies,
@@ -35,6 +43,11 @@ public sealed class GraphQLClientStartupValidator : IHostedService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Validates every request type and lets a failure propagate, which stops the host from starting.
+    /// A validation failure is logged with the offending query first.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels validation.</param>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _logger?.LogInformation(
@@ -61,5 +74,7 @@ public sealed class GraphQLClientStartupValidator : IHostedService
         _logger?.LogInformation("All outbound GraphQL queries validated successfully");
     }
 
+    /// <summary>Does nothing; there is nothing to stop.</summary>
+    /// <param name="cancellationToken">Unused.</param>
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

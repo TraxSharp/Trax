@@ -5,7 +5,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
 /// <summary>
 /// GraphQL surface for a persisted operation row.
 /// </summary>
-public sealed record PersistedOperationDto(
+internal sealed record PersistedOperationDto(
     string Id,
     string? TenantKey,
     string OperationName,

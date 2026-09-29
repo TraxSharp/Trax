@@ -22,6 +22,9 @@ public class FileSchemaProvider : ISchemaProvider
     private readonly string _path;
     private readonly Lazy<Task<ISchema>> _schema;
 
+    /// <summary>Creates a provider for the SDL file at <paramref name="path"/>. The file is not read until the schema is first requested.</summary>
+    /// <param name="path">An absolute path, or one relative to the process's working directory.</param>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is null, empty or whitespace.</exception>
     public FileSchemaProvider(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -32,6 +35,7 @@ public class FileSchemaProvider : ISchemaProvider
         );
     }
 
+    /// <inheritdoc/>
     public Task<ISchema> GetSchemaAsync(CancellationToken cancellationToken = default) =>
         _schema.Value;
 

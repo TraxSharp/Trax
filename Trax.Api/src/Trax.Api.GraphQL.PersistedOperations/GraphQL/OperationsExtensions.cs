@@ -11,7 +11,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.GraphQL;
 /// <c>Trax.Api.GraphQL</c> package.
 /// </summary>
 [ExtendObjectType(typeof(OperationsQueries))]
-public sealed class OperationsQueriesPersistedOperationsExtension
+internal sealed class OperationsQueriesPersistedOperationsExtension
 {
     /// <summary>
     /// Nested namespace exposing persisted-operation queries (paged list,
@@ -25,7 +25,7 @@ public sealed class OperationsQueriesPersistedOperationsExtension
 /// side of the schema.
 /// </summary>
 [ExtendObjectType(typeof(OperationsMutations))]
-public sealed class OperationsMutationsPersistedOperationsExtension
+internal sealed class OperationsMutationsPersistedOperationsExtension
 {
     /// <summary>
     /// Nested namespace exposing persisted-operation mutations (upload,

@@ -29,6 +29,12 @@ public sealed class CrossSchemaLoader<TContext, TEntity>(
     where TContext : DbContext
     where TEntity : class
 {
+    /// <summary>
+    /// Loads every requested key in one query against a fresh context from the factory. A key with
+    /// no matching row is absent from the result, so the field resolves to <c>null</c>.
+    /// </summary>
+    /// <param name="keys">The distinct <c>Id</c> values requested in this batch.</param>
+    /// <param name="cancellationToken">Cancels the query.</param>
     protected override async Task<IReadOnlyDictionary<int, TEntity>> LoadBatchAsync(
         IReadOnlyList<int> keys,
         CancellationToken cancellationToken

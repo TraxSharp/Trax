@@ -9,6 +9,9 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration;
 /// </summary>
 public sealed partial class PersistedOperationsBuilder
 {
+    // Created by UsePersistedOperations and handed to its callback.
+    internal PersistedOperationsBuilder() { }
+
     // ----- enforcement -----
     private bool _requirePersisted = true;
     private bool _logNonPersistedRequests;

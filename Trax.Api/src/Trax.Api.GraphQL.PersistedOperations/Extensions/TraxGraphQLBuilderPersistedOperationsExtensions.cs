@@ -5,6 +5,7 @@ using HotChocolate.Execution.Caching;
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Language;
 using HotChocolate.PersistedOperations;
+using HotChocolate.Types;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -134,6 +135,27 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
             builder.ExposeOperationQueries();
             builder.ExposeOperationMutations();
             builder.AddTypeExtensions(typeof(GraphQL.PersistedOperationMutations).Assembly);
+
+            // The management types are internal, and HotChocolate infers a schema type only
+            // from a public runtime type, so each one is bound explicitly. The names and fields
+            // come from the same conventions inference would apply.
+            builder.ConfigureSchema(schema =>
+                schema
+                    .AddType<ObjectType<GraphQL.PersistedOperationQueries>>()
+                    .AddType<ObjectType<GraphQL.PersistedOperationMutations>>()
+                    .AddType<ObjectType<GraphQL.Models.PersistedOperationDto>>()
+                    .AddType<ObjectType<GraphQL.Models.PersistedOperationHistoryDto>>()
+                    .AddType<ObjectType<GraphQL.Models.PersistedOperationsPage>>()
+                    .AddType<ObjectType<GraphQL.Models.PersistedOperationError>>()
+                    .AddType<ObjectType<GraphQL.Models.PersistedOperationErrorLocation>>()
+                    .AddType<ObjectType<GraphQL.Models.UploadPersistedOperationPayload>>()
+                    .AddType<ObjectType<GraphQL.Models.DeactivatePersistedOperationPayload>>()
+                    .AddType<ObjectType<GraphQL.Models.RestorePersistedOperationPayload>>()
+                    .AddType<InputObjectType<GraphQL.Models.UploadPersistedOperationInput>>()
+                    .AddType<InputObjectType<GraphQL.Models.DeactivatePersistedOperationInput>>()
+                    .AddType<InputObjectType<GraphQL.Models.RestorePersistedOperationInput>>()
+                    .AddType<InputObjectType<GraphQL.Models.PersistedOperationFilter>>()
+            );
         }
 
         // HotChocolate cache invalidator. The schema name is captured below

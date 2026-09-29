@@ -16,7 +16,7 @@ namespace Trax.Api.GraphQL.Client.Typed;
 /// </summary>
 internal static class TypedQueryGenerator
 {
-    public sealed record GeneratedQuery(
+    internal sealed record GeneratedQuery(
         string Query,
         string OperationName,
         OperationType OperationType,
@@ -25,7 +25,7 @@ internal static class TypedQueryGenerator
         string RootField
     );
 
-    public sealed record ArgumentBinding(
+    internal sealed record ArgumentBinding(
         string VariableName,
         PropertyInfo Property,
         string GraphQLType

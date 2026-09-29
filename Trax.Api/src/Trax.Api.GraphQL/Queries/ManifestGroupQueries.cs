@@ -9,10 +9,8 @@ namespace Trax.Api.GraphQL.Queries;
 /// <summary>
 /// Queries under <c>operations.manifestGroups</c>. Holds the paginated list of manifest
 /// groups, single-group lookup, and the 1-hop cross-group dependency neighborhood used
-/// by the dashboard's DAG visualisation. The list and single-group reads hit the
-/// <c>manifest_group</c> table directly via EF; <c>graph</c> delegates to
-/// <see cref="IOperationsService"/> so the GraphQL surface and the in-process dashboard
-/// see identical nodes and edges.
+/// by the dashboard's DAG visualisation. <c>graph</c> goes through the same service the
+/// dashboard uses, so both see identical nodes and edges.
 /// </summary>
 public class ManifestGroupQueries
 {
@@ -119,8 +117,6 @@ public class ManifestGroupQueries
     /// last run per group. Batched so the dashboard's groups list fetches stats for just the
     /// visible page in one round-trip. Every requested id gets a row (zeros when it has no
     /// manifests or executions), in the order requested, so the caller can zip it to its rows.
-    /// The metadata side is served by ix_metadata_manifest_state, the manifest side by
-    /// ix_manifest_manifest_group_id.
     /// </summary>
     public async Task<IReadOnlyList<ManifestGroupStats>> GetStats(
         long[] groupIds,

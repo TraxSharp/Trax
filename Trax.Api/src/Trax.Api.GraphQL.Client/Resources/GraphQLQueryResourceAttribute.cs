@@ -26,11 +26,19 @@ namespace Trax.Api.GraphQL.Client;
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 public sealed class GraphQLQueryResourceAttribute : Attribute
 {
+    /// <summary>Names the embedded resource that holds the request's query.</summary>
+    /// <param name="resourceName">The resource file name relative to the request type's namespace, for example <c>GetPlayer.graphql</c>.</param>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty or whitespace.</exception>
     public GraphQLQueryResourceAttribute(string resourceName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceName);
         ResourceName = resourceName;
     }
 
+    /// <summary>
+    /// The resource file name. Looked up as <c>{namespace}.{name}</c>, then
+    /// <c>{assembly}.{name}</c>, then as given, with <c>/</c> and <c>\</c> read as dots, and finally by
+    /// a case-insensitive suffix match.
+    /// </summary>
     public string ResourceName { get; }
 }

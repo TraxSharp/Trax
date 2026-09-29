@@ -20,6 +20,9 @@ public sealed class AssemblySchemaProvider : ISchemaProvider
     private readonly Action<IRequestExecutorBuilder> _configure;
     private readonly Lazy<Task<ISchema>> _schema;
 
+    /// <summary>Creates a provider that builds the schema from <paramref name="configure"/> when it is first requested.</summary>
+    /// <param name="configure">Configures a HotChocolate request executor builder the same way the server does.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <c>null</c>.</exception>
     public AssemblySchemaProvider(Action<IRequestExecutorBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
@@ -30,6 +33,7 @@ public sealed class AssemblySchemaProvider : ISchemaProvider
         );
     }
 
+    /// <inheritdoc/>
     public Task<ISchema> GetSchemaAsync(CancellationToken cancellationToken = default) =>
         _schema.Value;
 

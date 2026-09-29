@@ -2,9 +2,6 @@ using NUnit.Framework;
 using Trax.Api.GraphQL.DataLoaders.CrossSchema;
 using Trax.Core.Testing;
 
-// The [Test] method names are the documentation; XML doc comments on them would be pure redundancy.
-#pragma warning disable CS1591
-
 namespace Trax.Api.GraphQL.Testing;
 
 /// <summary>
@@ -35,6 +32,10 @@ public abstract class CrossSchemaGuardFixture
     /// </summary>
     protected virtual IReadOnlyList<CrossSchemaEdge> Edges => [];
 
+    /// <summary>
+    /// Fails when an edge in <see cref="Edges"/> names a foreign key, target or field that does
+    /// not exist as declared. See <see cref="CrossSchemaGuards.EdgeManifestIsValid"/>.
+    /// </summary>
     [Test]
     public void Cross_schema_edge_manifest_is_valid()
     {
@@ -42,6 +43,10 @@ public abstract class CrossSchemaGuardFixture
         Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
     }
 
+    /// <summary>
+    /// Fails when a cross-schema <c>[ExtendObjectType]</c> resolver does not go through a
+    /// <c>CrossSchemaLoader</c>. See <see cref="CrossSchemaGuards.EdgeResolversUseLoader"/>.
+    /// </summary>
     [Test]
     public void Cross_schema_edge_resolvers_use_the_batched_loader()
     {
@@ -49,6 +54,11 @@ public abstract class CrossSchemaGuardFixture
         Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
     }
 
+    /// <summary>
+    /// Fails when a <c>[Parent]</c> resolver reads a property other than the key without declaring
+    /// it in <c>[Parent(requires: ...)]</c>. See
+    /// <see cref="CrossSchemaGuards.ExtensionResolversDeclareParentRequirements"/>.
+    /// </summary>
     [Test]
     public void Extension_resolvers_declare_what_they_read_off_their_parent()
     {

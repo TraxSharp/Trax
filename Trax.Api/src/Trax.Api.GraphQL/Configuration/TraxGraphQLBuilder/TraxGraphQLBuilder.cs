@@ -25,6 +25,11 @@ public partial class TraxGraphQLBuilder
 
     internal List<Action<IRequestExecutorBuilder>> SchemaConfigurations { get; } = [];
 
+    /// <summary>
+    /// Creates a builder over <paramref name="services"/>. <c>AddTraxGraphQL(graphql =&gt; ...)</c>
+    /// creates one and hands it to your callback; a builder constructed on its own registers nothing.
+    /// </summary>
+    /// <param name="services">The service collection the finished configuration is registered into.</param>
     public TraxGraphQLBuilder(IServiceCollection services)
     {
         Services = services;

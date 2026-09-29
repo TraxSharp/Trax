@@ -19,6 +19,9 @@ public class GraphQLDataChangeHandler : ITrainEventHandler
     private readonly ITopicEventSender _eventSender;
     private readonly ILogger<GraphQLDataChangeHandler>? _logger;
 
+    /// <summary>Creates the handler. Registered by <c>AddTraxGraphQL</c>; not intended to be constructed directly.</summary>
+    /// <param name="eventSender">HotChocolate's subscription transport.</param>
+    /// <param name="logger">Logs unrecognized domains; optional.</param>
     public GraphQLDataChangeHandler(
         ITopicEventSender eventSender,
         ILogger<GraphQLDataChangeHandler>? logger = null
@@ -28,6 +31,12 @@ public class GraphQLDataChangeHandler : ITrainEventHandler
         _logger = logger;
     }
 
+    /// <summary>
+    /// Forwards a data-change message to <c>onDataChanged</c> subscribers on this process. Ignores
+    /// every other message type, and logs and drops a message whose domain this version does not know.
+    /// </summary>
+    /// <param name="message">The broadcast message.</param>
+    /// <param name="ct">Cancels the send.</param>
     public async Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct)
     {
         if (message.EventType != TrainLifecycleEventMessage.DataChangedEventType)

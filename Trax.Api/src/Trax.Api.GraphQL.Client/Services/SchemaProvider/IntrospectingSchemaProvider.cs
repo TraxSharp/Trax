@@ -95,6 +95,8 @@ public class IntrospectingSchemaProvider : ISchemaProvider
     private readonly IGraphQLClientConfiguration _configuration;
     private readonly Lazy<Task<ISchema>> _schema;
 
+    /// <summary>Creates a provider that introspects the endpoint in <paramref name="configuration"/> when the schema is first requested.</summary>
+    /// <param name="configuration">Supplies the endpoint, HTTP client and subscription setting.</param>
     public IntrospectingSchemaProvider(IGraphQLClientConfiguration configuration)
     {
         _configuration = configuration;
@@ -104,6 +106,7 @@ public class IntrospectingSchemaProvider : ISchemaProvider
         );
     }
 
+    /// <inheritdoc/>
     public Task<ISchema> GetSchemaAsync(CancellationToken cancellationToken = default) =>
         _schema.Value;
 

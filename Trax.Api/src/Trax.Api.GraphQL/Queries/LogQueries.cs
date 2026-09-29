@@ -6,11 +6,24 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 namespace Trax.Api.GraphQL.Queries;
 
 /// <summary>
-/// Queries against <c>trax.log</c> for the dashboard's Logs page and ad-hoc API consumers.
+/// Queries over the log records trains write, for the dashboard's Logs page and ad-hoc API consumers.
 /// Reads only; logs are written by the framework.
 /// </summary>
 public class LogQueries
 {
+    /// <summary>
+    /// A page of log records written by trains, newest first. Pass the previous page's
+    /// <c>nextCursor</c> as <c>afterId</c> to page deeply; <c>skip</c> is ignored when <c>afterId</c>
+    /// is set. The total is exact whenever a filter or cursor is given.
+    /// </summary>
+    /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the read.</param>
+    /// <param name="skip">How many records to skip (negative is treated as 0).</param>
+    /// <param name="take">The page size, clamped to 1 through 500.</param>
+    /// <param name="metadataId">Only records written by this execution.</param>
+    /// <param name="minimumLevel">Only records at this level or above.</param>
+    /// <param name="category">Only records with exactly this logger category.</param>
+    /// <param name="afterId">Only records older than this id (a keyset cursor).</param>
     public async Task<PagedResult<LogEntry>> GetLogs(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,

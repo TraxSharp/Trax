@@ -11,11 +11,14 @@ namespace Trax.Api.GraphQL.Sinks;
 /// local delivery path: any WebSocket client subscribed to <c>onDataChanged</c> on this process
 /// receives one event per changed domain.
 /// </summary>
-public sealed class TopicEventSenderChangeSink : IChangeSignalSink
+internal sealed class TopicEventSenderChangeSink : IChangeSignalSink
 {
     private readonly ITopicEventSender _eventSender;
     private readonly TimeProvider _timeProvider;
 
+    /// <summary>Creates the sink. Registered by <c>AddTraxGraphQL</c>; not intended to be constructed directly.</summary>
+    /// <param name="eventSender">HotChocolate's subscription transport.</param>
+    /// <param name="timeProvider">Stamps each event's timestamp.</param>
     public TopicEventSenderChangeSink(ITopicEventSender eventSender, TimeProvider timeProvider)
     {
         _eventSender = eventSender;

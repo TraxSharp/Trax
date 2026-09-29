@@ -35,6 +35,13 @@ public sealed class TraxApiKeySocketInterceptor(
     ILogger<TraxApiKeySocketInterceptor> logger
 ) : DefaultSocketSessionInterceptor
 {
+    /// <summary>
+    /// Accepts the connection when the <c>connection_init</c> payload carries an API key that the
+    /// registered resolver maps to a principal, and rejects it otherwise.
+    /// </summary>
+    /// <param name="session">The socket session being opened.</param>
+    /// <param name="connectionInitMessage">The <c>connection_init</c> message and its payload.</param>
+    /// <param name="cancellationToken">Cancels resolution.</param>
     public override async ValueTask<ConnectionStatus> OnConnectAsync(
         ISocketSession session,
         IOperationMessagePayload connectionInitMessage,

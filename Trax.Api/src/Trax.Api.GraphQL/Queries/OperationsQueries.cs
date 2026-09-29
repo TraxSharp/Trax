@@ -37,7 +37,7 @@ public class OperationsQueries
     public ManifestGroupQueries ManifestGroups() => new();
 
     /// <summary>
-    /// Nested namespace exposing log queries (paginated reads of <c>trax.log</c>).
+    /// Nested namespace exposing log queries (paginated reads of the log records trains write).
     /// </summary>
     public LogQueries Logs() => new();
 
@@ -53,6 +53,10 @@ public class OperationsQueries
     /// </summary>
     public ConfigQueries Config() => new();
 
+    /// <summary>
+    /// The current health summary: queue depth, running and recently failed executions, and dead
+    /// letters awaiting intervention. Computed on every call.
+    /// </summary>
     public async Task<HealthStatus> GetHealth(
         [Service] ITraxHealthService healthService,
         CancellationToken ct
@@ -68,6 +72,12 @@ public class OperationsQueries
     /// </summary>
     public IReadOnlyList<string> GetAdminTrainNames() => AdminTrains.FullNames;
 
+    /// <summary>
+    /// Every train registered with this host, with its input schema, authorization requirements and
+    /// how it is exposed in GraphQL.
+    /// </summary>
+    /// <param name="discoveryService">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="hideAdminTrains">Leave out the scheduler's own internal trains (see <c>adminTrainNames</c>).</param>
     public IReadOnlyList<TrainInfo> GetTrains(
         [Service] ITrainDiscoveryService discoveryService,
         bool hideAdminTrains = false
@@ -191,6 +201,20 @@ public class OperationsQueries
             .ToList();
     }
 
+    /// <summary>
+    /// A page of manifests, newest first. Pass the previous page's <c>nextCursor</c> as
+    /// <c>afterId</c> to page deeply; <c>skip</c> is ignored when <c>afterId</c> is set. Carries no
+    /// train input; <c>manifestDetail</c> does.
+    /// </summary>
+    /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the read.</param>
+    /// <param name="skip">How many manifests to skip (negative is treated as 0).</param>
+    /// <param name="take">The page size, clamped to 1 through 500.</param>
+    /// <param name="isEnabled">Only enabled (<c>true</c>) or disabled (<c>false</c>) manifests.</param>
+    /// <param name="scheduleType">Only manifests with this schedule type.</param>
+    /// <param name="nameContains">Only manifests whose train name contains this text.</param>
+    /// <param name="afterId">Only manifests older than this id (a keyset cursor).</param>
+    /// <param name="manifestGroupId">Only manifests in this group.</param>
     public async Task<PagedResult<ManifestSummary>> GetManifests(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
@@ -276,6 +300,9 @@ public class OperationsQueries
         );
     }
 
+    /// <summary>
+    /// One manifest by id, without its train input, or <c>null</c> when none has that id.
+    /// </summary>
     public async Task<ManifestSummary?> GetManifest(
         long id,
         [Service] IDataContextProviderFactory dataContextFactory,
@@ -351,7 +378,6 @@ public class OperationsQueries
     /// <summary>
     /// Execution roll-up for a single manifest: run counts by state plus the most recent run and
     /// most recent successful run. Backs the summary cards on the dashboard's manifest detail page.
-    /// Served index-only by ix_metadata_manifest_state.
     /// </summary>
     public async Task<ManifestExecutionStats> GetManifestStats(
         long manifestId,
@@ -388,9 +414,8 @@ public class OperationsQueries
     }
 
     /// <summary>
-    /// Execution roll-up for one train, keyed by its interface FullName (the value stored in
-    /// <c>metadata.Name</c>). Backs the per-train detail page. The state grouping and
-    /// <c>ix_metadata_*</c> indexes keep this cheap even against a large metadata table.
+    /// Execution roll-up for one train, keyed by its interface FullName (the name every
+    /// execution records). Backs the per-train detail page.
     /// </summary>
     public async Task<TrainExecutionStats> GetTrainStats(
         string trainName,
@@ -432,10 +457,10 @@ public class OperationsQueries
     }
 
     /// <summary>
-    /// The processes that have executed trains, rolled up from <c>metadata</c> by
+    /// The processes that have executed trains, rolled up from the recorded executions by
     /// <c>HostInstanceId</c>: last-seen, total executions, and how many are still running. Backs the
-    /// dashboard's cluster view. This is a full aggregation over the metadata table (like the
-    /// dashboard metrics), so it is meant for occasional refresh, not a hot poll.
+    /// dashboard's cluster view. It aggregates over every recorded execution (like the dashboard
+    /// metrics), so it is meant for occasional refresh, not a hot poll.
     /// </summary>
     public async Task<IReadOnlyList<HostInfo>> GetHosts(
         [Service] IDataContextProviderFactory dataContextFactory,
@@ -479,6 +504,26 @@ public class OperationsQueries
             .ToList();
     }
 
+    /// <summary>
+    /// A page of executions. Pass the previous page's <c>nextCursor</c> as <c>afterId</c> to page
+    /// deeply in either order; <c>skip</c> is ignored when <c>afterId</c> is set. The total is exact
+    /// whenever a filter or cursor is given. Carries no input, output or stack trace;
+    /// <c>executionDetail</c> does.
+    /// </summary>
+    /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the read.</param>
+    /// <param name="skip">How many executions to skip (negative is treated as 0).</param>
+    /// <param name="take">The page size, clamped to 1 through 500.</param>
+    /// <param name="trainState">Only executions in this state.</param>
+    /// <param name="trainName">Only executions of this train (the train interface's full name, matched exactly).</param>
+    /// <param name="startedAfter">Only executions that started at or after this time (UTC).</param>
+    /// <param name="startedBefore">Only executions that started at or before this time (UTC).</param>
+    /// <param name="order">Newest first (the default) or oldest first.</param>
+    /// <param name="afterId">A keyset cursor: the page continues after this id in the chosen order.</param>
+    /// <param name="manifestId">Only executions scheduled by this manifest.</param>
+    /// <param name="manifestGroupId">Only executions scheduled by a manifest in this group.</param>
+    /// <param name="hideAdminTrains">Leave out the scheduler's own internal trains.</param>
+    /// <param name="failureClass">Only executions whose failure was classified this way.</param>
     public async Task<PagedResult<ExecutionSummary>> GetExecutions(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
@@ -598,6 +643,9 @@ public class OperationsQueries
         );
     }
 
+    /// <summary>
+    /// One execution by id, without input, output or stack trace, or <c>null</c> when none has that id.
+    /// </summary>
     public async Task<ExecutionSummary?> GetExecution(
         long id,
         [Service] IDataContextProviderFactory dataContextFactory,
@@ -628,6 +676,10 @@ public class OperationsQueries
             .FirstOrDefaultAsync(ct);
     }
 
+    /// <summary>
+    /// Full detail for one execution, including its input, output, stack trace and the number of
+    /// executions it started, or <c>null</c> when none has that id.
+    /// </summary>
     public async Task<ExecutionDetail?> GetExecutionDetail(
         long id,
         [Service] IDataContextProviderFactory dataContextFactory,
@@ -680,7 +732,7 @@ public class OperationsQueries
     }
 
     /// <summary>
-    /// Paginated child executions of a parent (metadata rows whose <c>parent_id</c> matches).
+    /// Paginated child executions of a parent: the executions it started, newest first.
     /// Keyset-paginated on id like the top-level executions list.
     /// </summary>
     public async Task<PagedResult<ExecutionSummary>> GetExecutionChildren(

@@ -13,7 +13,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.GraphQL;
 /// structured exceptions into payload <c>errors[]</c> entries with stable
 /// <c>code</c> values; mutations never throw to the client.
 /// </summary>
-public sealed class PersistedOperationMutations
+internal sealed class PersistedOperationMutations
 {
     /// <summary>
     /// Upload (insert or update) a persisted operation. Validates the

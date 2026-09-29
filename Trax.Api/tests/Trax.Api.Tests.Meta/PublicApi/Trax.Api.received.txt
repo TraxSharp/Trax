@@ -276,36 +276,10 @@ namespace Trax.Api.DTOs
         public int Take { get; init; }
         public int TotalCount { get; init; }
     }
-    public class QueueTrainRequest : System.IEquatable<Trax.Api.DTOs.QueueTrainRequest>
-    {
-        public QueueTrainRequest(string TrainName, System.Text.Json.JsonElement Input, int? Priority = default) { }
-        public System.Text.Json.JsonElement Input { get; init; }
-        public int? Priority { get; init; }
-        public string TrainName { get; init; }
-    }
-    public class RunTrainRequest : System.IEquatable<Trax.Api.DTOs.RunTrainRequest>
-    {
-        public RunTrainRequest(string TrainName, System.Text.Json.JsonElement Input) { }
-        public System.Text.Json.JsonElement Input { get; init; }
-        public string TrainName { get; init; }
-    }
     public class RunTrainResponse : System.IEquatable<Trax.Api.DTOs.RunTrainResponse>
     {
         public RunTrainResponse(long MetadataId) { }
         public long MetadataId { get; init; }
-    }
-    public class ScheduleOnceRequest : System.IEquatable<Trax.Api.DTOs.ScheduleOnceRequest>
-    {
-        public ScheduleOnceRequest(string TrainName, System.Text.Json.JsonElement Input, System.TimeSpan Delay) { }
-        public System.TimeSpan Delay { get; init; }
-        public System.Text.Json.JsonElement Input { get; init; }
-        public string TrainName { get; init; }
-    }
-    public class ScheduleOnceResponse : System.IEquatable<Trax.Api.DTOs.ScheduleOnceResponse>
-    {
-        public ScheduleOnceResponse(long ManifestId, string ExternalId) { }
-        public string ExternalId { get; init; }
-        public long ManifestId { get; init; }
     }
     public enum SortOrder
     {
@@ -356,11 +330,6 @@ namespace Trax.Api.DTOs
         public System.DateTime Timestamp { get; init; }
         public string TrainName { get; init; }
         public Trax.Effect.Enums.TrainState TrainState { get; init; }
-    }
-    public class TriggerDelayedRequest : System.IEquatable<Trax.Api.DTOs.TriggerDelayedRequest>
-    {
-        public TriggerDelayedRequest(System.TimeSpan Delay) { }
-        public System.TimeSpan Delay { get; init; }
     }
     public class UpdateManifestInput : System.IEquatable<Trax.Api.DTOs.UpdateManifestInput>
     {
@@ -468,16 +437,6 @@ namespace Trax.Api.Services.HealthCheck
     public interface ITraxHealthService
     {
         System.Threading.Tasks.Task<Trax.Api.DTOs.HealthStatus> GetHealthAsync(System.Threading.CancellationToken ct = default);
-    }
-    public class TraxHealthCheck : Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck
-    {
-        public TraxHealthCheck(Trax.Api.Services.HealthCheck.ITraxHealthService healthService) { }
-        public System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult> CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext context, System.Threading.CancellationToken ct = default) { }
-    }
-    public class TraxHealthService : Trax.Api.Services.HealthCheck.ITraxHealthService
-    {
-        public TraxHealthService(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory) { }
-        public System.Threading.Tasks.Task<Trax.Api.DTOs.HealthStatus> GetHealthAsync(System.Threading.CancellationToken ct = default) { }
     }
 }
 namespace Trax.Api.Services.Metrics

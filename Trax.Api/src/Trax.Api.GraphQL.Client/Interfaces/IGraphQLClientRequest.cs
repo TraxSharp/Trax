@@ -2,6 +2,13 @@ using System.Text.Json;
 
 namespace Trax.Api.GraphQL.Client;
 
+/// <summary>
+/// An outbound GraphQL request whose result is read as <typeparamref name="TResponse"/>. Implement it
+/// directly with a literal <c>Query</c>, or derive from <see cref="GraphQLResourceRequest{TResponse}"/>
+/// to load the query from an embedded <c>.graphql</c> file. Run it with
+/// <see cref="IGraphQLClientExecutor.Run{TReturn}"/>.
+/// </summary>
+/// <typeparam name="TResponse">The type the response data is deserialized into.</typeparam>
 public interface IGraphQLClientRequest<out TResponse> : IGenericGraphQLClientRequest
 {
     /// <summary>

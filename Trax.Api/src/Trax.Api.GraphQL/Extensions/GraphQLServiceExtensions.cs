@@ -42,6 +42,10 @@ using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Api.GraphQL.Extensions;
 
+/// <summary>
+/// Registers and maps the Trax GraphQL API. Call <c>AddTraxGraphQL</c> on the service collection
+/// after <c>AddTrax(...)</c>, then <c>UseTraxGraphQL</c> on the application to map the endpoint.
+/// </summary>
 public static class GraphQLServiceExtensions
 {
     private const string SchemaName = "trax";

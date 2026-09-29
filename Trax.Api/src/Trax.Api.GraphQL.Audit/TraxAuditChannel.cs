@@ -53,7 +53,7 @@ public sealed class TraxAuditChannel : IDisposable
     /// when accepted, <c>false</c> when dropped (channel full). Drops increment
     /// the <c>trax.audit.dropped</c> meter and emit a throttled warning log.
     /// </summary>
-    public bool TryEnqueue(TraxAuditEntry entry)
+    internal bool TryEnqueue(TraxAuditEntry entry)
     {
         if (_channel.Writer.TryWrite(entry))
             return true;
@@ -76,10 +76,10 @@ public sealed class TraxAuditChannel : IDisposable
     }
 
     /// <summary>Consumer read stream. Only the writer service reads from this.</summary>
-    public ChannelReader<TraxAuditEntry> Reader => _channel.Reader;
+    internal ChannelReader<TraxAuditEntry> Reader => _channel.Reader;
 
     /// <summary>Signals no more entries will be enqueued (used on shutdown).</summary>
-    public void Complete() => _channel.Writer.TryComplete();
+    internal void Complete() => _channel.Writer.TryComplete();
 
     /// <summary>Observed total dropped count since process start. For tests and diagnostics.</summary>
     public long TotalDropped => Interlocked.Read(ref _totalDropped);

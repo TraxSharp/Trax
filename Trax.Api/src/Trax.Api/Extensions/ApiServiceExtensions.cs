@@ -9,6 +9,10 @@ using Trax.Mediator.Services.TrainAuthorization;
 
 namespace Trax.Api.Extensions;
 
+/// <summary>
+/// Registers the services behind the Trax GraphQL API. <c>AddTraxGraphQL</c> calls
+/// <see cref="AddTraxApi"/> for you.
+/// </summary>
 public static class ApiServiceExtensions
 {
     /// <summary>

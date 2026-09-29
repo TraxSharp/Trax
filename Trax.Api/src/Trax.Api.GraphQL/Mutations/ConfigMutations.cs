@@ -9,6 +9,13 @@ namespace Trax.Api.GraphQL.Mutations;
 /// </summary>
 public class ConfigMutations
 {
+    /// <summary>
+    /// Changes the scheduler's runtime settings. Only the fields you set change; the rest keep their
+    /// current values. The change takes effect at once in this process and is saved so it
+    /// survives a restart. On success <c>count</c> is the number of fields that changed. A value
+    /// outside the range the scheduler can run with refuses the whole patch: the result reports
+    /// failure, names each offending field, and nothing is applied.
+    /// </summary>
     public async Task<OperationResponse> UpdateScheduler(
         UpdateSchedulerConfigInput input,
         [Service] IOperationsService operationsService,

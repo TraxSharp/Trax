@@ -16,9 +16,13 @@ namespace Trax.Api.GraphQL.Extensions;
 /// type.
 /// </para>
 /// </remarks>
-public sealed class TraxApplicationServices(IServiceProvider services)
+public sealed class TraxApplicationServices
 {
+    // Built only by AddTraxGraphQL around the application container. A host resolves it; it
+    // never wraps another provider in one.
+    internal TraxApplicationServices(IServiceProvider services) =>
+        Services = services ?? throw new ArgumentNullException(nameof(services));
+
     /// <summary>The application container, with the host's scoped registrations.</summary>
-    public IServiceProvider Services { get; } =
-        services ?? throw new ArgumentNullException(nameof(services));
+    public IServiceProvider Services { get; }
 }

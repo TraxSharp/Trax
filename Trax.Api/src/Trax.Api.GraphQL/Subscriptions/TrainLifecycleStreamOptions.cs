@@ -27,5 +27,5 @@ public sealed class TrainLifecycleStreamOptions
     /// When <c>true</c>, every train's lifecycle is streamed regardless of <c>[TraxBroadcast]</c>.
     /// When <c>false</c> (default), only <c>[TraxBroadcast]</c> trains are streamed.
     /// </summary>
-    public bool StreamAllTrains { get; init; }
+    public bool StreamAllTrains { get; internal init; }
 }

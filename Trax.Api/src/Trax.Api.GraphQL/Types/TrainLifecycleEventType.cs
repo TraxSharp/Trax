@@ -9,8 +9,9 @@ namespace Trax.Api.GraphQL.Types;
 /// The raw <c>Output</c> string is hidden; a resolver-based <c>output</c> field
 /// lazily parses it into a JSON scalar only when the client selects it.
 /// </summary>
-public class TrainLifecycleEventType : ObjectType<TrainLifecycleEvent>
+internal class TrainLifecycleEventType : ObjectType<TrainLifecycleEvent>
 {
+    /// <inheritdoc/>
     protected override void Configure(IObjectTypeDescriptor<TrainLifecycleEvent> descriptor)
     {
         descriptor.BindFieldsExplicitly();
@@ -47,7 +48,7 @@ public class TrainLifecycleEventType : ObjectType<TrainLifecycleEvent>
 /// Useful for custom resolvers or lifecycle event handlers that need to deserialize
 /// raw JSON output strings into structured objects.
 /// </summary>
-public static class JsonElementConverter
+internal static class JsonElementConverter
 {
     /// <summary>
     /// Parses a JSON string and converts it into native .NET types

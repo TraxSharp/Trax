@@ -16,8 +16,17 @@ public abstract class TypedRequest<TResponse> : IGraphQLClientRequest<TResponse>
         TypedQueryGenerator.GeneratedQuery
     > GeneratedQueryCache = new();
 
+    /// <summary>
+    /// The query generated from the request and result types, built on first access and cached per
+    /// request type. Throws <see cref="InvalidOperationException"/> when the request lacks
+    /// <see cref="GraphQLOperationAttribute"/> or the result type lacks <see cref="GraphQLTypeAttribute"/>.
+    /// </summary>
     public virtual string Query => GetOrGenerate().Query;
 
+    /// <summary>
+    /// A dictionary of every <see cref="GraphQLArgumentAttribute"/> property's current value, keyed by
+    /// variable name; <c>null</c> when the request declares no arguments.
+    /// </summary>
     public virtual object? Variables
     {
         get

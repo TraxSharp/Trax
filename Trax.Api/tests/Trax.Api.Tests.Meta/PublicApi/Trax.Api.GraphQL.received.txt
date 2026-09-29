@@ -2,7 +2,6 @@ namespace Trax.Api.GraphQL.Configuration
 {
     public class GraphQLConfiguration
     {
-        public GraphQLConfiguration(System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Configuration.QueryModelRegistration> modelRegistrations, System.Collections.Generic.IReadOnlyList<System.Type> additionalTypeModules, System.Collections.Generic.IReadOnlyList<System.Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder>> schemaConfigurations, System.Collections.Generic.IReadOnlyList<System.Type> additionalTypeExtensions, int maxExecutionDepth = 15, System.Action<HotChocolate.CostAnalysis.CostOptions>? costOverride = null, System.Predicate<Microsoft.AspNetCore.Http.HttpContext>? introspectionPredicate = null, int maxOperationsPerRequest = 50, bool authorizationRequired = false, string? authorizationPolicy = null, bool operationQueriesExposed = false, bool operationMutationsExposed = false, System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Filtering.ITraxFilterModule>? filterModules = null, System.Collections.Generic.IReadOnlyList<Trax.Effect.Attributes.TraxAuthorizeAttribute>? operationsAuthorizeAttributes = null) { }
         public int MaxExecutionDepth { get; }
         public int MaxOperationsPerConnection { get; }
         public int MaxOperationsPerRequest { get; }
@@ -12,21 +11,19 @@ namespace Trax.Api.GraphQL.Configuration
     }
     public class QueryModelRegistration : System.IEquatable<Trax.Api.GraphQL.Configuration.QueryModelRegistration>
     {
-        public QueryModelRegistration(System.Type EntityType, System.Type DbContextType, Trax.Effect.Attributes.TraxQueryModelAttribute Attribute, System.Type? FilterInputType = null, System.Type? SortInputType = null, System.Collections.Generic.IReadOnlyList<Trax.Effect.Attributes.TraxAuthorizeAttribute>? AuthorizeAttributes = null, bool AllowAnonymous = false) { }
-        public bool AllowAnonymous { get; init; }
-        public Trax.Effect.Attributes.TraxQueryModelAttribute Attribute { get; init; }
-        public System.Collections.Generic.IReadOnlyList<Trax.Effect.Attributes.TraxAuthorizeAttribute> AuthorizeAttributes { get; init; }
-        public System.Type DbContextType { get; init; }
-        public System.Type EntityType { get; init; }
-        public System.Type? FilterInputType { get; init; }
-        public System.Type? SortInputType { get; init; }
+        public bool AllowAnonymous { get; }
+        public Trax.Effect.Attributes.TraxQueryModelAttribute Attribute { get; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Effect.Attributes.TraxAuthorizeAttribute> AuthorizeAttributes { get; }
+        public System.Type DbContextType { get; }
+        public System.Type EntityType { get; }
+        public System.Type? FilterInputType { get; }
+        public System.Type? SortInputType { get; }
     }
 }
 namespace Trax.Api.GraphQL.Configuration.TraxFilterBuilder
 {
     public class TraxFilterBuilder
     {
-        public TraxFilterBuilder() { }
         public Trax.Api.GraphQL.Configuration.TraxFilterBuilder.TraxFilterBuilder AddCaseInsensitiveStringOperations() { }
     }
 }
@@ -100,17 +97,11 @@ namespace Trax.Api.GraphQL.Extensions
     }
     public sealed class TraxApplicationServices
     {
-        public TraxApplicationServices(System.IServiceProvider services) { }
         public System.IServiceProvider Services { get; }
     }
 }
 namespace Trax.Api.GraphQL.Filtering
 {
-    public sealed class CaseInsensitiveStringFilterModule : Trax.Api.GraphQL.Filtering.ITraxFilterModule
-    {
-        public CaseInsensitiveStringFilterModule() { }
-        public void Apply(HotChocolate.Data.Filters.IFilterConventionDescriptor descriptor) { }
-    }
     public interface ITraxFilterModule
     {
         void Apply(HotChocolate.Data.Filters.IFilterConventionDescriptor descriptor);
@@ -271,14 +262,6 @@ namespace Trax.Api.GraphQL.Queries
         public System.Threading.Tasks.Task<Trax.Api.DTOs.PagedResult<Trax.Api.DTOs.WorkQueueSummary>> GetWorkQueues([HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct, int skip = 0, int take = 25, Trax.Effect.Enums.WorkQueueStatus? status = default, string? trainName = null, long? afterId = default) { }
     }
 }
-namespace Trax.Api.GraphQL.Sinks
-{
-    public sealed class TopicEventSenderChangeSink : Trax.Effect.Services.ChangeSignal.IChangeSignalSink
-    {
-        public TopicEventSenderChangeSink(HotChocolate.Subscriptions.ITopicEventSender eventSender, System.TimeProvider timeProvider) { }
-        public System.Threading.Tasks.Task FlushAsync(System.Collections.Generic.IReadOnlyCollection<Trax.Effect.Services.ChangeSignal.ChangeDomain> domains, System.Threading.CancellationToken ct) { }
-    }
-}
 namespace Trax.Api.GraphQL.Subscriptions
 {
     public class LifecycleSubscriptions
@@ -300,7 +283,7 @@ namespace Trax.Api.GraphQL.Subscriptions
     public sealed class TrainLifecycleStreamOptions
     {
         public TrainLifecycleStreamOptions() { }
-        public bool StreamAllTrains { get; init; }
+        public bool StreamAllTrains { get; }
     }
     public sealed class TraxApiKeySocketInterceptor : HotChocolate.AspNetCore.DefaultSocketSessionInterceptor
     {
@@ -327,27 +310,9 @@ namespace Trax.Api.GraphQL.Subscriptions
 }
 namespace Trax.Api.GraphQL.TypeModules
 {
-    public sealed class QueryModelTypeModule : HotChocolate.Execution.Configuration.TypeModule
-    {
-        public QueryModelTypeModule(Trax.Api.GraphQL.Configuration.GraphQLConfiguration configuration) { }
-        public override System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyCollection<HotChocolate.Types.ITypeSystemMember>> CreateTypesAsync(HotChocolate.Types.Descriptors.IDescriptorContext context, System.Threading.CancellationToken cancellationToken) { }
-    }
     public class TrainTypeModule : HotChocolate.Execution.Configuration.TypeModule
     {
         public TrainTypeModule(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Api.GraphQL.Configuration.GraphQLConfiguration? graphQLConfiguration = null) { }
         public override System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyCollection<HotChocolate.Types.ITypeSystemMember>> CreateTypesAsync(HotChocolate.Types.Descriptors.IDescriptorContext context, System.Threading.CancellationToken cancellationToken) { }
-    }
-}
-namespace Trax.Api.GraphQL.Types
-{
-    public static class JsonElementConverter
-    {
-        public static object? ConvertElement(System.Text.Json.JsonElement element) { }
-        public static object? ToObject(string json) { }
-    }
-    public class TrainLifecycleEventType : HotChocolate.Types.ObjectType<Trax.Api.DTOs.TrainLifecycleEvent>
-    {
-        public TrainLifecycleEventType() { }
-        protected override void Configure(HotChocolate.Types.IObjectTypeDescriptor<Trax.Api.DTOs.TrainLifecycleEvent> descriptor) { }
     }
 }

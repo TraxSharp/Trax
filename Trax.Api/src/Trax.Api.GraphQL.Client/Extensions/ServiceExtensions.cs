@@ -4,6 +4,11 @@ using Microsoft.Extensions.Logging;
 
 namespace Trax.Api.GraphQL.Client;
 
+/// <summary>
+/// Registers the Trax GraphQL client kernel, which validates outbound queries against the server's
+/// schema and runs them. Start with <c>AddTraxGraphQLClient</c>, then resolve
+/// <see cref="IGraphQLClientExecutor"/>.
+/// </summary>
 public static class ServiceExtensions
 {
     /// <summary>

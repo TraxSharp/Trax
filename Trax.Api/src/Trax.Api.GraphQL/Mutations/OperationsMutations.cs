@@ -34,6 +34,10 @@ public class OperationsMutations
     /// </summary>
     public ConfigMutations Config() => new();
 
+    /// <summary>
+    /// Queues an immediate run of the manifest with this external id, outside its normal schedule,
+    /// which continues unaffected. An unknown external id fails the mutation with an error.
+    /// </summary>
     public async Task<OperationResponse> TriggerManifest(
         string externalId,
         [Service] ITraxScheduler scheduler,
@@ -44,6 +48,11 @@ public class OperationsMutations
         return new OperationResponse(true, Message: "Manifest triggered");
     }
 
+    /// <summary>
+    /// Queues a run of the manifest with this external id that becomes eligible for dispatch once
+    /// <c>delay</c> has passed (an ISO-8601 duration such as <c>PT5M</c>). The normal schedule
+    /// continues unaffected. An unknown external id fails the mutation with an error.
+    /// </summary>
     public async Task<OperationResponse> TriggerManifestDelayed(
         string externalId,
         TimeSpan delay,
@@ -55,6 +64,11 @@ public class OperationsMutations
         return new OperationResponse(true, Message: $"Manifest triggered with {delay} delay");
     }
 
+    /// <summary>
+    /// Disables the manifest with this external id so the scheduler stops running it. The manifest
+    /// is kept; <c>enableManifest</c> turns it back on. An unknown external id fails the mutation
+    /// with an error.
+    /// </summary>
     public async Task<OperationResponse> DisableManifest(
         string externalId,
         [Service] ITraxScheduler scheduler,
@@ -65,6 +79,10 @@ public class OperationsMutations
         return new OperationResponse(true, Message: "Manifest disabled");
     }
 
+    /// <summary>
+    /// Enables the manifest with this external id so the scheduler runs it again. An unknown external
+    /// id fails the mutation with an error.
+    /// </summary>
     public async Task<OperationResponse> EnableManifest(
         string externalId,
         [Service] ITraxScheduler scheduler,
@@ -75,6 +93,12 @@ public class OperationsMutations
         return new OperationResponse(true, Message: "Manifest enabled");
     }
 
+    /// <summary>
+    /// Requests cancellation of every pending and running execution of the manifest with this
+    /// external id. A running train stops at its next junction boundary and ends Cancelled, and is
+    /// not retried. <c>count</c> is the number of executions flagged. An unknown external id fails
+    /// the mutation with an error.
+    /// </summary>
     public async Task<OperationResponse> CancelManifest(
         string externalId,
         [Service] ITraxScheduler scheduler,
@@ -85,6 +109,11 @@ public class OperationsMutations
         return new OperationResponse(true, Count: count, Message: "Cancellation requested");
     }
 
+    /// <summary>
+    /// Queues an immediate run of every enabled manifest in the group that can run on its own.
+    /// Dependent manifests are skipped, since they run after their parent. <c>count</c> is the number
+    /// of manifests queued.
+    /// </summary>
     public async Task<OperationResponse> TriggerGroup(
         long groupId,
         [Service] ITraxScheduler scheduler,
@@ -95,6 +124,10 @@ public class OperationsMutations
         return new OperationResponse(true, Count: count, Message: $"{count} manifest(s) triggered");
     }
 
+    /// <summary>
+    /// Requests cancellation of every pending and running execution of every manifest in the group.
+    /// <c>count</c> is the number of executions flagged.
+    /// </summary>
     public async Task<OperationResponse> CancelGroup(
         long groupId,
         [Service] ITraxScheduler scheduler,
@@ -110,10 +143,10 @@ public class OperationsMutations
     }
 
     /// <summary>
-    /// Requests cancellation of a single execution by metadata id. Sets the durable
-    /// <c>cancel_requested</c> flag on the row (only when it is still Pending or InProgress);
-    /// an in-process runner observes it and transitions the train to Cancelled. Returns the
-    /// number of rows flagged (0 if the execution is already terminal or missing).
+    /// Requests cancellation of a single execution by id, when it is still pending or in
+    /// progress. The request is durable: the process running the train sees it and ends the run
+    /// as Cancelled. <c>count</c> is 1 when the execution was flagged and 0 when it is already
+    /// finished or does not exist.
     /// </summary>
     public async Task<OperationResponse> CancelExecution(
         long id,
@@ -140,8 +173,9 @@ public class OperationsMutations
     }
 
     /// <summary>
-    /// Re-queues an execution: reads its train name + input from the metadata row and enqueues
-    /// a fresh work queue entry for the dispatcher, mirroring the dashboard's Re-queue action.
+    /// Re-queues an execution: queues a fresh run of the same train with the input the execution
+    /// recorded, mirroring the dashboard's Re-queue action. Fails without queueing when the
+    /// execution does not exist, recorded no input, or recorded only a truncated placeholder.
     /// </summary>
     public async Task<OperationResponse> RequeueExecution(
         long id,

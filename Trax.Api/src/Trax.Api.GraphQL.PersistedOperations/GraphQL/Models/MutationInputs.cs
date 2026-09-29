@@ -1,14 +1,14 @@
 namespace Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
 
 /// <summary>Input for the <c>deactivatePersistedOperation</c> mutation.</summary>
-public sealed record DeactivatePersistedOperationInput(
+internal sealed record DeactivatePersistedOperationInput(
     string Id,
     string Reason,
     string? TenantKey = null
 );
 
 /// <summary>Result of <c>deactivatePersistedOperation</c>.</summary>
-public sealed record DeactivatePersistedOperationPayload(
+internal sealed record DeactivatePersistedOperationPayload(
     PersistedOperationDto? Operation,
     IReadOnlyList<PersistedOperationError> Errors
 )
@@ -18,10 +18,10 @@ public sealed record DeactivatePersistedOperationPayload(
 }
 
 /// <summary>Input for the <c>restorePersistedOperation</c> mutation.</summary>
-public sealed record RestorePersistedOperationInput(string Id, string? TenantKey = null);
+internal sealed record RestorePersistedOperationInput(string Id, string? TenantKey = null);
 
 /// <summary>Result of <c>restorePersistedOperation</c>.</summary>
-public sealed record RestorePersistedOperationPayload(
+internal sealed record RestorePersistedOperationPayload(
     PersistedOperationDto? Operation,
     IReadOnlyList<PersistedOperationError> Errors
 )
@@ -31,14 +31,14 @@ public sealed record RestorePersistedOperationPayload(
 }
 
 /// <summary>Filter for the <c>persistedOperations</c> query.</summary>
-public sealed record PersistedOperationFilter(
+internal sealed record PersistedOperationFilter(
     bool? IsActive = null,
     string? TenantKey = null,
     string? IdStartsWith = null
 );
 
 /// <summary>Paged result for the <c>persistedOperations</c> query.</summary>
-public sealed record PersistedOperationsPage(
+internal sealed record PersistedOperationsPage(
     IReadOnlyList<PersistedOperationDto> Items,
     int TotalCount
 );

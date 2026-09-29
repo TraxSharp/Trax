@@ -4,13 +4,24 @@ namespace Trax.Api.GraphQL.Client.Trax;
 
 /// <summary>
 /// Walks an assembly for <see cref="TraxOutboundQueryAttribute"/>-decorated request types and
-/// returns a flat mapping of (request type -> endpoint name). Used by dashboard discovery; the
-/// same data can be exported as JSON for tooling.
+/// returns a flat mapping of (request type -> endpoint name), for tooling that reports which
+/// external endpoints an app calls. Nothing in Trax calls it today.
 /// </summary>
 public static class OutboundQueryDiscovery
 {
+    /// <summary>One request type marked with <see cref="TraxOutboundQueryAttribute"/>.</summary>
+    /// <param name="RequestType">The request type.</param>
+    /// <param name="Endpoint">The logical endpoint name from the attribute.</param>
+    /// <param name="QueryName">The operation name parsed from the request's query, or <c>null</c> when it is anonymous, not a query or mutation, or cannot be read.</param>
     public sealed record Entry(Type RequestType, string Endpoint, string? QueryName);
 
+    /// <summary>
+    /// Returns every concrete request type in <paramref name="assemblies"/> that carries
+    /// <see cref="TraxOutboundQueryAttribute"/>. Request types are created without running a
+    /// constructor to read their query.
+    /// </summary>
+    /// <param name="assemblies">The assemblies to scan.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="assemblies"/> is <c>null</c>.</exception>
     public static IReadOnlyList<Entry> Discover(params Assembly[] assemblies)
     {
         ArgumentNullException.ThrowIfNull(assemblies);

@@ -8,7 +8,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
 /// to the GraphQL caller; failures are returned in the <c>errors</c> field
 /// with a stable <c>code</c> so clients can branch without string-matching.
 /// </summary>
-public sealed record PersistedOperationError(
+internal sealed record PersistedOperationError(
     string Code,
     string Message,
     IReadOnlyList<PersistedOperationErrorLocation>? Locations,
@@ -79,4 +79,4 @@ public sealed record PersistedOperationError(
 }
 
 /// <summary>1-based location in the candidate document.</summary>
-public sealed record PersistedOperationErrorLocation(int Line, int Column);
+internal sealed record PersistedOperationErrorLocation(int Line, int Column);

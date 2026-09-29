@@ -12,6 +12,11 @@ namespace Trax.Api.GraphQL.Configuration;
 /// </summary>
 public class GraphQLConfiguration
 {
+    /// <summary>
+    /// Every entity discovered through <c>AddDbContext&lt;T&gt;()</c> that carries
+    /// <c>[TraxQueryModel]</c>, one registration per entity. A consumer's own type module can read
+    /// it to extend the generated query types.
+    /// </summary>
     public IReadOnlyList<QueryModelRegistration> ModelRegistrations { get; }
 
     /// <summary>
@@ -126,7 +131,25 @@ public class GraphQLConfiguration
     /// </summary>
     internal IReadOnlyList<string>? SocketAllowedOrigins { get; init; }
 
-    public GraphQLConfiguration(
+    /// <summary>
+    /// Creates the configuration. <see cref="Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder"/>
+    /// builds it from the builder calls; hosts receive it from DI rather than constructing it.
+    /// </summary>
+    /// <param name="modelRegistrations">The discovered <c>[TraxQueryModel]</c> entities.</param>
+    /// <param name="additionalTypeModules">Type module types added with <c>AddTypeModule&lt;T&gt;()</c>.</param>
+    /// <param name="schemaConfigurations">Callbacks added with <c>ConfigureSchema()</c>, applied to the request executor builder.</param>
+    /// <param name="additionalTypeExtensions">Type extension types added with <c>AddTypeExtension&lt;T&gt;()</c> or <c>AddTypeExtensions(assembly)</c>.</param>
+    /// <param name="maxExecutionDepth">The deepest query accepted; deeper queries fail validation.</param>
+    /// <param name="costOverride">An optional cost-analysis override, applied after the Trax defaults.</param>
+    /// <param name="introspectionPredicate">Decides per request whether introspection is allowed; <c>null</c> allows it in Development only.</param>
+    /// <param name="maxOperationsPerRequest">The most top-level selections one request may carry.</param>
+    /// <param name="authorizationRequired">Whether <c>RequireAuthorization()</c> was called, so every execution needs an authorized caller.</param>
+    /// <param name="authorizationPolicy">The policy that gate applies, or <c>null</c> for the combined Trax auth policy.</param>
+    /// <param name="operationQueriesExposed">Whether the <c>operations</c> query namespace is in the schema.</param>
+    /// <param name="operationMutationsExposed">Whether the <c>operations</c> mutation namespace is in the schema.</param>
+    /// <param name="filterModules">Filter convention modules added with <c>ConfigureFiltering()</c>; <c>null</c> for none.</param>
+    /// <param name="operationsAuthorizeAttributes">The authorization shapes that gate the <c>operations</c> namespace; <c>null</c> for no namespace gate of its own.</param>
+    internal GraphQLConfiguration(
         IReadOnlyList<QueryModelRegistration> modelRegistrations,
         IReadOnlyList<Type> additionalTypeModules,
         IReadOnlyList<Action<IRequestExecutorBuilder>> schemaConfigurations,

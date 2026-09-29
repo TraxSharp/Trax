@@ -10,6 +10,16 @@ namespace Trax.Api.GraphQL.Queries;
 /// </summary>
 public class DeadLetterQueries
 {
+    /// <summary>
+    /// A page of dead letters, newest first. Pass the previous page's <c>nextCursor</c> as
+    /// <c>afterId</c> to page deeply; <c>skip</c> is ignored when <c>afterId</c> is set.
+    /// </summary>
+    /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the read.</param>
+    /// <param name="skip">How many dead letters to skip (negative is treated as 0).</param>
+    /// <param name="take">The page size, clamped to 1 through 500.</param>
+    /// <param name="status">Only dead letters in this status; <c>null</c> for all.</param>
+    /// <param name="afterId">Only dead letters older than this id (a keyset cursor).</param>
     public async Task<PagedResult<DeadLetterSummary>> GetDeadLetters(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
@@ -67,6 +77,9 @@ public class DeadLetterQueries
         );
     }
 
+    /// <summary>
+    /// One dead letter by id, or <c>null</c> when none has that id.
+    /// </summary>
     public async Task<DeadLetterSummary?> GetDeadLetter(
         long id,
         [Service] IDataContextProviderFactory dataContextFactory,

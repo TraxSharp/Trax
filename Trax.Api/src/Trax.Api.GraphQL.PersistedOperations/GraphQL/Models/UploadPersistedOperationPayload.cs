@@ -4,7 +4,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
 /// Result of <c>uploadPersistedOperation</c>. Exactly one of
 /// <see cref="Operation"/> and <see cref="Errors"/> is populated.
 /// </summary>
-public sealed record UploadPersistedOperationPayload(
+internal sealed record UploadPersistedOperationPayload(
     PersistedOperationDto? Operation,
     IReadOnlyList<PersistedOperationError> Errors
 )

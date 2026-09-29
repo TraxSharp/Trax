@@ -32,6 +32,9 @@ public sealed partial class PersistedOperationsBuilder
 /// </summary>
 public sealed class CacheOptions
 {
+    // Created by WithInMemoryCache and handed to its callback.
+    internal CacheOptions() { }
+
     /// <summary>
     /// Time-to-live for cached entries. Defaults to 15 minutes when null.
     /// Acts as a backstop only; broadcast invalidation is the primary

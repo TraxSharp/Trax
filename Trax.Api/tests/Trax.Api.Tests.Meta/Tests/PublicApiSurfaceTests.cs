@@ -27,9 +27,9 @@ public class PublicApiSurfaceTests
 
     public static IEnumerable<TestCaseData> Assemblies()
     {
-        yield return new TestCaseData(typeof(Trax.Api.DTOs.RunTrainRequest).Assembly).SetName(
-            "Trax.Api"
-        );
+        yield return new TestCaseData(
+            typeof(Trax.Api.Exceptions.TrainAuthorizationException).Assembly
+        ).SetName("Trax.Api");
         yield return new TestCaseData(typeof(Trax.Api.Auth.TraxPrincipal).Assembly).SetName(
             "Trax.Api.Auth"
         );
@@ -40,7 +40,7 @@ public class PublicApiSurfaceTests
             typeof(Trax.Api.GraphQL.PersistedOperations.IPersistedOperationsCapability).Assembly
         ).SetName("Trax.Api.GraphQL.PersistedOperations");
         yield return new TestCaseData(
-            typeof(Trax.Api.GraphQL.Client.GraphQLClientConfiguration).Assembly
+            typeof(Trax.Api.GraphQL.Client.GraphQLClientConfigurationBuilder).Assembly
         ).SetName("Trax.Api.GraphQL.Client");
     }
 

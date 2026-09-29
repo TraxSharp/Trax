@@ -5,7 +5,11 @@ using GraphQLParser.AST;
 
 namespace Trax.Api.GraphQL.Client;
 
-public class GraphQLClientValidator : IGraphQLClientValidator
+/// <summary>
+/// The default <see cref="IGraphQLClientValidator"/>, registered by <c>AddTraxGraphQLClient</c>.
+/// Infrastructure not intended to be used directly; depend on <see cref="IGraphQLClientValidator"/>.
+/// </summary>
+internal class GraphQLClientValidator : IGraphQLClientValidator
 {
     private readonly ISchemaProvider _schemaProvider;
     private readonly DocumentValidator _validator = new();
@@ -13,11 +17,14 @@ public class GraphQLClientValidator : IGraphQLClientValidator
 
     internal ConcurrentDictionary<string, OperationType> CachedQueries { get; } = new();
 
+    /// <summary>Creates a validator that checks queries against the schema from <paramref name="schemaProvider"/>.</summary>
+    /// <param name="schemaProvider">Supplies the schema.</param>
     public GraphQLClientValidator(ISchemaProvider schemaProvider)
     {
         _schemaProvider = schemaProvider;
     }
 
+    /// <inheritdoc/>
     public async Task<OperationType> ValidateAsync(
         string query,
         CancellationToken cancellationToken = default

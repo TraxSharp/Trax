@@ -12,7 +12,14 @@ namespace Trax.Api.GraphQL.Client;
 /// </summary>
 public abstract class GraphQLResourceRequest<TResponse> : IGraphQLClientRequest<TResponse>
 {
+    /// <summary>
+    /// The query text from the embedded resource named by <see cref="GraphQLQueryResourceAttribute"/>,
+    /// loaded on first access and cached per request type. Throws
+    /// <see cref="InvalidOperationException"/> when the attribute is missing or no matching resource
+    /// exists.
+    /// </summary>
     public virtual string Query => ResourceQueryCache.GetQuery(GetType());
 
+    /// <summary>The operation's variables; <c>null</c> unless a subclass overrides it.</summary>
     public virtual object? Variables => null;
 }

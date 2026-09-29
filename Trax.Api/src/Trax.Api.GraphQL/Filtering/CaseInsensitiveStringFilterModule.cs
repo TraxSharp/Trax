@@ -14,8 +14,9 @@ namespace Trax.Api.GraphQL.Filtering;
 /// <c>lower(col)</c> expression index. The existing case-sensitive <c>contains</c> /
 /// <c>eq</c> operations are untouched; callers opt in per query by choosing the operator.
 /// </summary>
-public sealed class CaseInsensitiveStringFilterModule : ITraxFilterModule
+internal sealed class CaseInsensitiveStringFilterModule : ITraxFilterModule
 {
+    /// <inheritdoc/>
     public void Apply(IFilterConventionDescriptor descriptor)
     {
         descriptor.Operation(TraxFilterOperations.IContains).Name("icontains");

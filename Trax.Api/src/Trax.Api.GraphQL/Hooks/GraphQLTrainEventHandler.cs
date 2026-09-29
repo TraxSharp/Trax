@@ -13,7 +13,9 @@ namespace Trax.Api.GraphQL.Hooks;
 /// and forwards them to HotChocolate's in-memory subscription transport.
 /// This bridges the gap between worker processes (where trains execute)
 /// and hub processes (where GraphQL subscriptions live).
-/// Only trains decorated with <c>[TraxBroadcast]</c> have their events forwarded.
+/// Only trains decorated with <c>[TraxBroadcast]</c> have their events forwarded, unless the
+/// operations surface is exposed, in which case every train is (see
+/// <see cref="TrainLifecycleStreamOptions"/>).
 /// </summary>
 public class GraphQLTrainEventHandler : ITrainEventHandler
 {
@@ -22,6 +24,14 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
     private readonly bool _streamAllTrains;
     private readonly HashSet<string> _enabledTrains;
 
+    /// <summary>
+    /// Creates the handler and captures, once, the set of trains marked <c>[TraxBroadcast]</c>.
+    /// Registered by <c>AddTraxGraphQL</c>; not intended to be constructed directly.
+    /// </summary>
+    /// <param name="eventSender">HotChocolate's subscription transport.</param>
+    /// <param name="discoveryService">Supplies the registered trains.</param>
+    /// <param name="options">Decides whether every train is forwarded or only broadcast ones.</param>
+    /// <param name="logger">Logs unknown event types; optional.</param>
     public GraphQLTrainEventHandler(
         ITopicEventSender eventSender,
         ITrainDiscoveryService discoveryService,
@@ -43,6 +53,13 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
     private bool ShouldForward(string trainName) =>
         _streamAllTrains || _enabledTrains.Contains(trainName);
 
+    /// <summary>
+    /// Forwards a lifecycle message from another process to the matching lifecycle subscription on
+    /// this process. Skips data-change messages, trains that are not forwarded, and unknown event
+    /// types (logged). An unparseable train state is sent as <c>Pending</c>.
+    /// </summary>
+    /// <param name="message">The broadcast message.</param>
+    /// <param name="ct">Cancels the send.</param>
     public async Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct)
     {
         // Data-change signals ride the same transport but are handled by GraphQLDataChangeHandler.

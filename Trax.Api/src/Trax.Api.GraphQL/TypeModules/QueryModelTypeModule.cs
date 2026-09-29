@@ -25,7 +25,7 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// field under <c>discover</c> with optional cursor pagination, filtering,
 /// sorting, and projection based on the attribute configuration.
 /// </summary>
-public sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModule
+internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) : TypeModule
 {
     /// <summary>
     /// Discovers all registered query model entities and generates the GraphQL schema types:

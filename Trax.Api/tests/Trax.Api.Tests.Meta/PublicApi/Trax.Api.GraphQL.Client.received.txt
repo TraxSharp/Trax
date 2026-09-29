@@ -5,20 +5,6 @@ namespace Trax.Api.GraphQL.Client
         public FileSchemaProvider(string path) { }
         public System.Threading.Tasks.Task<GraphQL.Types.ISchema> GetSchemaAsync(System.Threading.CancellationToken cancellationToken = default) { }
     }
-    public class GraphQLClientConfiguration : System.IDisposable, Trax.Api.GraphQL.Client.IGraphQLClientConfiguration
-    {
-        public GraphQLClientConfiguration(System.Uri baseAddress, GraphQL.Client.Abstractions.Websocket.IGraphQLWebsocketJsonSerializer jsonSerializer, GraphQL.Client.Http.GraphQLHttpClientOptions graphQLHttpClientOptions, System.Text.Json.JsonSerializerOptions jsonSerializerOptions, bool disposeHttpClient, bool removeSubscriptionsFromSchema, Trax.Api.GraphQL.Client.ResponseStrictness responseStrictness, System.Net.Http.HttpClient httpClient) { }
-        public System.Uri BaseAddress { get; }
-        public bool DisposeHttpClient { get; }
-        public GraphQL.Client.Http.GraphQLHttpClientOptions GraphQLClientOptions { get; }
-        public GraphQL.Client.Http.GraphQLHttpClient GraphQLHttpClient { get; }
-        public System.Net.Http.HttpClient HttpClient { get; }
-        public System.Text.Json.JsonSerializerOptions JsonSerializerOptions { get; }
-        public bool RemoveSubscriptionsFromSchema { get; }
-        public Trax.Api.GraphQL.Client.ResponseStrictness ResponseStrictness { get; }
-        public GraphQL.Client.Abstractions.Websocket.IGraphQLWebsocketJsonSerializer WebsocketJsonSerializer { get; }
-        public void Dispose() { }
-    }
     public class GraphQLClientConfigurationBuilder
     {
         public GraphQLClientConfigurationBuilder(System.Uri baseAddress) { }
@@ -30,17 +16,12 @@ namespace Trax.Api.GraphQL.Client
         public Trax.Api.GraphQL.Client.ResponseStrictness ResponseStrictness { get; set; }
         public bool ValidateAssemblies { get; set; }
         public GraphQL.Client.Abstractions.Websocket.IGraphQLWebsocketJsonSerializer WebsocketJsonSerializer { get; set; }
-        public Trax.Api.GraphQL.Client.GraphQLClientConfiguration Build() { }
+        public Trax.Api.GraphQL.Client.IGraphQLClientConfiguration Build() { }
     }
     public class GraphQLClientExecutor : Trax.Api.GraphQL.Client.IGraphQLClientExecutor
     {
         public GraphQLClientExecutor(Trax.Api.GraphQL.Client.IGraphQLClientValidator validator, Trax.Api.GraphQL.Client.IGraphQLClientConfiguration configuration, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Client.GraphQLClientExecutor>? logger = null) { }
         public System.Threading.Tasks.Task<TReturn> Run<TReturn>(Trax.Api.GraphQL.Client.IGraphQLClientRequest<TReturn> request, System.Threading.CancellationToken cancellationToken = default) { }
-    }
-    public class GraphQLClientValidator : Trax.Api.GraphQL.Client.IGraphQLClientValidator
-    {
-        public GraphQLClientValidator(Trax.Api.GraphQL.Client.ISchemaProvider schemaProvider) { }
-        public System.Threading.Tasks.Task<GraphQLParser.AST.OperationType> ValidateAsync(string query, System.Threading.CancellationToken cancellationToken = default) { }
     }
     public static class GraphQLClientValidatorExtensions
     {
@@ -147,14 +128,5 @@ namespace Trax.Api.GraphQL.Client
         public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder UseFileSchema(string sdlPath) { }
         public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder UseIntrospection() { }
         public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder WithStrictness(Trax.Api.GraphQL.Client.ResponseStrictness strictness) { }
-    }
-}
-namespace Trax.Api.GraphQL.Client.Utils.Converters
-{
-    public class DateOnlyConverter : System.Text.Json.Serialization.JsonConverter<System.DateOnly>
-    {
-        public DateOnlyConverter() { }
-        public override System.DateOnly Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
-        public override void Write(System.Text.Json.Utf8JsonWriter writer, System.DateOnly value, System.Text.Json.JsonSerializerOptions options) { }
     }
 }

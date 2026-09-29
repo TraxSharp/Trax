@@ -17,29 +17,44 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// Each field carries the authorization of the data it streams, decided per subscriber by
 /// <see cref="LifecycleSubscriptionAccess"/>: a subscriber sees the trains the operations
 /// authorization or each train's own posture admits them to, and one who could see nothing is
-/// refused when subscribing. See
-/// <c>docs/adr/0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md</c>.
+/// refused when subscribing.
 /// </remarks>
 public class LifecycleSubscriptions
 {
     private const string PrincipalState = "ClaimsPrincipal";
 
+    /// <summary>
+    /// Fires when a train you may see starts running.
+    /// </summary>
     [AuthorizedPerSubscriber]
     [Subscribe(With = nameof(SubscribeToTrainStarted))]
     public TrainLifecycleEvent OnTrainStarted([EventMessage] TrainLifecycleEvent e) => e;
 
+    /// <summary>
+    /// Fires when a train you may see completes successfully.
+    /// </summary>
     [AuthorizedPerSubscriber]
     [Subscribe(With = nameof(SubscribeToTrainCompleted))]
     public TrainLifecycleEvent OnTrainCompleted([EventMessage] TrainLifecycleEvent e) => e;
 
+    /// <summary>
+    /// Fires when a train you may see fails.
+    /// </summary>
     [AuthorizedPerSubscriber]
     [Subscribe(With = nameof(SubscribeToTrainFailed))]
     public TrainLifecycleEvent OnTrainFailed([EventMessage] TrainLifecycleEvent e) => e;
 
+    /// <summary>
+    /// Fires when a train you may see is cancelled.
+    /// </summary>
     [AuthorizedPerSubscriber]
     [Subscribe(With = nameof(SubscribeToTrainCancelled))]
     public TrainLifecycleEvent OnTrainCancelled([EventMessage] TrainLifecycleEvent e) => e;
 
+    /// <summary>
+    /// Fires on every state change of a train you may see, including the start, completion, failure
+    /// and cancellation that the other lifecycle subscriptions report individually.
+    /// </summary>
     [AuthorizedPerSubscriber]
     [Subscribe(With = nameof(SubscribeToTrainStateChanged))]
     public TrainLifecycleEvent OnTrainStateChanged([EventMessage] TrainLifecycleEvent e) => e;

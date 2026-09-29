@@ -5,12 +5,21 @@ using Microsoft.Extensions.Logging;
 
 namespace Trax.Api.GraphQL.Client;
 
+/// <summary>
+/// The default <see cref="IGraphQLClientExecutor"/>, registered by <c>AddTraxGraphQLClient</c>.
+/// Resolve it through <see cref="IGraphQLClientExecutor"/>. Response-shape drift is logged under
+/// the <c>ILogger&lt;GraphQLClientExecutor&gt;</c> category.
+/// </summary>
 public class GraphQLClientExecutor : IGraphQLClientExecutor
 {
     private readonly IGraphQLClientValidator _validator;
     private readonly IGraphQLClientConfiguration _configuration;
     private readonly ILogger<GraphQLClientExecutor>? _logger;
 
+    /// <summary>Creates an executor over a validator and a configuration.</summary>
+    /// <param name="validator">Validates each query before it is sent.</param>
+    /// <param name="configuration">Supplies the HTTP client, JSON options and strictness.</param>
+    /// <param name="logger">Receives drift warnings under <see cref="ResponseStrictness.WarnOnDrift"/>; optional.</param>
     public GraphQLClientExecutor(
         IGraphQLClientValidator validator,
         IGraphQLClientConfiguration configuration,
@@ -22,6 +31,7 @@ public class GraphQLClientExecutor : IGraphQLClientExecutor
         _logger = logger;
     }
 
+    /// <inheritdoc/>
     public async Task<TReturn> Run<TReturn>(
         IGraphQLClientRequest<TReturn> request,
         CancellationToken cancellationToken = default

@@ -63,6 +63,13 @@ public sealed class TraxJwtSocketInterceptor : DefaultSocketSessionInterceptor
         _logger = logger;
     }
 
+    /// <summary>
+    /// Accepts the connection when the <c>connection_init</c> payload carries a JWT that validates
+    /// against the registered JWT scheme, and rejects it otherwise.
+    /// </summary>
+    /// <param name="session">The socket session being opened.</param>
+    /// <param name="connectionInitMessage">The <c>connection_init</c> message and its payload.</param>
+    /// <param name="cancellationToken">Cancels validation.</param>
     public override async ValueTask<ConnectionStatus> OnConnectAsync(
         ISocketSession session,
         IOperationMessagePayload connectionInitMessage,

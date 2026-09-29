@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Api.Tests" />
+    <InternalsVisibleTo Include="Trax.Api.Tests.Stress" />
   </ItemGroup>
 
   <ItemGroup>

@@ -5,6 +5,55 @@
   xmlns:xsd="http://www.w3.org/2001/XMLSchema"
 >
   <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Api.DTOs.QueueTrainRequest</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Api.DTOs.RunTrainRequest</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Api.DTOs.ScheduleOnceRequest</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Api.DTOs.ScheduleOnceResponse</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Api.DTOs.TriggerDelayedRequest</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Api.Services.HealthCheck.TraxHealthCheck</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Api.Services.HealthCheck.TraxHealthService</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Trax.Api.DTOs.EffectInfo.#ctor(System.String,System.String,System.Boolean,System.Boolean)</Target>
     <Left>lib/net10.0/Trax.Api.dll</Left>

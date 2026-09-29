@@ -2,6 +2,11 @@ using GraphQLParser.AST;
 
 namespace Trax.Api.GraphQL.Client;
 
+/// <summary>
+/// Checks outbound queries against the server's schema before they are sent. Registered per client
+/// by <c>AddTraxGraphQLClient</c>; <see cref="GraphQLClientValidatorExtensions"/> uses it to
+/// validate whole assemblies.
+/// </summary>
 public interface IGraphQLClientValidator
 {
     /// <summary>
