@@ -21,6 +21,12 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
     private IChannel? _channel;
     private string? _queueName;
 
+    /// <summary>
+    /// Creates a receiver for the exchange and connection named in <paramref name="options"/>.
+    /// Opens no connection until <see cref="StartAsync"/>.
+    /// </summary>
+    /// <param name="options">The connection URI, exchange name and prefetch count.</param>
+    /// <param name="logger">Optional logger for start, stop and handler failures.</param>
     public RabbitMqTrainEventReceiver(
         RabbitMqBroadcasterOptions options,
         ILogger<RabbitMqTrainEventReceiver>? logger = null
@@ -30,6 +36,21 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         _logger = logger;
     }
 
+    /// <summary>
+    /// Connects, declares the fanout exchange, binds a new exclusive auto-delete queue to it and
+    /// starts consuming, passing each deserialized event to <paramref name="handler"/>.
+    /// </summary>
+    /// <param name="handler">
+    /// Called once per event. A delivery is acknowledged after the handler returns; if the handler
+    /// or deserialization throws, the error is logged and the delivery is rejected without requeue,
+    /// so that event is lost to this receiver. A body that deserializes to null is acknowledged and
+    /// skipped.
+    /// </param>
+    /// <param name="ct">Cancels the startup calls, and is also the token passed to every handler call.</param>
+    /// <exception cref="InvalidOperationException">
+    /// <see cref="RabbitMqBroadcasterOptions.PrefetchCount"/> is 0.
+    /// </exception>
+    /// <remarks>Call once per instance; calling again opens a second connection and leaks the first.</remarks>
     public async Task StartAsync(
         Func<TrainLifecycleEventMessage, CancellationToken, Task> handler,
         CancellationToken ct
@@ -120,6 +141,11 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         );
     }
 
+    /// <summary>
+    /// Deletes this receiver's queue and closes the channel and connection if they are open.
+    /// Does not dispose them; <see cref="DisposeAsync"/> does.
+    /// </summary>
+    /// <param name="ct">Cancels the close calls.</param>
     public async Task StopAsync(CancellationToken ct)
     {
         if (_channel is { IsOpen: true })
@@ -140,6 +166,9 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         _logger?.LogInformation("RabbitMQ receiver stopped.");
     }
 
+    /// <summary>
+    /// Closes the channel and connection if still open, then disposes both.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (_channel is not null)

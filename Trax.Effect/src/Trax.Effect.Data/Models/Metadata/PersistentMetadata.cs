@@ -4,6 +4,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Trax.Effect.Data.Models.Metadata;
 
+/// <summary>
+/// EF Core mapping for <see cref="Effect.Models.Metadata.Metadata"/>: maps it to <c>trax.metadata</c>,
+/// with its input, output and host labels stored as <c>jsonb</c> and restricting foreign keys to its parent metadata and its manifest. Infrastructure applied by the data context; not intended for direct use. Query the rows
+/// through <c>IDataContext</c>.
+/// </summary>
 public class PersistentMetadata : Effect.Models.Metadata.Metadata
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)

@@ -54,5 +54,9 @@ public sealed record DifferentialModel<TState, TTrigger>(
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
+    /// <summary>
+    /// True when no samples, seeds or probe contexts were authored. The IR exporter omits the
+    /// <c>differential</c> section for an empty model, so the IR matches a machine without one.
+    /// </summary>
     public bool IsEmpty => Samples.Count == 0 && Seeds.Count == 0 && Contexts.Count == 0;
 }

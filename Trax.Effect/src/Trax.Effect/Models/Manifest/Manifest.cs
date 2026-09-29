@@ -28,26 +28,62 @@ public class Manifest : IModel
 {
     #region Columns
 
+    /// <summary>
+    /// Database-generated primary key. Zero until the manifest is inserted.
+    /// </summary>
     [Column("id")]
     public long Id { get; }
 
+    /// <summary>
+    /// The manifest's stable, caller-facing identifier, unique across <c>trax.manifest</c>. The
+    /// scheduling APIs set it to the external id the caller passes and look manifests up by it
+    /// (enable, disable, trigger, dependencies); <see cref="Create"/> assigns a random 32-digit
+    /// GUID when nothing else sets it.
+    /// </summary>
     [Column("external_id")]
     public string ExternalId { get; set; } = null!;
 
+    /// <summary>
+    /// FullName of the train type the manifest runs, as passed when it was scheduled. Resolved back
+    /// to a type by <see cref="NameType"/>.
+    /// </summary>
     [Column("name")]
     public string Name { get; set; } = null!;
 
+    /// <summary>
+    /// FullName of the <see cref="IManifestProperties"/> type serialized in <see cref="Properties"/>,
+    /// set by <see cref="SetProperties"/>. Null when the manifest has no stored input.
+    /// </summary>
     [Column("property_type")]
     public string? PropertyTypeName { get; set; }
 
+    /// <summary>
+    /// The train input each run receives, as JSON (a <c>jsonb</c> column in Postgres). Written by
+    /// <see cref="SetProperties"/> with a leading <c>"$type"</c> discriminator; read it back with
+    /// <see cref="GetProperties{TProperty}"/>. Null when the manifest has no stored input.
+    /// </summary>
+    /// <remarks>
+    /// Stored unmasked: <c>[TraxSensitive]</c> does not apply to this copy. A model's
+    /// <c>ToString()</c> writes it as <c>{"_omitted": true}</c>.
+    /// </remarks>
     [Column("properties")]
     public string? Properties { get; set; }
 
+    /// <summary>
+    /// The type named by <see cref="PropertyTypeName"/>, found by searching the loaded assemblies;
+    /// <see cref="Unit"/> when there is none. Not mapped.
+    /// </summary>
+    /// <exception cref="TypeLoadException">No loaded assembly defines the named type.</exception>
     [NotMapped]
     [JsonIgnore]
     public Type PropertyType =>
         PropertyTypeName == null ? typeof(Unit) : ResolveType(PropertyTypeName);
 
+    /// <summary>
+    /// The train type named by <see cref="Name"/>, found by searching the loaded assemblies. Not
+    /// mapped.
+    /// </summary>
+    /// <exception cref="TypeLoadException">No loaded assembly defines the named type.</exception>
     [NotMapped]
     [JsonIgnore]
     public Type NameType => Name == null ? typeof(Unit) : ResolveType(Name);
@@ -258,6 +294,10 @@ public class Manifest : IModel
     /// </remarks>
     public ICollection<DeadLetter.DeadLetter> DeadLetters { get; private set; } = [];
 
+    /// <summary>
+    /// The work queue entries created from this manifest. Populated by EF Core only when included
+    /// in a query; empty otherwise.
+    /// </summary>
     public ICollection<WorkQueue.WorkQueue> WorkQueues { get; private set; } = [];
 
     #endregion
@@ -292,6 +332,14 @@ public class Manifest : IModel
                 );
     }
 
+    /// <summary>
+    /// Builds an unsaved manifest from <paramref name="manifest"/>: <see cref="Name"/> is the train
+    /// type's FullName, <see cref="ExternalId"/> a new GUID, and the properties are serialized
+    /// with <see cref="SetProperties"/> when given. <see cref="ManifestGroupId"/> is left unset, so
+    /// assign a group before saving.
+    /// </summary>
+    /// <param name="manifest">The manifest's train type, input and scheduling settings.</param>
+    /// <exception cref="Exception">The train type has no FullName (a generic parameter, for example).</exception>
     public static Manifest Create(CreateManifest manifest)
     {
         if (manifest.Name.FullName is null)
@@ -323,6 +371,12 @@ public class Manifest : IModel
         return newManifest;
     }
 
+    /// <summary>
+    /// Serializes <paramref name="properties"/> into <see cref="Properties"/> and records its
+    /// runtime type's FullName in <see cref="PropertyTypeName"/>. A JSON object is written with
+    /// <c>"$type"</c> as its first member.
+    /// </summary>
+    /// <param name="properties">The train input to store on the manifest.</param>
     public Unit SetProperties(IManifestProperties properties)
     {
         var propertiesType = properties.GetType();
@@ -351,9 +405,25 @@ public class Manifest : IModel
         return Unit.Default;
     }
 
+    /// <summary>
+    /// Deserializes <see cref="Properties"/> as <typeparamref name="TProperty"/>.
+    /// </summary>
+    /// <typeparam name="TProperty">Must be exactly the stored <see cref="PropertyType"/>, not a base type.</typeparam>
+    /// <exception cref="Exception">
+    /// <typeparamref name="TProperty"/> is not the stored type, or <see cref="Properties"/> is
+    /// empty or deserializes to null.
+    /// </exception>
     public TProperty GetProperties<TProperty>()
         where TProperty : IManifestProperties => (TProperty)GetProperties(typeof(TProperty));
 
+    /// <summary>
+    /// Deserializes <see cref="Properties"/> as <paramref name="propertyType"/>.
+    /// </summary>
+    /// <param name="propertyType">Must equal the stored <see cref="PropertyType"/>.</param>
+    /// <exception cref="Exception">
+    /// <paramref name="propertyType"/> is not the stored type, or <see cref="Properties"/> is
+    /// empty or deserializes to null.
+    /// </exception>
     public object GetProperties(Type propertyType)
     {
         if (propertyType != PropertyType)
@@ -394,6 +464,10 @@ public class Manifest : IModel
             );
     }
 
+    /// <summary>
+    /// Serializes this manifest to JSON for a log line, with <see cref="Properties"/> written as <c>{"_omitted": true}</c>. Not a stable format: read the
+    /// properties for values.
+    /// </summary>
     public override string ToString() =>
         JsonSerializer.Serialize(
             this,
@@ -405,6 +479,10 @@ public class Manifest : IModel
 
     #endregion
 
+    /// <summary>
+    /// For JSON deserialization and EF Core materialization. Build a new manifest with
+    /// <see cref="Create"/>, or through the scheduler's scheduling APIs.
+    /// </summary>
     [JsonConstructor]
     public Manifest() { }
 

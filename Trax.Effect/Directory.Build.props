@@ -44,15 +44,6 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <!-- CS1591 (a public member with no doc comment) is the one doc warning suppressed: the summaries
-       that exist ship now, and the undocumented members are a tracked burn-down. Every other
-       doc-comment warning (malformed XML, a bad cref, a param mismatch) stays on and fails the build.
-       Trax.Effect.Data.Testing and Trax.Effect.StateMachine.Testing already document every public
-       member, so they keep CS1591 on. -->
-  <PropertyGroup Condition="$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectDirectory)').Replace('\', '/').StartsWith('src/')) And '$(MSBuildProjectName)' != 'Trax.Effect.Data.Testing' And '$(MSBuildProjectName)' != 'Trax.Effect.StateMachine.Testing'">
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
-  </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
   </ItemGroup>

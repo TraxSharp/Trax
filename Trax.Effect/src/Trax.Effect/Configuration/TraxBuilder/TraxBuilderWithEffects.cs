@@ -16,6 +16,11 @@ public class TraxBuilderWithEffects
     [EditorBrowsable(EditorBrowsableState.Never)]
     public TraxBuilder Root { get; }
 
+    /// <summary>
+    /// Wraps <paramref name="root"/> once effects are configured. Called by <c>AddEffects()</c>; a consumer never
+    /// constructs this directly.
+    /// </summary>
+    /// <param name="root">The root builder whose state this view shares; nothing is copied.</param>
     public TraxBuilderWithEffects(TraxBuilder root)
     {
         Root = root;

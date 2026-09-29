@@ -4,8 +4,14 @@ using Trax.Effect.Utils;
 
 namespace Trax.Effect.Configuration.TraxEffectConfiguration;
 
+/// <summary>
+/// Default <see cref="ITraxEffectConfiguration"/>, built once from the effect builder by <c>AddEffects</c> and
+/// registered as a singleton. Also holds <see cref="StaticSystemJsonSerializerOptions"/>, the process-wide options
+/// the models' <c>ToString()</c> overrides and lifecycle-hook output copies serialize with.
+/// </summary>
 public class TraxEffectConfiguration : ITraxEffectConfiguration
 {
+    /// <inheritdoc/>
     public JsonSerializerOptions SystemJsonSerializerOptions { get; set; } =
         TraxJsonSerializationOptions.Default;
 
@@ -22,7 +28,9 @@ public class TraxEffectConfiguration : ITraxEffectConfiguration
     public static JsonSerializerOptions StaticSystemJsonSerializerOptions { get; set; } =
         TraxJsonSerializationOptions.Default;
 
+    /// <inheritdoc/>
     public bool SerializeJunctionData { get; set; } = false;
 
+    /// <inheritdoc/>
     public LogLevel LogLevel { get; set; } = LogLevel.Debug;
 }

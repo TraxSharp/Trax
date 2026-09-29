@@ -52,6 +52,10 @@ public class TraxAuthorizeAttribute : Attribute
     /// </summary>
     public string? Roles { get; init; }
 
+    /// <summary>
+    /// Creates a bare <see cref="TraxAuthorizeAttribute"/> with no policy and no roles, which requires only an
+    /// authenticated caller. Set <see cref="Policy"/> or <see cref="Roles"/> through the initializer to narrow it.
+    /// </summary>
     public TraxAuthorizeAttribute() { }
 
     /// <summary>

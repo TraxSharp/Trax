@@ -8,12 +8,18 @@ using TraxEffectBuilder = Trax.Effect.Configuration.TraxEffectBuilder.TraxEffect
 
 namespace Trax.Effect.JunctionProvider.Progress.Extensions;
 
+/// <summary>
+/// Adds <c>AddJunctionProgress</c> to the effect builder, which records which junction a run is on and
+/// lets a requested cancellation stop the run between junctions.
+/// </summary>
 public static class ServiceExtensions
 {
     /// <summary>
-    /// Adds junction progress tracking and cancellation checking. Each junction's progress
-    /// (current junction index, total junctions, junction name) is persisted to metadata, and
-    /// the train's cancellation token is checked before each junction executes.
+    /// Adds junction progress tracking and cancellation checking. Before each junction runs, the run's
+    /// metadata row is read, and if its <c>CancellationRequested</c> flag has been set (by the dashboard
+    /// or the API) the run stops with an <see cref="OperationCanceledException"/>. Otherwise the junction's
+    /// name and start time are saved to the metadata's <c>CurrentlyRunningJunction</c> and
+    /// <c>JunctionStartedAt</c>, and cleared again after it finishes.
     /// Requires a data provider (<c>UsePostgres()</c>, <c>UseSqlite()</c>, or <c>UseInMemory()</c>).
     /// </summary>
     /// <typeparam name="TBuilder">The builder type (supports chaining through promoted builders).</typeparam>

@@ -20,6 +20,19 @@ using Trax.Effect.Services.TrainLifecycleHookFactory;
 
 namespace Trax.Effect.Extensions;
 
+/// <summary>
+/// The Trax entry points on <see cref="IServiceCollection"/> and the effect builder: <c>AddTrax</c>, which every
+/// application calls once, <c>AddEffects</c>, the <c>AddEffect</c>, <c>AddJunctionEffect</c> and
+/// <c>AddLifecycleHook</c> registrations, and the <c>Add*TraxJunction</c> and <c>Add*TraxRoute</c> helpers that
+/// register a junction or train so its <c>[Inject]</c> properties are filled when it is resolved.
+/// </summary>
+/// <example>
+/// <code>
+/// services.AddTrax(trax => trax
+///     .AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
+///     .AddMediator(typeof(Program).Assembly));
+/// </code>
+/// </example>
 public static class ServiceExtensions
 {
     #region Configuration

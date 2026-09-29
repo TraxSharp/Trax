@@ -12,6 +12,12 @@ namespace Trax.Effect.StateMachine;
 /// </summary>
 public static class RuleEvaluator
 {
+    /// <summary>Evaluates <paramref name="rule"/>; never throws.</summary>
+    /// <param name="rule">The predicate to evaluate.</param>
+    /// <param name="context">The snapshot context that <see cref="RuleSource.Context"/> fields read from.</param>
+    /// <param name="input">The trigger input that <see cref="RuleSource.Input"/> fields read from; null when the trigger has none.</param>
+    /// <param name="customGuards">Handlers for <see cref="Rule.Custom"/> by name; a missing name evaluates to false.</param>
+    /// <returns>Whether the rule holds.</returns>
     public static bool Evaluate(
         Rule rule,
         JsonObject context,

@@ -7,10 +7,19 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <summary>The total result of <see cref="SnapshotDraftService{TState,TTrigger}.Load"/>.</summary>
 public abstract record LoadResult
 {
+    /// <summary>The draft exists and rehydrated cleanly.</summary>
+    /// <param name="Snapshot">The validated snapshot, at the machine's current definition version.</param>
     public sealed record Loaded(Snapshot Snapshot) : LoadResult;
 
+    /// <summary>
+    /// No draft exists for this user and id, or it had been idle longer than the configured draft TTL and
+    /// was deleted by this read. Treat it as "start fresh".
+    /// </summary>
     public sealed record NotFound : LoadResult;
 
+    /// <summary>A stored row exists but failed rehydration; the row is left untouched.</summary>
+    /// <param name="Code">A rehydration error code, one of <see cref="RehydrationErrorCodes"/>.</param>
+    /// <param name="Message">A human-readable explanation of what failed validation.</param>
     public sealed record Invalid(string Code, string Message) : LoadResult;
 
     private LoadResult() { }
@@ -19,8 +28,17 @@ public abstract record LoadResult
 /// <summary>The total result of <see cref="SnapshotDraftService{TState,TTrigger}.Autosave"/>.</summary>
 public abstract record AutosaveResult
 {
+    /// <summary>The client snapshot validated and was persisted.</summary>
+    /// <param name="Snapshot">The snapshot as stored, after rehydration (and any version migration).</param>
     public sealed record Saved(Snapshot Snapshot) : AutosaveResult;
 
+    /// <summary>The snapshot was refused and nothing was written.</summary>
+    /// <param name="Code">
+    /// <c>too-large</c> (over <see cref="SnapshotLimits.MaxSnapshotBytes"/>), <c>draft-committed</c> (the stored
+    /// draft is in a committed state and the save would move it anywhere but the same state or the initial
+    /// state), or a <see cref="RehydrationErrorCodes"/> value when the payload failed validation.
+    /// </param>
+    /// <param name="Message">A human-readable explanation of the refusal.</param>
     public sealed record Rejected(string Code, string Message) : AutosaveResult;
 
     /// <summary>The draft changed elsewhere between read and write — reload and retry.</summary>
@@ -32,12 +50,28 @@ public abstract record AutosaveResult
 /// <summary>The total result of <see cref="SnapshotDraftService{TState,TTrigger}.Advance(string, Guid, string, JsonNode, string, CancellationToken)"/>.</summary>
 public abstract record AdvanceOutcome
 {
+    /// <summary>
+    /// The trigger fired and the result was persisted, or the request was a replay of the one the draft
+    /// last recorded and nothing was fired again.
+    /// </summary>
+    /// <param name="Snapshot">The draft's snapshot after the advance (or the current one, on a replay).</param>
     public sealed record Advanced(Snapshot Snapshot) : AdvanceOutcome;
 
+    /// <summary>The advance was refused and the stored draft is unchanged.</summary>
+    /// <param name="Reason">
+    /// A machine rejection reason (see <see cref="RejectionReasons"/>), or one of the service's own:
+    /// <c>request-id-reused</c>, <c>too-large</c>, <c>client-divergence</c>, or
+    /// <see cref="RehydrationErrorCodes.Malformed"/> when the resulting context could not be stored.
+    /// </param>
+    /// <param name="Detail">Extra context for the reason, such as the failing guard; null when there is none.</param>
     public sealed record Rejected(string Reason, string? Detail) : AdvanceOutcome;
 
+    /// <summary>No draft exists for this user and id, so there is nothing to advance.</summary>
     public sealed record NotFound : AdvanceOutcome;
 
+    /// <summary>The stored draft failed rehydration, so it could not be advanced; it is left untouched.</summary>
+    /// <param name="Code">A rehydration error code, one of <see cref="RehydrationErrorCodes"/>.</param>
+    /// <param name="Message">A human-readable explanation of what failed validation.</param>
     public sealed record LoadError(string Code, string Message) : AdvanceOutcome;
 
     /// <summary>Another writer advanced this draft first — the client's view is stale.</summary>
@@ -53,8 +87,26 @@ public abstract record AdvanceOutcome
 /// </summary>
 public interface ISnapshotDraftService
 {
+    /// <summary>
+    /// Reads the caller's draft and rehydrates it, validating the stored JSON on the way out. A draft idle
+    /// past the configured TTL is deleted and reported as <see cref="LoadResult.NotFound"/>.
+    /// </summary>
+    /// <param name="userKey">The owner of the draft; drafts are always scoped to one user.</param>
+    /// <param name="id">The draft's id.</param>
+    /// <param name="cancellationToken">Cancels the store read.</param>
     Task<LoadResult> Load(string userKey, Guid id, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The soft path: validates a client-provided snapshot and persists it as-is. Invalid or oversized
+    /// data is never stored. When the machine declares committed states, a save that would move a
+    /// committed draft anywhere but its own state or the initial state is rejected as
+    /// <c>draft-committed</c>, and a concurrent write yields <c>Conflict</c>; otherwise it is last writer
+    /// wins. Saving a snapshot in the initial state releases the draft's effect claims.
+    /// </summary>
+    /// <param name="userKey">The owner of the draft.</param>
+    /// <param name="id">The draft's id; the draft is created if it does not exist.</param>
+    /// <param name="snapshotJson">The client's serialized snapshot.</param>
+    /// <param name="cancellationToken">Cancels the store calls.</param>
     Task<AutosaveResult> Autosave(
         string userKey,
         Guid id,
@@ -62,6 +114,22 @@ public interface ISnapshotDraftService
         CancellationToken cancellationToken = default
     );
 
+    /// <summary>
+    /// The authoritative path: reads the stored snapshot, fires <paramref name="trigger"/> on it, and
+    /// persists the result under an optimistic-concurrency check, never trusting a client-computed state.
+    /// A lost race comes back as <c>Conflict</c>, not an exception.
+    /// </summary>
+    /// <param name="userKey">The owner of the draft.</param>
+    /// <param name="id">The draft's id; it must already exist.</param>
+    /// <param name="trigger">The trigger name, matched against the machine's trigger enum.</param>
+    /// <param name="input">The trigger's input, validated against its declared schema; null when it takes none.</param>
+    /// <param name="requestId">
+    /// An optional idempotency key. A repeat of the request the draft last recorded (same id and trigger)
+    /// returns the current snapshot without firing again, unless the draft has since moved back to the
+    /// state that request fired from, in which case it fires as a new request. The same id with a
+    /// different trigger is refused as <c>request-id-reused</c>. Null never replays.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the store calls.</param>
     Task<AdvanceOutcome> Advance(
         string userKey,
         Guid id,
@@ -94,11 +162,17 @@ public interface ISnapshotDraftService
                 $"{GetType().Name} cannot compare a client result before it persists an advance."
             );
 
+    /// <summary>
+    /// Serializes a snapshot to the machine's canonical wire JSON: the exact string a client twin must
+    /// produce for a <c>clientResult</c> comparison to match.
+    /// </summary>
+    /// <param name="snapshot">The snapshot to serialize.</param>
     string Serialize(Snapshot snapshot);
 }
 
 /// <summary>
-/// The FE-drives / BE-validates operations over a persisted, user-scoped snapshot, built on the total
+/// Infrastructure behind <see cref="ISnapshotDraftService"/>, built by <see cref="IMachine.CreateService"/>;
+/// not intended to be constructed directly. The FE-drives / BE-validates operations over a persisted, user-scoped snapshot, built on the total
 /// <see cref="SnapshotMachine{TState,TTrigger}"/> engine and an <see cref="ISnapshotStore"/>. Every
 /// method is total for expected outcomes — including concurrency conflicts, which come back as a typed
 /// <c>Conflict</c> rather than a thrown <c>DbUpdateException</c>.
@@ -159,6 +233,7 @@ public sealed class SnapshotDraftService<TState, TTrigger>(
         return new AutosaveResult.Saved(snapshot);
     }
 
+    /// <inheritdoc/>
     public string Serialize(Snapshot snapshot) => machine.Serialize(snapshot);
 
     /// <summary>Read the caller's draft, validating the stored data on the way out.</summary>

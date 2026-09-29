@@ -28,8 +28,16 @@ public sealed class SnapshotMachine<TState, TTrigger>
 {
     private readonly MachineDefinition<TState, TTrigger> _def;
 
+    /// <summary>
+    /// Creates an engine over <paramref name="definition"/>. The definition is not validated here; a
+    /// machine built with <see cref="MachineBuilder{TState,TTrigger}"/> was checked by
+    /// <see cref="MachineBuilder{TState,TTrigger}.Build"/>, and <see cref="BuiltMachine{TState,TTrigger}.Engine"/>
+    /// already holds one.
+    /// </summary>
+    /// <param name="definition">The machine definition to interpret.</param>
     public SnapshotMachine(MachineDefinition<TState, TTrigger> definition) => _def = definition;
 
+    /// <summary>The definition this engine interprets: states, transitions, validators and migrations.</summary>
     public MachineDefinition<TState, TTrigger> Definition => _def;
 
     /// <summary>

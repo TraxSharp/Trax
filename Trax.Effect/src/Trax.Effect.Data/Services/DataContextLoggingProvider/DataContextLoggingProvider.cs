@@ -6,6 +6,17 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 
 namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
 
+/// <summary>
+/// An <see cref="ILoggerProvider"/> that stores application log entries in the <c>trax.log</c> table
+/// through <see cref="IDataContext.Logs"/>. Registered by <c>AddDataContextLogging</c>; not intended to
+/// be constructed directly.
+/// </summary>
+/// <remarks>
+/// Loggers queue entries into a bounded in-memory queue of 4096; when it is full the oldest entry is
+/// dropped. A single background loop, started by the constructor, writes them in batches of up to 256
+/// at least once a second using one long-lived data context. If a batch fails, its entries are retried
+/// one at a time and any that still fail are dropped, so logging never throws into the caller.
+/// </remarks>
 public class DataContextLoggingProvider : IDataContextLoggingProvider
 {
     private readonly IDataContextProviderFactory _dbContextFactory;
@@ -25,6 +36,13 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _flushTask;
 
+    /// <summary>
+    /// Compiles the blacklist and starts the background writer. A blacklist entry containing
+    /// <c>*</c> is a wildcard (<c>*</c> matches any run of characters, anchored at both ends); any
+    /// other entry must match the category exactly.
+    /// </summary>
+    /// <param name="dbContextFactory">Creates the one data context the writer uses for its lifetime.</param>
+    /// <param name="configuration">Minimum level and blacklist, read once here.</param>
     public DataContextLoggingProvider(
         IDataContextProviderFactory dbContextFactory,
         IDataContextLoggingProviderConfiguration configuration
@@ -48,6 +66,11 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
         _flushTask = Task.Run(() => FlushLoopAsync(_cts.Token));
     }
 
+    /// <summary>
+    /// Returns a new <see cref="DataContextLogger"/> for <paramref name="categoryName"/> that writes
+    /// into this provider's queue.
+    /// </summary>
+    /// <param name="categoryName">The category stored on each entry and matched against the blacklist.</param>
     public ILogger CreateLogger(string categoryName)
     {
         return new DataContextLogger(
@@ -154,6 +177,10 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
         return true;
     }
 
+    /// <summary>
+    /// Stops accepting entries, cancels the background writer and waits up to five seconds for it to
+    /// stop. Entries still queued when the writer is cancelled are not written.
+    /// </summary>
     public void Dispose()
     {
         _logChannel.Writer.TryComplete();

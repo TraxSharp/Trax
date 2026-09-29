@@ -6,6 +6,11 @@ using Trax.Effect.Services.TrainEventBroadcaster;
 
 namespace Trax.Effect.Extensions;
 
+/// <summary>
+/// Adds <c>UseBroadcaster()</c> to the effect builder, which publishes train lifecycle events and data-change
+/// signals to other processes through a transport package such as Trax.Effect.Broadcaster.RabbitMQ.
+/// See https://traxsharp.net/docs/sdk-reference/configuration/use-broadcaster.
+/// </summary>
 public static class BroadcasterExtensions
 {
     /// <summary>

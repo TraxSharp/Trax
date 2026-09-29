@@ -8,12 +8,24 @@ using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Services.JunctionEffectRunner;
 
+/// <summary>
+/// Default <see cref="IJunctionEffectRunner"/>, registered as transient so each train run gets its own providers.
+/// Infrastructure; not intended to be constructed or called directly.
+/// </summary>
 public class JunctionEffectRunner : IJunctionEffectRunner
 {
     private List<IJunctionEffectProvider> ActiveJunctionEffectProviders { get; init; }
 
     private readonly ILogger<JunctionEffectRunner>? _logger;
 
+    /// <summary>
+    /// Creates one provider from each factory the effect registry reports as enabled at this moment; toggling an
+    /// effect later affects only runners created after the change. An exception from a factory's
+    /// <c>Create()</c> propagates.
+    /// </summary>
+    /// <param name="junctionEffectProviderFactories">Every registered junction effect factory.</param>
+    /// <param name="effectRegistry">Decides which factories are enabled.</param>
+    /// <param name="logger">Receives disposal failures; optional.</param>
     public JunctionEffectRunner(
         IEnumerable<IJunctionEffectProviderFactory> junctionEffectProviderFactories,
         IEffectRegistry effectRegistry,
@@ -30,6 +42,13 @@ public class JunctionEffectRunner : IJunctionEffectRunner
         );
     }
 
+    /// <summary>
+    /// Awaits each active provider's <c>BeforeJunctionExecution</c> in turn. The first exception stops the
+    /// remaining providers and propagates.
+    /// </summary>
+    /// <param name="effectJunction">The junction being run; its <c>Metadata</c> is already created.</param>
+    /// <param name="serviceTrain">The train running the junction.</param>
+    /// <param name="cancellationToken">The train's cancellation token.</param>
     public async Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectJunction<TIn, TOut> effectJunction,
         ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
@@ -41,6 +60,13 @@ public class JunctionEffectRunner : IJunctionEffectRunner
         );
     }
 
+    /// <summary>
+    /// Awaits each active provider's <c>AfterJunctionExecution</c> in turn. The first exception stops the
+    /// remaining providers and propagates.
+    /// </summary>
+    /// <param name="effectJunction">The junction being run; its <c>Metadata</c> is already created.</param>
+    /// <param name="serviceTrain">The train running the junction.</param>
+    /// <param name="cancellationToken">The train's cancellation token.</param>
     public async Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectJunction<TIn, TOut> effectJunction,
         ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
@@ -52,6 +78,10 @@ public class JunctionEffectRunner : IJunctionEffectRunner
         );
     }
 
+    /// <summary>
+    /// Disposes every provider, logging and swallowing each provider's exception so the rest are still disposed,
+    /// then clears the list.
+    /// </summary>
     public void Dispose()
     {
         var disposalExceptions = new List<Exception>();

@@ -10,6 +10,16 @@ namespace Trax.Effect.StateMachine;
 /// </summary>
 public static class ReductionEvaluator
 {
+    /// <summary>Computes the destination context for <paramref name="reduction"/>; never throws.</summary>
+    /// <param name="reduction">The reduction to apply. An unrecognized case carries the context forward.</param>
+    /// <param name="context">The current context; it is not modified.</param>
+    /// <param name="input">The trigger input that <see cref="ValueSource.FromInput"/> reads; a missing field yields JSON null.</param>
+    /// <param name="initialContext">The machine's initial context, used by <see cref="Reduction.Reset"/>.</param>
+    /// <param name="customReducers">
+    /// Handlers for <see cref="Reduction.Custom"/> by name. A handler's return value is used as-is (not
+    /// cloned), so a handler that returns its argument aliases the context.
+    /// </param>
+    /// <returns>The destination context.</returns>
     public static JsonObject Apply(
         Reduction reduction,
         JsonObject context,

@@ -23,6 +23,17 @@ public class DatabaseMigrator
             .LogToTrace()
             .Build();
 
+    /// <summary>
+    /// Applies every embedded SQLite migration script not yet recorded in the DbUp journal, in
+    /// name order. Runs synchronously; the returned task is already complete.
+    /// </summary>
+    /// <param name="connectionString">SQLite connection string for the target database.</param>
+    /// <returns>A completed task.</returns>
+    /// <remarks>
+    /// <c>UseSqlite</c> calls this during service registration unless migrations are skipped. The
+    /// failing exception is also written to standard output before it is rethrown.
+    /// </remarks>
+    /// <exception cref="Exception">The script that failed, as reported by DbUp, is rethrown unchanged.</exception>
     public static Task Migrate(string connectionString)
     {
         try

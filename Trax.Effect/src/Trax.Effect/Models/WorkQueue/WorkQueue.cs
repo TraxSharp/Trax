@@ -21,7 +21,15 @@ namespace Trax.Effect.Models.WorkQueue;
 /// </remarks>
 public class WorkQueue : IModel
 {
+    /// <summary>
+    /// The lowest dispatch priority. <see cref="Create"/> clamps a lower requested priority up to it.
+    /// </summary>
     public const int MinPriority = 0;
+
+    /// <summary>
+    /// The highest dispatch priority. <see cref="Create"/> clamps a higher requested priority down
+    /// to it.
+    /// </summary>
     public const int MaxPriority = 31;
 
     /// <summary>
@@ -36,9 +44,18 @@ public class WorkQueue : IModel
 
     #region Columns
 
+    /// <summary>
+    /// Database-generated primary key. Zero until the entry is inserted.
+    /// </summary>
     [Column("id")]
     public long Id { get; private set; }
 
+    /// <summary>
+    /// A 32-digit GUID assigned by <see cref="Create"/>, unique across <c>trax.work_queue</c>. It is
+    /// the id handed back to whoever queued the work, and the job dispatcher gives the run's
+    /// <c>Metadata</c> the same <c>ExternalId</c>, so the entry and its run correlate. A dispatch
+    /// retry can leave several metadata rows with this id, the older ones failed.
+    /// </summary>
     [Column("external_id")]
     public string ExternalId { get; set; } = null!;
 
@@ -262,6 +279,10 @@ public class WorkQueue : IModel
             );
     }
 
+    /// <summary>
+    /// Serializes this entry to JSON for a log line, with <see cref="Input"/> written as <c>{"_omitted": true}</c>. Not a stable format: read the
+    /// properties for values.
+    /// </summary>
     public override string ToString() =>
         JsonSerializer.Serialize(
             this,

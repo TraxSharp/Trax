@@ -8,7 +8,14 @@ namespace Trax.Effect.Broadcaster.RabbitMQ;
 
 /// <summary>
 /// Publishes train lifecycle events to a RabbitMQ fanout exchange.
+/// Infrastructure registered by <c>UseRabbitMq</c>; not intended to be constructed directly.
 /// </summary>
+/// <remarks>
+/// The connection and channel are opened lazily on the first publish, reopened if they are found
+/// closed, and shared by concurrent publishers. The exchange is declared durable, but messages are
+/// published transient and unmandatory: an event published while no receiver queue is bound is
+/// dropped by the broker.
+/// </remarks>
 public class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDisposable
 {
     private readonly RabbitMqBroadcasterOptions _options;
@@ -19,6 +26,12 @@ public class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDispo
     private IChannel? _channel;
     private bool _exchangeDeclared;
 
+    /// <summary>
+    /// Creates a broadcaster for the exchange and connection named in <paramref name="options"/>.
+    /// Opens no connection.
+    /// </summary>
+    /// <param name="options">The connection URI and exchange name.</param>
+    /// <param name="logger">Optional logger; each publish is logged at Debug.</param>
     public RabbitMqTrainEventBroadcaster(
         RabbitMqBroadcasterOptions options,
         ILogger<RabbitMqTrainEventBroadcaster>? logger = null
@@ -28,6 +41,13 @@ public class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDispo
         _logger = logger;
     }
 
+    /// <summary>
+    /// Serializes <paramref name="message"/> to JSON and publishes it to the fanout exchange,
+    /// connecting and declaring the exchange first if needed.
+    /// </summary>
+    /// <param name="message">The lifecycle event to publish.</param>
+    /// <param name="ct">Cancels connecting and publishing.</param>
+    /// <remarks>Connection and publish failures propagate to the caller.</remarks>
     public async Task PublishAsync(TrainLifecycleEventMessage message, CancellationToken ct)
     {
         var channel = await EnsureChannelAsync(ct);
@@ -95,6 +115,10 @@ public class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDispo
         }
     }
 
+    /// <summary>
+    /// Closes and disposes the channel and connection, if they were opened. Safe to call after the
+    /// client library has already disposed them on connection loss.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         // RabbitMQ.Client's AutorecoveringChannel/Connection can dispose

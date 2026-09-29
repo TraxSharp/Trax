@@ -14,6 +14,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// </summary>
 public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
 {
+    /// <inheritdoc/>
     public async Task<StoredSnapshot?> Get(
         string userKey,
         Guid id,
@@ -46,11 +47,22 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
         };
     }
 
+    /// <inheritdoc/>
     public Task Delete(string userKey, Guid id, CancellationToken cancellationToken = default) =>
         db
             .SnapshotDrafts.Where(x => x.Id == id && x.UserKey == userKey)
             .ExecuteDeleteAsync(cancellationToken);
 
+    /// <summary>
+    /// Inserts the draft or overwrites its machine, version, state and context, with a fresh concurrency token
+    /// and <c>updated_at</c>. It does not compare tokens and leaves the last-request columns untouched. Returns
+    /// <c>false</c> when a tracked write turned stale or a concurrent insert of the same <c>(user_key, id)</c>
+    /// won (recognised only as a Postgres unique violation); any other database error propagates.
+    /// </summary>
+    /// <param name="userKey">The owning user's key.</param>
+    /// <param name="id">The client-minted draft id.</param>
+    /// <param name="snapshot">The snapshot to store.</param>
+    /// <param name="cancellationToken">Cancels the database calls.</param>
     public async Task<bool> Upsert(
         string userKey,
         Guid id,
@@ -72,8 +84,18 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
         return await TrySave(cancellationToken);
     }
 
-    // Records the id alone: the trigger and from-state are cleared, so a retry of this request is refused
-    // as a reused id rather than replayed. The draft service writes through UpdateWithRequest.
+    /// <summary>
+    /// Conditional update that records <paramref name="requestId"/> alone and clears the stored trigger and
+    /// from-state, so a retry of that request is refused as a reused id rather than replayed. The draft service
+    /// writes through <see cref="UpdateWithRequest"/> instead. Returns <c>false</c> when the row no longer carries
+    /// <paramref name="expectedToken"/> or does not exist.
+    /// </summary>
+    /// <param name="userKey">The owning user's key.</param>
+    /// <param name="id">The client-minted draft id.</param>
+    /// <param name="snapshot">The snapshot to store.</param>
+    /// <param name="expectedToken">The concurrency token read with the draft.</param>
+    /// <param name="requestId">The idempotency key to record, or null to clear it.</param>
+    /// <param name="cancellationToken">Cancels the update.</param>
     public Task<bool> Update(
         string userKey,
         Guid id,
@@ -91,6 +113,18 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
             cancellationToken
         );
 
+    /// <summary>
+    /// One atomic <c>UPDATE ... WHERE concurrency_token = expectedToken</c> that bypasses the change tracker. It
+    /// writes the snapshot, the request's id, trigger and from-state (all null when <paramref name="request"/> is
+    /// null), a fresh token and <c>updated_at</c>. A write that lost the race, or targets a missing row, updates
+    /// nothing and returns <c>false</c> rather than throwing.
+    /// </summary>
+    /// <param name="userKey">The owning user's key.</param>
+    /// <param name="id">The client-minted draft id.</param>
+    /// <param name="snapshot">The snapshot to store.</param>
+    /// <param name="expectedToken">The concurrency token read with the draft.</param>
+    /// <param name="request">The applied request to record, or null to clear the last-request columns.</param>
+    /// <param name="cancellationToken">Cancels the update.</param>
     public async Task<bool> UpdateWithRequest(
         string userKey,
         Guid id,

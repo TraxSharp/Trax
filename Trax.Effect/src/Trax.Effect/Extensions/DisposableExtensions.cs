@@ -3,6 +3,10 @@ namespace Trax.Effect.Extensions;
 using System;
 using System.Reflection;
 
+/// <summary>
+/// Reflection helper that guesses whether an <see cref="IDisposable"/> was disposed. Nothing in Trax calls it;
+/// infrastructure not intended for direct use.
+/// </summary>
 public static class DisposableExtensions
 {
     /// <summary>

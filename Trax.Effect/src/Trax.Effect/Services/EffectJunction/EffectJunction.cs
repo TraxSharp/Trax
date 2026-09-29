@@ -9,6 +9,14 @@ using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Services.EffectJunction;
 
+/// <summary>
+/// A junction that records <see cref="JunctionMetadata"/> for each run and lets junction effects (the junction
+/// logger, junction progress) run before and after it. Derive from it instead of <see cref="Junction{TIn,TOut}"/>
+/// when the junction belongs to a <see cref="ServiceTrain{TIn,TOut}"/> and should be observable; it throws
+/// <see cref="TrainException"/> when chained into any other kind of train.
+/// </summary>
+/// <typeparam name="TIn">The junction's input type.</typeparam>
+/// <typeparam name="TOut">The junction's output type.</typeparam>
 public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJunction<TIn, TOut>
 {
     /// <summary>
@@ -19,8 +27,20 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     /// <returns>The output produced by this junction</returns>
     public abstract override Task<TOut> Run(TIn input);
 
+    /// <summary>
+    /// The in-memory record of the current or most recent run: name, input/output types, start and end times,
+    /// the railway state, and <c>OutputJson</c> when the junction logger serializes output. <c>null</c> until the
+    /// junction first runs, then replaced at the start of every run. It is not written to the database; junction
+    /// effects read it, and the junction logger logs it.
+    /// </summary>
     public JunctionMetadata? Metadata { get; private set; }
 
+    /// <summary>
+    /// Routes to the <see cref="ServiceTrain{TIn,TOut}"/> overload.
+    /// </summary>
+    /// <param name="previousOutput">The previous junction's result, or the train input.</param>
+    /// <param name="train">The running train; must be a <see cref="ServiceTrain{TIn,TOut}"/>.</param>
+    /// <exception cref="TrainException"><paramref name="train"/> is not a <see cref="ServiceTrain{TIn,TOut}"/>.</exception>
     public override Task<Either<Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(
         Either<Exception, TIn> previousOutput,
         Train<TTrainIn, TTrainOut> train
@@ -34,6 +54,16 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
         return RailwayJunction(previousOutput, serviceTrain);
     }
 
+    /// <summary>
+    /// Runs the junction inside a service train: creates a fresh <see cref="Metadata"/>, runs the train's
+    /// junction effects' <c>BeforeJunctionExecution</c>, runs the junction on the railway (a
+    /// <c>Left</c> input skips <see cref="Run"/>), stamps the end time and state, then runs the effects'
+    /// <c>AfterJunctionExecution</c>. Called by the train; not intended to be called directly.
+    /// </summary>
+    /// <param name="previousOutput">The previous junction's result, or the train input.</param>
+    /// <param name="serviceTrain">The running train, whose metadata and junction effect runner are used.</param>
+    /// <returns>The junction's result on the railway.</returns>
+    /// <exception cref="TrainException">The train's <c>Metadata</c> is <c>null</c>.</exception>
     public async Task<Either<Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(
         Either<Exception, TIn> previousOutput,
         ServiceTrain<TTrainIn, TTrainOut> serviceTrain

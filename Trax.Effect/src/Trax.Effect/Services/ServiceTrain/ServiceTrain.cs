@@ -48,10 +48,21 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     [JsonIgnore]
     public IEffectRunner? EffectRunner { get; set; }
 
+    /// <summary>
+    /// Runs the junction effects (junction logger, junction progress) around each
+    /// <see cref="EffectJunction.EffectJunction{TIn,TOut}"/> in this train. Filled by property injection when the
+    /// train is resolved; <see cref="Run(TIn, CancellationToken)"/> throws when it is <c>null</c>.
+    /// </summary>
     [Inject]
     [JsonIgnore]
     public IJunctionEffectRunner? JunctionEffectRunner { get; set; }
 
+    /// <summary>
+    /// Fires the registered lifecycle hooks (broadcaster, GraphQL subscriptions, your own
+    /// <c>AddLifecycleHook</c> registrations) when the run starts, completes, fails or is cancelled. Filled by
+    /// property injection from the run's scope; <see cref="Run(TIn, CancellationToken)"/> throws when it is
+    /// <c>null</c>.
+    /// </summary>
     [Inject]
     [JsonIgnore]
     public ILifecycleHookRunner? LifecycleHookRunner { get; set; }
@@ -569,6 +580,17 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     // run uses the caller's row instead of starting a fresh one.
     private bool _metadataSuppliedForRun;
 
+    /// <summary>
+    /// Runs the train against a metadata row the caller already created, instead of creating one. The row must be
+    /// <c>Pending</c>; it is tracked, moved to <c>InProgress</c> and then finished exactly as
+    /// <see cref="Run(TIn, CancellationToken)"/> finishes its own row. Used by the mediator and scheduler, which
+    /// create the row before dispatch. Runs with the train's current <c>CancellationToken</c>; use the overload
+    /// that takes a token to supply one.
+    /// </summary>
+    /// <param name="input">The train input.</param>
+    /// <param name="metadata">The pre-created row for this run.</param>
+    /// <returns>The train's output.</returns>
+    /// <exception cref="TrainException"><paramref name="metadata"/> is not <c>Pending</c>.</exception>
     public async Task<TOut> Run(TIn input, Metadata metadata)
     {
         await this.InitializeServiceTrain(metadata);
@@ -595,6 +617,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     protected sealed override Monad<TIn, TOut> NewMonad() =>
         new(this, ServiceProvider!, CancellationToken);
 
+    /// <summary>
+    /// Releases the run: clears the in-memory input and output objects, disposes the effect, junction effect and
+    /// lifecycle hook runners (which dispose their providers and hooks) and the metadata, and drops the logger
+    /// and service provider. The instance cannot run again afterwards.
+    /// </summary>
     public void Dispose()
     {
         if (Metadata != null)

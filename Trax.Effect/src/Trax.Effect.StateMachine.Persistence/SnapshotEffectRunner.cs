@@ -3,6 +3,28 @@ using Trax.Effect.StateMachine;
 
 namespace Trax.Effect.StateMachine.Persistence;
 
+/// <summary>The machine-agnostic face of <see cref="SnapshotEffectRunner{TState,TTrigger}"/> (for the registry).</summary>
+public interface ISnapshotEffectRunner
+{
+    /// <summary>
+    /// Runs the machine's effect for the caller's draft at most once and commits its receipt by firing the
+    /// effect's trigger. A draft already in the target state replays as <see cref="AdvanceOutcome.Advanced"/>
+    /// without running anything. A draft in any state other than the effect's from-state, or a
+    /// <paramref name="requestId"/> recorded for a different trigger, is <see cref="AdvanceOutcome.Rejected"/>
+    /// before the effect runs; a claim still held by another caller is rejected as <c>effect-in-progress</c>.
+    /// </summary>
+    /// <param name="userKey">The authenticated owner of the draft.</param>
+    /// <param name="id">The draft id.</param>
+    /// <param name="requestId">The client's idempotency key for this send; a retry with the same id replays.</param>
+    /// <param name="cancellationToken">Cancels the request; also passed to the effect.</param>
+    Task<AdvanceOutcome> Run(
+        string userKey,
+        Guid id,
+        string requestId,
+        CancellationToken cancellationToken = default
+    );
+}
+
 /// <summary>
 /// The generic exactly-once orchestration for the ONE irreversible transition of a machine (place an
 /// order, send a letter, charge a card). It closes the residual a bare concurrency token cannot: the
@@ -14,18 +36,13 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <para>The flow: <c>Load -&gt; (already at target? replay) -&gt; (wrong state? refuse before the effect)
 /// -&gt; RunOnce(effect) -&gt; Advance(trigger, {receipt}) with idempotency</c>. The effect implementation
 /// and the intent key are supplied by the host; everything else is mechanism.</para>
+///
+/// <para>Infrastructure built by <see cref="Machine{TState,TTrigger}.CreateEffectRunner"/>; not intended to be
+/// constructed directly. Consumers get an <see cref="ISnapshotEffectRunner"/> from
+/// <see cref="ISnapshotMachineRegistry.EffectRunner"/>.</para>
 /// </summary>
-/// <summary>The machine-agnostic face of <see cref="SnapshotEffectRunner{TState,TTrigger}"/> (for the registry).</summary>
-public interface ISnapshotEffectRunner
-{
-    Task<AdvanceOutcome> Run(
-        string userKey,
-        Guid id,
-        string requestId,
-        CancellationToken cancellationToken = default
-    );
-}
-
+/// <typeparam name="TState">The machine's state enum.</typeparam>
+/// <typeparam name="TTrigger">The machine's trigger enum.</typeparam>
 public sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRunner
     where TState : struct, Enum
     where TTrigger : struct, Enum
@@ -72,6 +89,7 @@ public sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRunn
         _lease = lease;
     }
 
+    /// <inheritdoc/>
     public async Task<AdvanceOutcome> Run(
         string userKey,
         Guid id,

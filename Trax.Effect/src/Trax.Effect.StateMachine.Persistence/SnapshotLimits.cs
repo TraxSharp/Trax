@@ -20,6 +20,12 @@ public static class SnapshotLimits
 /// <summary>A typed problem returned as DATA from a mutation (never a thrown error across the API boundary).</summary>
 public sealed record SnapshotProblem
 {
+    /// <summary>
+    /// A stable kebab-case code a client can branch on, such as <c>unknown-machine</c>, <c>malformed</c>,
+    /// <c>too-large</c>, <c>conflict</c> or <c>no-transition</c>.
+    /// </summary>
     public required string Code { get; init; }
+
+    /// <summary>A human-readable explanation for logs or display. Its wording is not a contract; branch on <see cref="Code"/>.</summary>
     public required string Message { get; init; }
 }

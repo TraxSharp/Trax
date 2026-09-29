@@ -19,6 +19,11 @@ public class BroadcastLifecycleHook : ITrainLifecycleHook
     private readonly ITrainEventBroadcaster _broadcaster;
     private readonly ILogger<BroadcastLifecycleHook>? _logger;
 
+    /// <summary>
+    /// Creates the hook. Registered by <c>UseBroadcaster()</c>; not intended to be constructed directly.
+    /// </summary>
+    /// <param name="broadcaster">The transport each event is published through.</param>
+    /// <param name="logger">Optional debug logging of each published event.</param>
     public BroadcastLifecycleHook(
         ITrainEventBroadcaster broadcaster,
         ILogger<BroadcastLifecycleHook>? logger = null
@@ -28,26 +33,63 @@ public class BroadcastLifecycleHook : ITrainLifecycleHook
         _logger = logger;
     }
 
+    /// <summary>
+    /// Publishes a <see cref="TrainLifecycleEventMessage"/> with <c>EventType</c> <c>"Started"</c>, built from the
+    /// row's id, external id, name, state, failure, output and host, and stamped with this process's executor.
+    /// A publish failure propagates to the lifecycle hook runner, which logs it.
+    /// </summary>
+    /// <param name="metadata">The run's metadata row.</param>
+    /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnStarted(Metadata metadata, CancellationToken ct)
     {
         await PublishAsync(metadata, "Started", ct);
     }
 
+    /// <summary>
+    /// Publishes a <see cref="TrainLifecycleEventMessage"/> with <c>EventType</c> <c>"Completed"</c>, built from the
+    /// row's id, external id, name, state, failure, output and host, and stamped with this process's executor.
+    /// A publish failure propagates to the lifecycle hook runner, which logs it.
+    /// </summary>
+    /// <param name="metadata">The run's metadata row.</param>
+    /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnCompleted(Metadata metadata, CancellationToken ct)
     {
         await PublishAsync(metadata, "Completed", ct);
     }
 
+    /// <summary>
+    /// Publishes a <see cref="TrainLifecycleEventMessage"/> with <c>EventType</c> <c>"Failed"</c>, built from the
+    /// row's id, external id, name, state, failure, output and host, and stamped with this process's executor.
+    /// A publish failure propagates to the lifecycle hook runner, which logs it.
+    /// </summary>
+    /// <param name="metadata">The run's metadata row.</param>
+    /// <param name="exception">Not published; the message carries the row's <c>FailureReason</c> and
+    /// <c>FailureJunction</c> instead.</param>
+    /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {
         await PublishAsync(metadata, "Failed", ct);
     }
 
+    /// <summary>
+    /// Publishes a <see cref="TrainLifecycleEventMessage"/> with <c>EventType</c> <c>"Cancelled"</c>, built from the
+    /// row's id, external id, name, state, failure, output and host, and stamped with this process's executor.
+    /// A publish failure propagates to the lifecycle hook runner, which logs it.
+    /// </summary>
+    /// <param name="metadata">The run's metadata row.</param>
+    /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnCancelled(Metadata metadata, CancellationToken ct)
     {
         await PublishAsync(metadata, "Cancelled", ct);
     }
 
+    /// <summary>
+    /// Publishes a <see cref="TrainLifecycleEventMessage"/> with <c>EventType</c> <c>"StateChanged"</c>, built from the
+    /// row's id, external id, name, state, failure, output and host, and stamped with this process's executor. The runner calls this after each of the other four, so every transition is published twice: once under its own event type and once as <c>StateChanged</c>.
+    /// A publish failure propagates to the lifecycle hook runner, which logs it.
+    /// </summary>
+    /// <param name="metadata">The run's metadata row.</param>
+    /// <param name="ct">Passed to <see cref="ITrainEventBroadcaster.PublishAsync"/>.</param>
     public async Task OnStateChanged(Metadata metadata, CancellationToken ct)
     {
         await PublishAsync(metadata, "StateChanged", ct);

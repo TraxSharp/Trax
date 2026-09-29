@@ -55,6 +55,13 @@ public class LifecycleHookRunner : ILifecycleHookRunner
             .ToList();
     }
 
+    /// <summary>
+    /// Calls <c>OnStarted</c> on each enabled hook in registration order, then <see cref="OnStateChanged"/>. Each hook's exception, including an
+    /// <see cref="OperationCanceledException"/>, is logged and swallowed, so one failing hook neither stops the
+    /// others nor fails the train.
+    /// </summary>
+    /// <param name="metadata">The run's metadata row.</param>
+    /// <param name="ct">Passed through to each hook.</param>
     public async Task OnStarted(Metadata metadata, CancellationToken ct)
     {
         foreach (var hook in _hooks)
@@ -77,6 +84,13 @@ public class LifecycleHookRunner : ILifecycleHookRunner
         await OnStateChanged(metadata, ct);
     }
 
+    /// <summary>
+    /// Calls <c>OnCompleted</c> on each enabled hook in registration order, then <see cref="OnStateChanged"/>. Each hook's exception, including an
+    /// <see cref="OperationCanceledException"/>, is logged and swallowed, so one failing hook neither stops the
+    /// others nor fails the train.
+    /// </summary>
+    /// <param name="metadata">The run's metadata row.</param>
+    /// <param name="ct">Passed through to each hook.</param>
     public async Task OnCompleted(Metadata metadata, CancellationToken ct)
     {
         foreach (var hook in _hooks)
@@ -99,6 +113,14 @@ public class LifecycleHookRunner : ILifecycleHookRunner
         await OnStateChanged(metadata, ct);
     }
 
+    /// <summary>
+    /// Calls <c>OnFailed</c> on each enabled hook in registration order, then <see cref="OnStateChanged"/>. Each hook's exception, including an
+    /// <see cref="OperationCanceledException"/>, is logged and swallowed, so one failing hook neither stops the
+    /// others nor fails the train.
+    /// </summary>
+    /// <param name="metadata">The run's metadata row.</param>
+    /// <param name="exception">The exception that failed the train.</param>
+    /// <param name="ct">Passed through to each hook.</param>
     public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {
         foreach (var hook in _hooks)
@@ -121,6 +143,13 @@ public class LifecycleHookRunner : ILifecycleHookRunner
         await OnStateChanged(metadata, ct);
     }
 
+    /// <summary>
+    /// Calls <c>OnCancelled</c> on each enabled hook in registration order, then <see cref="OnStateChanged"/>. Each hook's exception, including an
+    /// <see cref="OperationCanceledException"/>, is logged and swallowed, so one failing hook neither stops the
+    /// others nor fails the train.
+    /// </summary>
+    /// <param name="metadata">The run's metadata row.</param>
+    /// <param name="ct">Passed through to each hook.</param>
     public async Task OnCancelled(Metadata metadata, CancellationToken ct)
     {
         foreach (var hook in _hooks)
@@ -143,6 +172,13 @@ public class LifecycleHookRunner : ILifecycleHookRunner
         await OnStateChanged(metadata, ct);
     }
 
+    /// <summary>
+    /// Calls <c>OnStateChanged</c> on each enabled hook in registration order. Each hook's exception, including an
+    /// <see cref="OperationCanceledException"/>, is logged and swallowed, so one failing hook neither stops the
+    /// others nor fails the train.
+    /// </summary>
+    /// <param name="metadata">The run's metadata row.</param>
+    /// <param name="ct">Passed through to each hook.</param>
     public async Task OnStateChanged(Metadata metadata, CancellationToken ct)
     {
         foreach (var hook in _hooks)
@@ -163,6 +199,9 @@ public class LifecycleHookRunner : ILifecycleHookRunner
         }
     }
 
+    /// <summary>
+    /// Disposes each hook that implements <see cref="IDisposable"/>, logging and continuing past any that throw.
+    /// </summary>
     public void Dispose()
     {
         foreach (var hook in _hooks)

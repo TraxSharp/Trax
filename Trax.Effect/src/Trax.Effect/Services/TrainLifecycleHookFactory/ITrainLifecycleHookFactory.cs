@@ -8,6 +8,10 @@ namespace Trax.Effect.Services.TrainLifecycleHookFactory;
 /// </summary>
 public interface ITrainLifecycleHookFactory
 {
+    /// <summary>
+    /// Creates a hook with no run scope. The runner uses <see cref="Create(IServiceProvider)"/> instead, whose
+    /// default calls this; implement this one when the hook needs no scoped services.
+    /// </summary>
     ITrainLifecycleHook Create();
 
     /// <summary>

@@ -6,16 +6,24 @@ using TraxEffectBuilder = Trax.Effect.Configuration.TraxEffectBuilder.TraxEffect
 
 namespace Trax.Effect.JunctionProvider.Logging.Extensions;
 
+/// <summary>
+/// Adds <c>AddJunctionLogger</c> to the effect builder, which logs every junction of every service
+/// train through <see cref="Microsoft.Extensions.Logging.ILogger"/>.
+/// </summary>
 public static class ServiceExtensions
 {
     /// <summary>
-    /// Adds a junction-level logger that records junction names, durations, and optionally serialized input/output
-    /// for each junction in a train. Log entries are written at the configured effect log level.
+    /// Adds a junction-level logger that logs each junction's metadata (name, timing, railway state) before
+    /// and after it runs, and optionally its serialized output. Log entries are written at the configured
+    /// effect log level under the category
+    /// <c>Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider.JunctionLoggerProvider</c>.
     /// </summary>
     /// <typeparam name="TBuilder">The builder type (supports chaining through promoted builders).</typeparam>
     /// <param name="configurationBuilder">The effect builder.</param>
     /// <param name="serializeJunctionData">
-    /// When <c>true</c>, junction input and output are serialized to JSON and included in log entries.
+    /// When <c>true</c>, a successful junction's output is serialized to JSON (with <c>[TraxSensitive]</c>
+    /// members masked) into its metadata's <c>OutputJson</c> and so appears in the after-junction entry.
+    /// Junction input is not serialized.
     /// Defaults to <c>false</c> to avoid performance overhead.
     /// </param>
     /// <returns>The builder for chaining.</returns>

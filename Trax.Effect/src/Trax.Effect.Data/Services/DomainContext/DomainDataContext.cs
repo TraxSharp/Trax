@@ -51,6 +51,13 @@ public abstract class DomainDataContext<TSelf>(DbContextOptions<TSelf> options)
     /// </summary>
     public TSelf Raw() => (TSelf)(object)this;
 
+    /// <summary>
+    /// Sealed. Sets <see cref="Schema"/> as the default schema when the provider is PostgreSQL (SQLite
+    /// and the in-memory provider have none), then calls <see cref="ConfigureModel"/>, then makes every
+    /// <see cref="DateTime"/> property read back as UTC. Put model configuration in
+    /// <see cref="ConfigureModel"/>.
+    /// </summary>
+    /// <param name="modelBuilder">The model being built.</param>
     protected sealed override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

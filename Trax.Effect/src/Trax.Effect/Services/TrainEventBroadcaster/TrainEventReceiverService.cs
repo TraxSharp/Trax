@@ -19,6 +19,13 @@ public class TrainEventReceiverService : BackgroundService
     private readonly ILogger<TrainEventReceiverService>? _logger;
     private readonly string? _localExecutor;
 
+    /// <summary>
+    /// Creates the service. Registered as a hosted service by <c>UseBroadcaster()</c>. The local executor used to
+    /// skip this process's own events is the entry assembly's name.
+    /// </summary>
+    /// <param name="receiver">The transport-specific receiver.</param>
+    /// <param name="serviceProvider">Root provider; a scope is created per message to resolve handlers.</param>
+    /// <param name="logger">Optional logging of connection failures and skipped events.</param>
     public TrainEventReceiverService(
         ITrainEventReceiver receiver,
         IServiceProvider serviceProvider,
@@ -31,6 +38,13 @@ public class TrainEventReceiverService : BackgroundService
         _localExecutor = Assembly.GetEntryAssembly()?.GetAssemblyProject();
     }
 
+    /// <summary>
+    /// Starts the receiver and keeps it running until the host stops. When <see cref="ITrainEventReceiver.StartAsync"/>
+    /// throws, stops the receiver and retries after 5 seconds, doubling to at most 2 minutes. Each message whose
+    /// executor matches this process is skipped; every other one goes to all registered
+    /// <see cref="ITrainEventHandler"/>s in a fresh scope, with each handler's exception logged and swallowed.
+    /// </summary>
+    /// <param name="stoppingToken">Signalled when the host stops.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger?.LogInformation("TrainEventReceiverService starting.");
@@ -121,6 +135,10 @@ public class TrainEventReceiverService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Stops the receiver, then the background loop.
+    /// </summary>
+    /// <param name="cancellationToken">Bounds the shutdown.</param>
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger?.LogInformation("TrainEventReceiverService stopping.");

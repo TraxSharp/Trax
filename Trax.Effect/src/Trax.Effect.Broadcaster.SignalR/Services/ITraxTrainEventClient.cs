@@ -13,5 +13,13 @@ namespace Trax.Effect.Broadcaster.SignalR.Services;
 /// </remarks>
 public interface ITraxTrainEventClient
 {
+    /// <summary>
+    /// Delivers one lifecycle event to the client, under the method name <c>"TrainEvent"</c>.
+    /// </summary>
+    /// <param name="payload">
+    /// The event as shaped by the sink's projection: a <c>TraxClientEvent</c> unless
+    /// <c>WithProjection</c> replaced it.
+    /// </param>
+    /// <returns>A task that completes when SignalR has handed the message to the transport.</returns>
     Task TrainEvent(object payload);
 }

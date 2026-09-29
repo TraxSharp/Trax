@@ -85,18 +85,43 @@ public partial class TraxEffectBuilder
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool MigrationsDisabled { get; set; }
 
+    /// <summary>
+    /// Set to <c>true</c> by <c>AddJunctionProgress()</c>. Building the effect configuration then throws
+    /// <see cref="InvalidOperationException"/> unless a data provider is also configured, because progress and
+    /// cancellation checks read and write the train's metadata row. Infrastructure; not intended to be set directly.
+    /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool JunctionProgressEnabled { get; set; }
 
+    /// <summary>
+    /// Set to <c>true</c> by the Postgres and Sqlite data providers. Nothing in Trax reads it today: data context
+    /// logging is enabled by <c>AddDataContextLogging()</c>, not by this flag. Infrastructure; not intended to be set
+    /// directly.
+    /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool DataContextLoggingEffectEnabled { get; set; } = false;
 
+    /// <summary>
+    /// Whether the junction logger serializes each junction's output into <c>JunctionMetadata.OutputJson</c>.
+    /// Defaults to <c>false</c>; set from the <c>serializeJunctionData</c> argument of <c>AddJunctionLogger()</c> and
+    /// copied into <see cref="TraxEffectConfiguration.ITraxEffectConfiguration.SerializeJunctionData"/>.
+    /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool SerializeJunctionData { get; set; } = false;
 
+    /// <summary>
+    /// The level the junction logger and the JSON effect write their entries at. Defaults to
+    /// <see cref="LogLevel.Debug"/>; set it with <c>SetEffectLogLevel()</c>.
+    /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public LogLevel LogLevel { get; set; } = LogLevel.Debug;
 
+    /// <summary>
+    /// The serializer options used for train input and output parameters. Defaults to
+    /// <see cref="TraxJsonSerializationOptions.Default"/>; <c>SaveTrainParameters()</c> replaces them. When the
+    /// configuration is built they also become the process-wide
+    /// <see cref="TraxEffectConfiguration.TraxEffectConfiguration.StaticSystemJsonSerializerOptions"/>.
+    /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public JsonSerializerOptions TrainParameterJsonSerializerOptions { get; set; } =
         TraxJsonSerializationOptions.Default;

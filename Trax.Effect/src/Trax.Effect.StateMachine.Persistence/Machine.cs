@@ -85,6 +85,10 @@ public abstract class Machine<TState, TTrigger> : IMachine
     private readonly Lazy<BuiltMachine<TState, TTrigger>> _built;
     private readonly Lazy<string?> _schemaHash;
 
+    /// <summary>
+    /// Creates the machine. <see cref="Configure"/> is not called here: it runs once, lazily and thread-safely,
+    /// the first time any member needs the built machine.
+    /// </summary>
     protected Machine()
     {
         _built = new(BuildOnce, LazyThreadSafetyMode.ExecutionAndPublication);
@@ -103,12 +107,20 @@ public abstract class Machine<TState, TTrigger> : IMachine
     /// <summary>Declare the machine. Everything about it lives here, on the transitions it belongs to.</summary>
     protected abstract void Configure(IMachineBuilder<TState, TTrigger> machine);
 
+    /// <inheritdoc/>
     public string Name => Built.Definition.Id;
 
+    /// <inheritdoc/>
     public bool HasEffect => Built.Effects.Count > 0;
 
+    /// <inheritdoc/>
     public string ExportIr() => IrExporter.Export(Built);
 
+    /// <summary>
+    /// The lowercase hex SHA-256 of <see cref="ExportIr"/>, computed once. Null for a raw-delegate machine, which
+    /// has no exportable IR, and null switches the client/server schema-mismatch check off for this machine. Any
+    /// other failure computing it is rethrown to every reader rather than answered with null.
+    /// </summary>
     public string? SchemaHash => _schemaHash.Value;
 
     // A raw-delegate machine has no exportable IR (its guards/reducers are opaque closures), so it has no
@@ -127,9 +139,20 @@ public abstract class Machine<TState, TTrigger> : IMachine
     /// <summary>Override to ship a committed differential corpus (e.g. an embedded resource); null = none.</summary>
     public virtual string? Corpus => null;
 
+    /// <inheritdoc/>
     public IReadOnlyList<string> SelfCheck() =>
         Corpus is { } corpus ? CorpusReplay.Replay(Built.Engine, corpus) : Array.Empty<string>();
 
+    /// <summary>
+    /// Builds a draft service over <paramref name="store"/>. This is the entry point for unit-testing a machine
+    /// against an in-memory <see cref="ISnapshotStore"/>; a host normally gets the service from
+    /// <see cref="ISnapshotMachineRegistry.Service"/>. With <paramref name="claims"/> set, resetting a draft also
+    /// releases the machine's effect claims for it (key <c>{prefix}:{userKey}:{draftId}</c>) so the effect can
+    /// run again.
+    /// </summary>
+    /// <param name="store">Where drafts are read and written.</param>
+    /// <param name="claims">The effect-claim ledger to clear on reset, or null to leave claims alone.</param>
+    /// <param name="draftTtl">Idle time after which a draft is discarded on load; null never expires one.</param>
     public ISnapshotDraftService CreateService(
         ISnapshotStore store,
         IEffectClaimStore? claims,
@@ -147,6 +170,19 @@ public abstract class Machine<TState, TTrigger> : IMachine
     private IEnumerable<string> EffectKeysOnReset(string userKey, Guid id) =>
         Built.Effects.Select(e => $"{e.KeyPrefix}:{userKey}:{id}");
 
+    /// <summary>
+    /// Builds the exactly-once runner for the machine's first bound effect, resolving the effect type from
+    /// <paramref name="services"/>; returns null when the machine binds no effect. Infrastructure used by
+    /// <see cref="ISnapshotMachineRegistry"/>; not intended to be called directly.
+    /// </summary>
+    /// <param name="service">
+    /// The draft service from this machine's <see cref="CreateService"/>. Any other implementation throws
+    /// <see cref="InvalidCastException"/>.
+    /// </param>
+    /// <param name="idempotent">The exactly-once primitive the runner claims the effect key through.</param>
+    /// <param name="services">The container the effect is resolved from; the effect must be registered.</param>
+    /// <exception cref="InvalidCastException"><paramref name="service"/> was not created by this machine.</exception>
+    /// <exception cref="InvalidOperationException">The effect type is not registered in <paramref name="services"/>.</exception>
     public ISnapshotEffectRunner? CreateEffectRunner(
         ISnapshotDraftService service,
         IdempotentEffect idempotent,

@@ -78,8 +78,9 @@ public class Metadata : IModel, IDisposable
     /// Gets or sets the name of the train.
     /// </summary>
     /// <remarks>
-    /// The Name typically corresponds to the class name of the train implementation.
-    /// This provides a human-readable identifier for the train type.
+    /// The train's canonical name: the FullName of the interface it was registered under, or the
+    /// concrete type's FullName for a train resolved outside dependency injection. Filter runs of a
+    /// train by the interface FullName, not the class name.
     /// </remarks>
     [Column("name")]
     public string Name { get; set; } = null!;
@@ -214,12 +215,32 @@ public class Metadata : IModel, IDisposable
     [Column("scheduled_time")]
     public DateTime? ScheduledTime { get; set; }
 
+    /// <summary>
+    /// The persisted request to cancel this run. Set to true by a cancel from the dashboard, the
+    /// GraphQL operations, <c>ITraxScheduler</c>, or the scheduler's job-timeout sweep; defaults to
+    /// false.
+    /// </summary>
+    /// <remarks>
+    /// Setting it does not stop a run by itself. A run notices it only at its next junction
+    /// boundary, and only when the cancellation check junction effect is registered; the run then
+    /// ends <c>Cancelled</c> rather than <c>Failed</c>. The flag stays set on the finished row.
+    /// </remarks>
     [Column("cancel_requested")]
     public bool CancellationRequested { get; set; }
 
+    /// <summary>
+    /// UTC time the junction named by <see cref="CurrentlyRunningJunction"/> started. Written by the
+    /// junction progress effect before each junction and cleared after it and when the run
+    /// finishes; always null when that effect is not registered.
+    /// </summary>
     [Column("junction_started_at")]
     public DateTime? JunctionStartedAt { get; set; }
 
+    /// <summary>
+    /// Short class name of the junction executing right now, for live progress. Written by the
+    /// junction progress effect before each junction and cleared to null after it and when the run
+    /// finishes; always null when that effect is not registered.
+    /// </summary>
     [Column("currently_running_junction")]
     public string? CurrentlyRunningJunction { get; set; }
 
@@ -462,6 +483,12 @@ public class Metadata : IModel, IDisposable
     private static FailureClass Defined(FailureClass failureClass) =>
         Enum.IsDefined(failureClass) ? failureClass : FailureClass.Unclassified;
 
+    /// <summary>
+    /// Drops the in-memory input and output objects and nulls the <see cref="Input"/> and
+    /// <see cref="Output"/> JSON on this instance so they can be collected. The service train calls
+    /// it from its own <c>Dispose</c>. It does not touch the database row, but saving a tracked
+    /// instance after disposing it would write those columns as null.
+    /// </summary>
     public void Dispose()
     {
         _inputObject = null;
@@ -470,6 +497,10 @@ public class Metadata : IModel, IDisposable
         Output = null;
     }
 
+    /// <summary>
+    /// Serializes this run to JSON for a log line, leaving out the <c>Manifest</c>, <c>Parent</c>, <c>Children</c> and <c>Logs</c> navigations. Not a stable format: read the
+    /// properties for values.
+    /// </summary>
     public override string ToString() =>
         JsonSerializer.Serialize(
             this,

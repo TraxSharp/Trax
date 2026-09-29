@@ -85,10 +85,25 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     /// </remarks>
     DbSet<DeadLetter> DeadLetters { get; }
 
+    /// <summary>
+    /// The <c>trax.work_queue</c> table: train runs waiting to be dispatched. Every source of a run
+    /// (a manifest's schedule, a dashboard or API trigger, a re-run, a deferred enqueue) inserts a row
+    /// here, and the scheduler's dispatcher turns a queued row into a <see cref="Metadata"/> run.
+    /// </summary>
     DbSet<WorkQueue> WorkQueues { get; }
 
+    /// <summary>
+    /// The <c>trax.manifest_group</c> table: groups of manifests that share dispatch settings (a cap on
+    /// concurrently active runs, a dispatch priority, and an enabled switch). Every manifest belongs to
+    /// exactly one group.
+    /// </summary>
     DbSet<ManifestGroup> ManifestGroups { get; }
 
+    /// <summary>
+    /// The <c>trax.background_job</c> table used by the scheduler's built-in database task server: one row
+    /// per dispatched run waiting for, or held by, a worker. Workers claim rows and delete them when the
+    /// run finishes, so the table holds only in-flight work, not history.
+    /// </summary>
     DbSet<BackgroundJob> BackgroundJobs { get; }
 
     /// <summary>

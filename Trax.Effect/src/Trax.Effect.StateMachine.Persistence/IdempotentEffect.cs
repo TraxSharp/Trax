@@ -36,6 +36,23 @@ public abstract record EffectOutcome
 /// </summary>
 public sealed class IdempotentEffect(IEffectClaimStore claims)
 {
+    /// <summary>
+    /// Claims <paramref name="effectKey"/>, runs <paramref name="effect"/> if the claim was won, and records its
+    /// receipt. A lost claim returns <see cref="EffectOutcome.AlreadyRan"/> with the stored receipt, or
+    /// <see cref="EffectOutcome.InProgress"/> while another caller is still in flight; the effect does not run.
+    /// If the effect throws, the claim is released (fenced on this call's token) and the exception rethrown, so a
+    /// retry runs it again: a throw is assumed to mean the effect did not happen. If this call's lease expired
+    /// mid-effect and another caller reclaimed the key, the receipt is not recorded but is still returned as
+    /// <see cref="EffectOutcome.Ran"/>.
+    /// </summary>
+    /// <param name="effectKey">The intent key; one key runs its effect at most once until it is released.</param>
+    /// <param name="effect">The side effect. It must return a non-empty receipt once it has run.</param>
+    /// <param name="lease">
+    /// How long the claim is held before another caller may reclaim it; null uses
+    /// <see cref="SnapshotLimits.DefaultEffectLease"/> (5 minutes). Set it longer than the effect can take.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the claim and completion calls. It is not passed to <paramref name="effect"/>.</param>
+    /// <exception cref="InvalidOperationException">The effect returned a null or empty receipt; its claim was released.</exception>
     public async Task<EffectOutcome> RunOnce(
         string effectKey,
         Func<Task<string>> effect,

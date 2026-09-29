@@ -157,6 +157,10 @@ public class DeadLetter : IModel
         RetryMetadataId = retryMetadataId;
     }
 
+    /// <summary>
+    /// Serializes this dead letter to JSON for a log line. Not a stable format: read the
+    /// properties for values.
+    /// </summary>
     public override string ToString() =>
         JsonSerializer.Serialize(
             this,
@@ -168,5 +172,10 @@ public class DeadLetter : IModel
 
     #endregion
 
+    /// <summary>
+    /// For EF Core materialization and deserialization. Build a new dead letter with
+    /// <see cref="Create"/>, which stamps <see cref="DeadLetteredAt"/> and sets the status to
+    /// <see cref="DeadLetterStatus.AwaitingIntervention"/>.
+    /// </summary>
     public DeadLetter() { }
 }

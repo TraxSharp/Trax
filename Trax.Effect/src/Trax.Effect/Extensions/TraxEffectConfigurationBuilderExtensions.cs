@@ -3,6 +3,10 @@ using Trax.Effect.Configuration.TraxEffectBuilder;
 
 namespace Trax.Effect.Extensions;
 
+/// <summary>
+/// General settings on the effect builder that apply regardless of which providers are added, such as
+/// <c>SetEffectLogLevel()</c>.
+/// </summary>
 public static class TraxEffectBuilderExtensions
 {
     /// <summary>

@@ -24,6 +24,12 @@ public sealed class BroadcastChangeSink : IChangeSignalSink
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<BroadcastChangeSink>? _logger;
 
+    /// <summary>
+    /// Creates the sink. Registered by <c>UseBroadcaster()</c>; not intended to be constructed directly.
+    /// </summary>
+    /// <param name="broadcaster">The transport each change domain is published through.</param>
+    /// <param name="timeProvider">Supplies the message timestamp.</param>
+    /// <param name="logger">Optional debug logging of each published domain.</param>
     public BroadcastChangeSink(
         ITrainEventBroadcaster broadcaster,
         TimeProvider timeProvider,

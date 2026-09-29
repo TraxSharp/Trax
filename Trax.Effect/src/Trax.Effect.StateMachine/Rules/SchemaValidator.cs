@@ -9,9 +9,19 @@ namespace Trax.Effect.StateMachine;
 /// valid, else a message. The message is non-contract detail (only "valid vs not" is the contract), so it is
 /// free to differ from a hand-written validator's wording. This is the schema-derived replacement for a
 /// hand-written <c>Holds(...)</c>.
+///
+/// <para>Infrastructure that <c>Context&lt;T&gt;()</c> compiles to; not intended to be called directly.</para>
 /// </summary>
 public static class SchemaValidator
 {
+    /// <summary>
+    /// Checks <paramref name="context"/> against <paramref name="schema"/>, stopping at the first failure.
+    /// A missing field and a JSON null are treated alike: both pass for a nullable field and fail for a
+    /// required one.
+    /// </summary>
+    /// <param name="schema">The declared schema.</param>
+    /// <param name="context">The context to check; it is not modified.</param>
+    /// <returns>Null when the context is valid; otherwise a short message naming the first failing field.</returns>
     public static string? Validate(ContextSchema schema, JsonObject context)
     {
         var known = new HashSet<string>(StringComparer.Ordinal);

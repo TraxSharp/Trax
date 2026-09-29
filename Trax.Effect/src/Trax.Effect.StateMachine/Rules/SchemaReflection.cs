@@ -17,11 +17,21 @@ namespace Trax.Effect.StateMachine;
 /// validates against its own serialized form. A property whose type has no fixed JSON type (<c>object</c>,
 /// a raw <c>JsonNode</c>) throws <see cref="InvalidOperationException"/> here, when the machine is
 /// configured, rather than being given a type its values would not match.</para>
+///
+/// <para>Infrastructure behind <c>Context&lt;T&gt;()</c> and <c>WithInput&lt;T&gt;()</c>; not intended to be
+/// called directly.</para>
 /// </summary>
 public static class SchemaReflection
 {
+    /// <summary>Builds the schema for <typeparamref name="T"/>; see <see cref="For(Type)"/>.</summary>
     public static ContextSchema For<T>() => For(typeof(T));
 
+    /// <summary>
+    /// Builds the schema from <paramref name="contextType"/>'s public readable instance properties, with
+    /// fields sorted by their camelCase JSON name.
+    /// </summary>
+    /// <param name="contextType">The context or input record type.</param>
+    /// <exception cref="InvalidOperationException">A property's type has no fixed JSON type.</exception>
     public static ContextSchema For(Type contextType)
     {
         var fields = contextType

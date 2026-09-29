@@ -2,6 +2,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Trax.Effect.Data.Models.Log;
 
+/// <summary>
+/// EF Core mapping for <see cref="Effect.Models.Log.Log"/>: maps it to <c>trax.log</c>,
+/// indexed on the metadata id. Infrastructure applied by the data context; not intended for direct use. Query the rows
+/// through <c>IDataContext</c>.
+/// </summary>
 public class PersistentLog : Effect.Models.Log.Log
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)

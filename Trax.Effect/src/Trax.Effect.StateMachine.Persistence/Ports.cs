@@ -119,5 +119,13 @@ public interface ISnapshotPrincipal
 /// </summary>
 public interface ISnapshotEffect
 {
+    /// <summary>
+    /// Performs the side effect for <paramref name="snapshot"/> (the draft as loaded, in the effect's from-state)
+    /// and returns its receipt, which is written into the terminal snapshot's context. Throw if the effect did not
+    /// happen: the claim is released and a retry runs it again.
+    /// </summary>
+    /// <param name="snapshot">The draft the effect acts on.</param>
+    /// <param name="cancellationToken">The request's cancellation token.</param>
+    /// <returns>A non-empty receipt, typically the downstream system's id for what was done.</returns>
     Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default);
 }

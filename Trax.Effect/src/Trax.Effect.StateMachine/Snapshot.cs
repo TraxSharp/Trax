@@ -36,6 +36,12 @@ public sealed record Snapshot
     // A JsonObject compares by reference, which would break value equality for a record whose
     // whole point is data equality. Compare context structurally so two snapshots with equal
     // JSON are equal (this is what the conformance and round-trip tests assert on).
+    /// <summary>
+    /// Value equality over <see cref="Machine"/>, <see cref="Version"/>, <see cref="State"/> and a deep,
+    /// structural comparison of <see cref="Context"/> (a <see cref="JsonObject"/> otherwise compares by
+    /// reference).
+    /// </summary>
+    /// <param name="other">The snapshot to compare with.</param>
     public bool Equals(Snapshot? other) =>
         other is not null
         && Machine == other.Machine
@@ -43,5 +49,9 @@ public sealed record Snapshot
         && State == other.State
         && JsonNode.DeepEquals(Context, other.Context);
 
+    /// <summary>
+    /// Hashes <see cref="Machine"/>, <see cref="Version"/> and <see cref="State"/> only; the context is left
+    /// out so snapshots that are equal by <see cref="Equals(Snapshot)"/> always share a hash.
+    /// </summary>
     public override int GetHashCode() => HashCode.Combine(Machine, Version, State);
 }

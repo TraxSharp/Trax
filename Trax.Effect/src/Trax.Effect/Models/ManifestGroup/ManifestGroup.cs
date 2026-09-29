@@ -20,6 +20,10 @@ namespace Trax.Effect.Models.ManifestGroup;
 /// </remarks>
 public class ManifestGroup : IModel
 {
+    /// <summary>
+    /// Database-generated primary key, referenced by <c>Manifest.ManifestGroupId</c>. Zero until
+    /// the group is inserted.
+    /// </summary>
     [Column("id")]
     public long Id { get; }
 
@@ -50,9 +54,18 @@ public class ManifestGroup : IModel
     [Column("is_enabled")]
     public bool IsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// UTC time the group was created. Set by the code that inserts it (the scheduler stamps it when
+    /// it creates a group while scheduling); no database trigger maintains it.
+    /// </summary>
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>
+    /// UTC time of the last change, stamped by the scheduler when it re-schedules into the group
+    /// and by the operations that edit a group's settings. No database trigger maintains it, so a
+    /// direct write through <c>IDataContext</c> must set it itself.
+    /// </summary>
     [Column("updated_at")]
     public DateTime UpdatedAt { get; set; }
 
@@ -61,6 +74,10 @@ public class ManifestGroup : IModel
     /// </summary>
     public ICollection<Manifest.Manifest> Manifests { get; private set; } = [];
 
+    /// <summary>
+    /// Serializes this group to JSON for a log line. Not a stable format: read the
+    /// properties for values.
+    /// </summary>
     public override string ToString() =>
         JsonSerializer.Serialize(
             this,
@@ -70,6 +87,10 @@ public class ManifestGroup : IModel
             )
         );
 
+    /// <summary>
+    /// For JSON deserialization, EF Core materialization, and creating a group directly. A new
+    /// group is enabled with priority 0 and no per-group job limit.
+    /// </summary>
     [JsonConstructor]
     public ManifestGroup() { }
 }

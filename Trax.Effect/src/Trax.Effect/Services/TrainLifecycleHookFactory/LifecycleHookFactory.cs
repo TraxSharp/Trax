@@ -17,9 +17,18 @@ public class LifecycleHookFactory<THook>(IServiceProvider serviceProvider)
     : ITrainLifecycleHookFactory
     where THook : class, ITrainLifecycleHook
 {
+    /// <summary>
+    /// Creates a <typeparamref name="THook"/> from the root container the factory was resolved from, so scoped
+    /// dependencies are not the run's.
+    /// </summary>
     public ITrainLifecycleHook Create() =>
         ActivatorUtilities.CreateInstance<THook>(serviceProvider);
 
+    /// <summary>
+    /// Creates a <typeparamref name="THook"/> with <see cref="ActivatorUtilities"/> from the run's scope, so its
+    /// constructor receives that run's scoped services. A new hook is built for every run.
+    /// </summary>
+    /// <param name="scopeProvider">The service provider of the run's scope.</param>
     public ITrainLifecycleHook Create(IServiceProvider scopeProvider) =>
         ActivatorUtilities.CreateInstance<THook>(scopeProvider);
 }

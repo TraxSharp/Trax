@@ -7,6 +7,10 @@ using Trax.Effect.Broadcaster.SignalR.Services;
 
 namespace Trax.Effect.Broadcaster.SignalR.Extensions;
 
+/// <summary>
+/// Adds <c>MapTraxTrainEventHub</c>, which maps the SignalR hub that clients connect to in order to
+/// receive the events <c>UseSignalRHub</c> pushes.
+/// </summary>
 public static class SignalRHubEndpointExtensions
 {
     /// <summary>

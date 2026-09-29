@@ -91,12 +91,16 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     /// </remarks>
     public DbSet<DeadLetter> DeadLetters { get; set; }
 
+    /// <inheritdoc/>
     public DbSet<WorkQueue> WorkQueues { get; set; }
 
+    /// <inheritdoc/>
     public DbSet<ManifestGroup> ManifestGroups { get; set; }
 
+    /// <inheritdoc/>
     public DbSet<BackgroundJob> BackgroundJobs { get; set; }
 
+    /// <inheritdoc/>
     public DbSet<SchedulerConfig> SchedulerConfigs { get; set; }
 
     /// <summary>
@@ -278,6 +282,13 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
         entry.State = model.Id > 0 ? EntityState.Modified : EntityState.Added;
     }
 
+    /// <summary>
+    /// Marks a detached model for saving: Modified when its <c>Id</c> is set, Added when it is 0.
+    /// A model the context already tracks is left alone, since EF detects its property changes on
+    /// save. Only this entity is attached; its navigations are not walked.
+    /// </summary>
+    /// <param name="model">The model that was changed.</param>
+    /// <returns>A completed task; nothing is written until <c>SaveChanges</c>.</returns>
     public async Task Update(IModel model)
     {
         var entry = Entry(model);

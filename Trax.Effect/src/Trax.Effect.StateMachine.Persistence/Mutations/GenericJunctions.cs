@@ -32,10 +32,15 @@ internal static class SnapshotGuards
             : null;
 }
 
-/// <summary>Autosave (soft path): validate + store a client snapshot for any registered machine.</summary>
+/// <summary>Autosave (soft path): validate + store a client snapshot for any registered machine. Infrastructure chained by <see cref="SaveSnapshot"/>; not intended to be called directly.</summary>
 public class SaveSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
     : Junction<SaveSnapshotInput, SaveSnapshotOutput>
 {
+    /// <summary>
+    /// Autosaves <see cref="SaveSnapshotInput.Snapshot"/> for the current user. Every refusal is returned as a
+    /// <see cref="SnapshotProblem"/>: <c>unauthenticated</c>, <c>unknown-machine</c>, <c>schema-mismatch</c>,
+    /// <c>conflict</c>, or the code of an <see cref="AutosaveResult.Rejected"/>.
+    /// </summary>
     public override async Task<SaveSnapshotOutput> Run(SaveSnapshotInput input)
     {
         if (principal.CurrentUserKey is not { } userKey)
@@ -73,12 +78,18 @@ public class SaveSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPr
         };
 }
 
-/// <summary>Authoritative advance: re-drive the stored draft by one trigger, server-side.</summary>
+/// <summary>Authoritative advance: re-drive the stored draft by one trigger, server-side. Infrastructure chained by <see cref="AdvanceSnapshot"/>; not intended to be called directly.</summary>
 public class AdvanceSnapshotJunction(
     ISnapshotMachineRegistry registry,
     ISnapshotPrincipal principal
 ) : Junction<AdvanceSnapshotInput, AdvanceSnapshotOutput>
 {
+    /// <summary>
+    /// Advances the current user's draft by one trigger. Refusals are returned as a
+    /// <see cref="SnapshotProblem"/>: <c>unauthenticated</c>, <c>unknown-machine</c>, <c>schema-mismatch</c>,
+    /// <c>too-large</c> (input over <see cref="SnapshotLimits.MaxSnapshotBytes"/>), <c>malformed</c> (input
+    /// is not JSON), <c>not-found</c>, <c>conflict</c>, or the reason of an <see cref="AdvanceOutcome.Rejected"/>.
+    /// </summary>
     public override async Task<AdvanceSnapshotOutput> Run(AdvanceSnapshotInput input)
     {
         if (principal.CurrentUserKey is not { } userKey)
@@ -155,10 +166,15 @@ public class AdvanceSnapshotJunction(
         };
 }
 
-/// <summary>Resume read: load the caller's stored draft. A missing draft is normal (start fresh), not an error.</summary>
+/// <summary>Resume read: load the caller's stored draft. A missing draft is normal (start fresh), not an error. Infrastructure chained by <see cref="LoadSnapshot"/>; not intended to be called directly.</summary>
 public class LoadSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
     : Junction<LoadSnapshotInput, LoadSnapshotOutput>
 {
+    /// <summary>
+    /// Loads the current user's draft. A missing (or expired) draft comes back as the <c>not-found</c>
+    /// problem, which clients treat as "start fresh"; a stored draft that fails validation comes back with
+    /// its rehydration error code.
+    /// </summary>
     public override async Task<LoadSnapshotOutput> Run(LoadSnapshotInput input)
     {
         if (principal.CurrentUserKey is not { } userKey)
@@ -193,10 +209,17 @@ public class LoadSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPr
         };
 }
 
-/// <summary>Run a machine's one irreversible effect exactly once (state-gated, idempotent).</summary>
+/// <summary>Run a machine's one irreversible effect exactly once (state-gated, idempotent). Infrastructure chained by <see cref="SendSnapshot"/>; not intended to be called directly.</summary>
 public class SendSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
     : Junction<SendSnapshotInput, SendSnapshotOutput>
 {
+    /// <summary>
+    /// Runs the machine's irreversible effect for the current user's draft, keyed by
+    /// <see cref="SendSnapshotInput.RequestId"/> or <c>send:{Id}</c> when none is given. Refusals are returned
+    /// as a <see cref="SnapshotProblem"/>, including <c>no-effect</c> when the machine declares none; an
+    /// exception from the effect is caught and returned as <c>delivery-failed</c> carrying the exception
+    /// message, with the draft not advanced.
+    /// </summary>
     public override async Task<SendSnapshotOutput> Run(SendSnapshotInput input)
     {
         if (principal.CurrentUserKey is not { } userKey)

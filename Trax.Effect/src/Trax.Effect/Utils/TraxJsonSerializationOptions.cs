@@ -88,6 +88,13 @@ public static class TraxJsonSerializationOptions
             },
         };
 
+    /// <summary>
+    /// The options the junction logger uses to serialize a junction's output into <c>JunctionMetadata.OutputJson</c>
+    /// when <c>serializeJunctionData</c> is on, wrapped by <see cref="TraxLogSerialization.ForLogging"/> so
+    /// <c>[TraxSensitive]</c> members are masked. Compact, camelCase, nulls omitted, enums as strings, cycles ignored
+    /// rather than preserved, depth capped at 8, and any <see cref="IDisposable"/> written as a placeholder by
+    /// <see cref="DisposableConverter"/>. Process-wide and settable; replacing it affects every junction logger.
+    /// </summary>
     public static JsonSerializerOptions JunctionLogging { get; set; } =
         new()
         {

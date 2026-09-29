@@ -205,6 +205,11 @@ public class ParameterEffect(
     private static string UnserializablePlaceholder(Exception ex) =>
         JsonSerializer.Serialize(new { _unserializable = true, _error = ex.GetType().Name });
 
+    /// <summary>
+    /// Releases the in-memory input and output objects held on every tracked metadata, so the run's
+    /// parameters can be garbage-collected, and stops tracking them. The serialized JSON already
+    /// stored on each metadata is kept.
+    /// </summary>
     public void Dispose()
     {
         lock (_lock)

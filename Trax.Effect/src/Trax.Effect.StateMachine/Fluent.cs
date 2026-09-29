@@ -33,6 +33,10 @@ public sealed record BuiltMachine<TState, TTrigger>(
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
+    /// <summary>
+    /// The engine that interprets <see cref="Definition"/>, created once with the record. Use it to advance,
+    /// rehydrate or serialize snapshots in memory (for example in tests) without any persistence.
+    /// </summary>
     public SnapshotMachine<TState, TTrigger> Engine { get; } = new(Definition);
 }
 
@@ -232,18 +236,21 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
         new(StringComparer.Ordinal);
     private bool _usedDeclarative;
 
+    /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> Id(string id)
     {
         _id = id;
         return this;
     }
 
+    /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> Version(int version)
     {
         _version = version;
         return this;
     }
 
+    /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> StartsAt(TState state, Func<JsonObject> initialContext)
     {
         _initial = state;
@@ -251,6 +258,7 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
         return this;
     }
 
+    /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> MigrateFrom(
         int fromVersion,
         Func<string, JsonObject, MigrationResult> migrate
@@ -260,6 +268,7 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
         return this;
     }
 
+    /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> Differential(
         Action<IDifferentialBuilder<TState, TTrigger>> configure
     )
@@ -268,8 +277,10 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
         return this;
     }
 
+    /// <inheritdoc/>
     public IStateBuilder<TState, TTrigger> In(TState state) => new StateBuilder(this, state);
 
+    /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> CustomGuard(
         string name,
         Func<JsonObject, JsonNode?, bool> guard
@@ -279,6 +290,7 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
         return this;
     }
 
+    /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> CustomReducer(
         string name,
         Func<JsonObject, JsonNode?, JsonObject> reducer

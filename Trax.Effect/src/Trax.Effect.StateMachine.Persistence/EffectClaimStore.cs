@@ -5,8 +5,21 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <summary>The outcome of claiming an effect key: won (with the fence token to complete/release under), or lost.</summary>
 public abstract record ClaimResult
 {
+    /// <summary>
+    /// This caller holds the claim: it inserted the key, or reclaimed an in-flight claim whose lease had expired.
+    /// Run the effect, then pass <c>OwnerToken</c> to <see cref="IEffectClaimStore.Complete"/> or
+    /// <see cref="IEffectClaimStore.ReleaseOwned"/>.
+    /// </summary>
+    /// <param name="OwnerToken">
+    /// The fence token minted for this claim. Completing or releasing succeeds only while the row still carries
+    /// it, so a claimant whose lease was taken over cannot touch the new owner's row.
+    /// </param>
     public sealed record Won(Guid OwnerToken) : ClaimResult;
 
+    /// <summary>
+    /// Another caller holds the key: either its claim is still inside its lease, or the effect already completed.
+    /// Read <see cref="IEffectClaimStore.GetReceipt"/> to tell the two apart.
+    /// </summary>
     public sealed record Lost : ClaimResult;
 
     private ClaimResult() { }
@@ -58,6 +71,15 @@ public interface IEffectClaimStore
 /// <summary>The Postgres-backed <see cref="IEffectClaimStore"/>. The unique PK on <c>effect_key</c> is the lock.</summary>
 public sealed class EfEffectClaimStore(SnapshotDbContext db) : IEffectClaimStore
 {
+    /// <summary>
+    /// Inserts a new <c>effect_claim</c> row with a fresh owner token and <c>lease_expires_at = now + lease</c>.
+    /// If the key already exists, it takes the row over only when the receipt is null and the lease has passed,
+    /// rotating the owner token; otherwise the result is <see cref="ClaimResult.Lost"/>. A completed claim is
+    /// never reclaimed. The duplicate key is recognised only as a Postgres unique violation.
+    /// </summary>
+    /// <param name="effectKey">The intent key, the primary key of the row.</param>
+    /// <param name="lease">How long the claim is held before another caller may reclaim it.</param>
+    /// <param name="cancellationToken">Cancels the database calls.</param>
     public async Task<ClaimResult> TryClaim(
         string effectKey,
         TimeSpan lease,
@@ -103,6 +125,7 @@ public sealed class EfEffectClaimStore(SnapshotDbContext db) : IEffectClaimStore
         }
     }
 
+    /// <inheritdoc/>
     public async Task<bool> Complete(
         string effectKey,
         Guid ownerToken,
@@ -118,6 +141,7 @@ public sealed class EfEffectClaimStore(SnapshotDbContext db) : IEffectClaimStore
         return rows == 1;
     }
 
+    /// <inheritdoc/>
     public async Task<string?> GetReceipt(
         string effectKey,
         CancellationToken cancellationToken = default
@@ -128,9 +152,16 @@ public sealed class EfEffectClaimStore(SnapshotDbContext db) : IEffectClaimStore
                 .FirstOrDefaultAsync(x => x.EffectKey == effectKey, cancellationToken)
         )?.Receipt;
 
+    /// <summary>
+    /// Deletes the key's row whatever its state, completed or in flight, so the next
+    /// <see cref="TryClaim"/> starts over and the effect can run again. Used when a draft is reset.
+    /// </summary>
+    /// <param name="effectKey">The intent key to forget.</param>
+    /// <param name="cancellationToken">Cancels the delete.</param>
     public Task Release(string effectKey, CancellationToken cancellationToken = default) =>
         db.EffectClaims.Where(x => x.EffectKey == effectKey).ExecuteDeleteAsync(cancellationToken);
 
+    /// <inheritdoc/>
     public async Task<bool> ReleaseOwned(
         string effectKey,
         Guid ownerToken,
@@ -145,6 +176,7 @@ public sealed class EfEffectClaimStore(SnapshotDbContext db) : IEffectClaimStore
         return rows == 1;
     }
 
+    /// <inheritdoc/>
     public Task<int> ReclaimStale(
         DateTimeOffset cutoff,
         CancellationToken cancellationToken = default

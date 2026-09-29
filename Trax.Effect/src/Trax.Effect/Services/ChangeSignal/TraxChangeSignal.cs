@@ -26,6 +26,13 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
     private long _totalDropped;
     private long _lastWarnedAt;
 
+    /// <summary>
+    /// Creates the signal with a bounded buffer of <see cref="ChangeSignalOptions.ChannelCapacity"/> entries and
+    /// registers the <see cref="MeterName"/> meter. Registered as a singleton by <c>AddTrax</c>; not intended to be
+    /// constructed directly.
+    /// </summary>
+    /// <param name="options">Buffer sizing. Throws <see cref="ArgumentNullException"/> when <c>null</c>.</param>
+    /// <param name="logger">Receives the throttled warning logged when signals are dropped; optional.</param>
     public TraxChangeSignal(ChangeSignalOptions options, ILogger<TraxChangeSignal>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(options);

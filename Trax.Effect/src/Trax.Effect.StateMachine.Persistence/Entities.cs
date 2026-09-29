@@ -25,12 +25,22 @@ public class SnapshotRecord
     [Column("user_key")]
     public string UserKey { get; set; } = default!;
 
+    /// <summary>
+    /// The id of the machine this draft belongs to (its <see cref="IMachine.Name"/>), copied from the snapshot on
+    /// every write. Not null.
+    /// </summary>
     [Column("machine")]
     public string Machine { get; set; } = default!;
 
+    /// <summary>
+    /// The machine definition version the snapshot was written under, copied from the snapshot on every write.
+    /// On load an older version is migrated forward through the machine's migrations; a newer one, or one with a
+    /// gap in the chain, is refused as <c>version-mismatch</c>.
+    /// </summary>
     [Column("version")]
     public int Version { get; set; }
 
+    /// <summary>The current state's name (the <c>TState</c> enum member as text). Not null.</summary>
     [Column("state")]
     public string State { get; set; } = default!;
 
@@ -65,9 +75,20 @@ public class SnapshotRecord
     [Column("last_request_from_state")]
     public string? LastRequestFromState { get; set; }
 
+    /// <summary>
+    /// When the draft was last written, set by the store to the UTC clock on every insert and update. With a
+    /// <see cref="StateMachineOptions.DraftTtl"/> set, a draft whose value is older than the TTL is deleted on its
+    /// next load.
+    /// </summary>
     [Column("updated_at")]
     public DateTimeOffset UpdatedAt { get; set; }
 
+    /// <summary>
+    /// Maps this entity on <paramref name="modelBuilder"/>: the composite key <c>(user_key, id)</c> and
+    /// <see cref="ConcurrencyToken"/> as a concurrency token. <see cref="SnapshotDbContext"/> calls it; a host
+    /// that maps the table on its own context calls it from that context's <c>OnModelCreating</c>.
+    /// </summary>
+    /// <param name="modelBuilder">The model being built.</param>
     public static void OnModelCreating(ModelBuilder modelBuilder)
     {
         var entity = modelBuilder.Entity<SnapshotRecord>();
@@ -109,9 +130,19 @@ public class EffectClaim
     [Column("lease_expires_at")]
     public DateTimeOffset LeaseExpiresAt { get; set; }
 
+    /// <summary>
+    /// When the row was first inserted (UTC). A reclaim after an expired lease keeps the original value, so
+    /// this is the first attempt's time, not the current claimant's.
+    /// </summary>
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; }
 
+    /// <summary>
+    /// Maps this entity on <paramref name="modelBuilder"/> with <see cref="EffectKey"/> as the primary key.
+    /// <see cref="SnapshotDbContext"/> calls it; a host that maps the table on its own context calls it from
+    /// that context's <c>OnModelCreating</c>.
+    /// </summary>
+    /// <param name="modelBuilder">The model being built.</param>
     public static void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.Entity<EffectClaim>().HasKey(x => x.EffectKey);
 }
@@ -128,9 +159,23 @@ public class EffectClaim
 public sealed class SnapshotDbContext(DbContextOptions<SnapshotDbContext> options)
     : DbContext(options)
 {
+    /// <summary>
+    /// The <c>snapshot_draft</c> table: one row per user's draft. Filter by <see cref="SnapshotRecord.UserKey"/>
+    /// when querying directly, because the draft id alone is not unique across users.
+    /// </summary>
     public DbSet<SnapshotRecord> SnapshotDrafts => Set<SnapshotRecord>();
+
+    /// <summary>
+    /// The <c>effect_claim</c> table: one row per exactly-once effect intent. A row with a null
+    /// <see cref="EffectClaim.Receipt"/> is in flight; one with a receipt has run.
+    /// </summary>
     public DbSet<EffectClaim> EffectClaims => Set<EffectClaim>();
 
+    /// <summary>
+    /// Maps both entities in the <c>trax</c> schema. On SQLite it drops the schema and stores the
+    /// <c>jsonb</c> context as <c>TEXT</c>, so the model matches the SQLite migration.
+    /// </summary>
+    /// <param name="modelBuilder">The model being built.</param>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("trax");

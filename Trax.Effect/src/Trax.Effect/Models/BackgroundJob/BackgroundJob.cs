@@ -22,6 +22,10 @@ public class BackgroundJob : IModel
 {
     #region Columns
 
+    /// <summary>
+    /// Database-generated primary key of the <c>trax.background_job</c> row. Zero until the row is
+    /// inserted.
+    /// </summary>
     [Column("id")]
     public long Id { get; private set; }
 
@@ -82,6 +86,10 @@ public class BackgroundJob : IModel
         };
     }
 
+    /// <summary>
+    /// Serializes this job to JSON for a log line, with <see cref="Input"/> written as <c>{"_omitted": true}</c> rather than the raw input. Not a stable format: use the
+    /// properties to read values.
+    /// </summary>
     public override string ToString() =>
         JsonSerializer.Serialize(
             this,
@@ -93,6 +101,10 @@ public class BackgroundJob : IModel
 
     #endregion
 
+    /// <summary>
+    /// For JSON deserialization and EF Core materialization. Build a new job with
+    /// <see cref="Create"/>, which stamps <see cref="CreatedAt"/>.
+    /// </summary>
     [JsonConstructor]
     public BackgroundJob() { }
 }

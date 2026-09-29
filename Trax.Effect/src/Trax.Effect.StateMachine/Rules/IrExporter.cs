@@ -11,6 +11,17 @@ namespace Trax.Effect.StateMachine;
 /// </summary>
 public static class IrExporter
 {
+    /// <summary>
+    /// Exports <paramref name="machine"/> as single-line canonical IR JSON (stable key order, so the output
+    /// can be committed and hashed). The <c>invariants</c> and <c>differential</c> sections are emitted only
+    /// when the machine declares them.
+    /// </summary>
+    /// <param name="machine">The result of <see cref="MachineBuilder{TState,TTrigger}.Build"/>.</param>
+    /// <returns>The IR as canonical JSON.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The machine was authored with raw delegates (<see cref="BuiltMachine{TState,TTrigger}.Declarative"/>
+    /// is null), so there is no declarative model to export.
+    /// </exception>
     public static string Export<TState, TTrigger>(BuiltMachine<TState, TTrigger> machine)
         where TState : struct, Enum
         where TTrigger : struct, Enum

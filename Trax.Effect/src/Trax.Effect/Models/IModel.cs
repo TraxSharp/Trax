@@ -38,5 +38,10 @@ public interface IModel
     [Column("id")]
     long Id { get; }
 
+    /// <summary>
+    /// Renders the model for a log line. Trax's models return JSON written with
+    /// <c>TraxLogSerialization.ForLogging</c>, which omits stored run inputs and a run's
+    /// navigation properties; the format is for reading, not parsing.
+    /// </summary>
     string ToString();
 }

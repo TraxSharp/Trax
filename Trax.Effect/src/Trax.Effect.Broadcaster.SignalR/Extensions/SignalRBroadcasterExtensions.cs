@@ -7,6 +7,11 @@ using Trax.Effect.Services.TrainLifecycleHookFactory;
 
 namespace Trax.Effect.Broadcaster.SignalR.Extensions;
 
+/// <summary>
+/// Adds <c>UseSignalRHub</c> to the broadcaster builder, which pushes train lifecycle events to
+/// browser and other SignalR clients. Pair it with <see cref="SignalRHubEndpointExtensions"/> to
+/// map the hub those clients connect to.
+/// </summary>
 public static class SignalRBroadcasterExtensions
 {
     /// <summary>
