@@ -12,7 +12,23 @@ Trax requires `net10.0`:
 <TargetFramework>net10.0</TargetFramework>
 ```
 
-If you're migrating from ChainSharp, see [Migration Guide](/docs/reference/migration).
+Every project that references a Trax package must target `net10.0`; there is no `net8.0` or
+`net9.0` build.
+
+Trax's packages depend on EF Core, Npgsql and `Microsoft.Extensions.*`, so NuGet resolves those
+for you. You only need to act if your project also pins one of them directly: the pin has to be
+at least the version the Trax package was built against, or the restore fails with `NU1605` (`NU1109`
+under Central Package Management) naming the package. The floors as of `Trax.Effect` 1.57 are:
+
+| Package | Minimum |
+|---|---|
+| `Microsoft.EntityFrameworkCore` (and `.Relational`, `.InMemory`, `.Sqlite`) | 10.0.12 |
+| `Npgsql` | 10.0.3 |
+| `Npgsql.EntityFrameworkCore.PostgreSQL` | 10.0.3 |
+| `EFCore.NamingConventions` | 10.0.1 |
+| `Microsoft.Extensions.*` | 10.0.12 |
+
+A release can raise them; the dependency list on the package's nuget.org page is authoritative.
 
 Pick the track that matches what you need:
 

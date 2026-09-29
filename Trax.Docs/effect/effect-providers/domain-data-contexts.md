@@ -39,6 +39,35 @@ services.AddDomainDataContext<ICatalogDbContext, CatalogDbContext>(o => o.UseNpg
 await app.Services.EnsureSchemaCreatedAsync<CatalogDbContext>();
 ```
 
+## PostgreSQL enum columns
+
+A C# enum stored as a PostgreSQL enum type is mapped in the `UseNpgsql` options callback, which
+is where EF Core's model learns about it:
+
+```csharp
+services.AddDomainDataContext<ICatalogDbContext, CatalogDbContext>(o =>
+    o.UseNpgsql(connectionString, npgsql => npgsql.MapEnum<BookFormat>("book_format", "catalog")));
+```
+
+Passing a connection string, as above, is enough: EF Core builds the data source and carries the
+mapping into it. If you build your own `NpgsqlDataSource` and pass that instead, map the enum on
+the `NpgsqlDataSourceBuilder` as well, because EF Core cannot change a data source it did not
+build. The builder mapping handles the ADO.NET layer and the callback mapping handles the model;
+leaving out the callback one fails at runtime with
+`column "x" is of type book_format but expression is of type integer`.
+
+```csharp
+var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+dataSourceBuilder.MapEnum<BookFormat>("catalog.book_format");
+var dataSource = dataSourceBuilder.Build();
+
+services.AddDomainDataContext<ICatalogDbContext, CatalogDbContext>(o =>
+    o.UseNpgsql(dataSource, npgsql => npgsql.MapEnum<BookFormat>("book_format", "catalog")));
+```
+
+`UsePostgres` does both for Trax's own enums (`TrainState`, `LogLevel`, `ScheduleType` and the
+rest) on the metadata store, so this only concerns enum types your own contexts add.
+
 ## Cross-schema reads
 
 A context never references another domain. When it needs to read an entity owned by another schema, the foreign entity exposes a static `OnCrossSchemaModelCreating(ModelBuilder, string schema)` that pins it to the foreign schema and **ignores every navigation**, so EF Core never walks the foreign model graph into the consuming context. The entity is exposed there only through a scalar-only `I{Entity}Reference : IEntityReference` interface, which keeps it out of GraphQL discovery so the owning domain stays the single GraphQL owner. Relationships that cross schemas at the GraphQL layer are resolved by [cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders) instead.

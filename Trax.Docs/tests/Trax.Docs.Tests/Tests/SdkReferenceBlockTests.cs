@@ -66,7 +66,6 @@ public class SdkReferenceBlockTests
         "reference/benchmarks.md",
         "reference/cli.md",
         "reference/comparison.md",
-        "reference/migration.md",
         "reference/semantic-release.md",
         // Only code block is a `gh attestation verify` CLI command, no SDK calls.
         "supply-chain-security.md",

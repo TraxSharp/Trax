@@ -45,8 +45,8 @@ up by review rather than by the lint.
 
 The lint exempts, in order: anything under `sdk-reference/`, `migration-guides/`, `adr/` or
 `.claude/`; thirteen filenames that are tables of contents wherever they appear (`README.md`,
-`index.md`, and the per-area overview pages such as `effect.md`); and thirteen named paths.
-Those last are not a licence to skip the block. Ten are pages whose code is shell commands,
+`index.md`, and the per-area overview pages such as `effect.md`); and twelve named paths.
+Those last are not a licence to skip the block. Nine are pages whose code is shell commands,
 SQL, directory trees or csproj fragments, with no SDK method to link to, and this page is one
 of them. The other three are tracked tech debt: concept pages that should carry a block and do
 not. A new page is not added to that list.
