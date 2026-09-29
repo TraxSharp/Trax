@@ -65,8 +65,8 @@
       },
       "Trax.Core": {
         "type": "Transitive",
-        "resolved": "1.7.3",
-        "contentHash": "If+wjMDtAs/ynL+RzeRnclbv813Y2+OgNeg5nFo7mYO+d+RYHRGZ5K01E0hz/Ss96WjcZmB0tSbl+ViuG0RDjA==",
+        "resolved": "1.7.4",
+        "contentHash": "Sv6R/avK2KuByuoLBTL+10P14VbxwWo4vHVul505cCDV3CcqCFrOtTCEYmlzSM916znizpCGaWCdts5WxCZovQ==",
         "dependencies": {
           "LanguageExt.Core": "4.4.9"
         }
@@ -75,8 +75,8 @@
         "type": "Project",
         "dependencies": {
           "Cronos": "[0.13.0, )",
-          "Trax.Effect": "[1.57.0, )",
-          "Trax.Effect.Data": "[1.57.0, )",
+          "Trax.Effect": "[1.57.1, )",
+          "Trax.Effect.Data": "[1.57.1, )",
           "Trax.Mediator": "[1.23.0, )"
         }
       },
@@ -94,24 +94,24 @@
       },
       "Trax.Effect": {
         "type": "CentralTransitive",
-        "requested": "[1.57.0, )",
-        "resolved": "1.57.0",
-        "contentHash": "9mq6Z27Nfxiq6t0amsRMaO/T3bsReFYmYxX+aWXnv7fSJervfEjTwM5ezFoYt/my8AuYah1PS0kvsCxBKPOYKw==",
+        "requested": "[1.57.1, )",
+        "resolved": "1.57.1",
+        "contentHash": "tUaQ31oGZoMCWdNuQ8tPCOq+PtpNZ8St6sd7imFibNe1HSqJFPSmEJup9n1vBH7cXTkP/pJgvE/kTDY7gtL7KA==",
         "dependencies": {
-          "Trax.Core": "1.7.3"
+          "Trax.Core": "1.7.4"
         }
       },
       "Trax.Effect.Data": {
         "type": "CentralTransitive",
-        "requested": "[1.57.0, )",
-        "resolved": "1.57.0",
-        "contentHash": "lVCBlHnAdCB6y7d+eO7s5FAtRrJjlyYtFygSduLArv3raCClUVeq2l/6WGVXb5/reBH1Pm0Kydxgb62+/D4iqw==",
+        "requested": "[1.57.1, )",
+        "resolved": "1.57.1",
+        "contentHash": "3Q/xYlebNfBmkeL/CHBLBN87S5FD4YvIgJbLKIO9hEHhPnHEN7LNceeWgkUEiyXlxnRzGvAHqgygJwytLCwz3A==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.12",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.12",
           "Npgsql": "10.0.3",
-          "Trax.Core": "1.7.3",
-          "Trax.Effect": "1.57.0"
+          "Trax.Core": "1.7.4",
+          "Trax.Effect": "1.57.1"
         }
       },
       "Trax.Mediator": {
