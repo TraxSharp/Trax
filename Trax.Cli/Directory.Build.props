@@ -7,6 +7,26 @@
     <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 
+  <!-- NuGet metadata shared by every packable project. -->
+  <PropertyGroup>
+    <Authors>Theauxm</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Cli</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
+    <PackageTags>trax;dotnet</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None
+      Include="$(MSBuildThisFileDirectory)README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+  </ItemGroup>
+
   <!-- Deterministic/reproducible builds. CI source-path normalization
        (ContinuousIntegrationBuild) is turned on by the package only when CI is detected. -->
   <ItemGroup>

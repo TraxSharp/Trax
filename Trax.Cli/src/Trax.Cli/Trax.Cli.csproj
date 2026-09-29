@@ -6,6 +6,16 @@
     <Nullable>enable</Nullable>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>trax</ToolCommandName>
+    <!-- System.CommandLine names the root command after the running assembly, so the
+         assembly is named after the command: help then reads `Usage: trax ...`.
+         PackageId and RootNamespace stay Trax.Cli (the embedded templates are looked
+         up as Trax.Cli.Templates.*). -->
+    <AssemblyName>trax</AssemblyName>
+    <RootNamespace>Trax.Cli</RootNamespace>
+    <PackageId>Trax.Cli</PackageId>
+    <Description>The `trax` dotnet tool. `trax generate` scaffolds a Trax hub project and a trains library (trains, junctions, input/output records) from a GraphQL SDL or OpenAPI schema; `trax machine new|generate|check` scaffolds a state machine and generates its IR, TypeScript twin and differential corpus from a compiled assembly. Install it with `dotnet tool install Trax.Cli`.</Description>
+    <PackageTags>trax;dotnet;dotnet-tool;cli;scaffolding;code-generation;graphql;openapi;state-machine</PackageTags>
+    <PackageProjectUrl>https://traxsharp.net/docs/reference/cli</PackageProjectUrl>
   </PropertyGroup>
 
   <ItemGroup>
