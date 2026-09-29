@@ -6,6 +6,18 @@ namespace Trax.Core.Monad;
 
 public partial class Monad<TInput, TReturn>
 {
+    /// <summary>
+    /// Stores services in Memory, each under the type argument it is passed as, so later
+    /// junctions and <see cref="IChain{TJunction}()"/> can find them. Each type argument must be an
+    /// interface the service implements (a class, or a struct value, fails the chain), and one
+    /// object may be passed under several interfaces. A Moq mock is stored under the type it mocks.
+    /// </summary>
+    /// <remarks>
+    /// A null service throws immediately rather than failing the chain. While the chain is read at
+    /// startup, null, a struct or a class type argument is recorded as a refusal instead, so the
+    /// argument must already be assigned when <c>Junctions()</c> runs.
+    /// </remarks>
+    /// <param name="service">The service to store under <typeparamref name="T1"/>.</param>
     public Monad<TInput, TReturn> AddServices<T1>(T1 service)
     {
         Type[] typeArray = [typeof(T1)];
@@ -13,6 +25,12 @@ public partial class Monad<TInput, TReturn>
         return AddServices([service], typeArray);
     }
 
+    /// <summary>
+    /// Stores two services in Memory, each under its type argument; see
+    /// <see cref="AddServices{T1}(T1)"/> for the rules each one follows.
+    /// </summary>
+    /// <param name="service1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="service2">The service to store under <typeparamref name="T2"/>.</param>
     public Monad<TInput, TReturn> AddServices<T1, T2>(T1 service1, T2 service2)
     {
         Type[] typeArray = [typeof(T1), typeof(T2)];
@@ -22,6 +40,13 @@ public partial class Monad<TInput, TReturn>
         return AddServices(services, typeArray);
     }
 
+    /// <summary>
+    /// Stores three services in Memory, each under its type argument; see
+    /// <see cref="AddServices{T1}(T1)"/> for the rules each one follows.
+    /// </summary>
+    /// <param name="service1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="service2">The service to store under <typeparamref name="T2"/>.</param>
+    /// <param name="service3">The service to store under <typeparamref name="T3"/>.</param>
     public Monad<TInput, TReturn> AddServices<T1, T2, T3>(T1 service1, T2 service2, T3 service3)
     {
         Type[] typeArray = [typeof(T1), typeof(T2), typeof(T3)];
@@ -31,6 +56,14 @@ public partial class Monad<TInput, TReturn>
         return AddServices(services, typeArray);
     }
 
+    /// <summary>
+    /// Stores four services in Memory, each under its type argument; see
+    /// <see cref="AddServices{T1}(T1)"/> for the rules each one follows.
+    /// </summary>
+    /// <param name="service1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="service2">The service to store under <typeparamref name="T2"/>.</param>
+    /// <param name="service3">The service to store under <typeparamref name="T3"/>.</param>
+    /// <param name="service4">The service to store under <typeparamref name="T4"/>.</param>
     public Monad<TInput, TReturn> AddServices<T1, T2, T3, T4>(
         T1 service1,
         T2 service2,
@@ -45,6 +78,15 @@ public partial class Monad<TInput, TReturn>
         return AddServices(services, typeArray);
     }
 
+    /// <summary>
+    /// Stores five services in Memory, each under its type argument; see
+    /// <see cref="AddServices{T1}(T1)"/> for the rules each one follows.
+    /// </summary>
+    /// <param name="service1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="service2">The service to store under <typeparamref name="T2"/>.</param>
+    /// <param name="service3">The service to store under <typeparamref name="T3"/>.</param>
+    /// <param name="service4">The service to store under <typeparamref name="T4"/>.</param>
+    /// <param name="service5">The service to store under <typeparamref name="T5"/>.</param>
     public Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5>(
         T1 service1,
         T2 service2,
@@ -60,6 +102,16 @@ public partial class Monad<TInput, TReturn>
         return AddServices(services, typeArray);
     }
 
+    /// <summary>
+    /// Stores six services in Memory, each under its type argument; see
+    /// <see cref="AddServices{T1}(T1)"/> for the rules each one follows.
+    /// </summary>
+    /// <param name="service1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="service2">The service to store under <typeparamref name="T2"/>.</param>
+    /// <param name="service3">The service to store under <typeparamref name="T3"/>.</param>
+    /// <param name="service4">The service to store under <typeparamref name="T4"/>.</param>
+    /// <param name="service5">The service to store under <typeparamref name="T5"/>.</param>
+    /// <param name="service6">The service to store under <typeparamref name="T6"/>.</param>
     public Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6>(
         T1 service1,
         T2 service2,
@@ -76,6 +128,17 @@ public partial class Monad<TInput, TReturn>
         return AddServices(services, typeArray);
     }
 
+    /// <summary>
+    /// Stores seven services in Memory, each under its type argument; see
+    /// <see cref="AddServices{T1}(T1)"/> for the rules each one follows.
+    /// </summary>
+    /// <param name="service1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="service2">The service to store under <typeparamref name="T2"/>.</param>
+    /// <param name="service3">The service to store under <typeparamref name="T3"/>.</param>
+    /// <param name="service4">The service to store under <typeparamref name="T4"/>.</param>
+    /// <param name="service5">The service to store under <typeparamref name="T5"/>.</param>
+    /// <param name="service6">The service to store under <typeparamref name="T6"/>.</param>
+    /// <param name="service7">The service to store under <typeparamref name="T7"/>.</param>
     public Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6, T7>(
         T1 service1,
         T2 service2,

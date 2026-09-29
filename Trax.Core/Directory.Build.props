@@ -20,12 +20,6 @@
     <PackageTags>trax;dotnet;railway-oriented-programming;functional;pipeline;either</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- CS1591 (public member has no doc comment) is the one doc warning left off. The existing
-         summaries ship now; documenting the members that have none is a tracked burn-down, and
-         every other doc-comment warning (malformed XML, a bad cref, a param mismatch) still
-         fails the build. Trax.Core.Testing already documents every public member, so it keeps
-         CS1591 on. -->
-    <NoWarn Condition="'$(MSBuildProjectName)' != 'Trax.Core.Testing'">$(NoWarn);CS1591</NoWarn>
     <!-- No .snupkg: DotNet.ReproducibleBuilds (below) sets DebugType=embedded, so the PDB, with its
          SourceLink map to this repository's commit, is already inside the shipped DLL. A symbol
          package would hold no PDB at all. -->

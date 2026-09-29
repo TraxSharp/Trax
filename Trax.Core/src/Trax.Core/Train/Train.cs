@@ -21,12 +21,22 @@ namespace Trax.Core.Train;
 /// a subclass that overrides it without calling <c>base.Run</c> runs something other than its
 /// declared chain, so <see cref="DeclaredChain"/>, and any check built on it, no longer describes
 /// what runs. A <c>ServiceTrain</c> cannot do this: its <c>Run</c> is sealed. See
-/// docs/adr/0003.
+/// Trax.Core ADR 0003.
 /// </remarks>
 /// <typeparam name="TInput">The type of input the train accepts</typeparam>
 /// <typeparam name="TReturn">The type of result the train produces</typeparam>
 public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
 {
+    /// <summary>
+    /// Identifies one run of this train across logs, stored metadata and failure data
+    /// (<see cref="Exceptions.TrainExceptionData.TrainExternalId"/>). Defaults to a new GUID in
+    /// 32-digit <c>"N"</c> format when the train is constructed; set it before <see cref="Run"/> to
+    /// correlate the run with an id you already have.
+    /// </summary>
+    /// <remarks>
+    /// A <c>ServiceTrain</c> run again on the same instance gets a fresh id unless the caller set a
+    /// new one first.
+    /// </remarks>
     public string ExternalId { get; set; } = Guid.NewGuid().ToString("N");
 
     /// <summary>
@@ -53,7 +63,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// <remarks>
     /// Virtual because the published Trax.Effect overrides it in <c>ServiceTrain</c>. An override
     /// here that does not call <c>base.Run</c> skips <see cref="Junctions"/>, so the chain check
-    /// reads a chain that never runs (docs/adr/0003).
+    /// reads a chain that never runs (Trax.Core ADR 0003).
     /// </remarks>
     public virtual async Task<TReturn> Run(
         TInput input,
@@ -115,7 +125,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// <see cref="Monad{TInput, TReturn}"/> has no public constructor, so an override outside Trax
     /// can only return a monad a base implementation built. It stays <c>protected</c> because the published Trax.Effect overrides it as
     /// <c>protected override</c>, and narrowing it would make every <c>ServiceTrain</c> fail to
-    /// load against a newer Trax.Core (docs/adr/0002).
+    /// load against a newer Trax.Core (Trax.Core ADR 0002).
     /// </remarks>
     [EditorBrowsable(EditorBrowsableState.Never)]
     protected virtual Monad<TInput, TReturn> NewMonad() => new(this, CancellationToken);

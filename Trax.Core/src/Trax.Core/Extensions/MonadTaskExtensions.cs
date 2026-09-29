@@ -23,14 +23,33 @@ public readonly struct MonadTask<TInput, TReturn>
         Source = source;
     }
 
+    /// <summary>
+    /// Lets the chain be awaited directly. Awaiting completes when every link queued so far has
+    /// run, and yields the underlying monad; a failed junction does not throw here, it is carried
+    /// in the monad until <see cref="Resolve()"/>.
+    /// </summary>
     public TaskAwaiter<Monad<TInput, TReturn>> GetAwaiter() => Joined().GetAwaiter();
 
+    /// <summary>
+    /// Awaits the chain with the given context-capture behaviour, as
+    /// <see cref="Task.ConfigureAwait(bool)"/> does for a task.
+    /// </summary>
+    /// <param name="continueOnCapturedContext">Whether the continuation resumes on the captured context.</param>
     public ConfiguredTaskAwaitable<Monad<TInput, TReturn>> ConfigureAwait(
         bool continueOnCapturedContext
     ) => Joined().ConfigureAwait(continueOnCapturedContext);
 
+    /// <summary>
+    /// The task behind this chain, for APIs that take a <see cref="Task{TResult}"/> (such as
+    /// <see cref="Task.WhenAll(System.Collections.Generic.IEnumerable{Task})"/>).
+    /// </summary>
     public Task<Monad<TInput, TReturn>> AsTask() => Joined();
 
+    /// <summary>
+    /// Converts the chain to the task behind it, so a <see cref="MonadTask{TInput, TReturn}"/> can be
+    /// returned or passed wherever a <see cref="Task{TResult}"/> of the monad is expected.
+    /// </summary>
+    /// <param name="mt">The chain to convert.</param>
     public static implicit operator Task<Monad<TInput, TReturn>>(MonadTask<TInput, TReturn> mt) =>
         mt.Joined();
 
@@ -48,13 +67,30 @@ public readonly struct MonadTask<TInput, TReturn>
 
     #region Chain
 
+    /// <summary>
+    /// Queues the junction <typeparamref name="TJunction"/> to run after the links before it;
+    /// the asynchronous form of <see cref="Monad{TInput, TReturn}.Chain{TJunction}()"/>. The junction is created
+    /// when this link runs, and is skipped if an earlier link failed.
+    /// </summary>
+    /// <typeparam name="TJunction">The junction class to create and run.</typeparam>
     public MonadTask<TInput, TReturn> Chain<TJunction>()
         where TJunction : class => new(ChainAsync<TJunction>());
 
+    /// <summary>
+    /// Queues the given junction instance to run after the links before it; the asynchronous
+    /// form of <see cref="Monad{TInput, TReturn}.Chain{TJunction}(TJunction)"/>.
+    /// </summary>
+    /// <param name="instance">The junction to run. Its input is read from Memory by its declared input type.</param>
     public MonadTask<TInput, TReturn> Chain<TJunction>(TJunction instance)
         where TJunction : class => new(ChainAsync(instance));
 
     // ReSharper disable once InconsistentNaming
+    /// <summary>
+    /// Queues a junction resolved by its interface <typeparamref name="TJunction"/> (from Memory,
+    /// then the container) to run after the links before it; the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.IChain{TJunction}()"/>. A class type argument fails the chain.
+    /// </summary>
+    /// <typeparam name="TJunction">The junction interface to resolve.</typeparam>
     public MonadTask<TInput, TReturn> IChain<TJunction>()
         where TJunction : class => new(IChainAsync<TJunction>());
 
@@ -79,18 +115,38 @@ public readonly struct MonadTask<TInput, TReturn>
         return await monad.IChain<TJunction>().ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Queues the given junction with its input and output types stated explicitly; the
+    /// asynchronous form of <see cref="Monad{TInput, TReturn}.Chain{TJunction, TIn, TOut}(TJunction)"/>.
+    /// </summary>
+    /// <param name="junction">The junction to run.</param>
     public MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
         where TJunction : IJunction<TIn, TOut> =>
         new(ChainTypedAsync<TJunction, TIn, TOut>(junction));
 
+    /// <summary>
+    /// Queues a new <typeparamref name="TJunction"/>, created with its parameterless constructor,
+    /// with its input and output types stated explicitly; the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.Chain{TJunction, TIn, TOut}()"/>.
+    /// </summary>
     public MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>()
         where TJunction : IJunction<TIn, TOut>, new() =>
         new(ChainTypedAsync<TJunction, TIn, TOut>(new TJunction()));
 
+    /// <summary>
+    /// Queues the given junction, which returns <see cref="Unit"/>, with its input type stated
+    /// explicitly; the asynchronous form of <see cref="Monad{TInput, TReturn}.Chain{TJunction, TIn}(TJunction)"/>.
+    /// </summary>
+    /// <param name="junction">The junction to run.</param>
     public MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
         where TJunction : IJunction<TIn, Unit> =>
         new(ChainTypedAsync<TJunction, TIn, Unit>(junction));
 
+    /// <summary>
+    /// Queues a new <typeparamref name="TJunction"/>, which returns <see cref="Unit"/>, created with
+    /// its parameterless constructor; the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.Chain{TJunction, TIn}()"/>.
+    /// </summary>
     public MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
         where TJunction : IJunction<TIn, Unit>, new() =>
         new(ChainTypedAsync<TJunction, TIn, Unit>(new TJunction()));
@@ -111,9 +167,20 @@ public readonly struct MonadTask<TInput, TReturn>
 
     #region ShortCircuit
 
+    /// <summary>
+    /// Queues <typeparamref name="TJunction"/> as a short-circuit step; the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.ShortCircuit{TJunction}()"/>. A Right result becomes what
+    /// <see cref="Resolve()"/> returns and a Left is ignored; later links still run.
+    /// </summary>
+    /// <typeparam name="TJunction">The junction class to create and run.</typeparam>
     public MonadTask<TInput, TReturn> ShortCircuit<TJunction>()
         where TJunction : class => new(ShortCircuitAsync<TJunction>());
 
+    /// <summary>
+    /// Queues the given junction instance as a short-circuit step; the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.ShortCircuit{TJunction}(TJunction)"/>.
+    /// </summary>
+    /// <param name="instance">The junction to run.</param>
     public MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction instance)
         where TJunction : class => new(ShortCircuitAsync(instance));
 
@@ -135,8 +202,19 @@ public readonly struct MonadTask<TInput, TReturn>
 
     #region Extract
 
+    /// <summary>
+    /// After the links before it, reads the <typeparamref name="TIn"/> in Memory and stores its
+    /// first public instance property or field of type <typeparamref name="TOut"/> in Memory; the
+    /// asynchronous form of <see cref="Monad{TInput, TReturn}.Extract{TIn, TOut}()"/>.
+    /// </summary>
     public MonadTask<TInput, TReturn> Extract<TIn, TOut>() => new(ExtractAsync<TIn, TOut>());
 
+    /// <summary>
+    /// After the links before it, stores the first public instance property or field of type
+    /// <typeparamref name="TOut"/> on <paramref name="input"/> in Memory; the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.Extract{TIn, TOut}(TIn)"/>.
+    /// </summary>
+    /// <param name="input">The object to read the value from. Null fails the chain.</param>
     public MonadTask<TInput, TReturn> Extract<TIn, TOut>(TIn input) =>
         new(ExtractAsync<TIn, TOut>(input));
 
@@ -156,17 +234,57 @@ public readonly struct MonadTask<TInput, TReturn>
 
     #region AddServices
 
+    /// <summary>
+    /// After the links before it, stores each service in Memory under the interface it is passed
+    /// as; the asynchronous form of <see cref="Monad{TInput, TReturn}.AddServices{T1}(T1)"/>. Each type argument must be an
+    /// interface the service implements, and a null service throws when this link runs.
+    /// </summary>
+    /// <param name="service">The service to store.</param>
     public MonadTask<TInput, TReturn> AddServices<T1>(T1 service) => new(AddServicesAsync(service));
 
+    /// <summary>
+    /// After the links before it, stores each service in Memory under the interface it is passed
+    /// as; the asynchronous form of <see cref="Monad{TInput, TReturn}.AddServices{T1, T2}(T1, T2)"/>. Each type argument must be an
+    /// interface the service implements, and a null service throws when this link runs.
+    /// </summary>
+    /// <param name="s1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="s2">The service to store under <typeparamref name="T2"/>.</param>
     public MonadTask<TInput, TReturn> AddServices<T1, T2>(T1 s1, T2 s2) =>
         new(AddServicesAsync(s1, s2));
 
+    /// <summary>
+    /// After the links before it, stores each service in Memory under the interface it is passed
+    /// as; the asynchronous form of <see cref="Monad{TInput, TReturn}.AddServices{T1, T2, T3}(T1, T2, T3)"/>. Each type argument must be an
+    /// interface the service implements, and a null service throws when this link runs.
+    /// </summary>
+    /// <param name="s1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="s2">The service to store under <typeparamref name="T2"/>.</param>
+    /// <param name="s3">The service to store under <typeparamref name="T3"/>.</param>
     public MonadTask<TInput, TReturn> AddServices<T1, T2, T3>(T1 s1, T2 s2, T3 s3) =>
         new(AddServicesAsync(s1, s2, s3));
 
+    /// <summary>
+    /// After the links before it, stores each service in Memory under the interface it is passed
+    /// as; the asynchronous form of <see cref="Monad{TInput, TReturn}.AddServices{T1, T2, T3, T4}(T1, T2, T3, T4)"/>. Each type argument must be an
+    /// interface the service implements, and a null service throws when this link runs.
+    /// </summary>
+    /// <param name="s1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="s2">The service to store under <typeparamref name="T2"/>.</param>
+    /// <param name="s3">The service to store under <typeparamref name="T3"/>.</param>
+    /// <param name="s4">The service to store under <typeparamref name="T4"/>.</param>
     public MonadTask<TInput, TReturn> AddServices<T1, T2, T3, T4>(T1 s1, T2 s2, T3 s3, T4 s4) =>
         new(AddServicesAsync(s1, s2, s3, s4));
 
+    /// <summary>
+    /// After the links before it, stores each service in Memory under the interface it is passed
+    /// as; the asynchronous form of <see cref="Monad{TInput, TReturn}.AddServices{T1, T2, T3, T4, T5}(T1, T2, T3, T4, T5)"/>. Each type argument must be an
+    /// interface the service implements, and a null service throws when this link runs.
+    /// </summary>
+    /// <param name="s1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="s2">The service to store under <typeparamref name="T2"/>.</param>
+    /// <param name="s3">The service to store under <typeparamref name="T3"/>.</param>
+    /// <param name="s4">The service to store under <typeparamref name="T4"/>.</param>
+    /// <param name="s5">The service to store under <typeparamref name="T5"/>.</param>
     public MonadTask<TInput, TReturn> AddServices<T1, T2, T3, T4, T5>(
         T1 s1,
         T2 s2,
@@ -175,6 +293,17 @@ public readonly struct MonadTask<TInput, TReturn>
         T5 s5
     ) => new(AddServicesAsync(s1, s2, s3, s4, s5));
 
+    /// <summary>
+    /// After the links before it, stores each service in Memory under the interface it is passed
+    /// as; the asynchronous form of <see cref="Monad{TInput, TReturn}.AddServices{T1, T2, T3, T4, T5, T6}(T1, T2, T3, T4, T5, T6)"/>. Each type argument must be an
+    /// interface the service implements, and a null service throws when this link runs.
+    /// </summary>
+    /// <param name="s1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="s2">The service to store under <typeparamref name="T2"/>.</param>
+    /// <param name="s3">The service to store under <typeparamref name="T3"/>.</param>
+    /// <param name="s4">The service to store under <typeparamref name="T4"/>.</param>
+    /// <param name="s5">The service to store under <typeparamref name="T5"/>.</param>
+    /// <param name="s6">The service to store under <typeparamref name="T6"/>.</param>
     public MonadTask<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6>(
         T1 s1,
         T2 s2,
@@ -184,6 +313,18 @@ public readonly struct MonadTask<TInput, TReturn>
         T6 s6
     ) => new(AddServicesAsync(s1, s2, s3, s4, s5, s6));
 
+    /// <summary>
+    /// After the links before it, stores each service in Memory under the interface it is passed
+    /// as; the asynchronous form of <see cref="Monad{TInput, TReturn}.AddServices{T1, T2, T3, T4, T5, T6, T7}(T1, T2, T3, T4, T5, T6, T7)"/>. Each type argument must be an
+    /// interface the service implements, and a null service throws when this link runs.
+    /// </summary>
+    /// <param name="s1">The service to store under <typeparamref name="T1"/>.</param>
+    /// <param name="s2">The service to store under <typeparamref name="T2"/>.</param>
+    /// <param name="s3">The service to store under <typeparamref name="T3"/>.</param>
+    /// <param name="s4">The service to store under <typeparamref name="T4"/>.</param>
+    /// <param name="s5">The service to store under <typeparamref name="T5"/>.</param>
+    /// <param name="s6">The service to store under <typeparamref name="T6"/>.</param>
+    /// <param name="s7">The service to store under <typeparamref name="T7"/>.</param>
     public MonadTask<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6, T7>(
         T1 s1,
         T2 s2,
@@ -266,12 +407,23 @@ public readonly struct MonadTask<TInput, TReturn>
 
     #region Resolve
 
+    /// <summary>
+    /// Waits for every queued link, then returns the train's result: the failure if a link failed,
+    /// otherwise the short-circuit value if one was set, otherwise the <typeparamref name="TReturn"/>
+    /// in Memory. See <see cref="Monad{TInput, TReturn}.Resolve()"/>.
+    /// </summary>
     public async Task<Either<Exception, TReturn>> Resolve()
     {
         var monad = await Source.ConfigureAwait(false);
         return monad.Resolve();
     }
 
+    /// <summary>
+    /// Waits for every queued link, then returns the chain's failure if a link failed, otherwise
+    /// <paramref name="returnType"/>. See <see cref="Monad{TInput, TReturn}.Resolve(Either{Exception, TReturn})"/>;
+    /// not for use in a train's <c>Junctions()</c>.
+    /// </summary>
+    /// <param name="returnType">The result to return when no link failed.</param>
     public async Task<Either<Exception, TReturn>> Resolve(Either<Exception, TReturn> returnType)
     {
         var monad = await Source.ConfigureAwait(false);

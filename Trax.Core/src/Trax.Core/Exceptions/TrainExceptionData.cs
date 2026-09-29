@@ -19,9 +19,18 @@ public class TrainExceptionData
     [JsonPropertyName("failureClass")]
     public FailureClass? FailureClass { get; set; }
 
+    /// <summary>
+    /// The name of the train that failed. A junction failure records the train class's short name
+    /// (<c>GetType().Name</c>); Trax.Effect, for a failure raised outside any junction,
+    /// records the train's canonical name instead.
+    /// </summary>
     [JsonPropertyName("trainName")]
     public required string TrainName { get; set; }
 
+    /// <summary>
+    /// The failing run's <c>ExternalId</c>, which identifies that run of the train and matches the
+    /// external id Trax.Effect stores on the run's metadata.
+    /// </summary>
     [JsonPropertyName("trainExternalId")]
     public required string TrainExternalId { get; set; }
 

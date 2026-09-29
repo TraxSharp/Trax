@@ -9,7 +9,7 @@ namespace Trax.Core.Exceptions;
 /// </summary>
 /// <remarks>
 /// Public only because it shipped public, and making it internal now would be a breaking change
-/// in the same release as <c>Train.NewMonad()</c> (docs/adr/0002). It is not part of the surface a
+/// in the same release as <c>Train.NewMonad()</c> (Trax.Core ADR 0002). It is not part of the surface a
 /// consumer programs against: nothing should catch it, match on it, or throw it, and a train that
 /// observes one has a bug in Trax rather than in the train.
 /// </remarks>
