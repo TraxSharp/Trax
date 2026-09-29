@@ -24,14 +24,14 @@
       "trax.effect": {
         "type": "Project",
         "dependencies": {
-          "Trax.Core": "[1.7.4, )"
+          "Trax.Core": "[1.7.5, )"
         }
       },
       "Trax.Core": {
         "type": "CentralTransitive",
-        "requested": "[1.7.4, )",
-        "resolved": "1.7.4",
-        "contentHash": "Sv6R/avK2KuByuoLBTL+10P14VbxwWo4vHVul505cCDV3CcqCFrOtTCEYmlzSM916znizpCGaWCdts5WxCZovQ==",
+        "requested": "[1.7.5, )",
+        "resolved": "1.7.5",
+        "contentHash": "eFPEp8Q++iFfKDrgS5JYIwzTv2Wt/zfi1yWj6F6cP61bRJ5FHEKltRKvLFxWNaKknvXHskLdUls/tL4oCgqgSw==",
         "dependencies": {
           "LanguageExt.Core": "4.4.9"
         }
