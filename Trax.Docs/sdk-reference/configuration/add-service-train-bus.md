@@ -51,7 +51,7 @@ The builder overload passes a `TraxMediatorBuilder` with the following methods:
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `ScanAssemblies(params Assembly[])` | `TraxMediatorBuilder` | Adds assemblies to scan for `IServiceTrain<,>` implementations |
-| `TrainLifetime(ServiceLifetime)` | `TraxMediatorBuilder` | Sets the DI lifetime for discovered train registrations (default: `Transient`) |
+| `TrainLifetime(ServiceLifetime)` | `TraxMediatorBuilder` | Sets the DI lifetime for discovered train registrations: `Transient` (the default) or `Scoped`. `Singleton` throws an `ArgumentException` naming `TrainLifetime`, because a train instance carries the state of the run in progress and one shared instance would mix concurrent runs together. `RegisterServiceTrains` and `AddServiceTrainBus` refuse it the same way |
 | `SkipChainVerification()` | `TraxMediatorBuilder` | Turns off the startup chain check. Logs a warning at startup instead. Use it for the check's blind spot (a junction asking for an interface only a subtype of the declared input implements), or temporarily while migrating a codebase whose chains do not pass yet. See [Trains & Junctions](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) |
 
 ## Returns
