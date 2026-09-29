@@ -31,12 +31,21 @@ public static class ServiceExtensions
     /// <summary>
     /// Registers all effect trains found in the specified assemblies with the dependency injection container.
     /// </summary>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="serviceLifetime"/> is Singleton: a train instance is one run (Trax.Effect ADR 0011).
+    /// </exception>
     public static IServiceCollection RegisterServiceTrains(
         this IServiceCollection services,
         ServiceLifetime serviceLifetime = ServiceLifetime.Transient,
         params Assembly[] assemblies
     )
     {
+        RefuseSingletonTrainLifetime(
+            serviceLifetime,
+            nameof(serviceLifetime),
+            nameof(RegisterServiceTrains)
+        );
+
         var trainType = typeof(IServiceTrain<,>);
 
         var types = new List<(Type, Type)>();
@@ -71,9 +80,6 @@ public static class ServiceExtensions
         {
             switch (serviceLifetime)
             {
-                case ServiceLifetime.Singleton:
-                    services.AddSingletonTraxRoute(typeInterface, typeImplementation);
-                    break;
                 case ServiceLifetime.Scoped:
                     services.AddScopedTraxRoute(typeInterface, typeImplementation);
                     break;
@@ -176,13 +182,16 @@ public static class ServiceExtensions
         ServiceLifetime serviceLifetime
     )
     {
+        RefuseSingletonTrainLifetime(
+            serviceLifetime,
+            nameof(serviceLifetime),
+            nameof(RegisterServiceTrains)
+        );
+
         foreach (var (serviceType, implementationType) in trains)
         {
             switch (serviceLifetime)
             {
-                case ServiceLifetime.Singleton:
-                    services.AddSingletonTraxRoute(serviceType, implementationType);
-                    break;
                 case ServiceLifetime.Scoped:
                     services.AddScopedTraxRoute(serviceType, implementationType);
                     break;
@@ -202,14 +211,45 @@ public static class ServiceExtensions
     }
 
     /// <summary>
+    /// Refuses a singleton lifetime for discovered trains, naming the setting that asked for it.
+    /// </summary>
+    /// <remarks>
+    /// Trax.Effect refuses a singleton service train too, but its message names the train, not the
+    /// mediator setting that chose the lifetime for every discovered train. A train instance carries
+    /// the state of the run in progress, so one instance shared by the process would mix concurrent
+    /// runs together (Trax.Effect ADR 0011).
+    /// </remarks>
+    internal static void RefuseSingletonTrainLifetime(
+        ServiceLifetime lifetime,
+        string parameterName,
+        string setting
+    )
+    {
+        if (lifetime == ServiceLifetime.Singleton)
+            throw new ArgumentException(
+                $"{setting} cannot register trains as singletons. A train instance carries the state of the run in progress, so one instance shared by the process would mix concurrent runs together. Use ServiceLifetime.Transient (the default) or ServiceLifetime.Scoped.",
+                parameterName
+            );
+    }
+
+    /// <summary>
     /// Adds the train bus and registry to the service collection.
     /// </summary>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="serviceTrainLifetime"/> is Singleton: a train instance is one run (Trax.Effect ADR 0011).
+    /// </exception>
     public static IServiceCollection AddServiceTrainBus(
         this IServiceCollection serviceCollection,
         ServiceLifetime serviceTrainLifetime = ServiceLifetime.Transient,
         params Assembly[] assemblies
     )
     {
+        RefuseSingletonTrainLifetime(
+            serviceTrainLifetime,
+            nameof(serviceTrainLifetime),
+            nameof(AddServiceTrainBus)
+        );
+
         var trainRegistry = new TrainRegistry(assemblies);
 
         // Prepended, not appended, so they run before any hosted service the host registered before

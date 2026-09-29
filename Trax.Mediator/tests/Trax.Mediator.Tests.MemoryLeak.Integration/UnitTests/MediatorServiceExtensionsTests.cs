@@ -19,10 +19,11 @@ public class MediatorServiceExtensionsTests
     #region Existing Registration Tests
 
     /// <summary>
-    /// A singleton train may inject the enqueue services. <c>TrainLifetime(Singleton)</c> is the
-    /// supported route to such a train, and <c>ValidateScopes</c> and <c>ValidateOnBuild</c> are
-    /// both on by default in Development for <c>WebApplication</c> — so registering those
-    /// services scoped fails the host at startup rather than leaving a latent risk.
+    /// A singleton may inject the enqueue services. <c>ValidateScopes</c> and
+    /// <c>ValidateOnBuild</c> are both on by default in Development for <c>WebApplication</c>, so
+    /// registering those services scoped would fail such a host at startup rather than leaving a
+    /// latent risk. The consumer here is a train registered directly, because it is the fixture that
+    /// injects both services; the mediator itself no longer registers trains as singletons.
     ///
     /// <para>The train is registered directly rather than scanned, so what is asserted is the
     /// lifetime of the two enqueue services and not the dependencies of every train in this
@@ -37,11 +38,9 @@ public class MediatorServiceExtensionsTests
         services.AddTrax(trax =>
             trax.AddEffects(effects => effects.UseInMemory())
                 .AddMediator(mediator =>
-                    mediator
-                        .TrainLifetime(ServiceLifetime.Singleton)
-                        // Trax.Mediator itself declares no trains, so the scan contributes none
-                        // and the container holds exactly the train registered below.
-                        .ScanAssemblies(typeof(ITrainBus).Assembly)
+                    // Trax.Mediator itself declares no trains, so the scan contributes none
+                    // and the container holds exactly the train registered below.
+                    mediator.ScanAssemblies(typeof(ITrainBus).Assembly)
                 )
         );
         services.AddSingleton<IEnqueueContextConsumingTrain, EnqueueContextConsumingTrain>();
@@ -59,6 +58,33 @@ public class MediatorServiceExtensionsTests
                 "neither enqueue service holds per-scope state, so a singleton train consuming "
                     + "one is a supported shape"
             );
+    }
+
+    /// <summary>
+    /// <c>TrainLifetime(Singleton)</c> is refused where it is written, naming the setting, instead
+    /// of failing later on the first discovered train with a message about that train.
+    /// </summary>
+    [Test]
+    public void TrainLifetime_Singleton_IsRefusedNamingTheSetting()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        Action act = () =>
+            services.AddTrax(trax =>
+                trax.AddEffects(effects => effects.UseInMemory())
+                    .AddMediator(mediator =>
+                        mediator
+                            .TrainLifetime(ServiceLifetime.Singleton)
+                            .ScanAssemblies(typeof(ITrainBus).Assembly)
+                    )
+            );
+
+        act.Should()
+            .Throw<ArgumentException>()
+            .WithMessage("TrainLifetime cannot register trains as singletons*")
+            .And.ParamName.Should()
+            .Be("lifetime");
     }
 
     /// <summary>

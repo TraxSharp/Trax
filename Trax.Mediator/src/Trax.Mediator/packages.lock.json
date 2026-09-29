@@ -19,20 +19,20 @@
       },
       "Trax.Effect": {
         "type": "Direct",
-        "requested": "[1.56.0, )",
-        "resolved": "1.56.0",
-        "contentHash": "N6w8UAcm4XFheh8Xm/XCDGHJYotC7t/A/zWcNQNDS/zUZOE8xs+QV+X1gxrCp0GFJ5DtmX6xf+L7NusAaEWqYA==",
+        "requested": "[1.57.1, )",
+        "resolved": "1.57.1",
+        "contentHash": "tUaQ31oGZoMCWdNuQ8tPCOq+PtpNZ8St6sd7imFibNe1HSqJFPSmEJup9n1vBH7cXTkP/pJgvE/kTDY7gtL7KA==",
         "dependencies": {
           "Microsoft.Extensions.Hosting.Abstractions": "10.0.12",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
-          "Trax.Core": "1.7.3"
+          "Trax.Core": "1.7.4"
         }
       },
       "Trax.Effect.Data": {
         "type": "Direct",
-        "requested": "[1.56.0, )",
-        "resolved": "1.56.0",
-        "contentHash": "WPh69/9Cc71qMWpNT2YRWgPTs47VSpruEItgZDG5Q+BXgqlvc6zX6KguwCpZ/qOGB1/0o3PTkm2yECn1kge91Q==",
+        "requested": "[1.57.1, )",
+        "resolved": "1.57.1",
+        "contentHash": "3Q/xYlebNfBmkeL/CHBLBN87S5FD4YvIgJbLKIO9hEHhPnHEN7LNceeWgkUEiyXlxnRzGvAHqgygJwytLCwz3A==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.12",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.12",
@@ -41,8 +41,8 @@
           "Microsoft.Extensions.Logging": "10.0.12",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
           "Npgsql": "10.0.3",
-          "Trax.Core": "1.7.3",
-          "Trax.Effect": "1.56.0"
+          "Trax.Core": "1.7.4",
+          "Trax.Effect": "1.57.1"
         }
       },
       "LanguageExt.Core": {
@@ -186,8 +186,8 @@
       },
       "Trax.Core": {
         "type": "Transitive",
-        "resolved": "1.7.3",
-        "contentHash": "If+wjMDtAs/ynL+RzeRnclbv813Y2+OgNeg5nFo7mYO+d+RYHRGZ5K01E0hz/Ss96WjcZmB0tSbl+ViuG0RDjA==",
+        "resolved": "1.7.4",
+        "contentHash": "Sv6R/avK2KuByuoLBTL+10P14VbxwWo4vHVul505cCDV3CcqCFrOtTCEYmlzSM916znizpCGaWCdts5WxCZovQ==",
         "dependencies": {
           "LanguageExt.Core": "4.4.9",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.3",

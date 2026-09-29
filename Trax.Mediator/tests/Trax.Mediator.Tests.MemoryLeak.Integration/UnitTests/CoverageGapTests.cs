@@ -39,21 +39,21 @@ public class CoverageGapTests
     #region Internal RegisterServiceTrains overload (lifetime switch)
 
     [Test]
-    public void RegisterServiceTrains_Internal_Singleton_RegistersAsSingleton()
+    public void RegisterServiceTrains_Internal_Singleton_IsRefused()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.RegisterServiceTrains(
-            new[] { (typeof(IGapTrain), typeof(GapTrain)) },
-            ServiceLifetime.Singleton
-        );
-
-        services
-            .Should()
-            .Contain(d =>
-                d.ServiceType == typeof(IGapTrain) && d.Lifetime == ServiceLifetime.Singleton
+        Action act = () =>
+            services.RegisterServiceTrains(
+                new[] { (typeof(IGapTrain), typeof(GapTrain)) },
+                ServiceLifetime.Singleton
             );
+
+        act.Should()
+            .Throw<ArgumentException>()
+            .WithMessage("RegisterServiceTrains cannot register trains as singletons*");
+        services.Should().NotContain(d => d.ServiceType == typeof(IGapTrain));
     }
 
     [Test]

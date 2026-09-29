@@ -17,9 +17,19 @@ public partial class TraxMediatorBuilder
     /// <summary>
     /// Sets the DI lifetime for discovered train implementations.
     /// </summary>
-    /// <param name="lifetime">The service lifetime (default: Transient)</param>
+    /// <param name="lifetime">
+    /// The service lifetime (default: Transient). <see cref="ServiceLifetime.Singleton"/> is
+    /// refused: a train instance carries the state of the run in progress, so one instance
+    /// shared by the process would mix concurrent runs together (Trax.Effect ADR 0011).
+    /// </param>
+    /// <exception cref="ArgumentException"><paramref name="lifetime"/> is Singleton.</exception>
     public TraxMediatorBuilder TrainLifetime(ServiceLifetime lifetime)
     {
+        Trax.Mediator.Extensions.ServiceExtensions.RefuseSingletonTrainLifetime(
+            lifetime,
+            nameof(lifetime),
+            "TrainLifetime"
+        );
         _lifetime = lifetime;
         return this;
     }

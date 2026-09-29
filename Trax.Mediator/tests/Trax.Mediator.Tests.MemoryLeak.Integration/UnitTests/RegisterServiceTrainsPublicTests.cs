@@ -40,15 +40,25 @@ public class RegisterServiceTrainsPublicTests
     }
 
     [Test]
-    public void RegisterServiceTrains_SingletonLifetime_RegistersDiscoveredTrains()
+    public void RegisterServiceTrains_SingletonLifetime_IsRefusedNamingTheSetting()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.RegisterServiceTrains(ServiceLifetime.Singleton, typeof(AssemblyMarker).Assembly);
+        Action act = () =>
+            services.RegisterServiceTrains(
+                ServiceLifetime.Singleton,
+                typeof(AssemblyMarker).Assembly
+            );
 
-        using var provider = services.BuildServiceProvider();
-        provider.GetService<IMemoryTestTrain>().Should().NotBeNull();
+        act.Should()
+            .Throw<ArgumentException>()
+            .WithMessage("RegisterServiceTrains cannot register trains as singletons*")
+            .And.ParamName.Should()
+            .Be("serviceLifetime");
+        services
+            .Should()
+            .NotContain(d => d.ServiceType == typeof(IMemoryTestTrain), "nothing is registered");
     }
 
     [Test]
