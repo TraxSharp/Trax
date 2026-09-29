@@ -17,6 +17,18 @@ public class LocalRunExecutor(ITrainBus trainBus, IDataContextProviderFactory da
 {
     private static readonly ConcurrentDictionary<Type, MethodInfo> RunAsyncMethodCache = new();
 
+    /// <summary>
+    /// Creates and saves a <c>Pending</c> metadata record for <paramref name="trainName"/> with a new
+    /// external id, then runs the train through <see cref="ITrainBus"/> as that record, in a child
+    /// DI scope. Returns the record's id and external id, and the output, which is null when
+    /// <paramref name="outputType"/> is <c>Unit</c>.
+    /// </summary>
+    /// <param name="trainName">The fully qualified service type name, stored as the metadata name.</param>
+    /// <param name="input">The deserialized input; its runtime type selects the train.</param>
+    /// <param name="outputType">The train's output type, used to call the matching generic <c>RunAsync</c>.</param>
+    /// <param name="ct">Passed to the save and to the run.</param>
+    /// <exception cref="Trax.Core.Exceptions.TrainException">No train is registered for the input type.</exception>
+    /// <remarks>An exception thrown by the train propagates.</remarks>
     public async Task<RunTrainResult> ExecuteAsync(
         string trainName,
         object input,

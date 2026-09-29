@@ -29,6 +29,21 @@ using Trax.Mediator.Services.TrustedExecution;
 
 namespace Trax.Mediator.Services.TrainExecution;
 
+/// <summary>
+/// Default <see cref="ITrainExecutionService"/>, registered as scoped by <c>AddMediator</c>. Resolve
+/// <see cref="ITrainExecutionService"/> rather than constructing this; it is infrastructure not
+/// intended to be constructed directly.
+/// </summary>
+/// <param name="discoveryService">Resolves train names to registrations.</param>
+/// <param name="runExecutor">Executes <see cref="RunAsync"/>, locally or remotely.</param>
+/// <param name="concurrencyLimiter">Gates <see cref="RunAsync"/>; queued work is not gated here.</param>
+/// <param name="dataContextFactory">Opens the contexts the enqueue writes through.</param>
+/// <param name="mediatorConfiguration">Supplies the input size cap, hook limit and authorization opt-out.</param>
+/// <param name="serviceProvider">
+/// The caller's scope. Resolves the train for its queue hooks (in a child scope), the optional
+/// <see cref="TrainAuthorization.ITrainAuthorizationService"/> and
+/// <see cref="TrustedExecution.ITrustedExecutionScope"/>, and the enqueue helpers.
+/// </param>
 public class TrainExecutionService(
     ITrainDiscoveryService discoveryService,
     IRunExecutor runExecutor,
@@ -59,6 +74,7 @@ public class TrainExecutionService(
     /// </summary>
     private static readonly ConcurrentDictionary<Type, MethodInfo> EnterQueueHooksCache = new();
 
+    /// <inheritdoc/>
     public async Task<QueueTrainResult> QueueAsync(
         string trainName,
         string? inputJson,
@@ -266,6 +282,7 @@ public class TrainExecutionService(
         return new QueueTrainResult(entry.Id, entry.ExternalId);
     }
 
+    /// <inheritdoc/>
     public async Task<RunTrainResult> RunAsync(
         string trainName,
         string inputJson,
@@ -289,6 +306,7 @@ public class TrainExecutionService(
         );
     }
 
+    /// <inheritdoc/>
     public async Task<PreparedTrain> PrepareAsync(
         string trainName,
         string? inputJson,

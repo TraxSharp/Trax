@@ -20,7 +20,7 @@ public partial class TraxMediatorBuilder
     /// <param name="lifetime">
     /// The service lifetime (default: Transient). <see cref="ServiceLifetime.Singleton"/> is
     /// refused: a train instance carries the state of the run in progress, so one instance
-    /// shared by the process would mix concurrent runs together (Trax.Effect ADR 0011).
+    /// shared by the process would mix concurrent runs together.
     /// </param>
     /// <exception cref="ArgumentException"><paramref name="lifetime"/> is Singleton.</exception>
     public TraxMediatorBuilder TrainLifetime(ServiceLifetime lifetime)

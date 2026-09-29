@@ -19,5 +19,22 @@ namespace Trax.Mediator.Services.TrainAuthorization;
 /// </remarks>
 public interface ITrainAuthorizationService
 {
+    /// <summary>
+    /// Returns when the current caller may run or queue <paramref name="registration"/>, and throws
+    /// when it may not. Called by <c>ITrainExecutionService</c> for every train before the input is
+    /// read, including trains without <c>[TraxAuthorize]</c>, and inside a trusted execution scope:
+    /// the mediator does not check <see cref="TrustedExecution.ITrustedExecutionScope.IsTrusted"/>
+    /// before calling, so an implementation decides itself whether trust skips its checks.
+    /// </summary>
+    /// <param name="registration">
+    /// The train being submitted; <see cref="TrainRegistration.RequiredPolicies"/>,
+    /// <see cref="TrainRegistration.RequiredRoles"/> and
+    /// <see cref="TrainRegistration.HasAuthorizeAttribute"/> carry its requirements.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="UnauthorizedAccessException">
+    /// The expected way to refuse; Trax.Api's <c>TrainAuthorizationException</c> derives from it,
+    /// and surfaces map it to an authorization error.
+    /// </exception>
     Task AuthorizeAsync(TrainRegistration registration, CancellationToken ct = default);
 }

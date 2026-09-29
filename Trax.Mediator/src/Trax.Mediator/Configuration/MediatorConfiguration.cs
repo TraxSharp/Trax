@@ -72,8 +72,11 @@ public class MediatorConfiguration
     /// limit is reached, additional requests from the same principal queue on a
     /// per-principal semaphore until an in-flight request completes. Defaults to
     /// <c>null</c> (no per-principal cap — global and per-train limits still apply).
-    /// Requires <c>IHttpContextAccessor</c> to be registered; without it the cap
-    /// has no effect.
+    /// Principals are identified by
+    /// <see cref="Services.Principal.ICurrentPrincipalProvider"/>. The default registered by
+    /// <c>AddMediator</c> returns <c>null</c>, so the cap has no effect until a provider that
+    /// returns an id is registered, as <c>AddTraxApi</c> does. A run with no principal id is not
+    /// capped per principal. Queued work is not counted.
     /// </summary>
     public int? PerPrincipalMaxConcurrentRun { get; internal set; }
 
@@ -88,7 +91,7 @@ public class MediatorConfiguration
     /// The hook's token is cancelled at the limit, but a hook that ignores it keeps running after
     /// its enqueue has failed, without the enqueue's context or transaction. An enqueue it starts
     /// after that is refused. A deferring train's hook holds no connection while it runs and is
-    /// not limited; the stale-staged sweep bounds it instead. See mediator/0004.
+    /// not limited; the stale-staged sweep bounds it instead.
     /// </remarks>
     public TimeSpan MaxQueueHookDuration { get; internal set; } = DefaultMaxQueueHookDuration;
 

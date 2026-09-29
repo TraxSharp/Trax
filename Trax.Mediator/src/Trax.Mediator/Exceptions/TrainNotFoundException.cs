@@ -12,8 +12,17 @@ namespace Trax.Mediator.Exceptions;
 /// </remarks>
 public class TrainNotFoundException : InvalidOperationException
 {
+    /// <summary>
+    /// The name the caller passed, exactly as given. Caller-controlled: log it server-side, but do
+    /// not echo it into a response.
+    /// </summary>
     public string RequestedName { get; }
 
+    /// <summary>
+    /// Creates the exception. The message is always "The requested train was not found."; the
+    /// name goes to <see cref="RequestedName"/> only.
+    /// </summary>
+    /// <param name="requestedName">The name that matched no registered train.</param>
     public TrainNotFoundException(string requestedName)
         : base("The requested train was not found.")
     {

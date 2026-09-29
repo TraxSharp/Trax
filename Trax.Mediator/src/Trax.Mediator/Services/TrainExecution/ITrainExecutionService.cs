@@ -84,6 +84,19 @@ public interface ITrainExecutionService
         );
 }
 
+/// <summary>The work queue entry <see cref="ITrainExecutionService.QueueAsync"/> created.</summary>
+/// <param name="WorkQueueId">The entry's database id.</param>
+/// <param name="ExternalId">
+/// The entry's external id, a 32-character hex GUID. The run the scheduler later dispatches
+/// carries the same external id, and the train's <c>OnQueue</c> hook saw it too, so it
+/// correlates the enqueue with its run.
+/// </param>
 public record QueueTrainResult(long WorkQueueId, string ExternalId);
 
+/// <summary>A completed run from <see cref="ITrainExecutionService.RunAsync"/> or <c>IRunExecutor</c>.</summary>
+/// <param name="MetadataId">The id of the run's metadata record.</param>
+/// <param name="ExternalId">The run's external id.</param>
+/// <param name="Output">
+/// The train's output, typed as its <c>TOut</c>; null for a train whose output is <c>Unit</c>.
+/// </param>
 public record RunTrainResult(long MetadataId, string ExternalId, object? Output = null);

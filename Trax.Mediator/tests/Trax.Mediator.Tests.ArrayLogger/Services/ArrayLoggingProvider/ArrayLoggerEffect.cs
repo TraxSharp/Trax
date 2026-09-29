@@ -4,13 +4,36 @@ using Trax.Effect.Models.Log.DTOs;
 
 namespace Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 
+/// <summary>
+/// An in-memory <see cref="ILogger"/> for tests: every entry it receives is kept in
+/// <see cref="Logs"/> as a Trax <see cref="Log"/> record, so a test can assert on what a train or
+/// junction logged. Created by <see cref="ArrayLoggingProvider"/>, one per logger category.
+/// </summary>
+/// <param name="categoryName">The logger category, copied onto every <see cref="Log"/> it records (as its <c>Category</c>, truncated to 500 characters).</param>
 public class ArrayLoggerEffect(string categoryName) : ILogger, IDisposable
 {
     private readonly object _lock = new();
     private bool _disposed = false;
 
+    /// <summary>
+    /// The entries recorded so far, oldest first, at every <see cref="LogLevel"/> (no level is
+    /// filtered out). Writes take a lock but reads through this list do not, so read it once the
+    /// code under test has finished logging. Emptied by <see cref="ClearLogs"/> and
+    /// <see cref="Dispose"/>.
+    /// </summary>
     public List<Log> Logs { get; } = [];
 
+    /// <summary>
+    /// Formats the entry with <paramref name="formatter"/> and appends it to <see cref="Logs"/> as a
+    /// <see cref="Log"/> carrying the level, message, category, exception and event id. Does nothing
+    /// once the logger is disposed.
+    /// </summary>
+    /// <typeparam name="TState">The type of the entry's state.</typeparam>
+    /// <param name="logLevel">The entry's level.</param>
+    /// <param name="eventId">The entry's event id; only <see cref="EventId.Id"/> is kept.</param>
+    /// <param name="state">The state passed to <paramref name="formatter"/>.</param>
+    /// <param name="exception">The exception to record, or null.</param>
+    /// <param name="formatter">Builds the message from <paramref name="state"/> and <paramref name="exception"/>.</param>
     public void Log<TState>(
         LogLevel logLevel,
         EventId eventId,
@@ -44,8 +67,13 @@ public class ArrayLoggerEffect(string categoryName) : ILogger, IDisposable
         }
     }
 
+    /// <summary>True for every level until the logger is disposed, then false.</summary>
+    /// <param name="logLevel">Ignored: no level is filtered.</param>
     public bool IsEnabled(LogLevel logLevel) => !_disposed;
 
+    /// <summary>Scopes are not recorded: always returns null.</summary>
+    /// <typeparam name="TState">The type of the scope state.</typeparam>
+    /// <param name="state">Ignored.</param>
     public IDisposable? BeginScope<TState>(TState state)
         where TState : notnull => null;
 

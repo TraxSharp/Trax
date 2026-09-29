@@ -24,6 +24,9 @@ public class QueuedWorkCancelledException : InvalidOperationException
     /// <summary>The fully qualified service type name of the train that was being queued.</summary>
     public string TrainName { get; }
 
+    /// <summary>Creates the exception; the message names the entry and the train.</summary>
+    /// <param name="workQueueId">The id of the cancelled work queue entry.</param>
+    /// <param name="trainName">The fully qualified service type name of the train.</param>
     public QueuedWorkCancelledException(long workQueueId, string trainName)
         : base(
             $"Work queue entry {workQueueId} for {trainName} was cancelled before its OnQueue "

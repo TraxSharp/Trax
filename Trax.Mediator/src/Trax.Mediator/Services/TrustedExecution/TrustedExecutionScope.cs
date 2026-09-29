@@ -1,14 +1,23 @@
 namespace Trax.Mediator.Services.TrustedExecution;
 
-/// <inheritdoc />
+/// <summary>
+/// Default <see cref="ITrustedExecutionScope"/>, registered as a singleton by <c>AddMediator</c>.
+/// Its state is a static <c>AsyncLocal</c>, so every instance sees the same scopes: a new instance
+/// is not a fresh, untrusted one. Infrastructure; resolve <see cref="ITrustedExecutionScope"/>
+/// instead of constructing it. Everything <see cref="ITrustedExecutionScope"/> says about what
+/// trust bypasses applies.
+/// </summary>
 public sealed class TrustedExecutionScope : ITrustedExecutionScope
 {
     private static readonly AsyncLocal<Frame?> Current = new();
 
+    /// <inheritdoc/>
     public bool IsTrusted => Current.Value is not null;
 
+    /// <inheritdoc/>
     public string? CurrentReason => Current.Value?.Reason;
 
+    /// <inheritdoc/>
     public IDisposable BeginTrusted(string reason)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);

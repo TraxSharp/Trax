@@ -4,21 +4,58 @@ using Trax.Effect.Attributes;
 namespace Trax.Mediator.Services.TrainDiscovery;
 
 /// <summary>
-/// Represents a discovered IServiceTrain registration in the DI container.
+/// One train found in the DI container by <see cref="ITrainDiscoveryService"/>: its types, lifetime,
+/// authorization requirements, and the attributes that decide how Trax exposes and runs it.
+/// Built by discovery; the Scheduler, Api and Dashboard read it.
 /// </summary>
 public class TrainRegistration
 {
+    /// <summary>
+    /// The type the train is resolved by: its service interface (for example <c>IBanPlayerTrain</c>)
+    /// when one is registered, otherwise the concrete class. Its <see cref="Type.FullName"/> is the
+    /// train's canonical name, used for lookups, work queue entries and metadata.
+    /// </summary>
     public required Type ServiceType { get; init; }
+
+    /// <summary>
+    /// The concrete train class. Attributes such as <c>[TraxAuthorize]</c> and
+    /// <c>[TraxMutation]</c> are read from it and its interfaces.
+    /// </summary>
     public required Type ImplementationType { get; init; }
+
+    /// <summary>
+    /// The train's <c>TIn</c>. Unique across registrations: each input type maps to one train.
+    /// </summary>
     public required Type InputType { get; init; }
+
+    /// <summary>The train's <c>TOut</c>; <c>Unit</c> for a train with no output.</summary>
     public required Type OutputType { get; init; }
+
+    /// <summary>The DI lifetime the train was registered with.</summary>
     public required ServiceLifetime Lifetime { get; init; }
 
+    /// <summary>
+    /// The short name of <see cref="ServiceType"/>, without namespace, generics written as
+    /// <c>Name&lt;Arg&gt;</c>. Accepted as a train name by <c>ITrainExecutionService</c> when no
+    /// other train shares it.
+    /// </summary>
     public required string ServiceTypeName { get; init; }
+
+    /// <summary>The short name of <see cref="ImplementationType"/>, formatted like <see cref="ServiceTypeName"/>.</summary>
     public required string ImplementationTypeName { get; init; }
+
+    /// <summary>The short name of <see cref="InputType"/>, formatted like <see cref="ServiceTypeName"/>.</summary>
     public required string InputTypeName { get; init; }
+
+    /// <summary>The short name of <see cref="OutputType"/>, formatted like <see cref="ServiceTypeName"/>.</summary>
     public required string OutputTypeName { get; init; }
 
+    /// <summary>
+    /// The distinct, non-blank <c>Policy</c> values from every <see cref="TraxAuthorizeAttribute"/>
+    /// on the implementation, its base classes and its interfaces. The caller must satisfy all of
+    /// them. Empty when there are none, which on its own does not mean the train is unprotected:
+    /// see <see cref="HasAuthorizeAttribute"/>.
+    /// </summary>
     public required IReadOnlyList<string> RequiredPolicies { get; init; }
 
     /// <summary>
@@ -29,8 +66,8 @@ public class TrainRegistration
     public required IReadOnlyList<string> RequiredRoles { get; init; }
 
     /// <summary>
-    /// True when the implementation carries at least one <see cref="TraxAuthorizeAttribute"/>,
-    /// including the parameterless form. A bare <c>[TraxAuthorize]</c> sets this flag with empty
+    /// True when the implementation, a base class or an implemented interface carries at least one
+    /// <see cref="TraxAuthorizeAttribute"/>, including the parameterless form. A bare <c>[TraxAuthorize]</c> sets this flag with empty
     /// policies and roles; authorization enforcement treats it as "require an authenticated user."
     /// </summary>
     public bool HasAuthorizeAttribute { get; init; }

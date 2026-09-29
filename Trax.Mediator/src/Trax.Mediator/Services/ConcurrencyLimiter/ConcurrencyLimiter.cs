@@ -6,10 +6,16 @@ using Trax.Mediator.Services.TrainDiscovery;
 namespace Trax.Mediator.Services.ConcurrencyLimiter;
 
 /// <summary>
-/// Singleton service that manages per-train, per-principal, and global concurrency
-/// limits for RUN executions. Uses <see cref="SemaphoreSlim"/> instances keyed by
-/// train interface FullName and (when applicable) principal id.
+/// Default <see cref="IConcurrencyLimiter"/>, registered as a singleton by <c>AddMediator</c>.
+/// Enforces per-train, per-principal and global limits on RUN executions with
+/// <see cref="SemaphoreSlim"/> instances keyed by train interface FullName and principal id.
+/// Infrastructure used by the train execution service; not intended to be called directly.
 /// </summary>
+/// <remarks>
+/// A per-train limit is resolved once per train, on first use: a builder override first, then
+/// <c>[TraxConcurrencyLimit]</c>. One semaphore is kept per distinct principal id for the life of
+/// the limiter and is never evicted.
+/// </remarks>
 public class ConcurrencyLimiter : IConcurrencyLimiter
 {
     private readonly MediatorConfiguration _configuration;
@@ -19,6 +25,14 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _perPrincipalSemaphores = new();
     private readonly SemaphoreSlim? _globalSemaphore;
 
+    /// <summary>
+    /// Creates the limiter. The global semaphore is created here when
+    /// <see cref="MediatorConfiguration.GlobalMaxConcurrentRun"/> is set; per-train and
+    /// per-principal ones are created on first use.
+    /// </summary>
+    /// <param name="configuration">Supplies the global, per-principal and per-train limits.</param>
+    /// <param name="discoveryService">Looks up a train's <c>[TraxConcurrencyLimit]</c>.</param>
+    /// <param name="principalProvider">Identifies the caller for the per-principal limit.</param>
     public ConcurrencyLimiter(
         MediatorConfiguration configuration,
         ITrainDiscoveryService discoveryService,
@@ -33,6 +47,7 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
             : null;
     }
 
+    /// <inheritdoc/>
     public async Task<IDisposable> AcquireAsync(string trainFullName, CancellationToken ct)
     {
         var perTrainSemaphore = GetOrCreatePerTrainSemaphore(trainFullName);

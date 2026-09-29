@@ -4,7 +4,7 @@ namespace Trax.Mediator.Exceptions;
 /// Thrown by <see cref="Services.TrainExecution.TrainExecutionService"/> when a train that
 /// declares <c>[TraxAuthorize]</c> is run or queued on a host with no
 /// <c>ITrainAuthorizationService</c> registered, outside a trusted execution scope, and without
-/// <c>AllowMissingAuthorizationService()</c>. See mediator/0001.
+/// <c>AllowMissingAuthorizationService()</c>.
 /// </summary>
 /// <remarks>
 /// This is a misconfiguration of the host, not a refusal of the caller or of the input, so a
@@ -17,6 +17,12 @@ public class TrainAuthorizationNotConfiguredException : InvalidOperationExceptio
     /// <summary>The canonical name of the train that was refused.</summary>
     public string TrainName { get; }
 
+    /// <summary>Creates the exception with the message the caller built.</summary>
+    /// <param name="trainName">The canonical name of the refused train.</param>
+    /// <param name="message">
+    /// The full message. The mediator's names the train and says how to fix the host: register an
+    /// <c>ITrainAuthorizationService</c> or opt out with <c>AllowMissingAuthorizationService()</c>.
+    /// </param>
     public TrainAuthorizationNotConfiguredException(string trainName, string message)
         : base(message)
     {

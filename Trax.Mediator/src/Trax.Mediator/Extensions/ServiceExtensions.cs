@@ -32,7 +32,7 @@ public static class ServiceExtensions
     /// Registers all effect trains found in the specified assemblies with the dependency injection container.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// <paramref name="serviceLifetime"/> is Singleton: a train instance is one run (Trax.Effect ADR 0011).
+    /// <paramref name="serviceLifetime"/> is Singleton: a train instance is one run.
     /// </exception>
     public static IServiceCollection RegisterServiceTrains(
         this IServiceCollection services,
@@ -217,7 +217,7 @@ public static class ServiceExtensions
     /// Trax.Effect refuses a singleton service train too, but its message names the train, not the
     /// mediator setting that chose the lifetime for every discovered train. A train instance carries
     /// the state of the run in progress, so one instance shared by the process would mix concurrent
-    /// runs together (Trax.Effect ADR 0011).
+    /// runs together.
     /// </remarks>
     internal static void RefuseSingletonTrainLifetime(
         ServiceLifetime lifetime,
@@ -236,7 +236,7 @@ public static class ServiceExtensions
     /// Adds the train bus and registry to the service collection.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// <paramref name="serviceTrainLifetime"/> is Singleton: a train instance is one run (Trax.Effect ADR 0011).
+    /// <paramref name="serviceTrainLifetime"/> is Singleton: a train instance is one run.
     /// </exception>
     public static IServiceCollection AddServiceTrainBus(
         this IServiceCollection serviceCollection,

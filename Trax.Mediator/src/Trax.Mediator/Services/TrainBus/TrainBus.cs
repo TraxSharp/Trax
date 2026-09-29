@@ -110,6 +110,11 @@ public class TrainBus(
             + RunWithMetadataCtMethodCache.Count;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Unlike <c>RunAsync</c>, the train is resolved from the bus's own scope, not a child scope,
+    /// so it and its scoped dependencies live as long as that scope does.
+    /// </remarks>
     public object InitializeTrain(object trainInput)
     {
         return InitializeTrainFromProvider(serviceProvider, trainInput);
@@ -337,6 +342,19 @@ public class TrainBus(
         return await taskRunMethod;
     }
 
+    /// <summary>
+    /// Runs the train registered for the input's runtime type and discards its output. Creates a
+    /// child DI scope for the run and disposes it afterwards.
+    /// </summary>
+    /// <param name="trainInput">The input; its runtime type selects the train.</param>
+    /// <param name="metadata">
+    /// A pre-created, <c>Pending</c> metadata record for the train to run as, or null for the train
+    /// to create its own.
+    /// </param>
+    /// <exception cref="TrainException">
+    /// The input is null, no train is registered for its type, or <paramref name="metadata"/> is
+    /// not <c>Pending</c>.
+    /// </exception>
     public async Task RunAsync(object trainInput, Metadata? metadata = null)
     {
         using var scope = scopeFactory.CreateScope();
@@ -398,6 +416,20 @@ public class TrainBus(
         await taskRun;
     }
 
+    /// <summary>
+    /// Runs the train registered for the input's runtime type with a cancellation token and
+    /// discards its output. Creates a child DI scope for the run and disposes it afterwards.
+    /// </summary>
+    /// <param name="trainInput">The input; its runtime type selects the train.</param>
+    /// <param name="cancellationToken">Passed to the train's <c>Run</c>.</param>
+    /// <param name="metadata">
+    /// A pre-created, <c>Pending</c> metadata record for the train to run as, or null for the train
+    /// to create its own.
+    /// </param>
+    /// <exception cref="TrainException">
+    /// The input is null, no train is registered for its type, or <paramref name="metadata"/> is
+    /// not <c>Pending</c>.
+    /// </exception>
     public async Task RunAsync(
         object trainInput,
         CancellationToken cancellationToken,

@@ -32,13 +32,11 @@
   </ItemGroup>
 
   <!-- XML docs for the shipped libraries, so the summaries in source reach IntelliSense for
-       package consumers. CS1591 (a public member with no comment) is the only warning turned off:
-       the existing summaries ship now, and the members that still lack one are a tracked burn-down.
-       Every other doc-comment warning (malformed XML, a bad cref, a param mismatch) stays on.
-       Trax.Mediator.Testing already documents every public member, so it keeps the warning. -->
+       package consumers. Every public member is documented and CS1591 stays on, so a new public
+       member without a comment fails the zero-warning build. Trax.Mediator.Testing already
+       generates its documentation file from its own project. -->
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Mediator' Or '$(MSBuildProjectName)' == 'Trax.Mediator.Tests.ArrayLogger'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <!-- Package validation: `dotnet pack` compares each published library with the last release on

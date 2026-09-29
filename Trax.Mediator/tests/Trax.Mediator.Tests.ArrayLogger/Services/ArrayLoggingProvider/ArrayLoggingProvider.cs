@@ -2,13 +2,24 @@ using Microsoft.Extensions.Logging;
 
 namespace Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 
+/// <summary>
+/// An <see cref="ILoggerProvider"/> for tests that hands out an <see cref="ArrayLoggerEffect"/> per
+/// <see cref="CreateLogger"/> call and keeps every one of them in <see cref="Loggers"/>, so a test can
+/// read what was logged under any category. Register it with <c>AddProvider</c> in a test host; it is
+/// not meant for production, since entries are only dropped when you clear, trim or dispose.
+/// </summary>
 public class ArrayLoggingProvider : IArrayLoggingProvider
 {
     private readonly object _lock = new();
     private bool _disposed = false;
 
+    /// <inheritdoc/>
     public List<ArrayLoggerEffect> Loggers { get; } = [];
 
+    /// <summary>
+    /// Disposes every logger (which empties its <see cref="ArrayLoggerEffect.Logs"/>) and empties
+    /// <see cref="Loggers"/>. Later calls do nothing; <see cref="CreateLogger"/> throws afterwards.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -31,6 +42,13 @@ public class ArrayLoggingProvider : IArrayLoggingProvider
         }
     }
 
+    /// <summary>
+    /// Creates a new <see cref="ArrayLoggerEffect"/> for <paramref name="categoryName"/> and adds it
+    /// to <see cref="Loggers"/>. Every call creates a new logger, even for a category seen before;
+    /// the logging framework normally caches one per category itself.
+    /// </summary>
+    /// <param name="categoryName">The logger category.</param>
+    /// <exception cref="ObjectDisposedException">The provider has been disposed.</exception>
     public ILogger CreateLogger(string categoryName)
     {
         if (_disposed)

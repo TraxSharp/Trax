@@ -13,9 +13,18 @@ namespace Trax.Mediator.Exceptions;
 /// </remarks>
 public class AmbiguousTrainNameException : InvalidOperationException
 {
+    /// <summary>The name the caller passed, which matched more than one train's short name.</summary>
     public string RequestedName { get; }
+
+    /// <summary>
+    /// The <see cref="Type.FullName"/> of each matching train's service interface. Any one of them
+    /// resolves unambiguously. Also listed in the message.
+    /// </summary>
     public IReadOnlyList<string> CandidateFullNames { get; }
 
+    /// <summary>Creates the exception; the message lists every candidate.</summary>
+    /// <param name="requestedName">The ambiguous name the caller passed.</param>
+    /// <param name="candidateFullNames">The full names of the trains it matched.</param>
     public AmbiguousTrainNameException(
         string requestedName,
         IReadOnlyList<string> candidateFullNames

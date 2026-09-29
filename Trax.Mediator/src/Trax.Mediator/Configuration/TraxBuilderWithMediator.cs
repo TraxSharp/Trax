@@ -13,6 +13,12 @@ public class TraxBuilderWithMediator
 {
     internal TraxBuilderWithEffects EffectsBuilder { get; }
 
+    /// <summary>
+    /// Wraps the effects builder once the mediator is registered. Called by <c>AddMediator</c>;
+    /// constructing one yourself skips that registration, so downstream <c>Add*</c> calls would
+    /// find no mediator services. Not intended to be called directly.
+    /// </summary>
+    /// <param name="effectsBuilder">The builder returned by <c>AddEffects</c>.</param>
     public TraxBuilderWithMediator(TraxBuilderWithEffects effectsBuilder)
     {
         EffectsBuilder = effectsBuilder;

@@ -6,17 +6,35 @@ using Trax.Mediator.Services.TrainExecution;
 
 namespace Trax.Mediator.Services.TrainDiscovery;
 
-/// <inheritdoc />
+/// <summary>
+/// Default <see cref="ITrainDiscoveryService"/>: reads train registrations from an
+/// <see cref="IServiceCollection"/>, so it works before the container is built. Registered as a
+/// singleton by <c>AddMediator</c>; Trax.Scheduler and Trax.Api also construct it during
+/// registration. Infrastructure; resolve <see cref="ITrainDiscoveryService"/> instead.
+/// </summary>
 public class TrainDiscoveryService : ITrainDiscoveryService
 {
     private readonly IServiceCollection _serviceCollection;
     private IReadOnlyList<TrainRegistration>? _cachedRegistrations;
 
+    /// <summary>Creates a discovery service over <paramref name="serviceCollection"/>.</summary>
+    /// <param name="serviceCollection">
+    /// The collection to scan. It is read on the first <see cref="DiscoverTrains"/> call, not
+    /// here, and the result is cached: trains registered after that first call are not seen.
+    /// </param>
     public TrainDiscoveryService(IServiceCollection serviceCollection)
     {
         _serviceCollection = serviceCollection;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// One registration is returned per input type. When a train is registered under both its
+    /// interface and its concrete class, the interface is used as
+    /// <see cref="TrainRegistration.ServiceType"/> and the class as
+    /// <see cref="TrainRegistration.ImplementationType"/>. Not synchronized: two threads making the
+    /// first call at once both scan, and either result is kept.
+    /// </remarks>
     public IReadOnlyList<TrainRegistration> DiscoverTrains()
     {
         if (_cachedRegistrations != null)
