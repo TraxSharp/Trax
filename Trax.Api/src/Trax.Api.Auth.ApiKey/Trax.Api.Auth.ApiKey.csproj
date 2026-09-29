@@ -5,10 +5,11 @@
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Api.Auth.ApiKey</AssemblyName>
-    <PackageDescription>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md. API-key authentication scheme for Trax: header-based handler plus AddTraxApiKeyAuth extension.</PackageDescription>
+    <PackageDescription>API-key authentication for the Trax GraphQL API: an X-Api-Key header handler with salted, hashed keys, registered with AddTraxApiKeyAuth. Install to authenticate service-to-service callers. NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageDescription>
     <PackageReleaseNotes>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageReleaseNotes>
     <PackageTags>trax;auth;api-key;security</PackageTags>
-    <PackageReadmeFile>SECURITY-DISCLAIMER.md</PackageReadmeFile>
+    <!-- The package README leads with the security disclaimer, then shows usage. -->
+    <TraxPackageReadme>$(MSBuildThisFileDirectory)..\AUTH-PACKAGE-README.md</TraxPackageReadme>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 

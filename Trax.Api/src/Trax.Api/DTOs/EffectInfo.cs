@@ -6,6 +6,10 @@ namespace Trax.Api.DTOs;
 /// cross-process broadcast, so a toggle from the API host would not reach the scheduler/worker
 /// processes where effects actually run. Backs the dashboard's effects list.
 /// </summary>
+/// <param name="Name">The effect provider factory's type name.</param>
+/// <param name="FullName">The effect provider factory's full type name, which identifies it.</param>
+/// <param name="Enabled">Whether the effect currently runs in this process.</param>
+/// <param name="Toggleable">Whether the effect registry allows the effect to be enabled and disabled at runtime.</param>
 /// <param name="IsConfigurable">
 /// Whether the effect's factory exposes runtime settings (it implements
 /// <c>IConfigurableProviderFactory</c>).

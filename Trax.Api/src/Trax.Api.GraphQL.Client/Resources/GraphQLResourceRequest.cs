@@ -8,7 +8,7 @@ namespace Trax.Api.GraphQL.Client;
 /// The resource is loaded lazily on first access of <c>Query</c> and cached statically per
 /// request type. Loading does not run in the constructor, so this remains compatible with
 /// <see cref="System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(Type)"/>
-/// used by <see cref="GraphQLClientValidatorExtensions.ValidateAssembliesAsync"/>.
+/// used by <see cref="GraphQLClientValidatorExtensions.ValidateAssembliesAsync(IGraphQLClientValidator, IEnumerable{System.Reflection.Assembly}, CancellationToken)"/>.
 /// </summary>
 public abstract class GraphQLResourceRequest<TResponse> : IGraphQLClientRequest<TResponse>
 {

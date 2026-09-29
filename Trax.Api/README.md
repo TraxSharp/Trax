@@ -4,12 +4,12 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Api.GraphQL)](https://www.nuget.org/packages/Trax.Api.GraphQL/)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Api.GraphQL)](https://www.nuget.org/packages/Trax.Api.GraphQL/)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Api/blob/main/LICENSE)
 [![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Api)](https://github.com/TraxSharp/Trax.Api/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Api/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Api)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
-GraphQL API for [Trax](https://www.nuget.org/packages/Trax.Effect/). Exposes train discovery, execution, and scheduler operations over HTTP via HotChocolate.
+GraphQL API for [Trax](https://traxsharp.net/docs), a .NET framework for building trains (typed pipelines of junctions) with execution logging, scheduling and dispatch. Trax.Api exposes train discovery, execution, and scheduler operations over HTTP via HotChocolate, generates queries over your own `[TraxQueryModel]` entities, and ships optional authentication and audit packages.
 
 ## The Trax Stack
 
@@ -38,13 +38,19 @@ The API is designed to run on a **separate machine** from the scheduler. Both sh
 
 ```bash
 dotnet add package Trax.Api.GraphQL
+dotnet add package Trax.Effect.Data.Postgres   # the data provider behind UsePostgres below
 ```
 
-`Trax.Api.GraphQL` depends on `Trax.Api`, so you don't need to reference it directly.
+`Trax.Api.GraphQL` depends on `Trax.Api` and `Trax.Mediator`, so you don't need to reference them directly.
 
 ## Setup
 
 ```csharp
+using Trax.Api.GraphQL.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddTrax(trax =>
@@ -52,6 +58,7 @@ builder.Services.AddTrax(trax =>
         .AddMediator(typeof(Program).Assembly)
 );
 
+// AddTraxGraphQL requires AddTrax to have been called first, and throws otherwise.
 builder.Services.AddTraxGraphQL();
 
 var app = builder.Build();
@@ -89,9 +96,9 @@ public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrai
 
 ## Security Disclaimer
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [SECURITY-DISCLAIMER.md](SECURITY-DISCLAIMER.md).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [SECURITY-DISCLAIMER.md](https://github.com/TraxSharp/Trax.Api/blob/main/SECURITY-DISCLAIMER.md).
 
-Trax.Api ships authentication (`Trax.Api.Auth`, `Trax.Api.Auth.ApiKey`) and audit (`Trax.Api.GraphQL.Audit`) packages. They provide the glue between ASP.NET Core's auth primitives and Trax's train dispatch. They do not guarantee that a system using them is secure. Read [SECURITY-DISCLAIMER.md](SECURITY-DISCLAIMER.md) before deploying.
+Trax.Api ships authentication (`Trax.Api.Auth`, `Trax.Api.Auth.ApiKey`) and audit (`Trax.Api.GraphQL.Audit`) packages. They provide the glue between ASP.NET Core's auth primitives and Trax's train dispatch. They do not guarantee that a system using them is secure. Read [SECURITY-DISCLAIMER.md](https://github.com/TraxSharp/Trax.Api/blob/main/SECURITY-DISCLAIMER.md) before deploying.
 
 ## Packages
 
@@ -99,9 +106,21 @@ Trax.Api ships authentication (`Trax.Api.Auth`, `Trax.Api.Auth.ApiKey`) and audi
 |---------|-------------|
 | `Trax.Api` | Core library: DTOs, health check, shared service registration |
 | `Trax.Api.GraphQL` | HotChocolate schema (queries, mutations, subscriptions) |
+| `Trax.Api.GraphQL.Client` | Runtime-validated GraphQL client: hand-written queries checked against the server schema at startup |
+| `Trax.Api.GraphQL.Client.Trax` | Trax integration for the client: query junctions, log correlation, schema discovery |
+| `Trax.Api.GraphQL.Client.Typed` | Queries derived from POCOs, built against the live schema at startup |
+| `Trax.Api.GraphQL.PersistedOperations` | Server-managed persisted operations, so shipped clients can be hot-fixed |
+| `Trax.Api.GraphQL.Testing` | Architecture-guard checkers for cross-schema edges and loaders |
 | `Trax.Api.Auth` | Principal abstraction and claim-type constants (no scheme). NO WARRANTY. |
 | `Trax.Api.Auth.ApiKey` | API-key authentication handler. NO WARRANTY. |
+| `Trax.Api.Auth.Jwt` | JWT bearer authentication, plus Google, Auth0, Entra and Cognito presets. NO WARRANTY. |
+| `Trax.Api.Auth.Jwt.Cognito` | Amazon Cognito token validation and claim normalization. NO WARRANTY. |
+| `Trax.Api.Auth.Jwt.Cognito.Issuer` | Cognito-shaped token minting and a refresh-token store. NO WARRANTY. |
+| `Trax.Api.Auth.Jwt.Testing` | JWKS server and token minters for integration tests. NO WARRANTY. |
+| `Trax.Api.Auth.Oidc` | OpenID Connect code flow with a session cookie. NO WARRANTY. |
 | `Trax.Api.GraphQL.Audit` | GraphQL request audit pipeline (listener, channel, writer, sink). NO WARRANTY. |
+
+Reference: [GraphQL API](https://traxsharp.net/docs/sdk-reference/graphql-api), [API Auth](https://traxsharp.net/docs/sdk-reference/api-auth), [API Security](https://traxsharp.net/docs/api-security).
 
 ## Next Layer
 

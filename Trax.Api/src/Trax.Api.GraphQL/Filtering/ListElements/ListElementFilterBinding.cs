@@ -6,7 +6,8 @@ namespace Trax.Api.GraphQL.Filtering.ListElements;
 
 /// <summary>
 /// Points scalar collection properties on query models at the restricted element filter
-/// inputs in <see cref="ListElementFilterInputTypes"/>, so the untranslatable
+/// inputs (<see cref="ListElementFilterInputType{TElement, TElementFilter}"/> and its enum and
+/// comparable counterparts), so the untranslatable
 /// <c>some/all/none: { neq: ... }</c> never reaches the schema.
 /// </summary>
 /// <remarks>

@@ -79,6 +79,14 @@ public static class GraphQLServiceExtensions
     /// Registers the Trax GraphQL schema on a named HotChocolate server ("trax")
     /// with support for configuring DbContext-based model queries.
     /// </summary>
+    /// <remarks>
+    /// Requires <c>services.AddTrax(trax => ...)</c> to have been called first; otherwise this
+    /// throws <see cref="InvalidOperationException"/>. The trains it exposes are the ones
+    /// registered by <c>AddMediator(...)</c> inside <c>AddTrax</c>. Pair it with
+    /// <see cref="UseTraxGraphQL(WebApplication, string, Action{IEndpointConventionBuilder}?)"/> on the
+    /// built app, which maps the endpoint (at <c>/trax/graphql</c> by default). It also calls
+    /// <see cref="Trax.Api.Extensions.ApiServiceExtensions.AddTraxApi"/>, so do not call that separately.
+    /// </remarks>
     /// <example>
     /// <code>
     /// services.AddTraxGraphQL(graphql => graphql
@@ -449,6 +457,14 @@ public static class GraphQLServiceExtensions
     /// This avoids conflicts with a consumer's own default GraphQL schema.
     /// Only trains annotated with <c>[TraxQuery]</c> or <c>[TraxMutation]</c> get typed operations generated.
     /// </summary>
+    /// <remarks>
+    /// Requires <c>services.AddTrax(trax => ...)</c> to have been called first; otherwise this
+    /// throws <see cref="InvalidOperationException"/>. The trains it exposes are the ones
+    /// registered by <c>AddMediator(...)</c> inside <c>AddTrax</c>. Pair it with
+    /// <see cref="UseTraxGraphQL(WebApplication, string, Action{IEndpointConventionBuilder}?)"/> on the
+    /// built app, which maps the endpoint (at <c>/trax/graphql</c> by default). It also calls
+    /// <see cref="Trax.Api.Extensions.ApiServiceExtensions.AddTraxApi"/>, so do not call that separately.
+    /// </remarks>
     public static IServiceCollection AddTraxGraphQL(this IServiceCollection services) =>
         services.AddTraxGraphQL(builder => builder);
 

@@ -50,7 +50,7 @@ public class GraphQLClientConfigurationBuilder
     public bool DisposeHttpClient { get; set; } = false;
 
     /// <summary>
-    /// If true, run <see cref="GraphQLClientValidatorExtensions.ValidateAssembliesAsync"/> at startup
+    /// If true, run <see cref="GraphQLClientValidatorExtensions.ValidateAssembliesAsync(IGraphQLClientValidator, IEnumerable{System.Reflection.Assembly}, CancellationToken)"/> at startup
     /// against the supplied assemblies. This eagerly catches schema-incompatible queries.
     /// </summary>
     public bool ValidateAssemblies { get; set; } = false;

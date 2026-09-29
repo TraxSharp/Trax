@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Api</AssemblyName>
-    <PackageDescription>Core API services for Trax: train catalog, health checks, and shared DTOs</PackageDescription>
+    <PackageDescription>Core services behind the Trax GraphQL API: health checks, per-train authorization, the HTTP principal provider and the shared DTOs. Trax.Api.GraphQL brings it in; reference it directly only to use those services without the GraphQL schema.</PackageDescription>
   </PropertyGroup>
 
   <ItemGroup>

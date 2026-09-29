@@ -5,10 +5,11 @@
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Api.GraphQL.Audit</AssemblyName>
-    <PackageDescription>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md. Request-level audit pipeline for Trax GraphQL: bounded-channel listener with background batch writer.</PackageDescription>
+    <PackageDescription>Request-level audit pipeline for the Trax GraphQL API: a bounded-channel listener and background batch writer that hand each request to your ITraxAuditSink, registered with AddAudit on the GraphQL builder. NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageDescription>
     <PackageReleaseNotes>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageReleaseNotes>
     <PackageTags>trax;graphql;audit;security</PackageTags>
-    <PackageReadmeFile>SECURITY-DISCLAIMER.md</PackageReadmeFile>
+    <!-- The package README leads with the security disclaimer, then shows usage. -->
+    <TraxPackageReadme>$(MSBuildThisFileDirectory)..\AUTH-PACKAGE-README.md</TraxPackageReadme>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 

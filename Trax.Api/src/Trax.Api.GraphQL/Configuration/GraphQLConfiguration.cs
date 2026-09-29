@@ -15,7 +15,7 @@ public class GraphQLConfiguration
     public IReadOnlyList<QueryModelRegistration> ModelRegistrations { get; }
 
     /// <summary>
-    /// Additional HotChocolate <see cref="HotChocolate.Types.TypeModule"/> types
+    /// Additional HotChocolate <see cref="HotChocolate.Execution.Configuration.TypeModule"/> types
     /// registered by consumers via <c>AddTypeModule&lt;T&gt;()</c>.
     /// </summary>
     internal IReadOnlyList<Type> AdditionalTypeModules { get; }

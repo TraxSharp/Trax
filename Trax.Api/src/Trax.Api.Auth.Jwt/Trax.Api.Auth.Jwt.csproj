@@ -5,10 +5,11 @@
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Api.Auth.Jwt</AssemblyName>
-    <PackageDescription>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md. JWT bearer authentication scheme for Trax: thin wrapper over Microsoft.AspNetCore.Authentication.JwtBearer that projects validated tokens into a TraxPrincipal.</PackageDescription>
+    <PackageDescription>JWT bearer authentication scheme for Trax: thin wrapper over Microsoft.AspNetCore.Authentication.JwtBearer that projects validated tokens into a TraxPrincipal. NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageDescription>
     <PackageReleaseNotes>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageReleaseNotes>
     <PackageTags>trax;auth;jwt;bearer;security</PackageTags>
-    <PackageReadmeFile>SECURITY-DISCLAIMER.md</PackageReadmeFile>
+    <!-- The package README leads with the security disclaimer, then shows usage. -->
+    <TraxPackageReadme>$(MSBuildThisFileDirectory)..\AUTH-PACKAGE-README.md</TraxPackageReadme>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 

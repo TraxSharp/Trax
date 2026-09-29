@@ -16,6 +16,13 @@ public static class ApiServiceExtensions
     /// Core train discovery and execution services are provided by Trax.Mediator's
     /// <c>AddMediator()</c>.
     /// </summary>
+    /// <remarks>
+    /// Call it after <c>services.AddTrax(trax => ...)</c> with <c>AddMediator(...)</c> inside: it
+    /// replaces the mediator's principal provider with one that reads the current HTTP request, and
+    /// called first, the mediator's registration would win. <c>AddTraxGraphQL()</c> calls this for
+    /// you, and its endpoint is mapped by <c>UseTraxGraphQL()</c>; call it directly only on a host
+    /// that uses these services without the GraphQL schema. There is no <c>Use*</c> counterpart.
+    /// </remarks>
     public static IServiceCollection AddTraxApi(this IServiceCollection services)
     {
         services.AddHttpContextAccessor();
