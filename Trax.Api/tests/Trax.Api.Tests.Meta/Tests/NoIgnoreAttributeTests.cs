@@ -17,14 +17,12 @@ public class NoIgnoreAttributeTests
     /// <summary>
     /// Files where [Ignore] is explicitly accepted. Each entry must justify why.
     /// </summary>
-    private static readonly HashSet<string> KnownExceptions = new(StringComparer.Ordinal)
-    {
-        // Stress tests are opt-in and must be invoked via
-        // `dotnet test --filter TestCategory=Stress`. They are intentionally [Ignore]'d by
-        // default so they never run on a normal CI build (seeding millions of rows takes
-        // minutes and would contend with parallel test runs).
-        "tests/Trax.Api.Tests.Stress/Fixtures/StressTestSetup.cs",
-    };
+    /// <remarks>
+    /// Empty. The stress suite used to be listed here; it is opt-in through <c>[Explicit]</c>
+    /// on its concrete fixture now, which runs when selected by
+    /// <c>--filter TestCategory=Stress</c> and is skipped otherwise.
+    /// </remarks>
+    private static readonly HashSet<string> KnownExceptions = new(StringComparer.Ordinal);
 
     [Test]
     public void TestSources_DoNotUse_IgnoreAttribute()

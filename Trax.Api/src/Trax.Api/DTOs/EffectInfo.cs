@@ -6,4 +6,22 @@ namespace Trax.Api.DTOs;
 /// cross-process broadcast, so a toggle from the API host would not reach the scheduler/worker
 /// processes where effects actually run. Backs the dashboard's effects list.
 /// </summary>
-public record EffectInfo(string Name, string FullName, bool Enabled, bool Toggleable);
+/// <param name="IsConfigurable">
+/// Whether the effect's factory exposes runtime settings (it implements
+/// <c>IConfigurableProviderFactory</c>).
+/// </param>
+/// <param name="ConfigurationTypeName">The full name of the settings type, when configurable.</param>
+/// <param name="Configuration">
+/// The factory's current settings serialized as JSON, when configurable. Settings can hold
+/// credentials, so this is only reachable through the <c>operations</c> namespace and its gate,
+/// the same gate that guards an execution's input.
+/// </param>
+public record EffectInfo(
+    string Name,
+    string FullName,
+    bool Enabled,
+    bool Toggleable,
+    bool IsConfigurable = false,
+    string? ConfigurationTypeName = null,
+    string? Configuration = null
+);

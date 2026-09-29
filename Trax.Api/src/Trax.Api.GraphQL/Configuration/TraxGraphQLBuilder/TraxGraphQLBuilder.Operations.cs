@@ -74,22 +74,58 @@ public partial class TraxGraphQLBuilder
     /// no third answer, so a host that needed one reached for the anonymous opt-in and got a
     /// public scheduler console.
     /// <para>
+    /// A policy or roles is required. The namespace reads execution inputs, outputs, stack
+    /// traces and logs, and requeues, cancels and reconfigures, so "any signed-in user" is not a
+    /// default: on a host with public sign-up it is everyone. A host that means it says so with
+    /// <see cref="GateOperationsToAuthenticatedUsers"/>.
+    /// </para>
+    /// <para>
     /// Repeated calls accumulate: policies are AND'd, roles are unioned and OR'd, the same way
     /// repeated <c>[TraxAuthorize]</c> attributes combine on a train or an entity.
     /// </para>
     /// </remarks>
     /// <param name="policy">
-    /// An ASP.NET Core authorization policy name that must be satisfied. <c>null</c> with no
-    /// roles requires only an authenticated caller.
+    /// An ASP.NET Core authorization policy name that must be satisfied.
     /// </param>
     /// <param name="roles">
     /// A comma-separated list of roles. The caller must hold at least one.
     /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// Neither <paramref name="policy"/> nor <paramref name="roles"/> is given. Thrown while
+    /// <c>AddTraxGraphQL</c> runs, so the host does not start.
+    /// </exception>
     public TraxGraphQLBuilder GateOperations(string? policy = null, string? roles = null)
     {
+        if (string.IsNullOrWhiteSpace(policy) && string.IsNullOrWhiteSpace(roles))
+            throw new InvalidOperationException(
+                "GateOperations() needs a policy or roles: GateOperations(policy: \"...\") or "
+                    + "GateOperations(roles: \"...\"). The operations namespace reads execution "
+                    + "inputs, outputs and logs and requeues, cancels and reconfigures work, so it "
+                    + "does not default to any signed-in caller. If any authenticated user is "
+                    + "really who should reach it, call GateOperationsToAuthenticatedUsers()."
+            );
+
         OperationsAuthorizeAttributes.Add(
-            new TraxAuthorizeAttribute { Policy = policy, Roles = roles }
+            new TraxAuthorizeAttribute
+            {
+                Policy = string.IsNullOrWhiteSpace(policy) ? null : policy,
+                Roles = string.IsNullOrWhiteSpace(roles) ? null : roles,
+            }
         );
+        return this;
+    }
+
+    /// <summary>
+    /// Gates the <c>operations</c> namespace to any authenticated caller, with no policy or role.
+    /// On a host where anyone can sign up, that is anyone, and each of them can read execution
+    /// inputs, outputs and logs and requeue, cancel and reconfigure work. Prefer
+    /// <see cref="GateOperations"/> with a policy or roles; use this when every authenticated
+    /// principal really is an operator, such as a host whose only identities are service
+    /// accounts.
+    /// </summary>
+    public TraxGraphQLBuilder GateOperationsToAuthenticatedUsers()
+    {
+        OperationsAuthorizeAttributes.Add(new TraxAuthorizeAttribute());
         return this;
     }
 }

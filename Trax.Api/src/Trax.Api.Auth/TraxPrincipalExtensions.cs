@@ -31,7 +31,9 @@ public static class TraxPrincipalExtensions
 
     /// <summary>
     /// Builds a <see cref="ClaimsPrincipal"/> from this <see cref="TraxPrincipal"/>.
-    /// Sets <see cref="TraxAuthClaimTypes.PrincipalId"/>, <see cref="ClaimTypes.Name"/>,
+    /// Sets <see cref="TraxAuthClaimTypes.PrincipalId"/> to the id qualified by
+    /// <paramref name="authenticationType"/> (<c>{scheme}:{id}</c>, see
+    /// <see cref="TraxPrincipalId.Qualify"/>), <see cref="ClaimTypes.Name"/>,
     /// one <see cref="ClaimTypes.Role"/> per role, any custom claims verbatim, and
     /// (when specified) <see cref="TraxAuthClaimTypes.PrincipalType"/>. Entries in
     /// <see cref="TraxPrincipal.Claims"/> whose key is a Trax-reserved claim type
@@ -42,8 +44,14 @@ public static class TraxPrincipalExtensions
     /// <param name="authenticationType">
     /// The authentication scheme name. Also sets
     /// <see cref="ClaimsIdentity.AuthenticationType"/>, which is what
-    /// ASP.NET Core reads to decide whether the identity is authenticated.
+    /// ASP.NET Core reads to decide whether the identity is authenticated, and qualifies the
+    /// principal id. It cannot contain <see cref="TraxPrincipalId.Separator"/>.
     /// </param>
+    /// <remarks>
+    /// Project a principal once, from the resolver's output: a principal read back with
+    /// <see cref="TryGetTraxPrincipal"/> already carries the qualified id, and projecting it again
+    /// qualifies it twice. See <c>docs/adr/0023-a-principal-id-is-qualified-by-its-scheme.md</c>.
+    /// </remarks>
     public static ClaimsPrincipal ToClaimsPrincipal(
         this TraxPrincipal principal,
         string authenticationType
@@ -54,7 +62,10 @@ public static class TraxPrincipalExtensions
 
         var claims = new List<Claim>
         {
-            new(TraxAuthClaimTypes.PrincipalId, principal.Id),
+            new(
+                TraxAuthClaimTypes.PrincipalId,
+                TraxPrincipalId.Qualify(authenticationType, principal.Id)
+            ),
             new(ClaimTypes.Name, principal.DisplayName),
         };
 
@@ -83,7 +94,9 @@ public static class TraxPrincipalExtensions
     /// <see cref="ClaimsPrincipal"/> produced by
     /// <see cref="ToClaimsPrincipal(TraxPrincipal, string)"/>. Returns <c>false</c>
     /// when no <see cref="TraxAuthClaimTypes.PrincipalId"/> claim is present,
-    /// meaning the principal did not originate from a Trax auth scheme.
+    /// meaning the principal did not originate from a Trax auth scheme. The returned
+    /// <see cref="TraxPrincipal.Id"/> is the qualified id the claim carries,
+    /// <c>{scheme}:{id}</c>.
     /// </summary>
     public static bool TryGetTraxPrincipal(
         this ClaimsPrincipal claimsPrincipal,
@@ -119,7 +132,8 @@ public static class TraxPrincipalExtensions
 
     /// <summary>
     /// Returns the stable principal identifier from
-    /// <see cref="TraxAuthClaimTypes.PrincipalId"/>, or <c>false</c> if the claim
+    /// <see cref="TraxAuthClaimTypes.PrincipalId"/>, qualified by its scheme
+    /// (<c>{scheme}:{id}</c>), or <c>false</c> if the claim
     /// is absent. Convenient for audit sinks and log correlation.
     /// </summary>
     public static bool TryGetPrincipalId(

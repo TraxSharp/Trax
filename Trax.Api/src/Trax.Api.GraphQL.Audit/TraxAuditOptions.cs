@@ -18,10 +18,19 @@ public sealed class TraxAuditOptions
     /// <summary>How long the writer waits for a batch to fill before flushing a partial batch.</summary>
     public TimeSpan FlushInterval { get; set; } = TimeSpan.FromMilliseconds(500);
 
-    /// <summary>Documents longer than this are truncated with a trailing "...[truncated]" marker.</summary>
+    /// <summary>
+    /// Documents longer than this are cut to this many characters, marked "...[truncated]", and
+    /// followed by "[selected fields: ...]": every <c>Type.field</c> the operation selects, read
+    /// from the compiled operation, so padding ahead of the fields that matter cannot hide them.
+    /// The list names each schema coordinate once, so it is bounded by the schema, not the request.
+    /// </summary>
     public int MaxDocumentLength { get; set; } = 65_536;
 
-    /// <summary>Skip introspection queries (<c>__schema</c>, <c>__type</c>, operation name <c>IntrospectionQuery</c>).</summary>
+    /// <summary>
+    /// Skip introspection queries: operations whose top-level selections are all
+    /// <c>__schema</c>, <c>__type</c> or <c>__typename</c>. Decided from the operation that
+    /// executed.
+    /// </summary>
     public bool SkipIntrospection { get; set; } = true;
 
     /// <summary>Skip subscription operations. They don't fit a request/response audit model well.</summary>

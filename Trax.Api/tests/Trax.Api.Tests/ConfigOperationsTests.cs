@@ -1,6 +1,9 @@
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using NUnit.Framework;
+using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Scheduler.Services.Operations;
@@ -74,5 +77,48 @@ public class ConfigOperationsTests
     public void OperationsMutations_ConfigNamespace_ReturnsNewInstance()
     {
         new OperationsMutations().Config().Should().NotBeNull();
+    }
+
+    [Test]
+    public void GetEnvironmentName_IsTheHostEnvironment()
+    {
+        var environment = Substitute.For<IHostEnvironment>();
+        environment.EnvironmentName.Returns("Staging");
+
+        new ConfigQueries().GetEnvironmentName(environment).Should().Be("Staging");
+    }
+
+    [Test]
+    public void GetLogLevels_ReadsTheLoggingSection_DefaultFirst()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Logging:LogLevel:Microsoft.AspNetCore"] = "Warning",
+                    ["Logging:LogLevel:Default"] = "Information",
+                    ["Logging:LogLevel:Trax"] = "Debug",
+                    ["ConnectionStrings:TraxDatabase"] = "Host=secret",
+                }
+            )
+            .Build();
+
+        var levels = new ConfigQueries().GetLogLevels(configuration);
+
+        levels
+            .Should()
+            .Equal(
+                new LogLevelSetting("Default", "Information"),
+                new LogLevelSetting("Microsoft.AspNetCore", "Warning"),
+                new LogLevelSetting("Trax", "Debug")
+            );
+    }
+
+    [Test]
+    public void GetLogLevels_NoLoggingSection_IsEmpty()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+
+        new ConfigQueries().GetLogLevels(configuration).Should().BeEmpty();
     }
 }

@@ -18,7 +18,10 @@ public class TraxPrincipalTests
 
         var claimsPrincipal = principal.ToClaimsPrincipal(Scheme);
 
-        claimsPrincipal.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value.Should().Be("alice");
+        claimsPrincipal
+            .FindFirst(TraxAuthClaimTypes.PrincipalId)
+            ?.Value.Should()
+            .Be("TestScheme:alice");
     }
 
     [Test]
@@ -151,7 +154,7 @@ public class TraxPrincipalTests
         var roundtripped = original.ToClaimsPrincipal(Scheme).TryGetTraxPrincipal(out var result);
 
         roundtripped.Should().BeTrue();
-        result!.Id.Should().Be("alice");
+        result!.Id.Should().Be("TestScheme:alice");
         result.DisplayName.Should().Be("Alice Liddell");
         result.Roles.Should().BeEquivalentTo(["User", "Admin"]);
         result.Claims.Should().ContainKey("tenant").WhoseValue.Should().Be("acme");
@@ -320,7 +323,7 @@ public class TraxPrincipalTests
             .FindAll(TraxAuthClaimTypes.PrincipalId)
             .Select(c => c.Value)
             .ToList();
-        idClaims.Should().BeEquivalentTo(["alice"]);
+        idClaims.Should().BeEquivalentTo(["TestScheme:alice"]);
     }
 
     [Test]
@@ -402,7 +405,7 @@ public class TraxPrincipalTests
         var roundtripped = original.ToClaimsPrincipal(Scheme).TryGetTraxPrincipal(out var result);
 
         roundtripped.Should().BeTrue();
-        result!.Id.Should().Be("alice");
+        result!.Id.Should().Be("TestScheme:alice");
         result.DisplayName.Should().Be("Alice");
         result.Roles.Should().BeEquivalentTo(["User"]);
         result.PrincipalType.Should().Be("apikey");

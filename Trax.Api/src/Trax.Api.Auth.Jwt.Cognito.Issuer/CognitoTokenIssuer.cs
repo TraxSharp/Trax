@@ -48,6 +48,44 @@ public sealed class CognitoTokenIssuer
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
+    /// <summary>
+    /// Claim names an additional claim may not use: every claim this issuer sets itself, and
+    /// every claim <see cref="CognitoJwtPrincipalResolver"/> reads an identity, a name or a role
+    /// from. A duplicate would shadow the real value, and a role-bearing name would grant roles
+    /// through whatever a host passes in as additional claims.
+    /// </summary>
+    private static readonly HashSet<string> ReservedClaimNames = new(StringComparer.Ordinal)
+    {
+        "sub",
+        "iss",
+        "aud",
+        "exp",
+        "nbf",
+        "iat",
+        "jti",
+        "auth_time",
+        "scope",
+        "username",
+        "given_name",
+        "family_name",
+        "name",
+        "preferred_username",
+        "role",
+        "roles",
+        CognitoDefaults.TokenUse,
+        CognitoDefaults.ClientId,
+        CognitoDefaults.CognitoUsername,
+        CognitoDefaults.CognitoGroups,
+        CognitoDefaults.Identities,
+        CognitoDefaults.Email,
+        CognitoDefaults.EmailVerified,
+        ClaimTypes.Role,
+        ClaimTypes.Name,
+        ClaimTypes.NameIdentifier,
+        TraxAuthClaimTypes.PrincipalId,
+        TraxAuthClaimTypes.PrincipalType,
+    };
+
     private readonly string _issuer;
     private readonly SigningCredentials _signingCredentials;
     private readonly string _kid;
@@ -221,6 +259,13 @@ public sealed class CognitoTokenIssuer
         {
             if (string.IsNullOrWhiteSpace(type))
                 continue;
+            if (ReservedClaimNames.Contains(type))
+                throw new ArgumentException(
+                    $"The additional claim '{type}' is reserved: the issuer sets it, or the "
+                        + "principal resolver reads an identity or roles from it. Use the "
+                        + "request's own property for it instead.",
+                    nameof(additional)
+                );
             claims.Add(new Claim(type, value ?? string.Empty));
         }
     }

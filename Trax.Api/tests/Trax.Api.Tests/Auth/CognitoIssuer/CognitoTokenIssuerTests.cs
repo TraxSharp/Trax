@@ -262,6 +262,79 @@ public class CognitoTokenIssuerTests
         jwt.Claims.Single(c => c.Type == "device_id").Value.Should().Be("device-42");
     }
 
+    // Every claim the issuer sets itself, and every claim the Cognito resolver reads an
+    // identity, a name or a role from. An additional claim with one of these names would
+    // duplicate or shadow it, so the issuer refuses it rather than minting the token.
+    private static readonly string[] ReservedClaimNames =
+    [
+        "sub",
+        "iss",
+        "aud",
+        "exp",
+        "nbf",
+        "iat",
+        "jti",
+        "auth_time",
+        "token_use",
+        "client_id",
+        "scope",
+        "username",
+        "cognito:username",
+        "cognito:groups",
+        "identities",
+        "email",
+        "email_verified",
+        "given_name",
+        "family_name",
+        "name",
+        "preferred_username",
+        "role",
+        "roles",
+        System.Security.Claims.ClaimTypes.Role,
+        System.Security.Claims.ClaimTypes.Name,
+        System.Security.Claims.ClaimTypes.NameIdentifier,
+        Trax.Api.Auth.TraxAuthClaimTypes.PrincipalId,
+        Trax.Api.Auth.TraxAuthClaimTypes.PrincipalType,
+    ];
+
+    [TestCaseSource(nameof(ReservedClaimNames))]
+    public void MintAccessToken_AdditionalClaim_ReservedName_Throws(string name)
+    {
+        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        Action act = () =>
+            issuer.MintAccessToken(
+                new CognitoAccessTokenRequest
+                {
+                    Sub = Guid.NewGuid(),
+                    ClientId = ClientId,
+                    Lifetime = TimeSpan.FromMinutes(5),
+                    AdditionalClaims = new Dictionary<string, string> { { name, "injected" } },
+                }
+            );
+
+        act.Should().Throw<ArgumentException>().WithMessage($"*'{name}'*");
+    }
+
+    [TestCaseSource(nameof(ReservedClaimNames))]
+    public void MintIdToken_AdditionalClaim_ReservedName_Throws(string name)
+    {
+        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        Action act = () =>
+            issuer.MintIdToken(
+                new CognitoIdTokenRequest
+                {
+                    Sub = Guid.NewGuid(),
+                    ClientId = ClientId,
+                    Lifetime = TimeSpan.FromMinutes(5),
+                    Email = "a@example.com",
+                    EmailVerified = true,
+                    AdditionalClaims = new Dictionary<string, string> { { name, "injected" } },
+                }
+            );
+
+        act.Should().Throw<ArgumentException>().WithMessage($"*'{name}'*");
+    }
+
     [Test]
     public void MintAccessToken_AdditionalClaim_EmptyKey_Skipped()
     {

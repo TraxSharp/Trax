@@ -172,7 +172,7 @@ public class JwtAuthHandlerIntegrationTests
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
         response.Should().NotBeNull();
-        response!.PrincipalId.Should().Be("alice");
+        response!.PrincipalId.Should().Be("TraxJwt:alice");
         response.Name.Should().Be("Alice Liddell");
         response.PrincipalType.Should().Be(JwtDefaults.PrincipalType);
         response.Roles.Should().Contain("Admin");
@@ -293,7 +293,7 @@ public class JwtAuthHandlerIntegrationTests
 
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
-        response!.PrincipalId.Should().Be("override-id");
+        response!.PrincipalId.Should().Be("TraxJwt:override-id");
         response.Name.Should().Be("Overridden");
     }
 

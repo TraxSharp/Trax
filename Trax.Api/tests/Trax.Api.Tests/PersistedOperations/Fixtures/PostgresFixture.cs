@@ -25,8 +25,8 @@ public class PostgresFixture
     /// a single test process from exhausting the CI Postgres instance.
     /// </para>
     /// </summary>
-    public const string ConnectionString =
-        "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123;"
+    public static readonly string ConnectionString =
+        $"Host=localhost;Port={TestPostgres.Port};Database=trax;Username=trax;Password=trax123;"
         + "Timeout=30;Command Timeout=30;Maximum Pool Size=16";
 
     private static ServiceProvider? _services;
@@ -86,7 +86,7 @@ public class PostgresFixture
         try
         {
             using var conn = new NpgsqlConnection(
-                "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123;Timeout=5"
+                $"Host=localhost;Port={TestPostgres.Port};Database=trax;Username=trax;Password=trax123;Timeout=5"
             );
             conn.Open();
             return true;

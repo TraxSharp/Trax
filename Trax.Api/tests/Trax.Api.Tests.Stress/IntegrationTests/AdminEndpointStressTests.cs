@@ -5,10 +5,12 @@ using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Services.HealthCheck;
+using Trax.Api.Services.Metrics;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.ChangeSignal;
+using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.Operations;
 
@@ -27,6 +29,9 @@ namespace Trax.Api.Tests.Stress.IntegrationTests;
 /// </remarks>
 [TestFixture]
 [Category("Stress")]
+[Explicit(
+    "Stress suite: seeds millions of rows. Run with dotnet test --filter TestCategory=Stress"
+)]
 public class AdminEndpointStressTests : StressTestSetup
 {
     private static IDataContextProviderFactory Factory(IServiceProvider sp) =>
@@ -98,6 +103,118 @@ public class AdminEndpointStressTests : StressTestSetup
                 var server = new MetricsQueries().GetServer(Operations(sp));
                 server.UptimeSeconds.Should().BeGreaterThan(0);
                 return Task.CompletedTask;
+            }
+        );
+    }
+
+    [Test]
+    public async Task Effects_AtScale_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.effects",
+            TrivialBudget,
+            (sp, _) =>
+            {
+                var effects = new OperationsQueries().GetEffects(
+                    sp.GetRequiredService<IEffectRegistry>(),
+                    sp
+                );
+                effects.Should().NotBeNull();
+                return Task.CompletedTask;
+            }
+        );
+    }
+
+    [Test]
+    public async Task MetricsServerCpuPercent_AtScale_WithinBudget()
+    {
+        // Stateful per process: the warm-up primes the baseline sample, so the measured poll
+        // is the steady-state one the dashboard makes every few seconds.
+        await MeasureAsync(
+            "operations.metrics.serverCpuPercent",
+            TrivialBudget,
+            (sp, _) =>
+            {
+                new MetricsQueries().GetServerCpuPercent(
+                    sp.GetRequiredService<ProcessCpuSampler>()
+                );
+                return Task.CompletedTask;
+            }
+        );
+    }
+
+    #endregion
+
+    #region Point reads (dashboard detail pages)
+
+    [Test]
+    public async Task Manifest_PointRead_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.manifest (by id)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var row = await new OperationsQueries().GetManifest(
+                    Profile.Manifests / 2,
+                    Factory(sp),
+                    ct
+                );
+                row.Should().NotBeNull();
+            }
+        );
+    }
+
+    [Test]
+    public async Task ManifestGroup_PointRead_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.manifestGroups.group (by id)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var row = await new ManifestGroupQueries().GetGroup(
+                    Profile.Groups / 2,
+                    Factory(sp),
+                    ct
+                );
+                row.Should().NotBeNull();
+            }
+        );
+    }
+
+    [Test]
+    public async Task WorkQueue_PointRead_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.workQueue.workQueue (by id)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var row = await new WorkQueueQueries().GetWorkQueue(
+                    Profile.WorkQueue / 2,
+                    Factory(sp),
+                    ct
+                );
+                row.Should().NotBeNull();
+            }
+        );
+    }
+
+    [Test]
+    public async Task DeadLetter_PointRead_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.deadLetters.deadLetter (by id)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var row = await new DeadLetterQueries().GetDeadLetter(
+                    Profile.DeadLetter / 2,
+                    Factory(sp),
+                    ct
+                );
+                row.Should().NotBeNull();
             }
         );
     }

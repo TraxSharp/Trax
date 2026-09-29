@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Auth.Jwt.Testing;
+using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
@@ -24,44 +25,36 @@ public class TraxJwtSocketInterceptorJwksTests
     private const string Audience = "trax-ws-jwks";
 
     /// <summary>
-    /// Wires an Authority (JWKS) JWT scheme against <paramref name="authority"/> and
-    /// returns a live options monitor plus the default principal resolver, exactly
-    /// as a host would after <c>AddTraxJwtAuth(authority, audience)</c>.
+    /// Wires an Authority (JWKS) JWT scheme against <paramref name="authority"/>, exactly as a
+    /// host would with <c>AddTraxJwtAuth(authority, audience)</c>.
     /// </summary>
-    private static (
-        ServiceProvider Provider,
-        IOptionsMonitor<JwtBearerOptions> Monitor,
-        ITraxPrincipalResolver<JwtTokenInput> Resolver
-    ) WireAuthorityScheme(string authority)
+    private static ServiceProvider WireAuthorityScheme(string authority)
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTraxJwtAuth(jwt => jwt.UseAuthority(authority, Audience).AllowHttpMetadata());
-        var sp = services.BuildServiceProvider();
-        return (
-            sp,
-            sp.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>(),
-            sp.GetRequiredService<ITraxPrincipalResolver<JwtTokenInput>>()
-        );
+        return services.BuildServiceProvider();
     }
 
-    private static TraxJwtSocketInterceptor NewInterceptor(
-        IOptionsMonitor<JwtBearerOptions> monitor,
-        ITraxPrincipalResolver<JwtTokenInput> resolver
-    ) => new(monitor, AppServicesWith(resolver), NullLogger<TraxJwtSocketInterceptor>.Instance);
+    private static TraxJwtSocketInterceptor NewInterceptor(ServiceProvider sp) =>
+        new(
+            sp.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>(),
+            new TraxApplicationServices(sp),
+            NullLogger<TraxJwtSocketInterceptor>.Instance
+        );
 
     [Test]
     public async Task JwksScheme_ValidToken_Accepts_AttachesPrincipal()
     {
         await using var server = await TestJwksServer.StartAsync();
-        var (sp, monitor, resolver) = WireAuthorityScheme(server.Issuer);
+        var sp = WireAuthorityScheme(server.Issuer);
         await using var _ = sp;
 
         var token = server
             .CreateIssuer(Audience)
             .Mint(b => b.WithSubject("alice").WithClaim("name", "Alice").WithRole("Player"));
 
-        var interceptor = NewInterceptor(monitor, resolver);
+        var interceptor = NewInterceptor(sp);
         var (session, http) = NewSession();
 
         var result = await interceptor.OnConnectAsync(
@@ -72,7 +65,7 @@ public class TraxJwtSocketInterceptorJwksTests
 
         result.Accepted.Should().BeTrue();
         http.User.Identity!.IsAuthenticated.Should().BeTrue();
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("TraxJwt:alice");
         http.User.IsInRole("Player").Should().BeTrue();
     }
 
@@ -83,14 +76,14 @@ public class TraxJwtSocketInterceptorJwksTests
         // a different server's key, so the kid is absent from the JWKS.
         await using var validatingServer = await TestJwksServer.StartAsync();
         await using var foreignServer = await TestJwksServer.StartAsync();
-        var (sp, monitor, resolver) = WireAuthorityScheme(validatingServer.Issuer);
+        var sp = WireAuthorityScheme(validatingServer.Issuer);
         await using var _ = sp;
 
         var token = foreignServer
             .CreateIssuer(Audience)
             .Mint(b => b.WithSubject("alice").WithIssuer(validatingServer.Issuer));
 
-        var interceptor = NewInterceptor(monitor, resolver);
+        var interceptor = NewInterceptor(sp);
         var (session, _sess) = NewSession();
 
         var result = await interceptor.OnConnectAsync(
@@ -107,7 +100,7 @@ public class TraxJwtSocketInterceptorJwksTests
     public async Task JwksScheme_Expired_Rejects()
     {
         await using var server = await TestJwksServer.StartAsync();
-        var (sp, monitor, resolver) = WireAuthorityScheme(server.Issuer);
+        var sp = WireAuthorityScheme(server.Issuer);
         await using var _ = sp;
 
         var token = server
@@ -118,7 +111,7 @@ public class TraxJwtSocketInterceptorJwksTests
                     .WithExpires(DateTime.UtcNow.AddMinutes(-5))
             );
 
-        var interceptor = NewInterceptor(monitor, resolver);
+        var interceptor = NewInterceptor(sp);
         var (session, _sess) = NewSession();
 
         var result = await interceptor.OnConnectAsync(
@@ -135,14 +128,14 @@ public class TraxJwtSocketInterceptorJwksTests
     public async Task JwksScheme_WrongAudience_Rejects()
     {
         await using var server = await TestJwksServer.StartAsync();
-        var (sp, monitor, resolver) = WireAuthorityScheme(server.Issuer);
+        var sp = WireAuthorityScheme(server.Issuer);
         await using var _ = sp;
 
         var token = server
             .CreateIssuer(Audience)
             .Mint(b => b.WithSubject("alice").WithAudience("some-other-audience"));
 
-        var interceptor = NewInterceptor(monitor, resolver);
+        var interceptor = NewInterceptor(sp);
         var (session, _sess) = NewSession();
 
         var result = await interceptor.OnConnectAsync(
@@ -159,7 +152,7 @@ public class TraxJwtSocketInterceptorJwksTests
     public async Task JwksScheme_WrongIssuer_Rejects()
     {
         await using var server = await TestJwksServer.StartAsync();
-        var (sp, monitor, resolver) = WireAuthorityScheme(server.Issuer);
+        var sp = WireAuthorityScheme(server.Issuer);
         await using var _ = sp;
 
         // Signed by the server's real key, but the iss claim is a stranger.
@@ -167,7 +160,7 @@ public class TraxJwtSocketInterceptorJwksTests
             .CreateIssuer(Audience)
             .Mint(b => b.WithSubject("alice").WithIssuer("https://rogue-issuer"));
 
-        var interceptor = NewInterceptor(monitor, resolver);
+        var interceptor = NewInterceptor(sp);
         var (session, _sess) = NewSession();
 
         var result = await interceptor.OnConnectAsync(
@@ -185,7 +178,7 @@ public class TraxJwtSocketInterceptorJwksTests
     {
         // Authority points at a closed loopback port: the discovery fetch fails.
         // The interceptor must turn that into a reject, not let it bubble.
-        var (sp, monitor, resolver) = WireAuthorityScheme("http://127.0.0.1:1");
+        var sp = WireAuthorityScheme("http://127.0.0.1:1");
         await using var _ = sp;
 
         var token = TestTokenIssuer
@@ -196,7 +189,7 @@ public class TraxJwtSocketInterceptorJwksTests
             )
             .Mint(b => b.WithSubject("alice"));
 
-        var interceptor = NewInterceptor(monitor, resolver);
+        var interceptor = NewInterceptor(sp);
         var (session, _sess) = NewSession();
 
         var result = await interceptor.OnConnectAsync(
@@ -205,7 +198,8 @@ public class TraxJwtSocketInterceptorJwksTests
             CancellationToken.None
         );
 
+        // The handler fails the authentication rather than throwing, as it does over HTTP.
         result.Accepted.Should().BeFalse();
-        result.Message.Should().Contain("JWT validation failed");
+        result.Message.Should().Contain("Invalid JWT");
     }
 }

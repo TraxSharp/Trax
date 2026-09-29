@@ -57,7 +57,7 @@ public class CognitoIssuerRoundTripTests
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var ctx = await ReadPrincipalSnapshot(resp);
-        ctx.Id.Should().Be(sub.ToString());
+        ctx.Id.Should().Be("TraxJwt:" + sub);
         ctx.PrincipalType.Should().Be(CognitoDefaults.PrincipalType);
         ctx.Roles.Should().BeEquivalentTo(new[] { "admin", "editor" });
         ctx.IdentityProvider.Should()
@@ -93,7 +93,7 @@ public class CognitoIssuerRoundTripTests
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var ctx = await ReadPrincipalSnapshot(resp);
-        ctx.Id.Should().Be(sub.ToString());
+        ctx.Id.Should().Be("TraxJwt:" + sub);
         ctx.DisplayName.Should().Be("alice");
         ctx.Email.Should().Be("alice@example.com");
     }

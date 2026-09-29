@@ -45,7 +45,7 @@ case it did not fail at all: HotChocolate's default interceptor accepted every
 **The message is part of the contract.** A validator that throws without naming the call to
 add is only marginally better than the request-time failure it replaced. `TraxOperationsServiceValidator`
 names `ExposeOperationQueries` and the services to register; the subscription one names the
-ordering to fix.
+schemes that are registered and the supported way to supply an interceptor.
 
 **Startup cost is paid only where there is something to check.**
 `QueryModelAuthorizationSchemaValidator` materialises the whole schema at boot, so it is
@@ -84,6 +84,9 @@ Not covered:
 
 ## Changelog
 
+- **2026-09-27**: `TraxSubscriptionAuthWiringValidator` is a backstop now, not an ordering
+  check: [0006](./0006-one-socket-interceptor-composes-every-token-scheme.md) made subscription
+  auth independent of registration order, so its message no longer names an order to fix.
 - **2026-09-11**: Corrected the account of `QueryModelAuthorizeSchemaInvariantE2ETests`.
   Starting the host runs the validator, so the success path is covered; what is missing is
   the failing direction end to end.

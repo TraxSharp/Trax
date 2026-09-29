@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Execution.Caching;
@@ -145,8 +146,9 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
             sp.GetRequiredService<DbPersistedOperationStorage>()
         );
 
-        // Allowlist matcher used by the middleware.
+        // Allowlist matcher and the decision the enforcement middleware asks.
         services.AddSingleton<AllowlistMatcher>();
+        services.AddSingleton<PersistedOperationPolicy>();
 
         // HotChocolate's persisted-operation middleware resolves
         // IOperationDocumentStorage from the schema-scoped service provider.
@@ -188,6 +190,14 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
                 })
             );
             schema.UsePersistedOperationPipeline();
+            // Enforcement runs here, after the document is parsed and before it is validated, so
+            // every transport that reaches the executor gets the same decision. See
+            // docs/adr/0013-persisted-operation-enforcement-runs-in-the-execution-pipeline.md.
+            schema.UseRequest(
+                PersistedOperationEnforcementMiddleware.Create,
+                key: PersistedOperationEnforcementMiddleware.Key,
+                after: WellKnownRequestMiddleware.DocumentParserMiddleware
+            );
             schema.ModifyRequestOptions(opts =>
             {
                 opts.PersistedOperations.AllowDocumentBody = true;
@@ -198,15 +208,19 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
     }
 
     /// <summary>
-    /// Inserts the persisted-operations enforcement middleware into the
-    /// ASP.NET pipeline. Call AFTER <c>UseRouting()</c> and BEFORE
-    /// <c>UseTraxGraphQL()</c>.
+    /// Kept so existing hosts compile. Enforcement no longer needs it: <c>UsePersistedOperations</c>
+    /// enforces inside HotChocolate's execution pipeline, which every transport passes through,
+    /// so this adds nothing to the ASP.NET pipeline.
     /// </summary>
+    /// <remarks>
+    /// See <c>docs/adr/0013-persisted-operation-enforcement-runs-in-the-execution-pipeline.md</c>.
+    /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static IApplicationBuilder UsePersistedOperationsEnforcement(
         this IApplicationBuilder app
     )
     {
         ArgumentNullException.ThrowIfNull(app);
-        return app.UseMiddleware<PersistedOperationsMiddleware>();
+        return app;
     }
 }

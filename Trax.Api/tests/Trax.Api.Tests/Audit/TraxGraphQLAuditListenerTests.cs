@@ -155,7 +155,7 @@ public class TraxGraphQLAuditListenerTests
     #region ShouldSkip
 
     [Test]
-    public async Task IntrospectionQuery_ByOperationName_IsSkipped()
+    public async Task IntrospectionDocument_Named_IsSkipped()
     {
         await using var host = await TestHost.BuildAsync();
 
@@ -167,6 +167,45 @@ public class TraxGraphQLAuditListenerTests
         AssertNoErrors(result);
 
         host.DrainEntries().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task IntrospectionDocument_Unnamed_IsSkipped()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync("{ __typename }");
+        AssertNoErrors(result);
+
+        host.DrainEntries().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task DataDocument_NamedIntrospectionQuery_IsCaptured()
+    {
+        // Whether a request is introspection is read from the operation that executed, so a
+        // document selecting data fields is audited whatever its operation is named.
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync(
+            QueryRequestBuilder("query IntrospectionQuery { ping }")
+                .SetOperationName("IntrospectionQuery")
+                .Build()
+        );
+        AssertNoErrors(result);
+
+        host.DrainEntries().Should().HaveCount(1);
+    }
+
+    [Test]
+    public async Task MixedDocument_IntrospectionAndDataFields_IsCaptured()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync("{ __typename ping }");
+        AssertNoErrors(result);
+
+        host.DrainEntries().Should().HaveCount(1);
     }
 
     [Test]
@@ -356,7 +395,44 @@ public class TraxGraphQLAuditListenerTests
 
         var entries = host.DrainEntries();
         entries.Should().HaveCount(1);
-        entries[0].Document.Should().EndWith("...[truncated]");
+        entries[0].Document.Should().StartWith("{\n  ").And.Contain("...[truncated]");
+        entries[0].Document.Should().EndWith("[selected fields: TestQuery.ping]");
+    }
+
+    [Test]
+    public async Task DocumentTruncation_PaddedHead_StillRecordsTheExecutedFields()
+    {
+        // The field that matters comes after enough padding to push it past the limit, so the
+        // head alone would show only the padding.
+        await using var host = await TestHost.BuildAsync(opts => opts.MaxDocumentLength = 64);
+        var padding = string.Join(" ", Enumerable.Range(0, 50).Select(i => $"p{i}: ping"));
+
+        var result = await host.Executor.ExecuteAsync($"{{ {padding} echo(s: \"x\") }}");
+        AssertNoErrors(result);
+
+        var document = host.DrainEntries().Should().ContainSingle().Subject.Document;
+        document.Should().Contain("...[truncated]");
+        document.Should().Contain("TestQuery.echo");
+        document.Should().Contain("TestQuery.ping");
+    }
+
+    [Test]
+    public async Task DocumentTruncation_FieldsReachedThroughFragments_AreRecorded()
+    {
+        await using var host = await TestHost.BuildAsync(opts => opts.MaxDocumentLength = 32);
+        var padding = string.Join(" ", Enumerable.Range(0, 20).Select(i => $"p{i}: ping"));
+
+        var result = await host.Executor.ExecuteAsync(
+            $"{{ {padding} ...F ... on TestQuery {{ throwsNot: ping }} }} "
+                + "fragment F on TestQuery { echo(s: \"x\") }"
+        );
+        AssertNoErrors(result);
+
+        host.DrainEntries()
+            .Should()
+            .ContainSingle()
+            .Subject.Document.Should()
+            .Contain("TestQuery.echo");
     }
 
     [Test]

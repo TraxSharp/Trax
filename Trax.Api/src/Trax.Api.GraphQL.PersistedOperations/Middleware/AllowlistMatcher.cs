@@ -19,7 +19,9 @@ internal sealed class AllowlistMatcher
 
     /// <summary>
     /// True when the operation name (or document id, when no name is given)
-    /// matches an allowlist entry or any registered predicate.
+    /// matches an allowlist entry or any registered predicate. Both keys come off the request
+    /// body, so the decision is the caller's claim about the operation, not a check of its
+    /// document. That is deliberate: see <c>docs/adr/0005</c>.
     /// </summary>
     public bool IsAllowed(string? operationName, string? documentId)
     {

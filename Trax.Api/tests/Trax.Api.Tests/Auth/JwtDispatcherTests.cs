@@ -173,7 +173,7 @@ public class JwtDispatcherTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await client.GetFromJsonAsync<EndpointResponse>("/dispatched");
-        response!.PrincipalId.Should().Be("alice");
+        response!.PrincipalId.Should().Be("alpha:alice");
     }
 
     [Test]
@@ -186,7 +186,7 @@ public class JwtDispatcherTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await client.GetFromJsonAsync<EndpointResponse>("/dispatched");
-        response!.PrincipalId.Should().Be("bob");
+        response!.PrincipalId.Should().Be("beta:bob");
     }
 
     [Test]

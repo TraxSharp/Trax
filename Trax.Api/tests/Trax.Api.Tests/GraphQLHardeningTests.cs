@@ -233,6 +233,88 @@ public class GraphQLHardeningTests
         ctx.Errors.Should().BeEmpty();
     }
 
+    [TestCase("{ ...F } fragment F on Query { a: foo b: foo c: foo }")]
+    [TestCase("{ ... on Query { a: foo b: foo c: foo } }")]
+    [TestCase("{ ... { a: foo b: foo c: foo } }")]
+    [TestCase("{ a: foo ...F } fragment F on Query { ...G } fragment G on Query { b: foo c: foo }")]
+    public void OperationCountValidator_SelectionsInsideFragments_AreCounted(string query)
+    {
+        // Three aliased root selections, reached through a fragment, exceed a cap of 2.
+        var rule = new OperationCountValidatorRule(2);
+        var doc = Utf8GraphQLParser.Parse(query);
+        var ctx = NewValidatorContext(doc);
+
+        rule.Validate(ctx, doc);
+
+        ctx.Errors.Should().ContainSingle().Which.Code.Should().Be("TRAX_TOO_MANY_OPERATIONS");
+    }
+
+    [Test]
+    public void OperationCountValidator_FragmentOfNAliases_CountsN()
+    {
+        var aliases = string.Join(" ", Enumerable.Range(0, 40).Select(i => $"a{i}: foo"));
+        var doc = Utf8GraphQLParser.Parse($"{{ ...F }} fragment F on Query {{ {aliases} }}");
+
+        var atCap = NewValidatorContext(doc);
+        new OperationCountValidatorRule(40).Validate(atCap, doc);
+        var underCap = NewValidatorContext(doc);
+        new OperationCountValidatorRule(39).Validate(underCap, doc);
+
+        atCap.Errors.Should().BeEmpty();
+        underCap.Errors.Should().ContainSingle();
+    }
+
+    [Test]
+    public void OperationCountValidator_SameResponseNameTwice_CountsOnce()
+    {
+        // Selections with one response name merge into a single field at execution, so a
+        // fragment spread twice, or a field repeated, runs once.
+        var rule = new OperationCountValidatorRule(2);
+        var doc = Utf8GraphQLParser.Parse(
+            "{ a: foo a: foo ...F ...F } fragment F on Query { a: foo b: foo }"
+        );
+        var ctx = NewValidatorContext(doc);
+
+        rule.Validate(ctx, doc);
+
+        ctx.Errors.Should().BeEmpty();
+    }
+
+    [Test]
+    public void OperationCountValidator_DeeplyNestedDoubledSpreads_FinishWithoutBlowup()
+    {
+        // Each fragment spreads the next one twice: expanding naively visits 2^30 spreads.
+        var fragments = string.Join(
+            " ",
+            Enumerable
+                .Range(0, 30)
+                .Select(i => $"fragment F{i} on Query {{ ...F{i + 1} ...F{i + 1} }}")
+        );
+        var doc = Utf8GraphQLParser.Parse(
+            $"{{ ...F0 }} {fragments} fragment F30 on Query {{ a: foo b: foo c: foo }}"
+        );
+        var ctx = NewValidatorContext(doc);
+
+        var validate = () => new OperationCountValidatorRule(2).Validate(ctx, doc);
+
+        validate.ExecutionTime().Should().BeLessThan(TimeSpan.FromSeconds(1));
+        ctx.Errors.Should().ContainSingle();
+    }
+
+    [Test]
+    public void OperationCountValidator_CyclicFragments_DoNotHang()
+    {
+        var rule = new OperationCountValidatorRule(5);
+        var doc = Utf8GraphQLParser.Parse(
+            "{ ...F } fragment F on Query { a: foo ...G } fragment G on Query { b: foo ...F }"
+        );
+        var ctx = NewValidatorContext(doc);
+
+        rule.Validate(ctx, doc);
+
+        ctx.Errors.Should().BeEmpty();
+    }
+
     [Test]
     public void OperationCountValidator_StopsAfterFirstOverflow()
     {

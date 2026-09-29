@@ -156,7 +156,10 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
                 continue;
 
             if (ExtensionMember(objectType.RuntimeType, field) is not { } member)
+            {
+                CensusOwnSubscriptionField(objectType, field);
                 continue;
+            }
 
             var fieldPath = $"{objectType.Name}.{field.Name}";
             var resolver = $"{member.DeclaringType?.FullName}.{member.Name}";
@@ -200,6 +203,42 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
                 )
             );
         }
+    }
+
+    /// <summary>
+    /// Trax's own subscription fields stream data the schema's other gates protect, so each must
+    /// declare how it is authorized: per subscriber, or with a Trax posture attribute. Checking the
+    /// type Trax itself registers means a field added to it later cannot ship ungated.
+    /// </summary>
+    private void CensusOwnSubscriptionField(
+        ObjectTypeConfiguration objectType,
+        ObjectFieldConfiguration field
+    )
+    {
+        if (objectType.RuntimeType != typeof(LifecycleSubscriptions))
+            return;
+
+        if ((field.ResolverMember ?? field.Member) is not MethodInfo method)
+            return;
+
+        if (method.IsDefined(typeof(AuthorizedPerSubscriberAttribute), inherit: false))
+            return;
+
+        var declaration = TraxAuthorization.Read(method);
+        if (declaration.HasAuthorize || declaration.AllowAnonymous)
+            return;
+
+        var fieldPath = $"{objectType.Name}.{field.Name}";
+        _report.Add(
+            new TypeExtensionExposureViolation(
+                fieldPath,
+                $"GraphQL subscription field '{fieldPath}' ({method.DeclaringType?.FullName}."
+                    + $"{method.Name}) declares no authorization. A field on Trax's subscription "
+                    + "root must be [AuthorizedPerSubscriber], [TraxAuthorize] or "
+                    + "[TraxAllowAnonymous]. See "
+                    + "docs/adr/0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md."
+            )
+        );
     }
 
     // ── Reading a declaration ───────────────────────────────────────────

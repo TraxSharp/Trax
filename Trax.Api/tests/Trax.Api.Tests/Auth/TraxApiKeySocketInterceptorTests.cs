@@ -116,7 +116,7 @@ public class TraxApiKeySocketInterceptorTests
         result.Accepted.Should().BeTrue();
         http.User.Identity!.IsAuthenticated.Should().BeTrue();
         http.User.Identity.AuthenticationType.Should().Be("TraxApiKey");
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("TraxApiKey:alice");
         http.User.IsInRole("Player").Should().BeTrue();
     }
 
@@ -138,7 +138,7 @@ public class TraxApiKeySocketInterceptorTests
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeTrue();
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("TraxApiKey:alice");
     }
 
     [Test]

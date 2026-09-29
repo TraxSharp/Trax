@@ -20,5 +20,7 @@
     <Project Path="tests/Trax.Api.Tests/Trax.Api.Tests.csproj" />
     <Project Path="tests/Trax.Api.Tests.Meta/Trax.Api.Tests.Meta.csproj" />
     <Project Path="tests/Trax.Api.GraphQL.Testing.Tests/Trax.Api.GraphQL.Testing.Tests.csproj" />
+    <Project Path="tests/Trax.Api.Tests.StateMachine.E2E/Trax.Api.Tests.StateMachine.E2E.csproj" />
+    <Project Path="tests/Trax.Api.Tests.Stress/Trax.Api.Tests.Stress.csproj" />
   </Folder>
 </Solution>

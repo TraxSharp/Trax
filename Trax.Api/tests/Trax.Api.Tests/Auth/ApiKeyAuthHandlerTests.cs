@@ -203,7 +203,7 @@ public class ApiKeyAuthHandlerTests
         var response = await client.GetFromJsonAsync<ProtectedResponse>("/protected");
 
         response.Should().NotBeNull();
-        response!.PrincipalId.Should().Be("alice");
+        response!.PrincipalId.Should().Be("TraxApiKey:alice");
     }
 
     [Test]
@@ -343,7 +343,7 @@ public class ApiKeyAuthHandlerTests
         var results = await Task.WhenAll(tasks);
 
         foreach (var (expected, actual) in results)
-            actual.Should().Be(expected);
+            actual.Should().Be("TraxApiKey:" + expected);
     }
 
     #endregion

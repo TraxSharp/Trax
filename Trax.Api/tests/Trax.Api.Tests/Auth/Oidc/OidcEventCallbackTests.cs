@@ -161,7 +161,7 @@ public class OidcEventCallbackTests
 
         ctx.Result.Should().BeNull();
         ctx.Principal.Should().NotBeSameAs(inputPrincipal);
-        ctx.Principal!.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value.Should().Be("u-1");
+        ctx.Principal!.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value.Should().Be("TraxOidc:u-1");
     }
 
     [Test]

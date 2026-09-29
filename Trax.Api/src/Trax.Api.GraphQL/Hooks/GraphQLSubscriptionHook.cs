@@ -108,5 +108,8 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
             FailureJunction: metadata.FailureJunction,
             FailureReason: metadata.FailureReason,
             Output: metadata.Output
-        );
+        )
+        {
+            FailureException = metadata.FailureException,
+        };
 }

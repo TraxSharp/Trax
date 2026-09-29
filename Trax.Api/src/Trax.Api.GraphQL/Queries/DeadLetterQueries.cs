@@ -19,6 +19,9 @@ public class DeadLetterQueries
         long? afterId = null
     )
     {
+        take = OperationsPageBounds.Take(take);
+        skip = OperationsPageBounds.Skip(skip);
+
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
         var baseQuery = db.DeadLetters.AsNoTracking().OrderByDescending(dl => dl.Id);

@@ -50,6 +50,16 @@ answers rather than only the two it used to offer.
 exception, so calling it recorded nothing about intent. With a third answer available, reaching
 for it is a decision again.
 
+**The gate names who it admits.** A parameterless `GateOperations()` used to require only an
+authenticated caller. On a host with public sign-up that is every user, and every one of them
+could read execution inputs, outputs and logs and requeue, cancel and reconfigure work, which is
+the public control plane this ADR exists to prevent, reached by the call that was pitched as the
+safe one. It now fails at startup; a policy or roles is required, and a host where every
+authenticated principal really is an operator says so with
+`GateOperationsToAuthenticatedUsers()`. The signature keeps its optional parameters, so code
+compiled against the old one still binds and meets the refusal at startup rather than a
+missing method.
+
 **Persisted operations no longer forces the namespace.** `UsePersistedOperations` grafted it on
 unconditionally, so taking enforcement meant taking a GraphQL-exposed scheduler console.
 `ExposeOperationsNamespace(false)` keeps storage, enforcement, cache and invalidation, and
@@ -57,7 +67,8 @@ leaves the namespace out of the schema.
 
 ## Exemplars
 
-- `OperationsExposureTests` pins the three answers, the two contradictions
+- `OperationsExposureTests` pins the three answers, the refusal of a `GateOperations` with
+  neither a policy nor roles, the two contradictions
   (`AllowAnonymousOperations` with either gate), the dead-configuration case, and that the
   directive reaches both root fields and is absent without the gate.
 - `AdminOperationsAuthorizationTests` drives all of it over HTTP, including the case the feature
@@ -72,4 +83,6 @@ with ASP.NET Core. An unknown policy name fails at request time, the same way it
 
 ## Changelog
 
+- **2026-09-27**: `GateOperations` requires a policy or roles; "any authenticated user" is
+  `GateOperationsToAuthenticatedUsers()`.
 - **2026-09-15**: Recorded.

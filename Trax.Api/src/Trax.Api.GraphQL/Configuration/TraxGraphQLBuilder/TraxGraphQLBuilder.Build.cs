@@ -85,7 +85,12 @@ public partial class TraxGraphQLBuilder
             OperationMutationsExposed,
             FilterModules,
             OperationsAuthorizeAttributes
-        );
+        )
+        {
+            GetRequestsAllowed = GetRequestsAllowed,
+            SocketAllowedOrigins = SocketAllowedOrigins,
+            MaxOperationsPerConnection = MaxOperationsPerConnectionValue,
+        };
     }
 
     /// <summary>

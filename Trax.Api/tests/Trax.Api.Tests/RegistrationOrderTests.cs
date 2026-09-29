@@ -30,29 +30,41 @@ namespace Trax.Api.Tests;
 /// Registration order must never change behaviour silently.
 /// </summary>
 /// <remarks>
-/// <c>AddTraxGraphQL()</c> reads the <c>IServiceCollection</c> to decide which subscription
-/// interceptor to wire, so a scheme registered after it is invisible. That used to leave
-/// HotChocolate's accept-everything interceptor in place: WebSocket clients connected
-/// unauthenticated while HTTP kept working, because <c>@authorize</c> lives on the schema and
-/// does not depend on order. The host refuses to start now instead.
+/// <c>AddTraxGraphQL()</c> used to read the <c>IServiceCollection</c> to decide which subscription
+/// interceptor to wire, so a scheme registered after it was invisible and HotChocolate's
+/// accept-everything interceptor stayed in place: WebSocket clients connected unauthenticated
+/// while HTTP kept working. It registers one composite interceptor now, which reads the schemes
+/// from the finished container, so either order authenticates.
 /// <para>
 /// The query and mutation halves guard the opposite property. Their auth does not depend on
 /// order at all, and has to keep working whichever way round the host is composed.
 /// </para>
+/// <para>Enforces <c>docs/adr/0006-one-socket-interceptor-composes-every-token-scheme.md</c> for the subscription half.</para>
 /// </remarks>
+[Property("adr", "docs/adr/0006-one-socket-interceptor-composes-every-token-scheme.md")]
 [TestFixture]
 public class RegistrationOrderTests
 {
-    #region Subscriptions — a scheme registered too late is refused, loudly
+    #region Subscriptions — a scheme is enforced whichever side of AddTraxGraphQL it lands
 
     [Test]
-    public async Task JwtAuthBeforeGraphQL_WiresTheTraxInterceptor()
+    public async Task JwtAuthBeforeGraphQL_WiresTheCompositeInterceptor()
     {
         var services = BaseServices();
         AddJwtAuth(services);
         AddGraphQL(services);
 
-        (await InterceptorTypeAsync(services)).Should().Be(nameof(TraxJwtSocketInterceptor));
+        (await InterceptorTypeAsync(services)).Should().Be(nameof(TraxCompositeSocketInterceptor));
+    }
+
+    [Test]
+    public async Task JwtAuthAfterGraphQL_WiresTheCompositeInterceptor()
+    {
+        var services = BaseServices();
+        AddGraphQL(services);
+        AddJwtAuth(services);
+
+        (await InterceptorTypeAsync(services)).Should().Be(nameof(TraxCompositeSocketInterceptor));
     }
 
     [Test]
@@ -64,28 +76,25 @@ public class RegistrationOrderTests
     }
 
     [Test]
-    public async Task JwtAuthAfterGraphQL_HostRefusesToStart()
+    public async Task JwtAuthAfterGraphQL_RefusesAnUnauthenticatedSubscriber()
     {
-        // This used to compose a host whose subscriptions accepted every connection_init.
-        var act = async () => await StartHostAsync(authBeforeGraphQL: false);
+        // This order used to compose a host whose subscriptions accepted every connection_init,
+        // and later one that refused to start. The composite reads the schemes from the finished
+        // container, so the order no longer matters, per
+        // docs/adr/0006-one-socket-interceptor-composes-every-token-scheme.md.
+        await using var app = await StartHostAsync(authBeforeGraphQL: false);
 
-        (await act.Should().ThrowAsync<InvalidOperationException>())
-            .WithMessage("*AddTraxJwtAuth*")
-            .WithMessage("*ran after AddTraxGraphQL*");
+        (await ConnectionInitTypeAsync(app))
+            .Should()
+            .NotBe(
+                "connection_ack",
+                "a scheme registered after AddTraxGraphQL() is still enforced, per "
+                    + "docs/adr/0006-one-socket-interceptor-composes-every-token-scheme.md"
+            );
     }
 
     [Test]
-    public async Task ApiKeyAuthBeforeGraphQL_WiresTheTraxInterceptor()
-    {
-        var services = BaseServices();
-        AddApiKeyAuth(services);
-        AddGraphQL(services);
-
-        (await InterceptorTypeAsync(services)).Should().Be(nameof(TraxApiKeySocketInterceptor));
-    }
-
-    [Test]
-    public async Task ApiKeyAuthAfterGraphQL_HostRefusesToStart()
+    public async Task ApiKeyAuthAfterGraphQL_HostStarts()
     {
         var services = BaseServices();
         AddGraphQL(services);
@@ -93,9 +102,28 @@ public class RegistrationOrderTests
 
         var act = async () => await RunHostedServicesAsync(services);
 
-        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
-            "*AddTraxApiKeyAuth*"
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task DefaultInterceptorWithASchemeRegistered_HostRefusesToStart()
+    {
+        // The backstop: whatever puts HotChocolate's accept-everything interceptor in front of a
+        // host with a token scheme, the host does not start.
+        var services = BaseServices();
+        AddApiKeyAuth(services);
+        services.AddTraxGraphQL(g =>
+            g.AddDbContext<OrderTestDbContext>()
+                .ConfigureSchema(b =>
+                    b.AddSocketSessionInterceptor<DefaultSocketSessionInterceptor>()
+                )
         );
+
+        var act = async () => await RunHostedServicesAsync(services);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*AddTraxApiKeyAuth*")
+            .WithMessage("*accepts every connection_init*");
     }
 
     [Test]

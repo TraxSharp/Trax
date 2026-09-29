@@ -10,9 +10,11 @@ namespace Trax.Api.Auth;
 public static class TraxAuthClaimTypes
 {
     /// <summary>
-    /// Claim type that carries the stable principal identifier across auth schemes.
-    /// API-key schemes set this to the account name; JWT schemes set it to <c>sub</c>;
-    /// OIDC/Cognito schemes set it to the provider-assigned subject.
+    /// Claim type that carries the stable principal identifier across auth schemes, qualified by
+    /// the scheme that authenticated it: <c>{scheme}:{id}</c> (see <see cref="TraxPrincipalId"/>).
+    /// The id is the resolver's: the account name for API keys, <c>sub</c> for JWT schemes, the
+    /// provider-assigned subject for OIDC and Cognito. So <c>sub = "abc"</c> from a JWT scheme
+    /// named <c>Customer</c> is <c>Customer:abc</c>.
     /// </summary>
     public const string PrincipalId = "trax:principal-id";
 

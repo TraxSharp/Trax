@@ -121,7 +121,7 @@ public class JwtTokenValidatedCallbackTests
 
         ctx.Result.Should().BeNull();
         ctx.Principal.Should().NotBeSameAs(input);
-        ctx.Principal!.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value.Should().Be("u-1");
+        ctx.Principal!.FindFirst(TraxAuthClaimTypes.PrincipalId)?.Value.Should().Be("TraxJwt:u-1");
     }
 
     [Test]

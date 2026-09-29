@@ -20,7 +20,10 @@ public static class ApiKeyAuthServiceCollectionExtensions
     /// <summary>
     /// Registers the Trax API-key authentication scheme with a static key set.
     /// Keys configured through the builder are salted and SHA-256 hashed at
-    /// registration time and compared in constant time on every request.
+    /// registration time and compared in constant time on every request. A key added with
+    /// <see cref="ApiKeyBuilder.Add(string, string, string[])"/> that contains
+    /// <see cref="ApiKeyBuilder.DemoKeyMarker"/> makes the host refuse to start outside
+    /// Development.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">Callback that registers keys via <see cref="ApiKeyBuilder.Add(string, string, string[])"/> or <see cref="ApiKeyBuilder.AddHashed(byte[], byte[], string, string[])"/>.</param>
@@ -42,6 +45,8 @@ public static class ApiKeyAuthServiceCollectionExtensions
         var builder = new ApiKeyBuilder();
         configure(builder);
         var resolver = builder.Build();
+        if (builder.HasDemoKey)
+            services.AddSingleton<IHostedService, DemoApiKeyEnvironmentValidator>();
 
         return AddTraxApiKeyAuthWithInstance(services, resolver, configureOptions);
     }
@@ -111,6 +116,7 @@ public static class ApiKeyAuthServiceCollectionExtensions
                     policy
                         .AddAuthenticationSchemes(ApiKeyDefaults.SchemeName)
                         .RequireAuthenticatedUser()
+                        .AddRequirements(new TraxSchemeRequirement(ApiKeyDefaults.SchemeName))
             );
 
         services.PostConfigure<AuthorizationOptions>(opts =>

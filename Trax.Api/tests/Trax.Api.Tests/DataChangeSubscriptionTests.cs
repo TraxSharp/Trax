@@ -77,6 +77,7 @@ public class DataChangeSubscriptionTests
                 "MANIFEST",
                 "MANIFEST_GROUP",
                 "SCHEDULER_CONFIG",
+                "EXECUTION",
             }
         )
             sdl.Should().Contain(value);

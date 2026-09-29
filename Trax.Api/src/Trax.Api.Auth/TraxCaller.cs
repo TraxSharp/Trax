@@ -25,12 +25,18 @@ namespace Trax.Api.Auth;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>Security: <see cref="IsTrusted"/> cannot be set from HTTP.</strong>
+/// <strong>Security: <see cref="IsTrusted"/> is true for whatever a remote runner is sent.</strong>
 /// The flag reflects <see cref="ITrustedExecutionScope.IsTrusted"/>, an in-process
 /// <c>AsyncLocal</c> opened only by C# code calling
 /// <see cref="ITrustedExecutionScope.BeginTrusted"/>. No HTTP header, cookie, query
-/// parameter, body field, JWT claim, or GraphQL input maps to it. An external caller
-/// with HTTP-only access cannot make this flag true for their request.
+/// parameter, body field, JWT claim, or GraphQL input maps to it on the API's own
+/// endpoints. A scheduler runner's endpoints are the exception: <c>UseTraxRunEndpoint</c>
+/// (and the Lambda runner's run path) runs each request inside a trusted scope, because
+/// the scheduler already authorized it. Whoever the runner's authorization posture
+/// admits (a request signed with its key, a caller its policy accepts, or anyone when
+/// the host allowed unsigned requests) therefore runs with this flag true, and
+/// row-level filters keyed on it treat that caller as the scheduler. Give the runner a
+/// posture that admits only the scheduler.
 /// </para>
 /// <para>
 /// In-process developer mistakes (a junction or resolver that opens a trusted scope
@@ -75,7 +81,8 @@ public sealed class TraxCaller
     /// <c>AsyncLocal</c> state opened by framework infrastructure
     /// (<c>TraxRequestHandler</c> in the scheduler, remote-worker runners).
     /// <para>
-    /// Cannot be set from HTTP. See the class-level remarks for the threat model.
+    /// Not settable from the API's own HTTP surface; a scheduler runner sets it for the
+    /// requests its posture admits. See the class-level remarks.
     /// </para>
     /// </summary>
     public bool IsTrusted => _trustedScope.IsTrusted;

@@ -1,10 +1,14 @@
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
 using Trax.Api.Services.HealthCheck;
 using Trax.Core.Exceptions;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
+using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
@@ -98,22 +102,61 @@ public class OperationsQueries
     }
 
     /// <summary>
-    /// The observational effects registered in THIS process, with their enabled + toggleable state.
-    /// Read-only: the registry is an in-memory per-process singleton, so this reflects the API host
-    /// only, not the scheduler/worker processes where effects run. Backs the dashboard effects list.
+    /// The observational effects registered in THIS process, with their enabled + toggleable state
+    /// and, for a factory that exposes runtime settings, those settings as JSON. Read-only: the
+    /// registry is an in-memory per-process singleton, so this reflects the API host only, not the
+    /// scheduler/worker processes where effects run. Backs the dashboard effects list.
     /// </summary>
-    public IReadOnlyList<EffectInfo> GetEffects([Service] IEffectRegistry registry)
+    /// <remarks>
+    /// Settings can hold credentials. They are reachable only here, under the operations
+    /// namespace, so they answer to the same gate as an execution's input.
+    /// </remarks>
+    public IReadOnlyList<EffectInfo> GetEffects(
+        [Service] IEffectRegistry registry,
+        [Service] IServiceProvider services
+    )
     {
         return registry
             .GetAll()
-            .Select(kvp => new EffectInfo(
-                kvp.Key.Name,
-                kvp.Key.FullName ?? kvp.Key.Name,
-                kvp.Value,
-                registry.IsToggleable(kvp.Key)
-            ))
+            .Select(kvp =>
+            {
+                var configurable = services.GetService(kvp.Key) as IConfigurableProviderFactory;
+                return new EffectInfo(
+                    kvp.Key.Name,
+                    kvp.Key.FullName ?? kvp.Key.Name,
+                    kvp.Value,
+                    registry.IsToggleable(kvp.Key),
+                    IsConfigurable: configurable is not null,
+                    ConfigurationTypeName: configurable?.GetConfigurationType().FullName,
+                    Configuration: configurable is null ? null : SerializeSettings(configurable)
+                );
+            })
             .OrderBy(e => e.FullName, StringComparer.Ordinal)
             .ToList();
+    }
+
+    private static readonly JsonSerializerOptions SettingsJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        ReferenceHandler = ReferenceHandler.IgnoreCycles,
+        MaxDepth = 8,
+        Converters = { new JsonStringEnumConverter() },
+    };
+
+    // Serialized against the runtime type so a settings object typed as object still writes
+    // its properties. A settings type System.Text.Json cannot write (a delegate, a pointer)
+    // reads as null rather than failing the whole effects list.
+    private static string? SerializeSettings(IConfigurableProviderFactory factory)
+    {
+        var settings = factory.GetConfiguration();
+        try
+        {
+            return JsonSerializer.Serialize(settings, settings.GetType(), SettingsJson);
+        }
+        catch (Exception e) when (e is NotSupportedException or JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -160,6 +203,9 @@ public class OperationsQueries
         long? manifestGroupId = null
     )
     {
+        take = OperationsPageBounds.Take(take);
+        skip = OperationsPageBounds.Skip(skip);
+
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
         IQueryable<Effect.Models.Manifest.Manifest> baseQuery = db
@@ -213,7 +259,8 @@ public class OperationsQueries
                 m.LastSuccessfulRun,
                 m.ManifestGroupId,
                 m.DependsOnManifestId,
-                m.Priority
+                m.Priority,
+                m.ManifestGroup.Name
             ))
             .ToListAsync(ct);
 
@@ -253,7 +300,50 @@ public class OperationsQueries
                 m.LastSuccessfulRun,
                 m.ManifestGroupId,
                 m.DependsOnManifestId,
-                m.Priority
+                m.Priority,
+                m.ManifestGroup.Name
+            ))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
+    /// Full detail for one manifest, including the train input it runs with. The input is on this
+    /// single-row read only, never on the <c>manifests</c> list, the way an execution's input is on
+    /// <c>executionDetail</c> alone. Returns <c>null</c> when the manifest does not exist.
+    /// </summary>
+    public async Task<ManifestDetail?> GetManifestDetail(
+        long id,
+        [Service] IDataContextProviderFactory dataContextFactory,
+        CancellationToken ct
+    )
+    {
+        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+
+        return await db
+            .Manifests.AsNoTracking()
+            .Where(m => m.Id == id)
+            .Select(m => new ManifestDetail(
+                m.Id,
+                m.ExternalId,
+                m.Name,
+                m.IsEnabled,
+                m.ScheduleType,
+                m.CronExpression,
+                m.IntervalSeconds,
+                m.MaxRetries,
+                m.TimeoutSeconds,
+                m.LastSuccessfulRun,
+                m.ManifestGroupId,
+                m.ManifestGroup.Name,
+                m.DependsOnManifestId,
+                m.Priority,
+                m.PropertyTypeName,
+                m.Properties,
+                m.MisfirePolicy,
+                m.MisfireThresholdSeconds,
+                m.ScheduledAt,
+                m.NextScheduledRun,
+                m.VarianceSeconds
             ))
             .FirstOrDefaultAsync(ct);
     }
@@ -406,6 +496,9 @@ public class OperationsQueries
         FailureClass? failureClass = null
     )
     {
+        take = OperationsPageBounds.Take(take);
+        skip = OperationsPageBounds.Skip(skip);
+
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
         IQueryable<Effect.Models.Metadata.Metadata> filtered = db.Metadatas.AsNoTracking();
@@ -569,7 +662,11 @@ public class OperationsQueries
                 // ChildCount is filled in after projection; passed explicitly only because an
                 // expression tree cannot skip to a later argument by name.
                 0,
-                m.FailureClass
+                m.FailureClass,
+                m.ParentId,
+                m.ScheduledTime,
+                m.Executor,
+                m.HostLabels
             ))
             .FirstOrDefaultAsync(ct);
 
@@ -594,6 +691,8 @@ public class OperationsQueries
         long? afterId = null
     )
     {
+        take = OperationsPageBounds.Take(take);
+
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
         var baseQuery = db.Metadatas.AsNoTracking().Where(m => m.ParentId == parentId);
@@ -626,18 +725,33 @@ public class OperationsQueries
         return new PagedResult<ExecutionSummary>(items, totalCount, 0, take, false, nextCursor);
     }
 
+    // Names and enum spellings follow the options the queue and run paths deserialize input
+    // with, so a client that builds its JSON from this schema writes what the reader expects.
     private static List<InputPropertySchema> GetInputSchema(Type inputType)
     {
+        var options = TraxEffectConfiguration.StaticSystemJsonSerializerOptions;
         return inputType
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead)
+            .Where(p => p.CanRead && p.GetCustomAttribute<JsonIgnoreAttribute>() is null)
             .Select(p => new InputPropertySchema(
-                p.Name,
+                JsonName(p, options),
                 GetFriendlyTypeName(p.PropertyType),
                 Nullable.GetUnderlyingType(p.PropertyType) is not null
-                    || !p.PropertyType.IsValueType
+                    || !p.PropertyType.IsValueType,
+                EnumValues(p.PropertyType)
             ))
             .ToList();
+    }
+
+    private static string JsonName(PropertyInfo property, JsonSerializerOptions options) =>
+        property.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name
+        ?? options.PropertyNamingPolicy?.ConvertName(property.Name)
+        ?? property.Name;
+
+    private static IReadOnlyList<string>? EnumValues(Type type)
+    {
+        var enumType = Nullable.GetUnderlyingType(type) ?? type;
+        return enumType.IsEnum ? Enum.GetNames(enumType) : null;
     }
 
     private static string GetFriendlyTypeName(Type type)

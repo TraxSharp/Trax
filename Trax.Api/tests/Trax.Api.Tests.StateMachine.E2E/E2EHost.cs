@@ -31,11 +31,11 @@ public static class E2EHost
     public const string AdminApiKey = "sm-e2e-admin-key";
 
     // The always-present `postgres` maintenance database (local docker-compose and CI differ on app dbs).
-    private const string Maintenance =
-        "Host=localhost;Port=5432;Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
+    private static readonly string Maintenance =
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
 
     public static string ConnectionString(string database) =>
-        $"Host=localhost;Port=5432;Username=trax;Password=trax123;Database={database};"
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={database};"
         + "Include Error Detail=true;Maximum Pool Size=20";
 
     /// <summary>Drop and recreate a throwaway database, then create the snapshot tables on it.</summary>

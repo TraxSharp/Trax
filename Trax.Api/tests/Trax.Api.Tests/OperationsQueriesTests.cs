@@ -42,8 +42,8 @@ public class OperationsQueriesTests
     // Idle Lifetime=1 forced every SetUp to pay TCP+auth and timed out under
     // contention. Pool Size=8 across the four test fixtures in this assembly
     // stays well under Postgres's default max_connections=100.
-    private const string ConnectionString =
-        "Host=localhost;Port=5432;Database=trax_api_operations;Username=trax;Password=trax123;"
+    private static readonly string ConnectionString =
+        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_operations;Username=trax;Password=trax123;"
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -906,7 +906,7 @@ public class OperationsQueriesTests
         registry.IsToggleable(typeof(FakeInput)).Returns(true);
         registry.IsToggleable(typeof(FakeOutput)).Returns(false);
 
-        var result = new OperationsQueries().GetEffects(registry);
+        var result = new OperationsQueries().GetEffects(registry, EmptyServices);
 
         result.Should().HaveCount(2);
         var enabled = result.Single(e => e.Name == nameof(FakeInput));
@@ -924,7 +924,7 @@ public class OperationsQueriesTests
         var registry = Substitute.For<IEffectRegistry>();
         registry.GetAll().Returns(new Dictionary<Type, bool>());
 
-        new OperationsQueries().GetEffects(registry).Should().BeEmpty();
+        new OperationsQueries().GetEffects(registry, EmptyServices).Should().BeEmpty();
     }
 
     [Test]
@@ -1425,14 +1425,15 @@ public class OperationsQueriesTests
     }
 
     private static Trax.Mediator.Services.TrainDiscovery.TrainRegistration FakeRegistration(
-        Type serviceType
+        Type serviceType,
+        Type? inputType = null
     )
     {
         return new Trax.Mediator.Services.TrainDiscovery.TrainRegistration
         {
             ServiceType = serviceType,
             ImplementationType = serviceType,
-            InputType = typeof(FakeInput),
+            InputType = inputType ?? typeof(FakeInput),
             OutputType = typeof(FakeOutput),
             Lifetime = Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped,
             ServiceTypeName = serviceType.Name,
@@ -1546,6 +1547,227 @@ public class OperationsQueriesTests
 
         (await queries.GetDeadLetter(99999, _factory, default)).Should().BeNull();
     }
+
+    #region Read fields an API-only frontend needs
+
+    private static readonly IServiceProvider EmptyServices = Substitute.For<IServiceProvider>();
+
+    [Test]
+    public async Task GetExecutionDetail_CarriesParentScheduleExecutorAndHostLabels()
+    {
+        long parentId;
+        long childId;
+        var due = new DateTime(2026, 9, 27, 8, 0, 0, DateTimeKind.Utc);
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var parent = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.Parent",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            await db.Track(parent);
+            await db.SaveChanges(default);
+            parentId = parent.Id;
+
+            var child = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.Child",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                    ParentId = parentId,
+                }
+            );
+            child.ScheduledTime = due;
+            child.HostLabels = "{\"region\": \"eu-west-1\"}";
+            await db.Track(child);
+            await db.SaveChanges(default);
+            childId = child.Id;
+        }
+
+        string? executor;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+            executor = await db
+                .Metadatas.AsNoTracking()
+                .Where(m => m.Id == childId)
+                .Select(m => m.Executor)
+                .SingleAsync();
+
+        var detail = await new OperationsQueries().GetExecutionDetail(childId, _factory, default);
+
+        detail.Should().NotBeNull();
+        detail!.ParentId.Should().Be(parentId);
+        detail.ScheduledTime.Should().Be(due);
+        detail.Executor.Should().Be(executor);
+        detail.HostLabels.Should().Be("{\"region\": \"eu-west-1\"}");
+    }
+
+    [Test]
+    public async Task GetManifests_AndGetManifest_CarryTheGroupName()
+    {
+        var groupId = await SeedManifestGroup("nightly-billing");
+        var manifestId = await SeedManifestInGroup(groupId);
+
+        var queries = new OperationsQueries();
+        var page = await queries.GetManifests(_factory, default);
+        var single = await queries.GetManifest(manifestId, _factory, default);
+
+        page.Items.Should().ContainSingle().Which.ManifestGroupName.Should().Be("nightly-billing");
+        single!.ManifestGroupName.Should().Be("nightly-billing");
+    }
+
+    [Test]
+    public async Task GetManifestDetail_CarriesPropertiesAndScheduling()
+    {
+        var groupId = await SeedManifestGroup("detail-group");
+        long id;
+        var next = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var m = Manifest.Create(
+                new CreateManifest
+                {
+                    Name = typeof(SomeFakeTrain),
+                    MisfirePolicy = MisfirePolicy.DoNothing,
+                    MisfireThresholdSeconds = 90,
+                    VarianceSeconds = 30,
+                }
+            );
+            m.ManifestGroupId = groupId;
+            m.PropertyTypeName = "Trax.X.BillingInput";
+            m.Properties = "{\"accountId\": \"acct-1\"}";
+            m.NextScheduledRun = next;
+            await db.Track(m);
+            await db.SaveChanges(default);
+            id = m.Id;
+        }
+
+        var detail = await new OperationsQueries().GetManifestDetail(id, _factory, default);
+
+        detail.Should().NotBeNull();
+        detail!.Id.Should().Be(id);
+        detail.ManifestGroupId.Should().Be(groupId);
+        detail.ManifestGroupName.Should().Be("detail-group");
+        detail.PropertyTypeName.Should().Be("Trax.X.BillingInput");
+        detail.Properties.Should().Contain("acct-1");
+        detail.MisfirePolicy.Should().Be(MisfirePolicy.DoNothing);
+        detail.MisfireThresholdSeconds.Should().Be(90);
+        detail.VarianceSeconds.Should().Be(30);
+        detail.NextScheduledRun.Should().Be(next);
+    }
+
+    [Test]
+    public async Task GetManifestDetail_MissingId_ReturnsNull()
+    {
+        (await new OperationsQueries().GetManifestDetail(99999, _factory, default))
+            .Should()
+            .BeNull();
+    }
+
+    [Test]
+    public void GetEffects_ConfigurableFactory_CarriesItsSettings()
+    {
+        var registry = Substitute.For<IEffectRegistry>();
+        registry
+            .GetAll()
+            .Returns(
+                new Dictionary<Type, bool>
+                {
+                    { typeof(FakeConfigurableFactory), true },
+                    { typeof(FakeInput), true },
+                }
+            );
+        var services = Substitute.For<IServiceProvider>();
+        services.GetService(typeof(FakeConfigurableFactory)).Returns(new FakeConfigurableFactory());
+
+        var result = new OperationsQueries().GetEffects(registry, services);
+
+        var configurable = result.Single(e => e.Name == nameof(FakeConfigurableFactory));
+        configurable.IsConfigurable.Should().BeTrue();
+        configurable.ConfigurationTypeName.Should().Be(typeof(FakeEffectSettings).FullName);
+        configurable.Configuration.Should().Contain("\"batchSize\"").And.Contain("50");
+        var plain = result.Single(e => e.Name == nameof(FakeInput));
+        plain.IsConfigurable.Should().BeFalse();
+        plain.ConfigurationTypeName.Should().BeNull();
+        plain.Configuration.Should().BeNull();
+    }
+
+    [Test]
+    public void GetEffects_SettingsThatCannotBeSerialized_ReadAsNullWithoutFailingTheList()
+    {
+        var registry = Substitute.For<IEffectRegistry>();
+        registry
+            .GetAll()
+            .Returns(new Dictionary<Type, bool> { { typeof(FakeUnwritableFactory), true } });
+        var services = Substitute.For<IServiceProvider>();
+        services.GetService(typeof(FakeUnwritableFactory)).Returns(new FakeUnwritableFactory());
+
+        var effect = new OperationsQueries().GetEffects(registry, services).Single();
+
+        effect.IsConfigurable.Should().BeTrue();
+        effect.Configuration.Should().BeNull();
+    }
+
+    public record FakeUnwritableSettings(Action Callback);
+
+    public class FakeUnwritableFactory
+        : Trax.Effect.Services.EffectProviderFactory.IConfigurableProviderFactory
+    {
+        public object GetConfiguration() => new FakeUnwritableSettings(() => { });
+
+        public Type GetConfigurationType() => typeof(FakeUnwritableSettings);
+    }
+
+    [Test]
+    public void GetTrains_InputSchema_UsesTheSystemNamingPolicyAndListsEnumValues()
+    {
+        var discovery =
+            NSubstitute.Substitute.For<Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService>();
+        var registration = FakeRegistration(typeof(IUserTrain), typeof(SchemaInput));
+        NSubstitute.SubstituteExtensions.Returns(discovery.DiscoverTrains(), [registration]);
+
+        var schema = new OperationsQueries().GetTrains(discovery).Single().InputSchema;
+
+        schema
+            .Select(p => p.Name)
+            .Should()
+            .BeEquivalentTo(["playerId", "tier", "maybeTier", "custom_name"]);
+        schema.Single(p => p.Name == "tier").EnumValues.Should().Equal("Bronze", "Silver", "Gold");
+        schema
+            .Single(p => p.Name == "maybeTier")
+            .EnumValues.Should()
+            .Equal("Bronze", "Silver", "Gold");
+        schema.Single(p => p.Name == "playerId").EnumValues.Should().BeNull();
+    }
+
+    public enum SchemaTier
+    {
+        Bronze,
+        Silver,
+        Gold,
+    }
+
+    public record SchemaInput(
+        string PlayerId,
+        SchemaTier Tier,
+        SchemaTier? MaybeTier,
+        [property: System.Text.Json.Serialization.JsonPropertyName("custom_name")] string Renamed
+    );
+
+    public record FakeEffectSettings(int BatchSize, string Target);
+
+    public class FakeConfigurableFactory
+        : Trax.Effect.Services.EffectProviderFactory.IConfigurableProviderFactory
+    {
+        public object GetConfiguration() => new FakeEffectSettings(50, "sink");
+
+        public Type GetConfigurationType() => typeof(FakeEffectSettings);
+    }
+
+    #endregion
 
     private interface ISomeFakeTrain
         : Trax.Effect.Services.ServiceTrain.IServiceTrain<FakeInput, FakeOutput> { }

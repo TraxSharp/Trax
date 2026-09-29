@@ -20,7 +20,8 @@ public sealed record StressProfile(
     long DeadLetter,
     int Manifests,
     int Groups,
-    int TrainNames
+    int TrainNames,
+    int PersistedOperations
 )
 {
     public static StressProfile FromEnvironment() =>
@@ -31,7 +32,10 @@ public sealed record StressProfile(
             DeadLetter: EnvLong("TRAX_STRESS_DEADLETTER", 1_000_000),
             Manifests: (int)EnvLong("TRAX_STRESS_MANIFEST", 5_000),
             Groups: (int)EnvLong("TRAX_STRESS_GROUP", 200),
-            TrainNames: (int)EnvLong("TRAX_STRESS_NAMES", 50)
+            TrainNames: (int)EnvLong("TRAX_STRESS_NAMES", 50),
+            // Persisted operations grow with releases, not with traffic, so they get a large
+            // catalog rather than millions: many tenants' documents, most of them retired.
+            PersistedOperations: (int)EnvLong("TRAX_STRESS_PERSISTED_OPS", 100_000)
         );
 
     private static long EnvLong(string name, long fallback) =>
@@ -39,8 +43,8 @@ public sealed record StressProfile(
 }
 
 /// <summary>
-/// Seeds the six admin-facing tables (manifest_group, manifest, metadata, dead_letter,
-/// work_queue, log) with millions of rows using server-side <c>generate_series</c> inserts.
+/// Seeds the admin-facing tables (manifest_group, manifest, metadata, dead_letter,
+/// work_queue, log, persisted_operation and its history) with millions of rows using server-side <c>generate_series</c> inserts.
 /// This is orders of magnitude faster than EF <c>SaveChanges</c> loops: the data never
 /// leaves Postgres. Idempotent — re-running with the same profile skips reseeding.
 /// </summary>
@@ -88,8 +92,9 @@ public static class BulkSeeder
     }
 
     /// <summary>
-    /// Seeds all tables to the given profile. Skips work entirely if the metadata and log
-    /// tables already hold at least 95% of their target counts (so repeated runs are instant).
+    /// Seeds all tables to the given profile. Skips work entirely if the metadata, log and
+    /// persisted_operation tables already hold at least 95% of their target counts (so
+    /// repeated runs are instant).
     /// </summary>
     public static async Task SeedAsync(
         string connectionString,
@@ -113,7 +118,8 @@ public static class BulkSeeder
         await Exec(
             conn,
             "TRUNCATE trax.log, trax.work_queue, trax.dead_letter, trax.metadata, "
-                + "trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE",
+                + "trax.manifest, trax.manifest_group, trax.persisted_operation, "
+                + "trax.persisted_operation_history RESTART IDENTITY CASCADE",
             ct
         );
 
@@ -223,6 +229,39 @@ public static class BulkSeeder
             ct
         );
 
+        // ── persisted_operation (+ one history row each) ─────────────────────
+        // Ten tenants plus the no-tenant set, ids in the name_vN form HotChocolate accepts as a document id, one in
+        // four retired, updated_at spread like the other tables so the list's newest-first
+        // order has a real sort to do.
+        log($"Seeding {profile.PersistedOperations:N0} persisted_operation...");
+        await SeedTable(
+            conn,
+            profile.PersistedOperations,
+            "INSERT INTO trax.persisted_operation (tenant_key, id, operation_name, version, document, "
+                + "shape_fingerprint, is_active, description, created_at, updated_at) "
+                + "SELECT CASE WHEN g % 11 = 0 THEN '' ELSE 'tenant-' || (g % 11) END, "
+                + "       'StressOp' || g || '_v1', 'StressOp' || g, 1, "
+                + "       'query StressOp' || g || ' { operations { health { status } } }', "
+                + "       md5(g::text), (g % 4) <> 0, 'stress persisted operation ' || g, "
+                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
+                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute') "
+                + "FROM generate_series(@lo, @hi) g",
+            ct
+        );
+        await SeedTable(
+            conn,
+            profile.PersistedOperations,
+            "INSERT INTO trax.persisted_operation_history (tenant_key, id, document, "
+                + "shape_fingerprint, change_type, changed_at, changed_reason) "
+                + "SELECT CASE WHEN g % 11 = 0 THEN '' ELSE 'tenant-' || (g % 11) END, "
+                + "       'StressOp' || g || '_v1', "
+                + "       'query StressOp' || g || ' { operations { health { status } } }', "
+                + "       md5(g::text), 'Upsert', "
+                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), NULL "
+                + "FROM generate_series(@lo, @hi) g",
+            ct
+        );
+
         // VACUUM (not just ANALYZE) so the visibility map is set and the metrics
         // covering indexes serve heap-free Index Only Scans immediately, the way
         // autovacuum keeps them in production. PARALLEL 0 keeps VACUUM off the shared-
@@ -235,7 +274,8 @@ public static class BulkSeeder
         );
         await Exec(
             conn,
-            "VACUUM (ANALYZE, PARALLEL 0) trax.dead_letter, trax.work_queue, trax.log",
+            "VACUUM (ANALYZE, PARALLEL 0) trax.dead_letter, trax.work_queue, trax.log, "
+                + "trax.persisted_operation, trax.persisted_operation_history",
             ct
         );
         log($"Seed complete in {sw.Elapsed.TotalSeconds:F0}s.");
@@ -251,7 +291,10 @@ public static class BulkSeeder
     {
         var metadata = await ScalarLong(conn, "SELECT count(*) FROM trax.metadata", ct);
         var logs = await ScalarLong(conn, "SELECT count(*) FROM trax.log", ct);
-        return metadata >= profile.Metadata * 0.95 && logs >= profile.Log * 0.95;
+        var persisted = await ScalarLong(conn, "SELECT count(*) FROM trax.persisted_operation", ct);
+        return metadata >= profile.Metadata * 0.95
+            && logs >= profile.Log * 0.95
+            && persisted >= profile.PersistedOperations * 0.95;
     }
 
     private static async Task SeedTable(

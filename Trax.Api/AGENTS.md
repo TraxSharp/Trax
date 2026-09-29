@@ -17,7 +17,10 @@ if your work contradicts one, say so rather than silently overriding it.
 | --- | --- |
 | anything in an `AddTrax*` extension | [0002](./docs/adr/0002-reading-the-service-collection-is-order-dependent.md), before you read the `IServiceCollection` |
 | a new host-configuration surface | [0001](./docs/adr/0001-a-misconfigured-host-fails-at-startup.md), it needs a startup validator |
-| subscriptions or socket auth | both, in that order. This is where the silent failure happened |
+| subscriptions or socket auth | both, in that order, then [0006](./docs/adr/0006-one-socket-interceptor-composes-every-token-scheme.md), which removed the ordering from subscription auth. This is where the silent failure happened |
+| the HTTP transport (GET, preflight headers, `ModifyServerOptions`) | [0024](./docs/adr/0024-graphql-get-is-off-unless-the-host-opts-in.md), GET is off unless the host opts in |
+| how a socket validates a JWT | [0022](./docs/adr/0022-a-socket-authenticates-through-the-schemes-handler.md): through the scheme's own handler, never a copy of its validation |
+| the principal id, or anything keyed on it | [0023](./docs/adr/0023-a-principal-id-is-qualified-by-its-scheme.md): it is `{scheme}:{id}`, built only by `ToClaimsPrincipal` |
 | `queueTrain` or `requeueExecution` | central `docs/0017`, they enqueue through the mediator so per-train authorization applies; manifest triggers and dead-letter requeues are governed by the operations gate |
 | `failureClass` on executions, or the `executions(failureClass:)` filter | central `docs/0020`, a failure is classified where it happens |
 | `subjectKey` or `confirmedAt` on work queue reads | central `docs/0019` and `docs/0018` |

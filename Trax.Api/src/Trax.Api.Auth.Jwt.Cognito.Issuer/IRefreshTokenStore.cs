@@ -16,6 +16,8 @@ namespace Trax.Api.Auth.Jwt.Cognito.Issuer;
 /// new one bound to the same chain. <see cref="RevokeAsync"/> revokes the
 /// entire chain, matching Cognito's <c>RevokeToken</c> behavior where
 /// revoking any token in a refresh-rotation chain revokes all of them.
+/// Rotating a token that was already rotated also revokes the chain
+/// (refresh-token reuse detection).
 /// </para>
 /// <para>
 /// Trax ships <see cref="InMemoryRefreshTokenStore"/> for tests and local
@@ -50,6 +52,13 @@ public interface IRefreshTokenStore
     /// supplied token was invalid (expired, revoked, already rotated, or
     /// unknown). The new token inherits the original token's expiry, not
     /// the original lifetime: rotation does not extend session length.
+    /// <para>
+    /// Presenting a token that rotation already consumed is reuse, and an implementation must
+    /// revoke the whole rotation chain before returning null, so the token the earlier rotation
+    /// issued stops working too. The store cannot tell the client from someone replaying a
+    /// copy, so it ends the session for both. Two concurrent rotations of one token count as
+    /// reuse: one may win, and the chain is then revoked.
+    /// </para>
     /// </summary>
     Task<RefreshTokenHandle?> RotateAsync(string oldToken, CancellationToken ct);
 

@@ -69,7 +69,7 @@ jobs:
       - name: Restore (locked)
         run: dotnet restore --locked-mode
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build --configuration Release --no-restore -warnaserror
       - name: Create per-fixture test databases
         env:
           PGPASSWORD: trax123

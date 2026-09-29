@@ -34,14 +34,16 @@ public class TrainLifecycleEventType : ObjectType<TrainLifecycleEvent>
                 if (output is null)
                     return null;
 
-                return JsonElementConverter.ToObject(output);
+                // HotChocolate's AnyType carries a JsonElement, so objects and arrays reach the
+                // client as JSON rather than failing to coerce.
+                using var document = JsonDocument.Parse(output);
+                return document.RootElement.Clone();
             });
     }
 }
 
 /// <summary>
-/// Converts a JSON string into native .NET types (dictionaries, lists, primitives)
-/// that HotChocolate's <see cref="AnyType"/> can serialize as proper GraphQL JSON.
+/// Converts a JSON string into native .NET types (dictionaries, lists, primitives).
 /// Useful for custom resolvers or lifecycle event handlers that need to deserialize
 /// raw JSON output strings into structured objects.
 /// </summary>

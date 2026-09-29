@@ -1,3 +1,4 @@
+using System.Text.Json;
 using HotChocolate;
 using HotChocolate.Execution;
 using Trax.Api.Exceptions;
@@ -35,9 +36,14 @@ namespace Trax.Api.GraphQL.Errors;
 /// The cap and observed size are intentionally not echoed to the client.
 /// </item>
 /// <item>
-/// <see cref="TrainException"/>: execution failures (junction errors, remote
-/// errors). Passes <c>ex.Message</c> through; code <c>TRAX_TRAIN_ERROR</c>. Train
-/// authors are expected to treat this message as client-safe.
+/// <see cref="TrainException"/>: execution failures; code <c>TRAX_TRAIN_ERROR</c>. A
+/// message a train author wrote is passed through, and authors are expected to treat it as
+/// client-safe. A message that carries another exception, as the structured
+/// <see cref="TrainExceptionData"/> JSON a remote worker or a nested train produces, passes
+/// through only the carried message of a carried <see cref="TrainException"/>; any other
+/// carried type, and the scheduler's remote-transport failures, get
+/// <see cref="TrainFailedMessage"/>. The detail stays in the recorded metadata and the logs.
+/// See <c>docs/adr/0014-only-a-train-exceptions-own-message-reaches-the-client.md</c>.
 /// </item>
 /// </list>
 /// Any other exception type (including <see cref="InvalidOperationException"/>) is
@@ -46,6 +52,12 @@ namespace Trax.Api.GraphQL.Errors;
 /// </remarks>
 internal class TraxErrorFilter : IErrorFilter
 {
+    /// <summary>
+    /// What a client is told when a train failed with something other than a TrainException's
+    /// own message.
+    /// </summary>
+    internal const string TrainFailedMessage = "The train failed.";
+
     public IError OnError(IError error)
     {
         // HotChocolate's @authorize directive (used by [TraxAuthorize] on
@@ -75,8 +87,59 @@ internal class TraxErrorFilter : IErrorFilter
             TrainInputValidationException ex => error
                 .WithMessage(ex.Message)
                 .WithCode("TRAX_INVALID_INPUT"),
-            TrainException ex => error.WithMessage(ex.Message).WithCode("TRAX_TRAIN_ERROR"),
+            TrainException ex => error
+                .WithMessage(PublicTrainMessage(ex.Message))
+                .WithCode("TRAX_TRAIN_ERROR"),
             _ => error,
         };
+    }
+
+    /// <summary>
+    /// Prefixes of the messages the scheduler's remote run executors build around a worker's
+    /// reply. What follows them is the worker's response, not text a train author wrote.
+    /// </summary>
+    private static readonly string[] RemoteTransportPrefixes =
+    [
+        "Remote run endpoint returned",
+        "Remote train execution failed",
+    ];
+
+    /// <summary>
+    /// The part of a <see cref="TrainException"/> message a client may see.
+    /// </summary>
+    internal static string PublicTrainMessage(string message)
+    {
+        if (TryReadCarried(message, out var carried))
+            return
+                string.Equals(carried.Type, nameof(TrainException), StringComparison.Ordinal)
+                && !string.IsNullOrEmpty(carried.Message)
+                ? PublicTrainMessage(carried.Message)
+                : TrainFailedMessage;
+
+        foreach (var prefix in RemoteTransportPrefixes)
+            if (message.StartsWith(prefix, StringComparison.Ordinal))
+                return TrainFailedMessage;
+
+        return message;
+    }
+
+    private static bool TryReadCarried(string message, out TrainExceptionData carried)
+    {
+        carried = null!;
+        if (!message.AsSpan().TrimStart().StartsWith("{"))
+            return false;
+
+        try
+        {
+            var data = JsonSerializer.Deserialize<TrainExceptionData>(message);
+            if (data is null || string.IsNullOrEmpty(data.Type))
+                return false;
+            carried = data;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 }

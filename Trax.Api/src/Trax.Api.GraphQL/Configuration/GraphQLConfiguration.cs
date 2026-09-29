@@ -63,9 +63,14 @@ public class GraphQLConfiguration
     public int MaxOperationsPerRequest { get; }
 
     /// <summary>
+    /// Maximum operations one WebSocket connection runs at once (default 100).
+    /// </summary>
+    public int MaxOperationsPerConnection { get; internal init; } = 100;
+
+    /// <summary>
     /// True when <c>RequireAuthorization()</c> was called on the builder.
-    /// Gates GraphQL execution (HTTP POST and GET-with-query); the BCP tool
-    /// page and schema introspection are governed independently.
+    /// Gates GraphQL execution (HTTP POST and GET-with-query); the schema download, the
+    /// GraphQL IDE and introspection follow <see cref="IntrospectionPredicate"/> instead.
     /// </summary>
     internal bool AuthorizationRequired { get; }
 
@@ -93,7 +98,8 @@ public class GraphQLConfiguration
 
     /// <summary>
     /// Every <c>[TraxAuthorize]</c> shape passed to
-    /// <c>TraxGraphQLBuilder.GateOperations()</c>. Empty when the namespace carries no gate of
+    /// <c>TraxGraphQLBuilder.GateOperations(...)</c> or
+    /// <c>GateOperationsToAuthenticatedUsers()</c>. Empty when the namespace carries no gate of
     /// its own, in which case the endpoint gate (or
     /// <c>AllowAnonymousOperations()</c>) is what governs it.
     /// </summary>
@@ -106,6 +112,19 @@ public class GraphQLConfiguration
     /// module is applied inside the <c>AddFiltering(convention =&gt; ...)</c> callback.
     /// </summary>
     internal IReadOnlyList<ITraxFilterModule> FilterModules { get; }
+
+    /// <summary>
+    /// Whether GraphQL queries are served over HTTP GET, set by
+    /// <c>TraxGraphQLBuilder.AllowGetRequests()</c>. Off by default. See
+    /// <c>docs/adr/0024-graphql-get-is-off-unless-the-host-opts-in.md</c>.
+    /// </summary>
+    internal bool GetRequestsAllowed { get; init; }
+
+    /// <summary>
+    /// Origins set through <c>TraxGraphQLBuilder.AllowSocketOrigins()</c>, normalized, or
+    /// <c>null</c> when the host's CORS default policy decides which origins may open a socket.
+    /// </summary>
+    internal IReadOnlyList<string>? SocketAllowedOrigins { get; init; }
 
     public GraphQLConfiguration(
         IReadOnlyList<QueryModelRegistration> modelRegistrations,

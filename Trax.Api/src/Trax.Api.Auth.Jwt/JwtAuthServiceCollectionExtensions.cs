@@ -210,7 +210,19 @@ public static class JwtAuthServiceCollectionExtensions
             .AddPolicy(
                 dispatcherSchemeName + JwtDefaults.PolicyNameSuffix,
                 policy =>
-                    policy.AddAuthenticationSchemes(dispatcherSchemeName).RequireAuthenticatedUser()
+                    policy
+                        .AddAuthenticationSchemes(dispatcherSchemeName)
+                        .RequireAuthenticatedUser()
+                        // The dispatcher forwards to the mapped schemes, and the identity carries
+                        // the scheme that validated the token.
+                        .AddRequirements(
+                            new TraxSchemeRequirement([
+                                .. mappings.Values.Distinct(),
+                                .. builder.FallbackSchemeName is { } fallbackScheme
+                                    ? new[] { fallbackScheme }
+                                    : [],
+                            ])
+                        )
             );
 
         IncludeInTraxAuthPolicy(services, dispatcherSchemeName);
@@ -258,7 +270,11 @@ public static class JwtAuthServiceCollectionExtensions
             .AddAuthorizationBuilder()
             .AddPolicy(
                 policyName,
-                policy => policy.AddAuthenticationSchemes(schemeName).RequireAuthenticatedUser()
+                policy =>
+                    policy
+                        .AddAuthenticationSchemes(schemeName)
+                        .RequireAuthenticatedUser()
+                        .AddRequirements(new TraxSchemeRequirement(schemeName))
             );
 
         IncludeInTraxAuthPolicy(services, schemeName);

@@ -3,7 +3,6 @@ using System.Text.Json;
 using HotChocolate.AspNetCore;
 using HotChocolate.AspNetCore.Subscriptions;
 using HotChocolate.AspNetCore.Subscriptions.Protocols;
-using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Api.Auth;
@@ -23,10 +22,12 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// convention on GraphQL transport WS, <c>apiKey</c> matches the REST header):
 /// <code>{ "authToken": "..." }</code> or <code>{ "apiKey": "..." }</code>.
 /// <para>
-/// Registered automatically by <c>AddTraxApiKeyAuth</c> when the Trax GraphQL
-/// schema is also present. Hosts that prefer their own subscription-auth
-/// pipeline can remove this registration and wire their own
-/// <see cref="ISocketSessionInterceptor"/>.
+/// <c>AddTraxGraphQL</c> does not register this type itself: it registers
+/// <see cref="TraxCompositeSocketInterceptor"/>, which delegates API-key
+/// connections here whenever <c>AddTraxApiKeyAuth</c> is registered, alongside
+/// JWT or on its own. Hosts that prefer their own subscription-auth pipeline
+/// register their own <see cref="ISocketSessionInterceptor"/> through
+/// <c>ConfigureSchema</c>, which replaces the composite.
 /// </para>
 /// </remarks>
 public sealed class TraxApiKeySocketInterceptor(
@@ -73,28 +74,6 @@ public sealed class TraxApiKeySocketInterceptor(
         AttachPrincipalToRequest(session, claimsPrincipal);
 
         return await base.OnConnectAsync(session, connectionInitMessage, cancellationToken);
-    }
-
-    public override async ValueTask OnRequestAsync(
-        ISocketSession session,
-        string operationSessionId,
-        OperationRequestBuilder requestBuilder,
-        CancellationToken cancellationToken = default
-    )
-    {
-        // Re-assert the principal onto per-operation HttpContext each time — HC reuses
-        // the same HttpContext object for the socket lifetime, but guards here are cheap
-        // and prevent a regression where a middleware downstream resets User.
-        if (
-            session.Connection.HttpContext is { } httpContext
-            && httpContext.User.Identity?.IsAuthenticated != true
-        )
-        {
-            // No-op: principal was never attached at init; OnConnectAsync already
-            // rejected the connection in that path. Defensive branch only.
-        }
-
-        await base.OnRequestAsync(session, operationSessionId, requestBuilder, cancellationToken);
     }
 
     private static void AttachPrincipalToRequest(

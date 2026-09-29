@@ -36,6 +36,11 @@ namespace Trax.Api.Auth
         public static bool TryGetPrincipalId(this System.Security.Claims.ClaimsPrincipal claimsPrincipal, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? id) { }
         public static bool TryGetTraxPrincipal(this System.Security.Claims.ClaimsPrincipal claimsPrincipal, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Trax.Api.Auth.TraxPrincipal? principal) { }
     }
+    public static class TraxPrincipalId
+    {
+        public const char Separator = ':';
+        public static string Qualify(string scheme, string id) { }
+    }
     public sealed class TraxPrincipalNotAvailableException : System.InvalidOperationException
     {
         public TraxPrincipalNotAvailableException() { }

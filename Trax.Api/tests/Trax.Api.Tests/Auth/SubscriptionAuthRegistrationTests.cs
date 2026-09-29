@@ -9,12 +9,10 @@ using Trax.Api.Auth.Jwt;
 namespace Trax.Api.Tests.Auth;
 
 /// <summary>
-/// Verifies the DI conditions that gate socket-interceptor registration
-/// inside <c>AddTraxGraphQL</c>. HotChocolate stores the interceptor in its
-/// schema-scoped service provider (not the root DI container), so we probe
-/// the <i>input</i> of the conditional — the per-scheme resolver registration —
-/// rather than scanning for the interceptor type itself. Interceptor
-/// behavior is covered by <see cref="TraxJwtSocketInterceptorTests"/> and
+/// Verifies the registrations <see cref="Trax.Api.GraphQL.Subscriptions.TraxCompositeSocketInterceptor"/>
+/// reads to decide which strategies are active: the per-scheme resolver each auth extension
+/// registers. Routing between them is covered by <see cref="TraxCompositeSocketInterceptorTests"/>,
+/// and each strategy by <see cref="TraxJwtSocketInterceptorTests"/> and
 /// <see cref="TraxApiKeySocketInterceptorTests"/>.
 /// </summary>
 [TestFixture]

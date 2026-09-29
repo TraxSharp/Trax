@@ -52,6 +52,10 @@ public sealed record CognitoAccessTokenRequest
     /// <summary>
     /// Additional string-valued claims. Use for custom attributes
     /// (<c>custom:*</c>) or scope-style extras not covered above.
+    /// A name the issuer sets itself (<c>sub</c>, <c>token_use</c>, <c>cognito:groups</c> and
+    /// the rest), or one the principal resolver reads an identity, a name or roles from
+    /// (<c>role</c>, <c>roles</c>, <c>name</c>, ...), is refused with an
+    /// <see cref="ArgumentException"/>; set it through this request's own property.
     /// </summary>
     public IReadOnlyDictionary<string, string>? AdditionalClaims { get; init; }
 }

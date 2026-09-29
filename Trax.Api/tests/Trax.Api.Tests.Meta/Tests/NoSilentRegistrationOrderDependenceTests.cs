@@ -60,11 +60,11 @@ public class NoSilentRegistrationOrderDependenceTests
         ["src/Trax.Api.Auth.Oidc/OidcAuthServiceCollectionExtensions.cs"] = 1,
         // Idempotency guard for the disclaimer hosted service.
         ["src/Trax.Api.GraphQL.Audit/TraxGraphQLBuilderAuditExtensions.cs"] = 1,
-        // AddTrax precondition (throws), the train discovery snapshot, and the three
-        // subscription-interceptor branches, which TraxSubscriptionAuthWiringValidator asserts at
-        // startup. The broadcaster branch used to be the sixth and is gone: its handlers are now
-        // registered unconditionally, so there is no order-dependent decision left to accept.
-        ["src/Trax.Api.GraphQL/Extensions/GraphQLServiceExtensions.cs"] = 5,
+        // AddTrax precondition (throws) and the train discovery snapshot. The broadcaster branch
+        // and the three subscription-interceptor branches are gone: the handlers and the
+        // composite socket interceptor are registered unconditionally and decide from the
+        // finished container, so there is no order-dependent decision left in either.
+        ["src/Trax.Api.GraphQL/Extensions/GraphQLServiceExtensions.cs"] = 2,
     };
 
     [Test]

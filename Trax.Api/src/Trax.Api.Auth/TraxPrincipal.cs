@@ -6,7 +6,9 @@ namespace Trax.Api.Auth;
 /// <see cref="TraxPrincipalExtensions.ToClaimsPrincipal(TraxPrincipal, string)"/>.
 /// </summary>
 /// <param name="Id">
-/// Stable principal identifier. Lands in the <see cref="TraxAuthClaimTypes.PrincipalId"/> claim.
+/// Stable principal identifier, unique within the scheme that authenticates it. Lands in the
+/// <see cref="TraxAuthClaimTypes.PrincipalId"/> claim qualified by that scheme,
+/// <c>{scheme}:{Id}</c>; a principal read back from the claims carries the qualified form.
 /// Must be a non-empty, non-whitespace string; empty identifiers would surface as real claims to
 /// audit sinks and downstream authorization handlers.
 /// </param>

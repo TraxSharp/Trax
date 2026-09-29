@@ -6,18 +6,6 @@ namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 [TestFixture]
 public class IntrospectionDetectorTests
 {
-    [Test]
-    public void LooksLikeIntrospectionByName_KnownName_ReturnsTrue() =>
-        IntrospectionDetector.LooksLikeIntrospectionByName("IntrospectionQuery").Should().BeTrue();
-
-    [TestCase("introspectionquery")] // case-sensitive
-    [TestCase("Introspection")]
-    [TestCase("__schema")]
-    [TestCase("")]
-    [TestCase(null)]
-    public void LooksLikeIntrospectionByName_OtherValues_ReturnFalse(string? name) =>
-        IntrospectionDetector.LooksLikeIntrospectionByName(name).Should().BeFalse();
-
     [TestCase("query { __schema { queryType { name } } }")]
     [TestCase("query { __type(name: \"User\") { fields { name } } }")]
     [TestCase("query { __schema { types { name } } __type(name: \"X\") { name } }")]

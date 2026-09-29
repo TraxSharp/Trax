@@ -105,9 +105,8 @@ public class CustomSocketInterceptorE2ETests
                                 )
                         );
 
-                        // Auth registered AFTER AddTraxGraphQL: the stock G5 gate
-                        // would have skipped its interceptor here, but the custom
-                        // one is wired regardless of order.
+                        // Auth registered AFTER AddTraxGraphQL: the custom
+                        // interceptor still replaces Trax's composite.
                         if (authMode == AuthMode.JwtAfterGraphQL)
                             s.AddTraxJwtAuth(jwt => jwt.UseSymmetricKey("https://iss", "aud", key));
                     })

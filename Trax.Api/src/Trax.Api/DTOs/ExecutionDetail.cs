@@ -9,6 +9,10 @@ namespace Trax.Api.DTOs;
 /// junction context is the <see cref="CurrentlyRunningJunction"/> / <see cref="FailureJunction"/>
 /// fields the framework records on the metadata itself.
 /// </summary>
+/// <param name="ParentId">The execution that started this one, or <c>null</c> for a top-level run.</param>
+/// <param name="ScheduledTime">When the run was due, for a scheduled run; <c>null</c> otherwise.</param>
+/// <param name="Executor">The project (entry assembly) of the process that ran it.</param>
+/// <param name="HostLabels">The host's user-supplied labels as a JSON object, or <c>null</c>.</param>
 public record ExecutionDetail(
     long Id,
     string ExternalId,
@@ -30,5 +34,9 @@ public record ExecutionDetail(
     string? HostEnvironment,
     string? HostInstanceId,
     int ChildCount = 0,
-    Trax.Core.Exceptions.FailureClass FailureClass = Trax.Core.Exceptions.FailureClass.Unclassified
+    Trax.Core.Exceptions.FailureClass FailureClass = Trax.Core.Exceptions.FailureClass.Unclassified,
+    long? ParentId = null,
+    DateTime? ScheduledTime = null,
+    string? Executor = null,
+    string? HostLabels = null
 );

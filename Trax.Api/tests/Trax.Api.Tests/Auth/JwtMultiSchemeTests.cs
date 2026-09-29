@@ -225,7 +225,7 @@ public class JwtMultiSchemeTests
 
         var response = await client.GetFromJsonAsync<EndpointResponse>("/protected-alpha");
         response.Should().NotBeNull();
-        response!.PrincipalId.Should().Be("alice");
+        response!.PrincipalId.Should().Be("alpha:alice");
     }
 
     [Test]
@@ -315,7 +315,7 @@ public class JwtMultiSchemeTests
 
         var response = await client.GetFromJsonAsync<EndpointResponse>("/protected-alpha");
 
-        response!.PrincipalId.Should().Be("alice");
+        response!.PrincipalId.Should().Be("alpha:alice");
         response.PrincipalType.Should().Be(JwtDefaults.PrincipalType);
     }
 

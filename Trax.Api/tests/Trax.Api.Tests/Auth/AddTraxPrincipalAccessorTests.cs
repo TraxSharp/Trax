@@ -70,7 +70,7 @@ public class AddTraxPrincipalAccessorTests
 
         var principal = scope.ServiceProvider.GetRequiredService<TraxPrincipal>();
 
-        principal.Id.Should().Be("alice");
+        principal.Id.Should().Be("TraxApiKey:alice");
         principal.DisplayName.Should().Be("Alice");
         principal.Roles.Should().BeEquivalentTo(["User"]);
     }
@@ -185,8 +185,8 @@ public class AddTraxPrincipalAccessorTests
         using var scope2 = sp.CreateScope();
         var second = scope2.ServiceProvider.GetRequiredService<TraxPrincipal>();
 
-        first.Id.Should().Be("alice");
-        second.Id.Should().Be("bob");
+        first.Id.Should().Be("TraxApiKey:alice");
+        second.Id.Should().Be("TraxApiKey:bob");
         second.Roles.Should().BeEquivalentTo(["User", "Admin"]);
     }
 
@@ -215,7 +215,7 @@ public class AddTraxPrincipalAccessorTests
 
         var resolved = scope.ServiceProvider.GetRequiredService<TraxPrincipal>();
 
-        resolved.Id.Should().Be("alice");
+        resolved.Id.Should().Be("TraxApiKey:alice");
         resolved.DisplayName.Should().Be("Alice");
         resolved.Roles.Should().BeEquivalentTo(["Admin"]);
         resolved.PrincipalType.Should().Be("apikey");

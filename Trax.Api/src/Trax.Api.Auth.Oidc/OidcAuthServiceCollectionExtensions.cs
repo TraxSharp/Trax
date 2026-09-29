@@ -122,6 +122,14 @@ public static class OidcAuthServiceCollectionExtensions
                     policy
                         .AddAuthenticationSchemes(OidcDefaults.CookieSchemeName)
                         .RequireAuthenticatedUser()
+                        // The session identity is built under the OIDC scheme's name and then
+                        // carried by the cookie, so either name identifies it.
+                        .AddRequirements(
+                            new TraxSchemeRequirement(
+                                OidcDefaults.SchemeName,
+                                OidcDefaults.CookieSchemeName
+                            )
+                        )
             );
 
         services.PostConfigure<AuthorizationOptions>(opts =>

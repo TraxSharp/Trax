@@ -14,6 +14,7 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Api.Tests.Fakes;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
@@ -47,7 +48,7 @@ public static class AuthE2EHost
     //   - Pool Size=8 — small enough that 5 fixtures × 8 = 40 connections
     //     stays well under postgres's default max_connections=100.
     public static string ConnectionString(string database) =>
-        $"Host=localhost;Port=5432;Database={database};Username=trax;Password=trax123;"
+        $"Host=localhost;Port={TestPostgres.Port};Database={database};Username=trax;Password=trax123;"
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -66,8 +67,8 @@ public static class AuthE2EHost
     /// </remarks>
     public static void EnsureDatabaseExists(string database)
     {
-        const string maintenanceConnectionString =
-            "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123;Timeout=30";
+        var maintenanceConnectionString =
+            $"Host=localhost;Port={TestPostgres.Port};Database=trax;Username=trax;Password=trax123;Timeout=30";
 
         using var connection = new Npgsql.NpgsqlConnection(maintenanceConnectionString);
         connection.Open();
@@ -139,6 +140,11 @@ public static class AuthE2EHost
                             );
                         }
 
+                        // The pipeline below runs UseAuthentication, which needs the
+                        // services even when no scheme is registered.
+                        if (schemes == Schemes.None)
+                            services.AddAuthentication();
+
                         // [TraxAuthorize(Policy="AdminPolicy")] requires a
                         // matching ASP.NET Core policy definition.
                         services.AddAuthorization(opts =>
@@ -177,6 +183,9 @@ public static class AuthE2EHost
                                 // without needing an explicit override.
                                 .AddDbContext<TestDbContext>()
                                 .AddDbContext<AuthzTestDbContext>()
+                                // The host runs as Production, where introspection is off by
+                                // default; a few tests here read the schema through it.
+                                .AllowIntrospection(_ => true)
                                 // Registered by name rather than by scanning the test
                                 // assembly. A scan pulls in every [ExtendObjectType] any other
                                 // test file happens to declare, which is how unrelated fixtures

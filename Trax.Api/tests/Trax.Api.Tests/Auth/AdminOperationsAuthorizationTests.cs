@@ -54,7 +54,9 @@ public class AdminOperationsAuthorizationTests
         /// <summary>AllowAnonymousOperations(): the control plane is deliberately public.</summary>
         AnonymousAcknowledged,
 
-        /// <summary>GateOperations(): the namespace is gated, the endpoint stays open.</summary>
+        /// <summary>
+        /// GateOperationsToAuthenticatedUsers(): the namespace is gated, the endpoint stays open.
+        /// </summary>
         NamespaceGated,
 
         /// <summary>GateOperations(roles: "Admin"): the namespace needs a role.</summary>
@@ -105,7 +107,7 @@ public class AdminOperationsAuthorizationTests
                                     graphql.AllowAnonymousOperations();
                                     break;
                                 case Posture.NamespaceGated:
-                                    graphql.GateOperations();
+                                    graphql.GateOperationsToAuthenticatedUsers();
                                     break;
                                 case Posture.NamespaceGatedByRole:
                                     graphql.GateOperations(roles: "Admin");
@@ -257,7 +259,7 @@ public class AdminOperationsAuthorizationTests
 
         doc.RootElement.TryGetProperty("errors", out _)
             .Should()
-            .BeFalse("a bare GateOperations() asks only for an authenticated caller");
+            .BeFalse("GateOperationsToAuthenticatedUsers() asks only for an authenticated caller");
         doc.RootElement.GetProperty("data")
             .GetProperty("operations")
             .GetProperty("health")

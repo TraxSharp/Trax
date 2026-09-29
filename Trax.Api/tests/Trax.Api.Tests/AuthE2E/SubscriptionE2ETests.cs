@@ -13,7 +13,10 @@ namespace Trax.Api.Tests.AuthE2E;
 /// WebSocket connections. Exercises the full handshake: TestServer WS
 /// upgrade → graphql-transport-ws <c>connection_init</c> → Trax socket
 /// interceptor → principal attached (or connection rejected).
+///
+/// <para>Enforces <c>docs/adr/0006-one-socket-interceptor-composes-every-token-scheme.md</c> for a host with both API-key and JWT auth.</para>
 /// </summary>
+[Property("adr", "docs/adr/0006-one-socket-interceptor-composes-every-token-scheme.md")]
 [TestFixture]
 [NonParallelizable]
 public class SubscriptionE2ETests
@@ -178,23 +181,16 @@ public class SubscriptionE2ETests
         closed.Should().BeTrue();
     }
 
-    // ── Multi-scheme coexistence over WS (stock defaults) ───────────────
+    // ── Multi-scheme coexistence over WS ────────────────────────────────
     //
-    // HotChocolate supports a single ISocketSessionInterceptor per schema.
-    // When both the stock ApiKey and Jwt interceptors are registered, the
-    // last one registered wins. In AuthE2EHost that's JWT (it registers
-    // after ApiKey), so a WS connection that presents an API-key token
-    // while both schemes are wired gets rejected by the JWT interceptor
-    // because the token isn't a valid JWT. Presenting a JWT works.
-    //
-    // Hosts that need richer behavior supply their own interceptor via
-    // graphql.ConfigureSchema(b => b.AddSocketSessionInterceptor<T>())
-    // (see CustomSocketInterceptorE2ETests), or use AddTraxJwtDispatcher to
-    // route multiple JWT schemes by issuer (see
-    // TraxJwtDispatcherSocketE2ETests).
+    // HotChocolate runs a single ISocketSessionInterceptor per schema, so Trax
+    // registers one composite that picks the API-key or JWT strategy per
+    // connection. Every branch is tested together here, because a composite
+    // that regresses one branch does so silently. See
+    // docs/adr/0006-one-socket-interceptor-composes-every-token-scheme.md.
 
     [Test]
-    public async Task BothSchemes_Jwt_Succeeds()
+    public async Task BothSchemes_JwtInAuthToken_ConnectionAck()
     {
         using var host = await StartAsync(Schemes.ApiKey | Schemes.Jwt);
         var token = SignJwt("alice", "Alice", "Player");
@@ -207,20 +203,99 @@ public class SubscriptionE2ETests
     }
 
     [Test]
-    public async Task BothSchemes_ApiKeyToken_RejectedByLastInterceptor()
+    public async Task BothSchemes_JwtInBearer_ConnectionAck()
     {
-        // Regression guard: when both socket interceptors are registered,
-        // only the last one (JWT) runs. An API-key token presented over WS
-        // gets rejected because JWT doesn't recognize it. If this test
-        // starts passing, a composite interceptor has been added and the
-        // multi-scheme story improved.
+        using var host = await StartAsync(Schemes.ApiKey | Schemes.Jwt);
+        var token = SignJwt("alice", "Alice", "Player");
+
+        using var ws = await ConnectAsync(host);
+        await SendInitAsync(ws, new { bearer = token });
+        var msg = await ReceiveAsync(ws);
+
+        msg.GetProperty("type").GetString().Should().Be("connection_ack");
+    }
+
+    [Test]
+    public async Task BothSchemes_ApiKeyInAuthToken_ConnectionAck()
+    {
         using var host = await StartAsync(Schemes.ApiKey | Schemes.Jwt);
 
         using var ws = await ConnectAsync(host);
         await SendInitAsync(ws, new { authToken = AdminApiKey });
+        var msg = await ReceiveAsync(ws);
 
-        var closed = await WaitForCloseAsync(ws);
-        closed.Should().BeTrue();
+        msg.GetProperty("type")
+            .GetString()
+            .Should()
+            .Be(
+                "connection_ack",
+                "an API key presented while JWT is also registered is routed to the API-key "
+                    + "strategy, per docs/adr/0006-one-socket-interceptor-composes-every-token-scheme.md"
+            );
+    }
+
+    [Test]
+    public async Task BothSchemes_ApiKeyInApiKey_ConnectionAck()
+    {
+        using var host = await StartAsync(Schemes.ApiKey | Schemes.Jwt);
+
+        using var ws = await ConnectAsync(host);
+        await SendInitAsync(ws, new { apiKey = AdminApiKey });
+        var msg = await ReceiveAsync(ws);
+
+        msg.GetProperty("type").GetString().Should().Be("connection_ack");
+    }
+
+    [Test]
+    public async Task BothSchemes_NoCredential_ConnectionRejected()
+    {
+        using var host = await StartAsync(Schemes.ApiKey | Schemes.Jwt);
+
+        using var ws = await ConnectAsync(host);
+        await SendInitAsync(ws, new { });
+
+        (await WaitForCloseAsync(ws)).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task BothSchemes_UnknownApiKey_ConnectionRejected()
+    {
+        using var host = await StartAsync(Schemes.ApiKey | Schemes.Jwt);
+
+        using var ws = await ConnectAsync(host);
+        await SendInitAsync(ws, new { authToken = "not-a-registered-key" });
+
+        (await WaitForCloseAsync(ws)).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task BothSchemes_JwtWithWrongSignature_ConnectionRejected()
+    {
+        using var host = await StartAsync(Schemes.ApiKey | Schemes.Jwt);
+        var parts = SignJwt("alice", "Alice", "Player").Split('.');
+        var tampered = $"{parts[0]}.{parts[1]}.{new string('A', parts[2].Length)}";
+
+        using var ws = await ConnectAsync(host);
+        await SendInitAsync(ws, new { authToken = tampered });
+
+        (await WaitForCloseAsync(ws))
+            .Should()
+            .BeTrue(
+                "a JWT-shaped credential is validated as a JWT and never retried as an API key"
+            );
+    }
+
+    [Test]
+    public async Task NoScheme_EmptyPayload_ConnectionAck()
+    {
+        // Negative control: a host with no token scheme keeps accepting every connection.
+        using var host = await StartAsync(Schemes.None);
+
+        using var ws = await ConnectAsync(host);
+        await SendInitAsync(ws, new { });
+        var msg = await ReceiveAsync(ws);
+
+        msg.GetProperty("type").GetString().Should().Be("connection_ack");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────

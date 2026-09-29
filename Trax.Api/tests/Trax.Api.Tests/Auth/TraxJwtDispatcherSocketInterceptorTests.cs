@@ -105,7 +105,7 @@ public class TraxJwtDispatcherSocketInterceptorTests
         result.Accepted.Should().BeTrue();
         http.User.Identity!.IsAuthenticated.Should().BeTrue();
         http.User.Identity.AuthenticationType.Should().Be("a");
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("a:alice");
     }
 
     [Test]
@@ -128,7 +128,7 @@ public class TraxJwtDispatcherSocketInterceptorTests
 
         result.Accepted.Should().BeTrue();
         http.User.Identity!.AuthenticationType.Should().Be("b");
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("bob");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("b:bob");
     }
 
     [Test]
@@ -178,6 +178,6 @@ public class TraxJwtDispatcherSocketInterceptorTests
         );
 
         result.Accepted.Should().BeTrue();
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("a:alice");
     }
 }

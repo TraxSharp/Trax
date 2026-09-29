@@ -32,9 +32,11 @@
     <PackageReference Include="Trax.Scheduler" />
   </ItemGroup>
 
-  <!-- The GraphQL resolver classes under test live here; Trax.Api gives us AddTraxApi. -->
+  <!-- The GraphQL resolver classes under test live here; Trax.Api gives us AddTraxApi, and the
+       persisted-operations package its store, management resolvers and document lookup. -->
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Api/Trax.Api.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
   </ItemGroup>
 </Project>

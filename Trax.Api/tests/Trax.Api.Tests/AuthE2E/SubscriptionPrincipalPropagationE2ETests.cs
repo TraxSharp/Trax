@@ -56,7 +56,7 @@ public class SubscriptionPrincipalPropagationE2ETests
         await PokeAsync(host, "ping", AdminApiKey, scheme: Schemes.ApiKey);
         var payload = await ReceiveNextAsync(ws, "sub-1");
 
-        payload.GetString().Should().Be("admin");
+        payload.GetString().Should().Be("TraxApiKey:admin");
     }
 
     [Test]
@@ -73,7 +73,7 @@ public class SubscriptionPrincipalPropagationE2ETests
         await PokeAsync(host, "ping", token, scheme: Schemes.Jwt);
         var payload = await ReceiveNextAsync(ws, "sub-1");
 
-        payload.GetString().Should().Be("alice");
+        payload.GetString().Should().Be("TraxJwt:alice");
     }
 
     // ── Subscriber identity is independent of poker identity ────────────
@@ -92,7 +92,7 @@ public class SubscriptionPrincipalPropagationE2ETests
         await PokeAsync(host, "ping", PlayerApiKey, scheme: Schemes.ApiKey);
         var payload = await ReceiveNextAsync(ws, "sub-1");
 
-        payload.GetString().Should().Be("admin");
+        payload.GetString().Should().Be("TraxApiKey:admin");
     }
 
     // ── Concurrent subscribers with different principals ────────────────
@@ -117,8 +117,8 @@ public class SubscriptionPrincipalPropagationE2ETests
         var adminPayload = await ReceiveNextAsync(wsAdmin, "sub-admin");
         var playerPayload = await ReceiveNextAsync(wsPlayer, "sub-player");
 
-        adminPayload.GetString().Should().Be("admin");
-        playerPayload.GetString().Should().Be("player");
+        adminPayload.GetString().Should().Be("TraxApiKey:admin");
+        playerPayload.GetString().Should().Be("TraxApiKey:player");
     }
 
     [Test]
@@ -147,8 +147,8 @@ public class SubscriptionPrincipalPropagationE2ETests
         var one = await ReceiveNextAsync(ws1, "s1");
         var two = await ReceiveNextAsync(ws2, "s2");
 
-        one.GetString().Should().Be("sub-one");
-        two.GetString().Should().Be("sub-two");
+        one.GetString().Should().Be("TraxJwt:sub-one");
+        two.GetString().Should().Be("TraxJwt:sub-two");
     }
 
     // ── Under load: N subscribers, N distinct principals ────────────────
@@ -170,7 +170,7 @@ public class SubscriptionPrincipalPropagationE2ETests
                 await InitAsync(ws, new { authToken = token });
                 await ExpectAckAsync(ws);
                 await SubscribeAsync(ws, $"sub-{i}", WhoAmISubscription);
-                subscribers.Add((ws, id, $"sub-{i}"));
+                subscribers.Add((ws, "TraxJwt:" + id, $"sub-{i}"));
             }
 
             // Single broadcast that fans out to all N subscribers.
@@ -213,7 +213,7 @@ public class SubscriptionPrincipalPropagationE2ETests
         {
             await PokeAsync(host, $"ping-{i}", pokerToken, scheme: Schemes.Jwt);
             var payload = await ReceiveNextAsync(ws, "sub-1");
-            payload.GetString().Should().Be("alice");
+            payload.GetString().Should().Be("TraxJwt:alice");
         }
     }
 

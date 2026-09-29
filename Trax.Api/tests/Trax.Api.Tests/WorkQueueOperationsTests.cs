@@ -10,6 +10,8 @@ using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ChangeSignal;
@@ -35,8 +37,8 @@ public class WorkQueueOperationsTests
     // class of CI flake. Dropping Connection Pruning Interval=1 + Idle Lifetime=1
     // lets the pool reuse connections across tests instead of paying TCP+auth
     // every SetUp, which is what was timing out under CI Postgres contention.
-    private const string ConnectionString =
-        "Host=localhost;Port=5432;Database=trax_api_workqueue;Username=trax;Password=trax123;"
+    private static readonly string ConnectionString =
+        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_workqueue;Username=trax;Password=trax123;"
         + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
         + "Timeout=30;Tcp Keepalive=true";
 
@@ -377,6 +379,177 @@ public class WorkQueueOperationsTests
         var queries = new WorkQueueQueries();
 
         (await queries.GetWorkQueue(99999, _factory, default)).Should().BeNull();
+    }
+
+    #endregion
+
+    #region Detail
+
+    private async Task<long> AddEntry(
+        string? subject,
+        WorkQueueStatus status = WorkQueueStatus.Queued,
+        int priority = 0,
+        string? input = null,
+        long? metadataId = null,
+        DateTime? createdAt = null
+    )
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "Trax.Tests.ISubjectTrain",
+                InputTypeName = "Trax.Tests.SubjectInput",
+                Input = input,
+                SubjectKey = subject,
+                Priority = priority,
+            }
+        );
+        entry.Status = status;
+        entry.MetadataId = metadataId;
+        if (createdAt is { } at)
+            entry.CreatedAt = at;
+        await db.Track(entry);
+        await db.SaveChanges(default);
+        return entry.Id;
+    }
+
+    private async Task<long> AddRun(TrainState state)
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var run = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Trax.Tests.ISubjectTrain",
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+        run.TrainState = state;
+        await db.Track(run);
+        await db.SaveChanges(default);
+        return run.Id;
+    }
+
+    [Test]
+    public async Task GetDetail_CarriesTheInputAndEverySummaryField()
+    {
+        var id = await AddEntry(subject: "customer-1", priority: 4, input: "{\"amount\": 12}");
+
+        var detail = await new WorkQueueQueries().GetDetail(id, _factory, default);
+
+        detail.Should().NotBeNull();
+        detail!.Id.Should().Be(id);
+        detail.Input.Should().Contain("\"amount\"");
+        detail.InputTypeName.Should().Be("Trax.Tests.SubjectInput");
+        detail.SubjectKey.Should().Be("customer-1");
+        detail.Priority.Should().Be(4);
+        detail.Status.Should().Be(WorkQueueStatus.Queued);
+        detail.ConfirmedAt.Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task GetDetail_SubjectWithARunInFlight_NamesTheEntryHoldingIt()
+    {
+        var running = await AddRun(TrainState.InProgress);
+        var holder = await AddEntry("customer-2", WorkQueueStatus.Dispatched, metadataId: running);
+        var waiting = await AddEntry("customer-2");
+
+        var detail = await new WorkQueueQueries().GetDetail(waiting, _factory, default);
+
+        detail!.SubjectHeldBy.Should().Be(holder);
+        detail
+            .SubjectQueuedBehind.Should()
+            .BeNull("an entry held by a running sibling says so, not what is queued ahead");
+    }
+
+    [Test]
+    public async Task GetDetail_SubjectWhoseRunFinished_IsNotHeld()
+    {
+        var done = await AddRun(TrainState.Completed);
+        await AddEntry("customer-3", WorkQueueStatus.Dispatched, metadataId: done);
+        var waiting = await AddEntry("customer-3");
+
+        var detail = await new WorkQueueQueries().GetDetail(waiting, _factory, default);
+
+        detail!.SubjectHeldBy.Should().BeNull();
+        detail.SubjectQueuedBehind.Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetDetail_OlderOrHigherPrioritySibling_IsWhatItQueuesBehind()
+    {
+        var older = await AddEntry("customer-4", createdAt: DateTime.UtcNow.AddMinutes(-5));
+        var younger = await AddEntry("customer-4");
+        var urgent = await AddEntry(
+            "customer-5",
+            createdAt: DateTime.UtcNow.AddMinutes(1),
+            priority: 9
+        );
+        var ordinary = await AddEntry("customer-5");
+
+        var queries = new WorkQueueQueries();
+
+        (await queries.GetDetail(younger, _factory, default))!
+            .SubjectQueuedBehind.Should()
+            .Be(older);
+        (await queries.GetDetail(older, _factory, default))!.SubjectQueuedBehind.Should().BeNull();
+        (await queries.GetDetail(ordinary, _factory, default))!
+            .SubjectQueuedBehind.Should()
+            .Be(urgent);
+    }
+
+    [Test]
+    public async Task GetDetail_SiblingNotYetDue_IsNotAheadOfIt()
+    {
+        long later;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var entry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = "Trax.Tests.ISubjectTrain",
+                    SubjectKey = "customer-6",
+                    Priority = 9,
+                    ScheduledAt = DateTime.UtcNow.AddDays(1),
+                }
+            );
+            await db.Track(entry);
+            await db.SaveChanges(default);
+            later = entry.Id;
+        }
+        var dueNow = await AddEntry("customer-6");
+
+        var detail = await new WorkQueueQueries().GetDetail(dueNow, _factory, default);
+
+        later.Should().BePositive();
+        detail!
+            .SubjectQueuedBehind.Should()
+            .BeNull("dispatch does not offer an entry before it is due");
+    }
+
+    [Test]
+    public async Task GetDetail_NoSubjectOrNotQueued_NamesNothing()
+    {
+        var running = await AddRun(TrainState.InProgress);
+        await AddEntry("customer-7", WorkQueueStatus.Dispatched, metadataId: running);
+        var dispatched = await AddEntry("customer-7", WorkQueueStatus.Dispatched);
+        var noSubject = await AddEntry(subject: null);
+
+        var queries = new WorkQueueQueries();
+        var d1 = await queries.GetDetail(dispatched, _factory, default);
+        var d2 = await queries.GetDetail(noSubject, _factory, default);
+
+        d1!.SubjectHeldBy.Should().BeNull();
+        d1.SubjectQueuedBehind.Should().BeNull();
+        d2!.SubjectHeldBy.Should().BeNull();
+        d2.SubjectQueuedBehind.Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetDetail_MissingId_ReturnsNull()
+    {
+        (await new WorkQueueQueries().GetDetail(99999, _factory, default)).Should().BeNull();
     }
 
     #endregion

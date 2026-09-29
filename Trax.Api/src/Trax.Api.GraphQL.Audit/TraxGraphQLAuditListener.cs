@@ -1,5 +1,6 @@
 using HotChocolate.Execution;
 using HotChocolate.Execution.Instrumentation;
+using HotChocolate.Execution.Processing;
 using HotChocolate.Language;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -41,9 +42,6 @@ public sealed class TraxGraphQLAuditListener(
     {
         try
         {
-            if (ShouldSkipOnStart(context))
-                return EmptyScope;
-
             var startTicks = timeProvider.GetTimestamp();
             var startTime = timeProvider.GetUtcNow();
             var principal = CapturePrincipal();
@@ -75,27 +73,47 @@ public sealed class TraxGraphQLAuditListener(
     }
 
     /// <summary>
-    /// Checks the only predicate that is knowable before the document is parsed: the
-    /// caller-supplied operation name. The subscription check needs the compiled
-    /// operation and therefore runs in <see cref="ShouldSkipOnComplete"/>.
+    /// Both skips need the compiled operation, which exists only partway through the pipeline,
+    /// so they are decided when the scope completes rather than when it opens. A request that
+    /// never produced an operation (a parse or validation failure) is audited.
     /// </summary>
-    private bool ShouldSkipOnStart(RequestContext context)
+    private bool ShouldSkipOnComplete(RequestContext context)
     {
-        if (!_options.SkipIntrospection)
+        if (!_options.SkipIntrospection && !_options.SkipSubscriptions)
             return false;
 
-        var operationName = context.Request.OperationName;
-        return string.Equals(operationName, "IntrospectionQuery", StringComparison.Ordinal);
+        if (!context.TryGetOperation(out var operation))
+            return false;
+
+        if (_options.SkipSubscriptions && operation.Kind == OperationType.Subscription)
+            return true;
+
+        return _options.SkipIntrospection && SelectsOnlyIntrospection(operation.Definition);
     }
 
     /// <summary>
-    /// The operation is only compiled partway through the pipeline, so its type cannot be
-    /// read when the scope opens. Subscriptions are therefore filtered on the way out.
+    /// True when every top-level selection of the executed operation is <c>__schema</c>,
+    /// <c>__type</c> or <c>__typename</c>. A fragment spread or inline fragment at the top level
+    /// is not treated as introspection, so the request is audited.
     /// </summary>
-    private bool ShouldSkipOnComplete(RequestContext context) =>
-        _options.SkipSubscriptions
-        && context.TryGetOperation(out var operation)
-        && operation.Kind == OperationType.Subscription;
+    private static bool SelectsOnlyIntrospection(OperationDefinitionNode definition)
+    {
+        var selections = definition.SelectionSet.Selections;
+        if (selections.Count == 0)
+            return false;
+
+        foreach (var selection in selections)
+        {
+            if (selection is not FieldNode field)
+                return false;
+
+            var name = field.Name.Value;
+            if (name is not ("__schema" or "__type" or "__typename"))
+                return false;
+        }
+
+        return true;
+    }
 
     private (string Id, string? Type) CapturePrincipal()
     {
@@ -120,9 +138,7 @@ public sealed class TraxGraphQLAuditListener(
                 return;
 
             var elapsed = timeProvider.GetElapsedTime(startTicks);
-            var document = TruncateDocument(
-                context.OperationDocumentInfo.Document?.ToString() ?? string.Empty
-            );
+            var document = CaptureDocument(context);
             var variables = BuildVariables(context);
             var redactedVariables = SafeRedact(variables);
             var (success, errorText) = InterpretResult(context);
@@ -148,12 +164,62 @@ public sealed class TraxGraphQLAuditListener(
         }
     }
 
-    private string TruncateDocument(string document)
+    /// <summary>
+    /// Returns the document as sent, or, past <see cref="TraxAuditOptions.MaxDocumentLength"/>,
+    /// its head followed by every field the compiled operation executes. The head alone can be
+    /// filled by padding placed ahead of the fields that matter; the field list cannot, because
+    /// it is read from the compiled operation after fragment expansion and holds each schema
+    /// coordinate once, so its size is bounded by the schema rather than by the request.
+    /// </summary>
+    private string CaptureDocument(RequestContext context)
     {
+        var document = context.OperationDocumentInfo.Document?.ToString() ?? string.Empty;
         if (document.Length <= _options.MaxDocumentLength)
             return document;
 
-        return string.Concat(document.AsSpan(0, _options.MaxDocumentLength), "...[truncated]");
+        var head = string.Concat(document.AsSpan(0, _options.MaxDocumentLength), TruncatedMarker);
+        if (!context.TryGetOperation(out var operation))
+            return head;
+
+        return string.Concat(
+            head,
+            ExecutedFieldsMarker,
+            string.Join(", ", ExecutedFieldCoordinates(operation)),
+            "]"
+        );
+    }
+
+    private const string TruncatedMarker = "...[truncated]";
+    private const string ExecutedFieldsMarker = " [selected fields: ";
+
+    /// <summary>
+    /// Every <c>Type.field</c> the operation selects, across all of its possible types, in
+    /// ordinal order. Walks each selection set once.
+    /// </summary>
+    private static SortedSet<string> ExecutedFieldCoordinates(Operation operation)
+    {
+        var coordinates = new SortedSet<string>(StringComparer.Ordinal);
+        var visited = new HashSet<int>();
+        var pending = new Stack<SelectionSet>();
+        pending.Push(operation.RootSelectionSet);
+
+        while (pending.Count > 0)
+        {
+            var selectionSet = pending.Pop();
+            if (!visited.Add(selectionSet.Id))
+                continue;
+
+            foreach (var selection in selectionSet.Selections)
+            {
+                coordinates.Add($"{selection.DeclaringType.Name}.{selection.Field.Name}");
+                if (selection.IsLeaf)
+                    continue;
+                foreach (var possibleType in operation.GetPossibleTypes(selection))
+                    pending.Push(operation.GetSelectionSet(selection, possibleType));
+            }
+        }
+
+        return coordinates;
     }
 
     private static IReadOnlyDictionary<string, object?>? BuildVariables(RequestContext context)

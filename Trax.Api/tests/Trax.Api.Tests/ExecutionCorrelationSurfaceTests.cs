@@ -5,6 +5,7 @@ using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.Services.HealthCheck;
+using Trax.Api.Tests.Fakes;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -175,7 +176,7 @@ public class ExecutionCorrelationSurfaceTests
         var discovery = Substitute.For<ITrainDiscoveryService>();
         discovery.DiscoverTrains().Returns([]);
 
-        var services = new ServiceCollection();
+        var services = new ServiceCollection().AddDevelopmentEnvironment();
         services.AddSingleton<Trax.Effect.Configuration.TraxBuilder.TraxMarker>();
         services.AddSingleton(discovery);
         services.AddSingleton(Substitute.For<IEffectRegistry>());

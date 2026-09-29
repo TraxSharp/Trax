@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.Services.HealthCheck;
+using Trax.Api.Tests.Fakes;
 using Trax.Core.Exceptions;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -149,7 +150,7 @@ public class FailureClassSchemaTests
         var discovery = Substitute.For<ITrainDiscoveryService>();
         discovery.DiscoverTrains().Returns([]);
 
-        var services = new ServiceCollection();
+        var services = new ServiceCollection().AddDevelopmentEnvironment();
         services.AddSingleton<Trax.Effect.Configuration.TraxBuilder.TraxMarker>();
         services.AddSingleton(discovery);
         services.AddSingleton(Substitute.For<IEffectRegistry>());

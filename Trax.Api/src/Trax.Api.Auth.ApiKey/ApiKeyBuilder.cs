@@ -11,11 +11,21 @@ namespace Trax.Api.Auth.ApiKey;
 /// </remarks>
 public sealed class ApiKeyBuilder
 {
+    /// <summary>
+    /// The marker the Trax templates and samples put on their plaintext demo keys. A host that
+    /// registers a key containing it (ignoring case) through <c>Add</c> refuses to start outside
+    /// Development.
+    /// </summary>
+    public const string DemoKeyMarker = "do-not-use-in-production";
+
     private readonly List<HashedApiKeyResolver.Entry> _entries = [];
+
+    internal bool HasDemoKey { get; private set; }
 
     /// <summary>
     /// Registers a cleartext key mapped to a principal. The key is salted and
     /// hashed immediately; the cleartext is not retained after registration.
+    /// A key containing <see cref="DemoKeyMarker"/> starts only in Development.
     /// </summary>
     /// <param name="key">The API key value callers present in the configured header.</param>
     /// <param name="id">Stable principal identifier (lands in the <see cref="TraxAuthClaimTypes.PrincipalId"/> claim).</param>
@@ -33,7 +43,7 @@ public sealed class ApiKeyBuilder
     /// <summary>
     /// Registers a cleartext key with a custom principal factory. Use this when
     /// the principal needs a display name distinct from its id, or custom claims
-    /// beyond roles.
+    /// beyond roles. A key containing <see cref="DemoKeyMarker"/> starts only in Development.
     /// </summary>
     /// <param name="key">The API key value callers present in the configured header.</param>
     /// <param name="principalFactory">Invoked when the key matches; result becomes the authenticated principal.</param>
@@ -42,6 +52,8 @@ public sealed class ApiKeyBuilder
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentNullException.ThrowIfNull(principalFactory);
 
+        if (key.Contains(DemoKeyMarker, StringComparison.OrdinalIgnoreCase))
+            HasDemoKey = true;
         _entries.Add(HashedApiKeyResolver.Entry.FromPlainKey(key, principalFactory));
         return this;
     }

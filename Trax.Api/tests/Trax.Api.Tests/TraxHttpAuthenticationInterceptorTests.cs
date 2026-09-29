@@ -8,19 +8,23 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.GraphQL.Authorization;
+using Trax.Api.GraphQL.Configuration;
 
 namespace Trax.Api.Tests;
 
 /// <summary>
-/// Direct unit coverage for <see cref="QueryModelAuthenticationInterceptor"/>.
+/// Direct unit coverage for <see cref="TraxHttpAuthenticationInterceptor"/> when no endpoint policy is set.
 /// The interceptor populates <c>HttpContext.User</c> by walking every registered
 /// authentication scheme; the E2E suite proves the happy path against real HC
 /// infrastructure, while these tests pin the branches around it — the
 /// short-circuit when the request is already authenticated, and the silent
 /// no-op when no scheme matches the inbound credentials.
+///
+/// <para>Enforces <c>docs/adr/0010-a-scheme-policy-requires-its-scheme.md</c>.</para>
 /// </summary>
+[Property("adr", "docs/adr/0010-a-scheme-policy-requires-its-scheme.md")]
 [TestFixture]
-public class QueryModelAuthenticationInterceptorTests
+public class TraxHttpAuthenticationInterceptorTests
 {
     [Test]
     public async Task OnCreateAsync_UserAlreadyAuthenticated_DoesNotWalkSchemes()
@@ -32,6 +36,7 @@ public class QueryModelAuthenticationInterceptorTests
         // with one from a fall-through scheme.
         var schemeProvider = Substitute.For<IAuthenticationSchemeProvider>();
         var httpContext = BuildHttpContext(
+            schemeProvider,
             authenticatedAs: new ClaimsPrincipal(
                 new ClaimsIdentity(
                     new[] { new Claim(ClaimTypes.Name, "alice") },
@@ -40,7 +45,7 @@ public class QueryModelAuthenticationInterceptorTests
             )
         );
 
-        var sut = new QueryModelAuthenticationInterceptor(schemeProvider);
+        var sut = new TraxHttpAuthenticationInterceptor(NoEndpointPolicy);
 
         await sut.OnCreateAsync(
             httpContext,
@@ -77,9 +82,9 @@ public class QueryModelAuthenticationInterceptorTests
         var schemeProvider = Substitute.For<IAuthenticationSchemeProvider>();
         schemeProvider.GetAllSchemesAsync().Returns(new[] { schemeA, schemeB });
 
-        var httpContext = BuildHttpContext(authenticatedAs: null);
+        var httpContext = BuildHttpContext(schemeProvider, authenticatedAs: null);
 
-        var sut = new QueryModelAuthenticationInterceptor(schemeProvider);
+        var sut = new TraxHttpAuthenticationInterceptor(NoEndpointPolicy);
 
         await sut.OnCreateAsync(
             httpContext,
@@ -88,7 +93,11 @@ public class QueryModelAuthenticationInterceptorTests
             CancellationToken.None
         );
 
-        httpContext.User.Identity!.IsAuthenticated.Should().BeFalse();
+        httpContext
+            .User.Identity!.IsAuthenticated.Should()
+            .BeFalse(
+                "a request no scheme authenticates stays anonymous, per docs/adr/0010-a-scheme-policy-requires-its-scheme.md"
+            );
     }
 
     [Test]
@@ -119,11 +128,12 @@ public class QueryModelAuthenticationInterceptorTests
         schemeProvider.GetAllSchemesAsync().Returns(new[] { winningScheme, loserScheme });
 
         var httpContext = BuildHttpContext(
+            schemeProvider,
             authenticatedAs: null,
             successPrincipalForScheme: ("schemeA", winningPrincipal)
         );
 
-        var sut = new QueryModelAuthenticationInterceptor(schemeProvider);
+        var sut = new TraxHttpAuthenticationInterceptor(NoEndpointPolicy);
 
         await sut.OnCreateAsync(
             httpContext,
@@ -143,7 +153,10 @@ public class QueryModelAuthenticationInterceptorTests
     /// AuthenticateAsync produces either NoResult (for every scheme) or a
     /// successful ticket only for a named scheme.
     /// </summary>
+    private static readonly GraphQLConfiguration NoEndpointPolicy = new([], [], [], []);
+
     private static HttpContext BuildHttpContext(
+        IAuthenticationSchemeProvider schemeProvider,
         ClaimsPrincipal? authenticatedAs,
         (string Scheme, ClaimsPrincipal Principal)? successPrincipalForScheme = null
     )
@@ -180,6 +193,7 @@ public class QueryModelAuthenticationInterceptorTests
 
         var services = new ServiceCollection();
         services.AddSingleton(authService);
+        services.AddSingleton(schemeProvider);
         ctx.RequestServices = services.BuildServiceProvider();
         return ctx;
     }

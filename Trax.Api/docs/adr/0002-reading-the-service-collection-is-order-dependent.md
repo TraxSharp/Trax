@@ -58,9 +58,10 @@ yet, which makes the ordering question moot rather than merely detected. That is
 a validator, because there is nothing left to get wrong.
 
 **Where order must matter, it fails at startup and the message names the call to
-move.** The token-based schemes (`AddTraxJwtAuth`, `AddTraxApiKeyAuth`, `AddTraxJwtDispatcher`)
-must be registered before `AddTraxGraphQL()` or the host refuses to start. Cookie-based OIDC
-is exempt by design: it needs no socket interceptor, so registering it afterwards is fine.
+move.** The subscription interceptor was the example here until
+[0006](./0006-one-socket-interceptor-composes-every-token-scheme.md) restructured it: one
+composite is registered for every host and reads the schemes from the finished container, so
+the token-based schemes may be registered on either side of `AddTraxGraphQL()`.
 
 **The census ratchets one way.** Adding a site means making it safe first and recording why.
 Raising a count to silence the guard is itself the violation, and the guard says so.
@@ -88,6 +89,10 @@ Not covered:
 
 ## Changelog
 
+- **2026-09-27**: The subscription interceptor branches are gone, restructured away by
+  [0006](./0006-one-socket-interceptor-composes-every-token-scheme.md), so the token-based
+  schemes no longer have to precede `AddTraxGraphQL()`. The census count for
+  `GraphQLServiceExtensions.cs` drops from five to two.
 - **2026-09-12**: Withdrew the "fourth safe kind". `ITrainEventReceiver` is public and on
   the API baseline, so a host can register one after `AddTraxGraphQL()` and leave the
   handlers unwired; the broadcaster branch is a second accepted exception, not a safe kind.

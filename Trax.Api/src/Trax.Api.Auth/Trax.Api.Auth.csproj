@@ -21,6 +21,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The scheme policies each auth package registers carry TraxSchemeRequirement. -->
+    <InternalsVisibleTo Include="Trax.Api.Auth.ApiKey" />
+    <InternalsVisibleTo Include="Trax.Api.Auth.Jwt" />
+    <InternalsVisibleTo Include="Trax.Api.Auth.Oidc" />
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\..\SECURITY-DISCLAIMER.md" Pack="true" PackagePath="\" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>

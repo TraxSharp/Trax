@@ -305,6 +305,19 @@ public class GraphQLOperationsTests
 
     #region Helper Methods
 
+    [Test]
+    public async Task InputSchema_ExposesEnumValues()
+    {
+        var executor = await BuildExecutor();
+
+        var result = await executor.ExecuteAsync(
+            "{ operations { trains { inputSchema { name typeName isNullable enumValues } } } }"
+        );
+
+        var operationResult = result as OperationResult;
+        operationResult!.Errors.Should().BeNullOrEmpty();
+    }
+
     private async Task<IRequestExecutor> BuildExecutor()
     {
         var services = new ServiceCollection();

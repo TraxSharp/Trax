@@ -156,6 +156,79 @@ public class InMemoryRefreshTokenStoreTests
     }
 
     [Test]
+    public async Task RotateAsync_ReplayedToken_RevokesTheFamily()
+    {
+        var store = new InMemoryRefreshTokenStore();
+        var handle = await store.IssueAsync(
+            Guid.NewGuid(),
+            ClientId,
+            TimeSpan.FromHours(1),
+            CancellationToken.None
+        );
+
+        // The legitimate client rotates, and keeps using the token it was given.
+        var legitimate = await store.RotateAsync(handle.Token, CancellationToken.None);
+        legitimate.Should().NotBeNull();
+
+        // The spent token comes back. Whoever holds it, one of the two parties has a copy it
+        // should not, so the whole family ends.
+        var replay = await store.RotateAsync(handle.Token, CancellationToken.None);
+        replay.Should().BeNull();
+
+        (await store.ValidateAsync(legitimate!.Token, CancellationToken.None)).Should().BeNull();
+        (await store.RotateAsync(legitimate.Token, CancellationToken.None)).Should().BeNull();
+    }
+
+    [Test]
+    public async Task RotateAsync_ReplayedToken_LeavesOtherFamiliesAlone()
+    {
+        var store = new InMemoryRefreshTokenStore();
+        var sub = Guid.NewGuid();
+        var replayed = await store.IssueAsync(
+            sub,
+            ClientId,
+            TimeSpan.FromHours(1),
+            CancellationToken.None
+        );
+        var otherSession = await store.IssueAsync(
+            sub,
+            ClientId,
+            TimeSpan.FromHours(1),
+            CancellationToken.None
+        );
+
+        await store.RotateAsync(replayed.Token, CancellationToken.None);
+        await store.RotateAsync(replayed.Token, CancellationToken.None);
+
+        (await store.ValidateAsync(otherSession.Token, CancellationToken.None))
+            .Should()
+            .NotBeNull();
+    }
+
+    [Test]
+    public async Task RotateAsync_ConcurrentCalls_RevokeTheFamily()
+    {
+        var store = new InMemoryRefreshTokenStore();
+        var handle = await store.IssueAsync(
+            Guid.NewGuid(),
+            ClientId,
+            TimeSpan.FromHours(1),
+            CancellationToken.None
+        );
+
+        // Two presentations of one token racing each other are a reuse like any other: the
+        // store cannot tell the client from a thief, so the winner's token is revoked too.
+        var results = await Task.WhenAll(
+            Enumerable
+                .Range(0, 8)
+                .Select(_ => store.RotateAsync(handle.Token, CancellationToken.None))
+        );
+
+        var winner = results.Single(r => r is not null);
+        (await store.ValidateAsync(winner!.Token, CancellationToken.None)).Should().BeNull();
+    }
+
+    [Test]
     public async Task RotateAsync_ConcurrentCalls_OnlyOneSucceeds()
     {
         var store = new InMemoryRefreshTokenStore();

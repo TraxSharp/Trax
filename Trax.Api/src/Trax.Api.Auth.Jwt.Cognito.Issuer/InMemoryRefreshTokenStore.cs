@@ -73,24 +73,32 @@ public sealed class InMemoryRefreshTokenStore : IRefreshTokenStore
         if (string.IsNullOrEmpty(oldToken) || !_tokens.TryGetValue(oldToken, out var entry))
             return Task.FromResult<RefreshTokenHandle?>(null);
 
-        if (
-            entry.Consumed
-            || IsChainRevoked(entry.ChainId)
-            || entry.ExpiresAt <= _clock.GetUtcNow()
-        )
+        // A token already spent by rotation is being presented again: either the client or
+        // someone holding a copy of it is replaying it, and the store cannot tell which. End
+        // the whole family, so the live descendant stops working too.
+        if (entry.Consumed)
+            return Replayed(entry.ChainId);
+
+        if (IsChainRevoked(entry.ChainId) || entry.ExpiresAt <= _clock.GetUtcNow())
             return Task.FromResult<RefreshTokenHandle?>(null);
 
-        // Atomically transition the entry to consumed. If somebody else got
-        // here first (double-rotation), reject this caller.
+        // Atomically transition the entry to consumed. A caller that loses the race presented
+        // the same token twice, which is a replay like any other.
         var consumed = entry with
         {
             Consumed = true,
         };
         if (!_tokens.TryUpdate(oldToken, consumed, entry))
-            return Task.FromResult<RefreshTokenHandle?>(null);
+            return Replayed(entry.ChainId);
 
         var handle = Mint(entry.ChainId, entry.Sub, entry.ClientId, entry.ExpiresAt);
         return Task.FromResult<RefreshTokenHandle?>(handle);
+    }
+
+    private Task<RefreshTokenHandle?> Replayed(Guid chainId)
+    {
+        RevokeChain(chainId);
+        return Task.FromResult<RefreshTokenHandle?>(null);
     }
 
     /// <inheritdoc />

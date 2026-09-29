@@ -1,4 +1,5 @@
 using System.Reflection;
+using HotChocolate.AspNetCore;
 using HotChocolate.Data;
 using HotChocolate.Execution;
 using HotChocolate.Execution.Configuration;
@@ -22,6 +23,7 @@ using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Errors;
 using Trax.Api.GraphQL.Filtering.ListElements;
 using Trax.Api.GraphQL.Hooks;
+using Trax.Api.GraphQL.Introspection;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Projection;
 using Trax.Api.GraphQL.Queries;
@@ -132,6 +134,12 @@ public static class GraphQLServiceExtensions
                 sp.GetRequiredService<LifecycleHookFactory<GraphQLSubscriptionHook>>()
             );
 
+        // Who may receive what from the subscriptions; see LifecycleSubscriptionAccess. It
+        // evaluates policies with ASP.NET Core's IAuthorizationService, which needs logging.
+        services.AddLogging();
+        services.AddAuthorization();
+        services.AddSingleton<LifecycleSubscriptionAccess>();
+
         // Deliver coalesced change signals to the local onDataChanged subscription. The change-
         // signal pipeline itself is registered by AddTrax(); this is the in-process delivery sink.
         services.AddSingleton<IChangeSignalSink, TopicEventSenderChangeSink>();
@@ -232,8 +240,8 @@ public static class GraphQLServiceExtensions
         // resolves IAuthenticationSchemeProvider, which a host that never called AddAuthentication()
         // does not have.
         //
-        // Three things can put one in the schema: a [TraxAuthorize] query model, GateOperations()
-        // on the operations namespace, and [TraxAuthorize] or [TraxAllowAnonymous] on a
+        // Three things can put one in the schema: a [TraxAuthorize] query model, an operations
+        // gate (GateOperations(...) or GateOperationsToAuthenticatedUsers()), and [TraxAuthorize] or [TraxAllowAnonymous] on a
         // type-extension resolver, which is what TypeExtensionExposureInterceptor requires of a
         // field that inherits no gate and turns into an @authorize directive.
         var authorizationInSchema =
@@ -251,14 +259,19 @@ public static class GraphQLServiceExtensions
             services.AddAuthorization();
 
             graphqlBuilder.AddAuthorization();
-            // HotChocolate 16 activates interceptors out of the schema container, which no longer
-            // forwards to the application container. Bridge the ASP.NET Core services the
-            // interceptor needs across the boundary.
-            graphqlBuilder.BridgeApplicationService<IAuthenticationSchemeProvider>();
-            graphqlBuilder.AddHttpRequestInterceptor<QueryModelAuthenticationInterceptor>();
         }
 
         ApplyHardeningDefaults(services, graphqlBuilder, config);
+
+        // One HTTP interceptor establishes the caller for both @authorize and the endpoint policy.
+        // HotChocolate keeps a single IHttpRequestInterceptor, so two would replace each other.
+        // It resolves the ASP.NET Core services it needs from the request, and only its
+        // configuration from the schema container.
+        if (authorizationInSchema || config.AuthorizationRequired)
+        {
+            graphqlBuilder.BridgeApplicationService<GraphQLConfiguration>();
+            graphqlBuilder.AddHttpRequestInterceptor<TraxHttpAuthenticationInterceptor>();
+        }
 
         if (config.ModelRegistrations.Count > 0)
         {
@@ -445,6 +458,17 @@ public static class GraphQLServiceExtensions
     /// in the same application. Use the optional <paramref name="configure"/> callback
     /// to apply endpoint conventions such as authorization or rate limiting.
     /// </summary>
+    /// <remarks>
+    /// The schema download (<c>?sdl</c>, <c>/schema</c>, <c>/schema.graphql</c>) and the GraphQL IDE
+    /// on this endpoint follow the same per-request decision as introspection: allowed in
+    /// Development, refused with 404 elsewhere, unless <c>AllowIntrospection(predicate)</c> says
+    /// otherwise.
+    /// A WebSocket upgrade to this endpoint that carries an <c>Origin</c> header is accepted only
+    /// when the origin is on the endpoint's own host or is allowed, and is refused with
+    /// <c>403</c> otherwise. The allowed origins are set with
+    /// <c>TraxGraphQLBuilder.AllowSocketOrigins(...)</c>, and default to the host's CORS default
+    /// policy. An upgrade with no <c>Origin</c> header is accepted.
+    /// </remarks>
     /// <example>
     /// <code>
     /// app.UseTraxGraphQL(configure: endpoint => endpoint
@@ -461,6 +485,40 @@ public static class GraphQLServiceExtensions
         // by WebSocketsStartupFilter (registered in AddTraxGraphQL), so it always
         // runs before endpoint execution regardless of host middleware ordering.
         var endpoint = app.MapGraphQL(routePrefix, SchemaName);
+        // The schema download and the IDE follow the same per-request decision as introspection.
+        SchemaDocumentGate.Apply(
+            endpoint,
+            new PathString(routePrefix.TrimEnd('/')),
+            app.Services.GetRequiredService<IntrospectionPolicy>()
+        );
+
+        // A browser socket is accepted only from origins the host serves: the endpoint's own
+        // host, or the allowed origins. The check wraps the endpoint's handler, so it runs
+        // before HotChocolate accepts the upgrade. See
+        // docs/adr/0007-a-browser-socket-is-accepted-only-from-origins-the-host-serves.md.
+        var allowedOrigins = app.Services.GetService<GraphQLConfiguration>()?.SocketAllowedOrigins;
+        endpoint.Add(endpointBuilder =>
+        {
+            var handler =
+                endpointBuilder.RequestDelegate
+                ?? throw new InvalidOperationException(
+                    "The Trax GraphQL endpoint has no request handler to guard."
+                );
+            endpointBuilder.RequestDelegate = context =>
+            {
+                if (
+                    context.WebSockets.IsWebSocketRequest
+                    && !SocketOriginPolicy.IsAllowed(context, allowedOrigins)
+                )
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
+                }
+
+                return handler(context);
+            };
+        });
+
         configure?.Invoke(endpoint);
         return app;
     }
@@ -507,90 +565,94 @@ public static class GraphQLServiceExtensions
             config.CostOverride?.Invoke(opts);
         });
 
-        // G3 — Conditional introspection. Default: on in Development, off elsewhere.
-        // Consumer predicate wins. DisableIntrospection's delegate returns TRUE to
-        // disable, so invert our "allow" predicate.
-        graphqlBuilder.DisableIntrospection(
-            (sp, _) =>
-            {
-                var httpCtx = sp.GetService<IHttpContextAccessor>()?.HttpContext;
-                if (httpCtx is null)
-                    return false;
-
-                if (config.IntrospectionPredicate is not null)
-                    return !config.IntrospectionPredicate(httpCtx);
-
-                var env = sp.GetService<IHostEnvironment>();
-                return env?.IsDevelopment() != true;
-            }
+        // G3 — Introspection, decided per request. HotChocolate reads the DisableIntrospection
+        // option once, when the executor is built and no request exists, so the schema-level
+        // switch is always on and a request is let through only by the allowance middleware,
+        // which runs before validation on every transport. See
+        // docs/adr/0012-introspection-is-decided-per-request.md.
+        services.TryAddSingleton(sp => new IntrospectionPolicy(
+            config.IntrospectionPredicate,
+            sp.GetService<IHostEnvironment>()
+        ));
+        graphqlBuilder.DisableIntrospection(true);
+        // With no predicate the answer outside Development is always no, so the schema download
+        // and the IDE are switched off in the schema's own server options too. That covers a host
+        // that maps the endpoint itself instead of calling UseTraxGraphQL, whose per-request gate
+        // it would otherwise skip.
+        services
+            .AddOptions<HotChocolate.AspNetCore.GraphQLServerOptions>(SchemaName)
+            .Configure<IServiceProvider>(
+                (options, sp) =>
+                {
+                    if (
+                        config.IntrospectionPredicate is null
+                        && sp.GetService<IHostEnvironment>()?.IsDevelopment() != true
+                    )
+                    {
+                        options.EnableSchemaRequests = false;
+                        options.Tool.Enable = false;
+                    }
+                }
+            );
+        graphqlBuilder.UseRequest(
+            IntrospectionAllowanceMiddleware.Create,
+            key: IntrospectionAllowanceMiddleware.Key,
+            before: WellKnownRequestMiddleware.DocumentValidationMiddleware
         );
 
-        // Recorded so TraxSubscriptionAuthWiringValidator can tell, once the container is
-        // complete, whether a scheme was registered too late to be seen here.
-        var wiredSocketInterceptors = new List<string>();
+        // G8 — HTTP GET. Off unless the host opts in: a cross-site top-level navigation carries a
+        // SameSite=Lax cookie, so a GET-executable query could be run as the signed-in user from
+        // another site. An opted-in GET still needs the GraphQL-preflight header (a navigation
+        // cannot add one) and runs queries only. Set on the schema, so it holds however the host
+        // maps the endpoint. The IDE page and the SDL download are separate options.
+        // See docs/adr/0024-graphql-get-is-off-unless-the-host-opts-in.md.
+        graphqlBuilder.ModifyServerOptions(options =>
+        {
+            options.EnableGetRequests = config.GetRequestsAllowed;
+            options.EnforceGetRequestsPreflightHeader = true;
+            options.AllowedGetOperations = AllowedGetOperations.Query;
+        });
 
-        // G5 — Subscription auth interceptors. Browsers cannot attach headers to
-        // WebSocket upgrades, so each auth scheme registers an interceptor that
-        // reads the credential from the connection_init payload. Wired only when
-        // the corresponding principal resolver is present in DI.
+        // G4 — Socket origins. A WebSocket upgrade is accepted only from origins the host
+        // serves. The listener is on the Trax schema, so it sees every socket that schema serves
+        // however the host mapped it, and no socket for another schema. UseTraxGraphQL() also
+        // refuses before HotChocolate runs. See
+        // docs/adr/0007-a-browser-socket-is-accepted-only-from-origins-the-host-serves.md.
+        graphqlBuilder.AddDiagnosticEventListener<SocketOriginListener>();
+
+        // G5 — Subscription auth. Browsers cannot attach headers to WebSocket upgrades, so the
+        // API-key and JWT schemes read their credential from the connection_init payload.
+        // HotChocolate runs one socket interceptor per schema, so one composite serves every
+        // token scheme, and it is registered for every host: which schemes are active is read
+        // from the completed container on the first connection, never from this collection, so
+        // registration order cannot change it. See
+        // docs/adr/0006-one-socket-interceptor-composes-every-token-scheme.md.
         //
-        // Cookie-based auth (Trax.Api.Auth.Oidc) needs no interceptor here: the
-        // browser attaches cookies to the upgrade request and the cookie scheme
-        // authenticates on the upgrade like any HTTP request.
-        if (
-            services.Any(sd =>
-                sd.ServiceType == typeof(Trax.Api.Auth.ITraxPrincipalResolver<string>)
-            )
-        )
-        {
-            // The resolver is scoped and cannot be bridged as a singleton; the interceptor
-            // takes the application container and opens a scope per connection instead.
-            services.TryAddSingleton(sp => new TraxApplicationServices(sp));
-            graphqlBuilder.BridgeApplicationService<TraxApplicationServices>();
-            graphqlBuilder.BridgeApplicationService<ILogger<TraxApiKeySocketInterceptor>>();
-            graphqlBuilder.AddSocketSessionInterceptor<TraxApiKeySocketInterceptor>();
-            wiredSocketInterceptors.Add(nameof(TraxApiKeySocketInterceptor));
-        }
+        // Cookie-based auth (Trax.Api.Auth.Oidc) needs nothing here: the browser attaches
+        // cookies to the upgrade request and the cookie scheme authenticates it like any HTTP
+        // request. With no token scheme registered the composite accepts every connection.
+        services.TryAddSingleton(sp => new TraxApplicationServices(sp));
+        graphqlBuilder.BridgeApplicationService<TraxApplicationServices>();
+        graphqlBuilder.AddSocketSessionInterceptor(sp => new TraxCompositeSocketInterceptor(
+            sp.GetRequiredService<TraxApplicationServices>(),
+            config.MaxOperationsPerConnection
+        ));
 
-        // A multi-scheme JWT dispatcher routes subscription auth by the token's
-        // issuer across every mapped scheme (JWKS included), so it supersedes the
-        // single-scheme stock JWT interceptor. Otherwise wire the stock one when a
-        // JWT resolver is present.
-        if (services.Any(sd => sd.ServiceType == typeof(Trax.Api.Auth.Jwt.JwtDispatcherRuntime)))
-        {
-            graphqlBuilder.BridgeApplicationService<Trax.Api.Auth.Jwt.JwtDispatcherRuntime>();
-            graphqlBuilder.BridgeApplicationService<IOptionsMonitor<JwtBearerOptions>>();
-            // The dispatcher resolves scoped principal resolvers by scheme name, so it
-            // needs the application container itself rather than one bridged service.
-            services.TryAddSingleton(sp => new TraxApplicationServices(sp));
-            graphqlBuilder.BridgeApplicationService<TraxApplicationServices>();
-            graphqlBuilder.BridgeApplicationService<ILogger<TraxJwtDispatcherSocketInterceptor>>();
-            graphqlBuilder.AddSocketSessionInterceptor<TraxJwtDispatcherSocketInterceptor>();
-            wiredSocketInterceptors.Add(nameof(TraxJwtDispatcherSocketInterceptor));
-        }
-        else if (
-            services.Any(sd =>
-                sd.ServiceType
-                == typeof(Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput>)
-            )
-        )
-        {
-            graphqlBuilder.BridgeApplicationService<IOptionsMonitor<JwtBearerOptions>>();
-            services.TryAddSingleton(sp => new TraxApplicationServices(sp));
-            graphqlBuilder.BridgeApplicationService<TraxApplicationServices>();
-            graphqlBuilder.BridgeApplicationService<ILogger<TraxJwtSocketInterceptor>>();
-            graphqlBuilder.AddSocketSessionInterceptor<TraxJwtSocketInterceptor>();
-            wiredSocketInterceptors.Add(nameof(TraxJwtSocketInterceptor));
-        }
+        // A connection runs a bounded number of operations at once. The composite marks an
+        // operation past the limit and this middleware refuses it with a coded error. See
+        // docs/adr/0015-a-socket-runs-a-bounded-number-of-operations.md.
+        graphqlBuilder.UseRequest(
+            SocketOperationLimitRequestMiddleware.Create,
+            key: SocketOperationLimitRequestMiddleware.Key,
+            before: "DocumentCacheMiddleware"
+        );
 
-        // Registration order decides which interceptor above was wired, so assert at startup
-        // that every registered scheme actually got one instead of letting subscriptions fall
-        // through to HotChocolate's accept-everything default.
+        // A backstop, not an ordering check: it fails the host if a token scheme is registered
+        // and HotChocolate's accept-everything default is what would answer connection_init.
         services.AddHostedService(sp => new TraxSubscriptionAuthWiringValidator(
             sp.GetRequiredService<IServiceProviderIsService>(),
             sp.GetRequiredService<IRequestExecutorProvider>(),
-            SchemaName,
-            wiredSocketInterceptors
+            SchemaName
         ));
 
         // G7 — HTTP execution authorization. Wired when the builder opted in via
@@ -598,10 +660,17 @@ public static class GraphQLServiceExtensions
         // requests, so the BCP tool page and schema introspection stay reachable.
         if (config.AuthorizationRequired)
         {
-            graphqlBuilder.BridgeApplicationService<IAuthorizationService>();
-            graphqlBuilder.BridgeApplicationService<GraphQLConfiguration>();
-            graphqlBuilder.AddHttpRequestInterceptor<TraxGraphQLAuthInterceptor>();
+            services.AddAuthorization();
             services.AddHostedService<TraxGraphQLAuthPolicyValidator>();
+
+            // The same policy for every operation on every transport. HotChocolate's request
+            // pipeline is the one place an HTTP request and each operation a socket carries both
+            // pass through. See docs/adr/0009-the-endpoint-policy-applies-to-every-transport.md.
+            graphqlBuilder.UseRequest(
+                EndpointPolicyRequestMiddleware.Create,
+                key: EndpointPolicyRequestMiddleware.Key,
+                before: "DocumentCacheMiddleware"
+            );
         }
 
         // G6 — Per-request operation cap. Register as a document validator rule so
@@ -628,7 +697,11 @@ public static class GraphQLServiceExtensions
     {
         var violations = new List<string>();
 
-        foreach (var reg in registrations.Where(r => r.IsQuery || r.IsMutation))
+        // A [TraxBroadcast] train streams its runs to subscribers, which exposes them as surely
+        // as a query field does, so it answers the same question.
+        foreach (
+            var reg in registrations.Where(r => r.IsQuery || r.IsMutation || r.IsBroadcastEnabled)
+        )
         {
             var violation = ExposureAuthorizationRule.Evaluate(
                 hasAuthorize: reg.HasAuthorizeAttribute,
@@ -639,7 +712,9 @@ public static class GraphQLServiceExtensions
             if (violation != ExposureViolation.None)
                 violations.Add(
                     ExposureAuthorizationRule.BuildMessage(
-                        "GraphQL-exposed train",
+                        reg.IsQuery || reg.IsMutation
+                            ? "GraphQL-exposed train"
+                            : "[TraxBroadcast] train",
                         reg.ServiceType.FullName!,
                         violation
                     )

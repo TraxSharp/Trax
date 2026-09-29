@@ -22,9 +22,12 @@ namespace Trax.Api.DTOs
     }
     public class EffectInfo : System.IEquatable<Trax.Api.DTOs.EffectInfo>
     {
-        public EffectInfo(string Name, string FullName, bool Enabled, bool Toggleable) { }
+        public EffectInfo(string Name, string FullName, bool Enabled, bool Toggleable, bool IsConfigurable = false, string? ConfigurationTypeName = null, string? Configuration = null) { }
+        public string? Configuration { get; init; }
+        public string? ConfigurationTypeName { get; init; }
         public bool Enabled { get; init; }
         public string FullName { get; init; }
+        public bool IsConfigurable { get; init; }
         public string Name { get; init; }
         public bool Toggleable { get; init; }
     }
@@ -51,11 +54,16 @@ namespace Trax.Api.DTOs
                     string? HostEnvironment,
                     string? HostInstanceId,
                     int ChildCount = 0,
-                    Trax.Core.Exceptions.FailureClass FailureClass = 0) { }
+                    Trax.Core.Exceptions.FailureClass FailureClass = 0,
+                    long? ParentId = default,
+                    System.DateTime? ScheduledTime = default,
+                    string? Executor = null,
+                    string? HostLabels = null) { }
         public bool CancellationRequested { get; init; }
         public int ChildCount { get; init; }
         public string? CurrentlyRunningJunction { get; init; }
         public System.DateTime? EndTime { get; init; }
+        public string? Executor { get; init; }
         public string ExternalId { get; init; }
         public Trax.Core.Exceptions.FailureClass FailureClass { get; init; }
         public string? FailureException { get; init; }
@@ -63,6 +71,7 @@ namespace Trax.Api.DTOs
         public string? FailureReason { get; init; }
         public string? HostEnvironment { get; init; }
         public string? HostInstanceId { get; init; }
+        public string? HostLabels { get; init; }
         public string? HostName { get; init; }
         public long Id { get; init; }
         public string? Input { get; init; }
@@ -70,6 +79,8 @@ namespace Trax.Api.DTOs
         public long? ManifestId { get; init; }
         public string Name { get; init; }
         public string? Output { get; init; }
+        public long? ParentId { get; init; }
+        public System.DateTime? ScheduledTime { get; init; }
         public string? StackTrace { get; init; }
         public System.DateTime StartTime { get; init; }
         public Trax.Effect.Enums.TrainState TrainState { get; init; }
@@ -114,7 +125,8 @@ namespace Trax.Api.DTOs
     }
     public class InputPropertySchema : System.IEquatable<Trax.Api.DTOs.InputPropertySchema>
     {
-        public InputPropertySchema(string Name, string TypeName, bool IsNullable) { }
+        public InputPropertySchema(string Name, string TypeName, bool IsNullable, System.Collections.Generic.IReadOnlyList<string>? EnumValues = null) { }
+        public System.Collections.Generic.IReadOnlyList<string>? EnumValues { get; init; }
         public bool IsNullable { get; init; }
         public string Name { get; init; }
         public string TypeName { get; init; }
@@ -130,6 +142,58 @@ namespace Trax.Api.DTOs
         public string Message { get; init; }
         public long MetadataId { get; init; }
         public string? StackTrace { get; init; }
+    }
+    public class LogLevelSetting : System.IEquatable<Trax.Api.DTOs.LogLevelSetting>
+    {
+        public LogLevelSetting(string Category, string Level) { }
+        public string Category { get; init; }
+        public string Level { get; init; }
+    }
+    public class ManifestDetail : System.IEquatable<Trax.Api.DTOs.ManifestDetail>
+    {
+        public ManifestDetail(
+                    long Id,
+                    string ExternalId,
+                    string Name,
+                    bool IsEnabled,
+                    Trax.Effect.Enums.ScheduleType ScheduleType,
+                    string? CronExpression,
+                    int? IntervalSeconds,
+                    int MaxRetries,
+                    int? TimeoutSeconds,
+                    System.DateTime? LastSuccessfulRun,
+                    long ManifestGroupId,
+                    string ManifestGroupName,
+                    long? DependsOnManifestId,
+                    int Priority,
+                    string? PropertyTypeName,
+                    string? Properties,
+                    Trax.Effect.Enums.MisfirePolicy MisfirePolicy,
+                    int? MisfireThresholdSeconds,
+                    System.DateTime? ScheduledAt,
+                    System.DateTime? NextScheduledRun,
+                    int? VarianceSeconds) { }
+        public string? CronExpression { get; init; }
+        public long? DependsOnManifestId { get; init; }
+        public string ExternalId { get; init; }
+        public long Id { get; init; }
+        public int? IntervalSeconds { get; init; }
+        public bool IsEnabled { get; init; }
+        public System.DateTime? LastSuccessfulRun { get; init; }
+        public long ManifestGroupId { get; init; }
+        public string ManifestGroupName { get; init; }
+        public int MaxRetries { get; init; }
+        public Trax.Effect.Enums.MisfirePolicy MisfirePolicy { get; init; }
+        public int? MisfireThresholdSeconds { get; init; }
+        public string Name { get; init; }
+        public System.DateTime? NextScheduledRun { get; init; }
+        public int Priority { get; init; }
+        public string? Properties { get; init; }
+        public string? PropertyTypeName { get; init; }
+        public Trax.Effect.Enums.ScheduleType ScheduleType { get; init; }
+        public System.DateTime? ScheduledAt { get; init; }
+        public int? TimeoutSeconds { get; init; }
+        public int? VarianceSeconds { get; init; }
     }
     public class ManifestExclusion : System.IEquatable<Trax.Api.DTOs.ManifestExclusion>
     {
@@ -179,7 +243,7 @@ namespace Trax.Api.DTOs
     }
     public class ManifestSummary : System.IEquatable<Trax.Api.DTOs.ManifestSummary>
     {
-        public ManifestSummary(long Id, string ExternalId, string Name, bool IsEnabled, Trax.Effect.Enums.ScheduleType ScheduleType, string? CronExpression, int? IntervalSeconds, int MaxRetries, int? TimeoutSeconds, System.DateTime? LastSuccessfulRun, long ManifestGroupId, long? DependsOnManifestId, int Priority) { }
+        public ManifestSummary(long Id, string ExternalId, string Name, bool IsEnabled, Trax.Effect.Enums.ScheduleType ScheduleType, string? CronExpression, int? IntervalSeconds, int MaxRetries, int? TimeoutSeconds, System.DateTime? LastSuccessfulRun, long ManifestGroupId, long? DependsOnManifestId, int Priority, string? ManifestGroupName = null) { }
         public string? CronExpression { get; init; }
         public long? DependsOnManifestId { get; init; }
         public string ExternalId { get; init; }
@@ -188,6 +252,7 @@ namespace Trax.Api.DTOs
         public bool IsEnabled { get; init; }
         public System.DateTime? LastSuccessfulRun { get; init; }
         public long ManifestGroupId { get; init; }
+        public string? ManifestGroupName { get; init; }
         public int MaxRetries { get; init; }
         public string Name { get; init; }
         public int Priority { get; init; }
@@ -281,6 +346,7 @@ namespace Trax.Api.DTOs
     {
         public TrainLifecycleEvent(long MetadataId, string ExternalId, string TrainName, Trax.Effect.Enums.TrainState TrainState, System.DateTime Timestamp, string? FailureJunction, string? FailureReason, string? Output, string? HostName = null, string? HostEnvironment = null) { }
         public string ExternalId { get; init; }
+        public string? FailureException { get; init; }
         public string? FailureJunction { get; init; }
         public string? FailureReason { get; init; }
         public string? HostEnvironment { get; init; }
@@ -307,6 +373,46 @@ namespace Trax.Api.DTOs
         public int? Priority { get; init; }
         public Trax.Effect.Enums.ScheduleType? ScheduleType { get; init; }
         public int? TimeoutSeconds { get; init; }
+    }
+    public class WorkQueueDetail : System.IEquatable<Trax.Api.DTOs.WorkQueueDetail>
+    {
+        public WorkQueueDetail(
+                    long Id,
+                    string ExternalId,
+                    string TrainName,
+                    Trax.Effect.Enums.WorkQueueStatus Status,
+                    System.DateTime CreatedAt,
+                    System.DateTime? DispatchedAt,
+                    System.DateTime? ScheduledAt,
+                    int Priority,
+                    int DispatchAttempts,
+                    long? ManifestId,
+                    long? MetadataId,
+                    long? DeadLetterId,
+                    string? InputTypeName,
+                    System.DateTime? ConfirmedAt,
+                    string? SubjectKey,
+                    string? Input,
+                    long? SubjectHeldBy,
+                    long? SubjectQueuedBehind) { }
+        public System.DateTime? ConfirmedAt { get; init; }
+        public System.DateTime CreatedAt { get; init; }
+        public long? DeadLetterId { get; init; }
+        public int DispatchAttempts { get; init; }
+        public System.DateTime? DispatchedAt { get; init; }
+        public string ExternalId { get; init; }
+        public long Id { get; init; }
+        public string? Input { get; init; }
+        public string? InputTypeName { get; init; }
+        public long? ManifestId { get; init; }
+        public long? MetadataId { get; init; }
+        public int Priority { get; init; }
+        public System.DateTime? ScheduledAt { get; init; }
+        public Trax.Effect.Enums.WorkQueueStatus Status { get; init; }
+        public long? SubjectHeldBy { get; init; }
+        public string? SubjectKey { get; init; }
+        public long? SubjectQueuedBehind { get; init; }
+        public string TrainName { get; init; }
     }
     public class WorkQueueSummary : System.IEquatable<Trax.Api.DTOs.WorkQueueSummary>
     {

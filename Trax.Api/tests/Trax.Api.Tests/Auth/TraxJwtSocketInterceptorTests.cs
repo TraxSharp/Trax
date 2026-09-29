@@ -5,12 +5,14 @@ using FluentAssertions;
 using HotChocolate.AspNetCore.Subscriptions;
 using HotChocolate.Execution;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;
+using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
@@ -23,30 +25,41 @@ public class TraxJwtSocketInterceptorTests
     private const string Audience = "trax-ws";
     private static readonly byte[] KeyBytes = Encoding.UTF8.GetBytes(new string('k', 32));
 
-    private static IOptionsMonitor<JwtBearerOptions> OptionsMonitor(
-        Action<JwtBearerOptions>? customize = null
+    /// <summary>
+    /// The <c>TraxJwt</c> scheme a host registers itself with <c>AddJwtBearer</c>, without
+    /// <c>AddTraxJwtAuth</c>: the interceptor authenticates through its handler and then runs the
+    /// registered resolver.
+    /// </summary>
+    private static ServiceProvider BareScheme(
+        ITraxPrincipalResolver<JwtTokenInput> resolver,
+        Action<JwtBearerOptions>? customize
     )
     {
-        var opts = new JwtBearerOptions
-        {
-            TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
-                RequireSignedTokens = true,
-                ValidIssuer = Issuer,
-                ValidAudience = Audience,
-                IssuerSigningKey = new SymmetricSecurityKey(KeyBytes),
-                ClockSkew = TimeSpan.Zero,
-            },
-        };
-        customize?.Invoke(opts);
-
-        var monitor = Substitute.For<IOptionsMonitor<JwtBearerOptions>>();
-        monitor.Get(JwtDefaults.SchemeName).Returns(opts);
-        return monitor;
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services
+            .AddAuthentication()
+            .AddJwtBearer(
+                JwtDefaults.SchemeName,
+                opts =>
+                {
+                    opts.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidateAudience = true,
+                        ValidateLifetime = true,
+                        ValidateIssuerSigningKey = true,
+                        RequireSignedTokens = true,
+                        ValidIssuer = Issuer,
+                        ValidAudience = Audience,
+                        IssuerSigningKey = new SymmetricSecurityKey(KeyBytes),
+                        ClockSkew = TimeSpan.Zero,
+                    };
+                    customize?.Invoke(opts);
+                }
+            );
+        services.AddScoped(_ => resolver);
+        return services.BuildServiceProvider();
     }
 
     private static string SignToken(
@@ -76,12 +89,15 @@ public class TraxJwtSocketInterceptorTests
     private static TraxJwtSocketInterceptor NewInterceptor(
         ITraxPrincipalResolver<JwtTokenInput>? resolver = null,
         Action<JwtBearerOptions>? customize = null
-    ) =>
-        new(
-            OptionsMonitor(customize),
-            AppServicesWith(resolver ?? new DefaultJwtPrincipalResolver()),
+    )
+    {
+        var sp = BareScheme(resolver ?? new DefaultJwtPrincipalResolver(), customize);
+        return new(
+            sp.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>(),
+            new TraxApplicationServices(sp),
             NullLogger<TraxJwtSocketInterceptor>.Instance
         );
+    }
 
     [Test]
     public async Task EmptyPayload_Rejects()
@@ -257,7 +273,7 @@ public class TraxJwtSocketInterceptorTests
         http.User.Should().NotBeNull();
         http.User.Identity!.IsAuthenticated.Should().BeTrue();
         http.User.Identity.AuthenticationType.Should().Be(JwtDefaults.SchemeName);
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("TraxJwt:alice");
         http.User.IsInRole("Player").Should().BeTrue();
     }
 
@@ -276,7 +292,7 @@ public class TraxJwtSocketInterceptorTests
         var result = await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
         result.Accepted.Should().BeTrue();
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("alice");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("TraxJwt:alice");
     }
 
     [Test]
@@ -318,7 +334,9 @@ public class TraxJwtSocketInterceptorTests
         var payload = Payload(new TraxJwtSocketInterceptor.ConnectionInitPayload(token, null));
         await interceptor.OnConnectAsync(session, payload, CancellationToken.None);
 
-        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!.Value.Should().Be("override-id");
+        http.User.FindFirst(TraxAuthClaimTypes.PrincipalId)!
+            .Value.Should()
+            .Be("TraxJwt:override-id");
         http.User.IsInRole("Admin").Should().BeTrue();
     }
 
@@ -349,8 +367,10 @@ public class TraxJwtSocketInterceptorTests
         await resolver
             .Received(1)
             .ResolveAsync(
+                // The bearer handler maps "sub" to NameIdentifier, on the socket as over HTTP.
                 Arg.Is<JwtTokenInput>(i =>
-                    i!.Principal!.FindFirst("sub")!.Value == "alice" && i.SecurityToken != null
+                    i!.Principal!.FindFirst(ClaimTypes.NameIdentifier)!.Value == "alice"
+                    && i.SecurityToken != null
                 ),
                 Arg.Any<CancellationToken>()
             );

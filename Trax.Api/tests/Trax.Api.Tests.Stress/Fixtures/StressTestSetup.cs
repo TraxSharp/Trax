@@ -23,9 +23,12 @@ namespace Trax.Api.Tests.Stress.Fixtures;
 /// asserts each endpoint stays within a dashboard-acceptable latency budget.
 /// </summary>
 /// <remarks>
-/// Ignored by default so the suite never runs in normal CI (seeding millions of rows takes
-/// minutes). Run explicitly:
+/// Every concrete fixture carries <c>[Explicit]</c>, so the suite never runs in a normal
+/// <c>dotnet test</c> (seeding millions of rows takes minutes) and runs when selected:
 /// <code>dotnet test --filter TestCategory=Stress</code>
+/// The attribute goes on the concrete fixture, not here: NUnit does not inherit
+/// <c>[Explicit]</c> or <c>[Ignore]</c> from a base class, so one placed on this class skips
+/// nothing.
 /// Row counts and the target database come from <c>appsettings.json</c> and the
 /// <c>TRAX_STRESS_*</c> environment variables (see <see cref="StressProfile"/>). Because
 /// hosted services only start under a running host, building a plain <see cref="ServiceProvider"/>
@@ -34,7 +37,6 @@ namespace Trax.Api.Tests.Stress.Fixtures;
 /// </remarks>
 [TestFixture]
 [Category("Stress")]
-[Ignore("Stress tests — run manually with: dotnet test --filter TestCategory=Stress")]
 public abstract class StressTestSetup
 {
     private ServiceProvider _serviceProvider = null!;
@@ -71,9 +73,9 @@ public abstract class StressTestSetup
     /// defaults to <c>trax_api_stress</c> on the local cluster. <c>Command Timeout</c> is large
     /// because seeding runs multi-million-row inserts on this connection.
     /// </summary>
-    private static string ConnectionString =>
+    protected static string ConnectionString =>
         Environment.GetEnvironmentVariable("TRAX_STRESS_CONNECTION")
-        ?? "Host=localhost;Port=5432;Database=trax_api_stress;Username=trax;Password=trax123;"
+        ?? $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_stress;Username=trax;Password=trax123;"
             + "Maximum Pool Size=16;Timeout=30;Command Timeout=1200;Include Error Detail=true";
 
     [OneTimeSetUp]
@@ -82,8 +84,10 @@ public abstract class StressTestSetup
         var connectionString = ConnectionString;
         BulkSeeder.EnsureDatabaseExists(connectionString);
 
-        _serviceProvider = new ServiceCollection()
+        var services = new ServiceCollection()
             .AddLogging(x => x.SetMinimumLevel(LogLevel.Warning))
+            // An API host has ASP.NET authorization; the per-train check on enqueue needs it.
+            .AddAuthorization()
             .AddTrax(trax =>
                 trax.AddEffects(effects =>
                         effects
@@ -97,8 +101,9 @@ public abstract class StressTestSetup
                     // services never start because this is a plain ServiceProvider, not a host.
                     .AddScheduler(scheduler => scheduler)
             )
-            .AddTraxApi()
-            .BuildServiceProvider();
+            .AddTraxApi();
+        ConfigureServices(services);
+        _serviceProvider = services.BuildServiceProvider();
 
         await BulkSeeder.SeedAsync(
             connectionString,
@@ -109,6 +114,84 @@ public abstract class StressTestSetup
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown() => await _serviceProvider.DisposeAsync();
+
+    /// <summary>
+    /// Adds a fixture's own registrations to the container before it is built, for surfaces
+    /// that <c>AddTraxApi()</c> does not register (persisted operations).
+    /// </summary>
+    protected virtual void ConfigureServices(IServiceCollection services) { }
+
+    /// <summary>The fixture's container, for tests that drive a service directly.</summary>
+    protected IServiceProvider Services => _serviceProvider;
+
+    /// <summary>Runs one SQL statement against the stress database.</summary>
+    protected static async Task ExecSqlAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.CommandTimeout = 1200;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>Reads one scalar from the stress database.</summary>
+    protected static async Task<T> ScalarAsync<T>(string sql)
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.CommandTimeout = 1200;
+        return (T)Convert.ChangeType((await command.ExecuteScalarAsync())!, typeof(T));
+    }
+
+    /// <summary>
+    /// The write counterpart of <see cref="MeasureAsync"/>. A write changes the rows it acts on,
+    /// so a second run would measure a no-op (or a conflict). <paramref name="prepare"/> puts the
+    /// rows into the state the write expects before the warm-up and before the timed run, and
+    /// <paramref name="restore"/> (by default <paramref name="prepare"/> again) runs at the end,
+    /// so every run does the same work and the suite leaves the database as the seed left it.
+    /// </summary>
+    protected async Task<TimeSpan> MeasureWriteAsync(
+        string label,
+        TimeSpan budget,
+        Func<Task> prepare,
+        Func<IServiceProvider, CancellationToken, Task> action,
+        Func<Task>? restore = null
+    )
+    {
+        await prepare();
+        try
+        {
+            using (var warm = _serviceProvider.CreateScope())
+                await action(warm.ServiceProvider, CancellationToken.None);
+            await prepare();
+
+            using var scope = _serviceProvider.CreateScope();
+            var sw = Stopwatch.StartNew();
+            await action(scope.ServiceProvider, CancellationToken.None);
+            sw.Stop();
+
+            TestContext.Out.WriteLine(
+                $"{label}: {sw.Elapsed.TotalMilliseconds:F0}ms "
+                    + $"(budget {budget.TotalMilliseconds:F0}ms, {Profile.Metadata:N0} metadata rows)"
+            );
+
+            sw.Elapsed.Should()
+                .BeLessThan(
+                    budget,
+                    $"{label} must stay within {budget.TotalMilliseconds:F0}ms at "
+                        + $"{Profile.Metadata:N0} metadata / {Profile.WorkQueue:N0} work queue / "
+                        + $"{Profile.DeadLetter:N0} dead letter rows"
+                );
+            return sw.Elapsed;
+        }
+        finally
+        {
+            await (restore ?? prepare)();
+        }
+    }
 
     /// <summary>
     /// Runs <paramref name="action"/> once to warm the connection pool / query plan, then a

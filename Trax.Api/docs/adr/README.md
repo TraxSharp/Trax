@@ -38,9 +38,9 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 
 | Area | ADRs |
 | --- | --- |
-| `graphql` | [0001](./0001-a-misconfigured-host-fails-at-startup.md), [0002](./0002-reading-the-service-collection-is-order-dependent.md), [0003](./0003-a-type-extension-field-declares-its-own-posture.md), [0004](./0004-the-operations-namespace-gates-independently-of-the-endpoint.md) |
+| `auth` | [0003](./0003-a-type-extension-field-declares-its-own-posture.md), [0004](./0004-the-operations-namespace-gates-independently-of-the-endpoint.md), [0005](./0005-the-allowlist-keys-on-the-caller-supplied-operation-name.md), [0006](./0006-one-socket-interceptor-composes-every-token-scheme.md), [0007](./0007-a-browser-socket-is-accepted-only-from-origins-the-host-serves.md), [0008](./0008-a-token-scheme-requires-a-credential-on-every-socket.md), [0009](./0009-the-endpoint-policy-applies-to-every-transport.md), [0010](./0010-a-scheme-policy-requires-its-scheme.md), [0011](./0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md), [0012](./0012-introspection-is-decided-per-request.md), [0016](./0016-a-train-input-is-read-one-row-at-a-time.md), [0022](./0022-a-socket-authenticates-through-the-schemes-handler.md), [0023](./0023-a-principal-id-is-qualified-by-its-scheme.md), [0024](./0024-graphql-get-is-off-unless-the-host-opts-in.md) |
+| `graphql` | [0001](./0001-a-misconfigured-host-fails-at-startup.md), [0002](./0002-reading-the-service-collection-is-order-dependent.md), [0003](./0003-a-type-extension-field-declares-its-own-posture.md), [0004](./0004-the-operations-namespace-gates-independently-of-the-endpoint.md), [0005](./0005-the-allowlist-keys-on-the-caller-supplied-operation-name.md), [0006](./0006-one-socket-interceptor-composes-every-token-scheme.md), [0007](./0007-a-browser-socket-is-accepted-only-from-origins-the-host-serves.md), [0008](./0008-a-token-scheme-requires-a-credential-on-every-socket.md), [0009](./0009-the-endpoint-policy-applies-to-every-transport.md), [0010](./0010-a-scheme-policy-requires-its-scheme.md), [0011](./0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md), [0012](./0012-introspection-is-decided-per-request.md), [0013](./0013-persisted-operation-enforcement-runs-in-the-execution-pipeline.md), [0014](./0014-only-a-train-exceptions-own-message-reaches-the-client.md), [0015](./0015-a-socket-runs-a-bounded-number-of-operations.md), [0016](./0016-a-train-input-is-read-one-row-at-a-time.md), [0017](./0017-an-operations-page-is-at-most-500-rows.md), [0022](./0022-a-socket-authenticates-through-the-schemes-handler.md), [0024](./0024-graphql-get-is-off-unless-the-host-opts-in.md) |
 | `platform` | [0001](./0001-a-misconfigured-host-fails-at-startup.md), [0002](./0002-reading-the-service-collection-is-order-dependent.md) |
-| `auth` | [0003](./0003-a-type-extension-field-declares-its-own-posture.md), [0004](./0004-the-operations-namespace-gates-independently-of-the-endpoint.md) |
 
 ## All of them
 
@@ -50,3 +50,19 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0002](./0002-reading-the-service-collection-is-order-dependent.md) | Reading the service collection during registration is order-dependent | graphql, platform |
 | [0003](./0003-a-type-extension-field-declares-its-own-posture.md) | A type-extension field on an anonymous parent declares its own posture | graphql, auth |
 | [0004](./0004-the-operations-namespace-gates-independently-of-the-endpoint.md) | The operations namespace gates independently of the endpoint | graphql, auth |
+| [0005](./0005-the-allowlist-keys-on-the-caller-supplied-operation-name.md) | The persisted-operations allowlist keys on the caller-supplied operation name | graphql, auth |
+| [0006](./0006-one-socket-interceptor-composes-every-token-scheme.md) | One socket interceptor composes every token scheme | graphql, auth |
+| [0007](./0007-a-browser-socket-is-accepted-only-from-origins-the-host-serves.md) | A browser socket is accepted only from origins the host serves | graphql, auth |
+| [0008](./0008-a-token-scheme-requires-a-credential-on-every-socket.md) | A token scheme requires a credential on every socket | graphql, auth |
+| [0009](./0009-the-endpoint-policy-applies-to-every-transport.md) | The endpoint policy applies to every transport | graphql, auth |
+| [0010](./0010-a-scheme-policy-requires-its-scheme.md) | A scheme policy requires its scheme | graphql, auth |
+| [0011](./0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md) | Subscriptions carry the authorization of the data they stream | graphql, auth |
+| [0012](./0012-introspection-is-decided-per-request.md) | Introspection is decided per request | graphql, auth |
+| [0013](./0013-persisted-operation-enforcement-runs-in-the-execution-pipeline.md) | Persisted-operation enforcement runs in the execution pipeline | graphql |
+| [0014](./0014-only-a-train-exceptions-own-message-reaches-the-client.md) | Only a TrainException's own message reaches the client | graphql |
+| [0015](./0015-a-socket-runs-a-bounded-number-of-operations.md) | A socket runs a bounded number of operations | graphql |
+| [0016](./0016-a-train-input-is-read-one-row-at-a-time.md) | A train input is read one row at a time | graphql, auth |
+| [0017](./0017-an-operations-page-is-at-most-500-rows.md) | An operations page is at most 500 rows, and take 0 returns one | graphql |
+| [0022](./0022-a-socket-authenticates-through-the-schemes-handler.md) | A socket authenticates through the scheme's handler | graphql, auth |
+| [0023](./0023-a-principal-id-is-qualified-by-its-scheme.md) | A principal id is qualified by its scheme | auth |
+| [0024](./0024-graphql-get-is-off-unless-the-host-opts-in.md) | GraphQL GET is off unless the host opts in | graphql, auth |

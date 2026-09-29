@@ -47,6 +47,10 @@ public static class ServiceCollectionPersistedOperationsExtensions
         >();
         services.TryAddSingleton<IPersistedOperationValidator, NoOpPersistedOperationValidator>();
 
+        // The storage empties HotChocolate's operation caches after a write. With no GraphQL
+        // server in this container there is no executor, and the invalidator does nothing.
+        services.TryAddSingleton<HotChocolateOperationCacheInvalidator>();
+
         services.AddSingleton<DbPersistedOperationStorage>();
         services.AddSingleton<IPersistedOperationStore>(sp =>
             sp.GetRequiredService<DbPersistedOperationStorage>()
