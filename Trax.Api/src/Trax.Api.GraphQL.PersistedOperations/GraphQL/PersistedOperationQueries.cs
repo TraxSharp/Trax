@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using HotChocolate;
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
@@ -9,7 +10,8 @@ namespace Trax.Api.GraphQL.PersistedOperations.GraphQL;
 /// Body of the <c>operations.persistedOperations</c> query namespace. Reads
 /// hit the Trax data context directly via <see cref="IDataContextProviderFactory"/>.
 /// </summary>
-internal sealed class PersistedOperationQueries
+[EditorBrowsable(EditorBrowsableState.Never)]
+public sealed class PersistedOperationQueries
 {
     /// <summary>List persisted operations, newest-first, paginated.</summary>
     public async Task<PersistedOperationsPage> PersistedOperations(

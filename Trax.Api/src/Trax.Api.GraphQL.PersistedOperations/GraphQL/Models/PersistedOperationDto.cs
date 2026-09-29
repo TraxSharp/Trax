@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Trax.Effect.Models.PersistedOperation;
 
 namespace Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
@@ -5,7 +6,8 @@ namespace Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
 /// <summary>
 /// GraphQL surface for a persisted operation row.
 /// </summary>
-internal sealed record PersistedOperationDto(
+[EditorBrowsable(EditorBrowsableState.Never)]
+public sealed record PersistedOperationDto(
     string Id,
     string? TenantKey,
     string OperationName,

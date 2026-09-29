@@ -1,10 +1,13 @@
+using System.ComponentModel;
+
 namespace Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
 
 /// <summary>
 /// Result of <c>uploadPersistedOperation</c>. Exactly one of
 /// <see cref="Operation"/> and <see cref="Errors"/> is populated.
 /// </summary>
-internal sealed record UploadPersistedOperationPayload(
+[EditorBrowsable(EditorBrowsableState.Never)]
+public sealed record UploadPersistedOperationPayload(
     PersistedOperationDto? Operation,
     IReadOnlyList<PersistedOperationError> Errors
 )

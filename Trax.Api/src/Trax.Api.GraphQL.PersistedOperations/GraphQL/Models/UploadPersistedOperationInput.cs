@@ -1,7 +1,10 @@
+using System.ComponentModel;
+
 namespace Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
 
 /// <summary>Input for the <c>uploadPersistedOperation</c> mutation.</summary>
-internal sealed record UploadPersistedOperationInput(
+[EditorBrowsable(EditorBrowsableState.Never)]
+public sealed record UploadPersistedOperationInput(
     string Id,
     string Document,
     string? Description = null,

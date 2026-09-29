@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using HotChocolate;
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
@@ -13,7 +14,8 @@ namespace Trax.Api.GraphQL.PersistedOperations.GraphQL;
 /// structured exceptions into payload <c>errors[]</c> entries with stable
 /// <c>code</c> values; mutations never throw to the client.
 /// </summary>
-internal sealed class PersistedOperationMutations
+[EditorBrowsable(EditorBrowsableState.Never)]
+public sealed class PersistedOperationMutations
 {
     /// <summary>
     /// Upload (insert or update) a persisted operation. Validates the

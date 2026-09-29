@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
 
@@ -8,7 +9,8 @@ namespace Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
 /// to the GraphQL caller; failures are returned in the <c>errors</c> field
 /// with a stable <c>code</c> so clients can branch without string-matching.
 /// </summary>
-internal sealed record PersistedOperationError(
+[EditorBrowsable(EditorBrowsableState.Never)]
+public sealed record PersistedOperationError(
     string Code,
     string Message,
     IReadOnlyList<PersistedOperationErrorLocation>? Locations,
@@ -79,4 +81,5 @@ internal sealed record PersistedOperationError(
 }
 
 /// <summary>1-based location in the candidate document.</summary>
-internal sealed record PersistedOperationErrorLocation(int Line, int Column);
+[EditorBrowsable(EditorBrowsableState.Never)]
+public sealed record PersistedOperationErrorLocation(int Line, int Column);

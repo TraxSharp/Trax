@@ -1,7 +1,10 @@
+using System.ComponentModel;
+
 namespace Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
 
 /// <summary>One row from the operation's audit log.</summary>
-internal sealed record PersistedOperationHistoryDto(
+[EditorBrowsable(EditorBrowsableState.Never)]
+public sealed record PersistedOperationHistoryDto(
     long HistoryId,
     string Id,
     string? TenantKey,

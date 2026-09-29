@@ -68,6 +68,127 @@ namespace Trax.Api.GraphQL.PersistedOperations.Extensions
         public static Microsoft.AspNetCore.Builder.IApplicationBuilder UsePersistedOperationsEnforcement(this Microsoft.AspNetCore.Builder.IApplicationBuilder app) { }
     }
 }
+namespace Trax.Api.GraphQL.PersistedOperations.GraphQL.Models
+{
+    public sealed class DeactivatePersistedOperationInput : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.DeactivatePersistedOperationInput>
+    {
+        public DeactivatePersistedOperationInput(string Id, string Reason, string? TenantKey = null) { }
+        public string Id { get; init; }
+        public string Reason { get; init; }
+        public string? TenantKey { get; init; }
+    }
+    public sealed class DeactivatePersistedOperationPayload : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.DeactivatePersistedOperationPayload>
+    {
+        public DeactivatePersistedOperationPayload(Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationDto? Operation, System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationError> Errors) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationError> Errors { get; init; }
+        public Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationDto? Operation { get; init; }
+        public bool Success { get; }
+    }
+    public sealed class PersistedOperationDto : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationDto>
+    {
+        public PersistedOperationDto(string Id, string? TenantKey, string OperationName, int Version, string Document, string ShapeFingerprint, bool IsActive, string? DeprecationReason, string? Description, System.DateTime CreatedAt, System.DateTime UpdatedAt) { }
+        public System.DateTime CreatedAt { get; init; }
+        public string? DeprecationReason { get; init; }
+        public string? Description { get; init; }
+        public string Document { get; init; }
+        public string Id { get; init; }
+        public bool IsActive { get; init; }
+        public string OperationName { get; init; }
+        public string ShapeFingerprint { get; init; }
+        public string? TenantKey { get; init; }
+        public System.DateTime UpdatedAt { get; init; }
+        public int Version { get; init; }
+    }
+    public sealed class PersistedOperationError : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationError>
+    {
+        public PersistedOperationError(string Code, string Message, System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationErrorLocation>? Locations, System.Collections.Generic.IReadOnlyList<string>? Path, string? OldFingerprint, string? NewFingerprint) { }
+        public string Code { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationErrorLocation>? Locations { get; init; }
+        public string Message { get; init; }
+        public string? NewFingerprint { get; init; }
+        public string? OldFingerprint { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string>? Path { get; init; }
+        public static Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationError NotFound(string id) { }
+    }
+    public sealed class PersistedOperationErrorLocation : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationErrorLocation>
+    {
+        public PersistedOperationErrorLocation(int Line, int Column) { }
+        public int Column { get; init; }
+        public int Line { get; init; }
+    }
+    public sealed class PersistedOperationFilter : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationFilter>
+    {
+        public PersistedOperationFilter(bool? IsActive = default, string? TenantKey = null, string? IdStartsWith = null) { }
+        public string? IdStartsWith { get; init; }
+        public bool? IsActive { get; init; }
+        public string? TenantKey { get; init; }
+    }
+    public sealed class PersistedOperationHistoryDto : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationHistoryDto>
+    {
+        public PersistedOperationHistoryDto(long HistoryId, string Id, string? TenantKey, string Document, string ShapeFingerprint, string ChangeType, System.DateTime ChangedAt, string? ChangedReason) { }
+        public string ChangeType { get; init; }
+        public System.DateTime ChangedAt { get; init; }
+        public string? ChangedReason { get; init; }
+        public string Document { get; init; }
+        public long HistoryId { get; init; }
+        public string Id { get; init; }
+        public string ShapeFingerprint { get; init; }
+        public string? TenantKey { get; init; }
+    }
+    public sealed class PersistedOperationsPage : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationsPage>
+    {
+        public PersistedOperationsPage(System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationDto> Items, int TotalCount) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationDto> Items { get; init; }
+        public int TotalCount { get; init; }
+    }
+    public sealed class RestorePersistedOperationInput : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.RestorePersistedOperationInput>
+    {
+        public RestorePersistedOperationInput(string Id, string? TenantKey = null) { }
+        public string Id { get; init; }
+        public string? TenantKey { get; init; }
+    }
+    public sealed class RestorePersistedOperationPayload : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.RestorePersistedOperationPayload>
+    {
+        public RestorePersistedOperationPayload(Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationDto? Operation, System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationError> Errors) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationError> Errors { get; init; }
+        public Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationDto? Operation { get; init; }
+        public bool Success { get; }
+    }
+    public sealed class UploadPersistedOperationInput : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.UploadPersistedOperationInput>
+    {
+        public UploadPersistedOperationInput(string Id, string Document, string? Description = null, bool BypassShapeDiff = false, int Version = 0, string? TenantKey = null) { }
+        public bool BypassShapeDiff { get; init; }
+        public string? Description { get; init; }
+        public string Document { get; init; }
+        public string Id { get; init; }
+        public string? TenantKey { get; init; }
+        public int Version { get; init; }
+    }
+    public sealed class UploadPersistedOperationPayload : System.IEquatable<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.UploadPersistedOperationPayload>
+    {
+        public UploadPersistedOperationPayload(Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationDto? Operation, System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationError> Errors) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationError> Errors { get; init; }
+        public Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationDto? Operation { get; init; }
+        public bool Success { get; }
+    }
+}
+namespace Trax.Api.GraphQL.PersistedOperations.GraphQL
+{
+    public sealed class PersistedOperationMutations
+    {
+        public PersistedOperationMutations() { }
+        public System.Threading.Tasks.Task<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.DeactivatePersistedOperationPayload> DeactivatePersistedOperation(Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.DeactivatePersistedOperationInput input, [HotChocolate.Service] Trax.Api.GraphQL.PersistedOperations.Storage.IPersistedOperationStore store, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.RestorePersistedOperationPayload> RestorePersistedOperation(Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.RestorePersistedOperationInput input, [HotChocolate.Service] Trax.Api.GraphQL.PersistedOperations.Storage.IPersistedOperationStore store, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.UploadPersistedOperationPayload> UploadPersistedOperation(Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.UploadPersistedOperationInput input, [HotChocolate.Service] Trax.Api.GraphQL.PersistedOperations.Storage.IPersistedOperationStore store, System.Threading.CancellationToken ct) { }
+    }
+    public sealed class PersistedOperationQueries
+    {
+        public PersistedOperationQueries() { }
+        public System.Threading.Tasks.Task<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationDto?> PersistedOperation(string id, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory, System.Threading.CancellationToken ct, string? tenantKey = null) { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationHistoryDto>> PersistedOperationHistory(string id, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory, System.Threading.CancellationToken ct, string? tenantKey = null, int skip = 0, int take = 50) { }
+        public System.Threading.Tasks.Task<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationsPage> PersistedOperations([HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory, System.Threading.CancellationToken ct, Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationFilter? filter = null, int skip = 0, int take = 50) { }
+    }
+}
 namespace Trax.Api.GraphQL.PersistedOperations
 {
     public interface IPersistedOperationsCapability { }
