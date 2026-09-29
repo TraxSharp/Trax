@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Trax.Scheduler</AssemblyName>
+    <Description>Recurring and one-off scheduling for Trax trains: cron and interval manifests, a durable work queue, retries, dead-lettering and dependent trains. Requires a persistent Trax data provider such as Trax.Effect.Data.Postgres.</Description>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
   </PropertyGroup>
 

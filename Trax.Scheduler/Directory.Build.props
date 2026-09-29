@@ -20,6 +20,37 @@
     <PackageValidationBaselineVersion>1.34.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
+  <!-- NuGet metadata shared by every package this repo publishes. A project may override any of
+       these; each sets its own Description. No .snupkg: DotNet.ReproducibleBuilds embeds the PDB,
+       with its SourceLink map, in each DLL, so a symbol package would be empty. -->
+  <PropertyGroup>
+    <Authors>Theauxm</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Scheduler</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
+    <PackageTags>trax;dotnet;scheduler;cron;jobs;background-jobs;work-queue;dead-letter</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- The published libraries (the same five as package validation above) ship their XML doc
+       comments, so the API is documented from the installed package alone. CS1591 (a public member
+       with no doc comment) is the one warning suppressed: the existing summaries ship now, and the
+       undocumented members are a tracked burn-down. Every other doc-comment warning stays on. -->
+  <PropertyGroup Condition="'$(EnablePackageValidation)' == 'true'">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None
+      Include="$(MSBuildThisFileDirectory)README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
   </ItemGroup>

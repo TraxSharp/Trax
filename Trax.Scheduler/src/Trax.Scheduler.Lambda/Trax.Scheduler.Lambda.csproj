@@ -4,8 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>AWS Lambda transport for Trax scheduler job dispatch and synchronous run execution</PackageDescription>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Scheduler</RepositoryUrl>
+    <Description>AWS Lambda transport for Trax.Scheduler: dispatches queued jobs and synchronous train runs to an AWS Lambda function by direct SDK invocation. Install it in the scheduler host when your trains run in a Lambda function built on Trax.Runner.Lambda.</Description>
     <AssemblyName>Trax.Scheduler.Lambda</AssemblyName>
   </PropertyGroup>
 

@@ -24,7 +24,7 @@ public static class LambdaSchedulerExtensions
     /// Trains can also be marked with <c>[TraxRemote]</c> to opt into remote execution without
     /// explicit <c>ForTrain&lt;T&gt;()</c> routing. Builder routing takes precedence over the attribute.
     ///
-    /// Jobs are sent as <see cref="Services.Lambda.LambdaEnvelope"/> payloads using
+    /// Jobs are sent as <see cref="Trax.Scheduler.Services.Lambda.LambdaEnvelope"/> payloads using
     /// <c>InvocationType.Event</c> (fire-and-forget). The Lambda function receives the payload
     /// via <c>TraxLambdaFunction</c> and executes the train.
     ///

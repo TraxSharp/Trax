@@ -123,7 +123,7 @@ public abstract class TraxLambdaFunction
     ) { }
 
     /// <summary>
-    /// Override to customize logging. Default adds console logging at <see cref="LogLevel.Information"/>.
+    /// Override to customize logging. Default adds console logging at <see cref="Microsoft.Extensions.Logging.LogLevel.Information"/>.
     /// </summary>
     /// <param name="logging">The logging builder to configure</param>
     protected virtual void ConfigureLogging(ILoggingBuilder logging)
@@ -227,7 +227,7 @@ public abstract class TraxLambdaFunction
     /// await new Function().RunLocalAsync(args);
     /// </code>
     /// </example>
-    /// <param name="args">Command-line arguments passed to <see cref="WebApplication.CreateBuilder"/></param>
+    /// <param name="args">Command-line arguments passed to <see cref="WebApplication.CreateBuilder(string[])"/></param>
     public async Task RunLocalAsync(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);

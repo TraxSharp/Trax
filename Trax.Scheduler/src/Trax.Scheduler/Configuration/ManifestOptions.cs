@@ -9,18 +9,19 @@ namespace Trax.Scheduler.Configuration;
 /// <remarks>
 /// ManifestOptions provides fine-grained control over individual job behavior.
 /// Default values are applied when scheduling a job, and can be overridden
-/// via the configure action in <see cref="Services.TraxScheduler.ITraxScheduler.ScheduleAsync"/>.
+/// per item through the <c>configureEach</c> callback of
+/// <see cref="Services.TraxScheduler.ITraxScheduler.ScheduleManyAsync"/>. For a single manifest, set
+/// the same values through <see cref="ScheduleOptions"/>.
 /// </remarks>
 /// <example>
 /// <code>
-/// await scheduler.ScheduleAsync&lt;IMyTrain, MyInput&gt;(
-///     "my-job",
-///     new MyInput(),
+/// await scheduler.ScheduleManyAsync&lt;ISyncTableTrain, SyncTableInput, Unit, string&gt;(
+///     tables,
+///     table => ($"sync-{table}", new SyncTableInput { Table = table }),
 ///     Every.Minutes(5),
-///     opts =>
+///     configureEach: (table, opts) =>
 ///     {
-///         opts.IsEnabled = true;
-///         opts.MaxRetries = 5;
+///         opts.MaxRetries = table == "orders" ? 5 : 3;
 ///         opts.Timeout = TimeSpan.FromMinutes(30);
 ///     });
 /// </code>

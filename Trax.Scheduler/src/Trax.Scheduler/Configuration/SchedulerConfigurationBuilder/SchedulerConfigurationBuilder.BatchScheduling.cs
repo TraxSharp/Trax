@@ -12,6 +12,7 @@ public partial class SchedulerConfigurationBuilder
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="sources">The collection of source items to create manifests from</param>
     /// <param name="map">A function that transforms each source item into an ExternalId and Input pair</param>
@@ -28,7 +29,7 @@ public partial class SchedulerConfigurationBuilder
     /// <code>
     /// builder.Services.AddTrax(trax => trax
     ///     .AddScheduler(scheduler => scheduler
-    ///         .ScheduleMany&lt;ISyncTableTrain, SyncTableInput, string&gt;(
+    ///         .ScheduleMany&lt;ISyncTableTrain, SyncTableInput, Unit, string&gt;(
     ///             new[] { "users", "orders", "products" },
     ///             table => ($"sync-{table}", new SyncTableInput { TableName = table }),
     ///             Every.Minutes(5),
@@ -93,6 +94,7 @@ public partial class SchedulerConfigurationBuilder
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="sources">The collection of items to create manifests from</param>
@@ -103,7 +105,7 @@ public partial class SchedulerConfigurationBuilder
     /// <returns>The builder for method chaining</returns>
     /// <example>
     /// <code>
-    /// scheduler.ScheduleMany&lt;ISyncTableTrain, SyncTableInput, string&gt;(
+    /// scheduler.ScheduleMany&lt;ISyncTableTrain, SyncTableInput, Unit, string&gt;(
     ///     "sync-table",
     ///     new[] { "users", "orders" },
     ///     table => (table, new SyncTableInput { TableName = table }),
@@ -146,11 +148,12 @@ public partial class SchedulerConfigurationBuilder
     /// Schedules multiple dependent train instances for deeper chaining after a previous
     /// <c>IncludeMany</c>.
     /// Each dependent manifest is linked to its parent via the <paramref name="dependsOn"/> function.
-    /// For first-level batch dependents after <see cref="ScheduleMany{TTrain,TInput,TSource}"/>,
+    /// For first-level batch dependents after <c>ScheduleMany</c>,
     /// use the <c>IncludeMany</c> overload with <c>dependsOn</c> instead.
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
     /// <param name="map">A function that transforms each source item into an ExternalId and Input pair</param>
@@ -161,10 +164,10 @@ public partial class SchedulerConfigurationBuilder
     /// <example>
     /// <code>
     /// scheduler
-    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, int&gt;(...)
-    ///     .IncludeMany&lt;ITransformTrain, TransformInput, int&gt;(
+    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, Unit, int&gt;(...)
+    ///     .IncludeMany&lt;ITransformTrain, TransformInput, Unit, int&gt;(
     ///         ..., dependsOn: i => $"extract-{i}")
-    ///     .ThenIncludeMany&lt;ILoadTrain, LoadInput, int&gt;(
+    ///     .ThenIncludeMany&lt;ILoadTrain, LoadInput, Unit, int&gt;(
     ///         Enumerable.Range(0, 10),
     ///         i => ($"load-{i}", new LoadInput { Index = i }),
     ///         dependsOn: i => $"transform-{i}",
@@ -225,6 +228,7 @@ public partial class SchedulerConfigurationBuilder
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
@@ -236,10 +240,10 @@ public partial class SchedulerConfigurationBuilder
     /// <example>
     /// <code>
     /// scheduler
-    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, int&gt;("extract", ...)
-    ///     .IncludeMany&lt;ITransformTrain, TransformInput, int&gt;("transform",
+    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, Unit, int&gt;("extract", ...)
+    ///     .IncludeMany&lt;ITransformTrain, TransformInput, Unit, int&gt;("transform",
     ///         ..., dependsOn: i => $"extract-{i}")
-    ///     .ThenIncludeMany&lt;ILoadTrain, LoadInput, int&gt;("load",
+    ///     .ThenIncludeMany&lt;ILoadTrain, LoadInput, Unit, int&gt;("load",
     ///         Enumerable.Range(0, 10),
     ///         i => ($"{i}", new LoadInput { Index = i }),
     ///         dependsOn: i => $"transform-{i}")
@@ -273,12 +277,13 @@ public partial class SchedulerConfigurationBuilder
         );
 
     /// <summary>
-    /// Schedules multiple dependent train instances that each depend on the root <see cref="Schedule{TTrain,TInput}"/> manifest.
-    /// Unlike <see cref="ThenIncludeMany{TTrain,TInput,TSource}"/> which requires an explicit <c>dependsOn</c> function,
+    /// Schedules multiple dependent train instances that each depend on the root <see cref="Schedule{TTrain,TInput,TOutput}"/> manifest.
+    /// Unlike <c>ThenIncludeMany</c> which requires an explicit <c>dependsOn</c> function,
     /// <c>IncludeMany</c> automatically parents all items from the root <c>Schedule</c>, enabling fan-out patterns.
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
     /// <param name="map">A function that transforms each source item into an ExternalId and Input pair</param>
@@ -286,10 +291,10 @@ public partial class SchedulerConfigurationBuilder
     /// <param name="configureEach">Optional action to configure per-item manifest options</param>
     /// <returns>The builder for method chaining</returns>
     /// <remarks>
-    /// Must be called after <see cref="Schedule{TTrain,TInput}"/>.
+    /// Must be called after <see cref="Schedule{TTrain,TInput,TOutput}"/>.
     /// <code>
     /// .Schedule&lt;A&gt;("root", inputA, Every.Minutes(5))
-    /// .IncludeMany&lt;B, InputB, int&gt;(
+    /// .IncludeMany&lt;B, InputB, Unit, int&gt;(
     ///     Enumerable.Range(0, 10),
     ///     i =&gt; ($"child-{i}", new InputB { Index = i }),
     ///     options => options.Group("children", group => group.MaxActiveJobs(5)))
@@ -352,10 +357,11 @@ public partial class SchedulerConfigurationBuilder
     /// Name-based overload of <c>IncludeMany</c> (root-based).
     /// The <paramref name="name"/> automatically derives <c>groupId</c>, <c>prunePrefix</c>, and
     /// the external ID prefix — reducing boilerplate when the naming follows the <c>{name}-{suffix}</c> pattern.
-    /// All items automatically depend on the root <see cref="Schedule{TTrain,TInput}"/> manifest.
+    /// All items automatically depend on the root <see cref="Schedule{TTrain,TInput,TOutput}"/> manifest.
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
@@ -366,9 +372,9 @@ public partial class SchedulerConfigurationBuilder
     /// <example>
     /// <code>
     /// scheduler
-    ///     .Schedule&lt;IExtractTrain, ExtractInput&gt;(
+    ///     .Schedule&lt;IExtractTrain, ExtractInput, Unit&gt;(
     ///         "extract-all", new ExtractInput(), Every.Hours(1))
-    ///     .IncludeMany&lt;ILoadTrain, LoadInput, int&gt;("load",
+    ///     .IncludeMany&lt;ILoadTrain, LoadInput, Unit, int&gt;("load",
     ///         Enumerable.Range(0, 10),
     ///         i => ($"{i}", new LoadInput { Partition = i }),
     ///         options => options.Group(group => group.MaxActiveJobs(5)))
@@ -404,12 +410,13 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Schedules multiple dependent train instances from a collection, where each item
     /// explicitly maps to its parent via the <paramref name="dependsOn"/> function.
-    /// Use after <see cref="ScheduleMany{TTrain,TInput,TSource}"/> for first-level batch dependents,
-    /// or after <see cref="Schedule{TTrain,TInput}"/> when explicit per-item parent mapping is needed.
+    /// Use after <c>ScheduleMany</c> for first-level batch dependents,
+    /// or after <see cref="Schedule{TTrain,TInput,TOutput}"/> when explicit per-item parent mapping is needed.
     /// For deeper chaining after a previous <c>IncludeMany</c>, use <c>ThenIncludeMany</c>.
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
     /// <param name="map">A function that transforms each source item into an ExternalId and Input pair</param>
@@ -420,12 +427,12 @@ public partial class SchedulerConfigurationBuilder
     /// <example>
     /// <code>
     /// scheduler
-    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, int&gt;(
+    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, Unit, int&gt;(
     ///         Enumerable.Range(0, 10),
     ///         i => ($"extract-{i}", new ExtractInput { Index = i }),
     ///         Every.Minutes(5),
     ///         options => options.Group("extract"))
-    ///     .IncludeMany&lt;ITransformTrain, TransformInput, int&gt;(
+    ///     .IncludeMany&lt;ITransformTrain, TransformInput, Unit, int&gt;(
     ///         Enumerable.Range(0, 10),
     ///         i => ($"transform-{i}", new TransformInput { Index = i }),
     ///         dependsOn: i => $"extract-{i}",
@@ -487,6 +494,7 @@ public partial class SchedulerConfigurationBuilder
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
     /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
@@ -498,8 +506,8 @@ public partial class SchedulerConfigurationBuilder
     /// <example>
     /// <code>
     /// scheduler
-    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, int&gt;("extract", ...)
-    ///     .IncludeMany&lt;ITransformTrain, TransformInput, int&gt;("transform",
+    ///     .ScheduleMany&lt;IExtractTrain, ExtractInput, Unit, int&gt;("extract", ...)
+    ///     .IncludeMany&lt;ITransformTrain, TransformInput, Unit, int&gt;("transform",
     ///         Enumerable.Range(0, 10),
     ///         i => ($"{i}", new TransformInput { Index = i }),
     ///         dependsOn: i => $"extract-{i}")

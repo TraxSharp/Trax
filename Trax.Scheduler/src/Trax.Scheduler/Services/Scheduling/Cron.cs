@@ -12,13 +12,13 @@ namespace Trax.Scheduler.Services.Scheduling;
 /// <example>
 /// <code>
 /// // Schedule a job to run daily at 3am
-/// await scheduler.ScheduleAsync&lt;IMyTrain, MyInput&gt;(
+/// await scheduler.ScheduleAsync&lt;IMyTrain, MyInput, Unit&gt;(
 ///     "my-job",
 ///     new MyInput(),
 ///     Cron.Daily(hour: 3));
 ///
 /// // Schedule a job with a custom 6-field cron expression (every 15 seconds)
-/// await scheduler.ScheduleAsync&lt;IMyTrain, MyInput&gt;(
+/// await scheduler.ScheduleAsync&lt;IMyTrain, MyInput, Unit&gt;(
 ///     "my-job",
 ///     new MyInput(),
 ///     Cron.Expression("*/15 * * * * *"));

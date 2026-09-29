@@ -12,7 +12,7 @@ public class SchedulerConfiguration
     /// </summary>
     /// <remarks>
     /// Pending manifests are added via the fluent configuration API
-    /// (e.g., <c>.Schedule&lt;TTrain, TInput&gt;(...)</c>) and seeded
+    /// (e.g., <c>.Schedule&lt;TTrain&gt;(...)</c>) and seeded
     /// automatically on startup by the ManifestPollingService.
     /// </remarks>
     internal List<PendingManifest> PendingManifests { get; } = [];

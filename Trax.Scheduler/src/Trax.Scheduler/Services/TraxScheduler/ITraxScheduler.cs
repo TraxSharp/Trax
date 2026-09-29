@@ -24,6 +24,7 @@ public interface ITraxScheduler
     /// The input type for the train. Must implement IManifestProperties to enable
     /// serialization for scheduled job storage.
     /// </typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <param name="externalId">
     /// A unique identifier for this scheduled job. Used for upsert semantics -
     /// if a manifest with this ID exists, it will be updated; otherwise, a new one is created.
@@ -57,6 +58,7 @@ public interface ITraxScheduler
     /// The input type for the train. Must implement IManifestProperties to enable
     /// serialization for scheduled job storage.
     /// </typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection.</typeparam>
     /// <param name="sources">The collection of source items to create manifests from.</param>
     /// <param name="map">
@@ -96,6 +98,7 @@ public interface ITraxScheduler
     /// </summary>
     /// <typeparam name="TTrain">The train interface type.</typeparam>
     /// <typeparam name="TInput">The input type for the train.</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <param name="externalId">A unique identifier for this dependent job.</param>
     /// <param name="input">The input data that will be passed to the train on each execution.</param>
     /// <param name="dependsOnExternalId">The external ID of the parent manifest this job depends on.</param>
@@ -117,6 +120,7 @@ public interface ITraxScheduler
     /// </summary>
     /// <typeparam name="TTrain">The train interface type.</typeparam>
     /// <typeparam name="TInput">The input type for the train.</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection.</typeparam>
     /// <param name="sources">The collection of source items to create manifests from.</param>
     /// <param name="map">A function that transforms each source item into an ExternalId and Input pair.</param>
@@ -197,6 +201,7 @@ public interface ITraxScheduler
     /// </summary>
     /// <typeparam name="TTrain">The train interface type.</typeparam>
     /// <typeparam name="TInput">The input type for the train.</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <param name="input">The input data for the train execution.</param>
     /// <param name="delay">The delay before the job should execute.</param>
     /// <param name="options">Optional callback to configure manifest options.</param>
@@ -217,6 +222,7 @@ public interface ITraxScheduler
     /// </summary>
     /// <typeparam name="TTrain">The train interface type.</typeparam>
     /// <typeparam name="TInput">The input type for the train.</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <param name="externalId">A unique identifier for this one-off job.</param>
     /// <param name="input">The input data for the train execution.</param>
     /// <param name="delay">The delay before the job should execute.</param>

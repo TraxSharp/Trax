@@ -25,7 +25,7 @@ namespace Trax.Scheduler.Services.DormantDependentContext;
 /// {
 ///     public override async Task&lt;Unit&gt; Run(MyInput input)
 ///     {
-///         await dormants.ActivateAsync&lt;IChildTrain, ChildInput&gt;(
+///         await dormants.ActivateAsync&lt;IChildTrain, ChildInput, Unit&gt;(
 ///             "child-external-id",
 ///             new ChildInput { Data = input.RuntimeData });
 ///         return Unit.Default;
@@ -42,6 +42,7 @@ public interface IDormantDependentContext
     /// </summary>
     /// <typeparam name="TTrain">The train interface type of the dormant dependent.</typeparam>
     /// <typeparam name="TInput">The input type for the train.</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <param name="externalId">The external ID of the dormant dependent manifest to activate.</param>
     /// <param name="input">The runtime-determined input for the dependent train.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -76,6 +77,7 @@ public interface IDormantDependentContext
     /// </summary>
     /// <typeparam name="TTrain">The train interface type of the dormant dependents.</typeparam>
     /// <typeparam name="TInput">The input type for the trains.</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <param name="activations">
     /// Collection of (ExternalId, Input) pairs identifying which dormant dependents
     /// to activate and with what input.

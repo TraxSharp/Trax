@@ -16,7 +16,7 @@ namespace Trax.Scheduler.Configuration;
 /// </remarks>
 /// <example>
 /// <code>
-/// scheduler.Schedule&lt;IMyTrain, MyInput&gt;(
+/// scheduler.Schedule&lt;IMyTrain&gt;(
 ///     "my-job",
 ///     new MyInput(),
 ///     Every.Minutes(5),

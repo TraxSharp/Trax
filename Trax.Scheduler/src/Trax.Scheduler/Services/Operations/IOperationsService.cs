@@ -259,6 +259,7 @@ public interface IOperationsService
     /// When true, framework admin trains (matching <c>AdminTrains.FullNames</c>) are
     /// excluded from every series. Mirrors the dashboard's "Hide admin trains" toggle.
     /// </param>
+    /// <param name="ct">Cancellation token.</param>
     Task<DashboardMetrics> GetDashboardMetricsAsync(
         MetricsRange range,
         bool hideAdminTrains,

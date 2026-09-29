@@ -19,6 +19,13 @@ internal static class HttpRetryHelper
         HttpStatusCode.ServiceUnavailable,
     ];
 
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
+    private static readonly MediaTypeHeaderValue JsonContentType = new("application/json")
+    {
+        CharSet = "utf-8",
+    };
+
     /// <summary>
     /// Posts a JSON request with retry logic for transient HTTP failures.
     /// </summary>
@@ -27,14 +34,9 @@ internal static class HttpRetryHelper
     /// <param name="options">Retry configuration.</param>
     /// <param name="logger">Logger for retry diagnostics.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="signingKey">When set, each attempt is signed with this key in the runner request signature header; null sends the request unsigned.</param>
+    /// <param name="purpose">Which runner endpoint the signature is bound to.</param>
     /// <returns>The final HTTP response (either successful or the last failed attempt).</returns>
-    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
-
-    private static readonly MediaTypeHeaderValue JsonContentType = new("application/json")
-    {
-        CharSet = "utf-8",
-    };
-
     internal static async Task<HttpResponseMessage> PostWithRetryAsync(
         HttpClient client,
         object request,

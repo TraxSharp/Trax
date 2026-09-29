@@ -16,7 +16,7 @@ public static class WorkerExtensions
     /// <param name="configure">Optional callback to customize worker count, polling interval, and timeouts</param>
     /// <returns>The service collection for continued chaining</returns>
     /// <remarks>
-    /// This registers the execution pipeline (via <see cref="JobRunnerExtensions.AddTraxJobRunner"/>)
+    /// This registers the execution pipeline (via <see cref="JobRunnerExtensions.AddTraxJobRunner(IServiceCollection)"/>)
     /// plus <see cref="Services.LocalWorkerService.LocalWorkerService"/> as a hosted service.
     /// No ManifestManager, no JobDispatcher — just the worker loop.
     ///

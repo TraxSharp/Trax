@@ -20,6 +20,7 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// <param name="ExceptionType">The .NET exception type name (e.g., "InvalidOperationException") when <paramref name="IsError"/> is true</param>
 /// <param name="FailureJunction">The train junction where the failure occurred, extracted from <c>TrainExceptionData</c> if available</param>
 /// <param name="StackTrace">The remote stack trace when <paramref name="IsError"/> is true</param>
+/// <param name="FailureClass">The runner's classification of the failure (for example transient or permanent), carried so the calling side can decide whether to retry; null on success or from a runner that does not send it</param>
 public record RemoteRunResponse(
     long MetadataId,
     string? ExternalId = null,

@@ -4,8 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>SQS transport for Trax scheduler job dispatch and Lambda execution</PackageDescription>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Scheduler</RepositoryUrl>
+    <Description>Amazon SQS transport for Trax.Scheduler: dispatches queued jobs as SQS messages and provides the SQS-triggered Lambda consumer that runs them. Install it when scheduled trains should run on workers fed by an SQS queue.</Description>
     <AssemblyName>Trax.Scheduler.Sqs</AssemblyName>
   </PropertyGroup>
 

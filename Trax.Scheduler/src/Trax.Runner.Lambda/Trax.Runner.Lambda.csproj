@@ -4,8 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>AWS Lambda base class for Trax remote job runners</PackageDescription>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Scheduler</RepositoryUrl>
+    <Description>Base class for an AWS Lambda function that executes Trax trains invoked directly by a scheduler using Trax.Scheduler.Lambda (UseLambdaWorkers or UseLambdaRun). Install it in the Lambda project that hosts your trains.</Description>
     <AssemblyName>Trax.Runner.Lambda</AssemblyName>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
   </PropertyGroup>

@@ -5,7 +5,7 @@ using Trax.Scheduler.Configuration;
 namespace Trax.Scheduler.Services.RequestSigning;
 
 /// <summary>
-/// The outcome of <see cref="RunnerRequestVerifier.Verify"/>.
+/// The outcome of <see cref="RunnerRequestVerifier.VerifyAsync"/>.
 /// </summary>
 public enum RunnerRequestVerdict
 {

@@ -4,7 +4,7 @@ namespace Trax.Scheduler.Services.Operations;
 /// Snapshot of the live scheduler runtime settings: the dashboard-editable subset of
 /// <c>SchedulerConfiguration</c>, <c>LocalWorkerOptions</c>, and
 /// <c>MetadataCleanupConfiguration</c>. Returned by
-/// <see cref="IOperationsService.GetSchedulerConfigAsync"/>; consumed by both the
+/// <see cref="IOperationsService.GetSchedulerConfig"/>; consumed by both the
 /// dashboard's ServerSettingsPage and the GraphQL <c>operations.config.scheduler</c>
 /// query.
 /// </summary>

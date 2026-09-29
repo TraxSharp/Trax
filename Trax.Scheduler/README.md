@@ -4,7 +4,7 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Trax.Scheduler)](https://www.nuget.org/packages/Trax.Scheduler/)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Scheduler)](https://www.nuget.org/packages/Trax.Scheduler/)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Scheduler/blob/main/LICENSE)
 [![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Scheduler)](https://github.com/TraxSharp/Trax.Scheduler/commits/main)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Scheduler/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Scheduler)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
@@ -38,23 +38,40 @@ Every scheduled run is a normal train journey, so you get the same journey loggi
 
 ```bash
 dotnet add package Trax.Scheduler
-```
-
-You'll also need a storage depot for persistent scheduling:
-
-```bash
 dotnet add package Trax.Effect.Data.Postgres
 ```
 
+**The scheduler needs a persistent data provider.** Manifests, the work queue and dead letters live in the database, so `Trax.Scheduler` alone is not enough: add `Trax.Effect.Data.Postgres` and call `UsePostgres(...)` (or `Trax.Effect.Data.Sqlite` and `UseSqlite(...)` for a single-node host). `AddScheduler()` throws at startup when no data provider is configured. `Trax.Effect.Data.InMemory` (`UseInMemory()`) also satisfies that check, but nothing survives a restart, so keep it to tests.
+
+Optional packages, for running trains outside the scheduler host:
+
+| Package | Use it when |
+|---------|-------------|
+| `Trax.Scheduler.Lambda` | the scheduler invokes an AWS Lambda function directly (`UseLambdaWorkers`, `UseLambdaRun`) |
+| `Trax.Runner.Lambda` | you are writing that Lambda function (`TraxLambdaFunction` base class) |
+| `Trax.Scheduler.Sqs` | jobs go to workers through an Amazon SQS queue (`UseSqsWorkers`, `SqsJobRunnerHandler`) |
+| `Trax.Scheduler.Tests.ArrayLogger` | a test needs to assert on what was logged (in-memory `ILoggerProvider`) |
+
 ## Setup
 
-Add the scheduler inside your `AddTrax` configuration:
+A scheduled train is an ordinary Trax train whose input implements `IManifestProperties`, so the scheduler can store it with the manifest:
 
 ```csharp
+using LanguageExt;
+using Trax.Core.Junction;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Effect.Models.Manifest;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Services.Scheduling;
+
+var builder = WebApplication.CreateBuilder(args);
+var connectionString = builder.Configuration.GetConnectionString("TraxDatabase")!;
+
 builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects =>
-            effects.UsePostgres(connectionString).SaveTrainParameters().AddStepProgress()
-        )
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
         .AddMediator(typeof(Program).Assembly)
         .AddScheduler(scheduler =>
             scheduler.Schedule<IGenerateReportTrain>(
@@ -64,7 +81,29 @@ builder.Services.AddTrax(trax =>
             )
         )
 );
+
+builder.Build().Run();
+
+public record GenerateReportInput : IManifestProperties
+{
+    public string Format { get; init; } = "pdf";
+}
+
+public interface IGenerateReportTrain : IServiceTrain<GenerateReportInput, Unit>;
+
+public class GenerateReportTrain : ServiceTrain<GenerateReportInput, Unit>, IGenerateReportTrain
+{
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<RenderReportJunction>().Resolve();
+}
+
+public class RenderReportJunction : Junction<GenerateReportInput, Unit>
+{
+    public override Task<Unit> Run(GenerateReportInput input) => Task.FromResult(Unit.Default);
+}
 ```
+
+`Schedule<TTrain>` infers the input type from the train's `IServiceTrain<TInput, TOutput>` interface. The explicit form `Schedule<IGenerateReportTrain, GenerateReportInput, Unit>(...)` takes all three type arguments; there is no two-argument overload. Manifests declared here are upserted by external ID when the host starts.
 
 ## Writing Manifests
 
@@ -158,9 +197,9 @@ public class CheckDataJunction(IDormantDependentContext dormants) : Junction<Ext
 {
     public override async Task<Unit> Run(ExtractInput input)
     {
-        if (anomaliesDetected)
+        if (input.AnomaliesDetected)
         {
-            await dormants.ActivateAsync<IQualityCheckTrain, QualityCheckInput>(
+            await dormants.ActivateAsync<IQualityCheckTrain, QualityCheckInput, Unit>(
                 "quality-0",
                 new QualityCheckInput { /* ... */ }
             );
@@ -171,29 +210,60 @@ public class CheckDataJunction(IDormantDependentContext dormants) : Junction<Ext
 }
 ```
 
+## Scheduling at Runtime
+
+Inject `ITraxScheduler` to create, trigger or cancel manifests after startup. Its methods take the train, input and output types explicitly:
+
+```csharp
+public class ReportController(ITraxScheduler scheduler)
+{
+    public Task<Manifest> ScheduleWeekly(string format) =>
+        scheduler.ScheduleAsync<IGenerateReportTrain, GenerateReportInput, Unit>(
+            $"weekly-report-{format}",
+            new GenerateReportInput { Format = format },
+            Cron.Weekly(DayOfWeek.Monday, hour: 6)
+        );
+
+    public Task<Manifest> RunInFiveMinutes() =>
+        scheduler.ScheduleOnceAsync<IGenerateReportTrain, GenerateReportInput, Unit>(
+            new GenerateReportInput(),
+            TimeSpan.FromMinutes(5)
+        );
+
+    public Task<int> Cancel(string externalId) => scheduler.CancelAsync(externalId);
+}
+```
+
+`ITraxScheduler` lives in `Trax.Scheduler.Services.TraxScheduler`, `Manifest` in `Trax.Effect.Models.Manifest`.
+
 ## How the Yard Works
 
 The scheduler runs as three internal trains — all visible in the control room with full journey logging:
 
 1. **ManifestManager** — the yard master. Polls on an interval, checks which manifests are due, and queues departures.
 2. **JobDispatcher** — the dispatcher. Reads the departure queue, respects per-line capacity limits, and assigns trains to the track.
-3. **TaskServerExecutor** — the engineer. Picks up an assigned train and drives it through its route.
+3. **JobRunner** — the engineer. Picks up an assigned job and drives the train through its route, recording the outcome.
 
 ## Journey Log Cleanup
 
-Long-running timetables accumulate journey records. Configure automatic archival per train type:
+Long-running timetables accumulate journey records. Configure automatic deletion of finished runs per train type:
 
 ```csharp
 scheduler.AddMetadataCleanup(cleanup =>
 {
+    cleanup.RetentionPeriod = TimeSpan.FromHours(2);
     cleanup.AddTrainType<IHealthCheckTrain>();
-    cleanup.AddTrainType<ISyncCustomersTrain>();
+    cleanup.AddTrainType<ISyncCustomersTrain>(TimeSpan.FromDays(7));
 });
 ```
 
 ## Next Layer
 
 When you need a programmatic interface for external consumers (queuing jobs, running trains on demand, querying state over HTTP), move up to [Trax.Api](https://github.com/TraxSharp/Trax.Api).
+
+## Documentation
+
+Guides, the full scheduler reference and the architecture of the whole stack: [traxsharp.net/docs](https://traxsharp.net/docs).
 
 ## License
 

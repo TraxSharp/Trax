@@ -7,7 +7,7 @@ namespace Trax.Scheduler.Lambda.Configuration;
 /// </summary>
 /// <remarks>
 /// Jobs are sent as direct Lambda invocations using <c>InvocationType.Event</c> (fire-and-forget).
-/// The Lambda function receives a <see cref="Services.Lambda.LambdaEnvelope"/> payload and executes
+/// The Lambda function receives a <see cref="Trax.Scheduler.Services.Lambda.LambdaEnvelope"/> payload and executes
 /// the train via <c>TraxLambdaFunction</c>.
 ///
 /// Access is controlled by IAM policies — no public endpoint is created. The calling service

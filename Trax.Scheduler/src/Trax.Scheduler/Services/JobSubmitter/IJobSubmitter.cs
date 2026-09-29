@@ -14,7 +14,7 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 /// Custom implementations can submit jobs to external systems (AWS Lambda, Azure Functions, etc.).
 ///
 /// Implementations should resolve <see cref="IJobRunnerTrain"/> from the DI container
-/// and call <see cref="IJobRunnerTrain.Run"/> with a <see cref="RunJobRequest"/>.
+/// and call <c>IJobRunnerTrain.Run</c> with a <see cref="RunJobRequest"/>.
 /// </remarks>
 public interface IJobSubmitter
 {
@@ -27,7 +27,7 @@ public interface IJobSubmitter
     /// The job will be picked up by a worker as soon as one is available.
     /// The returned identifier is provider-specific and can be stored for later correlation.
     ///
-    /// Implementations should enqueue a call to <see cref="IJobRunnerTrain.Run"/>
+    /// Implementations should enqueue a call to <c>IJobRunnerTrain.Run</c>
     /// with a <see cref="RunJobRequest"/> containing the provided metadata ID.
     /// </remarks>
     Task<string> EnqueueAsync(long metadataId);

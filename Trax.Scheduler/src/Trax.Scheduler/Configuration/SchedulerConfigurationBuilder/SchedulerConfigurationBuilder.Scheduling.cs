@@ -12,6 +12,7 @@ public partial class SchedulerConfigurationBuilder
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <param name="externalId">A unique identifier for this scheduled job</param>
     /// <param name="input">The input data that will be passed to the train on each execution</param>
     /// <param name="schedule">The schedule definition (interval or cron-based)</param>
@@ -26,13 +27,13 @@ public partial class SchedulerConfigurationBuilder
     /// <code>
     /// builder.Services.AddTrax(trax => trax
     ///     .AddScheduler(scheduler => scheduler
-    ///         .Schedule&lt;IHelloWorldTrain, HelloWorldInput&gt;(
+    ///         .Schedule&lt;IHelloWorldTrain, HelloWorldInput, Unit&gt;(
     ///             "hello-world",
     ///             new HelloWorldInput { Name = "Scheduler" },
     ///             Every.Minutes(1),
     ///             options => options
     ///                 .Priority(10)
-    ///                 .Group(group => group.MaxActiveJobs(5)))
+    ///                 .Group("hello", group => group.MaxActiveJobs(5)))
     ///     )
     /// );
     /// </code>
@@ -77,6 +78,7 @@ public partial class SchedulerConfigurationBuilder
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <param name="externalId">A unique identifier for this one-off job</param>
     /// <param name="input">The input data that will be passed to the train on execution</param>
     /// <param name="delay">The delay before the job should execute</param>
@@ -122,12 +124,13 @@ public partial class SchedulerConfigurationBuilder
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <param name="externalId">A unique identifier for this dependent job</param>
     /// <param name="input">The input data that will be passed to the train on each execution</param>
     /// <param name="options">Optional callback to configure manifest and group options via <see cref="ScheduleOptions"/></param>
     /// <returns>The builder for method chaining</returns>
     /// <remarks>
-    /// Must be called after <see cref="Schedule{TTrain,TInput}"/>, <see cref="Include{TTrain,TInput}"/>,
+    /// Must be called after <see cref="Schedule{TTrain,TInput,TOutput}"/>, <see cref="Include{TTrain,TInput,TOutput}"/>,
     /// or another <c>ThenInclude</c> call.
     /// The dependent manifest will be queued when the parent's LastSuccessfulRun is newer than its own.
     /// Supports chaining: <c>.Schedule(...).Include(...).ThenInclude(...)</c> for branched dependency chains.
@@ -174,18 +177,19 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
-    /// Schedules a dependent train that runs after the root <see cref="Schedule{TTrain,TInput}"/> manifest succeeds.
-    /// Unlike <see cref="ThenInclude{TTrain,TInput}"/> which chains from the most recent manifest,
+    /// Schedules a dependent train that runs after the root <see cref="Schedule{TTrain,TInput,TOutput}"/> manifest succeeds.
+    /// Unlike <see cref="ThenInclude{TTrain,TInput,TOutput}"/> which chains from the most recent manifest,
     /// <c>Include</c> always branches from the root <c>Schedule</c>, enabling fan-out patterns.
     /// </summary>
     /// <typeparam name="TTrain">The train interface type</typeparam>
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <param name="externalId">A unique identifier for this dependent job</param>
     /// <param name="input">The input data that will be passed to the train on each execution</param>
     /// <param name="options">Optional callback to configure manifest and group options via <see cref="ScheduleOptions"/></param>
     /// <returns>The builder for method chaining</returns>
     /// <remarks>
-    /// Must be called after <see cref="Schedule{TTrain,TInput}"/>.
+    /// Must be called after <see cref="Schedule{TTrain,TInput,TOutput}"/>.
     /// Use <c>Include</c> to create multiple independent branches from a single root:
     /// <code>
     /// .Schedule&lt;A&gt;(...)           // root=A

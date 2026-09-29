@@ -12,7 +12,7 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 /// - Local development without background job infrastructure
 /// - Simple scenarios where background processing isn't needed
 ///
-/// Jobs are executed inline when <see cref="EnqueueAsync"/> is called, so the method
+/// Jobs are executed inline when <see cref="EnqueueAsync(long)"/> is called, so the method
 /// returns only after the train completes.
 ///
 /// This submitter is registered automatically when no database provider is configured
