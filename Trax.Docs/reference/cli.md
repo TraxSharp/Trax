@@ -45,7 +45,8 @@ trax generate --schema <path> --output <dir> --name <project-name> [--type graph
 `generate` builds the project in a hidden directory beside `--output` and moves it into place only
 when every step has succeeded, so a failed run (most often a missing `trax-hub` template) leaves an
 existing directory exactly as it was. `--force` is refused for the current directory, any of its
-parents, and a directory holding a git repository (`.git`); generate into a new directory instead.
+parents, and a directory with a git repository (`.git`) in it or anywhere below it, such as a
+folder of side-by-side repositories; generate into a new directory instead.
 
 ### Examples
 
