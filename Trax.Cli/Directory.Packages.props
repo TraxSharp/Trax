@@ -10,7 +10,7 @@
   <!-- Trax cross-repo packages. CI uses the exact pin; trax-local.props overrides to the locally-packed
        1.99.99 during cross-repo dev. -->
   <ItemGroup>
-    <PackageVersion Include="Trax.Effect.StateMachine.Persistence" Version="1.57.1" />
+    <PackageVersion Include="Trax.Effect.StateMachine.Persistence" Version="1.57.2" />
   </ItemGroup>
 
   <!-- Third-party packages (exact pins). -->
