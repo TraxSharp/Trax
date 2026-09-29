@@ -17,7 +17,7 @@
        tests/ too, and a new package must be added here. -->
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Scheduler' Or '$(MSBuildProjectName)' == 'Trax.Scheduler.Lambda' Or '$(MSBuildProjectName)' == 'Trax.Scheduler.Sqs' Or '$(MSBuildProjectName)' == 'Trax.Runner.Lambda' Or '$(MSBuildProjectName)' == 'Trax.Scheduler.Tests.ArrayLogger'">
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>1.34.0</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>1.34.1</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <!-- NuGet metadata shared by every package this repo publishes. A project may override any of
